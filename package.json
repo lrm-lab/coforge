@@ -20,14 +20,19 @@
     "check:release": "bunx oxfmt --check scripts/release && bunx oxlint scripts/release && mise exec -- shellcheck scripts/release/install.sh",
     "test:ci": "bun scripts/test/isolated-test-run.ts bun test scripts/ci ./scripts/test scripts/git-hooks scripts/e2e/computer-setup-harness.test.ts",
     "check:ci": "actionlint && bunx oxfmt --check scripts/ci scripts/test scripts/git-hooks && bunx oxlint scripts/ci scripts/test scripts/git-hooks && mise exec -- shellcheck .githooks/pre-commit .githooks/pre-push",
-    "test:cdn-certs": "bun scripts/test/isolated-test-run.ts bun test scripts/ops/cdn-certificates.test.ts",
-    "check:cdn-certs": "bunx oxfmt --check scripts/ops/cdn-certificates.test.ts && bunx oxlint scripts/ops/cdn-certificates.test.ts && mise exec -- shellcheck scripts/ops/renew-cdn-certificates.sh",
+    "test:cdn-certs": "bun scripts/test/isolated-test-run.ts bun test scripts/ops",
+    "check:cdn-certs": "bunx oxfmt --check scripts/ops && bunx oxlint scripts/ops && mise exec -- shellcheck scripts/ops/acme-dns-hook.sh",
     "test:reference-computer": "bun scripts/test/isolated-test-run.ts bun test ./scripts/reference-computer",
     "check:reference-computer": "bunx oxfmt --check scripts/reference-computer && bunx oxlint scripts/reference-computer",
-    "prepare": "[ ! -f scripts/git-hooks/install-hooks-path.ts ] || bun scripts/git-hooks/install-hooks-path.ts"
+    "prepare": "[ ! -f scripts/git-hooks/install-hooks-path.ts ] || bun scripts/git-hooks/install-hooks-path.ts",
+    "test:docs-site": "bun scripts/test/isolated-test-run.ts bun test scripts/docs",
+    "check:docs-site": "bunx oxfmt --check scripts/docs && bunx oxlint scripts/docs"
   },
   "devDependencies": {
+    "@alicloud/alidns20150109": "4.6.1",
+    "@alicloud/cdn20180510": "9.2.0",
     "@alicloud/credentials": "2.4.7",
+    "@alicloud/openapi-client": "0.4.15",
     "@bufbuild/buf": "1.72.0",
     "@bufbuild/protoc-gen-es": "^2.14.0",
     "@coforge/computer": "workspace:*",

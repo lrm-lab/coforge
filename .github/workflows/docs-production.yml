@@ -1,0 +1,144 @@
+name: Publish docs site (production)
+
+# Deploys the public developer docs (apps/docs, VitePress) to https://docs.coforge.cn: a private OSS
+# bucket (coforge-docs-prod, cn-beijing) read by the CDN domain. Production only; there is no docs
+# staging. The `build` job holds no secrets. The `deploy` job runs in the `production` GitHub
+# Environment (required reviewer, protected branches only) and assumes the docs publisher RAM role
+# through GitHub OIDC, as release-production.yml does. To roll back, dispatch this workflow with an
+# earlier ref; scripts/ci/workflow.test.ts keeps every non-CI workflow dispatch-only, so a push to
+# main starts no publication and an operator dispatches this one from main (apps/docs/AGENTS.md, "Deployment").
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Check and build docs site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          cache: false
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check docs site
+        run: bun run --cwd apps/docs check
+
+      - name: Test docs site
+        run: bun run --cwd apps/docs test
+
+      - name: Test the publish script
+        run: bun run test:docs-site
+
+      - name: Build docs site
+        env:
+          DOCS_ORIGIN: https://docs.coforge.cn
+        run: bun run --cwd apps/docs build
+
+      - name: Upload site
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docs-site
+          path: apps/docs/.vitepress/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Publish docs site
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    # `id-token: write` lets this job mint the GitHub OIDC token it exchanges for the Alibaba Cloud
+    # STS credential of the docs publisher role, whose trust policy names only this repository's
+    # `production` environment.
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          cache: false
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate protocol sources
+        run: bun run --cwd packages/coforge-sdk generate
+
+      - name: Download site
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: docs-site
+          path: docs-site
+
+      - name: Request an OIDC token for Alibaba Cloud
+        env:
+          AUDIENCE: sts.aliyuncs.com
+        run: |
+          token_file="$RUNNER_TEMP/aliyun-oidc-token"
+          token="$(curl -sSf --retry 3 --retry-delay 2 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -r '.value')"
+          if [ -z "$token" ] || [ "$token" = null ]; then
+            echo "::error::GitHub returned no OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          (umask 077 && printf '%s' "$token" > "$token_file")
+          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+
+      - name: Upload, prune, and verify site
+        env:
+          ALIBABA_CLOUD_ROLE_ARN: acs:ram::1085194890307801:role/coforge-docs-publisher
+          ALIBABA_CLOUD_OIDC_PROVIDER_ARN: acs:ram::1085194890307801:oidc-provider/github-actions
+          ALIBABA_CLOUD_ROLE_SESSION_NAME: github-actions-${{ github.run_id }}
+          ALIBABA_CLOUD_ECS_METADATA_DISABLED: "true"
+        run: |
+          bun scripts/docs/publish-docs-site.ts \
+            --dist docs-site \
+            --bucket coforge-docs-prod \
+            --endpoint oss-accelerate.aliyuncs.com \
+            --region oss-cn-beijing
+
+      - name: Summarize
+        run: |
+          {
+            echo "## Docs site published"
+            echo ""
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Site: https://docs.coforge.cn"
+            echo "- Verified: read-back hashes of index.html and llms.txt, and a private bucket origin"
+          } >> "$GITHUB_STEP_SUMMARY"

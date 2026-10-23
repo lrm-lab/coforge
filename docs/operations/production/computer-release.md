@@ -38,10 +38,10 @@ Do these once, in the Alibaba Cloud console of account `1085194890307801`.
 
 4. **DNS and certificate** (done 2026-10-12, Let's Encrypt via acme.sh). CNAME `releases` in the `coforge.cn` zone to
    `releases.coforge.cn.w.kunlunaq.com` (done 2026-10-12). Add `releases.coforge.cn` to
-   `CDN_DOMAINS` in `scripts/ops/renew-cdn-certificates.sh`,
+   `scripts/ops/cdn-certificate-domains.json`,
    [`cdn-certificates/domains.md`](../cdn-certificates/domains.md), and the CDN
    ARNs of [its RAM policy](../cdn-certificates/ram-permissions.md), then run the
-   script ([first run](../cdn-certificates/first-run.md)). Turn on 强制 HTTPS
+   `Renew CDN certificates` workflow with `force` ([runbook](../cdn-certificates/renewal.md)). Turn on 强制 HTTPS
    (`HTTP -> HTTPS`) on the CDN domain.
 5. **Publisher role** (done 2026-10-12, policy
    `CoForgeProductionReleasesBucketAccess`). RAM role `coforge-release-publisher-production`

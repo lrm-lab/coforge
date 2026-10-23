@@ -126,6 +126,7 @@ test("documentation skips application checks, while shared and unknown inputs fa
     "computer",
     "daemon",
     "deploy",
+    "docs-site",
     "installer-crate",
     "macos-lifecycle",
     "oss-cdn",
@@ -192,7 +193,12 @@ test("documentation skips application checks, while shared and unknown inputs fa
     "windows-release",
   ]);
   expect(selectChecks(["infra/staging/caddy/Caddyfile"], "changes")).toEqual(["deploy", "web"]);
-  expect(selectChecks(["scripts/ops/renew-cdn-certificates.sh"], "changes")).toEqual(["cdn-certs"]);
+  expect(selectChecks(["scripts/ops/renew-cdn-certificates.ts"], "changes")).toEqual(["cdn-certs"]);
+  expect(selectChecks(["scripts/docs/publish-docs-site.ts"], "changes")).toEqual(["docs-site"]);
+  expect(selectChecks([".github/workflows/docs-production.yml"], "changes")).toEqual([
+    "ci",
+    "docs-site",
+  ]);
   expect(selectChecks(["scripts/reference-computer/extract.ts"], "changes")).toEqual([
     "reference-computer",
   ]);

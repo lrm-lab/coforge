@@ -1,23 +1,19 @@
 # 9. 官方依据
 
-- [acme.sh dnsapi wiki — Ali (dns_ali)](https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
-- [acme.sh deployhooks wiki — Alibaba Cloud CDN (ali_cdn)](https://github.com/acmesh-official/acme.sh/wiki/deployhooks)
-- [acme.sh dns_ali.sh source](https://github.com/acmesh-official/acme.sh/blob/master/dnsapi/dns_ali.sh) —
-  确认它只调用 `AddDomainRecord`、`DeleteDomainRecord`、`DescribeDomainRecords`
-- [acme.sh ali_cdn.sh source](https://github.com/acmesh-official/acme.sh/blob/master/deploy/ali_cdn.sh) —
-  确认它只调用 `SetCdnDomainSSLCertificate`，并共享 `Ali_Key`/`Ali_Secret`
-- [acme.sh How-to-install wiki](https://github.com/acmesh-official/acme.sh/wiki/How-to-install) —
-  安装方式（git clone 或 curl \| sh）与自动写入的 crontab 任务
-- [acme.sh README](https://github.com/acmesh-official/acme.sh) — 续期窗口
-  （约每 30 天检查一次，ARI 优先）与 90 天证书有效期
+- [GitHub OIDC 与阿里云 RAM 角色 SSO](https://www.alibabacloud.com/help/en/ram/user-guide/overview-of-oidc-based-sso) —
+  工作流用 OIDC 令牌换取 STS 凭据，不使用长期 AccessKey
+- [Alibaba Cloud SDK for TypeScript](https://www.alibabacloud.com/help/en/sdk/alibaba-cloud-sdk-for-node-js) — DNS 与 CDN 调用所用的官方 SDK
 - [Alibaba Cloud CDN — SetCdnDomainSSLCertificate](https://www.alibabacloud.com/help/en/cdn/developer-reference/api-cdn-2018-05-10-setcdndomainsslcertificate)
 - [Alibaba Cloud DNS — AddDomainRecord](https://www.alibabacloud.com/help/en/dns/api-alidns-2015-01-09-adddomainrecord)
+- [acme.sh README](https://github.com/acmesh-official/acme.sh) — ACME 客户端，固定为 3.1.6
+- [acme.sh dnsapi wiki](https://github.com/acmesh-official/acme.sh/wiki/dnsapi) — 自定义 DNS 钩子
+  （`dns_<name>_add` / `dns_<name>_rm`）的约定
+- [acme.sh deployhooks wiki](https://github.com/acmesh-official/acme.sh/wiki/deployhooks)
 - [acme.sh Server wiki](https://github.com/acmesh-official/acme.sh/wiki/Server) —
   默认 CA 是 ZeroSSL，`--server letsencrypt` 才是 Let's Encrypt
 
-**未能独立验证、本文不断言的点**：acme.sh 官方 wiki 页面本身没有明确写出
-`dns_ali` 插件所需的最小 RAM 权限列表（wiki 只说「需要 RAM API key」）；[第 4
-节](ram-permissions.md)的四个 action 是直接阅读 `dns_ali.sh`/`ali_cdn.sh` 源码里实际发出的 API
-调用得到的，如果 acme.sh 后续版本改变了这两个脚本的实现，这张表可能需要
-重新核对源码。另外，`DEPLOY_ALI_CDN_DOMAIN` 未设置时 `ali_cdn.sh` 会退回使用
-证书的 CN 作为目标域名，本脚本选择始终显式设置它而不依赖这个默认值。
+**未能独立验证、本文不断言的点**：`dns_ali.sh` 与 `ali_cdn.sh` 只读取 `Ali_Key`/`Ali_Secret`，
+不读安全令牌，所以不能直接用于 STS；这是读 3.1.6 源码得出的结论。RAM
+资源级授权（尤其 `alidns:DescribeDomainRecords`）需要在首次强制运行时实测；GitHub 生成的
+源码包的 sha256 在历史上稳定，但 GitHub 并不承诺，哪天变了，工作流会在校验步骤失败，需要人工
+核对后更新写死的摘要。

@@ -1,35 +1,35 @@
-# 6. 续期如何工作（首次运行之后不需要再手动做任何事）
+# 6. 续期如何工作
 
-`scripts/ops/renew-cdn-certificates.sh` 本身**不是**续期的调度者：
+`.github/workflows/cdn-certificates.yml`（`Renew CDN certificates`）每天 03:17 UTC 在 `main`
+上运行，也可手动触发。它是定时维护任务，不部署任何提交内容。无状态：没有服务器、cron 或
+`account.conf`，每次运行都从零开始。
 
-1. 如果 `~/.acme.sh/acme.sh` 不存在，脚本会从 acme.sh 官方仓库
-   `git clone` 后执行 `./acme.sh --install`（这是 acme.sh 自己文档里的两种
-   官方安装方式之一，另一种是 `curl | sh`；选择 git clone 是因为它可以审查
-   源码、可以钉在某个 tag 上，见脚本里的 `ACME_GIT_REF`）。这一步会在当前
-   用户的 crontab 里写入一条每天执行的任务：
+1. 工具在**每次**调用阿里云 API 之前（包括 acme.sh 钩子进程）向 GitHub 重新申请 OIDC 令牌
+   （audience `sts.aliyuncs.com`，已 `::add-mask::`，获取失败或为空即报错）并写入令牌文件，
+   由 `@alicloud/credentials` 换成角色 `coforge-cdn-cert-renewal` 的 STS 凭据。OIDC 令牌只有几分钟有效期，
+   而一次运行远比这长，所以不能只在工作流开头取一次。STS 值不导出、不打印。
+2. 下载 acme.sh 3.1.6 的源码包并校验写死的 sha256。acme.sh 自带的 `dns_ali` 与 `ali_cdn` 只接受
+   长期 `Ali_Key`/`Ali_Secret`，不支持 STS 令牌，所以这里 acme.sh **只负责 ACME 协议**；
+   DNS 与 CDN 调用由 `scripts/ops/renew-cdn-certificates.ts` 通过阿里云官方 SDK（`@alicloud/alidns20150109`、`@alicloud/cdn20180510`）用 STS 凭据发出。
+3. 对 [`cdn-certificate-domains.json`](../../../scripts/ops/cdn-certificate-domains.json) 里的每个域名：
+   用 `openssl s_client` 读 CDN 边缘当前证书的 `notAfter`；剩余不足 30 天（或 `force`）才续期。
+4. 续期：`acme.sh --issue --server letsencrypt --dns dns_cdncert`（每次新建 ACME 账号），
+   DNS-01 的 TXT 记录由钩子 `scripts/ops/acme-dns-hook.sh` 经 Bun 工具写入 `coforge.cn`，
+   校验后由同一钩子删除；签发前会先清掉该域名遗留的 `_acme-challenge` TXT 记录，结束时（无论成败）再清一次，
+   重复添加同一条记录视为成功。随后 `SetCdnDomainSSLCertificate`（`CertType=upload`，
+   `CertName=cert-<域名>-<毫秒时间戳>`）。
+   上传或边缘校验失败时，**用同一张证书**重试上传（最多 3 次），不会重新签发。
+5. 轮询边缘，直到它提供的证书 `notAfter` 等于新证书的 `notAfter`，否则该域名失败。
+6. 任一域名失败则整次运行失败（GitHub 会通知）；其余域名照常处理。
 
-   ```
-   0 0 * * * "$HOME/.acme.sh"/acme.sh --cron --home "$HOME/.acme.sh" > /dev/null
-   ```
+## 限流
 
-   这是 acme.sh 唯一的调度者；本脚本每次运行只用 `crontab -l` 确认这条任务
-   还在，不会再装第二个 cron 或 systemd timer。如果它不见了，脚本会打印
-   `acme.sh --install-cronjob` 这条可以直接执行的修复命令。
-2. `acme.sh --issue --server letsencrypt --dns dns_ali -d <domain>` 对每个域名
-   执行一次。`--server letsencrypt` 是显式写死的：acme.sh 自己的默认 CA 是
-   **ZeroSSL** 而不是 Let's Encrypt（见
-   [Server 说明](https://github.com/acmesh-official/acme.sh/wiki/Server)），
-   不写这一项就会按执行主机上碰巧的默认值签发，和本文档承诺的 CA 不一致。根据
-   acme.sh 官方说明，证书默认每 30 天检查一次续期（有 ACME Renewal
-   Information 时以 CA 建议的窗口为准），Let's Encrypt 证书有效期 90 天，
-   所以实际续期发生在到期前约 60 天，留有充足的重试窗口。已经签发且未到续期
-   窗口的证书会被跳过（除非 `FORCE_RENEW=1`），这就是脚本可以反复安全运行的
-   原因。
-3. `acme.sh --deploy -d <domain> --deploy-hook ali_cdn` 只需要成功执行一次：
-   acme.sh 会把这个部署钩子连同 `DEPLOY_ALI_CDN_DOMAIN` 一起写进该域名自己的
-   配置文件里；官方文档确认这类部署配置「will be stored with the domain
-   configuration and will be available when renewing, so that deploy will
-   happen automatically when renewed」。也就是说，[第 5 节](first-run.md)的首次运行之后，
-   之后每一次由 cron 触发的续期都会自动重新调用 `ali_cdn`，把新证书推送到
-   CDN，不需要人再跑一次这个脚本——除非要检查/记录续期是否成功，或者
-   `crontab -l` 显示 cron 任务丢失需要人工介入。
+Let's Encrypt 对同一域名集合每周最多签发 5 张。签发返回限流错误时，该域名被跳过且整次运行失败，
+工具不会重试签发。**一个失败的日子里最多手动 `force` 重跑几次**，先看日志找原因。
+想验证改动又不消耗额度，用 `staging` 输入（Let's Encrypt 测试 CA，只签发、不上传）。
+
+## 强制续期
+
+Actions -> `Renew CDN certificates` -> Run workflow（从 `main`），勾选 `force`；或
+`gh workflow run cdn-certificates.yml -f force=true`。Let's Encrypt 对同一域名集合每周最多签发
+5 张，不要反复强制。

@@ -37,8 +37,8 @@ object key 本身。这一节是它
    指向 `${IMAGES_BUCKET}`，开启同账号 STS 私有回源，**不启用** URL 鉴权，缓存与响应头
    按 [5.3](cdn-domains.md) 表格的 `images` 行设置为 `public, max-age=31536000, immutable`。
    `images-staging.coforge.cn` 的 HTTPS 证书不走控制台手动上传：它已经是
-   [`cdn-certificates/`](../cdn-certificates/README.md) 里 `scripts/ops/renew-cdn-certificates.sh`
-   覆盖的三个域名之一，按该文档[第 5 节](../cdn-certificates/first-run.md)跑一次首次签发即可，之后自动续期。
+   [`cdn-certificates/`](../cdn-certificates/README.md) 里定时工作流
+   覆盖的域名之一，按该文档[第 6 节](../cdn-certificates/renewal.md)手动触发一次并勾选 `force` 即可，之后自动续期。
 5. 在该域名的性能优化里把「忽略参数」改成**保留指定参数**并保留 `x-oss-process`。
    CDN 默认过滤 `?` 之后的全部参数，不改这一项样式参数根本到不了 OSS：结果不是报错，
    而是静默回退成原图，慢但能显示——所以必须按[第 6 节](acceptance-gate.md)实测样式 URL 的响应大小。

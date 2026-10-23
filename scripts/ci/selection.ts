@@ -7,6 +7,7 @@ const allChecks = [
   "computer",
   "daemon",
   "deploy",
+  "docs-site",
   "installer-crate",
   "macos-lifecycle",
   "oss-cdn",
@@ -60,6 +61,7 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
     const excluded = [
       "cdn-certs",
       "deploy",
+      "docs-site",
       "installer-crate",
       "oss-cdn",
       "reference-computer",
@@ -119,6 +121,11 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       affected = ["deploy", "web"];
     } else if (/^scripts\/verify-oss-cdn[.]/.test(path)) {
       affected = ["oss-cdn"];
+    } else if (path.startsWith("scripts/docs/")) {
+      affected = ["docs-site"];
+    } else if (path === ".github/workflows/docs-production.yml") {
+      // The workflow is checked by actionlint and scripts/ci's workflow tests; its script by docs-site.
+      affected = ["ci", "docs-site"];
     } else if (path.startsWith("scripts/ops/")) {
       affected = ["cdn-certs"];
     } else if (path.startsWith("scripts/reference-computer/")) {
@@ -153,7 +160,9 @@ if (import.meta.main) {
   const checks = selectChecks(paths, track);
   const libraries = checks.filter((check) => ["coforge-sdk", "agent", "coforge"].includes(check));
   const contracts = checks.filter((check) =>
-    ["cdn-certs", "ci", "deploy", "release", "oss-cdn", "reference-computer"].includes(check),
+    ["cdn-certs", "ci", "deploy", "docs-site", "release", "oss-cdn", "reference-computer"].includes(
+      check,
+    ),
   );
   const jobs = [
     "changes",

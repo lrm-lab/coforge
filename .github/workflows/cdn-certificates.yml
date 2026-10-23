@@ -1,0 +1,93 @@
+name: Renew CDN certificates
+
+# Keeps the Let's Encrypt certificates of the CDN domains (scripts/ops/cdn-certificate-domains.json)
+# current. A scheduled maintenance job, not a deployment: it publishes nothing from a commit. Each
+# run reads every domain's live certificate from the CDN edge and renews only those with fewer than
+# 30 days left (or all with `force`). A failed day must not be re-run with `force` more than a few
+# times: Let's Encrypt allows 5 certificates per week per domain set. The `certificates` GitHub Environment is restricted to main
+# and holds no secret; the job assumes the RAM role below through GitHub OIDC, whose policy allows
+# only the DNS TXT records of coforge.cn and SetCdnDomainSSLCertificate on the CDN domains.
+# docs/operations/cdn-certificates/ is the runbook.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Renew every domain now, whatever its expiry
+        required: false
+        type: boolean
+        default: false
+      staging:
+        description: >-
+          Dry run against Let's Encrypt staging: issues every domain's certificate and uploads
+          nothing. Use it to test changes before a real forced run.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdn-certificates
+  cancel-in-progress: false
+
+jobs:
+  renew:
+    name: Renew certificates near expiry
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: certificates
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          cache: false
+          install: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # acme.sh speaks the ACME protocol only (its own Alibaba Cloud hooks accept no STS token).
+      # Pinned to a tag and checked against the tarball's digest.
+      - name: Fetch acme.sh 3.1.6
+        env:
+          ACME_SH_SHA256: 0d3f9000ac44a6331314742a88c475f79134e24fc991997883652adc59efc486
+        run: |
+          curl -sSfL "https://github.com/acmesh-official/acme.sh/archive/refs/tags/3.1.6.tar.gz" \
+            -o "$RUNNER_TEMP/acme.tar.gz"
+          echo "$ACME_SH_SHA256  $RUNNER_TEMP/acme.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/acme.tar.gz" -C "$RUNNER_TEMP"
+
+      # The tool requests a fresh GitHub OIDC token before every Alibaba Cloud call (a token lives
+      # only minutes, a run far longer), writes it to the token file, masks it, and lets the
+      # `@alicloud/credentials` chain exchange it for STS; no STS value is ever exported or printed.
+      - name: Renew certificates
+        env:
+          ALIBABA_CLOUD_ROLE_ARN: acs:ram::1085194890307801:role/coforge-cdn-cert-renewal
+          ALIBABA_CLOUD_OIDC_PROVIDER_ARN: acs:ram::1085194890307801:oidc-provider/github-actions
+          ALIBABA_CLOUD_ROLE_SESSION_NAME: github-actions-${{ github.run_id }}
+          ALIBABA_CLOUD_ECS_METADATA_DISABLED: "true"
+          ALIBABA_CLOUD_OIDC_TOKEN_FILE: ${{ runner.temp }}/aliyun-oidc-token
+          INPUT_FORCE: ${{ inputs.force }}
+          INPUT_STAGING: ${{ inputs.staging }}
+        run: |
+          flags=()
+          if [ "$INPUT_FORCE" = true ]; then flags+=(--force); fi
+          if [ "$INPUT_STAGING" = true ]; then flags+=(--staging); fi
+          bun scripts/ops/renew-cdn-certificates.ts renew \
+            --acme-sh "$RUNNER_TEMP/acme.sh-3.1.6/acme.sh" "${flags[@]}"
