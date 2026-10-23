@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 
-import { parseOidcToken, requestOidcToken } from "./alicloud-clients";
+import { describeSdkError, parseOidcToken, requestOidcToken } from "./alicloud-clients";
 import {
   CDN_DOMAINS,
   certName,
@@ -172,4 +172,18 @@ describe("workflow and tool", () => {
     expect(text).toContain("cdn-certificates/");
     expect(text).not.toContain("不自动续期");
   });
+});
+
+test("an error without an API code still says what kind of failure it was, never its message", () => {
+  const network = new TypeError("fetch failed: secret-looking detail");
+  expect(describeSdkError("DNS record cleanup", network).message).toBe(
+    "DNS record cleanup failed: code=TypeError request-id=unknown",
+  );
+  const api = Object.assign(new Error("Signature mismatch for AK xyz"), {
+    code: "SignatureDoesNotMatch",
+    data: { RequestId: "req-1" },
+  });
+  expect(describeSdkError("DNS record cleanup", api).message).toBe(
+    "DNS record cleanup failed: code=SignatureDoesNotMatch request-id=req-1",
+  );
 });

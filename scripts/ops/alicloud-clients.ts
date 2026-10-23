@@ -89,11 +89,12 @@ export function sdkErrorCode(error: unknown): string | undefined {
   return typeof code === "string" ? code : undefined;
 }
 
-/** Only an API's code and request id: never the message, which may carry parameters. */
+/** Only an API's code and request id: never the message, which may carry parameters. A failure
+ * that never reached the API (network, credentials) has no code, so its error class stands in. */
 export function describeSdkError(action: string, error: unknown): Error {
   const data = (error as { data?: { RequestId?: unknown } } | null)?.data;
   const requestId = typeof data?.RequestId === "string" ? data.RequestId : "unknown";
-  return new Error(
-    `${action} failed: code=${sdkErrorCode(error) ?? "unknown"} request-id=${requestId}`,
-  );
+  const errorClass = error instanceof Error ? error.name : undefined;
+  const code = sdkErrorCode(error) ?? errorClass ?? "unknown";
+  return new Error(`${action} failed: code=${code} request-id=${requestId}`);
 }
