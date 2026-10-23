@@ -40,14 +40,23 @@ export function cloudDesktopUrl(
   return desktop.toString();
 }
 
-/** A sized popup, not a tab. `noopener` keeps the desktop page from navigating this one. */
-export const CLOUD_DESKTOP_WINDOW_FEATURES = "popup,width=1280,height=800,noopener,noreferrer";
+/** A sized popup. The window name is what reuses it; `noopener` would discard that name. */
+export const CLOUD_DESKTOP_WINDOW_FEATURES = "popup,width=1280,height=800";
 
-/** One window per desktop, so opening it again focuses that window when the browser allows it. */
+/** One window per desktop. The desktop page drops `window.opener` itself. */
 export function cloudDesktopWindowName(computerId: string, agentId?: string): string {
   return agentId ? `coforge-desktop-${computerId}-${agentId}` : `coforge-desktop-${computerId}`;
 }
 
+const openDesktops = new Map<string, Window>();
+
 export function openCloudDesktopWindow(url: string, computerId: string, agentId?: string): void {
-  window.open(url, cloudDesktopWindowName(computerId, agentId), CLOUD_DESKTOP_WINDOW_FEATURES);
+  const name = cloudDesktopWindowName(computerId, agentId);
+  const current = openDesktops.get(name);
+  if (current && !current.closed) {
+    current.focus();
+    return;
+  }
+  const opened = window.open(url, name, CLOUD_DESKTOP_WINDOW_FEATURES);
+  if (opened) openDesktops.set(name, opened);
 }

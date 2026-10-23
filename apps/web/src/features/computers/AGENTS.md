@@ -17,9 +17,11 @@ These rules apply to `src/features/computers/`.
   binds the creator's weekly-report assistant to the default computer. Each
   Workspace can add one extra. The cluster places it. The page does not ask the
   user to pick a host. The owner's Open desktop button opens
-  `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in a new tab when that
-  deployment variable is set. The same owner's Computer tab opens that Agent's
-  own screen at `/desktop/<computer id>/<agent id>/`. That origin is the Swarm
+  `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in its own window when that
+  deployment variable is set, and opening it again brings that window forward.
+  The same owner's Computer tab opens that Agent's
+  own screen at `/desktop/<computer id>/<agent id>/`, in that Agent's window.
+  That origin is the Swarm
   host proxy in front of the image, opened directly by the browser. The address
   carries no token. Without the variable the button is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server

@@ -4,6 +4,7 @@ import {
   CLOUD_DESKTOP_WINDOW_FEATURES,
   cloudDesktopUrl,
   cloudDesktopWindowName,
+  openCloudDesktopWindow,
 } from "#src/features/computers/cloud-desktop-url";
 
 const COMPUTER = "01a15829-2da5-740c-848c-c287bf1e8ab6";
@@ -43,13 +44,42 @@ test("an agent's desktop carries that agent's name as its window title", () => {
   );
 });
 
-test("a desktop opens in its own sized window", () => {
+test("a desktop opens in its own sized window, and a second open focuses that window", () => {
   const agent = "01a15829-2da5-740c-848c-c287bf1e8ab7";
   expect(CLOUD_DESKTOP_WINDOW_FEATURES.startsWith("popup,")).toBe(true);
   expect(CLOUD_DESKTOP_WINDOW_FEATURES).toContain("width=1280");
   expect(CLOUD_DESKTOP_WINDOW_FEATURES).toContain("height=800");
+  expect(CLOUD_DESKTOP_WINDOW_FEATURES).not.toContain("noopener");
+  expect(CLOUD_DESKTOP_WINDOW_FEATURES).not.toContain("noreferrer");
   expect(cloudDesktopWindowName(COMPUTER)).toBe(`coforge-desktop-${COMPUTER}`);
   expect(cloudDesktopWindowName(COMPUTER, agent)).toBe(`coforge-desktop-${COMPUTER}-${agent}`);
+
+  const opened: string[] = [];
+  let focused = 0;
+  const popup = {
+    closed: false,
+    focus: () => {
+      focused += 1;
+    },
+  };
+  const previous = globalThis.window;
+  globalThis.window = {
+    open: (url: string) => {
+      opened.push(url);
+      return popup;
+    },
+  } as unknown as Window & typeof globalThis;
+  try {
+    openCloudDesktopWindow("http://10.110.158.143:6090/desktop/one/", COMPUTER, agent);
+    openCloudDesktopWindow("http://10.110.158.143:6090/desktop/one/", COMPUTER, agent);
+    expect(opened).toEqual(["http://10.110.158.143:6090/desktop/one/"]);
+    expect(focused).toBe(1);
+    popup.closed = true;
+    openCloudDesktopWindow("http://10.110.158.143:6090/desktop/one/", COMPUTER, agent);
+    expect(opened).toHaveLength(2);
+  } finally {
+    globalThis.window = previous;
+  }
 });
 
 test("a computer id or origin that is not one desktop proxy is refused", () => {

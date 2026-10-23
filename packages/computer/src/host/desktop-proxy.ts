@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { adaptDesktopHtml, withDesktopTitle } from "./desktop-page";
+import { adaptDesktopHtml, releaseWindowOpener, withDesktopTitle } from "./desktop-page";
 
-export { adaptDesktopHtml, withDesktopTitle };
+export { adaptDesktopHtml, releaseWindowOpener, withDesktopTitle };
 
 export type DesktopEndpoint = { host: string; port: number; token: string };
 
@@ -150,7 +150,9 @@ async function proxyHttp(
     },
   );
   if (!upstreamPath.endsWith("/desktop.html") && upstreamPath !== "/desktop.html") return upstream;
-  const html = withDesktopTitle(adaptDesktopHtml(await upstream.text()), title);
+  const html = releaseWindowOpener(
+    withDesktopTitle(adaptDesktopHtml(await upstream.text()), title),
+  );
   const outHeaders = new Headers(upstream.headers);
   outHeaders.delete("content-length");
   return new Response(html, { status: upstream.status, headers: outHeaders });
