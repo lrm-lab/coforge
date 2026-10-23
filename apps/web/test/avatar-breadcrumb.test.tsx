@@ -54,11 +54,13 @@ const settingsProps = {
   githubCallbackError: false,
   githubWrongAccount: false,
   profile: {
+    id: "user-1",
     name: "Frank",
     displayName: "Frank",
     email: "frank@example.com",
     description: "",
     avatarUrl: null,
+    hasAvatar: false,
     joinedAt: "2026-01-01T00:00:00Z",
   },
   createdAgents: [],

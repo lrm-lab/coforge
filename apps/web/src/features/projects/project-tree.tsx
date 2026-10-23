@@ -4,13 +4,11 @@ import { Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, ArrowUpRight, ChevronRight, Folder } from "@untitledui/icons";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { PageHeader } from "#src/components/layout/page-header";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
@@ -26,6 +24,7 @@ import {
 } from "./project-tree-queries";
 import { RepositoryStatusMessage } from "./repository-status";
 import { buildTreeIndex, childrenOf, isBrowsable, type TreeEntry } from "./tree-index";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 type LastCommit = { sha: string; message: string; date: string } | null;
 const crumbLinkClassName =
@@ -449,14 +448,12 @@ function DirectoryBody({
             <>
               <span className="flex shrink-0 -space-x-1.5">
                 {latest.people.slice(0, 3).map((person) => (
-                  <Avatar
+                  <IdentityAvatar
                     key={person.name}
                     size="xs"
-                    src={person.avatarUrl ?? undefined}
-                    initials={avatarInitial(person.name)}
-                    contentClassName={avatarToneClassName(person.name)}
+                    name={person.name}
+                    src={person.avatarUrl}
                     className="ring-2 ring-bg-secondary"
-                    alt=""
                   />
                 ))}
               </span>

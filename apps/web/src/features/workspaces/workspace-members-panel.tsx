@@ -3,19 +3,18 @@ import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { DotsVertical, Shield01, UserMinus01, UsersPlus } from "@untitledui/icons";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useAppToast } from "#src/components/ui/toast";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { InviteMemberDialog } from "./invite-member-dialog";
 import { canManageMembers } from "./workspace-roles";
 import { workspaceRoleLabel } from "./workspace-role-label";
 import { removeWorkspaceMember, updateWorkspaceMemberRole } from "./members.functions";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 type MemberRow = {
   userId: string;
@@ -81,12 +80,11 @@ export function WorkspaceMembersPanel(props: {
               return (
                 <li key={member.userId} className="flex h-12 items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <Avatar
+                    <IdentityAvatar
                       size="sm"
+                      name={displayName}
                       alt={displayName}
-                      src={member.avatarUrl ?? undefined}
-                      initials={avatarInitial(displayName)}
-                      contentClassName={avatarToneClassName(displayName)}
+                      src={member.avatarUrl}
                       className="shrink-0"
                     />
                     <div className="flex min-w-0 items-baseline gap-1.5">

@@ -1,5 +1,4 @@
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import type { ThreadedConversationProps } from "./conversation-types";
 import { ThreadedConversation } from "./threaded-conversation";
 
@@ -33,8 +32,7 @@ export function DirectThreadedConversation({
             size="2xl"
             alt={avatar.name}
             src={avatar.src ?? undefined}
-            initials={avatarInitial(avatar.name)}
-            contentClassName={avatarToneClassName(avatar.name)}
+            name={avatar.name}
             className="ring-1 ring-secondary"
           />
         ),

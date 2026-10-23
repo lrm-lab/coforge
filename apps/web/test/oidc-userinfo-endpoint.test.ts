@@ -38,7 +38,7 @@ test("a Bearer access token reads the person's claims for every granted scope", 
     sub: "user-1",
     name: "Ada Lovelace",
     preferred_username: "ada",
-    picture: "https://coforge.example/avatars/portrait-07.webp",
+    picture: "https://coforge.example/avatars/person-3-1.webp",
     email: "ada@acme.example",
     email_verified: false,
     type: "user",
@@ -63,7 +63,8 @@ test("each scope releases only its claims, read as they are now", async () => {
   });
 
   const token = await accessToken(context, ["openid", "profile", "email"]);
-  // Changed after the token was issued: the answer follows the person, not the token.
+  // Changed after the token was issued: the answer follows the person, not the token. No picture
+  // the issuer can serve (an upload on a deployment without an image CDN) leaves the claim out.
   context.person.displayName = "Ada King";
   context.person.picture = null;
   context.person.email = null;
@@ -197,7 +198,7 @@ test("narrowing the app's scopes or the person's consent narrows what an issued 
     sub: "user-1",
     name: "Ada Lovelace",
     preferred_username: "ada",
-    picture: "https://coforge.example/avatars/portrait-07.webp",
+    picture: "https://coforge.example/avatars/person-3-1.webp",
     type: "user",
     workspace_id: "ws-acme",
     workspace_slug: "acme",

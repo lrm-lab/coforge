@@ -2,12 +2,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { Check, ChevronLeft, ChevronRight } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import type { loadWeeklyReportStats } from "./records.functions";
 import { BackToRecords } from "./records-layout";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 export type WeeklyStats = Awaited<ReturnType<typeof loadWeeklyReportStats>>;
 
@@ -89,12 +88,11 @@ export function WeeklyReportStats({
                   <tr key={member.userId}>
                     <td className="px-4 py-3 sm:px-5">
                       <div className="flex items-center gap-2">
-                        <Avatar
+                        <IdentityAvatar
                           size="xs"
+                          name={member.displayName}
                           alt={member.displayName}
-                          src={member.avatarUrl ?? undefined}
-                          initials={avatarInitial(member.displayName)}
-                          contentClassName={avatarToneClassName(member.displayName)}
+                          src={member.avatarUrl}
                         />
                         <span className="font-medium text-primary">{member.displayName}</span>
                       </div>

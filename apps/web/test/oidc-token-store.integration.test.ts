@@ -39,7 +39,7 @@ async function fixture(db: PrismaClient) {
       displayName: "Ada Lovelace",
       username: `oidc-ada-${suffix}`,
       email: "ada@acme.example",
-      avatarObjectKey: "preset:portrait-07",
+      avatarObjectKey: "preset:person-3",
     },
   });
   const workspace = await db.workspace.create({
@@ -165,7 +165,7 @@ test.skipIf(!db)("an approved code redeems once, and UserInfo reads the person",
       sub: f.member.id,
       name: "Ada Lovelace",
       preferred_username: f.member.username,
-      picture: "https://coforge.example/avatars/portrait-07.webp",
+      picture: "https://coforge.example/avatars/person-3-1.webp",
       email: "ada@acme.example",
       email_verified: false,
       type: "user",

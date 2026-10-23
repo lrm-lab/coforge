@@ -1,3 +1,5 @@
+import { currentPersonPictureUrl, isPersonPicture } from "#src/lib/person-picture";
+
 export type RecordAssistantPayload =
   | { kind: "offer-help-generate" }
   | { kind: "collect-plan"; reportId: string; year: number; week: number }
@@ -21,10 +23,19 @@ export type RecordAssistantPayload =
       updatedAt?: string;
       recipients?: Array<{
         displayName: string;
+        /** The recipient's user id, absent on a payload written before it was stored: the avatar
+         * then resolves to the default cartoon person only when the stored URL is gone. */
+        userId?: string;
         avatarUrl: string | null;
       }>;
       recipientTotal?: number;
     };
+
+/** A stock portrait the cartoon people replaced (`/avatars/portrait-NN.webp`), still named by
+ * payloads stored before. */
+function isRetiredPortrait(url: string): boolean {
+  return url.startsWith("/avatars/portrait-");
+}
 
 export function parseRecordAssistantPayload(value: unknown): RecordAssistantPayload | null {
   if (!value || typeof value !== "object") return null;
@@ -45,12 +56,21 @@ export function parseRecordAssistantPayload(value: unknown): RecordAssistantPayl
     const recipients = Array.isArray(row.recipients)
       ? row.recipients.flatMap((entry) => {
           if (!entry || typeof entry !== "object") return [];
-          const person = entry as { displayName?: unknown; avatarUrl?: unknown };
+          const person = entry as { displayName?: unknown; userId?: unknown; avatarUrl?: unknown };
           if (typeof person.displayName !== "string" || !person.displayName.trim()) return [];
           return [
             {
               displayName: person.displayName.trim(),
-              avatarUrl: typeof person.avatarUrl === "string" ? person.avatarUrl : null,
+              ...(typeof person.userId === "string" && person.userId
+                ? { userId: person.userId }
+                : {}),
+              // A payload is stored as written: a cartoon person is re-resolved from its id (a
+              // version bump cannot strand it), a retired stock portrait no longer exists.
+              avatarUrl:
+                typeof person.avatarUrl === "string" && !isRetiredPortrait(person.avatarUrl)
+                  ? (currentPersonPictureUrl(person.avatarUrl) ??
+                    (isPersonPicture(person.avatarUrl) ? null : person.avatarUrl))
+                  : null,
             },
           ];
         })

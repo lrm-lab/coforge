@@ -88,7 +88,7 @@ export function endpoints({ signingKeys = SIGNING_KEYS }: { signingKeys?: Signin
     username: "ada",
     displayName: "Ada Lovelace",
     email: "ada@acme.example" as string | null,
-    picture: "/avatars/portrait-07.webp" as string | null,
+    picture: "/avatars/person-3-1.webp" as string | null,
   };
   const membership = { role: "admin" as string | undefined, installed: true };
   const consent = { revoked: false, scopes: ["openid", "profile", "email", "identity"] };

@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { mascotStaticUrl } from "#src/features/agents/mascot-contract";
 
 // Frank's references (2026-10-23): every Agent mascot is a sticker, the white-edged figure drawn
-// larger than a light backdrop and unclipped. The moving avatar (message stream, Agent card,
-// profile) once fell back to the clipped photo tile because it has no `src`.
+// larger than its box, unclipped, with no backdrop behind it. The moving avatar (DM row, Agent
+// card, profile) once fell back to the clipped photo tile because it has no `src`.
 test("a moving mascot avatar is the same sticker as a still one, never a clipped tile", () => {
   const moving = renderToStaticMarkup(<AgentMascotAvatar mascot="blue" name="Atlas" size="sm" />);
   const still = renderToStaticMarkup(

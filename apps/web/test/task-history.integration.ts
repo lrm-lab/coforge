@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { TaskHistoryEvent } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
@@ -100,7 +101,7 @@ test("Task changes record history events with their before and after state", asy
       id: alice.id,
       name: "Alice",
       handle: alice.username,
-      avatarUrl: null,
+      avatarUrl: personAvatarUrl(alice.id, null),
     });
     expect(await history(task.number)).toEqual([
       {

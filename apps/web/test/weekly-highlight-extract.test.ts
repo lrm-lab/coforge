@@ -51,3 +51,22 @@ test("parseRecordAssistantPayload rejects removed highlight payload kinds", () =
   expect(parseRecordAssistantPayload({ kind: "generating", highlightId: "hl-1" })).toBeNull();
   expect(parseRecordAssistantPayload({ kind: "generated", highlightId: "hl-1" })).toBeNull();
 });
+
+test("parseRecordAssistantPayload drops a retired stock portrait and keeps the recipient's id", () => {
+  const parsed = parseRecordAssistantPayload({
+    kind: "offer-send",
+    recipients: [
+      { displayName: "Ada", userId: "u-1", avatarUrl: "/avatars/portrait-07.webp" },
+      { displayName: "Bo", avatarUrl: "/api/workspaces/w/users/u-2/avatar?v=a" },
+      { displayName: "Cy", userId: "u-3", avatarUrl: "/avatars/person-3-0.webp" },
+    ],
+  });
+  expect(parsed).toEqual({
+    kind: "offer-send",
+    recipients: [
+      { displayName: "Ada", userId: "u-1", avatarUrl: null },
+      { displayName: "Bo", avatarUrl: "/api/workspaces/w/users/u-2/avatar?v=a" },
+      { displayName: "Cy", userId: "u-3", avatarUrl: "/avatars/person-3-1.webp" },
+    ],
+  });
+});

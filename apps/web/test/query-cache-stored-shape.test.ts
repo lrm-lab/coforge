@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { describe, expect, test } from "bun:test";
 import type { InferDataFromTag, QueryKey } from "@tanstack/react-query";
 
@@ -105,7 +106,7 @@ const windowFields = {
       handle: "ada",
       label: "Ada",
       description: "",
-      avatarUrl: null,
+      avatarUrl: personAvatarUrl("user-1", null),
       mentionScore: 0,
     },
   ],
@@ -172,7 +173,12 @@ const fixtures = [
         ...windowFields,
         conversationId: "d2",
         kind: "people",
-        peer: { id: "user-2", username: "grace", displayName: "Grace", avatarUrl: null },
+        peer: {
+          id: "user-2",
+          username: "grace",
+          displayName: "Grace",
+          avatarUrl: personAvatarUrl("user-2", null),
+        },
         messages: [message],
       },
     ],
@@ -393,6 +399,20 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "channel window": "e7aded67e38ffb44",
     "direct window with an Agent": "1725081943acee05",
     "direct window with a person": "4b31a9f0b0c38386",
+    "sidebar channels": "91afa2f21eb4ec87",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "331d221481674004",
+    "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
+    "chat sections": "4c7716ab24622fdc",
+    "chat section order": "89829726781b01aa",
+  },
+  // A person's `avatarUrl` is never `null` either: one with no avatar carries the cartoon person
+  // their id chooses, and the thirty portrait photos a stored URL could name are gone.
+  9: {
+    "channel window": "311f6b99684eed2c",
+    "direct window with an Agent": "409b90398ef4884e",
+    "direct window with a person": "7adde1efb9396169",
     "sidebar channels": "91afa2f21eb4ec87",
     "sidebar directs": "5205999212e744be",
     "channel names": "331d221481674004",

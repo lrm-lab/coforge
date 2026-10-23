@@ -60,6 +60,7 @@ export function AgentMascotView({
   mascot,
   activity,
   still = false,
+  hovered: hoveredFromParent,
   className,
 }: {
   mascot: AgentMascot;
@@ -68,10 +69,14 @@ export function AgentMascotView({
   /** The picture stays still whatever the Agent does (an archived Agent's, a copy of an avatar
    * already moving elsewhere on screen). */
   still?: boolean;
+  /** Whether the pointer is over a larger target this picture belongs to (a list row), which
+   * decides the mascot's `hovered` in place of the picture's own pointer. */
+  hovered?: boolean;
   className?: string;
 }) {
   const reducedMotion = usePrefersReducedMotion();
-  const [hovered, setHovered] = useState(false);
+  const [hoveredOver, setHovered] = useState(false);
+  const hovered = hoveredFromParent ?? hoveredOver;
   const [failed, setFailed] = useState(false);
   const mayMove = !still && !reducedMotion && !failed;
   const [watch, near] = useNearViewport(mayMove);

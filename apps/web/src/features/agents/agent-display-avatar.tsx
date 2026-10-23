@@ -1,14 +1,10 @@
-import { Avatar, type AvatarProps } from "#src/components/base/avatar/avatar";
+import type { AvatarProps } from "#src/components/base/avatar/avatar";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { StatusDot } from "#src/components/ui/status-dot";
-import { cx } from "#src/utils/cx";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { m } from "#src/paraglide/messages";
-import { DELETED_AGENT_AVATAR_CLASS, DELETED_AGENT_PICTURE_CLASS } from "./deleted-agent";
 import { agentDisplay } from "./agent-activity-presentation";
 import { agentAvatarUrl } from "./agent-mascot";
-import { AvatarSticker, IdentityAvatar, StickerInitial, StickerPicture } from "./avatar-sticker";
-import { isMascotPicture } from "./mascot-contract";
 
 export type AvatarSize = NonNullable<AvatarProps["size"]>;
 
@@ -53,40 +49,22 @@ export function AgentDisplayAvatar({
       aria-label={`${name}, ${deleted ? m.agent_deleted_badge() : view.label}`}
       className="relative flex shrink-0 rounded-[inherit]"
     >
-      {isMascotPicture(picture) ? (
-        <AvatarSticker
-          size={size}
-          className={className}
-          contentClassName={deleted ? DELETED_AGENT_PICTURE_CLASS : undefined}
-          badge={badge}
-        >
-          <StickerPicture
-            src={picture}
-            fallback={<StickerInitial initial={avatarInitial(name)} />}
-          />
-        </AvatarSticker>
-      ) : (
-        <Avatar
-          size={size}
-          className={className}
-          alt=""
-          src={picture}
-          initials={avatarInitial(name)}
-          contentClassName={
-            deleted
-              ? cx(DELETED_AGENT_AVATAR_CLASS, DELETED_AGENT_PICTURE_CLASS)
-              : avatarToneClassName(name)
-          }
-          badge={badge}
-        />
-      )}
+      <IdentityAvatar
+        size={size}
+        className={className}
+        alt=""
+        src={picture}
+        name={name}
+        deleted={deleted}
+        badge={badge}
+      />
     </span>
   );
 }
 
 /** One face in an overlapping stack of Agents: its sticker with no status dot, which the overlap
  * would half cover, and the same page-coloured separator ring as the stack's "+N" chip, so the
- * overlapping backdrops read as separate faces. */
+ * overlapping stickers read as separate faces. */
 export function AgentStackFace({
   agent,
 }: {
@@ -97,8 +75,7 @@ export function AgentStackFace({
       size="xs"
       alt=""
       src={agent.avatarUrl ?? agentAvatarUrl(agent.id)}
-      initials={avatarInitial(agent.displayName)}
-      contentClassName={avatarToneClassName(agent.displayName)}
+      name={agent.displayName}
       className="ring-2 ring-bg-primary"
     />
   );

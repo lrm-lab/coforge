@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Hash01 as Hash } from "@untitledui/icons";
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
@@ -196,13 +195,7 @@ function MentionRow({
           size="xs"
         />
       ) : (
-        <IdentityAvatar
-          size="xs"
-          alt=""
-          src={mention.avatarUrl}
-          initials={avatarInitial(mention.label)}
-          contentClassName={avatarToneClassName(mention.label)}
-        />
+        <IdentityAvatar size="xs" alt="" src={mention.avatarUrl} name={mention.label} />
       )}
       <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,auto)_auto_minmax(0,1fr)] items-center gap-1.5">
         <span

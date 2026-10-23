@@ -4,14 +4,13 @@ import { getRouteApi } from "@tanstack/react-router";
 import { ChevronRight } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
-import { IdentityAvatar } from "./avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover";
 import { ClockTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { StatusDot } from "#src/components/ui/status-dot";
-import { avatarInitial } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay, presentActivityRows } from "./agent-activity-presentation";
 import { ActivityMarker } from "./activity-marker";
@@ -132,7 +131,7 @@ function AgentCard({
           <AgentMascotAvatar mascot={mascot} name={displayName} display={display} size="md" />
         ) : (
           // An Agent outside the live roster whose profile has not landed: its still picture.
-          <IdentityAvatar size="md" alt="" src={src} initials={avatarInitial(displayName)} />
+          <IdentityAvatar size="md" alt="" src={src} name={displayName} />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">

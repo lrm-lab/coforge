@@ -11,7 +11,7 @@ import { still, track, type ColorKey, type Tracks } from "./timeline.ts";
  * sheets; the face box is tight on orange), and inside the circle the web draws behind the
  * figure. Everything here is in artboard units (24 by 24), outside the fitted figure.
  */
-/** The web's backdrop circle in artboard units: the picture is drawn at 110% of the avatar,
+/** The avatar's circle in artboard units (no fill is drawn there now): the picture is drawn at 110% of the avatar,
  * 5% left and 6.5% up (`.avatar-sticker-figure` in `styles.css`). */
 export const CIRCLE = { centre: [12, 12.33] as Point, radius: 10.9 };
 const BUBBLE = { centre: [13.5, 4.1] as Point, width: 5, height: 3.3 };
@@ -81,7 +81,7 @@ export function thoughtXml(rig: ThoughtRig): string {
   );
 }
 
-/** Whether the bubble, its white edge included, lies inside the backdrop circle. */
+/** Whether the bubble, its white edge included, lies inside the avatar's circle. */
 export function bubbleInsideCircle(): boolean {
   const half = BUBBLE.width / 2 - R;
   return [-half, half].every(

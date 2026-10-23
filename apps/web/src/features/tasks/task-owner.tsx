@@ -1,6 +1,6 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -19,7 +19,7 @@ export function TaskPerson({
     >
       <IdentityAvatar
         size="xs"
-        initials={person.name.trim().charAt(0).toUpperCase()}
+        name={person.name}
         alt=""
         src={person.avatarUrl ?? undefined}
         deleted={person.deleted}
@@ -47,7 +47,7 @@ export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {
         {owner ? (
           <IdentityAvatar
             size="xs"
-            initials={owner.name.trim().charAt(0).toUpperCase()}
+            name={owner.name}
             alt=""
             src={owner.avatarUrl ?? undefined}
             deleted={owner.deleted}

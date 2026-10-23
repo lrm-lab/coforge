@@ -1,3 +1,4 @@
+import { fnv1a } from "#src/lib/stable-hash";
 import { MASCOT_IDS, mascotStaticUrl, type MascotId } from "./mascot-contract";
 
 /**
@@ -21,11 +22,7 @@ export function isAgentMascot(value: unknown): value is AgentMascot {
 /** The mascot of an Agent that has not been given one: a stable FNV-1a hash of its id, taken
  * modulo the pool in `AGENT_MASCOTS` order. */
 export function defaultAgentMascot(agentId: string): AgentMascot {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < agentId.length; index += 1) {
-    hash = Math.imul(hash ^ agentId.charCodeAt(index), 0x01000193);
-  }
-  return AGENT_MASCOTS[(hash >>> 0) % AGENT_MASCOTS.length]!;
+  return AGENT_MASCOTS[fnv1a(agentId) % AGENT_MASCOTS.length]!;
 }
 
 /** The mascot one Agent shows: its creator's pick, else the one its id chooses. A stored key this

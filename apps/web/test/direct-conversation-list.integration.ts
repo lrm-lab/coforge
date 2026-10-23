@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
@@ -106,7 +107,7 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
         userId: grace.id,
         username: usernames[1]!,
         displayName: "Grace Hopper",
-        avatarUrl: null,
+        avatarUrl: personAvatarUrl(grace.id, null),
       },
       muted: false,
       lastMessage: null,
@@ -118,7 +119,7 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
         userId: ada.id,
         username: usernames[0]!,
         displayName: usernames[0]!,
-        avatarUrl: null,
+        avatarUrl: personAvatarUrl(ada.id, null),
       },
       muted: false,
       lastMessage: null,

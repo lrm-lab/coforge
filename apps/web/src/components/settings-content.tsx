@@ -21,7 +21,7 @@ import {
 } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import AnimatedGradient from "#src/components/spell/animated-gradient";
 import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
 import { AvatarPicker } from "#src/features/profiles/avatar-picker";
@@ -68,7 +68,6 @@ import {
   settingsSection,
   type SettingsSection,
 } from "#src/features/settings/settings-sections";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { formatCalendarDate } from "#src/lib/dates";
 import { isTimeFormat, localeTimeFormat, type TimeFormat } from "#src/lib/time-format";
 import { cn } from "#src/lib/utils";
@@ -85,6 +84,7 @@ interface SettingsContentProps {
   githubWrongAccount?: boolean;
   onSectionChange?: (section: SettingsSection) => void;
   profile: {
+    id: string;
     /** The name teammates see: the display name. */
     name: string;
     /** Null until the person has been asked for it. */
@@ -93,6 +93,8 @@ interface SettingsContentProps {
     email: string | null;
     description: string;
     avatarUrl: string | null;
+    /** False while `avatarUrl` is only the default cartoon. */
+    hasAvatar: boolean;
     /** When the account was created, as an ISO instant. */
     joinedAt: string;
   };
@@ -433,7 +435,7 @@ function AccountSettings({
 
   const headerAvatarSrc = editing
     ? removeAvatar
-      ? null
+      ? undefined
       : (pendingAvatarPreview ?? profile.avatarUrl)
     : profile.avatarUrl;
 
@@ -466,13 +468,13 @@ function AccountSettings({
         </div>
         <header className="flex min-w-0 items-start gap-4 px-4 sm:gap-6 sm:px-8">
           <div className="relative -mt-12 shrink-0 rounded-[1.75rem] bg-primary p-1 shadow-lg">
-            <Avatar
+            <IdentityAvatar
               size="2xl"
               className="size-24"
-              src={headerAvatarSrc}
+              name={profile.name}
               alt={profile.name}
-              initials={avatarInitial(profile.name)}
-              contentClassName={avatarToneClassName(profile.name)}
+              userId={profile.id}
+              src={headerAvatarSrc}
             />
           </div>
           <div className="min-w-0 flex-1 pt-4">
@@ -515,10 +517,10 @@ function AccountSettings({
                   type="button"
                   color="link-gray"
                   size="sm"
-                  isDisabled={saving || removeAvatar || !(profile.avatarUrl || pendingAvatar)}
+                  isDisabled={saving || removeAvatar || !(profile.hasAvatar || pendingAvatar)}
                   onPress={() => {
                     setPendingAvatar(null);
-                    setRemoveAvatar(Boolean(profile.avatarUrl));
+                    setRemoveAvatar(profile.hasAvatar);
                   }}
                 >
                   {m.settings_avatar_remove()}

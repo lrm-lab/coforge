@@ -1,9 +1,8 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Bell01, Check, Plus } from "@untitledui/icons";
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { executeMentionActions } from "./channels.functions";
@@ -145,8 +144,7 @@ export function PendingMentionStrip({
                 size="xs"
                 alt=""
                 src={mention.targetAvatarUrl}
-                initials={avatarInitial(mention.targetLabel)}
-                contentClassName={avatarToneClassName(mention.targetLabel)}
+                name={mention.targetLabel}
               />
               <p role="status" className="min-w-0 flex-1 text-sm text-secondary">
                 {mention.outcome === "added"

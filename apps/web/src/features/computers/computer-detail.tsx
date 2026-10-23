@@ -14,7 +14,6 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Checkbox as AriaCheckbox } from "react-aria-components";
 import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -25,7 +24,6 @@ import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useAppToast } from "#src/components/ui/toast";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { TerminalCommand } from "./terminal-command";
@@ -77,6 +75,7 @@ import type {
   ComputerUpgradeStatus,
 } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 export const RESTART_POLL_INTERVAL_MS = 2_000;
 export const RESTART_MAX_POLLS = 31;
@@ -514,12 +513,10 @@ export function ComputerDetail({
                   label={m.computer_added_by()}
                   value={
                     <span className="flex min-w-0 items-center justify-end gap-2">
-                      <Avatar
+                      <IdentityAvatar
                         size="xs"
+                        name={creatorName}
                         src={computer.creator.avatarUrl}
-                        alt=""
-                        initials={avatarInitial(creatorName)}
-                        contentClassName={avatarToneClassName(creatorName)}
                       />
                       <span className="truncate">
                         {creatorName} ·{" "}

@@ -1,8 +1,9 @@
-import { Avatar, type AvatarProps } from "#src/components/base/avatar/avatar";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import type { AvatarProps } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { useMemberOnline } from "./member-presence";
 
-/** A Workspace member's avatar with their online dot, wherever a member is shown by face. */
+/** A Workspace member's avatar with their online dot, wherever a member is shown by face. A
+ * member with no picture shows the cartoon person their id chooses. */
 export function MemberAvatar({
   userId,
   name,
@@ -18,13 +19,13 @@ export function MemberAvatar({
 }) {
   const online = useMemberOnline(userId);
   return (
-    <Avatar
+    <IdentityAvatar
       size={size}
       className={className}
+      name={name}
+      userId={userId}
       alt={name}
-      src={src ?? undefined}
-      initials={avatarInitial(name)}
-      contentClassName={avatarToneClassName(name)}
+      src={src}
       // No dot until presence is known: an unknown state is never drawn as offline.
       status={online === undefined ? undefined : online ? "online" : "offline"}
     />

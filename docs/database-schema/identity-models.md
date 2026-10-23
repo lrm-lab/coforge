@@ -65,9 +65,18 @@ worded inline where it is typed.
 avatar in the shared user-files store; image bytes and delivery URLs are never
 stored in PostgreSQL. Replacing an avatar writes a new immutable object before
 the row points to it, then removes the previous object. A user who picks one of
-the platform's preset pictures stores `preset:<id>` in `avatarObjectKey` with a
-null `avatarContentType`: it names no object and resolves to the app's own
-`/avatars/<id>.webp`. An `Agent` has no uploaded picture: its nullable
+the platform's preset pictures, four cartoon people (`person-1` to `person-4`),
+stores `preset:<id>` in `avatarObjectKey` with a null `avatarContentType`: it names
+no object and resolves to the app's own `/avatars/<id>-<version>.webp`. A user with
+no avatar (null key), or whose preset this build does not ship, shows the cartoon
+person a stable hash of their user id chooses (`personAvatarUrl`, `src/lib/person-picture.ts`); nothing
+is stored for that, and every user avatar URL the server returns to the browser
+is therefore never null. Login with CoForge's `picture` is the same person as an
+absolute URL on the issuer; it is absent only for an upload on a deployment
+without an image CDN. The thirty portrait photos (`portrait-01` to `portrait-30`) were
+retired by migration `20261024130000_avatar_cartoon_people`, which rewrote
+`preset:portrait-NN` to `preset:person-((NN - 1) % 4 + 1)`; uploaded photos were
+left alone. An `Agent` has no uploaded picture: its nullable
 `avatarMascot` holds the key of the platform mascot its creator picked (one of
 seven, validated at the server boundary); null shows the mascot its id chooses.
 Its `avatarObjectKey` and `avatarContentType` are no longer read and are dropped

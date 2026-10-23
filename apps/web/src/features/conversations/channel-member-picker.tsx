@@ -1,9 +1,8 @@
 import { Checkbox as AriaCheckbox } from "react-aria-components";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { BadgeWithButton } from "#src/components/base/badges/badges";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { memberMatchesSearch, type SearchableMember } from "./channel-member-search";
@@ -224,8 +223,7 @@ function ChannelCandidateRow({
               className="avatar-square"
               alt=""
               src={entry.avatarUrl ?? undefined}
-              initials={avatarInitial(entry.displayName)}
-              contentClassName={avatarToneClassName(entry.displayName)}
+              name={entry.displayName}
             />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-primary">

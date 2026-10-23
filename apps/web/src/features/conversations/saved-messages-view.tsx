@@ -2,7 +2,7 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -140,6 +140,8 @@ function SavedMessageCard({
               <IdentityAvatar
                 size="xs"
                 src={message.senderAvatarUrl ?? null}
+                name={message.senderName}
+                deleted={message.senderDeleted}
                 alt=""
                 className="size-4 shrink-0"
               />

@@ -5,19 +5,8 @@ import { m } from "#src/paraglide/messages";
  * The single place that renders a deleted Agent's identity treatment. A deleted Agent
  * keeps its history, so it can still appear in message rows, the thread root, the thread reply
  * preview and the DM header; all of those share this module so the grey avatar and the `ARCHIVED`
- * badge cannot drift apart between surfaces.
+ * badge cannot drift apart between surfaces. The grey avatar itself is `features/avatars/deleted-avatar.ts`.
  */
-
-/**
- * The deleted avatar background. Deliberately its own token rather than `bg-offline`:
- * `docs/design-tokens.md` documents `--color-offline` as the presence/status *dot* colour, and a
- * deleted identity is not a presence state. The value matches the light/dark offline greys so the
- * rendering is unchanged, but the name says what it means.
- */
-export const DELETED_AGENT_AVATAR_CLASS = "bg-avatar-deleted text-white";
-
-/** A deleted Agent's mascot sticker, which has no tile to grey: the sticker itself is greyed. */
-export const DELETED_AGENT_PICTURE_CLASS = "grayscale opacity-60";
 
 /** The `ARCHIVED` (已归档) marker shown beside a deleted Agent's name. */
 export function DeletedAgentBadge() {

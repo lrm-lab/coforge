@@ -115,7 +115,7 @@ export class PrismaGrantStore implements GrantStore {
         username: user.username,
         displayName: user.displayName,
         email: user.email,
-        picture: publicAvatarUrl(user.avatarObjectKey),
+        picture: publicAvatarUrl(userId, user.avatarObjectKey),
       },
       workspace: { id: workspaceId, slug: workspace.slug },
     };

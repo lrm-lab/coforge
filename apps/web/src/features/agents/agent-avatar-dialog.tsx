@@ -7,7 +7,8 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
-import { AvatarChoice } from "#src/features/profiles/avatar-choice";
+import { AvatarChoice } from "#src/features/avatars/avatar-choice";
+import { AgentMascotView } from "./agent-mascot-view";
 import { AGENT_MASCOTS, isAgentMascot, type AgentMascot } from "./agent-mascot";
 import { mascotStaticUrl } from "./mascot-contract";
 
@@ -23,7 +24,7 @@ const MASCOT_LABELS: Record<AgentMascot, () => string> = {
 
 /**
  * The creator's mascot picker, opened by clicking the Agent's picture in its profile: the
- * platform's mascots in a grid with the one the Agent shows now selected. Nothing is written
+ * platform's mascots, moving, in a grid with the one the Agent shows now selected. Nothing is written
  * until Save; Cancel and Escape drop the choice.
  */
 export function AgentAvatarDialog({
@@ -106,6 +107,11 @@ export function AgentAvatarDialog({
                     value={key}
                     src={mascotStaticUrl(key)}
                     label={MASCOT_LABELS[key]()}
+                    // The mascots move while choosing: idle, eyes following the cursor, and the
+                    // hover reaction under the pointer (a still picture with reduced motion).
+                    figure={(hovered) => (
+                      <AgentMascotView mascot={key} activity="idle" hovered={hovered} />
+                    )}
                   />
                 ))}
               </RadioGroup>

@@ -11,13 +11,11 @@ import {
 } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { useAppToast } from "#src/components/ui/toast";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
 import { KEY_POINT_EXTRACTION_TAB, KeyPointExtractionPanel } from "./key-point-extraction-panel";
@@ -78,6 +76,7 @@ import { TemplateChildrenTable, type TemplateChild } from "./template-children-t
 import { normalizeLeaderFormatTabs, resetLeaderFormatPage } from "./template-outline-sections";
 import { WEEKLY_SEND_TOAST_MS, WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";
 import { zonedCalendarDate } from "./weekly-report-schedule-due";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { sendWindowEnd, useWeeklySendArmed } from "./use-send-window";
 import {
   readingWheelSession,
@@ -560,12 +559,11 @@ function ReportDetail({
             {returnTo ? <RecordsKeyPointReturnBack returnTo={returnTo} /> : <BackToRecords />}
           </span>
           <div className="flex min-w-0 flex-1 items-start gap-2.5">
-            <Avatar
+            <IdentityAvatar
               size="sm"
+              name={report.author.displayName}
               alt={report.author.displayName}
-              src={report.author.avatarUrl ?? undefined}
-              initials={avatarInitial(report.author.displayName)}
-              contentClassName={avatarToneClassName(report.author.displayName)}
+              src={report.author.avatarUrl}
               className="mt-0.5"
             />
             <div className="min-w-0 flex-1">

@@ -11,6 +11,7 @@ import {
   publicImageUrlOrFallback,
   type PublicImageUrlResolver,
 } from "#src/server/files/public-image-delivery.server";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { readUserAvatar } from "#src/server/profiles/user-avatar.server";
 
 /**
@@ -19,19 +20,23 @@ import { readUserAvatar } from "#src/server/profiles/user-avatar.server";
  * is why that route exists at all. The fallback carries the object's version token (`?v=`) like
  * the other three avatars: it is what makes the route's one-year immutable answer safe — a new
  * upload lands on a new URL. (The fallback only runs with a key, so the token is always there.)
+ * With no avatar the creator shows the cartoon person their id chooses, as everywhere.
  */
 export function computerCreatorAvatarUrl(
   computerId: string,
   workspaceId: string,
-  objectKey: string | null,
+  owner: { id: string; avatarObjectKey: string | null },
   publicUrl: PublicImageUrlResolver = publicImageUrl,
 ) {
-  return publicImageUrlOrFallback(
-    objectKey,
-    PROFILE_IMAGE_STYLES.avatar,
-    (key) =>
-      `/api/computers/${computerId}/creator-avatar?workspaceId=${workspaceId}&v=${encodeURIComponent(publicImageVersion(key))}`,
-    publicUrl,
+  return personAvatarUrl(
+    owner.id,
+    publicImageUrlOrFallback(
+      owner.avatarObjectKey,
+      PROFILE_IMAGE_STYLES.avatar,
+      (key) =>
+        `/api/computers/${computerId}/creator-avatar?workspaceId=${workspaceId}&v=${encodeURIComponent(publicImageVersion(key))}`,
+      publicUrl,
+    ),
   );
 }
 

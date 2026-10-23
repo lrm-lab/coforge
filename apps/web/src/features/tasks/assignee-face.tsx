@@ -1,6 +1,6 @@
 import type { FC } from "react";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { cx } from "#src/utils/cx";
 
 const faces = new Map<string, FC<{ className?: string }>>();

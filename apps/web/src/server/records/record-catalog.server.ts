@@ -7,6 +7,7 @@ import {
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
+import { offerSendRecipient } from "./weekly-report-offer-recipient.server";
 import {
   currentIsoWeek,
   emptyReportContent,
@@ -3184,10 +3185,7 @@ export class RecordCatalog {
 
     const recipients = people
       .filter((user) => user.id !== input.userId)
-      .map((user) => ({
-        displayName: humanLabel(user),
-        avatarUrl: workspaceUserAvatarUrl(input.workspaceId, user.id, user.avatarObjectKey),
-      }));
+      .map((user) => offerSendRecipient(input.workspaceId, user));
     const displayName = humanLabel(report.author);
     return {
       body: `hi，${displayName}，${year} W${week}的工作周报模板已生成，请确认是否发送。`,

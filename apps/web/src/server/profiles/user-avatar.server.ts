@@ -44,7 +44,7 @@ export async function storeUserAvatar(
       throw error;
     },
   });
-  return { avatarUrl: avatarUrl(objectKey) };
+  return { avatarUrl: avatarUrl(input.userId, objectKey) };
 }
 
 /** Makes one of the platform's own pictures the avatar. It already ships with the app, so only
@@ -67,7 +67,7 @@ export async function chooseUserAvatarPreset(
     data: { avatarObjectKey: reference, avatarContentType: null },
   });
   await removeStoredAvatar(previous.avatarObjectKey, storage);
-  return { avatarUrl: avatarUrl(reference) };
+  return { avatarUrl: avatarUrl(input.userId, reference) };
 }
 
 export async function readUserAvatar(

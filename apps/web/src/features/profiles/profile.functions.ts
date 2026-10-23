@@ -25,6 +25,7 @@ export const getUserProfile = createServerFn({ method: "GET" })
       email: user.email,
       description: profile.description,
       avatarUrl: profile.avatarUrl,
+      hasAvatar: profile.hasAvatar,
       joinedAt: profile.joinedAt,
     };
   });

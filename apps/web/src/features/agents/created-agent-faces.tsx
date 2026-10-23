@@ -1,6 +1,4 @@
-import { avatarInitial } from "#src/lib/avatar-tone";
-
-import { IdentityAvatar } from "./avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 /** The Agents a person created, as a row of small mascot stickers named by their alt text, or
  * "-" when there are none (Settings → Account). */
@@ -16,7 +14,7 @@ export function CreatedAgentFaces({
       size="xs"
       src={agent.avatarUrl}
       alt={agent.name}
-      initials={avatarInitial(agent.name)}
+      name={agent.name}
     />
   ));
 }

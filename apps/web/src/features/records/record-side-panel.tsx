@@ -28,7 +28,6 @@ import {
 } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { useSendWindowCountdown } from "./use-send-window";
@@ -36,7 +35,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -72,6 +70,7 @@ import {
   postWeeklyReportAssistantRequest,
   renameWeeklyReportAssistantChatSessionFn,
 } from "./records.functions";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import {
   looksLikeMemberGenerateOfferAccept,
   shouldUseMemberReportRulePath,
@@ -1290,12 +1289,11 @@ export function RecordSidePanel({
               return (
                 <article key={item.id} className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Avatar
+                    <IdentityAvatar
                       size="xs"
+                      name={authorName}
                       alt={authorName}
-                      src={comment.author?.avatarUrl ?? undefined}
-                      initials={avatarInitial(authorName)}
-                      contentClassName={avatarToneClassName(authorName)}
+                      src={comment.author?.avatarUrl}
                     />
                     <span className="text-sm font-medium text-primary">{authorName}</span>
                     <span className="ml-auto text-xs text-tertiary">
@@ -1410,11 +1408,12 @@ export function RecordSidePanel({
             return (
               <article key={item.id} className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Avatar
+                  <IdentityAvatar
                     size="xs"
                     alt={authorName}
-                    initials={avatarInitial(authorName)}
-                    contentClassName={avatarToneClassName(authorName)}
+                    name={authorName}
+                    // The assistant has no cartoon person (initial only); the viewer's face is theirs.
+                    src={message.author === "assistant" ? undefined : viewer.avatarUrl}
                   />
                   <span className="text-sm font-medium text-primary">{authorName}</span>
                   <span className="ml-auto text-xs text-tertiary">
@@ -1722,13 +1721,13 @@ function AssistantAttachmentCard({
           {shown.length > 0 ? (
             <div className="mt-2 flex items-center">
               {shown.map((person, index) => (
-                <Avatar
+                <IdentityAvatar
                   key={`${person.displayName}-${index}`}
                   size="xs"
+                  name={person.displayName}
                   alt={person.displayName}
-                  src={person.avatarUrl ?? undefined}
-                  initials={avatarInitial(person.displayName)}
-                  contentClassName={avatarToneClassName(person.displayName)}
+                  userId={person.userId}
+                  src={person.avatarUrl}
                   className={cx("ring-2 ring-primary", index > 0 ? "-ml-1.5" : undefined)}
                 />
               ))}

@@ -12,13 +12,11 @@ import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/cof
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { StatusDot } from "#src/components/ui/status-dot";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
@@ -35,6 +33,7 @@ import { ContextUsageItem, RUNTIME_PILL_PART_CLASS } from "./agent-context-usage
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
 
@@ -249,13 +248,7 @@ export function AgentProfileTab({
           </FactRow>
           <FactRow label={m.agent_profile_creator()}>
             <span className="flex items-center gap-1.5">
-              <Avatar
-                size="xs"
-                alt=""
-                src={profile.owner.avatarUrl ?? undefined}
-                initials={avatarInitial(creatorName)}
-                contentClassName={avatarToneClassName(creatorName)}
-              />
+              <IdentityAvatar size="xs" name={creatorName} src={profile.owner.avatarUrl} />
               <span className="truncate">{creatorName}</span>
             </span>
           </FactRow>

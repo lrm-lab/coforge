@@ -22,14 +22,13 @@ import {
 } from "./computer-identity";
 import { BackToComputersContext } from "./back-to-computers";
 import { ComputerTile } from "./computer-tile";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Button } from "#src/components/base/buttons/button";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { computerListUpdateVersion, computerVersionLabel } from "./computer-identity";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { upgradeRunning } from "./computer-upgrade-status";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 export type ComputerListItem = ComputerIdentity &
   ComputerPlatformInfo & {
@@ -154,12 +153,10 @@ export function ComputerLayout({
                         })}
                       >
                         <TooltipTrigger className="shrink-0 rounded-full">
-                          <Avatar
+                          <IdentityAvatar
                             size="xs"
+                            name={creatorName}
                             src={computer.creator.avatarUrl}
-                            alt=""
-                            initials={avatarInitial(creatorName)}
-                            contentClassName={avatarToneClassName(creatorName)}
                           />
                           <span className="sr-only">{creatorName}</span>
                         </TooltipTrigger>

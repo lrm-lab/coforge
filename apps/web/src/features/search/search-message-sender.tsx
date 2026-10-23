@@ -1,5 +1,4 @@
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 /** Who sent a found message: their 16px face, a person's photo or an Agent's mascot sticker, and
  * their name. */
@@ -12,14 +11,7 @@ export function SearchMessageSender({
 }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
-      <IdentityAvatar
-        size="xs"
-        src={avatarUrl}
-        initials={avatarInitial(name)}
-        contentClassName={avatarToneClassName(name)}
-        alt=""
-        className="size-4 shrink-0"
-      />
+      <IdentityAvatar size="xs" src={avatarUrl} name={name} alt="" className="size-4 shrink-0" />
       <span className="truncate font-semibold text-secondary">{name}</span>
     </span>
   );

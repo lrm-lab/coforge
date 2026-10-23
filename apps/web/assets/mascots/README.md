@@ -59,7 +59,7 @@ auto-bind: it creates a new `Mascot` view model instance for each canvas (`autoB
   node; an accessory's twin moves with it). Every mascot is drawn at the same scale (0.87) and
   centred so the outlined figure fits its 24 by 24 artboard with a margin, more above (1.8) than
   below (1.2) for the hover hop (`fit.ts`); the build fails if one does not fit. The web draws the
-  picture a little larger than the avatar's backdrop circle (`.avatar-sticker-figure`).
+  picture a little larger than the avatar's box (`.avatar-sticker-figure`).
 - Motion is slow and small: loops of 4 s or more, 500 ms eased blends between activities. The
   figure's size and place are the same in every activity (each loop starts and ends at rest), so
   a change of activity only reshapes the face, poses an accessory, mutes the colours or fades the

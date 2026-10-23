@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 import { ChevronDown, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -15,7 +15,6 @@ import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
@@ -373,8 +372,7 @@ const MemberRow = memo(function MemberRow({
               size="sm"
               alt=""
               src={member.avatarUrl ?? undefined}
-              initials={avatarInitial(member.displayName)}
-              contentClassName={avatarToneClassName(member.displayName)}
+              name={member.displayName}
             />
           }
           userId={member.id}

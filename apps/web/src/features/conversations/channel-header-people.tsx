@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Folder } from "@untitledui/icons";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -10,7 +10,6 @@ import {
   useOpenAgentProfile,
   type OpenAgentProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
 import { PersonHoverCard } from "./person-hover-card";
@@ -85,8 +84,7 @@ export function ChannelHeaderFaces({
                   size="xs"
                   alt=""
                   src={entry.avatarUrl ?? undefined}
-                  initials={avatarInitial(entry.displayName)}
-                  contentClassName={avatarToneClassName(entry.displayName)}
+                  name={entry.displayName}
                   className="ring-[1.5px] ring-bg-primary"
                 />
                 <span className="sr-only">{entry.displayName}</span>

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
@@ -235,16 +236,26 @@ test("members are at most six, active, in join order then member id, mixing peop
 
   const row = rowOf(await channels.list(workspaceId, ada.id), conversation.id);
   expect(row.members).toEqual([
-    { kind: "user", id: ada.id, name: ada.username, avatarUrl: null },
+    { kind: "user", id: ada.id, name: ada.username, avatarUrl: personAvatarUrl(ada.id, null) },
     { kind: "agent", id: helper.id, name: "Helper", avatarUrl: null },
     ...tied.map((member) => ({
       kind: "user" as const,
       id: member.userId!,
       name: member.userId === tiedA.id ? tiedA.username : tiedB.username,
-      avatarUrl: null,
+      avatarUrl: personAvatarUrl(member.userId!, null),
     })),
-    { kind: "user", id: extras[0]!.id, name: extras[0]!.username, avatarUrl: null },
-    { kind: "user", id: extras[1]!.id, name: extras[1]!.username, avatarUrl: null },
+    {
+      kind: "user",
+      id: extras[0]!.id,
+      name: extras[0]!.username,
+      avatarUrl: personAvatarUrl(extras[0]!.id, null),
+    },
+    {
+      kind: "user",
+      id: extras[1]!.id,
+      name: extras[1]!.username,
+      avatarUrl: personAvatarUrl(extras[1]!.id, null),
+    },
   ]);
   expect(row.members).toHaveLength(6);
 });

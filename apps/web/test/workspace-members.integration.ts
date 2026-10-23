@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
@@ -117,7 +118,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
             id: otherOwner.id,
             displayName: "Agent Owner",
             description: "Owns the Workspace Agents",
-            avatarUrl: null,
+            avatarUrl: personAvatarUrl(otherOwner.id, null),
             createdAgents: {
               total: 2,
               items: [
@@ -141,7 +142,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
             id: viewer.id,
             displayName: "Directory Viewer",
             description: "Views the directory",
-            avatarUrl: null,
+            avatarUrl: personAvatarUrl(viewer.id, null),
             createdAgents: { total: 0, items: [] },
           },
         },
@@ -158,7 +159,11 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           computerId: computer.id,
           computerName: "Owner workstation",
           createdAt: assignedAgent.createdAt,
-          owner: { id: otherOwner.id, displayName: "Agent Owner", avatarUrl: null },
+          owner: {
+            id: otherOwner.id,
+            displayName: "Agent Owner",
+            avatarUrl: personAvatarUrl(otherOwner.id, null),
+          },
           canMessage: true,
           deletable: true,
         },
@@ -171,7 +176,11 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           computerId: null,
           computerName: null,
           createdAt: unassignedAgent.createdAt,
-          owner: { id: otherOwner.id, displayName: "Agent Owner", avatarUrl: null },
+          owner: {
+            id: otherOwner.id,
+            displayName: "Agent Owner",
+            avatarUrl: personAvatarUrl(otherOwner.id, null),
+          },
           canMessage: true,
           deletable: true,
         },

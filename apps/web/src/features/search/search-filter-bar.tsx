@@ -8,10 +8,9 @@ import {
   useFilter,
 } from "react-aria-components";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import {
   clearedFilters,
@@ -56,8 +55,7 @@ function senderAvatar(sender: Sender): FC<{ className?: string }> {
           size="xs"
           alt=""
           src={sender.avatarUrl ?? undefined}
-          initials={avatarInitial(sender.name)}
-          contentClassName={avatarToneClassName(sender.name)}
+          name={sender.name}
           className="size-5"
         />
       </span>

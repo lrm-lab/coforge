@@ -1,12 +1,11 @@
 import { GridListItem } from "react-aria-components";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Archive, Calendar, DotsVertical, Edit01, Monitor01 as Monitor } from "@untitledui/icons";
-import { IdentityAvatar } from "./avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -159,8 +158,7 @@ export function AgentCard({
             size="lg"
             alt={member.displayName}
             src={member.avatarUrl ?? undefined}
-            initials={avatarInitial(member.displayName)}
-            contentClassName={avatarToneClassName(member.displayName)}
+            name={member.displayName}
           />
         )}
         <div className="flex min-h-9 shrink-0 items-center gap-1">
@@ -248,8 +246,7 @@ export function AgentCard({
               size="xs"
               alt=""
               src={member.owner.avatarUrl ?? undefined}
-              initials={avatarInitial(member.owner.displayName)}
-              contentClassName={avatarToneClassName(member.owner.displayName)}
+              name={member.owner.displayName}
             />
             <span className="sr-only">{m.member_created_by()}</span>
             <span className="truncate">{member.owner.displayName}</span>

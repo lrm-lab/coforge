@@ -12,7 +12,7 @@ import {
   Settings01,
   XCircle,
 } from "@untitledui/icons";
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -23,7 +23,6 @@ import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { CreateChannelDialog } from "#src/features/conversations/create-channel-dialog";
 import { createPublicChannel } from "#src/features/conversations/channels.functions";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import type { getProject, getProjectRepository } from "./projects.functions";
 import { ProjectImage } from "./project-image";
@@ -119,16 +118,7 @@ export function ProjectDetail({
                         <IdentityAvatar
                           size="xs"
                           src={conversation.lastSender?.avatarUrl ?? undefined}
-                          initials={
-                            conversation.lastSender
-                              ? avatarInitial(conversation.lastSender.name)
-                              : undefined
-                          }
-                          contentClassName={
-                            conversation.lastSender
-                              ? avatarToneClassName(conversation.lastSender.name)
-                              : undefined
-                          }
+                          name={conversation.lastSender?.name}
                           alt=""
                         />
                         <span className="min-w-0 flex-1">
@@ -302,8 +292,7 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                 <IdentityAvatar
                   size="xs"
                   src={latestCommit.authorAvatarUrl ?? undefined}
-                  initials={avatarInitial(latestCommit.author)}
-                  contentClassName={avatarToneClassName(latestCommit.author)}
+                  name={latestCommit.author}
                   alt=""
                 />
                 <span className="min-w-0 flex-1 truncate text-sm text-tertiary">
@@ -431,8 +420,7 @@ function CommitIdentity({
         <IdentityAvatar
           size="xs"
           src={avatarUrl ?? undefined}
-          initials={avatarInitial(name)}
-          contentClassName={avatarToneClassName(name)}
+          name={name}
           className="ring-2 ring-primary"
           alt=""
         />

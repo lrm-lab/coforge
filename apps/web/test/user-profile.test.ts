@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { saveUserProfileInputSchema } from "#src/features/profiles/profile.schemas";
 import { AppError } from "#src/lib/app-error";
 import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
@@ -239,12 +240,12 @@ test("choosing a preset stores its reference, uploads nothing, and drops the rep
 
   const result = await chooseUserAvatarPreset(
     db,
-    { userId: "user-1", presetId: "portrait-07" },
+    { userId: "user-1", presetId: "person-3" },
     async () => storage.files,
   );
 
-  expect(result).toEqual({ avatarUrl: "/avatars/portrait-07.webp" });
-  expect(writes).toEqual([{ avatarObjectKey: "preset:portrait-07", avatarContentType: null }]);
+  expect(result).toEqual({ avatarUrl: "/avatars/person-3-1.webp" });
+  expect(writes).toEqual([{ avatarObjectKey: "preset:person-3", avatarContentType: null }]);
   expect(storage.put).toEqual([]);
   expect(storage.removed).toEqual(["users/user-1/avatars/old/original"]);
 });
@@ -253,13 +254,13 @@ test("choosing a picture that is not a preset changes nothing", async () => {
   await expect(
     chooseUserAvatarPreset(persistenceMustNotBeTouched(), {
       userId: "user-1",
-      presetId: "portrait-99",
+      presetId: "person-99",
     }),
   ).rejects.toEqual(new AppError("INVALID_INPUT"));
 });
 
 test("replacing or removing a preset deletes no stored object", async () => {
-  const replaced = userAvatarStore("preset:portrait-99");
+  const replaced = userAvatarStore("preset:person-99");
   const replacedStorage = recordingStorage();
   await storeUserAvatar(
     replaced.db,
@@ -269,7 +270,7 @@ test("replacing or removing a preset deletes no stored object", async () => {
   expect(replacedStorage.put).toHaveLength(1);
   expect(replacedStorage.removed).toEqual([]);
 
-  const removed = userAvatarStore("preset:portrait-07");
+  const removed = userAvatarStore("preset:person-3");
   const removedStorage = recordingStorage();
   await removeUserAvatar(removed.db, "user-1", async () => removedStorage.files);
   expect(removed.writes).toEqual([{ avatarObjectKey: null, avatarContentType: null }]);
@@ -336,7 +337,7 @@ test("profile image HTTP boundary rejects unauthenticated requests", async () =>
       throw new AppError("ACCESS_DENIED");
     },
     database: () => ({}) as never,
-    store: async () => ({ avatarUrl: null }),
+    store: async () => ({ avatarUrl: personAvatarUrl("user-1", null) }),
     read: async () => {
       throw new Error("must not read without authentication");
     },

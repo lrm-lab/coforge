@@ -10,6 +10,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/auth/` — the sign-in error page, the split shell of the pages before
   sign-in, `returnTo` handling, signing out (`signOut`) and the step `/` takes to resume sign-in
   after signing out to switch account, the first-sign-in name step (`/welcome`), and the auth middleware for server functions.
+- `features/avatars/` — how a face is drawn, for people and Agents alike: the sticker (`AvatarSticker`, `StickerPicture`), `IdentityAvatar` (a sticker picture as a sticker, an uploaded photo on the base `Avatar`; the initial and its tone from `name`; a missing picture the default cartoon person of a `userId`), the deleted-identity greying, and the radio tile of the avatar pickers (`AvatarChoice`). A lower layer: `agents/`, `conversations/` and `profiles/` import it and it imports none of them, except the import-free `agents/mascot-contract.ts`. The cartoon people's pictures and the default one an id chooses are `src/lib/person-picture.ts`, which the server reads too.
 - `features/cache-persistence/` — the browser's copy of the Query cache in IndexedDB that Chat opens from (what is kept, per person, removed at sign-out).
 - `features/computers/` — Computer list/detail, setup, and Runtime Usage.
 - `features/conversations/` — channels, direct messages, threads, composer, message rendering, action cards, saved messages, and the sidebar lists.
@@ -23,7 +24,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/notifications/` — browser push lifecycle and in-page notifications.
 - `features/onboarding/` — the "Finish setting up" checklist card in the Workspace sidebar: its server function, query, steps' actions, and the dismissal read from the server; the full-page "Connect GitHub" step after a Workspace is created (`/w/<slug>/connect-github`, `github-step.ts` decides skip or ask).
 - `features/panel-tabs/` — each member's saved panel tab order.
-- `features/profiles/` — current-user profile read and update, and the one rule for a person's name (`person-name.ts`).
+- `features/profiles/` — current-user profile read and update, the one rule for a person's name (`person-name.ts`), and the avatar presets a person can choose (`avatar-presets.ts`, the four cartoon people of `src/lib/person-picture.ts`).
 - `features/projects/` — Projects directory, project detail, file browser, and project settings page.
 - `features/realtime/` — the one browser Centrifuge connection, and its status as the page shows it (`connection-status.ts`).
 - `features/records/` — Workspace Records (see the last section).

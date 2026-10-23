@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import {
   createPublicImageDelivery,
@@ -21,21 +22,34 @@ const avatarKey = "users/user-1/avatars/avatar-1/original";
 const iconKey = "workspaces/workspace-1/projects/project-1/icons/icon-1/original";
 const workspaceIconKey = "workspaces/workspace-1/icons/icon-2/original";
 
-test("an unset image gives no URL at all", () => {
-  expect(avatarUrl(null, publicImageUrl)).toBeNull();
-  expect(workspaceUserAvatarUrl("workspace-1", "user-1", null, publicImageUrl)).toBeNull();
+test("an unset image gives no URL at all, except a person's, which is their cartoon person", () => {
+  const person = personAvatarUrl("user-1", null);
+  expect(avatarUrl("user-1", null, publicImageUrl)).toBe(person);
+  expect(workspaceUserAvatarUrl("workspace-1", "user-1", null, publicImageUrl)).toBe(person);
   expect(projectIconUrl("project-1", null, publicImageUrl)).toBeNull();
   expect(workspaceIconUrl("workspace-1", null, publicImageUrl)).toBeNull();
-  expect(computerCreatorAvatarUrl("computer-1", "workspace-1", null, publicImageUrl)).toBeNull();
+  expect(
+    computerCreatorAvatarUrl(
+      "computer-1",
+      "workspace-1",
+      { id: "user-1", avatarObjectKey: null },
+      publicImageUrl,
+    ),
+  ).toBe(person);
 });
 
 test("configured delivery addresses every profile image on the image CDN at a bounded size", () => {
   const expected = `https://images-staging.coforge.cn/${avatarKey}?x-oss-process=style/avatar192`;
-  expect(avatarUrl(avatarKey, publicImageUrl)).toBe(expected);
+  expect(avatarUrl("user-1", avatarKey, publicImageUrl)).toBe(expected);
   expect(workspaceUserAvatarUrl("workspace-1", "user-1", avatarKey, publicImageUrl)).toBe(expected);
-  expect(computerCreatorAvatarUrl("computer-1", "workspace-1", avatarKey, publicImageUrl)).toBe(
-    expected,
-  );
+  expect(
+    computerCreatorAvatarUrl(
+      "computer-1",
+      "workspace-1",
+      { id: "user-1", avatarObjectKey: avatarKey },
+      publicImageUrl,
+    ),
+  ).toBe(expected);
   expect(projectIconUrl("project-1", iconKey, publicImageUrl)).toBe(
     `https://images-staging.coforge.cn/${iconKey}?x-oss-process=style/icon256`,
   );
@@ -45,13 +59,13 @@ test("configured delivery addresses every profile image on the image CDN at a bo
 });
 
 test("the same object key always yields the same URL, so the browser caches one copy", () => {
-  expect(avatarUrl(avatarKey, publicImageUrl)).toBe(
+  expect(avatarUrl("user-1", avatarKey, publicImageUrl)).toBe(
     workspaceUserAvatarUrl("workspace-1", "user-1", avatarKey, publicImageUrl),
   );
 });
 
 test("without delivery every image falls back to its authenticated route", () => {
-  expect(avatarUrl(avatarKey, noDelivery)).toBe("/api/me/avatar?v=avatar-1");
+  expect(avatarUrl("user-1", avatarKey, noDelivery)).toBe("/api/me/avatar?v=avatar-1");
   expect(workspaceUserAvatarUrl("workspace-1", "user-1", avatarKey, noDelivery)).toBe(
     "/api/workspaces/workspace-1/users/user-1/avatar?v=avatar-1",
   );
@@ -61,7 +75,12 @@ test("without delivery every image falls back to its authenticated route", () =>
   expect(workspaceIconUrl("workspace-1", workspaceIconKey, noDelivery)).toBe(
     "/api/workspaces/workspace-1/icon?v=icon-2",
   );
-  expect(computerCreatorAvatarUrl("computer-1", "workspace-1", avatarKey, noDelivery)).toBe(
-    "/api/computers/computer-1/creator-avatar?workspaceId=workspace-1&v=avatar-1",
-  );
+  expect(
+    computerCreatorAvatarUrl(
+      "computer-1",
+      "workspace-1",
+      { id: "user-1", avatarObjectKey: avatarKey },
+      noDelivery,
+    ),
+  ).toBe("/api/computers/computer-1/creator-avatar?workspaceId=workspace-1&v=avatar-1");
 });

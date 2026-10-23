@@ -1,3 +1,5 @@
+import { PERSON_PICTURES } from "#src/lib/person-picture";
+
 export interface AvatarPreset {
   id: string;
   /** The picture's number, shown as "Avatar 01". */
@@ -5,12 +7,12 @@ export interface AvatarPreset {
   url: string;
 }
 
-/** The pictures the platform offers as an avatar, served from `public/avatars`. */
-export const avatarPresets: AvatarPreset[] = Array.from({ length: 30 }, (_, index) => {
-  const number = String(index + 1).padStart(2, "0");
-  const id = `portrait-${number}`;
-  return { id, number, url: `/avatars/${id}.webp` };
-});
+/** The pictures the platform offers as an avatar (the cartoon people), served from `public/avatars`. */
+export const avatarPresets: AvatarPreset[] = PERSON_PICTURES.map(({ id, url }, index) => ({
+  id,
+  number: String(index + 1).padStart(2, "0"),
+  url,
+}));
 
 const PRESET_REFERENCE_PREFIX = "preset:";
 const presetsById = new Map(avatarPresets.map((preset) => [preset.id, preset]));

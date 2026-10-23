@@ -6,13 +6,13 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { agentDisplay } from "./agent-activity-presentation";
 import type { AgentMascot } from "./agent-mascot";
 import { AgentMascotView } from "./agent-mascot-view";
-import { AvatarSticker } from "./avatar-sticker";
-import { DELETED_AGENT_PICTURE_CLASS } from "./deleted-agent";
+import { AvatarSticker } from "#src/features/avatars/avatar-sticker";
+import { DELETED_PICTURE_CLASS } from "#src/features/avatars/deleted-avatar";
 import { mascotActivity } from "./mascot-activity";
 
 /**
- * An Agent's avatar where its mascot is the subject and may move: a message in the stream, the
- * Agent card, the profile. The mascot is a sticker on the avatar backdrop, unclipped, and acts out
+ * An Agent's avatar where its mascot is the subject and may move: a Direct-message list row, the
+ * Agent card, the profile. The mascot is a bare sticker, unclipped, and acts out
  * the Agent's `display` (`mascotActivity`). A deleted Agent's is greyed, still and without a dot.
  */
 export function AgentMascotAvatar({
@@ -25,6 +25,7 @@ export function AgentMascotAvatar({
   size = "sm",
   cornerDot = false,
   announced = false,
+  hovered,
   className,
 }: {
   mascot: AgentMascot;
@@ -41,6 +42,8 @@ export function AgentMascotAvatar({
   /** Announce the avatar as an image named by the Agent and its status. Off where the name and
    * status already read beside it. */
   announced?: boolean;
+  /** The pointer is over the row this avatar belongs to (`AgentMascotView`'s `hovered`). */
+  hovered?: boolean;
   className?: string;
 }) {
   const view = agentDisplay(display, { stopped });
@@ -48,7 +51,7 @@ export function AgentMascotAvatar({
     <AvatarSticker
       size={size}
       className={className}
-      contentClassName={deleted ? DELETED_AGENT_PICTURE_CLASS : undefined}
+      contentClassName={deleted ? DELETED_PICTURE_CLASS : undefined}
       badge={
         cornerDot && display && !deleted ? (
           <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />
@@ -59,6 +62,7 @@ export function AgentMascotAvatar({
         mascot={mascot}
         activity={mascotActivity(view.kind)}
         still={still || deleted}
+        hovered={hovered}
       />
     </AvatarSticker>
   );

@@ -76,7 +76,6 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 | `--color-message-hover`   | `#f7f8fb`                                 | `var(--color-bg-primary_hover)`          | 消息行 hover / 键盘聚焦的底色（圆角 8px 在行组件里），不透明，值由设计指定；原先是 `border-secondary` 的 50%，白底合成约 `#F0F2F8`，设计认为偏深 |
 | `--color-avatar-1…6`       | `#7556b9` `#d18a38` `#b65757` `#5268b7` `#497665` `#ba5937` | 同亮色 | 无头像时的占位底色（设计稿用真实头像图，未定义专门配色）|
 | `--color-avatar-deleted`   | `#afbccb`                                 | `#778393`                                | 已删除 Agent 的头像底色，取值与离线圆点一致但语义独立 |
-| `--color-avatar-backdrop`  | `#edf0f5`                                 | `#262a33`                                | Agent 吉祥物贴纸头像与频道群头像下的浅灰圆底（取自 Frank 的设计稿，亮色略压深一档，好在聊天列表选中卡 `#f4f6fa` 上仍看得出圆底） |
 | `--color-avatar-outline`   | `#ffffff`                                 | `#ffffff`（明暗一致）                    | 群头像里真人照片的白色贴纸边，与吉祥物美术自带的白边一致 |
 | `--color-online`           | `#1bb618`                                 | `#42c83f`                                | 在线/成功圆点             |
 | `--color-offline`          | `#afbccb`                                 | `#778393`                                | 离线圆点                  |

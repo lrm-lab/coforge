@@ -17,7 +17,6 @@ import {
 import { Button as AriaButton } from "react-aria-components";
 
 import type { NavItemType } from "#src/components/application/app-navigation/config";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
 import { SetupChecklistCard } from "#src/features/onboarding/setup-checklist-card";
@@ -38,10 +37,10 @@ import {
   type WorkspaceOption,
 } from "#src/features/workspaces/workspace-switcher";
 import type { CreateWorkspaceInput } from "#src/features/workspaces/create-workspace-form";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 export type AppUser = {
   id: string;
@@ -277,12 +276,13 @@ function UserMenuCard({
   compact?: boolean;
 }) {
   const avatar = (
-    <Avatar
+    <IdentityAvatar
       size={compact ? "sm" : "md"}
-      src={user.avatarUrl}
+      name={user.name}
       alt={user.name}
-      initials={avatarInitial(user.name)}
-      contentClassName={avatarToneClassName(user.name)}
+      src={user.avatarUrl}
+      // An uploaded photo is a rounded square in the full card, a circle in the rail; a sticker
+      // is bare either way.
       rounded={compact}
       className={compact ? undefined : "rounded-lg"}
     />

@@ -70,11 +70,8 @@
      a presence state. See docs/design-tokens.md. */
   --color-avatar-deleted: #afbccb;
 
-  /* An Agent's mascot is a white-edged sticker on a light circle (`.avatar-sticker` in
-     styles.css): the circle behind it, and the white edge a person's photo gets beside mascots in
-     a channel's group avatar. The mascot artwork's own edge is white in both themes, so the
-     photo's is too. */
-  --color-avatar-backdrop: #edf0f5;
+  /* The white edge a person's photo gets beside stickers in a channel's group avatar. The
+     mascot artwork's own edge is white in both themes, so the photo's is too. */
   --color-avatar-outline: #ffffff;
 }
 
@@ -196,7 +193,6 @@
     --color-online: #42c83f;
     --color-offline: #778393;
     --color-avatar-deleted: #778393;
-    --color-avatar-backdrop: #262a33;
 
     --sidebar-gradient: linear-gradient(155deg, #21183b 0%, #171421 52%, #141720 100%);
   }

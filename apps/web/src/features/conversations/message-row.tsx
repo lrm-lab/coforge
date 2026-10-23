@@ -15,7 +15,6 @@ import {
 import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -34,11 +33,11 @@ import type {
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
 import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { AgentModelLabel } from "#src/features/agents/agent-model-label";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
-import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
@@ -564,29 +563,25 @@ export const MessageRow = memo(function MessageRow({
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
   // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that
   // wrote a message is around right now without opening its profile. It reads that one Agent from
-  // the live store and its mascot moves with it. A person's avatar stays plain here (presence is on
-  // the Members page); a deleted Agent shows no dot — not a presence state.
-  const senderAvatar = (animated: boolean) =>
+  // the live store. The mascot stays a still sticker in the stream (`mascots.md`). A person's
+  // avatar stays plain here (presence is on the Members page); a deleted Agent shows no dot — not
+  // a presence state.
+  const avatar =
     message.senderKind === "agent" && message.senderAgentId ? (
       <LiveAgentAvatar
         agentId={message.senderAgentId}
         name={message.senderName}
         src={message.senderAvatarUrl}
         deleted={deleted}
-        animated={animated}
       />
     ) : (
-      <Avatar
+      <IdentityAvatar
         size="sm"
-        alt=""
+        name={message.senderName}
         src={message.senderAvatarUrl}
-        initials={avatarInitial(message.senderName)}
-        contentClassName={
-          deleted ? DELETED_AGENT_AVATAR_CLASS : avatarToneClassName(message.senderName)
-        }
+        deleted={deleted}
       />
     );
-  const avatar = senderAvatar(true);
   // Reply-to-selection: the browser owns the highlight, this row only decides whether to *offer*
   // the action. The offer is made from a completed pointer gesture, so a drag that merely passes
   // over this message while selecting another one never raises it.
@@ -1128,7 +1123,7 @@ export const MessageRow = memo(function MessageRow({
                 {/* The tapped message, quoted in a muted card at the top — the Slack/Discord
                     mobile signature that tells you which message the actions belong to. */}
                 <div className="mx-3 mt-3 flex gap-2.5 rounded-xl bg-secondary/60 p-3">
-                  <span className="shrink-0">{senderAvatar(false)}</span>
+                  <span className="shrink-0">{avatar}</span>
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <p className="flex items-baseline gap-2">
                       <span className="min-w-0 truncate text-sm font-semibold text-primary">

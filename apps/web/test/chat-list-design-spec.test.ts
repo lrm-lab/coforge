@@ -29,10 +29,11 @@ test("Chat list avatars: a 48px circle for a DM and a channel, 38px round for th
   expect(group).toContain("--avatar-group-size: 3rem");
   expect(group).toContain("border-radius: 9999px");
   expect(group).not.toContain("gradient");
-  // Frank's references: an Agent's mascot is a sticker on a light circle, drawn a little larger
-  // than the circle and unclipped; a channel's members sit on the same circle.
-  expect(group).toContain("background: var(--color-avatar-backdrop)");
-  expect(rule(".avatar-sticker")).toContain("background: var(--color-avatar-backdrop)");
+  // Frank (2026-10-24): a mascot or cartoon person is the bare white-edged sticker, drawn a little
+  // larger than its box and unclipped, with no circle or fill behind it, in a channel's group
+  // avatar too.
+  expect(group).not.toContain("background");
+  expect(rule(".avatar-sticker")).not.toContain("background");
   expect(rule("[data-avatar][data-avatar-sticker]")).toContain("border-radius: 9999px");
   const figure = rule(".avatar-sticker-figure");
   expect(figure).toContain("position: absolute");
@@ -45,9 +46,14 @@ test("Chat list avatars: a 48px circle for a DM and a channel, 38px round for th
 });
 
 test("Row wiring: the selected card uses the spec fill/border and pinned rows use the sidebar foreground", async () => {
-  const source = await Bun.file(
-    new URL("../src/features/conversations/conversation-directory.tsx", import.meta.url),
-  ).text();
+  // The row's own treatment lives in `conversation-row.tsx`; its callers are in the directory.
+  const source = (
+    await Promise.all(
+      ["conversation-directory.tsx", "conversation-row.tsx"].map((file) =>
+        Bun.file(new URL(`../src/features/conversations/${file}`, import.meta.url)).text(),
+      ),
+    )
+  ).join("\n");
   expect(source).toContain("bg-chat-selected-bg");
   expect(source).toContain("border-chat-selected-border");
   expect(source).toContain("text-sidebar-fg");

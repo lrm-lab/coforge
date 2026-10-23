@@ -25,13 +25,11 @@ import { UnreadDot } from "#src/components/ui/unread-marker";
 import { PageHeader } from "#src/components/layout/page-header";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { createRecordNote, type loadRecordsCatalog } from "./records.functions";
@@ -50,6 +48,7 @@ import {
   isWeeklyTemplateChipHighlighted,
   weeklySendWindow,
 } from "./weekly-send-window";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 export type RecordsTab = "weekly" | "notes";
 export type RecordsPanel = "settings" | "stats" | "dashboard";
@@ -334,12 +333,11 @@ export function RecordsLayout({
                                 setShowMobileList(false);
                               }}
                             >
-                              <Avatar
+                              <IdentityAvatar
                                 size="sm"
+                                name={item.author.displayName}
                                 alt={item.author.displayName}
-                                src={item.author.avatarUrl ?? undefined}
-                                initials={avatarInitial(item.author.displayName)}
-                                contentClassName={avatarToneClassName(item.author.displayName)}
+                                src={item.author.avatarUrl}
                               />
                               <span className="truncate">{item.title}</span>
                             </RecordLink>
@@ -491,14 +489,11 @@ export function RecordsLayout({
                                           setShowMobileList(false);
                                         }}
                                       >
-                                        <Avatar
+                                        <IdentityAvatar
                                           size="sm"
+                                          name={submission.author.displayName}
                                           alt={submission.author.displayName}
-                                          src={submission.author.avatarUrl ?? undefined}
-                                          initials={avatarInitial(submission.author.displayName)}
-                                          contentClassName={avatarToneClassName(
-                                            submission.author.displayName,
-                                          )}
+                                          src={submission.author.avatarUrl}
                                         />
                                         <span className="truncate">{submission.title}</span>
                                       </RecordLink>
@@ -550,12 +545,11 @@ export function RecordsLayout({
                               setShowMobileList(false);
                             }}
                           >
-                            <Avatar
+                            <IdentityAvatar
                               size="sm"
+                              name={catalog.actorDisplayName}
                               alt={catalog.actorDisplayName}
-                              src={catalog.actorAvatarUrl ?? undefined}
-                              initials={avatarInitial(catalog.actorDisplayName)}
-                              contentClassName={avatarToneClassName(catalog.actorDisplayName)}
+                              src={catalog.actorAvatarUrl}
                             />
                             <span className="truncate">{note.title}</span>
                           </RecordLink>

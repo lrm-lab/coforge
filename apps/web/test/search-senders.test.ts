@@ -1,14 +1,20 @@
 import { describe, expect, test } from "bun:test";
 
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { directorySenders } from "#src/features/search/search-senders";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 
 const directory = {
   viewerId: "user-1",
   people: [
-    { id: "user-2", name: "Amazing Grace", avatarUrl: null, dmId: null },
-    { id: "user-1", name: "Dee", avatarUrl: null, dmId: null },
-    { id: "user-3", name: "ada-9d3", avatarUrl: null, dmId: null },
+    {
+      id: "user-2",
+      name: "Amazing Grace",
+      avatarUrl: personAvatarUrl("user-2", null),
+      dmId: null,
+    },
+    { id: "user-1", name: "Dee", avatarUrl: personAvatarUrl("user-1", null), dmId: null },
+    { id: "user-3", name: "ada-9d3", avatarUrl: personAvatarUrl("user-3", null), dmId: null },
   ],
   agents: [
     {

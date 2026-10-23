@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { AlertCircle, Paperclip } from "@untitledui/icons";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
@@ -16,6 +14,7 @@ import {
 import type { ChipMention } from "./message-markdown";
 import { MessageBody } from "./message-body";
 import { canEditUnsent, failureAnnounced, failureNeedsAnnouncing } from "./use-message-outbox";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -115,15 +114,7 @@ export function OutboxMessageRow({
     >
       <div className={cn("mx-1 flex px-3 md:mx-3", "gap-3", grouped ? "pt-0 pb-1" : "py-3")}>
         <div className="flex w-9 shrink-0 items-start justify-center">
-          {!grouped && (
-            <Avatar
-              size="sm"
-              alt=""
-              src={viewer.avatarUrl}
-              initials={avatarInitial(viewer.name)}
-              contentClassName={avatarToneClassName(viewer.name)}
-            />
-          )}
+          {!grouped && <IdentityAvatar size="sm" name={viewer.name} src={viewer.avatarUrl} />}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {!grouped && (

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
@@ -186,7 +187,11 @@ describe("WorkspaceMembers", () => {
           computerId: null,
           computerName: null,
           createdAt: new Date("2026-08-01T00:00:00.000Z"),
-          owner: { id: "another-user", displayName: "Ada Lovelace", avatarUrl: null },
+          owner: {
+            id: "another-user",
+            displayName: "Ada Lovelace",
+            avatarUrl: personAvatarUrl("another-user", null),
+          },
           canMessage: false,
           deletable: false,
         },
@@ -307,10 +312,15 @@ describe("WorkspaceMembers", () => {
         {
           id: "user-1",
           name: "Amazing Grace",
-          avatarUrl: null,
+          avatarUrl: personAvatarUrl("user-1", null),
           dmId: null,
         },
-        { id: "user-2", name: UNNAMED_PERSON_NAME, avatarUrl: null, dmId: null },
+        {
+          id: "user-2",
+          name: UNNAMED_PERSON_NAME,
+          avatarUrl: personAvatarUrl("user-2", null),
+          dmId: null,
+        },
       ]);
       expect(JSON.stringify(people)).not.toContain("grace-hopper-4k2");
       expect(JSON.stringify(people)).not.toContain("ada-9d3");

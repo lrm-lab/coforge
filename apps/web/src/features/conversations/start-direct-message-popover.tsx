@@ -7,13 +7,12 @@ import { Heading, Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { loadWorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { useOpenDirectConversation } from "./open-direct-conversation";
 import { useCloseConversationList } from "./conversation-navigation";
@@ -206,8 +205,7 @@ function DirectMessagePicker({ onDone, onCreate }: { onDone: () => void; onCreat
                             size="xs"
                             alt={member.name}
                             src={member.avatarUrl ?? undefined}
-                            initials={avatarInitial(member.name)}
-                            contentClassName={avatarToneClassName(member.name)}
+                            name={member.name}
                           />
                         }
                       >

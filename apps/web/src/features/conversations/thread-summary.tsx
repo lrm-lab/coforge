@@ -1,11 +1,10 @@
 import { ChevronRight, MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { UnreadDot } from "#src/components/ui/unread-marker";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { replyCountLabel, withUnreadCount } from "./conversation-labels";
@@ -103,8 +102,7 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
               size="xs"
               alt={reply.senderName}
               src={reply.senderAvatarUrl}
-              initials={avatarInitial(reply.senderName)}
-              contentClassName={avatarToneClassName(reply.senderName)}
+              name={reply.senderName}
               deleted={reply.senderDeleted}
               className="shrink-0"
             />

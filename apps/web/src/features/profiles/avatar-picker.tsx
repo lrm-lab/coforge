@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { RadioGroup } from "react-aria-components";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Button } from "#src/components/base/buttons/button";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { m } from "#src/paraglide/messages";
-import { AvatarChoice } from "./avatar-choice";
+import { AvatarChoice } from "#src/features/avatars/avatar-choice";
 import { avatarPresets } from "./avatar-presets";
 
 /**
@@ -55,17 +54,7 @@ export function AvatarPicker({
           </div>
           <div className="mt-6 flex flex-col items-center gap-3">
             <div className="rounded-3xl bg-primary p-1 shadow-lg">
-              {previewUrl ? (
-                <img src={previewUrl} alt="" className="size-40 rounded-[1.25rem] object-cover" />
-              ) : (
-                <Avatar
-                  size="2xl"
-                  className="size-40"
-                  alt={name}
-                  initials={avatarInitial(name)}
-                  contentClassName={avatarToneClassName(name)}
-                />
-              )}
+              <IdentityAvatar size="2xl" className="size-40" name={name} src={previewUrl} />
             </div>
             <p className="min-h-5 text-sm font-semibold text-primary">
               {selected ? m.settings_avatar_preset_label({ number: selected.number }) : ""}
@@ -125,7 +114,6 @@ export function AvatarPicker({
                 value={preset.id}
                 src={preset.url}
                 label={m.settings_avatar_preset_label({ number: preset.number })}
-                lazy
               />
             ))}
           </RadioGroup>

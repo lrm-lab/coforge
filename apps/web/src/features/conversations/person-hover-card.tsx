@@ -7,12 +7,11 @@ import { HoverPopover } from "#src/components/ui/hover-popover";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { memberPersonQuery } from "#src/features/agents/member-directory-queries";
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { isAppErrorCode } from "#src/lib/app-error";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 
 /** A card's read may be a few minutes old; re-hovering a person does not re-read them. */
@@ -145,13 +144,7 @@ function MemberProfileCard({
         {userId ? (
           <MemberAvatar size="md" userId={userId} name={name} src={src ?? null} />
         ) : (
-          <IdentityAvatar
-            size="md"
-            alt=""
-            src={src ?? undefined}
-            initials={avatarInitial(name)}
-            contentClassName={avatarToneClassName(name)}
-          />
+          <IdentityAvatar size="md" alt="" src={src ?? undefined} name={name} />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">

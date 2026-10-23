@@ -5,7 +5,7 @@ import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import { XClose } from "@untitledui/icons";
 import { Checkbox as AriaCheckbox, Heading, Text } from "react-aria-components";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
-import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox, CheckboxBase } from "#src/components/base/checkbox/checkbox";
@@ -14,7 +14,6 @@ import { Select } from "#src/components/base/select/select";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { loadWorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
 import { isAppErrorCode } from "#src/lib/app-error";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import {
   buildGroupChatCandidates,
@@ -366,8 +365,7 @@ function CreateChannelForm({
                     size="xs"
                     alt=""
                     src={entry.avatarUrl ?? undefined}
-                    initials={avatarInitial(entry.name)}
-                    contentClassName={avatarToneClassName(entry.name)}
+                    name={entry.name}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
                     {entry.name}
@@ -474,8 +472,7 @@ function GroupChatPickerPane({
                       size="xs"
                       alt=""
                       src={entry.avatarUrl ?? undefined}
-                      initials={avatarInitial(entry.name)}
-                      contentClassName={avatarToneClassName(entry.name)}
+                      name={entry.name}
                     />
                     <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-primary">
                       {entry.name}
