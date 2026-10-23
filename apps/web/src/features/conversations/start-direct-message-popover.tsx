@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight, Cloud01, Loading02, Plus } from "@untitledui/icons";
+import { ArrowRight, Cloud01, Plus } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 import { Heading, Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
@@ -152,7 +153,7 @@ function DirectMessagePicker({ onDone, onCreate }: { onDone: () => void; onCreat
           role="status"
           className="flex shrink-0 items-center gap-2 px-4 pt-2 text-sm text-tertiary"
         >
-          <Loading02 aria-hidden="true" className="size-4 animate-spin" />
+          <Spinner className="size-4" />
           {m.conversation_opening_direct()}
         </p>
       )}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Loading02, WifiOff } from "@untitledui/icons";
+import { WifiOff } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 import { Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
@@ -31,12 +32,7 @@ export function ConnectionStatusPill({
     <div role="status" className="flex shrink-0 items-center">
       {(!connection || connection.status === "quiet") && whenConnected}
       {connection?.status === "reconnecting" && (
-        <BadgeWithIcon
-          size="sm"
-          color="gray"
-          iconLeading={Loading02}
-          className="[&_svg]:motion-safe:animate-spin"
-        >
+        <BadgeWithIcon size="sm" color="gray" iconLeading={Spinner}>
           {m.connection_reconnecting()}
         </BadgeWithIcon>
       )}

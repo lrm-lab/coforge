@@ -2,8 +2,8 @@ import type { FC, ReactElement, ReactNode } from "react";
 import { isValidElement } from "react";
 import type { ButtonProps as AriaButtonProps, LinkProps as AriaLinkProps } from "react-aria-components";
 import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
-import { ClassicV2 } from "loading-dev";
 import { useLoadingVisible } from "#src/components/ui/loading";
+import { Spinner } from "#src/components/ui/spinner";
 import { cx, sortCx } from "#src/utils/cx";
 import { isReactComponent } from "#src/utils/is-react-component";
 
@@ -207,8 +207,7 @@ export const Button: {
                     data-icon="loading"
                     className={cx(styles.common.icon, "inline-flex", !showTextWhileLoading && "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2")}
                 >
-                    {/* Its viewBox is 16×16, so it also lands on the `xs` scale's 16px icon box. */}
-                    <ClassicV2 size={size === "xs" ? 16 : 20} />
+                    <Spinner className={size === "xs" ? "size-4" : "size-5"} />
                 </span>
             )}
 

@@ -12,7 +12,6 @@ import {
 import { Link, getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Loading02,
   ChevronDown,
   ChevronRightDouble,
   CheckCircle,
@@ -27,6 +26,7 @@ import {
   Send01 as Send,
   Trash01 as Trash,
 } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -1520,9 +1520,9 @@ export function RecordSidePanel({
             <ProgressBar
               isIndeterminate
               aria-label={awaitingLabel ?? m.records_side_chat_assistant_running()}
-              className="inline-flex shrink-0 size-4 text-brand-secondary"
+              className="inline-flex shrink-0 text-brand-secondary"
             >
-              <Loading02 aria-hidden className="size-full motion-safe:animate-spin" />
+              <Spinner className="size-4" />
             </ProgressBar>
             <span className="text-xs text-tertiary">
               {awaitingLabel ?? m.records_side_chat_assistant_running()}

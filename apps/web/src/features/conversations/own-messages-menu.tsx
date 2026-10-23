@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Loading02, List } from "@untitledui/icons";
+import { List } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 import {
   ProgressBar,
   MenuItem as AriaMenuItem,
@@ -199,7 +200,7 @@ export function OwnMessagesMenu({
               aria-label={m.conversation_loading_your_messages()}
               className="inline-flex shrink-0 size-4"
             >
-              <Loading02 aria-hidden className="size-full motion-safe:animate-spin" />
+              <Spinner className="size-full" />
             </ProgressBar>
           </div>
         )}

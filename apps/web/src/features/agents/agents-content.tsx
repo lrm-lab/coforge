@@ -8,7 +8,6 @@ import {
   Calendar,
   DotsVertical,
   Edit01,
-  Loading02,
   Monitor01 as Monitor,
   Plus,
   SearchLg as Search,
@@ -16,6 +15,7 @@ import {
   Users01 as UsersRound,
   UsersPlus,
 } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
@@ -343,7 +343,7 @@ export function AgentsContent({
                 aria-label={m.member_loading_more()}
                 className="text-fg-quaternary"
               >
-                <Loading02 aria-hidden="true" className="size-5 motion-safe:animate-spin" />
+                <Spinner />
               </ProgressBar>
             </GridListLoadMoreItem>
           </GridList>

@@ -2,7 +2,8 @@ import { WorkspaceAssistantWelcome } from "./workspace-assistant-welcome";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { ProgressBar } from "react-aria-components";
-import { ArrowDown, Loading02 } from "@untitledui/icons";
+import { ArrowDown } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 
 import { useStateWithRef } from "#src/hooks/use-state-with-ref";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -917,9 +918,9 @@ export function ConversationPane({
                 <ProgressBar
                   isIndeterminate
                   aria-label={m.conversation_loading()}
-                  className="inline-flex shrink-0 size-4"
+                  className="inline-flex shrink-0"
                 >
-                  <Loading02 aria-hidden className="size-full motion-safe:animate-spin" />
+                  <Spinner className="size-4" />
                 </ProgressBar>
               </div>
             ) : visibleMessages.length === 0 && shownOutbox.length === 0 ? (

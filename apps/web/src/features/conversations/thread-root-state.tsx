@@ -1,5 +1,6 @@
 import { ProgressBar } from "react-aria-components";
-import { AlertCircle, Loading02 } from "@untitledui/icons";
+import { AlertCircle } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
@@ -36,7 +37,7 @@ export function ThreadLoadStatus({
         aria-label={m.conversation_loading()}
         className="inline-flex size-4 shrink-0"
       >
-        <Loading02 aria-hidden className="size-full motion-safe:animate-spin" />
+        <Spinner className="size-full" />
       </ProgressBar>
     </div>
   ) : (

@@ -86,7 +86,6 @@
         "input-otp": "^1.5.0",
         "jose": "^6.2.10",
         "katex": "^0.16.22",
-        "loading-dev": "^0.3.6",
         "lowlight": "^3.3.0",
         "mermaid": "^11.6.0",
         "micromark-util-decode-numeric-character-reference": "^2.0.2",
@@ -1801,8 +1800,6 @@
     "linkify-it": ["linkify-it@5.0.2", "", { "dependencies": { "uc.micro": "^2.0.0" } }, "sha512-ONTm2jCMAVZjgQa/Fy1kScXsuOoF5NPTsoFBdE1KVIZ2vAh/r9+Bqo+0jINCBYnavTPQZz38QzFTme79ENoN3Q=="],
 
     "linkifyjs": ["linkifyjs@4.3.3", "", {}, "sha512-P8aEP5U/D1/IlTY2OeYsErdwh9bGuLE30NcXtKEjgdHcahveQoQwM2yZNsioQHsWFz0P7KKudisbrzCgR0sDHg=="],
-
-    "loading-dev": ["loading-dev@0.3.6", "", { "peerDependencies": { "react": ">=19.0.0", "react-dom": ">=19.0.0" } }, "sha512-htn86CAKi28d4vCBFMImogiCzs8AxDi18J19FAAI7iJXibPwNvFuoGnomuSPkrDD+ft7X+8yK0BYPwsu1EKY9Q=="],
 
     "lodash": ["lodash@4.17.21", "", {}, "sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg=="],
 

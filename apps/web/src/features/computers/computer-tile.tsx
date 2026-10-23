@@ -1,5 +1,6 @@
 import { ProgressBar } from "react-aria-components";
-import { Loading02, ArrowUp } from "@untitledui/icons";
+import { ArrowUp } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -79,7 +80,7 @@ export function ComputerTile({
             dims.loading,
           )}
         >
-          <Loading02 aria-hidden className="size-full motion-safe:animate-spin" />
+          <Spinner className="size-full" />
         </ProgressBar>
       ) : (
         updateAvailableVersion && (

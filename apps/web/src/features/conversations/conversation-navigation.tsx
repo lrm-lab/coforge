@@ -10,9 +10,9 @@ import {
 import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { Loading02 } from "@untitledui/icons";
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { PageHeader } from "#src/components/layout/page-header";
+import { Spinner } from "#src/components/ui/spinner";
 import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { ConversationListContext } from "./conversation-list-button";
@@ -316,12 +316,7 @@ function SavingChangesBadge() {
   const count = useSavesRetrying();
   if (count === 0) return null;
   return (
-    <BadgeWithIcon
-      size="sm"
-      color="gray"
-      iconLeading={Loading02}
-      className="[&_svg]:motion-safe:animate-spin"
-    >
+    <BadgeWithIcon size="sm" color="gray" iconLeading={Spinner}>
       {m.chat_saving_changes({ count })}
     </BadgeWithIcon>
   );

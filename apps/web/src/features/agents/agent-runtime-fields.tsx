@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { RefreshCw01 } from "@untitledui/icons";
+import { Spinner } from "#src/components/ui/spinner";
 import {
   parseRuntimeProvider,
   RUNTIME_PROVIDER,
@@ -432,13 +433,12 @@ export function AgentRuntimeFields({
             </Select>
             <div className="absolute top-0 right-0 flex h-5 items-center">
               <ButtonUtility
-                icon={RefreshCw01}
+                icon={refreshing ? Spinner : RefreshCw01}
                 size="xs"
                 color="tertiary"
                 tooltip={m.agent_form_model_refresh()}
                 onClick={() => void refreshCatalog()}
                 isDisabled={refreshingComputerId !== undefined || !options}
-                className={refreshing ? "*:data-icon:animate-spin" : undefined}
               />
             </div>
           </div>
