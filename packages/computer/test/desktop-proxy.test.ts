@@ -145,7 +145,7 @@ describe("desktop proxy", () => {
       const html = await page.text();
       expect(html).toContain('from "./core/rfb.js"');
       expect(html).not.toContain("缺少连接令牌");
-      expect(html).toContain("window.opener=null");
+      expect(html).not.toContain("window.opener=null");
       const asset = await fetch(`http://127.0.0.1:${proxy.port}/desktop/computer-1/core/rfb.js`);
       expect(await asset.text()).toBe("rfb");
       const missing = await fetch(`http://127.0.0.1:${proxy.port}/desktop/other/`);
@@ -183,7 +183,7 @@ describe("desktop proxy", () => {
         `http://127.0.0.1:${proxy.port}/desktop/computer-1/agent-1/?title=${encodeURIComponent("A&B")}`,
       );
       expect(page.status).toBe(200);
-      expect(await page.text()).toBe("<script>window.opener=null</script><title>A&amp;B</title>");
+      expect(await page.text()).toBe("<title>A&amp;B</title>");
       expect(seen).toEqual(["/screen/agent-1/desktop.html"]);
     } finally {
       proxy.stop();

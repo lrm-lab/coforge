@@ -137,7 +137,7 @@ that environment; login, setup, and lifecycle adapters share that public seam.
   `docker service update --image --force` on that service and does not remove
   the volume. Heartbeats report node and `coforge-<id>` task image ids so Web
   can offer a replace when layers differ; the runtime version is display-only.
-  `docker/Dockerfile` is the local image; its entrypoint is `coforge-computer foreground`.
+  `docker/Dockerfile` is the local image; its entrypoint is `coforge-computer foreground`. The proxied desktop page keeps `window.opener`; clearing it makes that window name unreachable.
 - `workspace/` owns the direct Workspace lookup used by setup intent. Computer
   never lists or interactively selects Workspaces; do not add a picker or a
   list-selection flow.

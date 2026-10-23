@@ -43,20 +43,22 @@ export function cloudDesktopUrl(
 /** A sized popup. The window name is what reuses it; `noopener` would discard that name. */
 export const CLOUD_DESKTOP_WINDOW_FEATURES = "popup,width=1280,height=800";
 
-/** One window per desktop. The desktop page drops `window.opener` itself. */
+/** One window per desktop. The desktop page keeps `window.opener`, so this name still selects it. */
 export function cloudDesktopWindowName(computerId: string, agentId?: string): string {
   return agentId ? `coforge-desktop-${computerId}-${agentId}` : `coforge-desktop-${computerId}`;
 }
 
-const openDesktops = new Map<string, Window>();
-
 export function openCloudDesktopWindow(url: string, computerId: string, agentId?: string): void {
   const name = cloudDesktopWindowName(computerId, agentId);
-  const current = openDesktops.get(name);
-  if (current && !current.closed) {
-    current.focus();
-    return;
+  // The same features every time. A call without them does not raise the popup, and a call that
+  // loads `url` again reconnects the desktop. An empty URL selects the existing named window.
+  // A fresh popup is `about:blank` and then loads the desktop; an already-open desktop is another
+  // origin, so reading its location fails and it is left as it is.
+  const opened = window.open("", name, CLOUD_DESKTOP_WINDOW_FEATURES);
+  if (!opened) return;
+  try {
+    if (opened.location.href === "about:blank") opened.location.href = url;
+  } catch {
+    // The named desktop is already open.
   }
-  const opened = window.open(url, name, CLOUD_DESKTOP_WINDOW_FEATURES);
-  if (opened) openDesktops.set(name, opened);
 }

@@ -44,39 +44,48 @@ test("an agent's desktop carries that agent's name as its window title", () => {
   );
 });
 
-test("a desktop opens in its own sized window, and a second open focuses that window", () => {
+test("a desktop opens in its own sized window, and a second open targets that name without a url", () => {
   const agent = "01a15829-2da5-740c-848c-c287bf1e8ab7";
+  const name = `coforge-desktop-${COMPUTER}-${agent}`;
   expect(CLOUD_DESKTOP_WINDOW_FEATURES.startsWith("popup,")).toBe(true);
   expect(CLOUD_DESKTOP_WINDOW_FEATURES).toContain("width=1280");
   expect(CLOUD_DESKTOP_WINDOW_FEATURES).toContain("height=800");
   expect(CLOUD_DESKTOP_WINDOW_FEATURES).not.toContain("noopener");
   expect(CLOUD_DESKTOP_WINDOW_FEATURES).not.toContain("noreferrer");
   expect(cloudDesktopWindowName(COMPUTER)).toBe(`coforge-desktop-${COMPUTER}`);
-  expect(cloudDesktopWindowName(COMPUTER, agent)).toBe(`coforge-desktop-${COMPUTER}-${agent}`);
+  expect(cloudDesktopWindowName(COMPUTER, agent)).toBe(name);
 
-  const opened: string[] = [];
-  let focused = 0;
+  const opened: Array<{ url: string; name?: string; features?: string }> = [];
+  const state = { href: "about:blank" };
   const popup = {
-    closed: false,
-    focus: () => {
-      focused += 1;
+    get location() {
+      if (state.href !== "about:blank") throw new Error("cross-origin");
+      return {
+        get href() {
+          return state.href;
+        },
+        set href(value: string) {
+          state.href = value;
+        },
+      };
     },
   };
   const previous = globalThis.window;
   globalThis.window = {
-    open: (url: string) => {
-      opened.push(url);
+    open: (url: string, target?: string, features?: string) => {
+      opened.push({ url, name: target, features });
       return popup;
     },
   } as unknown as Window & typeof globalThis;
   try {
-    openCloudDesktopWindow("http://10.110.158.143:6090/desktop/one/", COMPUTER, agent);
-    openCloudDesktopWindow("http://10.110.158.143:6090/desktop/one/", COMPUTER, agent);
-    expect(opened).toEqual(["http://10.110.158.143:6090/desktop/one/"]);
-    expect(focused).toBe(1);
-    popup.closed = true;
-    openCloudDesktopWindow("http://10.110.158.143:6090/desktop/one/", COMPUTER, agent);
-    expect(opened).toHaveLength(2);
+    const url = "http://10.110.158.143:6090/desktop/one/";
+    openCloudDesktopWindow(url, COMPUTER, agent);
+    openCloudDesktopWindow(url, COMPUTER, agent);
+    expect(opened).toEqual([
+      { url: "", name, features: CLOUD_DESKTOP_WINDOW_FEATURES },
+      { url: "", name, features: CLOUD_DESKTOP_WINDOW_FEATURES },
+    ]);
+    expect(state.href).toBe(url);
   } finally {
     globalThis.window = previous;
   }

@@ -57,15 +57,6 @@ const RECONNECT_CONTROL = `<style>
 #coforge-desktop-reconnect.is-visible{display:grid}
 </style><button type="button" id="coforge-desktop-reconnect" aria-label="重新连接"><svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-8.9 3.1L6.68 17.5A7 7 0 0 0 19 13c0-3.87-3.13-7-7-7z"/></svg></button>`;
 
-const RELEASE_OPENER = `<script>window.opener=null</script>`;
-
-/** The desktop is another origin. Drop its handle on this page so it cannot navigate the opener. */
-export function releaseWindowOpener(html: string): string {
-  if (html.includes("window.opener=null")) return html;
-  if (html.includes("<head>")) return html.replace("<head>", `<head>${RELEASE_OPENER}`);
-  return `${RELEASE_OPENER}${html}`;
-}
-
 function withReconnectControl(html: string): string {
   if (html.includes("</body>")) return html.replace("</body>", `${RECONNECT_CONTROL}</body>`);
   return `${html}${RECONNECT_CONTROL}`;
