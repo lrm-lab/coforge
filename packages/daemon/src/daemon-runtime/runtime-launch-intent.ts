@@ -30,6 +30,17 @@ export type AgentInput =
   | { kind: "startup"; text: string; completion: AgentInputCompletion }
   | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion };
 
+/** Whether any queued input has something to say, so the startup starter has nothing to add:
+ * the input drain skips the starter when this holds for the inputs behind it. */
+export function queueHasInputContent(items: readonly AgentInput[]): boolean {
+  return items.some(
+    (item) =>
+      item.kind === "delivery" ||
+      item.kind === "prompt" ||
+      (item.kind === "recovery" && recoveryHasContent(item.context)),
+  );
+}
+
 export type AgentInputQueue = {
   items: AgentInput[];
   drain?: Promise<void>;

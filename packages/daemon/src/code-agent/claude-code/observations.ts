@@ -52,10 +52,7 @@ export function claudeContextUsage(
     if (parsed?.type === "message") lastMessage = parsed;
   }
   if (!lastMessage) return undefined;
-  const usedTokens =
-    nonNegativeNumber(lastMessage.input_tokens) +
-    nonNegativeNumber(lastMessage.cache_read_input_tokens) +
-    nonNegativeNumber(lastMessage.cache_creation_input_tokens);
+  const usedTokens = claudeUsageContextTokens(lastMessage);
   const modelUsage = asRecord(record.modelUsage);
   if (!modelUsage) return undefined;
   const entries = Object.entries(modelUsage).flatMap(([model, raw]) => {
@@ -79,6 +76,15 @@ export function claudeContextUsage(
   if (!modelWindow) return undefined;
   const windowTokens = Math.min(modelWindow, autoCompactWindow ?? Infinity);
   return { usedTokens, windowTokens, occurredAt: eventTime(record) };
+}
+
+/** Input + cache read + cache creation tokens of a usage-shaped record: the context one request carried. */
+export function claudeUsageContextTokens(usage: Readonly<Record<string, unknown>>): number {
+  return (
+    nonNegativeNumber(usage.input_tokens) +
+    nonNegativeNumber(usage.cache_read_input_tokens) +
+    nonNegativeNumber(usage.cache_creation_input_tokens)
+  );
 }
 
 function claudeModelUsageWeight(value: Record<string, unknown>): number {

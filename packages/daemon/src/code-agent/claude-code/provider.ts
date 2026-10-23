@@ -19,6 +19,9 @@ import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
 import { claudeContextUsage, claudeServiceTierState } from "./observations";
+import { readClaudeRecycleBriefing } from "./recycle-briefing";
+import { readClaudeSessionResumeFacts } from "./session-transcript";
+import { TASK_LIFECYCLE_PHASE, isTaskStatus, type TaskStatus } from "./task-lifecycle";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
@@ -59,6 +62,9 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
       timeoutMs: options.timeoutMs,
     });
   }
+
+  readonly readSessionResumeFacts = readClaudeSessionResumeFacts;
+  readonly readRecycleBriefing = readClaudeRecycleBriefing;
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())
@@ -106,25 +112,6 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
       throw error;
     }
   }
-}
-
-/** Claude Code's task lifecycle `system` subtypes, by the phase each reports. */
-const TASK_LIFECYCLE_PHASE = new Map<
-  unknown,
-  Extract<AgentRuntimeEvent, { type: "subagent-progress" }>["phase"]
->([
-  ["task_started", "started"],
-  ["task_progress", "progress"],
-  ["task_notification", "notification"],
-]);
-
-type TaskStatus = NonNullable<
-  Extract<AgentRuntimeEvent, { type: "subagent-progress" }>["taskStatus"]
->;
-
-/** Whether a `task_notification`'s status is one of its terminal ones (SDKTaskNotificationMessage). */
-function isTaskStatus(value: unknown): value is TaskStatus {
-  return value === "completed" || value === "failed" || value === "stopped";
 }
 
 class ClaudeCodeAgentSession implements AgentSession {

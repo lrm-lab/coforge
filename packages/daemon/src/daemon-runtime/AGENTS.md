@@ -141,12 +141,12 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   launch abandoned because its recovery notice was rejected, discards them;
   the next Start recovers them from the cloud read boundary.
 - `stalled-recovery.ts` owns when a message restarts a stalled provider instead
-  of being steered into its turn; `runtime.ts` only performs it. Count only raw
-  provider events and turn-starting input as progress, never published
-  Activity, and never let it touch `hasLiveTurn`. Do not restart over an open
-  tool call or an unresumable session. Nothing settles a tracked mention on
-  exit, so hand the old turn's back as unknown before the relaunch reports its
-  session, and refuse one that arrives during the restart.
+  of being steered into its turn; `runtime-release.ts` performs it, and the cold
+  idle stop (`agent-runtime/AGENTS.md`). Count only raw provider events and
+  turn-starting input as progress, never published Activity, and never let it
+  touch `hasLiveTurn`. Do not restart over an open tool call or an unresumable
+  session. Nothing settles a tracked mention on exit: hand the old turn's back
+  as unknown before the relaunch reports its session; refuse one arriving meanwhile.
 - Thread follow state is cloud-persisted. The Daemon only forwards the Agent's
   explicit unfollow operation.
 

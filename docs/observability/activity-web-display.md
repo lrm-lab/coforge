@@ -35,5 +35,5 @@ Activity timeline 是完整的按时间顺序工作记录，不是只读最新�
 发送 "Tool finished"/"Thinking finished"/"Context compaction finished"），仅当 `detail` 为空（旧版 daemon、或改版前已落库的历史
 行）时才回退到 Web 自己的措辞；服务端在持久化前不改写、不清空这个 `detail`。
 `tool_end` 帧的 `toolOutcome`（`callId`/`ok`/`durationMs`/`exitCode`，见
-[Agent 状态与 Activity](agent-status-and-activity.md)）和 `tool_start` entry 的 `callId`
+[Agent 状态与 Activity](agent-status-and-activity/detail-kinds.md)）和 `tool_start` entry 的 `callId`
 目前 Web 只接收、转发，不展示；是否展示、怎么展示另行决定。

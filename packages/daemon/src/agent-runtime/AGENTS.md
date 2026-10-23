@@ -21,7 +21,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   reasoning.
 - `tool-call-ledger.ts` is a launch's one record of open tool calls (stalled
   recovery reads it too) and builds each `tool_end`'s `toolOutcome`; the field
-  rules are in `docs/observability/agent-status-and-activity.md` (`tool_end`).
+  rules are in `docs/observability/agent-status-and-activity/detail-kinds.md` (`tool_end`).
 
 ## Start and stop
 
@@ -135,3 +135,28 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   an existing `MEMORY.md` is never migrated or rewritten.
 - Seed `MEMORY.md` for on-demand recovery. Do not require per-turn memory
   maintenance in the standing instructions.
+
+## Idle recycle of a cold, large session
+
+- Reference-client behaviour (`wakeSessionRecycle`, 1.0.51), on by default: a native session idle for
+  more than 60 minutes whose last context exceeds 128k tokens is not resumed. `wake-session-recycle.ts`
+  holds the provider-neutral decision and the env knobs (listed in
+  `docs/observability/agent-status-and-activity/runtime-lifecycle.md`); an Agent's runtime variables
+  override the daemon's environment, and only the sweep period is daemon-wide.
+- A provider recycles only through the optional `readSessionResumeFacts` /
+  `readRecycleBriefing` seam in `code-agent/contract.ts`; a provider without it never does. Any
+  fact the seam cannot supply means resume, never recycle. Provider transcript parsing stays in the
+  provider's own directory.
+- `daemon-runtime/cold-idle-sweep.ts` stops a live runtime every sweep period only when every guard
+  of the daemon's own state holds (no live turn, queued delivery or input, open tool call, background
+  task, launch, stop, stalled recovery, runner hold or migration) and the runtime's last event and the
+  session's own record are both older than the cold gap. The Agent stays active; its next message wakes
+  it through the ordinary exited-delivery path, never `no_process`.
+- `daemon-runtime/wake-recycle.ts` decides at `#launchAgent`, once the launch config (and so the
+  Agent's variables) is known and inside the registered launch, never before its first await. A
+  recycle starts a session with no id, reports the old one as `replacedSessionId` (no session
+  invalidate, no new reason), leaves the session reference alone until the new session is reported,
+  and makes the briefing the launch's first input. A briefing that cannot be built still starts a
+  fresh session. No resume when the launch carries a `resumePrompt` or `create`s its session.
+- `startup-memory-block.ts` is the briefing's MEMORY.md section: the head of the regular file within
+  its token budget, never through a symlink.

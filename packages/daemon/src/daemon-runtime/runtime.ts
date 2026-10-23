@@ -3,7 +3,6 @@ import {
   AgentProcessCleanupError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
-  type AgentSession,
   type CodeAgentProvider,
   type UsageSnapshot,
 } from "#src/code-agent/contract";
@@ -50,6 +49,7 @@ import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-inv
 import { fastModeUnavailableDetail } from "./fast-mode-activity";
 import {
   recoveryHasContent,
+  queueHasInputContent,
   recoveryOf,
   runtimeConfigOf,
   type AgentInput,
@@ -156,11 +156,10 @@ import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runt
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { deleteAgentWorkspaceFiles } from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
-import {
-  ProviderProgress,
-  STALLED_RECOVERY_EXIT_TIMEOUT_MS,
-  shouldRecoverStalledRuntime,
-} from "./stalled-recovery";
+import { ProviderProgress } from "./stalled-recovery";
+import { ColdIdleSweep } from "./cold-idle-sweep";
+import { RuntimeRelease } from "./runtime-release";
+import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
@@ -269,14 +268,6 @@ type ActivityLaunch = PublishedActivityLaunch & {
    * kept (queued and ACKed) with this Activity restated. */
   offlineError?: ReturnType<typeof buildRuntimeErrorActivity>;
 };
-
-/** A launch found stalled, and what its restart needs (`#stalledRuntime`). */
-type StalledRuntime = Readonly<{
-  launch: ActivityLaunch;
-  session: AgentSession;
-  restart: AgentRestartConfig;
-  silentForMs: number;
-}>;
 
 const TURN_ACTIVITY_EVENT_TYPES = new Set<AgentRuntimeEvent["type"]>([
   "text-delta",
@@ -414,8 +405,56 @@ export class DaemonRuntime {
   });
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
   readonly #wakeLaunches = new Set<string>();
-  /** Agents whose stalled provider is being restarted; messages meanwhile wait for the relaunch. */
-  readonly #stalledRecoveries = new Set<string>();
+  /** Ends a live process without a stopped/crashed Activity, for a stalled provider's restart or
+   * a cold idle stop; the Agent stays active and wakeable. */
+  readonly #runtimeRelease = new RuntimeRelease<ActivityLaunch>({
+    launch: (agentId) => this.#currentActivityLaunches.get(agentId),
+    runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
+    restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
+    lastBusyLaunch: (agentId) => this.#activityPublisher.lastBusy(agentId)?.launch,
+    resumable: (agentId) => this.#runningMentionIdentity(agentId) !== undefined,
+    sessionId: (agentId) => this.#sessionReferences.get(agentId)?.sessionId,
+    isStopping: (agentId) => this.#stoppingAgents.has(agentId),
+    daemonIdleFacts: (agentId) => {
+      const queue = this.#agentInputQueues.get(agentId);
+      return {
+        working: this.#isWorking(agentId),
+        deliveriesQueued: this.#deliveryQueue.hasQueued(agentId),
+        inputsQueued: queue !== undefined && (queue.items.length > 0 || queue.drain !== undefined),
+        launching: this.#agentLaunches.has(agentId),
+        stopping:
+          this.#stoppingAgents.has(agentId) ||
+          this.#agentStops.has(agentId) ||
+          this.#agentProcessManager.isStopping(agentId),
+        runnerHold: this.#runnerHold !== undefined,
+        migrating: this.#migrations?.holds(agentId) === true,
+      };
+    },
+    hasParkedWork: (agentId) =>
+      this.#deliveryQueue.hasQueued(agentId) || this.#deliveryQueue.hasHeldAppItems(agentId),
+    flushParked: (agentId) => this.#releaseSurvivingHolds(agentId),
+    wake: (agentId, restart) => this.#wakeAgent(agentId, restart),
+    publish: (agentId, launch, level, detailKind, text) =>
+      this.#activityPublisher.publish(
+        agentId,
+        launch,
+        this.#activity(agentId, detailKind, level, text),
+      ),
+    handBackMentions: (agentId) => this.#mentionDeliveries.handBackForRelaunch(agentId),
+    release: (agentId, timeoutMs) => this.#agentProcessManager.release(agentId, timeoutMs),
+  });
+  /** Stops cold, idle, large-context runtimes; the next launch decides resume or fresh session. */
+  readonly #coldIdleSweep = new ColdIdleSweep({
+    agentIds: () => this.#agentProcessManager.runningAgentIds(),
+    agent: (agentId) => this.#runtimeRelease.coldIdleAgent(agentId),
+    provider: (provider) => this.#createProvider(provider),
+    stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
+  });
+  readonly #wakeRecycle = new WakeRecycle({
+    provider: (provider) => this.#createProvider(provider),
+    inputQueue: (agentId) => this.#agentInputQueues.get(agentId),
+    hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
+  });
   /** Per-Agent delivery hold after retryable runtime errors: backoff, fingerprint fence, and the
    * backoff's release timer. */
   readonly #runtimeErrorHold = new RuntimeErrorDeliveryHold({
@@ -1282,6 +1321,7 @@ export class DaemonRuntime {
       buffering = false;
       this.#started = true;
       this.#activityPublisher.enable();
+      this.#coldIdleSweep.start();
       // Kick off optional inventory before flushing buffered publications so immediate probes can
       // make progress while the first Agent inputs are delivered.
       const codeAgentReport = this.#codeAgentInventory.reportRuntimes(transport);
@@ -1575,11 +1615,7 @@ export class DaemonRuntime {
           // `#recoverAttention` never ran), yet the session is ready — flush anything
           // AgentDeliveryQueue held across an unexpected exit now. Do not open a
           // second recovery notice: the queued startup input opens the initial turn if needed.
-          else {
-            this.#flushSurvivingDeliveryQueue(agentId);
-            this.#releaseHeldAppItems(agentId);
-            this.#releaseFallbackNotices(agentId);
-          }
+          else this.#releaseSurvivingHolds(agentId);
           if (startupCompletion) await startupCompletion;
           return runtime;
         },
@@ -1641,12 +1677,7 @@ export class DaemonRuntime {
       try {
         if (
           item.kind === "startup" &&
-          (queue.items.some(
-            (pending) =>
-              pending.kind === "delivery" ||
-              pending.kind === "prompt" ||
-              (pending.kind === "recovery" && recoveryHasContent(pending.context)),
-          ) ||
+          (queueHasInputContent(queue.items) ||
             this.#deliveryQueue.hasQueued(agentId) ||
             this.#agentProcessManager.session(agentId)?.hasLiveTurn === true)
         ) {
@@ -1978,6 +2009,32 @@ export class DaemonRuntime {
         this.#connection.workspaceId,
         agentId,
       );
+      // A session left cold with a large context is not resumed: a fresh one opens with a briefing.
+      const recycled = request.replacedSessionId
+        ? undefined
+        : await this.#wakeRecycle.plan({
+            agentId,
+            provider: config.provider,
+            envVars: launchConfig.envVars,
+            sessionId: reference.sessionId,
+            sessionMode: reference.sessionMode,
+            hasResumePrompt: request.resumePrompt !== undefined,
+            memoryAgent: isMemoryAgentRuntime(config),
+            agentWorkspaceDirectory: workspaceDirectory,
+          });
+      // `reference.sessionId` is overwritten by the next report.
+      const recycledSessionId = recycled ? reference.sessionId : undefined;
+      if (recycled)
+        this.#activityPublisher.publish(
+          agentId,
+          launch,
+          this.#activity(
+            agentId,
+            AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE,
+            "info",
+            recycled.activityText,
+          ),
+        );
       const runtime = await this.#agentProcessManager.start(
         agentId,
         {
@@ -1987,7 +2044,7 @@ export class DaemonRuntime {
         },
         {
           agentWorkspaceDirectory: workspaceDirectory,
-          sessionId: reference.sessionId,
+          sessionId: recycled ? undefined : reference.sessionId,
           environment: {
             ...desktopEnvironment,
             COFORGE_DAEMON_SOCKET: "",
@@ -2010,7 +2067,8 @@ export class DaemonRuntime {
                 // Kept for compat on the session report's own `replacedSessionId` field only
                 // (unrelated to whether an invalidate is sent below): either a driver-reported
                 // replacement just now, or one carried over from AgentControl's own retry.
-                const replaced = driverReplacedSessionId ?? request.replacedSessionId;
+                const replaced =
+                  driverReplacedSessionId ?? recycledSessionId ?? request.replacedSessionId;
                 if (driverReplacedSessionId) {
                   // Claude Code/Codex replace a missing native session inside the driver, with
                   // no separate "before the fresh launch" moment; this callback IS the point the
@@ -2076,7 +2134,7 @@ export class DaemonRuntime {
                 }
               }
             : undefined,
-          sessionMode: reference.sessionMode,
+          sessionMode: recycled ? "create" : reference.sessionMode,
           assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
           identity: launchConfig.identity,
           serverLaunch: managedScope
@@ -2994,11 +3052,11 @@ export class DaemonRuntime {
       throw new Error(`Agent runtime is stopping: ${message.agentId}`);
     // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
     if (this.#runnerHold === undefined) {
-      const recovering = this.#stalledRecoveries.has(message.agentId);
-      const stalled = recovering ? undefined : this.#stalledRuntime(message.agentId);
+      const recovering = this.#runtimeRelease.isRecovering(message.agentId);
+      const stalled = recovering ? undefined : this.#runtimeRelease.stalled(message.agentId);
       if (recovering || stalled) {
         this.#exitedDelivery.keepForNextLaunch(message.agentId, message);
-        if (stalled) return this.#recoverStalledRuntime(message.agentId, stalled);
+        if (stalled) return this.#runtimeRelease.recoverStalled(message.agentId, stalled);
         return;
       }
     }
@@ -3056,7 +3114,7 @@ export class DaemonRuntime {
     if (
       this.#runnerHold === undefined &&
       (this.#stoppingAgents.has(agentId) ||
-        this.#stalledRecoveries.has(agentId) ||
+        this.#runtimeRelease.isRecovering(agentId) ||
         !this.#agentProcessManager.session(agentId))
     ) {
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
@@ -3088,110 +3146,6 @@ export class DaemonRuntime {
       launchId: report.launchId,
       sessionId: report.sessionId,
     });
-  }
-
-  /** What a stalled-provider restart works on, when a message arriving now should restart this
-   * Agent's provider (`stalled-recovery.ts`): its busy turn has been silent too long with nothing
-   * still running. */
-  #stalledRuntime(agentId: string): StalledRuntime | undefined {
-    const launch = this.#currentActivityLaunches.get(agentId);
-    const session = this.#agentProcessManager.session(agentId);
-    const restart = this.#agentProcessManager.restartConfig(agentId);
-    const progress = launch?.progress;
-    if (!launch || !progress || !session || !restart) return undefined;
-    const stalled = shouldRecoverStalledRuntime({
-      turnBusy:
-        this.#activityPublisher.lastBusy(agentId)?.launch === launch &&
-        session.hasLiveTurn !== false,
-      silentForMs: progress.silentForMs(),
-      hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
-      resumable: this.#runningMentionIdentity(agentId) !== undefined,
-    });
-    return stalled ? { launch, session, restart, silentForMs: progress.silentForMs() } : undefined;
-  }
-
-  /**
-   * Restarts a stalled provider for the message(s) now waiting for it, as the reference client
-   * does: announce it, end the stalled process without a stopped/crashed Activity, then wake the
-   * Agent on the same launch, resuming the session it last reported. Messages meanwhile wait for
-   * the relaunch.
-   */
-  async #recoverStalledRuntime(agentId: string, stalled: StalledRuntime): Promise<void> {
-    this.#stalledRecoveries.add(agentId);
-    try {
-      if (!(await this.#endStalledRuntime(agentId, stalled))) return;
-      // A Stop that arrived meanwhile wins: the Agent is not woken again.
-      if (this.#stoppingAgents.has(agentId) || !this.#agentProcessManager.restartConfig(agentId))
-        return;
-      const sessionId =
-        this.#sessionReferences.get(agentId)?.sessionId ?? stalled.restart.sessionId;
-      // A relaunch that fails reports its own launch error; the waiting messages stay queued,
-      // acknowledged, for the Agent's next launch.
-      await this.#wakeAgent(agentId, { ...stalled.restart, sessionId }).catch((error: unknown) =>
-        logger.error("Agent stalled-runtime relaunch failed", {
-          event: "agent.runtime.stalled_recovery_failed",
-          agent_id: agentId,
-          error: thrownMessage(error),
-        }),
-      );
-    } finally {
-      this.#stalledRecoveries.delete(agentId);
-    }
-  }
-
-  /** Announces the restart and ends the stalled process; false, with an error Activity, when it
-   * will not exit. Once is enough: that launch is never judged stalled again. */
-  async #endStalledRuntime(
-    agentId: string,
-    { launch, session, restart, silentForMs }: StalledRuntime,
-  ): Promise<boolean> {
-    const runtimeName = runtimeDisplayName(restart.config.provider);
-    // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
-    this.#activityPublisher.publish(
-      agentId,
-      launch,
-      this.#activity(
-        agentId,
-        AGENT_ACTIVITY_DETAIL_KIND.STALLED_RECOVERY,
-        "info",
-        `Restarting stalled ${runtimeName} runtime for queued message`,
-      ),
-    );
-    logger.warn("Agent runtime stalled; restarting it for a queued message", {
-      event: "agent.runtime.stalled_recovery",
-      agent_id: agentId,
-      silent_for_ms: silentForMs,
-    });
-    launch.stopping = true;
-    try {
-      // Dispose can reject notices still waiting for provider acceptance. Hand their mentions
-      // back first, before those rejections can settle them as lost.
-      await this.#mentionDeliveries.handBackForRelaunch(agentId);
-      await this.#agentProcessManager.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
-      return true;
-    } catch (error) {
-      launch.progress = undefined;
-      // A process that is still running gets its Activity back.
-      const stillRunning = this.#agentProcessManager.session(agentId) === session;
-      if (stillRunning) launch.stopping = false;
-      this.#activityPublisher.publish(
-        agentId,
-        launch,
-        this.#activity(
-          agentId,
-          AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
-          "error",
-          `Restarting the stalled ${runtimeName} runtime failed`,
-        ),
-      );
-      logger.error("Agent stalled-runtime restart failed", {
-        event: "agent.runtime.stalled_recovery_failed",
-        agent_id: agentId,
-        still_running: stillRunning,
-        error: thrownMessage(error),
-      });
-      return false;
-    }
   }
 
   /** Relaunches an exited Agent for a message; a failure starts or extends the wake cooldown. A
@@ -3527,6 +3481,13 @@ export class DaemonRuntime {
   #forgetLocalAgent(agentId: string): void {
     this.systemCleaner.replaceOwnerSnapshot(agentId, null);
     this.#offlineResidency.forget(agentId);
+  }
+
+  /** Presents what was kept across an exit or a runtime's end, as at idle. */
+  #releaseSurvivingHolds(agentId: string): void {
+    this.#flushSurvivingDeliveryQueue(agentId);
+    this.#releaseHeldAppItems(agentId);
+    this.#releaseFallbackNotices(agentId);
   }
 
   /** Whether the Agent is mid-turn, by its last busy Activity or a notice just written. */
@@ -3928,6 +3889,11 @@ export class DaemonRuntime {
     const existing = notified.get(itemId);
     if (existing) return existing;
     const pending = Promise.resolve().then(async () => {
+      // An ending runtime takes no notice: it waits for the launch that follows.
+      if (this.#runtimeRelease.isRecovering(agentId)) {
+        this.#deliveryQueue.holdAppItem(agentId, itemId);
+        return false;
+      }
       let session = this.#agentProcessManager.session(agentId);
       if (!session) {
         if (!startStopped) return false;
@@ -4105,6 +4071,7 @@ export class DaemonRuntime {
     // Close every local capability synchronously before any shutdown await.
     this.#stopping = true;
     this.#started = false;
+    this.#coldIdleSweep.stop();
     this.#activityPublisher.disable();
     for (const launch of this.#currentActivityLaunches.values()) launch.startup?.dispose();
     this.#disposeAllPhases();

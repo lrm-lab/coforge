@@ -36,7 +36,31 @@ export interface CodeAgentProvider {
     sessionId: string;
     timeoutMs?: number;
   }): Promise<AgentContextReport | undefined>;
+  /**
+   * What the native session's own record says about it, for the idle-recycle decision: its last
+   * activity and the context it last carried. `undefined` (or a missing field) means the record is
+   * absent or unreadable, which the caller treats as "resume". `envVars` are the Agent's own
+   * overrides, which may relocate the provider's session store.
+   */
+  readSessionResumeFacts?(options: {
+    sessionId: string;
+    envVars?: Readonly<Record<string, string>>;
+  }): Promise<SessionResumeFacts | undefined>;
+  /**
+   * The briefing a fresh session opens with when it replaces `sessionId`, built from that session's
+   * own record within `budgetTokens`; `undefined` when there is nothing worth carrying over.
+   */
+  readRecycleBriefing?(options: {
+    sessionId: string;
+    workingDirectory: string;
+    budgetTokens: number;
+    envVars?: Readonly<Record<string, string>>;
+  }): Promise<string | undefined>;
 }
+export type SessionResumeFacts = {
+  lastActivityAtMs?: number;
+  lastContextTokens?: number;
+};
 export type CodeAgentProviderFactory = (provider: RuntimeProvider) => CodeAgentProvider;
 export interface CodeAgentProbe {
   which(name: string, searchPath?: string): string | undefined;

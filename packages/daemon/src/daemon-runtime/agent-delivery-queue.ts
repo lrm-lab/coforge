@@ -183,6 +183,11 @@ export class AgentDeliveryQueue {
     this.#heldAppItems.set(agentId, items);
   }
 
+  /** Whether any app-item notice is held for the Agent. */
+  hasHeldAppItems(agentId: string): boolean {
+    return (this.#heldAppItems.get(agentId)?.size ?? 0) > 0;
+  }
+
   /** Drains and returns the app-item ids held for the Agent, for the caller to re-attempt
    * delivery of each — unconditionally, like `discardPending`; the caller re-checks `shouldHold`
    * itself for each item before actually notifying, so one still-busy item (e.g. a coalesced

@@ -1,7 +1,7 @@
 import { isActivityCallId } from "./activity-entries";
 
 /** How one tool call ended: carried by its `tool_end` Activity, keyed by the `callId` of the
- * call's `tool_start` entry. What each field means: docs/observability/agent-status-and-activity.md
+ * call's `tool_start` entry. What each field means: docs/observability/agent-status-and-activity/detail-kinds.md
  * (`tool_end`). */
 export type ActivityToolOutcome = {
   callId: string;

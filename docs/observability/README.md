@@ -13,7 +13,7 @@
 ## 目录
 
 - [结构化日志](structured-logging.md): 结构化日志的保留字段、敏感信息禁区、级别与采样。
-- [Agent 状态与活动上报通道](agent-status-and-activity.md): Agent 状态与活动两条上报通道、activity 字段与类型、忙碌心跳与 liveness sweep。
+- [Agent 状态与活动上报通道](agent-status-and-activity/README.md): Agent 状态与活动两条上报通道、activity 字段与类型、runtime 生命周期与冷空闲回收、忙碌心跳与 liveness sweep。
 - [`running_command` 与工具摘要](running-command-summary.md): `running_command` 的通用标签与 `toolInput` 摘要、CoForge 语义工具表、文件工具与生命周期顺序。
 - [Activity 发送与错误转换](activity-delivery-and-errors.md): WSS Activity 的 best-effort 发送，以及错误与重连的单一转换点。
 - [Web 展示契约](activity-web-display.md): Web 的 activity timeline 展示契约。

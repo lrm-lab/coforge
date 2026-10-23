@@ -40,6 +40,11 @@ export class OutstandingBackgroundTasks {
     else if (event.taskStatus) this.#taskIds.delete(event.taskId);
   }
 
+  /** How many tasks have started and not yet ended. */
+  get count(): number {
+    return this.#taskIds.size;
+  }
+
   /** What a quiet turn shows while tasks are still running, as the reference client words it;
    * `undefined` once none is, when the turn is Idle. */
   quietDetail(): string | undefined {

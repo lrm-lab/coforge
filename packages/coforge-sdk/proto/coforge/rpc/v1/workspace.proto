@@ -417,7 +417,7 @@ message AgentActivity {
 }
 
 // The outcome of one tool call, keyed by the `call_id` of its `tool_name` entry. What each
-// field means: docs/observability/agent-status-and-activity.md (`tool_end`).
+// field means: docs/observability/agent-status-and-activity/detail-kinds.md (`tool_end`).
 message ActivityToolOutcome {
   string call_id = 1;
   bool ok = 2;

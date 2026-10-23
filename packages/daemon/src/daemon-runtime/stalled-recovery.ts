@@ -26,6 +26,11 @@ export class ProviderProgress {
     this.#lastEventAtMs = Date.now();
   }
 
+  /** When the provider last reported anything. */
+  get lastEventAtMs(): number {
+    return this.#lastEventAtMs;
+  }
+
   silentForMs(): number {
     return Date.now() - this.#lastEventAtMs;
   }
