@@ -14,7 +14,7 @@ async function claimJob(
   const token = bearerToken(request);
   if (!token) return error(401, "invalid host token");
   try {
-    const job = await dependencies.jobs.claim({ token });
+    const job = await dependencies.jobs.claim({ token, now: dependencies.now() });
     return Response.json({ job: job ?? null });
   } catch (cause) {
     return jobError(cause);

@@ -13,3 +13,5 @@ These rules apply to `src/server/hosts/`.
 - The daemon key is returned only when the cluster claims a create or attach, and it is cleared when the job is reported. Browser and list APIs never return it.
 - `host-production.server.ts` wires the database and the token. Routes stay thin adapters over it.
 - Operator steps for a new deployment are in `docs/operations/cloud-swarm/README.md`.
+
+- `COFORGE_RETAINED_CLOUD_IMAGE_IDS` holds exact private image IDs that must keep their local customizations. Derive protection from deployment configuration on every snapshot read, never trust a heartbeat's protection flag. Keep the real image ID. Refuse shared replacement both at enqueue and claim, including queued work; an unknown live image also cannot be replaced. Retained upgrades remain an operator operation that preserves each image's layer.
