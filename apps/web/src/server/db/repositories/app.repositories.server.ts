@@ -1,7 +1,11 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import type { Prisma } from "#src/generated/prisma/client";
 import type { AppCategory } from "#src/features/apps/app-category";
-import { DELETABLE_STATUSES, type AppPublishStatus } from "#src/features/apps/app-publish-status";
+import {
+  DELETABLE_STATUSES,
+  LISTED_STATUSES,
+  type AppPublishStatus,
+} from "#src/features/apps/app-publish-status";
 import type { AppRegistrationInput } from "#src/features/apps/app-registration";
 import type { AppChange, AppRegistryStore, AppView } from "#src/server/apps/app-registry.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
@@ -24,15 +28,22 @@ const APP_VIEW = {
   secretRotatedAt: true,
   createdAt: true,
   updatedAt: true,
+  ownerWorkspace: { select: { name: true } },
 } as const;
 
 /** A row as the registry sees it: `apps_category_check` admits only the nine categories. */
-const view = (
-  row: Omit<AppView, "category" | "publishStatus"> & { category: string; publishStatus: string },
-): AppView => ({
+const view = ({
+  ownerWorkspace,
+  ...row
+}: Omit<AppView, "category" | "publishStatus" | "developer"> & {
+  category: string;
+  publishStatus: string;
+  ownerWorkspace: { name: string };
+}): AppView => ({
   ...row,
   category: row.category as AppCategory,
   publishStatus: row.publishStatus as AppPublishStatus,
+  developer: ownerWorkspace.name,
 });
 
 /** The one app `key` that `workspaceId` owns: every write is scoped by it, so none can reach
@@ -160,7 +171,14 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
     const row = await this.db.app.findFirst({
       where: {
         ...owned(workspaceId, key),
-        installations: { some: { workspace: { members: { some: { userId: viewerUserId } } } } },
+        // A member of a Workspace where it is installed, or any signed-in person while the app is
+        // listed: the Marketplace shows its logo before an install.
+        OR: [
+          {
+            installations: { some: { workspace: { members: { some: { userId: viewerUserId } } } } },
+          },
+          { publishStatus: { in: [...LISTED_STATUSES] } },
+        ],
       },
       select: { logoObjectKey: true, logoContentType: true },
     });

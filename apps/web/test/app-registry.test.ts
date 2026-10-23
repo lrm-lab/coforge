@@ -17,6 +17,7 @@ const WORKSPACE = "workspace-1";
 const ownApp: AppView = {
   key: "acme-notes",
   ownerWorkspaceId: WORKSPACE,
+  developer: "Acme",
   name: "Acme Notes",
   description: "",
   whenToUse: "",

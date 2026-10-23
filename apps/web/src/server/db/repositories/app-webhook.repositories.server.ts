@@ -79,7 +79,7 @@ export class PrismaAppWebhookStore implements AppWebhookStore {
 
   async statusesByAppKey(workspaceId: string) {
     const rows = await this.db.appInstallation.findMany({
-      where: { workspaceId, app: { webhook: { enabled: true } } },
+      where: { workspaceId, app: { ownerWorkspaceId: workspaceId, webhook: { enabled: true } } },
       select: {
         app: { select: { key: true, webhook: { select: { enabled: true, endpointUrl: true } } } },
       },

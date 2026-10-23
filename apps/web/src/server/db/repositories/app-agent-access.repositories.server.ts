@@ -68,6 +68,24 @@ export async function approvePendingRequest(
   return true;
 }
 
+/** Ends the Agents' access to an app in the Workspaces `workspace` names: revokes their grants
+ * (the rows stay, so a reinstall needs a person's approval again) and denies their pending
+ * requests. Part of what removing an installation revokes (`removeAppInstallations`). */
+export async function revokeAppAgentAccess(
+  tx: Tx,
+  input: { appId: string; workspace: string | { not: string }; userId: string; at: Date },
+) {
+  const scope = { appId: input.appId, workspaceId: input.workspace };
+  await tx.appAgentGrant.updateMany({
+    where: { ...scope, revokedAt: null },
+    data: { revokedAt: input.at, revokedByUserId: input.userId },
+  });
+  await tx.appAgentAccessRequest.updateMany({
+    where: { ...scope, status: PENDING },
+    data: { status: "denied", decidedAt: input.at, decidedByUserId: input.userId },
+  });
+}
+
 /** Gives `grant`: creates the Agent's row for the app, or replaces the one it had. */
 function upsertGrant(tx: Tx, grant: GrantInput) {
   const given = {

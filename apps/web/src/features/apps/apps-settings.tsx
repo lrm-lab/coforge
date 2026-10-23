@@ -12,19 +12,13 @@ import { Select } from "#src/components/base/select/select";
 import { SelectItem } from "#src/components/base/select/select-item";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { Alert } from "#src/components/ui/alert";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
 import { canManageApps } from "#src/features/workspaces/workspace-roles";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AppCard } from "./app-card";
+import { AppsEmpty } from "./apps-empty";
+import { MarketplacePanel } from "./marketplace-panel";
 import { AppDetail } from "./app-detail";
 import { AppEditor } from "./app-editor";
 import { AppReviewLink } from "./app-review-link";
@@ -36,6 +30,7 @@ import { useAppsLayout } from "./apps-layout";
 import { useAppPublishing } from "./use-app-publishing";
 import { useRefreshOnFocus } from "./use-refresh-on-focus";
 import { APPS_VIEWS, type AppsView } from "./apps-settings-search";
+import { uninstallMarketplaceApp } from "./app-marketplace.functions";
 import {
   approveWorkspaceAppPermissions,
   deleteWorkspaceApp,
@@ -50,6 +45,12 @@ import {
 } from "./apps.functions";
 
 type EditorState = { mode: "register" } | { mode: "edit"; app: AppSummary };
+
+const TAB_LABELS: Record<AppsView, () => string> = {
+  installed: m.apps_tab_installed,
+  mine: m.apps_tab_mine,
+  marketplace: m.apps_tab_marketplace,
+};
 
 const settingsRoute = getRouteApi("/w/$workspaceSlug/settings");
 
@@ -72,7 +73,8 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const { appsTab: view = "installed", appsCategory: category = "all" } = settingsRoute.useSearch();
+  const { appsTab: requestedView = "installed", appsCategory: category = "all" } =
+    settingsRoute.useSearch();
   const navigate = settingsRoute.useNavigate();
   const [query, setQuery] = useState("");
   const [layout, setLayout] = useAppsLayout();
@@ -93,6 +95,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   const resetLogo = useServerFn(resetWorkspaceAppLogo);
   const uploadLogo = useServerFn(uploadWorkspaceAppLogo);
   const approve = useServerFn(approveWorkspaceAppPermissions);
+  const uninstall = useServerFn(uninstallMarketplaceApp);
 
   /** Reads the apps, and which declarations this Workspace shows, into the page. */
   const read = useCallback(async () => {
@@ -234,12 +237,37 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
       );
     });
 
+  /** Uninstalls an app another Workspace owns; its grants and tokens here are revoked. */
+  const uninstallApp = (app: AppSummary) =>
+    refreshingWhenStale(async () => {
+      await uninstall({ data: { key: app.key } });
+      setDetail((prev) => ({ ...prev, open: false }));
+      setApps((current) => current?.filter((held) => held.key !== app.key));
+    });
+
   const publishing = useAppPublishing(setApps, refreshingWhenStale);
 
   const all = apps ?? [];
-  const shown = filterApps(all, { query, category });
-  // Phase 1: a Workspace installs only the apps it registered, so both lists hold the same apps.
-  const counts: Record<AppsView, number> = { installed: all.length, mine: all.length };
+  // Installed: every app installed here, the ones installed from the Marketplace included; My apps:
+  // the ones this Workspace registered. The Marketplace tab exists only where `app-marketplace` is on.
+  const mine = all.filter((app) => app.owned);
+  const views = APPS_VIEWS.filter((id) => id !== "marketplace" || declares.marketplace);
+  const view = views.includes(requestedView) ? requestedView : "installed";
+  const list = view === "mine" ? mine : all;
+  const shown = filterApps(list, { query, category });
+  // The Marketplace tab shows no count: its list is its own panel's.
+  const counts: Partial<Record<AppsView, number>> = { installed: all.length, mine: mine.length };
+  // A tab the Workspace no longer has (the Marketplace where its flag is off) leaves the URL once
+  // the apps and flags are read, so a shared link does not keep naming it.
+  const unavailableView = apps !== undefined && requestedView !== view;
+  useEffect(() => {
+    if (unavailableView) {
+      void navigate({
+        search: (prev) => ({ ...prev, appsTab: view === "installed" ? undefined : view }),
+        replace: true,
+      });
+    }
+  }, [unavailableView, view, navigate]);
   // The editor shows the app as the list now holds it, so a refresh reaches it too.
   const editing =
     editor?.mode === "edit"
@@ -249,12 +277,12 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
   return (
     <div className="w-full px-page pb-8">
       <section aria-labelledby={titleId} className="grid gap-4 py-6">
-        <header className="flex items-center justify-between gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-primary">
             <Link03 aria-hidden="true" className="size-5 text-fg-quaternary" />
             {m.settings_applications()}
           </h2>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {declares.reviewer && <AppReviewLink />}
             {canManage && (
               <Button
@@ -272,7 +300,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
         <Tabs
           selectedKey={view}
           onSelectionChange={(key) => {
-            const next = APPS_VIEWS.find((candidate) => candidate === key);
+            const next = views.find((candidate) => candidate === key);
             if (next) showList({ view: next });
           }}
         >
@@ -297,11 +325,11 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
               aria-label={m.apps_views_label()}
               className="w-max max-w-full"
             >
-              {APPS_VIEWS.map((id) => (
+              {views.map((id) => (
                 <Tab key={id} id={id}>
                   {/* The tab's own badge hides below `md`; this one stays at every width. */}
-                  {id === "installed" ? m.apps_tab_installed() : m.apps_tab_mine()}
-                  {counts[id] > 0 && (
+                  {TAB_LABELS[id]()}
+                  {(counts[id] ?? 0) > 0 && (
                     <Badge size="sm" type="modern" color="gray" className="-my-px">
                       {counts[id]}
                     </Badge>
@@ -375,41 +403,58 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
             </div>
           )}
 
-          {APPS_VIEWS.map((id) => (
-            <TabPanel key={id} id={id} className="mt-4 grid gap-3 outline-hidden">
-              {id === "mine" && (
-                <p className="text-sm text-tertiary">
-                  {canManage ? m.apps_mine_intro_manage() : m.apps_mine_intro_view()}
-                </p>
-              )}
-              {apps && shown.length === 0 ? (
-                <AppsEmpty
-                  view={id}
-                  filtered={all.length > 0}
+          {views.map((id) =>
+            id === "marketplace" ? (
+              <TabPanel key={id} id={id} className="mt-4 grid gap-3 outline-hidden">
+                <MarketplacePanel
+                  query={query}
+                  category={category}
+                  layout={layout}
                   canManage={canManage}
-                  onRegister={() => openEditor({ mode: "register" })}
+                  onInstalled={read}
                   onClearFilters={clearFilters}
                 />
-              ) : (
-                <ul className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}>
-                  {shown.map((app) => (
-                    <AppCard
-                      key={app.key}
-                      app={app}
-                      view={id}
-                      layout={layout}
-                      onEdit={canManage ? () => openEditor({ mode: "edit", app }) : undefined}
-                      onOpen={
-                        id === "installed"
-                          ? () => setDetail({ key: app.key, open: true })
-                          : undefined
-                      }
-                    />
-                  ))}
-                </ul>
-              )}
-            </TabPanel>
-          ))}
+              </TabPanel>
+            ) : (
+              <TabPanel key={id} id={id} className="mt-4 grid gap-3 outline-hidden">
+                {id === "mine" && (
+                  <p className="text-sm text-tertiary">
+                    {canManage ? m.apps_mine_intro_manage() : m.apps_mine_intro_view()}
+                  </p>
+                )}
+                {apps && shown.length === 0 ? (
+                  <AppsEmpty
+                    view={id}
+                    filtered={list.length > 0}
+                    canManage={canManage}
+                    onRegister={canManage ? () => openEditor({ mode: "register" }) : undefined}
+                    onClearFilters={clearFilters}
+                  />
+                ) : (
+                  <ul className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}>
+                    {shown.map((app) => (
+                      <AppCard
+                        key={app.key}
+                        app={app}
+                        view={id}
+                        layout={layout}
+                        onEdit={
+                          canManage && app.owned
+                            ? () => openEditor({ mode: "edit", app })
+                            : undefined
+                        }
+                        onOpen={
+                          id === "installed"
+                            ? () => setDetail({ key: app.key, open: true })
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </ul>
+                )}
+              </TabPanel>
+            ),
+          )}
         </Tabs>
       </section>
 
@@ -421,6 +466,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
         onClose={() => setDetail((prev) => ({ ...prev, open: false }))}
         onApprovePermissions={approvePermissions}
         onRefreshSetup={refreshSetup}
+        onUninstall={uninstallApp}
       />
 
       {canManage && (
@@ -443,67 +489,5 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
         />
       )}
     </div>
-  );
-}
-
-/**
- * A tab with no app to show: none yet (with Register for an owner or admin, second to the page's
- * own button), or none matching the search and category (with a way back to every app).
- */
-function AppsEmpty({
-  view,
-  filtered,
-  canManage,
-  onRegister,
-  onClearFilters,
-}: {
-  view: AppsView;
-  filtered: boolean;
-  canManage: boolean;
-  onRegister: () => void;
-  onClearFilters: () => void;
-}) {
-  const Icon = filtered ? SearchLg : Link03;
-  const title = filtered
-    ? view === "installed"
-      ? m.apps_installed_no_match()
-      : m.apps_mine_no_match()
-    : view === "installed"
-      ? m.apps_installed_empty_title()
-      : m.apps_mine_empty_title();
-  const description = filtered
-    ? m.apps_no_match_description()
-    : view === "installed"
-      ? canManage
-        ? m.apps_installed_empty_description_manage()
-        : m.apps_installed_empty_description_view()
-      : canManage
-        ? m.apps_mine_empty_description_manage()
-        : m.apps_mine_empty_description_view();
-  return (
-    <Empty className="max-w-none rounded-xl border border-dashed border-secondary px-4 py-10">
-      <EmptyHeader className="mb-4 gap-2">
-        <EmptyMedia className="mb-2">
-          <Icon aria-hidden="true" className="size-8 text-tertiary" strokeWidth={1.5} />
-        </EmptyMedia>
-        <EmptyTitle role="heading" aria-level={3}>
-          {title}
-        </EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
-      </EmptyHeader>
-      {(filtered || canManage) && (
-        <EmptyContent>
-          {filtered ? (
-            <Button size="sm" color="secondary" onPress={onClearFilters}>
-              {m.apps_clear_filters()}
-            </Button>
-          ) : (
-            <Button size="sm" color="secondary" iconLeading={Plus} onPress={onRegister}>
-              {m.apps_register()}
-            </Button>
-          )}
-        </EmptyContent>
-      )}
-    </Empty>
   );
 }

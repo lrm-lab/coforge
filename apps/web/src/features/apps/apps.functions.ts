@@ -2,10 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { AppError } from "#src/lib/app-error";
-import {
-  workspaceUserMiddleware,
-  type WorkspaceUserContext,
-} from "#src/features/auth/function-auth";
+import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import {
   createAppEditorSave,
@@ -18,7 +15,8 @@ import { createAppWebhooks } from "#src/server/app-notifications/app-webhooks-co
 import { createAppPublishing } from "#src/server/app-marketplace/app-publishing-composition.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
-import type { AppActor, AppView } from "#src/server/apps/app-registry.server";
+import type { AppView } from "#src/server/apps/app-registry.server";
+import { actorOf } from "./app-actor";
 import { APP_CATEGORIES } from "./app-category";
 import type { AppPublishStatus } from "./app-publish-status";
 import {
@@ -59,12 +57,16 @@ export type AppSummary = Omit<
 > & {
   logoUrl: string | null;
   createdAt: string;
-  /** The app's signed webhook state; present only for an owner or admin where
-   * `app-notifications` is on. */
+  /** This Workspace registered the app (it is its developer); otherwise it installed it from the
+   * Marketplace and only uninstalls it. */
+  owned: boolean;
+  /** The app's signed webhook state; present only for an app this Workspace owns, to an owner or
+   * admin, where `app-notifications` is on. */
   webhookStatus?: WebhookStatus;
   permissions?: AppPermissionsSummary;
   setup?: AppSetupSummary;
-  /** Where the app is in Marketplace review; present only where `app-marketplace` is on. */
+  /** Where the app is in Marketplace review; present only for an app this Workspace owns, where
+   * `app-marketplace` is on: an installing Workspace never sees the developer's review state. */
   publishStatus?: AppPublishStatus;
 };
 
@@ -111,6 +113,8 @@ const summary = (
     createdAt,
     ...app
   }: AppView,
+  /** The Workspace asking, to say whether the app is its own. */
+  viewerWorkspaceId: string,
   permissions?: AppPermissionsView | null,
   setup?: AppSetupView | null,
   /** `app-marketplace` is on: the summary says where the app is in review. */
@@ -118,10 +122,12 @@ const summary = (
 ): AppSummary => ({
   ...app,
   logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey),
+  owned: ownerWorkspaceId === viewerWorkspaceId,
   createdAt: createdAt.toISOString(),
   ...(permissions && { permissions: permissionsSummary(permissions) }),
   ...(setup && { setup: setupSummary(setup) }),
-  ...(marketplace && { publishStatus }),
+  // The developer's review state is the developer's: an installing Workspace never sees it.
+  ...(marketplace && ownerWorkspaceId === viewerWorkspaceId && { publishStatus }),
 });
 
 /** A text the registry counts in code points; zod counts UTF-16 units, at most two per code point. */
@@ -141,12 +147,6 @@ const fields = {
 };
 
 const keyInput = z.object({ key: z.string().max(APP_KEY_MAX_LENGTH) });
-
-/** The member acting, in the Workspace the page URL names. */
-const actorOf = ({ user, workspaceId }: WorkspaceUserContext): AppActor => ({
-  workspaceId,
-  actorUserId: user.id,
-});
 
 /** Which declarations the editor shows in this Workspace: where the `app-data-permissions` and
  * `app-installation-setup` flags are on, and, with `app-data-permissions`, `app-notifications`
@@ -186,8 +186,17 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
       : null;
     return {
       apps: apps.map((app) => ({
-        ...summary(app, permissions?.apps.get(app.key), setups?.get(app.key), marketplace),
-        ...(webhookStatuses && { webhookStatus: webhookStatuses.get(app.key) ?? "off" }),
+        ...summary(
+          app,
+          actor.workspaceId,
+          permissions?.apps.get(app.key),
+          setups?.get(app.key),
+          marketplace,
+        ),
+        ...(webhookStatuses &&
+          app.ownerWorkspaceId === actor.workspaceId && {
+            webhookStatus: webhookStatuses.get(app.key) ?? "off",
+          }),
       })),
       declares: {
         permissions: permissions !== null,
@@ -234,7 +243,10 @@ export const registerWorkspaceApp = createServerFn({ method: "POST" })
       notificationEvents,
       setup,
     });
-    return { app: summary(app, permissions, declaredSetup), clientSecret };
+    return {
+      app: summary(app, context.workspaceId, permissions, declaredSetup),
+      clientSecret,
+    };
   });
 
 /** Changes any field of the Workspace's app but its key and, with `permissionGroups`, the data it
@@ -266,7 +278,7 @@ export const updateWorkspaceApp = createServerFn({ method: "POST" })
       workspaceId: actor.workspaceId,
       workspaceSlug,
     });
-    return summary(app, permissions, setup, marketplace);
+    return summary(app, actor.workspaceId, permissions, setup, marketplace);
   });
 
 /** Approves the data app `key` declares at `revision`, the one the approver was shown, for this
@@ -311,6 +323,7 @@ export const uploadWorkspaceAppLogo = createServerFn({ method: "POST" })
     declareNoStore();
     return summary(
       await createAppRegistry(context.db).setAppLogo(actorOf(context), data.key, data.file),
+      context.workspaceId,
     );
   });
 
@@ -320,7 +333,10 @@ export const resetWorkspaceAppLogo = createServerFn({ method: "POST" })
   .validator(keyInput)
   .handler(async ({ data, context }) => {
     declareNoStore();
-    return summary(await createAppRegistry(context.db).resetAppLogo(actorOf(context), data.key));
+    return summary(
+      await createAppRegistry(context.db).resetAppLogo(actorOf(context), data.key),
+      context.workspaceId,
+    );
   });
 
 /** Deletes the Workspace's app. */

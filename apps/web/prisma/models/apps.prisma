@@ -78,8 +78,8 @@ model App {
   @@map("apps")
 }
 
-/// An app installed in a Workspace. Today only the registering Workspace installs its app; the row
-/// is what a later install elsewhere adds.
+/// An app installed in a Workspace: the registering Workspace's row is made with the app, another
+/// Workspace's by a Marketplace install (`server/app-marketplace/`).
 model AppInstallation {
   id                String    @id @default(uuid(7)) @db.Uuid
   appId             String    @db.Uuid

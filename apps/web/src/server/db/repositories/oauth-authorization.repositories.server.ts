@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type {
   AuthorizationStore,
   ConsentGrant,
@@ -7,6 +7,21 @@ import type {
 import type { StoredAuthorizationCode } from "#src/server/authorization-server/authorization-codes.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
+
+/** Ends the people's authorizations of an app in the Workspaces `workspace` names: revokes their
+ * remembered consents and deletes the authorization codes (so a later consent cannot revive an old
+ * grant). Part of what removing an installation revokes (`removeAppInstallations`). */
+export async function revokeAppAuthorizations(
+  tx: Prisma.TransactionClient,
+  input: { appId: string; workspace: string | { not: string }; at: Date },
+) {
+  const scope = { appId: input.appId, workspaceId: input.workspace };
+  await tx.userAppConsent.updateMany({
+    where: { ...scope, revokedAt: null },
+    data: { revokedAt: input.at },
+  });
+  await tx.oAuthAuthorizationCode.deleteMany({ where: scope });
+}
 
 /** The authorization endpoint's rows: apps as OIDC clients, the Workspaces each person may
  * authorize them in, consents and authorization codes. What a request may do stays in

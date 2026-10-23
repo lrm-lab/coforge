@@ -63,19 +63,25 @@ export function AppCard({
             <p className="truncate text-sm font-semibold text-primary">{app.name}</p>
           )}
           <p className="truncate text-sm text-tertiary">
-            {view === "installed" ? m.apps_installed_byline({ category }) : category}
+            {view === "installed"
+              ? app.owned
+                ? m.apps_installed_byline({ category })
+                : m.apps_installed_byline_developer({ category, developer: app.developer })
+              : category}
           </p>
           <div className="flex flex-wrap gap-1.5 pt-0.5">
             {app.publishStatus ? (
               <PublishStatusBadge status={app.publishStatus} place="card" />
             ) : (
-              <Badge size="sm" color="gray">
-                {m.apps_private_badge()}
-              </Badge>
+              app.owned && (
+                <Badge size="sm" color="gray">
+                  {m.apps_private_badge()}
+                </Badge>
+              )
             )}
             {view === "installed" && (
               <Badge size="sm" color="gray">
-                {m.apps_this_workspace()}
+                {app.owned ? m.apps_this_workspace() : m.apps_from_marketplace()}
               </Badge>
             )}
             {installationSetup && installationSetup.status !== "not_required" && (

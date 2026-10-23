@@ -44,6 +44,7 @@ function registry({ keyTaken = false } = {}) {
     ...valid,
     agentManifestUrl: null,
     ownerWorkspaceId: actor.workspaceId,
+    developer: "Acme",
     logoObjectKey: null,
     publishStatus: "private",
     secretRotatedAt: null,
@@ -130,6 +131,8 @@ describe("an app form's homepage", () => {
       agentManifestUrl: null,
       homepageUrl: null,
       logoUrl: null,
+      owned: true,
+      developer: "Acme",
       createdAt: "2026-10-20T00:00:00.000Z",
     };
     expect(draftOf(app).homepageUrl).toBe("");

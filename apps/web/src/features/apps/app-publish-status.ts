@@ -61,3 +61,7 @@ export const canDeleteApp = (status: AppPublishStatus = "private") =>
 /** A publish request can be filed only from private or rejected. */
 export const canRequestPublish = (status: AppPublishStatus) =>
   (PUBLISH_TRANSITIONS.publish.from as readonly AppPublishStatus[]).includes(status);
+
+/** The statuses in which other Workspaces can discover and install the app: published, and still
+ * published while a request to take it off waits (Raft keeps it listed and installable). */
+export const LISTED_STATUSES: readonly AppPublishStatus[] = ["published", "unpublish_requested"];

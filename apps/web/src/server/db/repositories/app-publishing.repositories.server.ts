@@ -11,6 +11,7 @@ import type {
   FileRequestInput,
   PendingReview,
 } from "#src/server/app-marketplace/app-publishing.server";
+import { removeAppInstallations } from "#src/server/db/repositories/app-installation.repositories.server";
 import { findAppMember } from "#src/server/db/repositories/app.repositories.server";
 import { inTransaction } from "#src/server/db/transaction.server";
 
@@ -144,6 +145,8 @@ export class PrismaAppPublishingStore implements AppPublishingStore {
       });
       if (!request) return "missing" as const;
       if (request.outcome !== null) return "decided" as const;
+      // Serializes with an install, which locks the same row before it reads the status.
+      await tx.$queryRaw`SELECT id FROM apps WHERE id = ${request.appId}::uuid FOR UPDATE`;
       const { count } = await tx.appReviewRequest.updateMany({
         where: { id: input.requestId, outcome: null },
         data: {
@@ -157,13 +160,27 @@ export class PrismaAppPublishingStore implements AppPublishingStore {
       const kind = request.kind as AppReviewKind;
       const approved = input.outcome === "approved";
       const transition = PUBLISH_TRANSITIONS[kind];
-      await tx.app.updateMany({
+      const { count: moved } = await tx.app.updateMany({
         where: { id: request.appId, publishStatus: transition.pending },
         data: {
           publishStatus: approved ? transition.approved : transition.rejected,
           ...(kind === "publish" && approved && { publishedAt: input.at }),
         },
       });
+      if (kind === "unpublish" && approved && moved === 1) {
+        // Offline: every other Workspace loses the app and what it had granted. The owner's own
+        // installation stays, so the app remains manageable there.
+        const app = await tx.app.findUniqueOrThrow({
+          where: { id: request.appId },
+          select: { ownerWorkspaceId: true },
+        });
+        await removeAppInstallations(tx, {
+          appId: request.appId,
+          workspace: { not: app.ownerWorkspaceId },
+          userId: input.userId,
+          at: input.at,
+        });
+      }
       return "done" as const;
     });
   }

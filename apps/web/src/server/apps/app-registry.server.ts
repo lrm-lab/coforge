@@ -26,6 +26,8 @@ import { appLogoObjectKey } from "./app-logo.server";
 export type AppView = {
   key: string;
   ownerWorkspaceId: string;
+  /** The name of the Workspace that registered the app: its developer. */
+  developer: string;
   name: string;
   description: string;
   whenToUse: string;

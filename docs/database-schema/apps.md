@@ -1,8 +1,9 @@
 # App registry
 
 The app registry (`apps/web/src/server/apps/`) holds the third-party apps Workspaces register. Each
-is an OpenID Connect client of CoForge's authorization server, its key the `client_id`. There is no
-marketplace: a registered app is installed only in the Workspace that registered it. Migrations
+is an OpenID Connect client of CoForge's authorization server, its key the `client_id`. A registered
+app is installed in the Workspace that registered it, and in others once it is listed in the
+[Marketplace](../app-marketplace.md#installing). Migrations
 `20261020120000_app_registry`, `20261020130000_app_category_identity_scope` (the category, the
 `identity` scope, and no resource URI), `20261020140000_app_homepage_optional` (an app needs only a
 name), `20261021120000_app_logo` (its uploaded logo) `20261021180000_app_data_permissions` (the
@@ -64,8 +65,10 @@ does not. A logo that does not load falls back to the monogram.
 `installedByUserId` (set null), `approvedGroups` (TEXT[], empty by default;
 `app_installations_approved_groups_check` limits the values to the four groups, the application keeps
 their order), `approvedRevision` (INTEGER, 0 before any approval), `approvedAt`, `approvedByUserId` (set null when the User is deleted), `setupCompletedRevision` (INTEGER, null until the app reports setup done) and `setupCompletedAt` (TIMESTAMP(3); null exactly when the revision is: `app_installations_setup_completion_check`), `agentAccess` (TEXT, `all` by default or `selected`; `app_installations_agent_access_check`), `createdAt`, unique (`appId`,
-`workspaceId`). Today only the registering Workspace installs its app; the table is where a later
-install elsewhere goes. A Workspace's delete removes its apps and installations.
+`workspaceId`). The registering Workspace's row is made with the app; another Workspace's is made by a
+Marketplace install and deleted by an uninstall or an approved offline request, which also revoke the
+consents, authorization codes and Agent grants of that (app, Workspace). A Workspace's delete removes
+its apps and installations.
 
 `app_installation_agents` — the Agents selected for an installation (migration
 `20261023140000_app_installation_agent_access`): `installationId` (cascade) and `agentId` (cascade,
@@ -102,7 +105,7 @@ transaction as the registration (`AppEditorSave.register`); the registering Work
 then starts with them pending, since registering is not an approval (Raft's registration-time
 approval is unverified, so the approval stays a separate act).
 
-Deliberate departures from Raft: the groups are four read-only checkboxes (Raft: a Resource | Access table of five rows, the fifth, agent reminders, writable); the reminders write group is not offered until a product decision. Approval happens on the installation card in the app editor, because apps are private to their Workspace (Raft: the installed-app detail or the marketplace install modal). No Suspended or App disabled installation state exists. Members see the summary on the app card and can open a read-only app detail (every role can: description, homepage, Login with CoForge scopes, setup status, what it reads and any pending update; Continue/Manage, Approve update and the installation ID are for owners and admins).
+Deliberate departures from Raft: the groups are four read-only checkboxes (Raft: a Resource | Access table of five rows, the fifth, agent reminders, writable); the reminders write group is not offered until a product decision. Approval happens on the installation card in the app editor, and a Marketplace install approves the declaration it shows in the same step (Raft: the installed-app detail or the marketplace install modal). No Suspended or App disabled installation state exists. Members see the summary on the app card and can open a read-only app detail (every role can: description, homepage, Login with CoForge scopes, setup status, what it reads and any pending update; Continue/Manage, Approve update and the installation ID are for owners and admins).
 
 - Effective groups, what the app may read in that Workspace: `approvedGroups` ∩ `permissionGroups`.
 - Pending groups, waiting for approval: `permissionGroups` not in `approvedGroups`.
