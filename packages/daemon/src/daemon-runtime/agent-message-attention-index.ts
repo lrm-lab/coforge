@@ -13,12 +13,10 @@ import {
   isChannelMessageTarget,
   isValidMessageSender,
   mergeSeenExactSeqs,
-  renderMessageSender,
   threadRootTarget,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
-import { CLI_CHANNEL_MESSAGE_EXAMPLE } from "#src/code-agent/agent-instructions";
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
@@ -56,27 +54,14 @@ const REMEMBERED_DELIVERIES = 4096;
  * same frontier anyway. No invented slack. */
 const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
 
-/** Footer shared by live and recovery inbox notices. Names the targeted drain; does not claim
- * unread state, because a notice can race a check/read that already advanced the cursor. */
-const INBOX_DRAIN_HINT =
-  "Drain each listed target with `coforge message check --target '<target>'`, or inspect with `coforge message read --target '<target>'`. Either may return nothing, because a message can already have been read.\n" +
-  CLI_CHANNEL_MESSAGE_EXAMPLE;
-
 /**
- * The text of one inbox notice: a headline counting what is delivered or held, one row per target,
- * and how to drain them. `occasion` names why it was sent when that is not a plain delivery
- * (`restart recovery`). Never a message body: the Agent reads those through `check`.
+ * The text of one inbox notice: one line per target, each naming what waits there. Never a message
+ * body and never how to read one — the standing instructions carry that, once. The Agent reads the
+ * messages themselves through `check`.
  */
-export function inboxNoticeText(
-  occasion: string | undefined,
-  totalCount: number,
-  rows: readonly string[],
-  drainHint = INBOX_DRAIN_HINT,
-): string {
-  return `[CoForge inbox notice${occasion ? ` (${occasion})` : ""}:
-Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
-${rows.join("\n")}
-${drainHint}]`;
+export function inboxNoticeText(rows: readonly string[]): string {
+  return `[CoForge inbox notice:
+${rows.join("\n")}]`;
 }
 
 /** One unreviewed delivery plus the moment this daemon learned about it. Deliveries carry no
@@ -89,16 +74,12 @@ type LocalViewItem = {
   target?: string;
   messageId: string;
   sequence?: number;
-  latestSenderKind?: MessageSenderKind;
-  latestSenderHandle?: string;
 };
 
 type LocalViewRow = {
   target: string;
   newIds: Set<string>;
   heldIds: Set<string>;
-  latestSenderKind?: MessageSenderKind;
-  latestSenderHandle?: string;
 };
 
 /**
@@ -560,17 +541,14 @@ export class AgentMessageAttentionIndex {
     // and `check` is what advances it (and records what it showed as exact sequences).
     const recoveryRows = this.#localViewRows(recoveredMessages, []);
     const rows = [
-      ...this.#renderLocalViewRows(recoveryRows.rows),
+      ...this.#renderLocalViewRows(recoveryRows),
       ...summaryOnly.map(
-        ([target, count]) => `${target}  new: ${count} message${count === 1 ? "" : "s"}`,
+        ([target, count]) => `${target} ${count} new message${count === 1 ? "" : "s"}`,
       ),
     ];
-    const totalCount =
-      recoveredMessages.length + summaryOnly.reduce((sum, [, count]) => sum + count, 0);
     const notice = recoveredMessages.length
-      ? inboxNoticeText("restart recovery", totalCount, rows, this.#inboxDrainHint(agentId))
+      ? inboxNoticeText(rows)
       : agentStartupCatchupInput(
-          totalCount,
           rows,
           Boolean(this.#runtimes.runtime?.(agentId)?.config.toolProfile),
         );
@@ -611,31 +589,20 @@ export class AgentMessageAttentionIndex {
     );
   }
 
-  #inboxDrainHint(agentId: string): string {
-    return this.#runtimes.runtime?.(agentId)?.config.toolProfile
-      ? "Read each listed target with message_read using the exact target and no range anchor. It returns channel messages after your server read cursor, including messages that did not mention you. Repeat while hasNewer is true. Do not use message_check for this update: it only drains eligible deliveries. Read first, then decide whether retrieval or a revised Offer is useful; otherwise stay silent. A notice is not a user request or proof that its messages remain unread."
-      : INBOX_DRAIN_HINT;
-  }
-
   /**
    * One line per target, in the order the targets first appear: what this notice announces (`new`)
-   * and what stays queued for this Agent (`held`). The delivery queue is per Agent, so
-   * a coalesced flush can mix a channel, a DM and a thread; attributing the whole batch to the
-   * last delivery's target would hide the others.
+   * and what stays queued for this Agent (`held`). The delivery queue is per Agent, so a coalesced
+   * flush can mix a channel, a DM and a thread; attributing the whole batch to the last delivery's
+   * target would hide the others.
    *
-   * Both sets appear because the headline counts both. A headline that summed announced and queued
-   * while the lines showed only the announced ones left the reader unable to tell where the rest
-   * were, which is the same kind of unexplainable number this change exists to remove.
+   * `held` is a fact only this daemon has: those messages have not been shown to the model yet.
+   * They are presented again when the queue releases them, unless a read covers them first.
    */
   #localViewRows(
     announced: readonly LocalViewItem[],
     queued: readonly LocalViewItem[],
-  ): {
-    rows: LocalViewRow[];
-    countedIds: Set<string>;
-  } {
+  ): LocalViewRow[] {
     const announcedIds = new Set(announced.map((delivery) => delivery.messageId));
-    const countedIds = new Set<string>();
     const byTarget = new Map<string, LocalViewRow>();
     const rowFor = (target: string) => {
       const existing = byTarget.get(target);
@@ -652,41 +619,23 @@ export class AgentMessageAttentionIndex {
       // `receive` rejects a delivery without a target before it can be held, so this only narrows
       // the wire type; a targetless delivery has no line to appear on either way.
       if (!delivery.target) continue;
-      const row = rowFor(delivery.target);
-      row.newIds.add(delivery.messageId);
-      countedIds.add(delivery.messageId);
-      const sender = printableSender(delivery.latestSenderKind, delivery.latestSenderHandle);
-      if (sender) {
-        row.latestSenderKind = sender.kind;
-        row.latestSenderHandle = sender.handle;
-      }
+      rowFor(delivery.target).newIds.add(delivery.messageId);
     }
     for (const delivery of queued) {
       if (!delivery.target || announcedIds.has(delivery.messageId)) continue;
-      const row = rowFor(delivery.target);
-      row.heldIds.add(delivery.messageId);
-      countedIds.add(delivery.messageId);
-      const sender = printableSender(delivery.latestSenderKind, delivery.latestSenderHandle);
-      if (sender) {
-        row.latestSenderKind = sender.kind;
-        row.latestSenderHandle = sender.handle;
-      }
+      rowFor(delivery.target).heldIds.add(delivery.messageId);
     }
-    return { rows: [...byTarget.values()], countedIds };
+    return [...byTarget.values()];
   }
 
   #renderLocalViewRows(rows: readonly LocalViewRow[]): string[] {
     return rows.map((row) => {
       const parts: string[] = [];
       if (row.newIds.size)
-        parts.push(`new: ${row.newIds.size} message${row.newIds.size === 1 ? "" : "s"}`);
+        parts.push(`${row.newIds.size} new message${row.newIds.size === 1 ? "" : "s"}`);
       if (row.heldIds.size)
-        parts.push(`held: ${row.heldIds.size} message${row.heldIds.size === 1 ? "" : "s"}`);
-      if (row.latestSenderKind !== undefined)
-        parts.push(
-          `latest sender ${renderMessageSender(row.latestSenderKind, row.latestSenderHandle ?? "")}`,
-        );
-      return `${row.target}  ${parts.join(" · ")}`;
+        parts.push(`${row.heldIds.size} held message${row.heldIds.size === 1 ? "" : "s"}`);
+      return `${row.target} ${parts.join(" · ")}`;
     });
   }
 
@@ -720,15 +669,9 @@ export class AgentMessageAttentionIndex {
       (delivery) =>
         !this.#isMemory(message.agentId) || delivery.conversationId === message.conversationId,
     );
-    const view = this.#localViewRows(announced, queued);
-    const rows = this.#renderLocalViewRows(view.rows);
+    const rows = this.#renderLocalViewRows(this.#localViewRows(announced, queued));
     const totalCount = countDistinctMessages([...announced, ...queued]);
-    const notice = inboxNoticeText(
-      undefined,
-      totalCount,
-      rows,
-      this.#inboxDrainHint(message.agentId),
-    );
+    const notice = inboxNoticeText(rows);
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
     const conversation = this.#isMemory(message.agentId)

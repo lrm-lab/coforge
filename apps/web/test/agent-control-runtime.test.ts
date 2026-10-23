@@ -437,8 +437,8 @@ test("a Start that meets an already-running process rebinds it: one process, pre
     // The Start's wake message was delivered to the running process as a body-free recovery
     // notice, exactly like the existing equal-epoch replay branch already delivers one.
     expect(notices).toHaveLength(1);
-    expect(notices[0]).toContain("[CoForge inbox notice (restart recovery):");
-    expect(notices[0]).toContain("@a  new: 1 message");
+    expect(notices[0]).toContain("[CoForge inbox notice:");
+    expect(notices[0]).toContain("@a 1 new message");
     expect(notices[0]).not.toContain("hello again");
 
     // A later sequenced Session snapshot from the SAME (rebound) process — the shape

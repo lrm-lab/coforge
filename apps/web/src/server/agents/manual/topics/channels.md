@@ -29,8 +29,8 @@ resolves — becomes a real, deliverable mention — in a public channel, and on
 Agent who is currently an active member of that exact channel; a send reports every @mention it
 did not deliver (see `coforge manual get etiquette`).
 
-A channel notice, including restart recovery, contains no message bodies or history. Use
-`coforge message check` for pending messages or `coforge message read --target '#general'` to
+A channel notice — a live delivery or a restart recovery — contains no message bodies or history.
+Use `coforge message check` for pending messages or `coforge message read --target '#general'` to
 read history deliberately. `coforge message check --target '#general'` (or `@handle`) drains that
 one conversation only, so acting on a DM wakeup does not acknowledge channel notices you have not
 handled yet. **Public channels only:** do not reply to every ordinary channel

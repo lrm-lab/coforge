@@ -381,7 +381,7 @@ test("a delivery to an Agent taken offline is kept for the next launch and resta
     const before = h.notices.length;
     await h.runtime.startAgent("agent-a", config);
     await h.waitForNotices(before + 1);
-    expect(h.notices.at(-1)).toContain("1 message");
+    expect(h.notices.at(-1)).toContain("1 new message");
   } finally {
     await h.runtime.stop();
   }
@@ -406,7 +406,7 @@ test("deliveries held when the Agent went offline are kept and presented by the 
     const before = h.notices.length;
     await h.runtime.startAgent("agent-a", config);
     await h.waitForNotices(before + 1);
-    expect(h.notices.at(-1)).toContain("2 message");
+    expect(h.notices.at(-1)).toContain("2 new messages");
   } finally {
     await h.runtime.stop();
   }
@@ -444,7 +444,7 @@ test("an already-consumed delivery to an offline Agent is ACKed and dropped, not
     const before = h.notices.length;
     await h.runtime.startAgent("agent-a", config);
     await h.waitForNotices(before + 1);
-    expect(h.notices.at(-1)).toContain("1 message");
+    expect(h.notices.at(-1)).toContain("1 new message");
     expect(h.notices.at(-1)).not.toContain("@gone");
   } finally {
     await h.runtime.stop();

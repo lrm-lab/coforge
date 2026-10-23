@@ -1526,7 +1526,7 @@ test("a message during a background-task wait starts a new turn, which ends wait
     });
     // Delivered as a notice now, not held for the wait to end.
     expect(live.notices).toHaveLength(1);
-    expect(live.notices[0]).toContain("@agent  new: 1 message");
+    expect(live.notices[0]).toContain("@agent 1 new message");
     expect(activities.at(-1)).toMatchObject({ detailKind: "message_received" });
     live.emit({ type: "progress" });
     activities.length = 0;
