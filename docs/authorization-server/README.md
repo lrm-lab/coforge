@@ -22,7 +22,7 @@ error that names the variable and never its value, so the health check never pas
 deployment keeps its previous release. The boot log's `startup_config_checked` line reports
 `authorization_server` as `configured` or `disabled`.
 
-Staging and production do not set these variables yet; setting them turns on every endpoint below.
+Production sets the issuer `https://coforge.cn/oidc` and reads the keyset from the host secret file `coforge_oidc_signing_jwks`. Staging sets neither, so its endpoints answer 404.
 
 ## Endpoints
 

@@ -85,7 +85,7 @@
 8. Run the first bootstrap deployment by hand to provision PostgreSQL and
    Redis volumes and apply Prisma migrations:
    ```
-   ssh deploy@staging-host 'bash -s' < scripts/deploy/remote-deploy.sh -- \
+   ssh deploy@staging-host 'bash ~/coforge-staging/scripts/deploy/remote-deploy.sh' \
      --image ghcr.io/lrm-lab/coforge/coforge-web@sha256:... \
      --compose-file ~/coforge-staging/infra/staging/docker-compose.yml \
      --secrets-dir ~/coforge-staging/infra/staging/secrets \

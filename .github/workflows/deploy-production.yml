@@ -122,6 +122,7 @@ jobs:
             infra/production/docker-compose.yml \
             infra/production/caddy/Caddyfile \
             infra/production/centrifugo/config.yaml \
+            scripts/deploy/deploy-secrets.sh \
             scripts/deploy/remote-deploy.sh
           ssh -i "$SSH_DIR/key" \
             -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
@@ -139,7 +140,7 @@ jobs:
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
-            "bash -s -- \
+            "bash '$REMOTE_ROOT/scripts/deploy/remote-deploy.sh' \
               --project coforge-production \
               --image '$IMAGE' \
               --compose-file '$REMOTE_ROOT/infra/production/docker-compose.yml' \
@@ -147,7 +148,7 @@ jobs:
               --state-file '$REMOTE_ROOT/state.env' \
               --web-health-url http://127.0.0.1:18080/health \
               --public-health-url https://coforge.cn/health" \
-            < scripts/deploy/remote-deploy.sh > remote-report.env
+            > remote-report.env
 
       - name: Log out of the image registry
         if: always()

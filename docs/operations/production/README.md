@@ -75,6 +75,7 @@ Not yet enabled in production: OpenTelemetry tracing and Server-Timing.
 | `centrifugo_http_api_key` | Centrifugo HTTP API key (`openssl rand -hex 32`). |
 | `centrifugo_proxy_secret` | Shared secret for Centrifugo proxy calls into Web (`openssl rand -hex 32`). |
 | `worker_jwt_private_jwk` | Ed25519 private JWK, single-line JSON, for daemon-runtime tokens. |
+| `coforge_oidc_signing_jwks` | Optional in the loader, required by production's issuer: Login with CoForge's ES256 P-256 private JWK Set, single-line JSON ([authorization server](../../authorization-server/README.md)). Never reuse `worker_jwt_private_jwk`. Rotate by adding the new key first and keeping the old one second. Without it the Web refuses to boot, so the deploy fails its health check and rolls back: write it before deploying. |
 | `worker_jwt_key_id` | Stable key id for the JWK, for example `coforge-production`. |
 | `authing_app_id` | Authing application id in the production user pool (`coforge-cn.authing.cn`). |
 | `authing_app_secret` | Authing application secret. |
@@ -112,7 +113,8 @@ The first job finds a successful staging deployment record of that exact
 digest and fails otherwise. The deploy job waits for a required reviewer of
 the `production` Environment to approve, then ships the Compose assets, logs
 the host in to GHCR with the run's short-lived token, runs
-`scripts/deploy/remote-deploy.sh --project coforge-production`, logs out, and
+`scripts/deploy/remote-deploy.sh --project coforge-production` (which sources
+`deploy-secrets.sh` to read the secret files), logs out, and
 checks `https://coforge.cn/health`, the WebSocket endpoint, and that port 80
 redirects to HTTPS and HTTPS sends HSTS. The script validates the Compose file, the Centrifugo config,
 and the Caddyfile with their pinned images before recreating anything, runs

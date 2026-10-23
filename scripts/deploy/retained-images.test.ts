@@ -4,11 +4,7 @@ import { join } from "node:path";
 import { test, expect } from "bun:test";
 
 test("retained image deployment configuration reaches Compose without entering stdout", async () => {
-  const script = await readFile(new URL("./remote-deploy.sh", import.meta.url), "utf8");
-  const functions = script.slice(
-    script.indexOf("load_compose_secrets()"),
-    script.indexOf("# Fail closed on a mutable"),
-  );
+  const functions = await readFile(new URL("./deploy-secrets.sh", import.meta.url), "utf8");
   const directory = await mkdtemp(join(tmpdir(), "coforge-github-deploy-"));
   try {
     for (const name of [

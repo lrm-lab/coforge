@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createECDH, createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,69 +14,9 @@ import {
   renderAuditRecord,
   renderState,
 } from "./deployment";
+import { digest, readCompose, registryImage, requiredSecretNames } from "./deploy-test-support";
 
-test("optional GitHub deployment credentials reach Compose without entering stdout", async () => {
-  const script = await readFile(new URL("./remote-deploy.sh", import.meta.url), "utf8");
-  const functions = script.slice(
-    script.indexOf("load_compose_secrets()"),
-    script.indexOf("# Fail closed on a mutable"),
-  );
-  const directory = await mkdtemp(join(tmpdir(), "coforge-github-deploy-"));
-  try {
-    for (const name of [
-      "authing_app_id",
-      "authing_app_secret",
-      "coforge_session_secret",
-      "coforge_agent_credential_encryption_key",
-      "coforge_web_push_public_key",
-      "coforge_web_push_private_key",
-      "coforge_file_delivery_key",
-      "centrifugo_token_hmac_secret_key",
-    ])
-      await writeFile(join(directory, name), "fixture");
-    for (const configured of [false, true]) {
-      if (configured) {
-        await writeFile(join(directory, "coforge_github_client_secret"), "github-fixture");
-        await writeFile(join(directory, "coforge_github_credential_encryption_key"), "key-fixture");
-        await writeFile(join(directory, "coforge_github_app_slug"), "fixture-app");
-        await writeFile(join(directory, "coforge_commit_coauthor"), "C <c@x.io>");
-        await writeFile(join(directory, "coforge_github_webhook_secret"), "hook-fixture");
-      }
-      const child = Bun.spawn(
-        [
-          "bash",
-          "-euc",
-          `${functions}
-        secrets_dir="$1"
-        COMPOSE_ARGS=()
-        docker() {
-          test "\${COFORGE_GITHUB_CLIENT_SECRET-unset}" = "$2"
-          test "\${COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY-unset}" = "$3"
-          test "\${COFORGE_GITHUB_APP_SLUG-unset}" = "$4"
-          test "\${COFORGE_COMMIT_COAUTHOR-unset}" = "$5"
-          test "\${COFORGE_GITHUB_WEBHOOK_SECRET-unset}" = "$6"
-        }
-        load_compose_secrets
-        compose "$2" "$3" "$4" "$5" "$6"
-      `,
-          "test",
-          directory,
-          configured ? "github-fixture" : "",
-          configured ? "key-fixture" : "",
-          configured ? "fixture-app" : "",
-          configured ? "C <c@x.io>" : "",
-          configured ? "hook-fixture" : "",
-        ],
-        { stdout: "pipe", stderr: "pipe" },
-      );
-      expect(await child.exited).toBe(0);
-      expect(await new Response(child.stdout).text()).toBe("");
-      expect(await new Response(child.stderr).text()).toBe("");
-    }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+const secretsScript = new URL("./deploy-secrets.sh", import.meta.url).pathname;
 
 const authingRuntimeSecretKeys = [
   "AUTHING_APP_ID",
@@ -84,8 +24,6 @@ const authingRuntimeSecretKeys = [
   "COFORGE_SESSION_SECRET",
 ] as const;
 
-const digest = `sha256:${"a".repeat(64)}`;
-const registryImage = `registry.cn-hangzhou.aliyuncs.com/coforge/web@${digest}`;
 const bareImage = `coforge/web@${digest}`;
 
 describe("parseImmutableImage", () => {
@@ -239,7 +177,7 @@ describe("renderAuditRecord", () => {
 
 describe("remote-deploy.sh compose invocation shape", () => {
   test("passes secrets only to Compose and places global arguments before its subcommand", async () => {
-    const script = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
+    const script = await Bun.file(secretsScript).text();
     const directInvocations = script.split("\n").filter((line) => line.includes("docker compose"));
     expect(directInvocations).toEqual(['\t\tdocker compose "${COMPOSE_ARGS[@]}" "$@"']);
     expect(script).not.toContain("export AUTHING_APP_ID");
@@ -255,135 +193,6 @@ describe("remote-deploy.sh compose invocation shape", () => {
     // output must not corrupt the key=value report on stdout.
     expect(runBlock).toContain("</dev/null");
     expect(runBlock).toContain("1>&2");
-  });
-
-  test("keeps Authing values out of compose .env and replaces it with mode 0600", async () => {
-    const root = await mkdtemp(join(tmpdir(), "coforge-write-deploy-env-"));
-    try {
-      const secretsDir = join(root, "secrets");
-      await mkdir(secretsDir, { mode: 0o700 });
-      await writeFile(join(root, "docker-compose.yml"), "name: coforge-staging\n");
-      await mkdir(join(root, "centrifugo"));
-      await writeFile(join(root, "centrifugo/config.yaml"), "client:\n  allowed_origins: []\n");
-      await mkdir(join(root, "caddy"));
-      const caddyfile = "staging.example.test {\n\treverse_proxy web:3000\n}\n";
-      await writeFile(join(root, "caddy/Caddyfile"), caddyfile);
-      const files: Record<string, string> = {
-        postgres_password: "pg-pass",
-        redis_password: "redis-pass",
-        centrifugo_http_api_key: "centrifugo-api",
-        centrifugo_proxy_secret: "centrifugo-proxy",
-        worker_jwt_key_id: "coforge-staging",
-        worker_jwt_private_jwk: '{"kty":"OKP"}',
-        authing_app_id: "staging-app-id",
-        authing_app_secret: "staging-app-secret",
-        authing_issuer: "https://coforge-staging.authing.cn/oidc",
-        authing_redirect_uri: "https://staging.coforge.cn/auth/callback",
-        coforge_session_secret: "staging-session-secret-at-least-32-chars",
-      };
-      for (const [name, value] of Object.entries(files)) {
-        await writeFile(join(secretsDir, name), value, { mode: 0o600 });
-      }
-      const envPath = join(root, ".env");
-      await writeFile(envPath, "STALE=value\n", { mode: 0o644 });
-      await chmod(envPath, 0o644);
-
-      const script = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
-      const start = script.indexOf("write_deploy_env() {");
-      const end = script.indexOf("\n}\n", start);
-      expect(start).toBeGreaterThanOrEqual(0);
-      expect(end).toBeGreaterThan(start);
-      const fn = script.slice(start, end + 2);
-
-      const proc = Bun.spawn(
-        [
-          "bash",
-          "-c",
-          [
-            "set -euo pipefail",
-            `compose_file=${JSON.stringify(join(root, "docker-compose.yml"))}`,
-            `secrets_dir=${JSON.stringify(secretsDir)}`,
-            fn,
-            `write_deploy_env ${JSON.stringify(registryImage)}`,
-          ].join("\n"),
-        ],
-        { stdout: "pipe", stderr: "pipe" },
-      );
-      const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
-      expect(exitCode, stderr).toBe(0);
-
-      const envFile = await readFile(join(root, ".env"), "utf8");
-      expect(envFile).not.toContain("AUTHING_");
-      expect(envFile).not.toContain("COFORGE_SESSION_SECRET");
-      expect(envFile).toContain("COFORGE_CENTRIFUGO_CONFIG_SHA256=");
-      expect(envFile).toContain(
-        `COFORGE_CADDYFILE_SHA256=${createHash("sha256").update(caddyfile).digest("hex")}`,
-      );
-      expect((await stat(envPath)).mode & 0o777).toBe(0o600);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  test("takes DATABASE_URL and REDIS_URL verbatim from secret files when no bundled datastore password exists", async () => {
-    const root = await mkdtemp(join(tmpdir(), "coforge-write-deploy-env-external-"));
-    try {
-      const secretsDir = join(root, "secrets");
-      await mkdir(secretsDir, { mode: 0o700 });
-      await writeFile(join(root, "docker-compose.yml"), "name: coforge-production\n");
-      await mkdir(join(root, "centrifugo"));
-      await writeFile(join(root, "centrifugo/config.yaml"), "client:\n  allowed_origins: []\n");
-      await mkdir(join(root, "caddy"));
-      await writeFile(join(root, "caddy/Caddyfile"), "coforge.example.test {\n}\n");
-      const databaseUrl =
-        "postgresql://coforge:db-pass@pg.example.test:5432/coforge?sslmode=require";
-      const redisUrl = "redis://fixture-instance:redis-pass@redis.example.test:6379";
-      const files: Record<string, string> = {
-        database_url: databaseUrl,
-        redis_url: redisUrl,
-        centrifugo_http_api_key: "centrifugo-api",
-        centrifugo_proxy_secret: "centrifugo-proxy",
-        worker_jwt_key_id: "coforge-production",
-        worker_jwt_private_jwk: '{"kty":"OKP"}',
-      };
-      for (const [name, value] of Object.entries(files)) {
-        await writeFile(join(secretsDir, name), value, { mode: 0o600 });
-      }
-
-      const script = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
-      const start = script.indexOf("write_deploy_env() {");
-      const end = script.indexOf("\n}\n", start);
-      expect(start).toBeGreaterThanOrEqual(0);
-      expect(end).toBeGreaterThan(start);
-      const fn = script.slice(start, end + 2);
-
-      const proc = Bun.spawn(
-        [
-          "bash",
-          "-c",
-          [
-            "set -euo pipefail",
-            `compose_file=${JSON.stringify(join(root, "docker-compose.yml"))}`,
-            `secrets_dir=${JSON.stringify(secretsDir)}`,
-            fn,
-            `write_deploy_env ${JSON.stringify(registryImage)}`,
-          ].join("\n"),
-        ],
-        { stdout: "pipe", stderr: "pipe" },
-      );
-      const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
-      expect(exitCode, stderr).toBe(0);
-
-      const envLines = (await readFile(join(root, ".env"), "utf8")).split("\n");
-      expect(envLines.filter((line) => line.startsWith("DATABASE_URL="))).toEqual([
-        `DATABASE_URL=${databaseUrl}`,
-      ]);
-      expect(envLines.filter((line) => line.startsWith("REDIS_URL="))).toEqual([
-        `REDIS_URL=${redisUrl}`,
-      ]);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
   });
 });
 
@@ -579,24 +388,6 @@ if [[ "$*" = *http_code* ]]; then echo 500; fi
     });
   }
 });
-
-// Shared by the Centrifugo config-guard and snapshot/rollback tests below.
-const requiredSecretNames = [
-  "authing_app_id",
-  "authing_app_secret",
-  "coforge_session_secret",
-  "coforge_agent_credential_encryption_key",
-  "coforge_web_push_public_key",
-  "coforge_web_push_private_key",
-  "coforge_file_delivery_key",
-  "postgres_password",
-  "redis_password",
-  "centrifugo_http_api_key",
-  "centrifugo_proxy_secret",
-  "centrifugo_token_hmac_secret_key",
-  "worker_jwt_key_id",
-  "worker_jwt_private_jwk",
-];
 
 describe("Centrifugo configuration guard and release snapshot", () => {
   test("a Centrifugo configuration the pinned image rejects stops the deployment before anything is recreated", async () => {
@@ -1363,19 +1154,6 @@ const centrifugoSecretNames = [
   "redis_url",
 ] as const;
 
-type ComposeSecretGrant = string | { source: string; uid?: string; gid?: string; mode?: number };
-type ComposeFile = {
-  services: Record<string, { command?: string[]; secrets?: ComposeSecretGrant[] }>;
-  secrets: Record<string, { file?: string; environment?: string }>;
-};
-
-const readCompose = async (environment: string) =>
-  Bun.YAML.parse(
-    await Bun.file(
-      new URL(`../../infra/${environment}/docker-compose.yml`, import.meta.url),
-    ).text(),
-  ) as ComposeFile;
-
 // Runs a Centrifugo launch snippet with `cat` and `centrifugo` replaced, so a secret can be made
 // unreadable (or empty) without a container. Returns the exit code and whether centrifugo ran.
 const runCentrifugoLaunch = async (snippet: string, unreadable: string, emptied: string) => {
@@ -1433,13 +1211,7 @@ describe("Centrifugo secrets under a rootless Docker daemon", () => {
       const names = Object.values(compose.secrets).flatMap((secret) =>
         secret.environment ? [secret.environment] : [],
       );
-      const script = await readFile(new URL("./remote-deploy.sh", import.meta.url), "utf8");
-      const loaders = script.slice(
-        script.indexOf("load_compose_secrets()"),
-        script.indexOf("# Fail closed on a mutable"),
-      );
-      const writerStart = script.indexOf("write_deploy_env() {");
-      const writer = script.slice(writerStart, script.indexOf("\n}\n", writerStart) + 2);
+      const loaders = await readFile(secretsScript, "utf8");
       const root = await mkdtemp(join(tmpdir(), "coforge-compose-secret-sources-"));
       try {
         await mkdir(join(root, "secrets"));
@@ -1457,6 +1229,7 @@ describe("Centrifugo secrets under a rootless Docker daemon", () => {
           "coforge_github_client_secret",
           "coforge_github_credential_encryption_key",
           "coforge_github_webhook_secret",
+          "coforge_oidc_signing_jwks",
         ];
         for (const name of [...requiredSecretNames, ...datastore, ...optional])
           await writeFile(join(root, "secrets", name), `fixture-${name}`, { mode: 0o600 });
@@ -1465,7 +1238,6 @@ describe("Centrifugo secrets under a rootless Docker daemon", () => {
             "bash",
             "-euc",
             `${loaders}
-${writer}
 secrets_dir="$1/secrets"
 compose_file="$1/docker-compose.yml"
 env_file="$1/.env"
@@ -1720,7 +1492,7 @@ describe("staging user file persistence", () => {
     expect(compose).toContain(
       "coforge_file_delivery_key:\n    environment: COFORGE_FILE_DELIVERY_KEY",
     );
-    const deploy = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
+    const deploy = await Bun.file(secretsScript).text();
     expect(deploy).toContain(
       'COFORGE_FILE_DELIVERY_KEY="$(cat "$secrets_dir/coforge_file_delivery_key")"',
     );
@@ -1744,11 +1516,7 @@ describe("staging user file persistence", () => {
       "COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:?staging cloud cluster token}",
     );
 
-    const script = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
-    const functions = script.slice(
-      script.indexOf("load_compose_secrets()"),
-      script.indexOf("# Fail closed on a mutable"),
-    );
+    const functions = await Bun.file(secretsScript).text();
     const directory = await mkdtemp(join(tmpdir(), "coforge-cluster-token-"));
     try {
       for (const name of [

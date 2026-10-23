@@ -169,6 +169,7 @@ jobs:
             infra/staging/docker-compose.yml \
             infra/staging/caddy/Caddyfile \
             infra/staging/centrifugo/config.yaml \
+            scripts/deploy/deploy-secrets.sh \
             scripts/deploy/remote-deploy.sh
           ssh -i "$SSH_DIR/key" \
             -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
@@ -253,14 +254,13 @@ jobs:
               -o ServerAliveInterval=15 \
               -o ServerAliveCountMax=8 \
               "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
-              "mkdir -p \$(dirname '$REMOTE_ROOT/state.env') && bash -s -- \
+              "mkdir -p \$(dirname '$REMOTE_ROOT/state.env') && bash '$REMOTE_ROOT/scripts/deploy/remote-deploy.sh' \
                 --image '$IMAGE' \
                 --compose-file '$REMOTE_ROOT/infra/staging/docker-compose.yml' \
                 --secrets-dir '$REMOTE_ROOT/infra/staging/secrets' \
                 --state-file '$REMOTE_ROOT/state.env' \
                 --web-health-url http://127.0.0.1:18080/health \
-                --public-health-url https://staging.coforge.cn/health" \
-                < scripts/deploy/remote-deploy.sh
+                --public-health-url https://staging.coforge.cn/health"
           } > remote-report.env
 
       - name: Check the remote outcome
