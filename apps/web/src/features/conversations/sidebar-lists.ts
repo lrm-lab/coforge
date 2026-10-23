@@ -5,7 +5,6 @@ import { useLiveQuery } from "@tanstack/react-db";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import {
-  applyChannelSignalToLists,
   chatListQueryKey,
   createSidebar,
   listReadPosition,
@@ -14,6 +13,7 @@ import {
   type ChannelRow,
   type Sidebar,
 } from "./sidebar-collections";
+import { applyChannelSignalToLists } from "./sidebar-signals";
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";

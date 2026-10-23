@@ -31,7 +31,7 @@ type DirectSettings = {
 
 /**
  * The gear in a direct message's header and the panel it opens: the viewer's own preferences for
- * this DM, the same two (pin, collapse long messages) for a DM with an Agent and one between
+ * this DM, the same three (pin, mute, collapse long messages) for a DM with an Agent and one between
  * members. The panel mounts only while open, so a header outside Chat reads no sidebar until then.
  */
 export function DirectSettingsButton(props: DirectSettings) {
@@ -87,15 +87,18 @@ function DirectPreferences({
 }: Omit<DirectSettings, "name">) {
   const setCollapse = useServerFn(setDirectConversationCollapseLongMessages);
   const actions = useSidebarActions();
-  // The sidebar owns pins: its row is the truth, and its optimistic action is the write, so the
-  // list moves as the toggle does. A DM the sidebar does not list yet reads as unpinned.
-  const pinned = useSidebarLists().directs.rows.some(
-    (row) => row.conversationId === conversationId && row.pinned,
+  // The sidebar owns pins and mutes: its row is the truth, and its optimistic action is the write,
+  // so the list moves as the toggle does and the row menu's items agree with it. A DM the sidebar
+  // does not list yet reads as unpinned and audible.
+  const row = useSidebarLists().directs.rows.find(
+    (entry) => entry.conversationId === conversationId,
   );
-  const [pending, setPending] = useState<"pin" | "collapse" | null>(null);
+  const pinned = row?.pinned === true;
+  const muted = row?.muted === true;
+  const [pending, setPending] = useState<"pin" | "mute" | "collapse" | null>(null);
   const [error, setError] = useState("");
 
-  async function change(which: "pin" | "collapse", write: () => Promise<unknown>) {
+  async function change(which: "pin" | "mute" | "collapse", write: () => Promise<unknown>) {
     setPending(which);
     setError("");
     try {
@@ -121,6 +124,20 @@ function DirectPreferences({
             isDisabled={pending !== null}
             onChange={(next) =>
               void change("pin", () => actions.setPinned({ kind: "direct", conversationId }, next))
+            }
+          />
+        </PreferenceRow>
+        <PreferenceRow
+          title={m.direct_settings_mute()}
+          description={m.direct_settings_mute_description()}
+        >
+          <Toggle
+            size="md"
+            aria-label={m.direct_settings_mute()}
+            isSelected={muted}
+            isDisabled={pending !== null}
+            onChange={(next) =>
+              void change("mute", () => actions.setMuted({ kind: "direct", conversationId }, next))
             }
           />
         </PreferenceRow>

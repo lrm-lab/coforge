@@ -15,6 +15,7 @@ import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
+import { MentionBadge } from "./mention-badge";
 import { useChannelUnreadCounts, useCloseConversationList } from "./conversation-navigation";
 import { StartDirectMessagePopover } from "./start-direct-message-popover";
 import { useSavedEntries } from "./conversation-host";
@@ -112,18 +113,6 @@ type LastMessageLines = {
   /** The "@" badge shows: the viewer is mentioned and the mention is unread (`channelMentionShown`). */
   mentioned?: boolean;
 };
-
-/** The "@" marker of a row whose conversation mentions the viewer: a light-violet pill. */
-function MentionBadge() {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand-primary px-1.5 text-xs font-semibold leading-none text-brand-secondary"
-    >
-      @
-    </span>
-  );
-}
 
 // A local row (not NavItemBase — its `icon` slot hardcodes size-5 and can't
 // take an Avatar). The icon sets its own column width: a 44px avatar (a DM's avatar, or a channel's
@@ -618,7 +607,7 @@ export function ConversationDirectory({
     const current = channel.id === selectedChannelId;
     return (
       <ConversationRowMenu
-        target={{ kind: "channel", ...channel }}
+        target={{ kind: "channel", ...channel, muted: channel.muted === true }}
         sections={groups.sections}
         sectionsReady={groups.status === "ready"}
         onSectionError={sectionFailed}
@@ -669,6 +658,7 @@ export function ConversationDirectory({
     conversationId,
     peer,
     pinned,
+    muted,
     name,
     agent,
     self,
@@ -676,7 +666,7 @@ export function ConversationDirectory({
     lastMessagePreview,
   }: DirectEntry) => (
     <ConversationRowMenu
-      target={{ kind: "direct", conversationId, pinned }}
+      target={{ kind: "direct", conversationId, pinned, muted: muted === true }}
       sections={groups.sections}
       sectionsReady={groups.status === "ready"}
       onSectionError={sectionFailed}
@@ -686,6 +676,7 @@ export function ConversationDirectory({
         current={conversationId === selectedDmId}
         card
         pinned={pinned}
+        muted={muted}
         unreadCount={unreadCounts[conversationId]}
         label={self ? m.conversation_dm_self_name({ name }) : name}
         lastMessage={{

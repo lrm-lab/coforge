@@ -224,13 +224,12 @@ export type ChatList = "channels" | "dms" | "channelNames" | "saved";
 /**
  * Which of the Chat page's lists a viewer event makes stale, for the page to re-read those alone. A
  * read carries its own count (`applyMarked`) and needs none; pins are one order across
- * channels and DMs, so they touch both; a save or unsave touches only the Saved list.
+ * channels and DMs, and a mute may be on either, so both touch both lists; a save or unsave touches only the Saved list.
  */
 export function sidebarListsChangedBy(event: ViewerEvent): readonly ChatList[] {
   if ("unreadCount" in event) return [];
   if (event.type.startsWith("saved.")) return ["saved"];
-  if (event.type === "pref.changed.v1")
-    return event.name === "pins" ? ["channels", "dms"] : ["channels"];
+  if (event.type === "pref.changed.v1") return ["channels", "dms"];
   return event.type.startsWith("dm.") ? ["dms"] : ["channels"];
 }
 

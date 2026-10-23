@@ -12,7 +12,7 @@ export type DirectPeer = DirectPreferences["conversations"][number]["peer"];
 
 /**
  * One DM's row in the Chat sidebar's Direct messages (see `sidebar-lists.ts`), with an Agent or a
- * member alike: who it is with, its pin, whether it is closed, and its unread count. The fields a
+ * member alike: who it is with, its pin, whether it is muted or closed, and its unread count. The fields a
  * sidebar change touches are named as on a channel row, so one change reads the same for both.
  */
 export type DirectRow = {
@@ -24,6 +24,9 @@ export type DirectRow = {
   pinned: boolean;
   pinSortOrder: number | null;
   hidden: boolean;
+  /** The viewer muted this DM: its unread count degrades to a dot. Absent from a copy stored
+   * before DMs carried it, which reads as audible until the list is read again. */
+  muted?: boolean;
   unreadCount: number;
   /** When the DM's last message was sent (ISO), or `null` while the DM has no message yet. */
   lastMessageAt: string | null;
@@ -39,17 +42,20 @@ export function directRowsOf(
 ): DirectRow[] {
   const pins = new Map(preferences.pinned.map((pin) => [pin.conversationId, pin.sortOrder]));
   const hidden = new Set(preferences.hidden);
-  return preferences.conversations.map(({ conversationId, peer, lastMessage }, position) => ({
-    conversationId,
-    position,
-    peer,
-    pinned: pins.has(conversationId),
-    pinSortOrder: pins.get(conversationId) ?? null,
-    hidden: hidden.has(conversationId),
-    unreadCount: unread[conversationId] ?? 0,
-    lastMessageAt: lastMessage?.createdAt ?? null,
-    lastMessagePreview: lastMessage?.preview ?? null,
-  }));
+  return preferences.conversations.map(
+    ({ conversationId, peer, muted, lastMessage }, position) => ({
+      conversationId,
+      position,
+      peer,
+      pinned: pins.has(conversationId),
+      pinSortOrder: pins.get(conversationId) ?? null,
+      hidden: hidden.has(conversationId),
+      muted,
+      unreadCount: unread[conversationId] ?? 0,
+      lastMessageAt: lastMessage?.createdAt ?? null,
+      lastMessagePreview: lastMessage?.preview ?? null,
+    }),
+  );
 }
 
 /** The rows as the sidebar reads them: all of them in the server's order, the closed ones (a

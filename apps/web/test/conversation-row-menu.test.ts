@@ -17,17 +17,25 @@ test("only an active member's row opens the menu", () => {
   expect(conversationRowMenuEnabled({ joined: false })).toBe(false);
 });
 
-test("items follow the mockup's order: mark-unread, pin, close-chat last", () => {
-  expect(conversationRowMenuItems({ pinned: false }).map((item) => item.id)).toEqual([
+test("items follow the mockup's order, with mute after pin and close-chat last", () => {
+  expect(conversationRowMenuItems({ pinned: false, muted: false }).map((item) => item.id)).toEqual([
     "mark-unread",
     "pin",
+    "mute",
     "close-chat",
   ]);
 });
 
 test("the pin item carries the row's pinned state so the label can read Pin or Unpin", () => {
-  const unpinned = conversationRowMenuItems({ pinned: false });
-  const pinned = conversationRowMenuItems({ pinned: true });
+  const unpinned = conversationRowMenuItems({ pinned: false, muted: false });
+  const pinned = conversationRowMenuItems({ pinned: true, muted: false });
   expect(unpinned.find((item) => item.id === "pin")?.pinned).toBe(false);
   expect(pinned.find((item) => item.id === "pin")?.pinned).toBe(true);
+});
+
+test("the mute item carries the row's muted state so the label can read Mute or Unmute", () => {
+  const audible = conversationRowMenuItems({ pinned: false, muted: false });
+  const muted = conversationRowMenuItems({ pinned: false, muted: true });
+  expect(audible.find((item) => item.id === "mute")?.muted).toBe(false);
+  expect(muted.find((item) => item.id === "mute")?.muted).toBe(true);
 });

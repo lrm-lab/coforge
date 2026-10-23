@@ -39,7 +39,7 @@ type LatestMessageRow = {
 export type ViewerDirectMembership = { conversationId: string; memberId: string };
 
 /**
- * The viewer's own list preferences for their DMs (pinned, marked unread, closed) and the sidebar's
+ * The viewer's own list preferences for their DMs (pinned, muted, marked unread, closed) and the sidebar's
  * read of their DMs: which there are, with whom, and how many unread. A DM with an Agent and one
  * between members are alike here. Writes take a DM the caller has already authorized
  * (`DirectConversations`); only what the viewer's list shows changes, never the conversation.
@@ -62,6 +62,16 @@ export class PrismaDirectConversationPreferences {
       return setConversationPin(tx, { workspaceId, userId, conversationId, memberId }, pinned);
     });
     return { pinned, changed };
+  }
+
+  /** Mutes the viewer's DM for themself, or lets it be heard again, and says whether the setting
+   * changed. One row's own flag, so it takes no conversation lock. */
+  async setMuted({ memberId }: ViewerDirectMembership, muted: boolean) {
+    const updated = await this.db.conversationMember.updateMany({
+      where: { id: memberId, channelMuted: { not: muted } },
+      data: { channelMuted: muted },
+    });
+    return { muted, changed: updated.count > 0 };
   }
 
   /** Marks the viewer's DM unread, anchored on the newest top-level message someone else sent, or
@@ -103,8 +113,8 @@ export class PrismaDirectConversationPreferences {
 
   /**
    * What the sidebar needs about the viewer's DMs, by conversation id: each DM they can open (in
-   * the order they started), who it is with and its newest top-level message (`lastMessage`, null
-   * for a DM with none), the pinned ones with their order, and the closed ones it leaves out.
+   * the order they started), who it is with, whether the viewer muted it, and its newest top-level
+   * message (`lastMessage`, null for a DM with none), the pinned ones with their order, and the closed ones it leaves out.
    */
   async preferencesForUser(workspaceId: string, userId: string) {
     const [memberships, latest, pins, hidden] = await Promise.all([
@@ -119,6 +129,7 @@ export class PrismaDirectConversationPreferences {
         },
         orderBy: [{ conversation: { createdAt: "asc" } }, { conversationId: "asc" }],
         select: {
+          channelMuted: true,
           conversation: {
             select: {
               id: true,
@@ -198,13 +209,14 @@ export class PrismaDirectConversationPreferences {
     const profiles = new Map(people.map((person) => [person.id, person]));
     const lastMessages = await this.lastMessagePreviews(latest);
     return {
-      conversations: memberships.flatMap(({ conversation }) => {
+      conversations: memberships.flatMap(({ conversation, channelMuted }) => {
         const peer = this.peerOf(workspaceId, conversation, peerIds, profiles);
         return peer
           ? [
               {
                 conversationId: conversation.id,
                 peer,
+                muted: channelMuted,
                 lastMessage: lastMessages.get(conversation.id) ?? null,
               },
             ]

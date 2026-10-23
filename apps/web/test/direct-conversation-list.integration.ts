@@ -96,6 +96,7 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
     {
       conversationId: withHelper.conversationId,
       peer: { kind: "agent", agentId: helper.id },
+      muted: false,
       lastMessage: null,
     },
     {
@@ -107,6 +108,7 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
         displayName: "Grace Hopper",
         avatarUrl: null,
       },
+      muted: false,
       lastMessage: null,
     },
     {
@@ -118,6 +120,7 @@ test("the list names each of the viewer's DMs by conversation id and who is on t
         displayName: usernames[0]!,
         avatarUrl: null,
       },
+      muted: false,
       lastMessage: null,
     },
   ]);
@@ -346,7 +349,12 @@ test("any member opens, lists and may write in their own DM with another member'
   });
 
   expect((await conversations.list(workspaceId, kai.id)).conversations).toEqual([
-    { conversationId, peer: { kind: "agent", agentId: helper.id }, lastMessage: null },
+    {
+      conversationId,
+      peer: { kind: "agent", agentId: helper.id },
+      muted: false,
+      lastMessage: null,
+    },
   ]);
   await expect(
     conversations.authorize(workspaceId, kai.id, conversationId, { canSend: true }),

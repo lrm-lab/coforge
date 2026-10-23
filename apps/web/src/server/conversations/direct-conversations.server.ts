@@ -185,6 +185,20 @@ export class DirectConversations {
     return { pinned };
   }
 
+  /** Mutes the DM for the viewer only, or lets it be heard again: its unread badge degrades to a
+   * dot and it sends no Web Push unless they are @mentioned. The viewer's other pages learn it as
+   * `pref.changed.v1` (`muted`), as a channel's mute does. */
+  async setMuted(workspaceId: string, viewerId: string, conversationId: string, muted: boolean) {
+    const memberId = await this.viewerMember(workspaceId, viewerId, conversationId);
+    const { changed } = await this.preferences.setMuted({ conversationId, memberId }, muted);
+    if (changed)
+      await announceViewerEvent(this.realtime, {
+        userIds: [viewerId],
+        event: { type: "pref.changed.v1", workspaceId, name: "muted" },
+      });
+    return { muted };
+  }
+
   /** Whether long messages fold behind "Show more" in this DM, for the viewer only. A display
    * preference nothing else reads, so it tells no other page. */
   async setCollapseLongMessages(

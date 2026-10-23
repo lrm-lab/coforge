@@ -8,20 +8,13 @@ import {
   type Arrangement,
   type SidebarApi,
   channelNamesBehind,
-  applyChannelSignalToLists,
-  listReadPosition,
   loadSidebarLists,
 } from "#src/features/conversations/sidebar-collections";
+import { applyChannelSignalToLists } from "#src/features/conversations/sidebar-signals";
 import { compareChannelNames, type ChannelName } from "#src/features/conversations/channel-signals";
-import {
-  channelNamesQueryKey,
-  sidebarChannelsQueryKey,
-  sidebarDirectsQueryKey,
-} from "#src/features/conversations/conversation-query-keys";
-import type { ChatList } from "#src/features/conversations/conversation-unread";
+import { channelNamesQueryKey } from "#src/features/conversations/conversation-query-keys";
 import { chatSectionOrderQuery } from "#src/features/conversations/chat-sections";
 import { AppError } from "#src/lib/app-error";
-import { savedMessagesQueryKey } from "#src/features/conversations/saved-messages-collection";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 
 /**
@@ -90,6 +83,7 @@ async function sidebarWith(
         {
           conversationId: "dm-helper",
           peer: { kind: "agent" as const, agentId: "helper" },
+          muted: false,
           lastMessage: null,
         },
         {
@@ -101,6 +95,7 @@ async function sidebarWith(
             displayName: "Grace",
             avatarUrl: null,
           },
+          muted: false,
           lastMessage: null,
         },
       ],
@@ -124,6 +119,7 @@ async function sidebarWith(
     },
     loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
     pin: async (target, pinned) => void saves.push(`pin ${JSON.stringify(target)} ${pinned}`),
+    setMuted: async (target, muted) => void saves.push(`mute ${JSON.stringify(target)} ${muted}`),
     markUnread: async (target) => void saves.push(`unread ${JSON.stringify(target)}`),
     close: async (target) => void saves.push(`close ${JSON.stringify(target)}`),
     arrange: async () => void saves.push("arrange"),
@@ -235,6 +231,35 @@ test("a DM row changes by its conversation id, a DM between members as one with 
     `pin {"kind":"direct","conversationId":"dm-grace"} true`,
     `close {"kind":"direct","conversationId":"dm-grace"}`,
   ]);
+});
+
+test("a mute shows at once on a channel row and on a DM row, and is saved", async () => {
+  const { sidebar, saves } = await sidebarWith();
+  const channelMuted = sidebar.actions.setMuted({ kind: "channel", channelId: "general" }, true);
+  expect(sidebar.channels.get("general")?.muted).toBe(true);
+  await channelMuted;
+  const dmMuted = sidebar.actions.setMuted({ kind: "direct", conversationId: "dm-grace" }, true);
+  expect(sidebar.directs.get("dm-grace")?.muted).toBe(true);
+  await dmMuted;
+  expect(sidebar.directs.get("dm-helper")?.muted).toBe(false);
+  await sidebar.actions.setMuted({ kind: "direct", conversationId: "dm-grace" }, false);
+  expect(sidebar.directs.get("dm-grace")?.muted).toBe(false);
+  expect(saves).toEqual([
+    `mute {"kind":"channel","channelId":"general"} true`,
+    `mute {"kind":"direct","conversationId":"dm-grace"} true`,
+    `mute {"kind":"direct","conversationId":"dm-grace"} false`,
+  ]);
+});
+
+test("a failed mute puts the row back and rejects", async () => {
+  const { sidebar } = await sidebarWith({
+    setMuted: async () => {
+      throw new Error("refused");
+    },
+  });
+  const saved = sidebar.actions.setMuted({ kind: "direct", conversationId: "dm-grace" }, true);
+  await expect(saved).rejects.toThrow("refused");
+  expect(sidebar.directs.get("dm-grace")?.muted).toBe(false);
 });
 
 test("a change to a row that has left the list is still saved", async () => {
@@ -584,52 +609,6 @@ describe("the DM list's stream positions", () => {
   });
 });
 
-describe("listReadPosition", () => {
-  const channel = "chat:user:viewer";
-  const readAt = (offset: number, epoch = "e1") => ({
-    streamPositions: { [channel]: { offset, epoch } },
-  });
-
-  test("finds where each list was last read, in that list's own query", async () => {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(sidebarChannelsQueryKey("w"), { rows: [], ...readAt(1) });
-    queryClient.setQueryData(sidebarDirectsQueryKey("w"), { rows: [], ...readAt(2) });
-    queryClient.setQueryData(channelNamesQueryKey("w"), { names: [], ...readAt(3) });
-    queryClient.setQueryData(savedMessagesQueryKey("w"), { entries: [], ...readAt(4) });
-    const lists: ChatList[] = ["channels", "dms", "channelNames", "saved"];
-    expect(
-      await Promise.all(lists.map((list) => listReadPosition(queryClient, "w", list, channel))),
-    ).toEqual([1, 2, 3, 4].map((offset) => ({ offset, epoch: "e1" })));
-  });
-
-  test("a list read without a position for the channel, or not read, has none", async () => {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(channelNamesQueryKey("w"), { names: [], ...readAt(3) });
-    queryClient.setQueryData(savedMessagesQueryKey("w"), { entries: [], streamPositions: {} });
-    expect(await listReadPosition(queryClient, "w", "channelNames", "chat:workspace:w")).toBe(
-      undefined,
-    );
-    expect(await listReadPosition(queryClient, "w", "saved", channel)).toBe(undefined);
-    expect(await listReadPosition(queryClient, "w", "dms", channel)).toBe(undefined);
-  });
-
-  test("a read under way settles first, and its position is the one reported", async () => {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(savedMessagesQueryKey("w"), { entries: [], ...readAt(3) });
-    let settle: (read: unknown) => void = () => {};
-    const answer = new Promise<unknown>((resolve) => (settle = resolve));
-    const reading = queryClient.fetchQuery({
-      queryKey: savedMessagesQueryKey("w"),
-      queryFn: () => answer,
-      staleTime: 0,
-    });
-    const position = listReadPosition(queryClient, "w", "saved", channel);
-    settle({ entries: [], ...readAt(8) });
-    await reading;
-    expect(await position).toEqual({ offset: 8, epoch: "e1" });
-  });
-});
-
 describe("loadSidebarLists", () => {
   // The chat layout's loader runs on every navigation inside Chat. The lists stay live through
   // realtime (and a subscribe's gap re-read), so a navigation reads only what is not cached.
@@ -699,6 +678,7 @@ function serverlessApi(server: {
     loadDirectPreferences: async () => server.preferences,
     loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
     pin: async () => {},
+    setMuted: async () => {},
     markUnread: async () => {},
     close: async () => {},
     arrange: async () => {},

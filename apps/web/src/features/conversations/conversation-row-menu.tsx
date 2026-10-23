@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react";
-import { Folder, MessageChatSquare, Pin01, XClose } from "@untitledui/icons";
+import { Bell01, BellOff01, Folder, MessageChatSquare, Pin01, XClose } from "@untitledui/icons";
 import { SubmenuTrigger } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -14,9 +14,11 @@ import {
   type ConversationRowMenuItem,
 } from "./conversation-row-menu-model";
 
-function itemIcon(id: ConversationRowMenuItem["id"]) {
-  if (id === "mark-unread") return MessageChatSquare;
-  if (id === "pin") return Pin01;
+function itemIcon(item: ConversationRowMenuItem) {
+  if (item.id === "mark-unread") return MessageChatSquare;
+  if (item.id === "pin") return Pin01;
+  // The icon shows what choosing it does: a muted row offers the bell back.
+  if (item.id === "mute") return item.muted ? Bell01 : BellOff01;
   return XClose;
 }
 
@@ -24,14 +26,16 @@ function itemLabel(item: ConversationRowMenuItem): string {
   if (item.id === "mark-unread") return m.conversation_menu_mark_unread();
   if (item.id === "pin")
     return item.pinned ? m.conversation_menu_unpin() : m.conversation_menu_pin();
+  if (item.id === "mute")
+    return item.muted ? m.conversation_menu_unmute() : m.conversation_menu_mute();
   return m.conversation_menu_close();
 }
 
 /** What the menu acts on: a channel row (membership decides) or a direct-message row (always the
  * viewer's own conversation). */
 export type ConversationRowMenuTarget =
-  | { kind: "channel"; id: string; joined: boolean; pinned: boolean }
-  | { kind: "direct"; conversationId: string; pinned: boolean };
+  | { kind: "channel"; id: string; joined: boolean; pinned: boolean; muted: boolean }
+  | { kind: "direct"; conversationId: string; pinned: boolean; muted: boolean };
 
 /**
  * The list item around a conversation row: the row's link is the trigger of a React Aria context
@@ -81,6 +85,7 @@ export function ConversationRowMenu({
     const run = {
       "mark-unread": () => actions.markUnread(row),
       pin: () => actions.setPinned(row, !target.pinned),
+      mute: () => actions.setMuted(row, !target.muted),
       "close-chat": () => actions.close(row),
     }[String(key)];
     run?.().catch((cause: unknown) => {
@@ -130,7 +135,7 @@ export function ConversationRowMenu({
               {item.id === "close-chat" && <Dropdown.Separator />}
               <Dropdown.Item
                 id={item.id}
-                icon={itemIcon(item.id)}
+                icon={itemIcon(item)}
                 label={itemLabel(item)}
                 selectionIndicator="none"
               />

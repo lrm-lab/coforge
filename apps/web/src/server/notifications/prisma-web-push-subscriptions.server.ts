@@ -87,11 +87,9 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
       message.body,
       message.mentions.map(browserMessageMention),
     );
-    const mentionedUserIds = channelName
-      ? message.mentions
-          .filter((mention) => mention.kind === "user")
-          .map((mention) => mention.actorId)
-      : [];
+    const mentionedUserIds = message.mentions
+      .filter((mention) => mention.kind === "user")
+      .map((mention) => mention.actorId);
     const sender = senderLabel(message.sender);
     const preview =
       readableBody.length > MESSAGE_PREVIEW_LENGTH
@@ -123,28 +121,24 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
   }
 
   /**
-   * The one recipient-eligibility rule (not sender, active member, `userId` not null, for channels
-   * not muted OR @mentioned OR thread-following, `browserNotificationsEnabled: true`), shared by
-   * every read. Passing `userId` narrows it to that one member, for `notificationForRecipient`.
+   * The one recipient-eligibility rule (not sender, active member, `userId` not null, not muted OR
+   * @mentioned OR thread-following, in a channel or a DM alike, `browserNotificationsEnabled:
+   * true`), shared by every read. Passing `userId` narrows it to that one member, for `notificationForRecipient`.
    */
   private recipientWhere(context: MessageContext, userId?: string) {
-    const { message, channelName, mentionedUserIds } = context;
+    const { message, mentionedUserIds } = context;
     return {
       conversationId: message.conversationId,
       ...(message.senderMemberId ? { id: { not: message.senderMemberId } } : {}),
       userId: userId ?? { not: null },
       ...ACTIVE_MEMBER_WHERE,
-      ...(channelName
-        ? {
-            OR: [
-              { channelMuted: false },
-              { userId: { in: mentionedUserIds } },
-              ...(message.threadRootId
-                ? [{ threadFollows: { some: { rootMessageId: message.threadRootId } } }]
-                : []),
-            ],
-          }
-        : {}),
+      OR: [
+        { channelMuted: false },
+        { userId: { in: mentionedUserIds } },
+        ...(message.threadRootId
+          ? [{ threadFollows: { some: { rootMessageId: message.threadRootId } } }]
+          : []),
+      ],
       user: { preferences: { browserNotificationsEnabled: true } },
     };
   }

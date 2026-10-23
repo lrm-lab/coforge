@@ -37,7 +37,7 @@ These rules apply to `src/features/conversations/`.
   Server and list share one order (`compareChannelNames`).
 - A channel created, changed or gone in the Workspace (`channel.created.v1`, `channel.updated.v1`,
   Slack's `channel_created`/`channel_rename`) carries its info or `gone`, which
-  `applyChannelSignalToLists` writes into the names and the list without a read; it re-reads only
+  `applyChannelSignalToLists` (`sidebar-signals.ts`) writes into the names and the list without a read; it re-reads only
   what an event cannot place, and a list being read or while a sidebar change is saving (a failed
   save's rollback undoes a direct write made meanwhile).
 - Read the lists with `useSidebarLists` and change them only through `useSidebarActions`

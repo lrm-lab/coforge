@@ -12,15 +12,16 @@ import { assertBrowserOnly } from "#src/lib/browser-only";
 import { nextPinOrder, pinOrdersAfterArrange } from "#src/lib/pin-order";
 import {
   listPublicChannels,
+  setPublicChannelMuted,
   setPublicConversationHidden,
   setPublicConversationPinned,
   setPublicConversationUnread,
-  type listChannelNames,
 } from "./channels.functions";
 import {
   loadDirectConversationBadges,
   loadDirectConversationPreferences,
   setDirectConversationHidden,
+  setDirectConversationMuted,
   setDirectConversationPinned,
   setDirectConversationUnread,
 } from "./conversations.functions";
@@ -38,7 +39,7 @@ import {
   type PinRef,
 } from "./pinned-conversations";
 import { directRowsOf, type DirectRow } from "./sidebar-rows";
-import { channelNamesAfter, type ChannelSignal } from "./channel-signals";
+import type { ChannelSignal } from "./channel-signals";
 import type { ChatList } from "./conversation-unread";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import {
@@ -60,7 +61,6 @@ import {
 
 type ChannelList = Awaited<ReturnType<typeof listPublicChannels>>;
 /** What one read of every channel's name holds: the names and the stream position they stand at. */
-type ChannelNamesRead = Awaited<ReturnType<typeof listChannelNames>>;
 type DirectPreferences = Awaited<ReturnType<typeof loadDirectConversationPreferences>>;
 type DirectBadges = Awaited<ReturnType<typeof loadDirectConversationBadges>>;
 export type Arrangement = { pins: readonly PinRef[]; unpinned: readonly PinRef[] };
@@ -72,6 +72,7 @@ export type SidebarApi = {
   loadDirectPreferences: () => Promise<DirectPreferences>;
   loadDirectBadges: () => Promise<DirectBadges>;
   pin: (target: PinRef, pinned: boolean) => Promise<unknown>;
+  setMuted: (target: PinRef, muted: boolean) => Promise<unknown>;
   markUnread: (target: PinRef) => Promise<unknown>;
   close: (target: PinRef) => Promise<unknown>;
   arrange: (arrangement: Arrangement) => Promise<unknown>;
@@ -86,6 +87,10 @@ export const serverSidebarApi: SidebarApi = {
     target.kind === "channel"
       ? setPublicConversationPinned({ data: { channelId: target.channelId, pinned } })
       : setDirectConversationPinned({ data: { conversationId: target.conversationId, pinned } }),
+  setMuted: (target, muted) =>
+    target.kind === "channel"
+      ? setPublicChannelMuted({ data: { channelId: target.channelId, muted } })
+      : setDirectConversationMuted({ data: { conversationId: target.conversationId, muted } }),
   markUnread: (target) =>
     target.kind === "channel"
       ? setPublicConversationUnread({ data: { channelId: target.channelId, unread: true } })
@@ -274,6 +279,7 @@ type SidebarFields = {
   pinSortOrder: number | null;
   unreadCount: number;
   hidden: boolean;
+  muted?: boolean;
 };
 
 /** How long a section change waits before each retry of a save that failed on the way (the
@@ -436,6 +442,17 @@ export function createSidebar(
     },
     mutationFn: async ({ target, pinned }, { transaction }) => {
       await api.pin(target, pinned);
+      confirm(transaction);
+    },
+  });
+
+  const setMutedAtOnce = createOptimisticAction<{ target: PinRef; muted: boolean }>({
+    onMutate: ({ target, muted }) =>
+      edit(target, (row) => {
+        row.muted = muted;
+      }),
+    mutationFn: async ({ target, muted }, { transaction }) => {
+      await api.setMuted(target, muted);
       confirm(transaction);
     },
   });
@@ -665,6 +682,8 @@ export function createSidebar(
       ),
     setPinned: (target: PinRef, pinned: boolean) =>
       saved(pin({ target, pinned }), () => api.pin(target, pinned), listOf(target)),
+    setMuted: (target: PinRef, muted: boolean) =>
+      saved(setMutedAtOnce({ target, muted }), () => api.setMuted(target, muted), listOf(target)),
     markUnread: (target: PinRef) =>
       saved(markUnreadAtOnce(target), () => api.markUnread(target), listOf(target)),
     close: (target: PinRef) => saved(close(target), () => api.close(target), listOf(target)),
@@ -715,35 +734,3 @@ export function createSidebar(
 }
 
 export type Sidebar = ReturnType<typeof createSidebar>;
-
-/**
- * Applies a channel created, changed or gone anywhere in the Workspace to every channel's name and
- * to the channel list from the event alone, as Slack's clients apply `channel_created`, and returns
- * the lists still to re-read: one the event cannot place (an older server's ids-only event,
- * `#general` coming back, a sidebar not yet hydrated or synced), and one whose read was already
- * under way, whose older answer would otherwise land over the event.
- */
-export function applyChannelSignalToLists(
-  queryClient: QueryClient,
-  workspaceId: string,
-  sidebar: Sidebar | undefined,
-  signal: ChannelSignal,
-): ChatList[] {
-  const namesKey = channelNamesQueryKey(workspaceId);
-  const reading = (queryKey: QueryKey) => queryClient.isFetching({ queryKey }) > 0;
-  const read = queryClient.getQueryData<ChannelNamesRead>(namesKey);
-  const known = Boolean(read?.names.some((channel) => channel.id === signal.conversationId));
-  const stale: ChatList[] = [];
-  if (read) {
-    const next = channelNamesAfter(read.names, signal);
-    // The positions stay: only a server read changes them.
-    if (next) queryClient.setQueryData<ChannelNamesRead>(namesKey, { ...read, names: next });
-    if (!next || reading(namesKey)) stale.push("channelNames");
-  }
-  if (
-    !sidebar?.applyChannelSignal(signal, { known }) ||
-    reading(sidebarChannelsQueryKey(workspaceId))
-  )
-    stale.push("channels");
-  return stale;
-}

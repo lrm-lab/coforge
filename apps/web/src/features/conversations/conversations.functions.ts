@@ -180,6 +180,14 @@ export const setDirectConversationPinned = createServerFn({ method: "POST" })
     new DirectConversations(db).setPinned(workspaceId, user.id, data.conversationId, data.pinned),
   );
 
+/** Mutes the viewer's DM for themself, or lets it be heard again. */
+export const setDirectConversationMuted = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationInputSchema.extend({ muted: z.boolean() }))
+  .handler(({ context: { user, db, workspaceId }, data }) =>
+    new DirectConversations(db).setMuted(workspaceId, user.id, data.conversationId, data.muted),
+  );
+
 /** Folds long messages in the viewer's DM behind "Show more", or shows them in full. */
 export const setDirectConversationCollapseLongMessages = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

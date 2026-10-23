@@ -7,5 +7,9 @@
   "direct_settings_pin_description": "将此会话固定在你的侧栏顶部。",
   "direct_settings_collapse_long_messages": "折叠长消息",
   "direct_settings_collapse_long_messages_description": "超过预览高度的消息折叠在「展开全文」开关后。关闭后此会话的长消息始终完整显示。",
-  "direct_settings_preference_error": "更新失败，请重试。"
+  "direct_settings_preference_error": "更新失败，请重试。",
+  "conversation_menu_mute": "静音",
+  "conversation_menu_unmute": "取消静音",
+  "direct_settings_mute": "静音会话",
+  "direct_settings_mute_description": "新消息只显示圆点而不显示数量，除非有人 @ 你，否则不发送浏览器通知，只影响你。"
 }

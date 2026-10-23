@@ -1,9 +1,11 @@
-export type ConversationRowMenuItemId = "mark-unread" | "pin" | "close-chat";
+export type ConversationRowMenuItemId = "mark-unread" | "pin" | "mute" | "close-chat";
 
 export type ConversationRowMenuItem = {
   id: ConversationRowMenuItemId;
   /** The row's current pin state, so the pin item can read "Pin" or "Unpin". */
   pinned: boolean;
+  /** The row's current mute state, so the mute item can read "Mute" or "Unmute". */
+  muted: boolean;
 };
 
 /**
@@ -16,16 +18,18 @@ export function conversationRowMenuEnabled(channel: { joined: boolean }): boolea
 }
 
 /**
- * The menu's items in the mockup's order (#122): Mark as Unread and Pin as the everyday actions,
- * Close Chat last behind a separator (the separator is presentation, drawn before the last item).
+ * The menu's items in the mockup's order (#122): Mark as Unread, Pin and Mute as the everyday
+ * actions, Close Chat last behind a separator (the separator is presentation, drawn before the last item).
  * "Move to section" left the plan with its schema field.
  */
-export function conversationRowMenuItems(channel: {
+export function conversationRowMenuItems(row: {
   pinned: boolean;
+  muted: boolean;
 }): readonly ConversationRowMenuItem[] {
   return [
-    { id: "mark-unread", pinned: false },
-    { id: "pin", pinned: channel.pinned },
-    { id: "close-chat", pinned: false },
+    { id: "mark-unread", pinned: false, muted: false },
+    { id: "pin", pinned: row.pinned, muted: false },
+    { id: "mute", pinned: false, muted: row.muted },
+    { id: "close-chat", pinned: false, muted: false },
   ];
 }
