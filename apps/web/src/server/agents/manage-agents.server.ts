@@ -173,6 +173,10 @@ export class ManageAgents {
       // A deleted Agent has no editable configuration. Refused here rather than only by
       // the restart below, so a stopped/deleted Agent cannot be silently rewritten either.
       assertAgentLive(current);
+      // A Computer can be chosen only while the Agent has none; after that it moves through
+      // the migration flow, never through this update.
+      if (current.computerId && input.computerId && input.computerId !== current.computerId)
+        throw new AppError("INVALID_INPUT", { errorId: "agent-computer-locked" });
       const computerId = input.computerId ?? current.computerId;
       if (!computerId) throw new AppError("INVALID_INPUT", { errorId: "agent-computer-required" });
       if (!providers.has(input.provider))
@@ -220,9 +224,6 @@ export class ManageAgents {
       const runtimeChanged =
         JSON.stringify(current.runtimeConfig) !== JSON.stringify(runtimeConfig);
       const computerChanged = computerId !== current.computerId;
-      // A migration is already moving it; a second move would race the switch.
-      if (computerChanged && (await this.agents.hasActiveMigration(current.id)))
-        throw new AppError("CONFLICT", { errorId: "agent-migrating" });
       if (
         (runtimeChanged || computerChanged) &&
         !(await this.availability.canRun(principal.workspaceId, principal.userId, computerId, {

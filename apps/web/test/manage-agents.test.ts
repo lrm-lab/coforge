@@ -13,7 +13,6 @@ function fixture(options?: {
   unavailable?: boolean;
   encryptionFails?: boolean;
   createFails?: boolean;
-  migrating?: boolean;
 }) {
   const records: AgentRecord[] = [];
   const starts: unknown[] = [];
@@ -30,7 +29,6 @@ function fixture(options?: {
         (agent) => agent.workspaceId === workspaceId && agent.computerId === computerId,
       ),
     listDeletedForComputer: async () => [],
-    hasActiveMigration: async () => options?.migrating ?? false,
     listOwnedInWorkspace: async (workspaceId, ownerId) =>
       records.filter((agent) => agent.workspaceId === workspaceId && agent.ownerId === ownerId),
     create: async (input) => {
@@ -210,56 +208,17 @@ describe("ManageAgents", () => {
     });
   });
 
-  test("moves a bound weekly-report assistant onto another Computer", async () => {
+  test.each([
+    ["weekly-report-assistant-user-1", "assistant-agent"],
+    ["builder", "builder-agent"],
+  ])("refuses to change the Computer of a bound Agent (%s), stopping nothing", async (name, id) => {
     const { agentManagement, records, starts, stops } = fixture();
     records.push({
-      id: "assistant-agent",
+      id,
       workspaceId: "workspace-1",
       ownerId: "user-1",
-      name: "weekly-report-assistant-user-1",
-      displayName: "李健的周报助手",
-      computerId: "computer-1",
-      runtimeConfig: {
-        runtime: RUNTIME_PROVIDER.PI,
-        provider: { kind: "default" },
-        model: "",
-        modelProvider: "",
-        reasoning: "",
-      },
-      createdAt: new Date(),
-    });
-
-    const result = await agentManagement.update(
-      { userId: "user-1", workspaceId: "workspace-1", role: "admin" as const },
-      {
-        agentId: "assistant-agent",
-        description: "",
-        provider: RUNTIME_PROVIDER.PI,
-        computerId: "computer-2",
-      },
-    );
-
-    expect(records[0]?.computerId).toBe("computer-2");
-    expect(result.restart).toBe("published");
-    expect(stops).toEqual([
-      expect.objectContaining({ computerId: "computer-1", agentId: "assistant-agent" }),
-    ]);
-    expect(starts).toEqual([
-      expect.objectContaining({
-        intent: expect.objectContaining({ computerId: "computer-2", agentId: "assistant-agent" }),
-        userId: "user-1",
-      }),
-    ]);
-  });
-
-  test("refuses to move an Agent a migration is already moving, before stopping anything", async () => {
-    const { agentManagement, records, starts, stops } = fixture({ migrating: true });
-    records.push({
-      id: "moving-agent",
-      workspaceId: "workspace-1",
-      ownerId: "user-1",
-      name: "moving-agent",
-      displayName: "Mover",
+      name,
+      displayName: name,
       computerId: "computer-1",
       runtimeConfig: {
         runtime: RUNTIME_PROVIDER.PI,
@@ -271,13 +230,11 @@ describe("ManageAgents", () => {
       createdAt: new Date(),
     });
     await expect(
-      agentManagement.update(principal, {
-        agentId: "moving-agent",
-        description: "",
-        provider: RUNTIME_PROVIDER.PI,
-        computerId: "computer-2",
-      }),
-    ).rejects.toMatchObject({ code: "CONFLICT", errorId: "agent-migrating" });
+      agentManagement.update(
+        { userId: "user-1", workspaceId: "workspace-1", role: "admin" as const },
+        { agentId: id, description: "", provider: RUNTIME_PROVIDER.PI, computerId: "computer-2" },
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "agent-computer-locked" });
     expect(records[0]?.computerId).toBe("computer-1");
     expect([...stops, ...starts]).toEqual([]);
   });

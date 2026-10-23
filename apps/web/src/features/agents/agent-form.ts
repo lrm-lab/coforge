@@ -60,6 +60,7 @@ const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
   ["agent-runtime-unavailable", m.agent_form_runtime_unavailable],
   ["agent-migrating", m.agent_form_migrating],
   ["agent-computer-required", m.agent_form_computer_required],
+  ["agent-computer-locked", m.agent_form_computer_locked],
   ["agent-name-taken", m.agent_form_name_taken],
   ["agent-name-required", m.agent_form_name_required],
   ["agent-provider-unsupported", m.agent_form_provider_unsupported],

@@ -135,11 +135,9 @@ export function AgentProfilePanel({
   usePrefetchAgentActivityFeed(agentId, canManage);
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
   const loadComputers = useServerFn(listComputers);
-  // An unbound Agent needs a Computer before its runtime can be saved. A weekly-report
-  // assistant keeps the picker after that first bind, so a retired Computer can be replaced.
-  const offerComputerPicker = Boolean(
-    profile && canManage && (!profile.computer || profile.isWeeklyReportAssistant),
-  );
+  // An unbound Agent needs a Computer before its runtime can be saved; once bound, only
+  // "Move to another Computer" changes it.
+  const offerComputerPicker = Boolean(profile && canManage && !profile.computer);
   const computersQuery = useQuery({
     queryKey: ["agent-runtime-computers", profile?.id, profile?.computerId ?? "none"],
     queryFn: () => loadComputers(),

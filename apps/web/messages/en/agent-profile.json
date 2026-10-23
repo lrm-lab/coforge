@@ -1,3 +1,4 @@
 {
-  "agent_profile_edit_visibility": "Edit visibility"
+  "agent_profile_edit_visibility": "Edit visibility",
+  "agent_form_computer_locked": "This Agent already runs on a Computer; use Move to another Computer to change it."
 }

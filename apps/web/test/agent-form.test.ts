@@ -108,6 +108,7 @@ test("a refused Agent save names the reason instead of only asking to try again"
   expect(refusal("agent-name-required")).toBe(m.agent_form_name_required());
   expect(refusal("agent-provider-unsupported")).toBe(m.agent_form_provider_unsupported());
   expect(refusal("agent-computer-required")).toBe(m.agent_form_computer_required());
+  expect(refusal("agent-computer-locked")).toBe(m.agent_form_computer_locked());
   expect(refusal("agent-not-authorized", "ACCESS_DENIED")).toBe(m.agent_form_not_authorized());
   expect(refusal("agent-model-provider-required")).toBe(m.agent_form_model_provider_required());
   expect(refusal("agent-credential-unavailable", "INTERNAL_ERROR")).toBe(

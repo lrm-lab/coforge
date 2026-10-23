@@ -1,3 +1,4 @@
 {
-  "agent_profile_edit_visibility": "编辑可见性"
+  "agent_profile_edit_visibility": "编辑可见性",
+  "agent_form_computer_locked": "这个智能体已经分配了电脑，要换请用「迁移到其他电脑」。"
 }

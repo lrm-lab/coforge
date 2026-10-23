@@ -6,7 +6,6 @@ import {
   recordAgentProfileUpdated,
   recordAgentRuntimeConfigChanged,
 } from "#src/server/app-notifications/agent-events.server";
-import { FINISHED_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -109,8 +108,6 @@ export interface AgentRepository {
   /** Deleted Agents still assigned to one Computer: recovery stops these rather than
    * starting them, so a delete whose Stop never reached an offline Daemon is reconciled. */
   listDeletedForComputer(workspaceId: string, computerId: string): Promise<AgentRecord[]>;
-  /** Whether a migration that has not finished is moving the Agent between Computers. */
-  hasActiveMigration(agentId: string): Promise<boolean>;
   listOwnedInWorkspace(workspaceId: string, ownerId: string): Promise<AgentRecord[]>;
   /** `introductionDueAt` is set only by a person's create (`ManageAgents.create`). */
   create(input: AgentCreateInput): Promise<AgentRecord>;
@@ -164,14 +161,6 @@ export class PrismaAgentRepository implements AgentRepository {
       visibility:
         visibility === AGENT_VISIBILITY.PUBLIC ? AGENT_VISIBILITY.PUBLIC : AGENT_VISIBILITY.PRIVATE,
     }));
-  }
-
-  async hasActiveMigration(agentId: string) {
-    const active = await this.db.agentMigration.findFirst({
-      where: { agentId, state: { notIn: [...FINISHED_AGENT_MIGRATION_STATES] } },
-      select: { id: true },
-    });
-    return Boolean(active);
   }
 
   async listDeletedForComputer(workspaceId: string, computerId: string) {

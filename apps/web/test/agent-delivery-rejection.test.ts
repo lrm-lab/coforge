@@ -212,7 +212,6 @@ test("a Daemon reconnect still starts an Agent whose last Start failed", async (
       listInWorkspace: async () => [],
       listForComputer: async () => [record()],
       listDeletedForComputer: async () => [],
-      hasActiveMigration: async () => false,
       create: async () => {
         throw new Error("not used");
       },
@@ -336,7 +335,6 @@ test("ready recovery reads the Agent's control record once to start it", async (
       listInWorkspace: async () => [],
       listForComputer: async () => [record],
       listDeletedForComputer: async () => [],
-      hasActiveMigration: async () => false,
       create: async () => {
         throw new Error("not used");
       },
