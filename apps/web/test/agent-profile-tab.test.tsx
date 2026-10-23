@@ -305,7 +305,7 @@ test("a non-manager never sees the Runtime config pencil", () => {
   expect(markup).not.toContain(m.agent_profile_edit_runtime_config());
 });
 
-test("an Agent without a Computer shows no Runtime config pencil, even for a manager", () => {
+test("an Agent without a Computer still gives a manager the Runtime config pencil", () => {
   const markup = render(
     <AgentProfileTab
       profile={profileFixture({ ownedByCurrentUser: true, computerId: null, computer: undefined })}
@@ -318,7 +318,7 @@ test("an Agent without a Computer shows no Runtime config pencil, even for a man
       runtimeCredentialDialog={null}
     />,
   );
-  expect(markup).not.toContain(m.agent_profile_edit_runtime_config());
+  expect(markup).toContain(`aria-label="${m.agent_profile_edit_runtime_config()}"`);
 });
 
 test("the Runtime config pencil never renders when the container gives no onStartRuntimeEdit", () => {

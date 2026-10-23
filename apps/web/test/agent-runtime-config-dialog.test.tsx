@@ -38,7 +38,7 @@ test("an unbound Agent's setup form shows the Computer picker and setup title", 
       onClose={() => {}}
     />,
   );
-  expect(markup).toContain(m.agent_profile_setup_runtime());
+  expect(markup).toContain(m.agent_profile_edit_runtime_config());
   expect(markup).toContain(m.agent_form_computer());
   expect(markup).toContain("LIJIAN");
 });

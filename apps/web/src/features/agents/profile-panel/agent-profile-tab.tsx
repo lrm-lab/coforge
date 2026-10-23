@@ -120,7 +120,6 @@ export function AgentProfileTab({
 }) {
   const { runtime, model, reasoning } = profile.runtimeConfig;
   const canEditRuntime = canManage && Boolean(onStartRuntimeEdit);
-  const needsComputerSetup = canManage && !profile.computer;
   const runtimeLabel = runtimeProviderLabel(runtime);
   const runtimeIcon = <RuntimeProviderMark provider={runtime} className="size-3.5" />;
   const creatorName = humanLabel(profile.owner);
@@ -266,7 +265,7 @@ export function AgentProfileTab({
       <section className="border-b border-secondary px-6 py-5">
         <div className="flex items-center gap-1.5">
           <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_runtime()}</p>
-          {canEditRuntime && !needsComputerSetup && (
+          {canEditRuntime && (
             <ButtonUtility
               aria-label={m.agent_profile_edit_runtime_config()}
               tooltip={m.agent_profile_edit_runtime_config()}
@@ -278,14 +277,7 @@ export function AgentProfileTab({
           )}
           {canManage && runtimeCredentialDialog}
         </div>
-        {needsComputerSetup && onStartRuntimeEdit && (
-          <div className="mt-3">
-            <Button color="secondary" size="sm" onPress={onStartRuntimeEdit}>
-              {m.agent_profile_setup_runtime()}
-            </Button>
-          </div>
-        )}
-        <div className={`flex flex-col gap-3 ${needsComputerSetup ? "mt-4" : "mt-3"}`}>
+        <div className="mt-3 flex flex-col gap-3">
           <FactRow label={m.agent_runtime_field()}>
             {/* One pill: the runtime (its usage peek) and, once reported, its context (the
               context peek). Each part stays its own button inside it. */}

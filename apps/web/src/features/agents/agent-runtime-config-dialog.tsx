@@ -106,10 +106,7 @@ export function AgentRuntimeConfigForm({
         });
       }}
     >
-      <DialogHeader
-        title={computerId ? m.agent_profile_edit_runtime_config() : m.agent_profile_setup_runtime()}
-        onClose={onClose}
-      />
+      <DialogHeader title={m.agent_profile_edit_runtime_config()} onClose={onClose} />
       {/* One column: the runtime fields stack (provider, then the model it belongs to, then
           reasoning) instead of splitting into two columns on a wide screen. */}
       <div className="grid gap-4 px-6 py-6">
