@@ -12,7 +12,11 @@ afterEach(async () => {
 
 const target = process.platform === "darwin" ? "darwin-arm64" : "linux-x64";
 const installerPath = `/installer/0.1.0/${target}/coforge-installer.gz`;
-const requests = ["/installer/latest", installerPath, `/installer/0.1.0/${target}/coforge-installer.sha256`];
+const requests = [
+  "/installer/latest",
+  installerPath,
+  `/installer/0.1.0/${target}/coforge-installer.sha256`,
+];
 
 function checksum(bytes: Uint8Array): string {
   return new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
@@ -33,10 +37,13 @@ async function fixture(options: {
   log: string;
 }) {
   const installer = fakeInstaller(options.log, options.command, options.exit);
-  const files = new Map<string, Uint8Array>([
+  const files = new Map<string, Uint8Array<ArrayBuffer>>([
     ["/installer/latest", Buffer.from("0.1.0\n")],
     [installerPath, Bun.gzipSync(installer)],
-    [`/installer/0.1.0/${target}/coforge-installer.sha256`, Buffer.from(`${checksum(installer)}\n`)],
+    [
+      `/installer/0.1.0/${target}/coforge-installer.sha256`,
+      Buffer.from(`${checksum(installer)}\n`),
+    ],
   ]);
   const requested: string[] = [];
   const server = serveStub({
