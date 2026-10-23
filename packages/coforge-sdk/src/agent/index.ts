@@ -21,3 +21,4 @@ export * from "./agent-manifest";
 export { checkBaseUrlOrigin, httpsUrlProblem } from "./agent-manifest-checks";
 export * from "./agent-manifest-json-schema";
 export * from "./agent-manifest-request";
+export * from "./agent-manifest-validate";

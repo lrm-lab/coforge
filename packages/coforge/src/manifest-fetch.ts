@@ -5,6 +5,7 @@ import {
   type AgentManifest,
   type AgentManifestProblem,
 } from "@lrm/coforge-sdk/agent";
+import { readCappedText } from "./capped-read";
 
 /** What reading an app's Agent manifest came to. `absent` is a 404/410 at the URL the CLI derived
  * from the homepage: the app publishes none, which is fine. `missing` is the same answer at a URL
@@ -43,32 +44,6 @@ const invalid = (message: string): ManifestOutcome => ({
   kind: "invalid",
   problems: [{ path: "", message }],
 });
-
-/** Reads the body, refusing more than the cap by `content-length` and again while streaming. */
-async function readCapped(response: Response): Promise<string | null> {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > AGENT_MANIFEST_LIMITS.maxBytes) {
-    await discard(response);
-    return null;
-  }
-  const reader = response.body?.getReader();
-  if (!reader) return "";
-  const decoder = new TextDecoder();
-  let text = "";
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return text + decoder.decode();
-      size += value.byteLength;
-      if (size > AGENT_MANIFEST_LIMITS.maxBytes) return null;
-      text += decoder.decode(value, { stream: true });
-    }
-  } finally {
-    // Cancelling also covers a read that threw or timed out; after a full read it is a no-op.
-    await reader.cancel().catch(() => undefined);
-  }
-}
 
 /**
  * GETs and validates the manifest at `url`, every time (nothing is cached). Redirects are followed
@@ -145,7 +120,7 @@ async function classify(response: Response, derived: boolean): Promise<ManifestO
     await discard(response);
     return invalid(`the manifest must be served as JSON, not "${type || "no content type"}"`);
   }
-  const text = await readCapped(response);
+  const text = await readCappedText(response, AGENT_MANIFEST_LIMITS.maxBytes);
   if (text === null) return invalid("the manifest is larger than 1 MiB");
   let value: unknown;
   try {

@@ -37,6 +37,8 @@ export type CliErrorInit = {
   /** Extra structured data carried only in `--json` mode, alongside the fixed error fields. */
   details?: unknown;
   outputMode?: CliErrorOutputMode;
+  /** The process exit status; 1 when unset. */
+  exitCode?: number;
 };
 
 export class CliError extends Error {
@@ -51,6 +53,7 @@ export class CliError extends Error {
   readonly stdoutText?: string;
   readonly details?: unknown;
   readonly outputMode: CliErrorOutputMode;
+  readonly exitCode?: number;
 
   constructor(init: CliErrorInit) {
     super(init.message);
@@ -66,6 +69,7 @@ export class CliError extends Error {
     this.stdoutText = init.stdoutText;
     this.details = init.details;
     this.outputMode = init.outputMode ?? "text";
+    this.exitCode = init.exitCode;
   }
 }
 
@@ -89,6 +93,7 @@ export function withOutputMode(
     contextText: error.contextText,
     stdoutText: outputMode === "text" ? error.stdoutText : undefined,
     details: error.details,
+    exitCode: error.exitCode,
     ...overrides,
     outputMode,
   });

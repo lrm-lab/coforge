@@ -11,5 +11,6 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Attachments](attachments.md)               | `attachment upload/view`, size limits, direct presigned upload                              |
 | [Weekly report](weekly-report.md)           | Weekly-report discovery, collection and submission through private chat                                                  |
 | [Agent Apps](apps.md)                       | `app list/invoke/token`: apps, manifest actions, app token; `app config`                    |
+| [Calling app actions](app-invoke.md)        | `app invoke <app-key> <action>`: input, validation, Bearer call, errors                     |
 | [Action cards](action-cards.md)             | `action prepare`, supported card kinds, the app approval card, how a human commits a card   |
 | [Output formats](output.md)                 | The plain-text formats the CLI prints                                                       |

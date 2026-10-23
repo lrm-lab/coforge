@@ -71,7 +71,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
       if (error.stdoutText) console.log(error.stdoutText);
       console.error(renderCliError(error));
     } else console.error(thrownMessage(error));
-    process.exitCode = 1;
+    process.exitCode = error instanceof CliError ? (error.exitCode ?? 1) : 1;
   }
 }
 

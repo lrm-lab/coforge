@@ -7,6 +7,8 @@ export type AgentManifestRequestParts = {
   path: string;
   /** Query pairs, in input order; an array input becomes repeated pairs. */
   query: [string, string][];
+  /** The endpoint's absolute URL, without the query; present when a `baseUrl` was given. */
+  url?: string;
   /** A JSON object for POST, PUT and PATCH; absent for GET and DELETE. */
   body?: Record<string, unknown>;
 };
@@ -23,9 +25,29 @@ const scalar = (value: unknown): value is string | number | boolean =>
  * `{name}` path parameters come from the same-named input property and are percent-encoded per
  * segment; for GET and DELETE the other top-level properties become the query, for POST, PUT and
  * PATCH they become a JSON object body. A path parameter is never repeated in the query or body.
+ * With `baseUrl`, the result also carries the absolute `url`, and a path that would move the request
+ * off `baseUrl`'s origin fails, so a caller cannot forget the check.
  * Pure: it validates the shape only, not the input against the schema.
  */
 export function buildActionRequest(
+  action: Pick<AgentManifestAction, "endpoint">,
+  input: unknown,
+  baseUrl?: string,
+): AgentManifestRequestResult {
+  const built = buildParts(action, input);
+  if (!built.ok || baseUrl === undefined) return built;
+  try {
+    const base = baseUrl.replace(/\/+$/, "");
+    const url = new URL(built.path === "/" ? baseUrl : `${base}${built.path}`);
+    if (url.origin !== new URL(baseUrl).origin)
+      return { ok: false, message: "the request would leave the app's API origin" };
+    return { ...built, url: url.href };
+  } catch {
+    return { ok: false, message: "the app's base_url and the path do not form a URL" };
+  }
+}
+
+function buildParts(
   action: Pick<AgentManifestAction, "endpoint">,
   input: unknown,
 ): AgentManifestRequestResult {

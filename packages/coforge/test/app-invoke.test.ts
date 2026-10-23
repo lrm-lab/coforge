@@ -83,16 +83,17 @@ async function invoke(args: string[], outcome: ManifestOutcome, apps: AgentAppVi
 }
 const valid: ManifestOutcome = { kind: "valid", manifest: MANIFEST };
 
-test("app invoke is parsed, and calling an action is not available yet", () => {
+test("app invoke is parsed", () => {
   expect(
     parseAppArgs(["invoke", "acme-notes", "--list-actions", "--action", "a", "--json"]),
   ).toEqual({
     command: "app-invoke",
     appKey: "acme-notes",
     action: "a",
+    listActions: true,
     json: true,
   });
-  expect(() => parseAppArgs(["invoke", "acme-notes"])).toThrow("not available yet");
+  expect(() => parseAppArgs(["invoke", "acme-notes"])).toThrow("needs an action name");
   for (const args of [
     ["invoke"],
     ["invoke", "a", "--list-actions", "--bogus"],

@@ -27,8 +27,8 @@ error `MANIFEST_MISSING`.
 ## Where it is fetched
 
 By the Agent's `coforge` CLI, on every use, nothing cached; the server never fetches it.
-`coforge app invoke <app-key> --list-actions` is the reader today
-([CLI reference](../agent-cli/apps.md#app-invoke)). The CLI:
+`coforge app invoke <app-key> --list-actions` reads it and `coforge app invoke <app-key> <action>`
+calls an action ([CLI reference](../agent-cli/apps.md#app-invoke), [calling](../agent-cli/app-invoke.md)). The CLI:
 
 - GETs with `accept: application/json`; the URL must be https without credentials, and every redirect
   hop too.
@@ -41,7 +41,7 @@ By the Agent's `coforge` CLI, on every use, nothing cached; the server never fet
   app's homepage or as the manifest URL, so a manifest cannot point an Agent at an unrelated host.
 
 `--action` on a `local_cli` app answers "declares no HTTP actions" (`NO_HTTP_ACTIONS`) rather than
-`ACTION_NOT_FOUND`. Calling an action is not available yet.
+`ACTION_NOT_FOUND`.
 
 ## Rules for every object
 

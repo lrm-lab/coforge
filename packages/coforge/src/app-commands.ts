@@ -1,8 +1,11 @@
 import type { AgentAppAccessState, AgentAppView } from "@lrm/coforge-sdk/agent";
 import type { AppClient } from "./app-client";
 import { runWithAppToken } from "./app-token-exec";
-import { CliError } from "./cli-error";
-import { runListActions, type AppActionsIo, type AppInvokeInvocation } from "./app-actions";
+import { parseInvokeArgs } from "./app-invoke-args";
+import { INPUT_MAX_BYTES, readCappedStdin } from "./action-input";
+import { runInvoke, type ActionInvokeIo } from "./action-invoke";
+import { APPROVAL_REQUIRED_EXIT_CODE, requestAppToken } from "./app-token-request";
+import { runListActions, type AppInvokeInvocation } from "./app-actions";
 
 /** `coforge app list`: the Workspace's apps, and with `all` the built-in Agent Apps too. */
 export type AppListInvocation = { command: "app-list"; all?: true; json?: true };
@@ -17,13 +20,11 @@ export type AppTokenInvocation = {
 };
 
 const APP_USAGE =
-  "Usage: coforge app list [--all] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]";
+  "Usage: coforge app list [--all] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app invoke <app-key> <action> [--param key=value]... | [--data-json <object> | --data-file <path|->] [--preflight] [--idempotency-key <key>] [--target <target>] [--timeout <seconds>] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]";
 /** How long the program may run by default; `--timeout` takes 1 to 300 seconds, as the token
  * lives five minutes. */
 export const DEFAULT_APP_TOKEN_TIMEOUT_SECONDS = 60;
 const MAX_APP_TOKEN_TIMEOUT_SECONDS = 300;
-/** Exit status when the app needs a person's approval first: nothing was run. */
-const APPROVAL_REQUIRED_EXIT_CODE = 2;
 
 function invalid(message: string): never {
   throw new Error(`${message}\n${APP_USAGE}`);
@@ -53,7 +54,7 @@ export function parseAppArgs(
       else invalid(`Unexpected argument ${option}`);
     return invocation;
   }
-  if (subcommand === "invoke") return parseInvoke(rest);
+  if (subcommand === "invoke") return parseInvokeArgs(rest, invalid, parseTimeout);
   if (subcommand !== "token") invalid(`Unknown app command ${subcommand ?? ""}`.trim());
   const values: Record<string, string> = {};
   for (let index = 0; index < options.length; index += 2) {
@@ -77,26 +78,6 @@ export function parseAppArgs(
       ? parseTimeout(values["--timeout"])
       : DEFAULT_APP_TOKEN_TIMEOUT_SECONDS,
   };
-}
-
-function parseInvoke(rest: readonly string[]): AppInvokeInvocation {
-  const [appKey, ...options] = rest;
-  if (!appKey || appKey.startsWith("--")) invalid("coforge app invoke needs an app key");
-  const invocation: AppInvokeInvocation = { command: "app-invoke", appKey };
-  let listActions = false;
-  for (let index = 0; index < options.length; index++) {
-    const option = options[index]!;
-    if (option === "--list-actions") listActions = true;
-    else if (option === "--json") invocation.json = true;
-    else if (option === "--action") {
-      const name = options[++index];
-      if (!name || name.startsWith("--")) invalid("--action needs an action name");
-      invocation.action = name;
-    } else invalid(`Unexpected argument ${option}`);
-  }
-  if (!listActions)
-    invalid("Calling actions is not available yet; use --list-actions to see what an app offers");
-  return invocation;
 }
 
 const ACCESS: Record<AgentAppAccessState, string> = {
@@ -130,14 +111,21 @@ function formatAppList(shown: readonly AgentAppView[], all: boolean): string {
   return blocks.join("\n\n");
 }
 
+/** What `app` commands need from the CLI; the optional fields are the `app invoke` seams tests
+ * inject. */
 export type AppCommandIo = {
   stdout(chunk: string | Uint8Array): void;
   stderr(chunk: string | Uint8Array): void;
   /** The CLI's environment; the program gets only a few names of it. */
   env: Record<string, string | undefined>;
-  /** Reads an app's Agent manifest; tests inject one. */
-  fetchManifest?: AppActionsIo["fetchManifest"];
-};
+} & Partial<Omit<ActionInvokeIo, "stdout">>;
+
+/** An input file's text, at most 1 MiB. */
+async function readInputFile(path: string): Promise<string> {
+  const file = Bun.file(path);
+  if (file.size > INPUT_MAX_BYTES) throw new Error("larger than 1 MiB");
+  return file.text();
+}
 
 /** Runs `coforge app list|invoke|token` and resolves to the CLI's exit code. The token is handed to the
  * program on file descriptor 3 and never printed. */
@@ -155,17 +143,19 @@ export async function runAppCommand(
   }
   if (invocation.command === "app-invoke") {
     const { apps } = await client.appList();
-    return runListActions(invocation, apps, {
-      stdout: (chunk) => io.stdout(chunk),
+    const stdout = (chunk: string) => io.stdout(chunk);
+    if (invocation.listActions)
+      return runListActions(invocation, apps, { stdout, fetchManifest: io.fetchManifest });
+    return runInvoke(invocation, apps, client, {
+      stdout,
       fetchManifest: io.fetchManifest,
+      fetch: io.fetch,
+      requestTimeoutMs: io.requestTimeoutMs,
+      readFile: io.readFile ?? readInputFile,
+      readStdin: io.readStdin ?? (() => readCappedStdin()),
     });
   }
-  const ask = () => client.appToken(invocation.appKey, invocation.target);
-  // A CONFLICT is a lost race with a concurrent use of the same app: asking once more settles it.
-  const answer = await ask().catch((error: unknown) => {
-    if (error instanceof CliError && error.code === "CONFLICT") return ask();
-    throw error;
-  });
+  const answer = await requestAppToken(client, invocation.appKey, invocation.target);
   if (answer.status === "issued")
     return runWithAppToken({
       token: answer.access_token,

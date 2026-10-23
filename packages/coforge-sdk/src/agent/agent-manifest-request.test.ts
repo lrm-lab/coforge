@@ -62,3 +62,14 @@ test("a __proto__ input key stays an own body property", () => {
   const result = buildActionRequest(action("POST", "/n"), JSON.parse('{"__proto__": {"x": 1}}'));
   expect(result.ok && Object.keys(result.body ?? {})).toEqual(["__proto__"]);
 });
+
+test("with a base URL the result has the absolute URL, and a path off its origin fails", () => {
+  const base = "https://api.example.com/v1/";
+  expect(buildActionRequest(action("GET", "/notes/{id}"), { id: "1" }, base)).toMatchObject({
+    ok: true,
+    url: "https://api.example.com/v1/notes/1",
+  });
+  expect(buildActionRequest(action("GET", "/"), {}, base)).toMatchObject({ url: base });
+  const off = buildActionRequest(action("GET", "@evil.example/x"), {}, "https://api.example.com");
+  expect(off.ok).toBe(false);
+});

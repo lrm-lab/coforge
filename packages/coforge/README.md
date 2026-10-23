@@ -17,8 +17,15 @@ The command reference lives in [`docs/agent-cli/`](../../docs/agent-cli/README.m
 | `src/cli-error.ts`                          | The typed CLI failure and its rendering                                                        |
 | `src/refusal-guidance.ts`                   | What a server refusal means for the Agent's next step                                          |
 | `src/app-config.ts`                         | `app config`: read or change one of the Agent's own Apps' config                               |
-| `src/app-commands.ts`                       | `app list/invoke/token`: parsing, the list text, approval-required guidance                    |
+| `src/app-commands.ts`                       | `app list/token` parsing and dispatch, the list text, approval-required guidance               |
+| `src/app-invoke-args.ts`                    | `app invoke` argument parsing                                                                  |
+| `src/action-invoke.ts`                      | `app invoke`: manifest, action, input, request, preflight or token, send                       |
+| `src/action-input.ts`                       | An action's input from `--param`, JSON text, a file or stdin: type coercion, 1 MiB cap         |
+| `src/action-response.ts`                    | An app's answer: capped read, token redaction, classification into a result or a `CliError`    |
+| `src/app-token-request.ts`                  | The app token request `app token` and `app invoke` share, and the approval exit status         |
 | `src/app-actions.ts`                        | `app invoke --list-actions`: actions as text or typed JSON, text cleaned                       |
+| `src/manifest-read.ts`                      | Reading an app's manifest for `app invoke`: cleaned text, typed failures, problem lines        |
+| `src/capped-read.ts`                        | Reading a response or stream as text up to a byte cap                                          |
 | `src/manifest-fetch.ts`                     | An app's Agent manifest fetch: https only, 1 MiB and 10 s caps, outcomes                       |
 | `src/app-client.ts`                         | The `app list` and `app token` requests through the local proxy                                |
 | `src/app-token-exec.ts`                     | Running a program with an app token: fd 3, minimal environment, redaction, timeout, group stop |
