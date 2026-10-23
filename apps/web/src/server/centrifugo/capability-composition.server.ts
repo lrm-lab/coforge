@@ -4,6 +4,7 @@ import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-c
 import {
   getPiChatCapabilityLease,
   getPiChatControlsLease,
+  getPiChatFilesLease,
 } from "#src/server/pi-chat/pi-chat-capability.server";
 
 /** Every ready and heartbeat updates the same set of feature capability leases. */
@@ -15,6 +16,7 @@ export function daemonCapabilityLeases() {
     getAppConfigCapabilityLease(),
     getPiChatCapabilityLease(),
     getPiChatControlsLease(),
+    getPiChatFilesLease(),
   ];
   return {
     reminderLease,

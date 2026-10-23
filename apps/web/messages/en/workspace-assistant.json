@@ -87,5 +87,20 @@
   "pi_chat_inputs_interrupted": "The result of these additional inputs could not be confirmed. Check the history before sending again.",
   "pi_chat_sending": "Sending…",
   "pi_chat_queue_held": "Taken text is saved with this chat until your next accepted message.",
-  "pi_chat_queue_restore": "Restore to composer"
+  "pi_chat_queue_restore": "Restore to composer",
+  "pi_chat_files": "Files",
+  "pi_chat_files_close": "Close files",
+  "pi_chat_files_scope": "Working directory on this cloud Computer",
+  "pi_chat_files_hidden": "Show hidden files",
+  "pi_chat_files_upload": "Upload",
+  "pi_chat_files_upload_error": "Upload failed. Files must be 10 MB or smaller. Retry to upload again.",
+  "pi_chat_files_upgrade": "Update this cloud Computer to browse files.",
+  "pi_chat_files_error": "Unable to load this file or folder. Check the connection and retry.",
+  "pi_chat_files_empty": "No files yet. Files created here by the AI and your uploads will appear here.",
+  "pi_chat_files_mention": "Reference in chat",
+  "pi_chat_files_download": "Download",
+  "pi_chat_files_large": "This file exceeds the 10 MB limit.",
+  "pi_chat_files_binary": "Preview unavailable. Download to open this file.",
+  "pi_chat_files_resize": "Resize files panel with drag or left/right arrow keys",
+  "pi_chat_files_open": "Open file"
 }

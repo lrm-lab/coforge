@@ -3,7 +3,10 @@ import { z } from "zod";
 import { piChatCommandSchema } from "@lrm/coforge-sdk/internal/pi-chat";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
-import { getPiChatControlsLease } from "#src/server/pi-chat/pi-chat-capability.server";
+import {
+  getPiChatControlsLease,
+  getPiChatFilesLease,
+} from "#src/server/pi-chat/pi-chat-capability.server";
 import {
   piChatConfiguration,
   productionPiChat,
@@ -31,6 +34,11 @@ export const getPiChatComputers = createServerFn({ method: "GET" })
         computers.map(async (computer) => ({
           id: computer.id,
           name: computer.displayName || computer.name,
+          files: piChatConfiguration()
+            ? await getPiChatFilesLease()
+                .supports(context.workspaceId, computer.id)
+                .catch(() => false)
+            : false,
           controls: piChatConfiguration()
             ? await getPiChatControlsLease()
                 .supports(context.workspaceId, computer.id)

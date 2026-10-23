@@ -9,7 +9,11 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { PiChatGateway } from "./pi-chat-gateway.server";
 import { RedisPiChatResults } from "./pi-chat-results.server";
-import { getPiChatCapabilityLease, getPiChatControlsLease } from "./pi-chat-capability.server";
+import {
+  getPiChatCapabilityLease,
+  getPiChatControlsLease,
+  getPiChatFilesLease,
+} from "./pi-chat-capability.server";
 
 export function piChatConfiguration() {
   return !!(
@@ -45,6 +49,8 @@ export function productionPiChat(db: PrismaClient) {
     canUse: (scope) => canUsePiChat(db, scope),
     online: async (scope, command) =>
       (await getPiChatCapabilityLease().supports(scope.workspaceId, scope.computerId)) &&
+      (!(command.action === "files" || command.action === "file" || command.action === "upload") ||
+        (await getPiChatFilesLease().supports(scope.workspaceId, scope.computerId))) &&
       (!(
         command.action === "models" ||
         command.action === "take_queue" ||

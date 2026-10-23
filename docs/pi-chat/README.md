@@ -4,6 +4,7 @@ The **AI workbench** at `/w/<workspace>/pi-chat` opens independent native Pi
 conversations in the current user's cloud Computer. It supports new chats,
 search, rename, deletion, stopping a turn, earlier-message paging, Markdown,
 model selection, native steering/follow-up queues, thinking returned by the model,
+a collapsible file sidebar with previews, downloads, uploads and chat references,
 complete SDK tool arguments/results (including
 structured details such as edit diffs and patches), and tool
 duration. It does not reset or reuse an ordinary Agent's session.
@@ -40,6 +41,8 @@ pauses following so the revealed content stays in view.
 The interaction reference is [Pi Agent Desktop](https://pi-desktop.app/),
 especially its [session sidebar](https://github.com/DLYZZT/pi-desktop/blob/v0.4.1/src/renderer/components/SessionSidebar.tsx).
 CoForge uses existing Untitled UI components; no upstream UI source is copied.
+
+File browsing and transfer are described in [Working files](files.md).
 
 ## Execution and data
 
@@ -111,7 +114,7 @@ Computer image through its existing release track. Both Web and that Computer's
 embedded Daemon need the new RPC contract. Publishing code alone does not update
 running images. Replacing the Computer container also releases any legacy
 host-launched worker's lock; its persistent volume and native sessions survive.
-Docker needs no engine restart. Controls require `pi-chat-controls:v1`;
+Docker needs no engine restart. Controls require `pi-chat-controls:v1`; files require `pi-chat-files:v1`;
 an older Computer keeps basic chat and prompts for an update. Model switching reads the configured Pi agent directory. Keep
 provider credentials on a private persistent volume, set `PI_CODING_AGENT_DIR`
 to that directory, and preserve existing model defaults when adding a provider.
@@ -142,7 +145,7 @@ together; there is no database migration or session backfill.
   Exceeding that bound is an explicit request failure, never silent truncation.
 - Tool output is the complete result returned by Pi. Pi's own tool limits,
   full-output files, provider context limits and compaction still apply.
-- Attachments/file browsing, editing/retrying past turns, context usage controls,
+- Editing/retrying past turns, context usage controls,
   and importing an existing Agent's history remain follow-up work.
 
 ## Validation
@@ -158,34 +161,7 @@ completion, real file tools, request deduplication and native reload after a
 worker restart. Its model and WSS adapter are controlled fixtures; Redis and Pi
 are real. It writes `.amp/e2e/pi-chat-daemon.json` as repeatable evidence.
 
-UI acceptance follows [the repository policy](agents/testing.md). Before deployment:
-
-- [ ] Verify the navigation and list/detail flow at desktop and mobile sizes,
-  in both themes, including direct links and returning to the list.
-- [ ] Search across date groups, clear a no-results query, and check both languages.
-- [ ] Expand process details and tool input/output; verify a failed tool remains
-  indicated when collapsed, and all output/diff/patch text remains available.
-- [ ] Copy a reply, code block and tool result; verify the clipboard and feedback.
-- [ ] Scroll up during a reply, load earlier history, switch chats and return;
-  verify reading position, expanded details, loaded pages and drafts. Expand long
-  details at the bottom and confirm the disclosure stays in view. Resume with Back to latest.
-- [ ] Type long/multiline text; verify composer growth, Enter, Shift+Enter and IME.
-- [ ] Open the conversation menu with keyboard and touch; rename and cancel delete.
-- [ ] Start two chats; verify independent context, actual model display,
-  Markdown/code rendering, and drafts retained when switching conversations.
-- [ ] Verify complete edit diffs and patches survive switching chats and reloading.
-- [ ] Fail the first send with missing model credentials, repair the credentials,
-  and verify a new message continues the same chat without replaying the failure.
-- [ ] Stop, rename, cancel deletion, confirm deletion from both menus, and reload.
-- [ ] Queue Steer/Follow-up during a tool, take back pending text with Alt+Up,
-  then switch model while idle; verify queued ordering and model persistence.
-- [ ] Delay history refresh with realtime disconnected; accepted text stays visible, Stop appears
-  immediately, and another send uses Steer/Follow-up. Verify no duplicates after refresh and no
-  regression to running after a delayed send reply arrives behind a newer terminal state.
-- [ ] Disconnect/reconnect while sending; retry the same message without
-  duplicate tool execution. Switch Users/Workspaces and verify isolation.
-- [ ] Check unavailable configuration, an old host/image, offline Computer,
-  model authentication failure, worker restart and keyboard/IME behavior.
+UI acceptance and the manual checklist are in [Validation](validation.md).
 
 ## Upstream contracts
 

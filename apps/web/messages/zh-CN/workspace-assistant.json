@@ -87,5 +87,20 @@
   "pi_chat_inputs_interrupted": "未能确认这些追加消息是否已执行。请检查历史后再决定是否重新发送。",
   "pi_chat_sending": "正在发送…",
   "pi_chat_queue_held": "已取回的文字会保存在会话中，直到下一条消息发送成功。",
-  "pi_chat_queue_restore": "恢复到输入框"
+  "pi_chat_queue_restore": "恢复到输入框",
+  "pi_chat_files": "文件",
+  "pi_chat_files_close": "关闭文件栏",
+  "pi_chat_files_scope": "当前云电脑的工作目录",
+  "pi_chat_files_hidden": "显示隐藏文件",
+  "pi_chat_files_upload": "上传",
+  "pi_chat_files_upload_error": "上传失败。文件不能超过 10 MB，请重试。",
+  "pi_chat_files_upgrade": "请更新这台云电脑以浏览文件。",
+  "pi_chat_files_error": "无法加载文件或文件夹，请检查连接后重试。",
+  "pi_chat_files_empty": "暂无文件。AI 在此创建的文件和你上传的文件会显示在这里。",
+  "pi_chat_files_mention": "引用到对话",
+  "pi_chat_files_download": "下载",
+  "pi_chat_files_large": "文件超过 10 MB 限制。",
+  "pi_chat_files_binary": "无法预览，请下载后打开。",
+  "pi_chat_files_resize": "拖动或使用左右方向键调整文件栏宽度",
+  "pi_chat_files_open": "打开文件"
 }
