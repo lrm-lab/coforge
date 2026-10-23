@@ -105,7 +105,7 @@ function Write-CoforgeStep([string]$Message) {
 # would end the user's own session. 75 is sysexits' EX_TEMPFAIL.
 $downloadFailedStatus = 75
 
-function Stop-CoforgeDownload([string]$Message) {
+function Exit-CoforgeDownload([string]$Message) {
   if ($PrepareDirectory -or $ResolveOnly) {
     # These modes run as the Computer's own child process (-File), never inside a user session.
     [Console]::Error.WriteLine($Message)
@@ -124,14 +124,14 @@ function Get-CoforgeObject([string]$Uri, [string]$OutFile, [long]$MaxBytes, [swi
     throw "install.ps1: download failed with curl exit code $curlExit"
   }
   if ($curlExit -ne 0) {
-    Stop-CoforgeDownload "install.ps1: download failed with curl exit code $curlExit"
+    Exit-CoforgeDownload "install.ps1: download failed with curl exit code $curlExit"
   }
   if ($status -cmatch '^3[0-9]{2}\z') {
     # A redirect is the feed answering against its contract, not a failure to reach it.
     throw "install.ps1: download returned HTTP $status (redirects are not followed)"
   }
   if ($status -cnotmatch '^2[0-9]{2}\z') {
-    Stop-CoforgeDownload "install.ps1: download returned HTTP $status (redirects are not followed)"
+    Exit-CoforgeDownload "install.ps1: download returned HTTP $status (redirects are not followed)"
   }
   if ((Get-Item -LiteralPath $OutFile).Length -gt $MaxBytes) {
     throw "install.ps1: download exceeded the maximum allowed size of $MaxBytes bytes"
