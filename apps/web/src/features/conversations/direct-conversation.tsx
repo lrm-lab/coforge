@@ -8,6 +8,7 @@ import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { m } from "#src/paraglide/messages";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
+import { DirectSettingsButton } from "./direct-settings-panel";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
@@ -22,9 +23,12 @@ import type {
 export function DirectConversationHeader({
   conversation,
   onOpenAgentProfile,
+  onChanged,
   ...tabs
 }: HeaderTabs & {
   conversation: DirectConversationView;
+  /** Re-reads the page after the settings panel changed a preference. */
+  onChanged: () => Promise<void>;
   /** Opens the Agent profile panel from this DM's own Agent identity. */
   onOpenAgentProfile?: (agentId: string) => void;
 }) {
@@ -95,15 +99,30 @@ export function DirectConversationHeader({
           </div>
         </>
       }
+      actions={
+        // The -mr-1.5 cancels the button's p-1.5 so its glyph lands on the pane gutter, as in the
+        // channel header.
+        <div className="-mr-1.5 flex shrink-0 items-center">
+          <DirectSettingsButton
+            conversationId={conversation.conversationId}
+            name={conversation.agent.displayName}
+            collapseLongMessages={conversation.collapseLongMessages}
+            onChanged={onChanged}
+          />
+        </div>
+      }
       tabs={conversationHeaderTabs(tabs)}
     />
   );
 }
 
-export function DirectConversation(
-  props: ConversationProps &
-    Pick<ThreadedConversationProps, "channels" | "taskPopup" | "jumpMessage">,
-) {
+export function DirectConversation({
+  onChanged,
+  ...props
+}: ConversationProps &
+  Pick<ThreadedConversationProps, "channels" | "taskPopup" | "jumpMessage"> & {
+    onChanged: () => Promise<void>;
+  }) {
   const { conversation } = props;
   // A deleted Agent's DM stays readable, but nothing new can be sent to it.
   const deleted = Boolean(conversation.agent.deletedAt);
@@ -140,6 +159,7 @@ export function DirectConversation(
           onShowTasks={props.onShowTasks}
           onShowFiles={props.onShowFiles}
           onOpenAgentProfile={props.onOpenAgentProfile}
+          onChanged={onChanged}
         />
       }
       readOnlyNotice={

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading, Text } from "react-aria-components";
 import {
@@ -40,6 +40,7 @@ import {
 } from "./channel-members-page";
 import { MembersStrip } from "./channel-members-strip";
 import { MembersPageHeading, SettingsPanelHeader } from "./channel-settings-header";
+import { PanelSection, PreferenceRow } from "./settings-panel-parts";
 import {
   deletePublicChannel,
   leavePublicChannel,
@@ -370,24 +371,6 @@ function CoordinatorSection({
   );
 }
 
-function PanelSection({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="border-t border-secondary py-5 first:border-t-0">
-      <h3 className="text-md font-semibold text-primary">{title}</h3>
-      {description && <p className="mt-1 text-sm text-tertiary">{description}</p>}
-      <div className="mt-3">{children}</div>
-    </section>
-  );
-}
-
 type InfoForm = ReturnType<typeof useInfoForm>;
 
 /** The Info form's draft and save state. The draft follows the channel until it is edited, so a
@@ -649,26 +632,6 @@ function PreferencesSection({
         </p>
       )}
     </PanelSection>
-  );
-}
-
-function PreferenceRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-primary">{title}</p>
-        <p className="mt-0.5 text-sm text-tertiary">{description}</p>
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
   );
 }
 

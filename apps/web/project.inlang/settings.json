@@ -10,6 +10,7 @@
       "./messages/{locale}/agent-activity.json",
       "./messages/{locale}/agent-runtime.json",
       "./messages/{locale}/conversations.json",
+      "./messages/{locale}/direct-settings.json",
       "./messages/{locale}/composer.json",
       "./messages/{locale}/channel-members.json",
       "./messages/{locale}/workspace-assistant.json",

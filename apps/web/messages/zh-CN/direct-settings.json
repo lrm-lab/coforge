@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "direct_settings_open": "会话设置",
+  "direct_settings_label": "私信",
+  "direct_settings_preferences": "偏好",
+  "direct_settings_pin": "置顶会话",
+  "direct_settings_pin_description": "将此会话固定在你的侧栏顶部。",
+  "direct_settings_collapse_long_messages": "折叠长消息",
+  "direct_settings_collapse_long_messages_description": "超过预览高度的消息折叠在「展开全文」开关后。关闭后此会话的长消息始终完整显示。",
+  "direct_settings_preference_error": "更新失败，请重试。"
+}

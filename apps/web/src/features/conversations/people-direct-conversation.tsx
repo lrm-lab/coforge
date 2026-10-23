@@ -7,6 +7,7 @@ import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { m } from "#src/paraglide/messages";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
+import { DirectSettingsButton } from "./direct-settings-panel";
 import type { ThreadedConversationProps } from "./conversation-types";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
 import { plainMentionsByHandle } from "./message-markdown";
@@ -31,8 +32,13 @@ function useIsSelfConversation(conversation: PeopleDirectConversationView) {
  */
 export function PeopleDirectConversationHeader({
   conversation,
+  onChanged,
   ...tabs
-}: HeaderTabs & { conversation: PeopleDirectConversationView }) {
+}: HeaderTabs & {
+  conversation: PeopleDirectConversationView;
+  /** Re-reads the page after the settings panel changed a preference. */
+  onChanged: () => Promise<void>;
+}) {
   const { peer } = conversation;
   const online = useMemberOnline(peer.id);
   const self = useIsSelfConversation(conversation);
@@ -53,6 +59,18 @@ export function PeopleDirectConversationHeader({
           </h1>
         </>
       }
+      actions={
+        // The -mr-1.5 cancels the button's p-1.5 so its glyph lands on the pane gutter, as in the
+        // channel header.
+        <div className="-mr-1.5 flex shrink-0 items-center">
+          <DirectSettingsButton
+            conversationId={conversation.conversationId}
+            name={peer.displayName}
+            collapseLongMessages={conversation.collapseLongMessages}
+            onChanged={onChanged}
+          />
+        </div>
+      }
       tabs={conversationHeaderTabs(tabs)}
     />
   );
@@ -65,11 +83,12 @@ export function PeopleDirectConversationHeader({
  */
 export function PeopleDirectConversation({
   conversation,
+  onChanged,
   ...props
 }: Omit<
   ThreadedConversationProps,
   "conversation" | "header" | "emptyState" | "conversationName" | "threadContext"
-> & { conversation: PeopleDirectConversationView }) {
+> & { conversation: PeopleDirectConversationView; onChanged: () => Promise<void> }) {
   const { peer } = conversation;
   const self = useIsSelfConversation(conversation);
   const { mentionables } = conversation;
@@ -87,6 +106,7 @@ export function PeopleDirectConversation({
           active="chat"
           onShowTasks={props.onShowTasks}
           onShowFiles={props.onShowFiles}
+          onChanged={onChanged}
         />
       }
       emptyState={{

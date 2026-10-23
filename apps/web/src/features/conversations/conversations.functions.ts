@@ -180,6 +180,19 @@ export const setDirectConversationPinned = createServerFn({ method: "POST" })
     new DirectConversations(db).setPinned(workspaceId, user.id, data.conversationId, data.pinned),
   );
 
+/** Folds long messages in the viewer's DM behind "Show more", or shows them in full. */
+export const setDirectConversationCollapseLongMessages = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationInputSchema.extend({ collapseLongMessages: z.boolean() }))
+  .handler(({ context: { user, db, workspaceId }, data }) =>
+    new DirectConversations(db).setCollapseLongMessages(
+      workspaceId,
+      user.id,
+      data.conversationId,
+      data.collapseLongMessages,
+    ),
+  );
+
 /** Marks the viewer's DM unread, or clears the marker (#122). */
 export const setDirectConversationUnread = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

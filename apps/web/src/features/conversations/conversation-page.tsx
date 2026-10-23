@@ -131,6 +131,7 @@ function AgentDirectConversationPage({
           conversation={conversation}
           {...tabs}
           onOpenAgentProfile={openAgentProfile}
+          onChanged={data.page.invalidate}
         />
       )}
       conversation={(chat) => (
@@ -160,7 +161,13 @@ function PeopleDirectConversationPage({
       {...props}
       data={data}
       name={conversation.peer.displayName}
-      header={(tabs) => <PeopleDirectConversationHeader conversation={conversation} {...tabs} />}
+      header={(tabs) => (
+        <PeopleDirectConversationHeader
+          conversation={conversation}
+          {...tabs}
+          onChanged={data.page.invalidate}
+        />
+      )}
       // No Agent profile here (a member DM has no Agent to open), only the people's own.
       conversation={({
         jumpMessage,

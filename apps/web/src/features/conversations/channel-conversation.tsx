@@ -11,7 +11,11 @@ import type { ChannelCapabilities } from "#src/server/conversations/channel-auth
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { ConversationListButton } from "./conversation-list-button";
 import { ThreadFollowingAgents } from "./thread-following-agents";
-import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
+import {
+  conversationHeaderTabs,
+  HEADER_ICON_CLASS,
+  type HeaderTabs,
+} from "./conversation-header-tabs";
 import type { SendOptions } from "./composer-outbox";
 import type { Mentionable } from "./mention-text";
 import { plainMentionsByHandle } from "./message-markdown";
@@ -59,9 +63,6 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   followedThreadRootIds?: string[];
   messages: DirectConversationView["messages"];
 };
-
-/** The channel header's search and settings glyphs: text colour (#101319 in light mode), 1.5 stroke. */
-const HEADER_ICON_CLASS = "text-primary hover:text-primary *:data-icon:stroke-[1.5]";
 
 export function ChannelConversationHeader({
   conversation,

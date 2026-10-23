@@ -51,8 +51,7 @@ These rules apply to `src/features/conversations/`.
   the viewer or the other side wrote it. A top-level message in a channel the sidebar already lists
   re-reads only the channel list (`channelRowRefreshLists`), for the same reason. A change made outside the sidebar on this page (a
   channel's creation, rename or archive, or leaving, muting or pinning it from the settings panel)
-  re-reads the channel list
-  through `useRefreshSidebarChannels`. The viewer's own changes elsewhere arrive as a `ViewerEvent`
+  re-reads the channel list through `useRefreshSidebarChannels`. The viewer's own changes elsewhere arrive as a `ViewerEvent`
   on their `chat:user:` channel (Slack's `channel_marked`, `channel_joined`, `im_marked`,
   `im_created`, `pref_change`, `star_added`, `star_removed`): a read sets the badge from the
   event's count; any other re-reads only the lists `sidebarListsChangedBy` names. A message signal
@@ -116,8 +115,7 @@ These rules apply to `src/features/conversations/`.
   themself included): always writable, no Agent in it, and its composer offers no
   @-completion because the server keeps a mention there as plain text. `threaded-conversation.tsx`
   coordinates thread/profile panes; `conversation-pane.tsx` renders one message
-  stream; `use-conversation-sync.ts` owns browser-only deep-link and read-cursor
-  synchronization.
+  stream; `use-conversation-sync.ts` owns browser-only deep-link and read-cursor sync.
 - Every main stream and thread opens at its oldest unread message, or the chronological bottom
   when all are read or no cursor exists; an explicit message deep link/search/Saved jump wins.
   `conversation-host.tsx` supplies the Workspace's channels and Saved list. A host's loader reads `savedMessagesQuery` into
@@ -180,6 +178,8 @@ These rules apply to `src/features/conversations/`.
   action (delete). Hiding `#general` and the way back (the System channels
   section of Settings → Members) are for a Workspace owner or admin only; the
   server decides who that is, the client never re-derives it from a role.
+  A DM header's gear (both kinds) opens `direct-settings-panel.tsx`: only pin (through
+  `useSidebarActions`, so the sidebar follows) and collapse; both panels share `settings-panel-parts.tsx`.
 - Leaving a channel uses the never-joined read-only state and `joined: false`, without a separate "left" state. A conversation that answers `NOT_FOUND` (such as a channel just hidden from the Workspace or deleted) leaves for Chat
   through `ConversationLoadError`; do not show it as a load failure.
 - A human commits an action card through `CreateChannelDialog`, `AgentCreateDialog`, or

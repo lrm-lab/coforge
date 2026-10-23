@@ -175,6 +175,8 @@ export function useDirectConversation(conversationId: string) {
         page.toggleReaction(messageId, emoji, viewerReactor, active, () =>
           toggleReaction({ data: { conversationId, messageId, emoji, active } }),
         ),
+      // The settings panel changed the viewer's preference for this DM: re-read the window.
+      onChanged: page.invalidate,
       onReadThread: async (threadRootId: string, throughSequence: number) => {
         await markRead({ data: { conversationId, threadRootId, throughSequence } });
         page.applyThreadRead(threadRootId, throughSequence);

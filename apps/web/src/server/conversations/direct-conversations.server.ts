@@ -185,6 +185,22 @@ export class DirectConversations {
     return { pinned };
   }
 
+  /** Whether long messages fold behind "Show more" in this DM, for the viewer only. A display
+   * preference nothing else reads, so it tells no other page. */
+  async setCollapseLongMessages(
+    workspaceId: string,
+    viewerId: string,
+    conversationId: string,
+    collapseLongMessages: boolean,
+  ) {
+    const memberId = await this.viewerMember(workspaceId, viewerId, conversationId);
+    await this.db.conversationMember.update({
+      where: { id: memberId },
+      data: { collapseLongMessages },
+    });
+    return { collapseLongMessages };
+  }
+
   /** Marks the DM unread from the newest top-level message someone else sent, or clears the
    * marker. */
   async setUnread(workspaceId: string, viewerId: string, conversationId: string, unread: boolean) {
@@ -241,8 +257,18 @@ export class DirectConversations {
       conversationId,
       window,
     );
-    const welcome = await workspaceAssistantWelcome(this.db, workspaceId, viewerId, conversationId);
-    return { ...page, ...(welcome ? { workspaceAssistantWelcome: true } : {}) };
+    const [welcome, preference] = await Promise.all([
+      workspaceAssistantWelcome(this.db, workspaceId, viewerId, conversationId),
+      this.db.conversationMember.findFirst({
+        where: { conversationId, userId: viewerId, leftAt: null },
+        select: { collapseLongMessages: true },
+      }),
+    ]);
+    // Optional in the type: a page the browser stored before DMs carried it still reads, as on.
+    const collapse: { collapseLongMessages?: boolean } = {
+      collapseLongMessages: preference?.collapseLongMessages ?? true,
+    };
+    return { ...page, ...collapse, ...(welcome ? { workspaceAssistantWelcome: true } : {}) };
   }
 
   /** What arrived after `afterSequence`, and of the replies only those after `afterReplySequence`
