@@ -10,6 +10,7 @@ import {
 } from "@untitledui/icons";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -73,7 +74,6 @@ export function AgentProfileTab({
   onSaveDisplayName,
   onSaveDescription,
   onAvatarChange,
-  onAvatarChoosePicture,
   onAvatarRemove,
   onSaveRole,
   onRequestVisibilityChange,
@@ -105,7 +105,6 @@ export function AgentProfileTab({
   onSaveDescription: (value: string) => Promise<void>;
   /** Creator-only. Omitted for every other viewer, who still sees the picture. */
   onAvatarChange?: (file: File) => Promise<void>;
-  onAvatarChoosePicture?: (pictureId: string) => Promise<void>;
   onAvatarRemove?: () => Promise<void>;
   onSaveRole?: (role: "admin" | "member") => Promise<void>;
   /** Opens the container's `AgentVisibilityConfirmDialog` for the given target visibility.
@@ -175,15 +174,14 @@ export function AgentProfileTab({
             profileAvatar
           )}
           {profile.deletedAt && <DeletedAgentBadge />}
-          {onAvatarChange && onAvatarChoosePicture && (
+          {onAvatarChange && (
             <AgentAvatarDialog
               name={profile.displayName}
-              avatarUrl={profile.avatarUrl ?? null}
+              avatarUrl={profile.avatarUrl ?? DEFAULT_AGENT_AVATAR_URL}
               open={avatarDialogOpen}
               onOpenChange={setAvatarDialogOpen}
               onUpload={onAvatarChange}
-              onChoosePicture={onAvatarChoosePicture}
-              onRemove={profile.avatarUrl ? onAvatarRemove : undefined}
+              onRemove={profile.avatarObjectKey ? onAvatarRemove : undefined}
             />
           )}
         </div>

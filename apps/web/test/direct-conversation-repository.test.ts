@@ -328,8 +328,7 @@ describe("PrismaDirectConversationRepository", () => {
     });
     expect(midWindow.hasOlder).toBe(true);
     expect(midWindow.hasNewer).toBe(true);
-    // The page itself is the first `limit` top-level rows, oldest first — the overflow row that
-    // only proved there was more is dropped from the reader's side.
+    // The page is the first `limit` top-level rows, oldest first; the overflow row is dropped.
     expect(midWindow.messages.map(({ id, sequence }) => [id, sequence])).toEqual([["root-5", 5]]);
     // The viewer's own row is in the list — that is what makes a mention *of the viewer*
     // resolvable, and what the pane's formatter and the composer both read.
@@ -350,7 +349,7 @@ describe("PrismaDirectConversationRepository", () => {
         handle: "helper",
         label: "Helper",
         description: "",
-        avatarUrl: null,
+        avatarUrl: "/agent-avatars/mascot-01.webp",
         mentionScore: 0,
       },
     ]);

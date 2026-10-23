@@ -4,6 +4,7 @@ import { isAppError } from "#src/lib/app-error";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
 import { AgentChannelManagementError } from "#src/server/conversations/agent-channel-management-error.server";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 
 const WORKSPACE_ID = "workspace-1";
 
@@ -80,7 +81,7 @@ test("PublicChannels.members never offers a private Agent as an add-candidate (m
       name: "scout",
       displayName: "Scout",
       description: "Reads the web",
-      avatarUrl: null,
+      avatarUrl: DEFAULT_AGENT_AVATAR_URL,
     },
   ]);
 });

@@ -24,6 +24,7 @@ import {
   chatSectionOrderQuery,
   chatSectionsQuery,
 } from "#src/features/conversations/chat-sections";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 
 /**
  * What the browser's copy of the Query cache holds is read back by later builds, so the shape of
@@ -157,7 +158,7 @@ const fixtures = [
           name: "helper",
           displayName: "Helper",
           deletedAt: null,
-          avatarUrl: null,
+          avatarUrl: DEFAULT_AGENT_AVATAR_URL,
         },
         dmWritable: true,
         messages: [message],
@@ -365,6 +366,19 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
   6: {
     "channel window": "e7aded67e38ffb44",
     "direct window with an Agent": "dd470007a536e5b0",
+    "direct window with a person": "4b31a9f0b0c38386",
+    "sidebar channels": "91afa2f21eb4ec87",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "331d221481674004",
+    "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
+    "chat sections": "4c7716ab24622fdc",
+    "chat section order": "89829726781b01aa",
+  },
+  // An Agent's `avatarUrl` is never `null`: one without its own upload carries the default picture.
+  7: {
+    "channel window": "e7aded67e38ffb44",
+    "direct window with an Agent": "1725081943acee05",
     "direct window with a person": "4b31a9f0b0c38386",
     "sidebar channels": "91afa2f21eb4ec87",
     "sidebar directs": "5205999212e744be",

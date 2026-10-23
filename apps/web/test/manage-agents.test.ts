@@ -12,7 +12,6 @@ function fixture(options?: {
   stopFails?: boolean;
   unavailable?: boolean;
   encryptionFails?: boolean;
-  noInitialAvatar?: boolean;
   createFails?: boolean;
   migrating?: boolean;
 }) {
@@ -22,7 +21,6 @@ function fixture(options?: {
   const controls: string[] = [];
   const selections: Array<{ hasApiKey?: boolean }> = [];
   const updates: Array<Parameters<AgentRepository["update"]>[1]> = [];
-  const avatarCalls: string[] = [];
   const repository: AgentRepository = {
     getById: async (id) => records.find((agent) => agent.id === id),
     listInWorkspace: async (workspaceId) =>
@@ -80,21 +78,8 @@ function fixture(options?: {
         return { keyId: "v1", ciphertext: `encrypted:${apiKey}`, nonce: "nonce", hint: "••••1234" };
       },
     }),
-    {
-      storeInitial: async (workspaceId, agentId) => {
-        avatarCalls.push(`store:${agentId}`);
-        if (options?.noInitialAvatar) return null;
-        return {
-          objectKey: `workspaces/${workspaceId}/agents/${agentId}/avatars/first/original`,
-          contentType: "image/webp",
-        };
-      },
-      discard: async (objectKey) => {
-        avatarCalls.push(`discard:${objectKey}`);
-      },
-    },
   );
-  return { agentManagement, records, starts, stops, controls, updates, selections, avatarCalls };
+  return { agentManagement, records, starts, stops, controls, updates, selections };
 }
 
 describe("ManageAgents", () => {
@@ -106,16 +91,15 @@ describe("ManageAgents", () => {
     computerId: "computer-1",
   };
 
-  test("a new Agent is created with its first avatar picture stored as its own object", async () => {
-    const { agentManagement, records, avatarCalls } = fixture();
+  // Frank, 2026-10-22: a new Agent stores no picture of its own; it shows the platform default
+  // (`DEFAULT_AGENT_AVATAR_URL`) until its creator uploads one.
+  test("a new Agent is created with no avatar object of its own", async () => {
+    const { agentManagement, records } = fixture();
 
-    const { agent } = await agentManagement.create(principal, input);
+    await agentManagement.create(principal, input);
 
-    expect(avatarCalls).toEqual([`store:${agent.id}`]);
-    expect(records[0]).toMatchObject({
-      avatarObjectKey: `workspaces/workspace-1/agents/${agent.id}/avatars/first/original`,
-      avatarContentType: "image/webp",
-    });
+    expect(records[0]?.avatarObjectKey ?? null).toBeNull();
+    expect(records[0]?.avatarContentType ?? null).toBeNull();
   });
 
   test("an Agent a person creates owes them an introduction", async () => {
@@ -126,40 +110,9 @@ describe("ManageAgents", () => {
     expect(records[0]).toMatchObject({ introductionDueAt: expect.any(Date) });
   });
 
-  test("an Agent whose picture could not be stored is still created, without an avatar", async () => {
-    const { agentManagement, records } = fixture({ noInitialAvatar: true });
-
-    await agentManagement.create(principal, input);
-
-    expect(records).toHaveLength(1);
-    expect(records[0]?.avatarObjectKey ?? null).toBeNull();
-  });
-
-  test("a create that fails removes the picture it stored, and a refused create stores none", async () => {
-    const failed = fixture({ createFails: true });
-    await expect(failed.agentManagement.create(principal, input)).rejects.toThrow(
-      "database unavailable",
-    );
-    expect(failed.avatarCalls).toHaveLength(2);
-    expect(failed.avatarCalls[1]).toBe(
-      `discard:${failed.avatarCalls[0]!.replace("store:", "workspaces/workspace-1/agents/")}/avatars/first/original`,
-    );
-
-    const unavailable = fixture({ unavailable: true });
-    await expect(unavailable.agentManagement.create(principal, input)).rejects.toMatchObject({
-      errorId: "agent-runtime-unavailable",
-    });
-    const unencrypted = fixture({ encryptionFails: true });
-    await expect(
-      unencrypted.agentManagement.create(principal, {
-        ...input,
-        provider: RUNTIME_PROVIDER.COFORGE,
-        modelProvider: "openrouter",
-        apiKey: "sk-test",
-      }),
-    ).rejects.toThrow();
-    expect(unavailable.avatarCalls).toEqual([]);
-    expect(unencrypted.avatarCalls).toEqual([]);
+  test("a create the database refuses fails", async () => {
+    const { agentManagement } = fixture({ createFails: true });
+    await expect(agentManagement.create(principal, input)).rejects.toThrow("database unavailable");
   });
 
   test("a member principal cannot create an Agent; an admin can", async () => {

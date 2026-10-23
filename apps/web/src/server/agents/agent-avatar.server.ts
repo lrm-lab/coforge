@@ -13,17 +13,14 @@ import { getPublicImageStorage } from "#src/server/files/public-image-storage.se
 import { validateImage } from "#src/server/files/image-upload.server";
 import { replaceStoredImage } from "#src/server/files/stored-image-replacement.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
-import {
-  AGENT_AVATAR_POOL_VERSION,
-  agentAvatarPictureById,
-  randomAgentAvatarPicture,
-} from "./agent-avatar-pictures.server";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 import { agentVisibilityViewerForUser, assertAgentVisible } from "./agent-visibility.server";
 
 /**
- * Where the browser reads an Agent avatar. Same delivery as a User avatar: the image CDN when
- * this deployment has one, otherwise the authenticated Workspace route versioned by the object
- * id. Bytes never live in PostgreSQL.
+ * Where the browser reads an Agent avatar. Its own upload has the same delivery as a User avatar:
+ * the image CDN when this deployment has one, otherwise the authenticated Workspace route
+ * versioned by the object id. An Agent without one shows the platform default picture the app
+ * ships. Bytes never live in PostgreSQL.
  */
 export function agentAvatarUrl(
   workspaceId: string,
@@ -31,35 +28,18 @@ export function agentAvatarUrl(
   objectKey: string | null,
   publicUrl: PublicImageUrlResolver = publicImageUrl,
 ) {
-  return publicImageUrlOrFallback(
-    objectKey,
-    PROFILE_IMAGE_STYLES.avatar,
-    (key) => versionedImagePath(`/api/workspaces/${workspaceId}/agents/${agentId}/avatar`, key),
-    publicUrl,
+  return (
+    publicImageUrlOrFallback(
+      objectKey,
+      PROFILE_IMAGE_STYLES.avatar,
+      (key) => versionedImagePath(`/api/workspaces/${workspaceId}/agents/${agentId}/avatar`, key),
+      publicUrl,
+    ) ?? DEFAULT_AGENT_AVATAR_URL
   );
 }
 
 function avatarObjectKey(workspaceId: string, agentId: string, version = crypto.randomUUID()) {
   return `workspaces/${workspaceId}/agents/${agentId}/avatars/${version}/original`;
-}
-
-/**
- * A copy of a platform picture says so in its object key: the version segment (also the `?v=` of
- * its URL) is `platform-<pool version>-<picture id>-<uuid>`, where an upload's is a bare uuid. That
- * is the only record of where an avatar came from, and it is what lets a later job replace every
- * platform-assigned avatar without touching one a creator uploaded. Keep the shape stable.
- */
-const PLATFORM_AVATAR_SEGMENT =
-  /^platform-(v\d+)-(ai-\d{2})-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-/** The pool version and picture a platform-assigned avatar key records; null for an upload, a
- * missing key, or a malformed one. */
-export function parsePlatformAvatarKey(
-  objectKey: string | null,
-): { version: string; pictureId: string } | null {
-  const segments = objectKey?.split("/") ?? [];
-  const match = PLATFORM_AVATAR_SEGMENT.exec(segments.at(-2) ?? "");
-  return match ? { version: match[1]!, pictureId: match[2]! } : null;
 }
 
 /**
@@ -71,36 +51,6 @@ export class AgentAvatars {
     private readonly db: PrismaClient,
     private readonly storage: () => Promise<FileStorage> = getPublicImageStorage,
   ) {}
-
-  /**
-   * Stores the random AI picture a new Agent starts with, before the Agent row exists, so the
-   * create can write the key in one step. A picture is a nicety, so a failure is reported and
-   * answered with null (the Agent shows its initials) rather than failing the create.
-   */
-  async storeInitial(workspaceId: string, agentId: string) {
-    try {
-      const { id, file } = await randomAgentAvatarPicture();
-      const objectKey = avatarObjectKey(
-        workspaceId,
-        agentId,
-        `platform-${AGENT_AVATAR_POOL_VERSION}-${id}-${crypto.randomUUID()}`,
-      );
-      await (await this.storage()).put(objectKey, file, file.type);
-      return { objectKey, contentType: file.type };
-    } catch (error) {
-      toPublicServerError(error);
-      return null;
-    }
-  }
-
-  /** Removes a picture `storeInitial` stored for an Agent whose create then failed. */
-  async discard(objectKey: string) {
-    try {
-      await (await this.storage()).remove(objectKey);
-    } catch (error) {
-      toPublicServerError(error);
-    }
-  }
 
   async store(workspaceId: string, userId: string, agentId: string, file: File) {
     await validateImage(file);
@@ -122,19 +72,6 @@ export class AgentAvatars {
       reportRemovalFailure: (error) => void toPublicServerError(error),
     });
     return { avatarUrl: agentAvatarUrl(workspaceId, agentId, objectKey) };
-  }
-
-  /**
-   * The creator picks one of the pool's pictures for their Agent. It is stored exactly like an
-   * upload (a bare-uuid key), not like a platform assignment, so replacing every platform avatar
-   * later leaves it alone.
-   */
-  async storeChosen(workspaceId: string, userId: string, agentId: string, pictureId: string) {
-    const file = await agentAvatarPictureById(pictureId);
-    // Authorization first, so a stranger learns nothing about which ids exist.
-    await this.#owned(workspaceId, userId, agentId);
-    if (!file) throw new AppError("INVALID_INPUT");
-    return this.store(workspaceId, userId, agentId, file);
   }
 
   async remove(workspaceId: string, userId: string, agentId: string) {

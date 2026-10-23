@@ -46,7 +46,6 @@ import {
 import {
   updateAgent,
   uploadAgentAvatar,
-  chooseAgentAvatarPicture,
   removeAgentAvatar,
   updateAgentRole,
   saveAgentRuntimeCredential,
@@ -215,7 +214,6 @@ export function AgentProfilePanel({
 
   const update = useServerFn(updateAgent);
   const uploadAvatar = useServerFn(uploadAgentAvatar);
-  const chooseAvatarPicture = useServerFn(chooseAgentAvatarPicture);
   const removeAvatar = useServerFn(removeAgentAvatar);
   const updateRole = useServerFn(updateAgentRole);
   const saveCredential = useServerFn(saveAgentRuntimeCredential);
@@ -441,15 +439,6 @@ export function AgentProfilePanel({
                     data.set("agentId", agentId);
                     data.set("file", file);
                     await uploadAvatar({ data });
-                    await invalidate();
-                    await router.invalidate();
-                  }
-                : undefined
-            }
-            onAvatarChoosePicture={
-              owned
-                ? async (pictureId) => {
-                    await chooseAvatarPicture({ data: { agentId, pictureId } });
                     await invalidate();
                     await router.invalidate();
                   }

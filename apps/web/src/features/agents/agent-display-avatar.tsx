@@ -5,6 +5,7 @@ import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { DELETED_AGENT_AVATAR_CLASS } from "./deleted-agent";
 import { agentDisplay } from "./agent-activity-presentation";
+import { DEFAULT_AGENT_AVATAR_URL } from "./agent-default-avatar";
 
 export type AvatarSize = NonNullable<AvatarProps["size"]>;
 
@@ -19,7 +20,8 @@ export function AgentDisplayAvatar({
   className,
 }: {
   name: string;
-  /** The Agent's uploaded avatar, when it has one; initials stand in otherwise. */
+  /** The Agent's avatar URL. The platform default picture stands in until it is known, so an
+   * Agent never flashes initials while its data loads. */
   src?: string | null;
   display?: AgentDisplaySnapshot;
   /** The user stopped this Agent; see `agentDisplay`. */
@@ -44,7 +46,7 @@ export function AgentDisplayAvatar({
         size={size}
         className={className}
         alt=""
-        src={src}
+        src={src ?? DEFAULT_AGENT_AVATAR_URL}
         initials={avatarInitial(name)}
         contentClassName={deleted ? DELETED_AGENT_AVATAR_CLASS : avatarToneClassName(name)}
         badge={
@@ -67,7 +69,7 @@ export function AgentStackFace({
     <Avatar
       size="xs"
       alt=""
-      src={agent.avatarUrl}
+      src={agent.avatarUrl ?? DEFAULT_AGENT_AVATAR_URL}
       initials={avatarInitial(agent.displayName)}
       contentClassName={avatarToneClassName(agent.displayName)}
       // The ring separates the overlapping faces, as an avatar group does.

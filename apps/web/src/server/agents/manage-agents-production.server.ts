@@ -5,7 +5,6 @@ import { ManageAgents } from "./manage-agents.server";
 import { getAgentRuntimeLock } from "./agent-runtime-lock.server";
 import { userAgentRuntimeControl } from "./user-agent-control.server";
 import { computerCanRunAgent } from "./computer-runtime-availability.server";
-import { AgentAvatars } from "./agent-avatar.server";
 import {
   AgentRuntimeCredentials,
   readAgentRuntimeCredentialEncryptionKey,
@@ -26,7 +25,6 @@ export function manageAgents(db: Database) {
     },
     runtimeLock,
     () => runtimeCredentials(db, true),
-    new AgentAvatars(db),
   );
   return agentManagement;
 }

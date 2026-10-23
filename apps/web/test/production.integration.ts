@@ -35,6 +35,12 @@ test(
         expect(body).not.toContain("https://releases.coforge.cn");
         if (extension === "sh") expect(body.startsWith("#!/bin/sh")).toBe(true);
       }
+      // Every Agent without its own upload shows this picture; the image must ship it.
+      const picture = await fetch("http://127.0.0.1:3000/agent-avatars/mascot-01.webp", {
+        signal: AbortSignal.timeout(1_000),
+      });
+      expect(picture.status).toBe(200);
+      expect(picture.headers.get("content-type")).toBe("image/webp");
     } finally {
       server.process.kill();
       await server.process.exited;
@@ -45,15 +51,6 @@ test(
   },
   BUILT_SERVER_BOOT_MS + TEST_SLACK_MS,
 );
-
-// A new Agent's first picture is read from the server bundle (the image has no `public/` or source
-// tree to read it from). If the build stops inlining them, `decodeInlinedPicture` throws at the
-// first Agent create; this fails the image before that.
-test("the server bundle embeds all twenty-four Agent avatar pictures", async () => {
-  const bundle = await Bun.file(".output/server/index.mjs").text();
-
-  expect(bundle.match(/data:image\/webp;base64,UklGR/g)?.length ?? 0).toBeGreaterThanOrEqual(24);
-});
 
 // Startup configuration is validated when the server starts, not when the first request loads the
 // SSR entry (Nitro loads it lazily). A bad deployment must stop the process with no request sent,

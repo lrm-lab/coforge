@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 
 const membership = { id: "workspace-member-1" };
 
@@ -317,7 +318,7 @@ describe("ConversationHistory", () => {
     expect(page.messages.map(({ senderAvatarUrl }) => senderAvatarUrl)).toEqual([
       "/api/workspaces/workspace-1/users/user-1/avatar?v=avatar-1",
       "/api/workspaces/workspace-1/users/user-1/avatar?v=avatar-1",
-      null,
+      DEFAULT_AGENT_AVATAR_URL,
     ]);
   });
   test("an around read anchored on a reply centres on its thread's root and names it", async () => {

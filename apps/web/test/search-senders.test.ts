@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { directorySenders } from "#src/features/search/search-senders";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 
 const directory = {
   viewerId: "user-1",
@@ -14,7 +15,7 @@ const directory = {
       id: "agent-1",
       name: "Atlas Bot",
       handle: "atlas",
-      avatarUrl: null,
+      avatarUrl: DEFAULT_AGENT_AVATAR_URL,
       canMessage: true,
       visibility: "public",
       weeklyReportAssistant: false,
@@ -24,7 +25,7 @@ const directory = {
       id: "agent-2",
       name: "Long",
       handle: "a-very-long-generated-agent-handle-name",
-      avatarUrl: null,
+      avatarUrl: DEFAULT_AGENT_AVATAR_URL,
       canMessage: true,
       visibility: "public",
       weeklyReportAssistant: false,
