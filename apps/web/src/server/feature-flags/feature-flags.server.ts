@@ -19,6 +19,8 @@ export const FEATURE_FLAGS = {
   "app-data-permissions": "Applications phase 2: the data permissions a Workspace grants an app",
   "app-installation-setup":
     "Applications phase 2: the page an app is set up on after installation, and its status",
+  "app-marketplace":
+    "Applications phase 2: asking for an app to be published to the Marketplace, and reviewing those requests",
   "app-notifications":
     "Applications phase 2: notifying the apps installed in a Workspace of what happens in it",
 } as const;

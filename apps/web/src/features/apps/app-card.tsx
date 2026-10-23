@@ -9,6 +9,7 @@ import { m } from "#src/paraglide/messages";
 import { permissionGroupList } from "./app-permission-copy";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import { AppLogo } from "./app-logo";
+import { PublishStatusBadge } from "./app-publish-status-badge";
 import { SetupDirections, SetupStatusBadge } from "./setup-status-badge";
 import { WebhookStatusBadge } from "./webhook-status-badge";
 import type { AppsLayout } from "./apps-layout";
@@ -65,9 +66,13 @@ export function AppCard({
             {view === "installed" ? m.apps_installed_byline({ category }) : category}
           </p>
           <div className="flex flex-wrap gap-1.5 pt-0.5">
-            <Badge size="sm" color="gray">
-              {m.apps_private_badge()}
-            </Badge>
+            {app.publishStatus ? (
+              <PublishStatusBadge status={app.publishStatus} place="card" />
+            ) : (
+              <Badge size="sm" color="gray">
+                {m.apps_private_badge()}
+              </Badge>
+            )}
             {view === "installed" && (
               <Badge size="sm" color="gray">
                 {m.apps_this_workspace()}

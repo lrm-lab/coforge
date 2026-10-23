@@ -22,6 +22,10 @@ model User {
   gitHubAuthorization         GitHubAuthorization?
   gitHubUserInstallations     GitHubUserInstallation[]
   memberships                 WorkspaceMembership[]
+  platformOperator            PlatformOperator?               @relation("PlatformOperatorUser")
+  platformOperatorsGranted    PlatformOperator[]              @relation("PlatformOperatorGrantedBy")
+  appReviewsRequested         AppReviewRequest[]              @relation("AppReviewRequestedBy")
+  appReviewsDecided           AppReviewRequest[]              @relation("AppReviewDecidedBy")
   pendingMentionActions       PendingMentionAction[]
   createdJoinLinks            WorkspaceJoinLink[]
   agents                      Agent[]                     @relation("AgentOwner")

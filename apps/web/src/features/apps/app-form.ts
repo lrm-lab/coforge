@@ -51,6 +51,8 @@ export type AppEditorSubmission = {
   /** The notification events subscribed to, with the groups, where `app-notifications` is on. */
   notificationEvents?: AppNotificationEventName[];
   setup?: AppSetupInput;
+  /** Keep the editor open after saving (a publish request follows the save). */
+  stayOpen?: boolean;
 };
 
 /**
@@ -70,6 +72,8 @@ export function appFormProblem(
   if (!isAppError(cause)) return { field: null, message: fallback() };
   if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === "app-key-taken")
     return { field: "key", message: m.apps_error_key_taken() };
+  if (isAppErrorCode(cause, "INVALID_INPUT") && cause.errorId === "app-description-required")
+    return { field: "description", message: m.apps_publish_description_required() };
   if (isPermissionsChanged(cause)) return { field: null, message: m.apps_permissions_changed() };
   const field = isAppErrorCode(cause, "INVALID_INPUT") ? appInputFieldOf(cause.errorId) : undefined;
   if (field) return { field, message: APP_FIELD_PROBLEMS[field]() };

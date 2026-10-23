@@ -12,6 +12,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AgentAccessScope } from "./agent-access-field";
 import { DangerZoneRows } from "./app-editor-danger";
+import { DistributionSection } from "./app-editor-distribution";
 import {
   EditorSection,
   LoginFields,
@@ -97,6 +98,10 @@ type AppEditorProps = {
   onApprovePermissions: (app: AppSummary, revision: number) => Promise<void>;
   /** Reads the apps again for the installation's setup status; throws when it can't. */
   onRefreshSetup: () => Promise<void>;
+  /** Marketplace review requests (`declares.marketplace`); each throws when refused. */
+  onRequestPublish: (app: AppSummary) => Promise<void>;
+  onWithdrawPublish: (app: AppSummary) => Promise<void>;
+  onRequestUnpublish: (app: AppSummary) => Promise<void>;
 };
 
 type Section = { id: string; title: string };
@@ -117,6 +122,9 @@ function AppEditorForm({
   onResetLogo,
   onApprovePermissions,
   onRefreshSetup,
+  onRequestPublish,
+  onWithdrawPublish,
+  onRequestUnpublish,
 }: Omit<AppEditorProps, "open"> & {
   saving: boolean;
   guard: ReturnType<typeof useSubmitGuard>[1];
@@ -148,6 +156,7 @@ function AppEditorForm({
     notifications: `${idPrefix}notifications`,
     setup: `${idPrefix}setup`,
     agentAccess: `${idPrefix}agent-access`,
+    distribution: `${idPrefix}distribution`,
     danger: `${idPrefix}danger`,
   };
   const sections: Section[] = [
@@ -159,6 +168,9 @@ function AppEditorForm({
       ? [{ id: ids.notifications, title: m.apps_notifications_section() }]
       : []),
     ...(editing ? [{ id: ids.agentAccess, title: m.apps_agent_access_title() }] : []),
+    ...(editing && declares.marketplace
+      ? [{ id: ids.distribution, title: m.apps_section_distribution() }]
+      : []),
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
   const [active, setActive] = useActiveSection(scroller, sections);
@@ -172,6 +184,11 @@ function AppEditorForm({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    void guard(async () => void (await save(false)));
+  }
+
+  /** Validates and sends the form; whether it was saved. Refusals show beside their fields. */
+  async function save(stayOpen: boolean): Promise<boolean> {
     setFormError("");
     const input = inputOf(draft, declares.manifest);
     // A change never carries the key (it is the client ID), and a blank one asks for a made key.
@@ -183,27 +200,32 @@ function AppEditorForm({
       setSetupErrors(
         Object.fromEntries(setupRefused.map((field) => [field, SETUP_FIELD_PROBLEMS[field]()])),
       );
-      return;
+      return false;
     }
     setSetupErrors({});
-    void guard(async () => {
-      try {
-        await onSubmit({
-          input,
-          permissionGroups: declares.permissions ? groups : undefined,
-          notificationEvents: declares.notifications ? notificationEvents.submitted : undefined,
-          setup: declares.setup ? setupInputOf(setupDraft) : undefined,
-        });
-      } catch (cause) {
-        const problem = appFormProblem(
-          cause,
-          editing ? m.apps_error_update : m.apps_error_register,
-        );
-        if (problem.setupField) setSetupErrors({ [problem.setupField]: problem.message });
-        else if (problem.field) setErrors({ [problem.field]: problem.message });
-        else setFormError(problem.message);
-      }
-    });
+    try {
+      await onSubmit({
+        input,
+        permissionGroups: declares.permissions ? groups : undefined,
+        notificationEvents: declares.notifications ? notificationEvents.submitted : undefined,
+        setup: declares.setup ? setupInputOf(setupDraft) : undefined,
+        stayOpen,
+      });
+      return true;
+    } catch (cause) {
+      const problem = appFormProblem(cause, editing ? m.apps_error_update : m.apps_error_register);
+      if (problem.setupField) setSetupErrors({ [problem.setupField]: problem.message });
+      else if (problem.field) setErrors({ [problem.field]: problem.message });
+      else setFormError(problem.message);
+      return false;
+    }
+  }
+
+  /** Saves the form first, as Raft does, then asks for publication. */
+  async function saveThenRequestPublish(current: AppSummary) {
+    let saved = false;
+    await guard(async () => void (saved = await save(true)));
+    if (saved) await onRequestPublish(current);
   }
 
   const profileComplete = [draft.name, draft.description, draft.homepageUrl].every(
@@ -381,6 +403,16 @@ function AppEditorForm({
               <AgentAccessScope appKey={app.key} canManage showTitle={false} />
             </EditorSection>
           )}
+          {app && declares.marketplace && (
+            <DistributionSection
+              id={ids.distribution}
+              status={app.publishStatus ?? "private"}
+              actions={{
+                requestPublish: () => saveThenRequestPublish(app),
+                withdraw: () => onWithdrawPublish(app),
+              }}
+            />
+          )}
           {editing && (
             <EditorSection
               id={ids.danger}
@@ -393,6 +425,9 @@ function AppEditorForm({
                 isDisabled={saving}
                 onRegenerate={() => onRegenerate(app)}
                 onDelete={() => onDelete(app)}
+                onRequestUnpublish={
+                  declares.marketplace ? () => onRequestUnpublish(app) : undefined
+                }
               />
             </EditorSection>
           )}

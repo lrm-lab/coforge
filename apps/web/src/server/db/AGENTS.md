@@ -51,6 +51,7 @@ These rules apply to `src/server/db/`.
 - `app-installation-data.repositories.server.ts` reads what an installed app may see, filtering
   private data out in the query itself and selecting only the projected columns. The projections
   and the bearer check stay in `server/app-installation-data/`.
+- `app-publishing.repositories.server.ts` persists review requests and the publish status they move: a request and its app's status change in one transaction (a conditional `updateMany` on the status it expects, so a lost race writes nothing). Who may ask and decide stays in `server/app-marketplace/`.
 - `app-notification-subscribers.repositories.server.ts` reads the Workspace and the installations an app notification is for; the flag and fan-out stay in `server/app-notifications/`.
 - `app-webhook.repositories.server.ts` persists an app's webhook row and its installations' delivery statuses: a change locks the webhook row, bumps `revision` and deletes the statuses in one transaction, and an attempt's outcome is one conditional upsert that writes only while the webhook is still at the revision the attempt started with. Who may change it, the endpoint rules and the delivery policy stay in `server/app-notifications/`.
 - `app-notification-queue-schema.repositories.server.ts` asks whether pg-boss's `pgboss` schema exists (the only raw SQL on it); starting the queue stays in `server/app-notifications/`.

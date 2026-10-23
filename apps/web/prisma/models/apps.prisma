@@ -54,6 +54,12 @@ model App {
   /// canonical form, at most 2000 characters, no user info or fragment (`apps_agent_manifest_url_check`).
   /// Null: the app names none, and its location is derived from the homepage.
   agentManifestUrl String?
+  /// Where the app is in Marketplace review (`server/app-marketplace/`): `private`,
+  /// `publish_requested`, `published`, `rejected` or `unpublish_requested`
+  /// (`apps_publish_status_check`). Changes only through `AppPublishing`.
+  publishStatus    String            @default("private")
+  /// When a reviewer last approved publication; null until then (kept after an approved unpublish).
+  publishedAt      DateTime?
   createdByUserId  String?           @db.Uuid
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -65,6 +71,7 @@ model App {
   agentGrants      AppAgentGrant[]
   agentAccessRequests AppAgentAccessRequest[]
   webhook          AppWebhook?
+  reviewRequests   AppReviewRequest[]
 
   @@index([ownerWorkspaceId])
   @@index([createdByUserId])

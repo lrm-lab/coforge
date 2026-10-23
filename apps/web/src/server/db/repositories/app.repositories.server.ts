@@ -1,6 +1,7 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import type { Prisma } from "#src/generated/prisma/client";
 import type { AppCategory } from "#src/features/apps/app-category";
+import { DELETABLE_STATUSES, type AppPublishStatus } from "#src/features/apps/app-publish-status";
 import type { AppRegistrationInput } from "#src/features/apps/app-registration";
 import type { AppChange, AppRegistryStore, AppView } from "#src/server/apps/app-registry.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
@@ -19,15 +20,19 @@ const APP_VIEW = {
   category: true,
   allowedScopes: true,
   logoObjectKey: true,
+  publishStatus: true,
   secretRotatedAt: true,
   createdAt: true,
   updatedAt: true,
 } as const;
 
 /** A row as the registry sees it: `apps_category_check` admits only the nine categories. */
-const view = (row: Omit<AppView, "category"> & { category: string }): AppView => ({
+const view = (
+  row: Omit<AppView, "category" | "publishStatus"> & { category: string; publishStatus: string },
+): AppView => ({
   ...row,
   category: row.category as AppCategory,
+  publishStatus: row.publishStatus as AppPublishStatus,
 });
 
 /** The one app `key` that `workspaceId` owns: every write is scoped by it, so none can reach
@@ -116,12 +121,17 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
   async delete(workspaceId: string, key: string) {
     try {
       return await this.db.app.delete({
-        where: owned(workspaceId, key),
+        where: { ...owned(workspaceId, key), publishStatus: { in: [...DELETABLE_STATUSES] } },
         select: { logoObjectKey: true },
       });
     } catch (error) {
-      if (hasErrorCode(error, "P2025")) return undefined;
-      throw error;
+      if (!hasErrorCode(error, "P2025")) throw error;
+      // Nothing deleted: the app is not there, or it moved to a status that cannot be deleted.
+      const present = await this.db.app.findFirst({
+        where: owned(workspaceId, key),
+        select: { id: true },
+      });
+      return present ? ("blocked" as const) : undefined;
     }
   }
 

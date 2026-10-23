@@ -18,6 +18,7 @@ import {
   assertCanManageApps,
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
+import type { AppPublishStatus } from "#src/features/apps/app-publish-status";
 import { mintAppClientSecret } from "./app-client-secret.server";
 import { appLogoObjectKey } from "./app-logo.server";
 
@@ -36,6 +37,8 @@ export type AppView = {
   allowedScopes: string[];
   /** The logo in the image store; surfaces show `appLogoUrl`, never the key. */
   logoObjectKey: string | null;
+  /** Where the app is in Marketplace review (`server/app-marketplace/`). */
+  publishStatus: AppPublishStatus;
   secretRotatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -74,8 +77,12 @@ export interface AppRegistryStore {
    * `false` when there is none. */
   update(workspaceId: string, key: string, change: AppChange): Promise<AppView | undefined>;
   /** Deletes the app `key` that `workspaceId` owns, answering the logo its row had as it went
-   * (so a logo uploaded since it was read is not left behind); `undefined` when there is none. */
-  delete(workspaceId: string, key: string): Promise<{ logoObjectKey: string | null } | undefined>;
+   * (so a logo uploaded since it was read is not left behind); `undefined` when there is none,
+   * `"blocked"` when it is published or waiting to leave the Marketplace (`DELETABLE_STATUSES`). */
+  delete(
+    workspaceId: string,
+    key: string,
+  ): Promise<{ logoObjectKey: string | null } | "blocked" | undefined>;
   /** Sets the logo of the app `key` that `workspaceId` owns to `to` (none: the monogram), only
    * while it is still `from`; `false` when it is not, or there is no such app. */
   replaceLogo(
@@ -92,6 +99,13 @@ export interface AppRegistryStore {
     viewerUserId: string;
   }): Promise<{ objectKey: string; contentType: string } | undefined>;
 }
+
+/** Finds an app's logo for a viewer. */
+export type AppLogoLookup = (input: {
+  workspaceId: string;
+  key: string;
+  viewerUserId: string;
+}) => Promise<{ objectKey: string; contentType: string } | undefined>;
 
 /** Where the registry keeps logos (the image store, as for Agent avatars), and who hears of an
  * old logo's object that could not be removed after its change was committed. */
@@ -135,18 +149,23 @@ export class AppRegistry {
       keySuffix?: () => string;
       /** Whether the Workspace may set an app's Agent manifest URL; off when absent. */
       agentManifestEnabled?: AgentManifestFlag;
+      /** A logo the member path does not show: a platform reviewer's view of a pending app's
+       * (`server/app-marketplace/`). Asked only after the member path misses. */
+      findReviewLogo?: AppLogoLookup;
     } = {},
   ) {}
 
   /** The Workspace's apps, and whether it shows the Agent manifest URL (`app-agent-manifest`). */
-  async listWorkspaceApps(actor: AppActor): Promise<{ apps: AppView[]; manifest: boolean }> {
+  async listWorkspaceApps(
+    actor: AppActor,
+  ): Promise<{ apps: AppView[]; manifest: boolean; workspaceSlug: string }> {
     const member = await this.store.findMember(actor.workspaceId, actor.actorUserId);
     if (!member) throw new AppError("ACCESS_DENIED");
     const [apps, manifest] = await Promise.all([
       this.store.listForWorkspace(actor.workspaceId),
       this.manifestAllowed(actor, member),
     ]);
-    return { apps, manifest };
+    return { apps, manifest, workspaceSlug: member.workspaceSlug };
   }
 
   /** Registers the app in the actor's Workspace; its client secret is in the answer and nowhere
@@ -190,10 +209,21 @@ export class AppRegistry {
 
   /** Changes the fields `patch` names; never the app's key or owner. */
   async updateApp(actor: AppActor, key: string, patch: AppPatch): Promise<AppView> {
+    return (await this.updateAppInWorkspace(actor, key, patch)).app;
+  }
+
+  /** `updateApp`, also answering the Workspace's slug (the member lookup already read it), for a
+   * caller that checks a flag the slug can decide. */
+  async updateAppInWorkspace(
+    actor: AppActor,
+    key: string,
+    patch: AppPatch,
+  ): Promise<{ app: AppView; workspaceSlug: string }> {
     const { member } = await this.ownApp(actor, key);
     const change = checked(checkAppInput(patch, "patch"));
     await this.assertManifestUrlAllowed(actor, member, change);
-    return this.written(await this.store.update(actor.workspaceId, key, change));
+    const app = this.written(await this.store.update(actor.workspaceId, key, change));
+    return { app, workspaceSlug: member.workspaceSlug };
   }
 
   /** Replaces the app's client secret: the old one stops verifying at once, and the new one is in
@@ -213,10 +243,13 @@ export class AppRegistry {
     return { app, clientSecret: secret };
   }
 
-  /** Deletes the app and its installation; its secret stops verifying, and its logo goes. */
+  /** Deletes the app and its installation; its secret stops verifying, and its logo goes. An app
+   * listed in the Marketplace, or waiting to leave it, is CONFLICT (`app-published-undeletable`). */
   async deleteApp(actor: AppActor, key: string): Promise<void> {
     await this.requireOwnApp(actor, key);
     const deleted = await this.store.delete(actor.workspaceId, key);
+    if (deleted === "blocked")
+      throw new AppError("CONFLICT", { errorId: "app-published-undeletable" });
     if (!deleted) throw new AppError("NOT_FOUND");
     await this.removeImage(deleted.logoObjectKey);
   }
@@ -249,10 +282,13 @@ export class AppRegistry {
     return { ...app, logoObjectKey: null };
   }
 
-  /** The logo's bytes, for a member of a Workspace where the app is installed; NOT_FOUND for
-   * anyone else, as for an app with no logo. */
+  /** The logo's bytes, for a member of a Workspace where the app is installed, or a reviewer of a
+   * pending request; NOT_FOUND for anyone else, as for an app with no logo. */
   async readAppLogo(viewerUserId: string, workspaceId: string, key: string) {
-    const logo = await this.store.findLogo({ workspaceId, key, viewerUserId });
+    const input = { workspaceId, key, viewerUserId };
+    const logo =
+      (await this.store.findLogo(input)) ??
+      (await (this.options.findReviewLogo ?? (async () => undefined))(input));
     const file = logo ? await (await this.images.storage()).open(logo.objectKey) : null;
     if (!logo || !file) throw new AppError("NOT_FOUND");
     return { body: file.body, contentType: logo.contentType };

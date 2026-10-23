@@ -1,0 +1,43 @@
+/// A person who works for the platform rather than for a Workspace (`server/app-marketplace/`).
+/// `app_reviewer` may decide Marketplace review requests of every Workspace's apps
+/// (`platform_operators_role_check`). Granted by `scripts/grant-platform-operator.ts`, never by a
+/// Workspace role.
+model PlatformOperator {
+  userId        String   @id @db.Uuid
+  role          String
+  grantedAt     DateTime @default(now())
+  /// The operator who granted it; null for the first one, granted by the script.
+  grantedByUserId String? @db.Uuid
+  user          User     @relation("PlatformOperatorUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy     User?    @relation("PlatformOperatorGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([grantedByUserId])
+  @@map("platform_operators")
+}
+
+/// One request to publish an app to the Marketplace, or to take it offline, and what a reviewer
+/// decided (`server/app-marketplace/`). At most one is pending (undecided) per app. The reason
+/// is recorded for the reviewers and is not shown to the app's developers, as in Raft.
+model AppReviewRequest {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  appId           String    @db.Uuid
+  /// `publish` or `unpublish` (`app_review_requests_kind_check`).
+  kind            String
+  requestedByUserId String? @db.Uuid
+  requestedAt     DateTime  @default(now())
+  decidedByUserId String?   @db.Uuid
+  decidedAt       DateTime?
+  /// `approved` or `rejected`; null while pending (`app_review_requests_decision_check` keeps
+  /// outcome, decider and time together). A withdrawn request is deleted, not decided.
+  outcome         String?
+  reason          String?
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  requestedBy     User?     @relation("AppReviewRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  decidedBy       User?     @relation("AppReviewDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([appId], map: "app_review_requests_one_pending", where: raw("\"outcome\" IS NULL"))
+  @@index([requestedByUserId])
+  @@index([decidedByUserId])
+  @@index([requestedAt])
+  @@map("app_review_requests")
+}

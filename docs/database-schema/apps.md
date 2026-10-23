@@ -169,3 +169,9 @@ keyed by `installationId` (cascade delete), absent until the first attempt:
 Every change to `app_webhooks` deletes the statuses of the app's installations in the same
 transaction, so a stop never outlives the endpoint it was about; saving the endpoint again or
 rotating the secret therefore starts deliveries again.
+
+## Marketplace review
+
+`apps.publishStatus` and `publishedAt`, `app_review_requests` and `platform_operators` are described with
+their state machine in [App Marketplace review](../app-marketplace.md); the migration is
+`20261024110000_app_marketplace_review`.

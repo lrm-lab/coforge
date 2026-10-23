@@ -27,11 +27,13 @@ import { m } from "#src/paraglide/messages";
 import { AppCard } from "./app-card";
 import { AppDetail } from "./app-detail";
 import { AppEditor } from "./app-editor";
+import { AppReviewLink } from "./app-review-link";
 import { isPermissionsChanged, type AppEditorSubmission } from "./app-form";
 import { APP_CATEGORY_LABELS, filterApps } from "./app-list";
 import { APP_CATEGORIES, type AppCategory } from "./app-category";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import { useAppsLayout } from "./apps-layout";
+import { useAppPublishing } from "./use-app-publishing";
 import { useRefreshOnFocus } from "./use-refresh-on-focus";
 import { APPS_VIEWS, type AppsView } from "./apps-settings-search";
 import {
@@ -65,6 +67,8 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     setup: false,
     notifications: false,
     manifest: false,
+    marketplace: false,
+    reviewer: false,
   });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -148,6 +152,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     permissionGroups,
     notificationEvents,
     setup,
+    stayOpen,
   }: AppEditorSubmission) {
     if (editor?.mode === "edit") {
       // The key is the app's client ID: never part of a change.
@@ -157,7 +162,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
         const app = await update({
           data: { key, patch, permissionGroups, notificationEvents, setup },
         });
-        setEditorOpen(false);
+        if (!stayOpen) setEditorOpen(false);
         setApps((current) => current?.map((held) => (held.key === app.key ? app : held)));
       });
       return;
@@ -229,6 +234,8 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
       );
     });
 
+  const publishing = useAppPublishing(setApps, refreshingWhenStale);
+
   const all = apps ?? [];
   const shown = filterApps(all, { query, category });
   // Phase 1: a Workspace installs only the apps it registered, so both lists hold the same apps.
@@ -247,16 +254,19 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
             <Link03 aria-hidden="true" className="size-5 text-fg-quaternary" />
             {m.settings_applications()}
           </h2>
-          {canManage && (
-            <Button
-              size="sm"
-              color="primary"
-              iconLeading={Plus}
-              onPress={() => openEditor({ mode: "register" })}
-            >
-              {m.apps_register()}
-            </Button>
-          )}
+          <div className="flex items-center gap-4">
+            {declares.reviewer && <AppReviewLink />}
+            {canManage && (
+              <Button
+                size="sm"
+                color="primary"
+                iconLeading={Plus}
+                onPress={() => openEditor({ mode: "register" })}
+              >
+                {m.apps_register()}
+              </Button>
+            )}
+          </div>
         </header>
 
         <Tabs
@@ -427,6 +437,9 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
           onResetLogo={resetAppLogo}
           onApprovePermissions={approvePermissions}
           onRefreshSetup={refreshSetup}
+          onRequestPublish={publishing.requestPublish}
+          onWithdrawPublish={publishing.withdrawPublish}
+          onRequestUnpublish={publishing.requestUnpublish}
         />
       )}
     </div>

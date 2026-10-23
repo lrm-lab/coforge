@@ -26,6 +26,7 @@ const ownApp: AppView = {
   category: "other",
   allowedScopes: ["openid", "profile", "identity"],
   logoObjectKey: null,
+  publishStatus: "private",
   secretRotatedAt: null,
   createdAt: new Date("2026-10-20T00:00:00.000Z"),
   updatedAt: new Date("2026-10-20T00:00:00.000Z"),

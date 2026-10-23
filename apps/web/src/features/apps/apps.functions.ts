@@ -15,10 +15,12 @@ import type { AppPermissionsView } from "#src/server/app-permissions/app-permiss
 import { createAppInstallationSetup } from "#src/server/app-installation-setup/app-installation-setup-composition.server";
 import type { AppSetupView } from "#src/server/app-installation-setup/app-installation-setup.server";
 import { createAppWebhooks } from "#src/server/app-notifications/app-webhooks-composition.server";
+import { createAppPublishing } from "#src/server/app-marketplace/app-publishing-composition.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import type { AppActor, AppView } from "#src/server/apps/app-registry.server";
 import { APP_CATEGORIES } from "./app-category";
+import type { AppPublishStatus } from "./app-publish-status";
 import {
   SETUP_DESCRIPTION_MAX_LENGTH,
   SETUP_URL_MAX_LENGTH,
@@ -48,7 +50,12 @@ import {
  * `app-installation-setup` is on. */
 export type AppSummary = Omit<
   AppView,
-  "ownerWorkspaceId" | "logoObjectKey" | "secretRotatedAt" | "createdAt" | "updatedAt"
+  | "ownerWorkspaceId"
+  | "logoObjectKey"
+  | "publishStatus"
+  | "secretRotatedAt"
+  | "createdAt"
+  | "updatedAt"
 > & {
   logoUrl: string | null;
   createdAt: string;
@@ -57,6 +64,8 @@ export type AppSummary = Omit<
   webhookStatus?: WebhookStatus;
   permissions?: AppPermissionsSummary;
   setup?: AppSetupSummary;
+  /** Where the app is in Marketplace review; present only where `app-marketplace` is on. */
+  publishStatus?: AppPublishStatus;
 };
 
 const permissionsSummary = ({
@@ -96,6 +105,7 @@ const summary = (
   {
     ownerWorkspaceId,
     logoObjectKey,
+    publishStatus,
     secretRotatedAt: _rotated,
     updatedAt: _updated,
     createdAt,
@@ -103,12 +113,15 @@ const summary = (
   }: AppView,
   permissions?: AppPermissionsView | null,
   setup?: AppSetupView | null,
+  /** `app-marketplace` is on: the summary says where the app is in review. */
+  marketplace = false,
 ): AppSummary => ({
   ...app,
   logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey),
   createdAt: createdAt.toISOString(),
   ...(permissions && { permissions: permissionsSummary(permissions) }),
   ...(setup && { setup: setupSummary(setup) }),
+  ...(marketplace && { publishStatus }),
 });
 
 /** A text the registry counts in code points; zod counts UTF-16 units, at most two per code point. */
@@ -138,13 +151,17 @@ const actorOf = ({ user, workspaceId }: WorkspaceUserContext): AppActor => ({
 /** Which declarations the editor shows in this Workspace: where the `app-data-permissions` and
  * `app-installation-setup` flags are on, and, with `app-data-permissions`, `app-notifications`
  * (the App notifications section and the events in the permissions); `manifest` where
- * `app-agent-manifest` is on. */
+ * `app-agent-manifest` is on, `marketplace` and `reviewer` where `app-marketplace` is. */
 export type AppDeclarations = {
   permissions: boolean;
   setup: boolean;
   notifications: boolean;
   /** The Agent manifest URL field and rows (`app-agent-manifest`). */
   manifest: boolean;
+  /** `app-marketplace` is on: the editor's Distribution section and the apps' publish status. */
+  marketplace: boolean;
+  /** The viewer reviews Marketplace requests (a platform operator), where it is on. */
+  reviewer: boolean;
 };
 
 /** The apps installed in the Workspace (the ones it registered), and the declarations it shows. */
@@ -153,18 +170,23 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     declareNoStore();
     const actor = actorOf(context);
-    const [{ apps, manifest }, permissions, setups] = await Promise.all([
+    const [{ apps, manifest, workspaceSlug }, permissions, setups] = await Promise.all([
       createAppRegistry(context.db).listWorkspaceApps(actor),
       createAppPermissions(context.db).workspacePermissions(actor),
       createAppInstallationSetup(context.db).workspaceSetups(actor),
     ]);
+    // After the member check above, which read the slug.
+    const { enabled: marketplace, reviewer } = await createAppPublishing(context.db).access(
+      { workspaceId: actor.workspaceId, workspaceSlug },
+      actor.actorUserId,
+    );
     const notifications = permissions?.notifications ?? false;
     const webhookStatuses = notifications
       ? await createAppWebhooks(context.db).workspaceStatuses(actor)
       : null;
     return {
       apps: apps.map((app) => ({
-        ...summary(app, permissions?.apps.get(app.key), setups?.get(app.key)),
+        ...summary(app, permissions?.apps.get(app.key), setups?.get(app.key), marketplace),
         ...(webhookStatuses && { webhookStatus: webhookStatuses.get(app.key) ?? "off" }),
       })),
       declares: {
@@ -172,6 +194,8 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
         setup: setups !== null,
         notifications,
         manifest,
+        marketplace,
+        reviewer,
       } satisfies AppDeclarations,
     };
   });
@@ -227,8 +251,9 @@ export const updateWorkspaceApp = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     declareNoStore();
-    const { app, permissions, setup } = await createAppEditorSave(context.db).save(
-      actorOf(context),
+    const actor = actorOf(context);
+    const { app, permissions, setup, workspaceSlug } = await createAppEditorSave(context.db).save(
+      actor,
       data.key,
       {
         patch: data.patch,
@@ -237,7 +262,11 @@ export const updateWorkspaceApp = createServerFn({ method: "POST" })
         setup: data.setup,
       },
     );
-    return summary(app, permissions, setup);
+    const marketplace = await createAppPublishing(context.db).isEnabledIn({
+      workspaceId: actor.workspaceId,
+      workspaceSlug,
+    });
+    return summary(app, permissions, setup, marketplace);
   });
 
 /** Approves the data app `key` declares at `revision`, the one the approver was shown, for this
