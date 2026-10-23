@@ -3,6 +3,7 @@ import { getRotatingFileSink } from "@logtape/file";
 import { configure, getJsonLinesFormatter } from "@logtape/logtape";
 import { DEFAULT_REDACT_FIELDS, redactByField } from "@logtape/redaction";
 import { prepareDaemonLogFile } from "./daemon-log-file";
+import { markStartup } from "./startup-timing";
 
 /** Shared sink configuration, called once by each Daemon-role entrypoint. */
 export async function configureDaemonLogging(stateDirectory: string): Promise<void> {
@@ -37,4 +38,5 @@ export async function configureDaemonLogging(stateDirectory: string): Promise<vo
     ],
     contextLocalStorage: new AsyncLocalStorage<Record<string, unknown>>(),
   });
+  markStartup("logging");
 }

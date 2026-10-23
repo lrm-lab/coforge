@@ -2,6 +2,10 @@
 
 export {};
 
+// Startup timing for the Daemon's first log line (`startup-timing.ts` in the daemon package reads
+// every `coforge:startup:` mark); written here because nothing else is loaded yet.
+performance.mark("coforge:startup:main");
+
 // Dispatch before importing either runtime so Agent commands never initialize
 // Computer logging, Daemon sockets, or Workspace recovery.
 if (Bun.argv[2] === "__pi-chat") {
@@ -25,6 +29,7 @@ if (Bun.argv[2] === "__pi-chat") {
   await runAgentCli(Bun.argv.slice(3));
 } else if (Bun.argv[2] === "__daemon") {
   const { runMachineSupervisor } = await import("@lrm/coforge-daemon");
+  performance.mark("coforge:startup:daemon_imported");
   // Belt and braces: shutdown here is fully awaited - `runMachineSupervisor` only
   // resolves after every Coordinator-owned background wait (the upgrade receipt watch, in
   // particular) has been cancelled and its logging disposed. Exiting explicitly the moment it
@@ -48,6 +53,7 @@ if (Bun.argv[2] === "__pi-chat") {
   await runLaunchdAgent(Bun.argv[3]!);
 } else if (Bun.argv[2] === "__workspace-daemon") {
   const { runDaemon } = await import("@lrm/coforge-daemon");
+  performance.mark("coforge:startup:daemon_imported");
   const { COFORGE_COMPUTER_VERSION } = await import("./version");
   // Belt and braces, same reasoning as `__daemon`: `runDaemon` only resolves once its
   // own SIGINT/SIGTERM shutdown has stopped every Workspace runtime, closed the Agent proxy and

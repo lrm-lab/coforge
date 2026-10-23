@@ -26,6 +26,8 @@ import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
 import { installerJournalExists } from "#src/platform/installer-journal";
 import { stopLaunchdAgents } from "#src/platform/launchd-process";
+import { startupTiming } from "#src/platform/startup-timing";
+import { refuseMissingSocket } from "#src/daemon-host/missing-socket";
 import { reapLeftoverAgentProcesses } from "#src/platform/linux-agent-processes";
 import {
   WorkspaceHealthJournal,
@@ -177,9 +179,6 @@ export {
 export { COFORGE_DAEMON_SERVER_URL, daemonConnectionEndpoint } from "#src/connection/built-server";
 
 const DAEMON_CATEGORY = ["coforge", "daemon"];
-/** `--socket` is required for every launch this build understands; a launch missing it is a
- * precondition no restart can fix. */
-const MISSING_SOCKET_REASON = "Daemon requires --socket";
 
 export async function runDaemon(args: string[], computerVersion?: string): Promise<void> {
   const argument = (flag: string) => {
@@ -193,35 +192,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
   const healthJournal = new WorkspaceHealthJournal(
     workspaceHealthJournalPath(daemonStateDirectory),
   );
-  if (!socketPath) {
-    // Terminal, not a crash to retry: restarting this exact invocation can never supply the
-    // missing argument. Latching degraded and exiting 0 (see the degraded branch below for why
-    // exit 0 is what stops both supervisors' restart loop) keeps a broken launch from spinning
-    // forever instead of surfacing once with the fix. Only latch when `--state-directory` was
-    // itself explicit: under every OS-supervised launch (the only shipped path) the Coordinator
-    // always supplies both flags together, so a launch missing `--socket` but not
-    // `--state-directory` never happens there. Without an explicit `--state-directory` this
-    // falls back to the shared default `~/.coforge/daemon` - not a real per-Workspace directory
-    // the Coordinator's `clearHealth` seam ever reaches - so writing a latch there could
-    // permanently poison a later, unrelated standalone run with no way to clear it short of
-    // deleting the file by hand. A hand-run invocation missing both flags gets today's plain
-    // failure instead, exactly as before this change.
-    if (stateDirectoryArg) await healthJournal.markTerminal(MISSING_SOCKET_REASON);
-    const brokenConfig = stateDirectoryArg
-      ? await new DaemonConfigStore(daemonStateDirectory, {
-          serverHttpUrl: COFORGE_DAEMON_SERVER_URL,
-        })
-          .load()
-          .catch(() => null)
-      : null;
-    getLogger(DAEMON_CATEGORY).error(
-      workspaceDegradedMessage(MISSING_SOCKET_REASON, brokenConfig?.workspaceId),
-      { event: "daemon:invalid_arguments" },
-    );
-    await dispose();
-    process.exitCode = 0;
-    return;
-  }
+  if (!socketPath)
+    return refuseMissingSocket(daemonStateDirectory, !!stateDirectoryArg, healthJournal);
   return withContext(
     {
       service: "coforge-daemon",
@@ -231,7 +203,11 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
     },
     async () => {
       const logger = getLogger(DAEMON_CATEGORY);
-      logger.info("Daemon process started", { event: "daemon:started", outcome: "ok" });
+      logger.info("Daemon process started", {
+        event: "daemon:started",
+        outcome: "ok",
+        ...startupTiming(),
+      });
       if (process.platform === "darwin" && Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX) {
         const directory = Bun.env.COFORGE_WORKSPACE_JOB_DIRECTORY;
         if (!directory) throw new Error("Workspace Agent job directory is missing");

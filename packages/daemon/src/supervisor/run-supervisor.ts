@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -11,7 +11,7 @@ import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
-import { acquireProcessLock, isLockContention, type ProcessLock } from "#src/platform/process-lock";
+import { acquireSupervisorLock } from "./supervisor-lock";
 import {
   MachineSupervisor,
   UPGRADE_OPERATION_PENDING_TTL_MS,
@@ -46,6 +46,7 @@ import { launchComputerUpgrade } from "#src/platform/computer-upgrade-launcher";
 import { sweepLeftoverComputerUpgradeJobs } from "#src/platform/computer-upgrade-sweep";
 import { UpgradeLaunchFailedError } from "./upgrade-error";
 import { startLoginShellPathImport } from "./login-shell-path-import";
+import { markStartup, startupTiming } from "#src/platform/startup-timing";
 import {
   sweepComputerUpgradeReceipts,
   watchComputerUpgradeReceipt,
@@ -69,6 +70,7 @@ export async function runMachineSupervisor(
     ? args[args.indexOf("--state-directory") + 1]!
     : dirname(socketPath);
   await mkdir(stateDirectory, { recursive: true, mode: 0o700 });
+  markStartup("state_directory");
   await configureDaemonLogging(stateDirectory);
   try {
     await withContext(
@@ -80,10 +82,14 @@ export async function runMachineSupervisor(
       },
       async () => {
         const lock = await acquireSupervisorLock(stateDirectory);
+        markStartup("lock");
         const logger = getLogger(["coforge", "daemon", "supervisor"]);
         const loginShellPath = startLoginShellPathImport(stateDirectory);
         try {
-          logger.info("Coordinator process started", { event: "coordinator:started" });
+          logger.info("Coordinator process started", {
+            event: "coordinator:started",
+            ...startupTiming(),
+          });
           // Best-effort: a leftover one-shot upgrade job never respawns but can hold a stale
           // `launchctl list` entry and plist across restarts until this sweep clears it.
           // Windows: do not await — accumulated upgrade-result files drove serial schtasks
@@ -108,50 +114,6 @@ export async function runMachineSupervisor(
     );
   } finally {
     await dispose();
-  }
-}
-
-/**
- * Takes the Coordinator's lifetime lock, or, when another CoForge Daemon already holds it,
- * raises a message that names the holder and how to clear it instead of letting bun:sqlite's
- * raw "database is locked" reach the person running `foreground`. Exported as its own function
- * so a test can drive real lock contention (two in-process `acquireProcessLock` calls on the
- * same path) without spawning a second process.
- */
-export async function acquireSupervisorLock(stateDirectory: string): Promise<ProcessLock> {
-  const lockPath = join(stateDirectory, "supervisor-lock.sqlite");
-  try {
-    return acquireProcessLock(lockPath);
-  } catch (error) {
-    if (!isLockContention(error)) throw error;
-    // Keeps SQLite's own code on the cause, so the technical reason survives for anyone reading
-    // a stack trace while the message stays the one a person can act on.
-    throw new Error(await describeSupervisorLockHeld(stateDirectory, lockPath), { cause: error });
-  }
-}
-
-async function describeSupervisorLockHeld(
-  stateDirectory: string,
-  lockPath: string,
-): Promise<string> {
-  const ownerPid = await readSupervisorLockOwnerPid(stateDirectory);
-  const holder = ownerPid !== null ? ` (pid ${ownerPid})` : "";
-  return [
-    `Another CoForge Daemon is already running on this Computer${holder} and holds the supervisor lock at ${lockPath}.`,
-    "Run `coforge-computer status` to see it, then `coforge-computer stop` before running `foreground` again.",
-  ].join("\n");
-}
-
-/** Best-effort: the owner file is written by the process that currently holds the lock
- * (`runWithSupervisorLock`, below), so a missing or unreadable file means only that the pid
- * cannot be shown, never that the lock itself is free — the caller already knows it is held. */
-async function readSupervisorLockOwnerPid(stateDirectory: string): Promise<number | null> {
-  try {
-    const text = (await readFile(join(stateDirectory, "supervisor.lock", "owner"), "utf8")).trim();
-    const pid = Number(text);
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
-  } catch {
-    return null;
   }
 }
 
