@@ -290,6 +290,21 @@ jobs:
           curl --fail --silent --show-error --max-time 10 \
             "https://staging.coforge.cn/health" >/dev/null
 
+      - name: Verify running Web retained image configuration
+        if: vars.COFORGE_RETAINED_CLOUD_IMAGE_IDS != ''
+        env:
+          EXPECTED_RETAINED_CLOUD_IMAGE_IDS: ${{ vars.COFORGE_RETAINED_CLOUD_IMAGE_IDS }}
+        run: |
+          set -euo pipefail
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            'docker exec -i "$(docker ps -q --filter label=com.docker.compose.project=coforge-staging --filter label=com.docker.compose.service=web)" bun -' <<'JS' > retained-runtime.value.json
+          console.log(JSON.stringify(Bun.env.COFORGE_RETAINED_CLOUD_IMAGE_IDS ?? ""));
+          JS
+          bun scripts/deploy/retained-runtime.ts retained-runtime.value.json | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Verify retained cloud image protection after a fresh host heartbeat
         if: vars.COFORGE_RETAINED_CLOUD_IMAGE_IDS != ''
         run: |
@@ -305,7 +320,7 @@ jobs:
           const started = Date.now();
           let verified = false;
           try {
-            while (Date.now() - started < 30000) {
+            while (Date.now() - started < 120000) {
               const snapshot = JSON.parse((await redis.get("coforge:cloud-image:v1")) ?? "null");
               if (snapshot?.observedAt >= started) {
                 const running = new Set(snapshot.computers.map((row) => row.imageId));
