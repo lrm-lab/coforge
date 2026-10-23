@@ -32,6 +32,7 @@ The architecture invariants every change must respect are in
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Repository rules: decisions, module design, delivery, toolchain, architecture invariants |
 | [apps/web/AGENTS.md](apps/web/AGENTS.md) | Web/backend rules and module map |
+| [apps/docs/AGENTS.md](apps/docs/AGENTS.md) | Public developer docs site (VitePress): commands, locales, llms.txt and schema rules |
 | [packages/computer/AGENTS.md](packages/computer/AGENTS.md) | Computer package rules and module map |
 | [packages/agent/AGENTS.md](packages/agent/AGENTS.md) | Agent runtime rules and module map |
 | [packages/daemon/AGENTS.md](packages/daemon/AGENTS.md) | Daemon package rules and module map |
@@ -87,6 +88,7 @@ Project skills live in `.agents/skills`; `skills-lock.json` pins the upstream on
 
 ```text
 apps/web                Web UI and backend control plane
+apps/docs               Public developer docs site (VitePress, English and zh-CN)
 packages/computer       Machine-level setup and supervisor package component
 packages/daemon         Single-workspace daemon and code-agent adapter package component
 packages/agent          Independently packable built-in Agent runtime using Pi SDK

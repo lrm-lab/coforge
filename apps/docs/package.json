@@ -1,0 +1,20 @@
+{
+  "name": "@coforge/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "test": "bun test",
+    "check": "oxfmt --check . && oxlint .",
+    "format": "oxfmt ."
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "vitepress": "1.6.4",
+    "vitepress-plugin-llms": "1.14.0"
+  }
+}
