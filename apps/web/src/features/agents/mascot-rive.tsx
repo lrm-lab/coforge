@@ -10,6 +10,7 @@ import {
 } from "@rive-app/react-canvas-lite";
 
 import type { AgentMascot } from "./agent-mascot";
+import { followPointer } from "./mascot-look-tracker";
 import {
   MASCOT_RIVE,
   mascotArtboard,
@@ -49,7 +50,8 @@ function mascotFile(): Promise<RiveFile> {
 /**
  * One mascot's canvas on the shared file. It owns its own view model instance, so what one mascot
  * acts out never reaches another that shares the file. The canvas listens to no pointer: the
- * wrapper around it does, and reports `hovered`. A canvas scrolled out of view pauses itself.
+ * wrapper around it does, and reports `hovered`; the eyes follow the pointer through the shared
+ * watcher (`mascot-look-tracker.ts`). A canvas scrolled out of view pauses itself.
  * https://rive.app/docs/runtimes/react/data-binding.md
  */
 export function MascotCanvas({
@@ -93,7 +95,7 @@ function BoundMascot({
 }: {
   file: RiveFile;
 } & Parameters<typeof MascotCanvas>[0]) {
-  const { rive, RiveComponent } = useRive({
+  const { rive, canvas, RiveComponent } = useRive({
     riveFile: file,
     artboard: mascotArtboard(mascot),
     stateMachine: MASCOT_RIVE.stateMachine,
@@ -115,6 +117,17 @@ function BoundMascot({
   useEffect(() => setActivity(activity), [setActivity, activity]);
   // A file without the property leaves the mascot as it is.
   useEffect(() => setHovered(hovered), [setHovered, hovered]);
+  // The eyes follow the pointer. The shared watcher writes the numbers straight into the view
+  // model: a hook would hold each one in React state and render on every pointer move.
+  useEffect(() => {
+    const lookX = instance?.number(MASCOT_RIVE.lookXProperty);
+    const lookY = instance?.number(MASCOT_RIVE.lookYProperty);
+    if (!canvas || !lookX || !lookY) return;
+    return followPointer(canvas, (look) => {
+      lookX.value = look.x;
+      lookY.value = look.y;
+    });
+  }, [instance, canvas]);
   const [bound, setBound] = useState(false);
   useEffect(() => {
     if (!instance || bound) return;

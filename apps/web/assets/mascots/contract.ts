@@ -25,6 +25,8 @@ export interface SharedIds {
   instance: string;
   activityProp: string;
   hoveredProp: string;
+  lookXProp: string;
+  lookYProp: string;
   activityEnum: string;
   activityValue: Record<MascotActivity, string>;
 }
@@ -35,6 +37,8 @@ export function allocateSharedIds(): SharedIds {
     instance: nextId(),
     activityProp: nextId(),
     hoveredProp: nextId(),
+    lookXProp: nextId(),
+    lookYProp: nextId(),
     activityEnum: nextId(),
     activityValue: idPerActivity(),
   };

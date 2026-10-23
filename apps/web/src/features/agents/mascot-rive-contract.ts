@@ -15,11 +15,15 @@ export const MASCOT_RIVE = {
   activityProperty: "activity",
   /** Boolean property: the pointer is over the mascot. Default `false`. */
   hoveredProperty: "hovered",
+  /** Number properties in [-1, 1]: where the eyes look, 0 straight ahead, +x right, +y down
+   * (`lookToward`). Default `0`. The file decides how far a full deflection moves the eyes. */
+  lookXProperty: "lookX",
+  lookYProperty: "lookY",
 } as const;
 
 /** Version of the Rive file (`mascots-<n>.riv`); bumped with the file name for the same reason as
  * `STATIC_VERSION`. */
-export const RIV_VERSION = 1;
+export const RIV_VERSION = 2;
 
 /** The one Rive file that animates every mascot. */
 export function mascotRivUrl(): string {

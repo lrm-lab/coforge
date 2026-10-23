@@ -8,7 +8,7 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   the profile's `mascot`), never a URL to reverse, and is drawn bare: no tile, ring or clip. The
   Rive canvas mounts only while it is near the viewport, motion is allowed and the shared file
   loads (`mascot-rive.tsx`, the only `@rive-app/*` importer); anything else stays the still
-  picture. Names: `mascot-contract.ts` and `mascot-rive-contract.ts`, shared with the generator
+  picture. A moving mascot's eyes follow the cursor (below). Names: `mascot-contract.ts` and `mascot-rive-contract.ts`, shared with the generator
   (`assets/mascots/README.md`). The base `Avatar` draws any mascot picture (`isMascotPicture`)
   bare as well, so a list row, a group avatar or a picker shows it the same way; people keep their
   tile.
@@ -21,3 +21,11 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   one a still picture (`busy-agents-strip.css`); reduced motion stops the cycle and the fade. The
   sentence is plain text, not a live region; only the overflow count (`agent_busy_others`) is a
   message, the labels are not localized.
+- A moving mascot's eyes follow the cursor. `mascot-look.ts` (pure) maps the pointer's offset from
+  the canvas centre to `lookX` / `lookY` in [-1, 1] (full deflection at 300 px, flattening toward
+  it), and `mascot-look-tracker.ts` is the one passive document `pointermove` listener every
+  moving canvas shares: at most one pass per animation frame, writing the numbers straight into
+  each instance's view model (never React state). The eyes ease back when the pointer leaves the
+  window or the window blurs; touch pointers and `(hover: none)` devices never feed it. The file
+  owns how far and how fast the eyes move; a mascot under a still pointer looks again at the next
+  pointer move (scrolling does not).

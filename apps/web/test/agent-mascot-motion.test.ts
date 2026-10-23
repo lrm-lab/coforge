@@ -52,6 +52,8 @@ test("the contract names one artboard and one picture per mascot, and one Rive f
   expect(mascotRivUrl()).toBe(`/agent-avatars/mascots-${RIV_VERSION}.riv`);
   expect(mascotStaticUrl("pink")).toBe(`/agent-avatars/mascot-pink-${STATIC_VERSION}.webp`);
   expect(MASCOT_RIVE.activityProperty).toBe("activity");
+  expect(MASCOT_RIVE.lookXProperty).toBe("lookX");
+  expect(MASCOT_RIVE.lookYProperty).toBe("lookY");
   expect(MASCOT_ACTIVITIES).toEqual(["idle", "thinking", "working", "error", "offline"]);
 });
 

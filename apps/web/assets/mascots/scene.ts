@@ -1,4 +1,5 @@
-import { nextId } from "./contract.ts";
+import { nextId, type SharedIds } from "./contract.ts";
+import { LOOK_REACH, lookBinds } from "./look.ts";
 import type { Accessory, MascotSpec, Paint, Part } from "./spec.ts";
 import { fmt, pathBounds, pointsPathsXml, type Point } from "./svg-path.ts";
 
@@ -54,6 +55,8 @@ export interface Rig {
   mouthMid0: number;
   /** The face node's own position inside the Mascot node. */
   faceAt: Point;
+  /** Root elements the artboard's data binds name (`look.ts`). */
+  converters: string[];
 }
 
 const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]];
@@ -91,6 +94,7 @@ function eyeXml(
   id: string,
   pupil: string,
   closed: string,
+  look: string,
 ): string {
   const { radius, color, glints } = spec.eyes;
   const d = radius * 2;
@@ -110,7 +114,7 @@ function eyeXml(
     `<SolidColor colorValue="${argb(spec.featureColor)}" name="Color"/></Stroke></Shape>`;
   return (
     `<Node x="${fmt(at[0])}" y="${fmt(at[1])}" name="Eye ${side}" id="${id}">\n` +
-    `${arc}\n<Node name="Pupil ${side}" id="${pupil}">\n${glintXml}\n${ellipseXml("Eye", d, d, color)}\n</Node>\n</Node>`
+    `${arc}\n<Node name="Pupil ${side}" id="${pupil}">\n${look}\n${glintXml}\n${ellipseXml("Eye", d, d, color)}\n</Node>\n</Node>`
   );
 }
 
@@ -179,7 +183,7 @@ export interface BuiltScene {
   rig: Rig;
 }
 
-export function buildScene(spec: MascotSpec): BuiltScene {
+export function buildScene(spec: MascotSpec, shared: SharedIds): BuiltScene {
   const { l, r } = spec.eyes;
   const face: Point = [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2 + 1.5];
   const eyeL0 = sub(l, face);
@@ -206,7 +210,14 @@ export function buildScene(spec: MascotSpec): BuiltScene {
     eyeR0,
     mouthMid0: 0,
     faceAt: sub(face, PIVOT),
+    converters: [],
   };
+  // The look binds sit on nodes no animation keys, so they compose with every activity and with
+  // the hover layer: the pupils, and a wrapper around the whole face.
+  const eyeLook = lookBinds(shared, LOOK_REACH.eye);
+  const eyeLookR = lookBinds(shared, LOOK_REACH.eye);
+  const faceLook = lookBinds(shared, LOOK_REACH.face);
+  rig.converters.push(...eyeLook.converters, ...eyeLookR.converters, ...faceLook.converters);
   const mb = bounds(spec.mouth);
   const mouthCentre: Point = [(mb.minX + mb.maxX) / 2 - face[0], (mb.minY + mb.maxY) / 2 - face[1]];
   const slope = Math.max(-0.15, Math.min(0, ((r[1] - l[1]) / (r[0] - l[0])) * 0.5));
@@ -236,13 +247,16 @@ export function buildScene(spec: MascotSpec): BuiltScene {
 <Node x="${PIVOT[0]}" y="${PIVOT[1]}" name="Hover root" id="${rig.hoverRoot}">
 <Node name="Mascot" id="${rig.mascot}">
 <Node x="${fmt(faceAt[0])}" y="${fmt(faceAt[1])}" name="Face" id="${rig.face}">
+<Node name="Face look">
+${faceLook.binds}
 ${browXml(spec, "L", eyeL0, rig.browL)}
 ${browXml(spec, "R", eyeR0, rig.browR)}
-${eyeXml(spec, "L", eyeL0, rig.eyeL, rig.pupilL, rig.closedL)}
-${eyeXml(spec, "R", eyeR0, rig.eyeR, rig.pupilR, rig.closedR)}
+${eyeXml(spec, "L", eyeL0, rig.eyeL, rig.pupilL, rig.closedL, eyeLook.binds)}
+${eyeXml(spec, "R", eyeR0, rig.eyeR, rig.pupilR, rig.closedR, eyeLookR.binds)}
 ${mouthLineXml(spec, rig, mouthCentre, halfWidth, slope)}
 <Node name="Mouth" id="${rig.mouthIdle}">
 ${mouthIdle}
+</Node>
 </Node>
 </Node>
 ${front}
