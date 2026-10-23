@@ -17,7 +17,7 @@ export default defineConfig({
   srcExclude: ["AGENTS.md", "test/**"],
   lastUpdated: false,
   head: [
-    ["link", { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32.png" }],
+    ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
     ["link", { rel: "apple-touch-icon", href: "/apple-touch-icon.png" }],
   ],
   vite: {
@@ -29,7 +29,7 @@ export default defineConfig({
     copyFileSync(schemaSource, target);
   },
   themeConfig: {
-    logo: "/logo.png",
+    logo: { light: "/coforge-logo-light.svg", dark: "/coforge-logo-dark.svg" },
     siteTitle: "CoForge Developers",
   },
   locales: {
