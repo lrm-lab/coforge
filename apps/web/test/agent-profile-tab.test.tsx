@@ -395,7 +395,7 @@ test("a Claude Code Agent's context badge becomes the breakdown popover trigger"
   );
 });
 
-test("a viewer who cannot change visibility sees the plain Visibility badge, no change button", () => {
+test("a viewer who cannot change visibility sees plain Visibility text, no edit pencil", () => {
   const markup = render(
     <AgentProfileTab
       profile={profileFixture()}
@@ -410,9 +410,10 @@ test("a viewer who cannot change visibility sees the plain Visibility badge, no 
   expect(markup).toContain("Visibility");
   expect(markup).toContain("Public");
   expect(markup).not.toContain("Make private");
+  expect(markup).not.toContain(m.agent_profile_edit_visibility());
 });
 
-test("the creator (or owner/admin) sees the current visibility and a button to change it", () => {
+test("the creator (or owner/admin) sees the current visibility and a pencil to change it", () => {
   const markup = render(
     <AgentProfileTab
       profile={profileFixture({ visibility: "private", canChangeVisibility: true })}
@@ -426,10 +427,11 @@ test("the creator (or owner/admin) sees the current visibility and a button to c
     />,
   );
   expect(markup).toContain("Private");
-  expect(markup).toMatch(/<button[^>]*>(?:(?!<\/button>).)*Make public/);
+  expect(markup).toContain(`aria-label="${m.agent_profile_edit_visibility()}"`);
+  expect(markup).not.toContain("Make public");
 });
 
-test("a private Agent without the visibility grant shows the Private badge with no edit affordance", () => {
+test("a private Agent without the visibility grant shows Private text with no edit affordance", () => {
   const markup = render(
     <AgentProfileTab
       profile={profileFixture({ visibility: "private", canChangeVisibility: false })}
@@ -443,6 +445,7 @@ test("a private Agent without the visibility grant shows the Private badge with 
   );
   expect(markup).toContain("Private");
   expect(markup).not.toContain("Make public");
+  expect(markup).not.toContain(m.agent_profile_edit_visibility());
 });
 
 test("RUNTIME CONFIG is one fact per row with a Mode row that reads Default, Fast or Not applied", () => {
