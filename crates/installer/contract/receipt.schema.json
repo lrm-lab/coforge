@@ -14,7 +14,10 @@
         },
         "operation": {
           "type": "string",
-          "const": "upgrade"
+          "enum": [
+            "upgrade",
+            "repair"
+          ]
         },
         "status": {
           "type": "string",
@@ -118,7 +121,10 @@
         },
         "operation": {
           "type": "string",
-          "const": "upgrade"
+          "enum": [
+            "upgrade",
+            "repair"
+          ]
         },
         "status": {
           "type": "string",
@@ -225,7 +231,10 @@
         },
         "operation": {
           "type": "string",
-          "const": "upgrade"
+          "enum": [
+            "upgrade",
+            "repair"
+          ]
         },
         "status": {
           "type": "string",
@@ -335,7 +344,10 @@
         },
         "operation": {
           "type": "string",
-          "const": "upgrade"
+          "enum": [
+            "upgrade",
+            "repair"
+          ]
         },
         "status": {
           "type": "string",
@@ -442,7 +454,10 @@
         },
         "operation": {
           "type": "string",
-          "const": "upgrade"
+          "enum": [
+            "upgrade",
+            "repair"
+          ]
         },
         "status": {
           "type": "string",

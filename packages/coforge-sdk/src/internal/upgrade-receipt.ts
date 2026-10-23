@@ -20,7 +20,7 @@ export const UPGRADE_RECEIPT_MAX_BYTES = 64 * 1024;
 export const UpgradeResultSchema = z.looseObject({
   schema_version: z.literal(1),
   request_id: z.string().regex(RFC_UUID_PATTERN),
-  operation: z.literal("upgrade"),
+  operation: z.enum(["upgrade", "repair"]),
   status: z.enum(["succeeded", "failed"]),
   version: z.string().optional(),
   restoredVersion: z.string().optional(),
@@ -97,12 +97,12 @@ const reason = z.string().min(1);
 
 /** Fields every receipt has: the product's receipt plus who wrote it, and the identities of the
  * processes the installer stopped (present exactly when it stopped any). The installer has no
- * rollback command, so its receipts always name the `upgrade` operation. `supervisorRunning` and
+ * rollback command, so its receipts name the `upgrade` or local `repair` operation. `supervisorRunning` and
  * `runtimes` stay optional and are the installer's to fill from `__lifecycle status`: the CLI
  * reads them from a succeeded receipt to say which Workspaces stay stopped. */
 const receiptFields = {
   ...UpgradeResultSchema.shape,
-  operation: z.literal("upgrade"),
+  operation: z.enum(["upgrade", "repair"]),
   protocol: z.literal(INSTALLER_RECEIPT_PROTOCOL),
   installer_version: z.string(),
   deadProcessIdentities: z.array(DeadProcessIdentitySchema).min(1).optional(),

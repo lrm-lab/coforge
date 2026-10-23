@@ -7,6 +7,7 @@
 //!   coforge-installer upgrade --request-id <uuid> --version <latest|X.Y.Z> [--caller-pid <pid>]
 //!                             [--from-directory <dir>] [--allow-downgrade]
 //!   coforge-installer recover [--caller-pid <pid>]
+//!   coforge-installer repair
 //!   coforge-installer status [--json]
 //!
 //! Exit status (`contract.rs`): 0 succeeded, 1 failed (a receipt, or a usage error that wrote
@@ -51,6 +52,7 @@ enum Command {
     Recover {
         caller_pid: Option<u32>,
     },
+    Repair,
     Status {
         json: bool,
     },
@@ -98,6 +100,7 @@ fn main() -> ExitCode {
             allow_downgrade,
         ),
         Command::Recover { caller_pid } => recover(&setup, caller_pid),
+        Command::Repair => repair(&setup, &new_request_id()),
         Command::Status { json } => status(&setup, json),
     }
 }
@@ -178,6 +181,17 @@ fn recover(setup: &Setup, caller_pid: Option<u32>) -> ExitCode {
     }
 }
 
+fn repair(setup: &Setup, request_id: &str) -> ExitCode {
+    match installation::repair(setup, request_id, &mut stage) {
+        Ok(Outcome::Receipt(receipt)) => report_receipt(&receipt),
+        Ok(Outcome::NoReceipt { exit, message }) => {
+            eprintln!("coforge-installer: {message}");
+            ExitCode::from(exit)
+        }
+        Err(message) => fail(&message),
+    }
+}
+
 fn status(setup: &Setup, json: bool) -> ExitCode {
     let report = installation::status(setup);
     if json {
@@ -203,11 +217,14 @@ fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Command, String> {
             "install" => parse_install(parser),
             "upgrade" => parse_upgrade(parser),
             "recover" => parse_recover(parser),
+            "repair" => parse_repair(parser),
             "status" => parse_status(parser),
             other => Err(format!("unknown command: {other}")),
         },
         Some(other) => Err(other.unexpected().to_string()),
-        None => Err("expected a command: install, upgrade, recover, status, or --version".into()),
+        None => Err(
+            "expected a command: install, upgrade, recover, repair, status, or --version".into(),
+        ),
     }
 }
 
@@ -304,6 +321,10 @@ fn parse_recover(mut parser: lexopt::Parser) -> Result<Command, String> {
         }
     }
     Ok(Command::Recover { caller_pid })
+}
+
+fn parse_repair(parser: lexopt::Parser) -> Result<Command, String> {
+    finish(parser, Command::Repair)
 }
 
 fn caller_pid_value(parser: &mut lexopt::Parser) -> Result<u32, String> {
@@ -409,6 +430,12 @@ mod tests {
             })
         ));
         assert!(parse(args(&["recover", "--caller-pid", "x"])).is_err());
+    }
+
+    #[test]
+    fn repair_takes_no_arguments() {
+        assert!(matches!(parse(args(&["repair"])), Ok(Command::Repair)));
+        assert!(parse(args(&["repair", "--json"])).is_err());
     }
 
     #[test]

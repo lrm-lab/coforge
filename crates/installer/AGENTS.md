@@ -6,7 +6,6 @@ what the installer owns and how it controls a running Computer; this file holds
 the crate's commands, toolchain, and gotchas.
 
 ## Module map
-
 The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it describes.
 
 ## Contract with the product
@@ -52,7 +51,7 @@ The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it de
   in one directory, the layout of the Computer's local package. It needs a concrete version, never
   `latest` (usage error, exit 1). Every check the feed path makes applies. It is for local builds
   (`scripts/`), not for users.
-- `--allow-downgrade` (install and upgrade): a plain flag that lets the target be older than the
+- `--allow-downgrade` (install and upgrade): lets the target be older than the
   active version. Without it, a target that orders below the active version by SemVer precedence
   (`version.rs`) is a failed receipt, `UPGRADE_DOWNGRADE_REFUSED`, exit 1, decided after the target
   resolves and before anything changes; a version that is not SemVer cannot be ordered and is refused
@@ -61,32 +60,33 @@ The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it de
 - `coforge-installer recover [--caller-pid <pid>]`: settles an unfinished upgrade (the journal).
   `--caller-pid` is the `coforge-computer recover` process that launched this installer and waits
   for it, verified and never stopped, as for `upgrade`.
+- `coforge-installer repair`: under the machine lock, verifies the `active.json` version and
+  recreates its `active` link and PATH shim. It never downloads, edits a version directory, or
+  controls the service. A bad version writes a failed `operation: "repair"` receipt with
+  `UPDATE_INTEGRITY_FAILED`; success writes a repair receipt, and request replays are supported.
 - `coforge-installer status [--json]`: read-only, no lock. `--json` field names are documented in
   `src/status.rs`.
 - `--version` prints the crate version.
 
-Output: each stage line is `==> <stage>` on stdout, flushed as it happens. A succeeded install or
-upgrade ends with `CoForge Computer <version> is active.`. A refusal or a failed receipt's message
-goes to stderr as `coforge-installer: <message>`, or `coforge-installer: <CODE>: <message>` when the
-receipt has an `errorCode`. A feed retry first prints `coforge-installer: retrying <object> in <n>s
+Output: each stage line is `==> <stage>` on stdout, flushed as it happens. A succeeded install,
+upgrade, or repair ends with `CoForge Computer <version> is active.`. A refusal or a failed
+receipt's message goes to stderr as `coforge-installer: <message>`, or
+`coforge-installer: <CODE>: <message>` when the receipt has an `errorCode`. A feed retry first
+prints `coforge-installer: retrying <object> in <n>s
 (attempt <k> of 3): <error>` to stderr. A feed request that failed 3 times ends its message with
 `(3 attempts; proxy configured|proxy bypassed|no proxy)`; bypassed: `NO_PROXY` exempts the feed.
+Exit status (`contract.rs`): 0 succeeded, 1 failed, 2 held (lock or request conflict), 3 unresolved
+(run `coforge-computer recover`, or a rollback failed).
 
-Exit status (`contract.rs`): 0 succeeded, 1 failed (a receipt, or a usage error that wrote
-nothing), 2 held (another run holds the lock, or the request id belongs to something else), 3
-unresolved (run `coforge-computer recover`, or a rollback failed).
-
-The release feed is compiled in: `COFORGE_RELEASE_FEED_URL` is read at build time only (default
-`https://releases.coforge.cn`, the production feed; `src/compiled_feed.rs`). A build whose feed is
-plain `http://` must name `127.0.0.1` or `localhost` (end-to-end tests only); any other plain-HTTP
-feed is refused at startup. No command takes a feed.
+The release feed is compiled in (`src/compiled_feed.rs`): production defaults to
+`https://releases.coforge.cn`; plain HTTP is allowed only for loopback end-to-end tests. No command
+takes a feed.
 
 ## Toolchain
 
-- `crates/installer/mise.toml` pins Rust (with rustfmt and clippy) and the supply-chain
-  tools: cargo-deny, cargo-audit (`github:rustsec/rustsec`), and cargo-about.
-  They are deliberately not in the root `mise.toml`: the root `mise install`
-  that every CI job and `.agents/setup` runs must never download Rust.
+- `crates/installer/mise.toml` pins Rust (with rustfmt and clippy) plus cargo-deny, cargo-audit
+  (`github:rustsec/rustsec`), and cargo-about. They stay out of root `mise.toml`, whose setup must
+  never download Rust.
 - Run every command from `crates/installer/`. mise merges the root config there too, so
   install only what you need: `mise install rust bun` (Bun runs the lock
   tests), or the four tools above for the supply-chain checks.

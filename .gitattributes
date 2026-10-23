@@ -10,6 +10,7 @@ Cargo.lock linguist-generated
 mise.lock linguist-generated
 skills-lock.json linguist-generated
 crates/installer/contract/lock.json linguist-generated
+crates/installer/contract/receipt-cases.json linguist-generated
 
 # Generated code
 apps/web/src/routeTree.gen.ts linguist-generated

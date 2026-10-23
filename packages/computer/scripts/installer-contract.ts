@@ -107,6 +107,10 @@ function json(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function compactJson(value: unknown): string {
+  return `${JSON.stringify(value)}\n`;
+}
+
 /** A golden instance, validated by its schema so an example can never drift from the contract. */
 function instance(schema: z.ZodType, value: unknown): string {
   return json(schema.parse(value));
@@ -306,7 +310,7 @@ export function renderInstallerContract(): Map<string, string> {
     ]),
     [
       "receipt-cases.json",
-      json({
+      compactJson({
         allowed: ALLOWED_RECEIPTS.map(({ slug, fields }) => ({
           slug,
           receipt: InstallerReceiptSchema.parse(receiptOf(fields)),

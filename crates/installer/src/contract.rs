@@ -1,11 +1,5 @@
-//! The files and JSON this installer shares with the CoForge Computer product.
-//!
-//! The TypeScript product is the source of truth: `packages/computer` defines each shape with zod
-//! and generates JSON Schema plus golden instances into `crates/installer/contract/`
-//! (`bun run --cwd packages/computer generate:installer-contract`). These types read and write
-//! the same shapes. Every struct ignores fields it does not know, because a contract version only
-//! ever gains fields; tests in `contract/tests.rs` read every golden and round-trip it, and write
-//! what this crate produces into `contract/rust/`, which a TypeScript test reads back.
+//! Files and JSON shared with CoForge Computer. TypeScript defines the shapes and generates the
+//! schemas and goldens; these types read and write them while ignoring future fields.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -310,19 +304,8 @@ struct ReceiptFields {
     installer_version: String,
 }
 
-/// `<install root>/upgrade-results/<request id>.result.json`: one receipt per request id, written
-/// atomically and never overwritten. A repeated request id for the same operation and target
-/// replays the stored receipt and its exit status; a different operation or target is held
-/// without a receipt. Keep it under [`RECEIPT_MAX_BYTES`].
-///
-/// The status and error code fix the exit code (`InstallerReceiptSchema` in the product has the
-/// table): succeeded is 0; failed is 1, or 3 when the rollback failed (`UPGRADE_ROLLBACK_FAILED`)
-/// or had nothing to roll back to (no code); held is 2. `UPGRADE_ROLLED_BACK` goes with
-/// `restoredVersion` and exit 1. A receipt that is not succeeded says why in `error`.
-///
-/// A receipt that breaks those rules cannot exist: [`UpgradeReceipt::new`] derives the exit code
-/// from a [`ReceiptOutcome`] and refuses an invalid one, and reading a receipt applies the same
-/// rules as the schema.
+/// One immutable receipt per request id under `upgrade-results`; replays return its exit status.
+/// Status, error code, and exit code are validated together as in `InstallerReceiptSchema`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpgradeReceipt(ReceiptFields);
 
@@ -331,6 +314,18 @@ impl UpgradeReceipt {
     /// stopped and is left out of the receipt when empty.
     pub fn new(
         request_id: &str,
+        outcome: ReceiptOutcome,
+        dead_process_identities: Vec<DeadProcessIdentity>,
+    ) -> Result<Self, InvalidReceipt> {
+        Self::new_for_operation(request_id, "upgrade", outcome, dead_process_identities)
+    }
+
+    /// Creates a receipt for one installer operation. `upgrade` is the existing public operation;
+    /// `repair` records the local activation repair separately so a daemon upgrade watcher never
+    /// mistakes a manual repair for a server-requested upgrade.
+    pub fn new_for_operation(
+        request_id: &str,
+        operation: &str,
         outcome: ReceiptOutcome,
         dead_process_identities: Vec<DeadProcessIdentity>,
     ) -> Result<Self, InvalidReceipt> {
@@ -385,7 +380,7 @@ impl UpgradeReceipt {
         let fields = ReceiptFields {
             schema_version: RECEIPT_SCHEMA_VERSION,
             request_id: request_id.to_owned(),
-            operation: "upgrade".to_owned(),
+            operation: operation.to_owned(),
             status,
             version,
             restored_version,
@@ -413,6 +408,10 @@ impl UpgradeReceipt {
 
     pub fn request_id(&self) -> &str {
         &self.0.request_id
+    }
+
+    pub fn operation(&self) -> &str {
+        &self.0.operation
     }
 
     pub fn status(&self) -> ReceiptStatus {
@@ -483,8 +482,8 @@ fn validate(fields: &ReceiptFields) -> Result<(), InvalidReceipt> {
     if fields.schema_version != RECEIPT_SCHEMA_VERSION {
         return invalid("schema_version is not 1");
     }
-    if fields.operation != "upgrade" {
-        return invalid("operation is not upgrade");
+    if fields.operation != "upgrade" && fields.operation != "repair" {
+        return invalid("operation is not upgrade or repair");
     }
     if fields.protocol != INSTALLER_RECEIPT_PROTOCOL {
         return invalid("protocol is not coforge-installer/v1");

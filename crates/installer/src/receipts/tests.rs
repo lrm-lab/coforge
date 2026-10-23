@@ -44,6 +44,29 @@ fn a_new_request_is_recorded_and_begins() {
 }
 
 #[test]
+fn a_repair_request_records_its_distinct_operation() {
+    let root = Scratch::new("receipts-repair");
+    let lock = MachineMutationLock::acquire(root.path()).unwrap();
+    let store = ReceiptStore::new(root.path());
+    assert_eq!(
+        store
+            .begin_operation(&lock, ID, "repair", "active")
+            .unwrap(),
+        Begin::Fresh
+    );
+    let request: serde_json::Value = serde_json::from_slice(
+        &fs::read(
+            root.path()
+                .join(format!("upgrade-results/{ID}.request.json")),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(request["operation"], "repair");
+    assert_eq!(request["selection"], "active");
+}
+
+#[test]
 fn a_committed_receipt_is_read_back_and_never_overwritten() {
     let root = Scratch::new("receipts-commit");
     let lock = MachineMutationLock::acquire(root.path()).unwrap();

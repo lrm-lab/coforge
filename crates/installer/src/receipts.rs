@@ -130,11 +130,24 @@ impl ReceiptStore {
         request_id: &str,
         selection: &str,
     ) -> Result<Begin, ReceiptError> {
+        self.begin_operation(lock, request_id, "upgrade", selection)
+    }
+
+    /// Decides what an operation under `request_id` does and records its operation name and
+    /// selection when it is new. `repair` uses the same durable request store but does not share
+    /// request ids with upgrades.
+    pub fn begin_operation(
+        &self,
+        lock: &MachineMutationLock,
+        request_id: &str,
+        operation: &str,
+        selection: &str,
+    ) -> Result<Begin, ReceiptError> {
         self.require_lock(lock)?;
         let wanted = RequestRecord {
             schema_version: REQUEST_SCHEMA_VERSION,
             request_id: request_id.to_owned(),
-            operation: "upgrade".to_owned(),
+            operation: operation.to_owned(),
             selection: selection.to_owned(),
         };
         let request_path = self.request_path(request_id);

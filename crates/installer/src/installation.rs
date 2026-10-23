@@ -16,6 +16,7 @@ use crate::prepare::ReleaseSource;
 use crate::processes::{OsProcesses, VerifiedCaller};
 use crate::recover::{RecoverOutcome, recover as recover_installation};
 use crate::release_directory::ReleaseDirectory;
+use crate::repair::repair as repair_installation;
 use crate::service::{self, SystemRunner};
 use crate::status::{self, StatusReport};
 use crate::store::VersionStore;
@@ -149,6 +150,18 @@ pub fn recover(
         verify_caller(ports, caller_pid).map(|caller| recover_installation(ports, caller, stage))
     })
     .and_then(std::convert::identity)
+}
+
+/// Repairs the active version's metadata and links without downloading or replacing its immutable
+/// payload. The operation uses the same machine lock and receipt directory as upgrades.
+pub fn repair(
+    setup: &Setup,
+    request_id: &str,
+    stage: &mut dyn FnMut(&str),
+) -> Result<Outcome, String> {
+    with_ports(setup, &ReleaseOrigin::Feed, |ports| {
+        repair_installation(ports, request_id, stage)
+    })
 }
 
 /// The launching process, verified as this installer's parent, or none when no pid was given.

@@ -56,6 +56,15 @@ export const ALLOWED_RECEIPTS = [
       exit_code: 0,
     },
   },
+  {
+    slug: "repair-succeeded",
+    fields: {
+      operation: "repair",
+      status: "succeeded",
+      version: "0.2.0",
+      exit_code: 0,
+    },
+  },
   // The product reads a request id case-insensitively (`RFC_UUID_PATTERN`), so a receipt for an id
   // in capitals must be writable too, version and variant digits included.
   {

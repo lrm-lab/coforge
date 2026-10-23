@@ -38,6 +38,13 @@ where the directory has the layout above. Local builds may carry a lower version
 installed one, so the developer scripts pass `--allow-downgrade`; without it the installer
 refuses an older version ([Upgrade operations](upgrade-operations.md)).
 
+The POSIX bootstrap also accepts `repair`, `status`, and `recover` subcommands and forwards them
+to the freshly verified installer. `repair` has no version or channel selector: CoForge repairs
+the version already selected by `active.json`, recreating activation links after verifying its
+immutable bytes. It does not restart the service or replace a corrupt version; that case remains a
+failed repair receipt. An installer exit 3 is retried once for install, upgrade, and repair, while
+status and recover preserve their single-attempt result.
+
 Both entry points detect the platform before resolving the version. Normal output
 is limited to platform/version, curl download progress, installation location, and
 the final result. Bootstrap retains one setup command and, only when needed, a

@@ -19,9 +19,7 @@ fn read_text(name: &str) -> String {
     fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
 }
 
-/// Reads one TypeScript golden into `T`, asserts that writing it back yields the same JSON
-/// value, and asserts that a field this build has never heard of is ignored rather than
-/// rejected (fields only ever get added to a contract version).
+/// Reads a TypeScript golden, round-trips it, and checks that future fields are ignored.
 fn golden<T: DeserializeOwned + Serialize>(name: &str) -> T {
     let original: Value = serde_json::from_str(&read_text(name))
         .unwrap_or_else(|error| panic!("{name} is not JSON: {error}"));
@@ -43,8 +41,7 @@ fn golden<T: DeserializeOwned + Serialize>(name: &str) -> T {
     parsed
 }
 
-/// Writes what the installer itself produces into `contract/rust/`, where a TypeScript test
-/// reads it back with the product's schemas and readers. CI fails if the committed copy differs.
+/// Writes installer output into `contract/rust/` for the TypeScript contract test.
 fn emit(name: &str, contents: &str) {
     let directory = contract_directory().join("rust");
     fs::create_dir_all(&directory).unwrap();
@@ -391,8 +388,7 @@ fn emits_installed_identity() {
     );
 }
 
-/// One receipt per allowed row of `receipt-cases.json`, built the only way the crate builds one.
-/// The texts are the rows' own; `receipt_cases` fails when they drift.
+/// One receipt per allowed row of `receipt-cases.json`.
 fn constructed_receipts() -> Vec<(&'static str, UpgradeReceipt)> {
     let new = |outcome, stopped| UpgradeReceipt::new(REQUEST_ID, outcome, stopped).unwrap();
     let failed = |error: &str, error_code: Option<&str>| ReceiptOutcome::Failed {
@@ -420,6 +416,18 @@ fn constructed_receipts() -> Vec<(&'static str, UpgradeReceipt)> {
             "succeeded-uppercase-request-id",
             UpgradeReceipt::new(
                 "0F8B6D5E-2A41-4C3B-BE7D-1A2B3C4D5E6F",
+                ReceiptOutcome::Succeeded {
+                    version: "0.2.0".into(),
+                },
+                vec![],
+            )
+            .unwrap(),
+        ),
+        (
+            "repair-succeeded",
+            UpgradeReceipt::new_for_operation(
+                REQUEST_ID,
+                "repair",
                 ReceiptOutcome::Succeeded {
                     version: "0.2.0".into(),
                 },

@@ -2,44 +2,59 @@
 set -eu
 
 default_feed_url="https://releases.coforge.cn"
-# COFORGE_RELEASE_FEED_URL is accepted unconditionally for any https:// host. This script is a
-# one-shot the user explicitly runs (`curl ... | sh`), not the long-lived compiled binary that
-# ./packages/computer/src/release-channel.ts hardens by inlining the feed URL at build time - an
-# attacker able to set this variable in the invoking shell can equally set PATH or https_proxy to
-# reach the same result, so there is no additional boundary to enforce here. See
-# docs/release/per-user-installation.md. It only chooses where this script's installer comes from:
-# coforge-installer installs from its own compiled-in feed.
 feed_url=${COFORGE_RELEASE_FEED_URL:-$default_feed_url}
 feed_url=${feed_url%/}
 
+command=install
+case "${1:-}" in
+  install|upgrade|repair|status|recover)
+    command=$1
+    shift
+    ;;
+esac
 version=latest
+version_arg=0
 prepare_directory=
+prepare_arg=0
 target=
+target_arg=0
 resolve_only=0
 quiet_header=0
 prepare_phase=all
 workspace=
+json=0
+request_id=
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --prepare-directory|--target|--prepare-phase|--workspace)
       [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "install.sh: $1 requires a value" >&2; exit 2; }
       case "$1" in
-        --prepare-directory) prepare_directory=$2 ;;
-        --target) target=$2 ;;
-        --prepare-phase) prepare_phase=$2 ;;
+        --prepare-directory) prepare_directory=$2; prepare_arg=1 ;;
+        --target) target=$2; target_arg=1 ;;
+        --prepare-phase) prepare_phase=$2; prepare_arg=1 ;;
         --workspace) workspace=$2 ;;
       esac
       shift 2
       ;;
     --resolve-only) resolve_only=1; shift ;;
-    --quiet-header) quiet_header=1; shift ;;
+    --quiet-header) quiet_header=1; prepare_arg=1; shift ;;
     --version)
       [ "$#" -ge 2 ] || { echo "install.sh: --version requires a value" >&2; exit 2; }
       version=$2
+      version_arg=1
       shift 2
       ;;
+    --request-id)
+      [ "$#" -ge 2 ] || { echo "install.sh: --request-id requires a value" >&2; exit 2; }
+      request_id=$2
+      shift 2
+      ;;
+    --json)
+      json=1
+      shift
+      ;;
     -h|--help)
-      echo "Usage: install.sh [--version latest|<version>] [--workspace <slug>]"
+      echo "Usage: install.sh [install|upgrade|repair|status|recover] [--version latest|<version>] [--workspace <slug>]"
       exit 0
       ;;
     *)
@@ -49,13 +64,6 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# A version is a bare label used both as a URL segment and as a local directory name, so it is
-# restricted to a safe charset with no traversal segment - the same rule the updater itself
-# applies to a "latest" pointer or an explicit --version. "." is rejected on its own (in addition
-# to the "*..*" traversal check, which does not catch a lone dot): as a directory name it is
-# "the versions directory itself", so accepting it would let a payload land directly in
-# "versions/" and break the one-version-per-directory invariant. A leading "-" is rejected so the
-# value can never be mistaken for a flag by a tool this script or the updater later shells out to.
 is_valid_version() {
   case "$1" in
     "") return 1 ;;
@@ -72,9 +80,42 @@ if [ "$version" != "latest" ] && ! is_valid_version "$version"; then
   exit 2
 fi
 
-# COFORGE_INSTALLER_TEST_MODE relaxes the HTTPS-only transport so tests can point the installer
-# at a local fixture server over plain HTTP. A real install always requires HTTPS: integrity no
-# longer comes from payload signing, only from TLS plus the sidecar SHA-256 checksum below.
+case "$command" in
+  install)
+    [ "$json" -eq 0 ] || { echo "install.sh: --json is only valid with status" >&2; exit 2; }
+    [ -z "$request_id" ] || { echo "install.sh: --request-id is only valid with upgrade" >&2; exit 2; }
+    ;;
+  upgrade)
+    [ -n "$request_id" ] || { echo "install.sh: upgrade requires --request-id" >&2; exit 2; }
+    [ "$json" -eq 0 ] || { echo "install.sh: --json is only valid with status" >&2; exit 2; }
+    [ -z "$workspace" ] || { echo "install.sh: --workspace is only valid with install" >&2; exit 2; }
+    ;;
+  repair)
+    [ "$version_arg" -eq 0 ] || { echo "install.sh: repair does not select a Computer version; --version is not supported" >&2; exit 2; }
+    [ -z "$request_id" ] || { echo "install.sh: repair does not accept --request-id" >&2; exit 2; }
+    [ "$json" -eq 0 ] || { echo "install.sh: --json is only valid with status" >&2; exit 2; }
+    [ -z "$workspace" ] || { echo "install.sh: --workspace is only valid with install" >&2; exit 2; }
+    ;;
+  status)
+    [ "$version_arg" -eq 0 ] || { echo "install.sh: status does not select a Computer version; --version is not supported" >&2; exit 2; }
+    [ -z "$request_id" ] || { echo "install.sh: status does not accept --request-id" >&2; exit 2; }
+    [ -z "$workspace" ] || { echo "install.sh: --workspace is only valid with install" >&2; exit 2; }
+    ;;
+  recover)
+    [ "$version_arg" -eq 0 ] || { echo "install.sh: recover does not select a Computer version; --version is not supported" >&2; exit 2; }
+    [ -z "$request_id" ] || { echo "install.sh: recover does not accept --request-id" >&2; exit 2; }
+    [ "$json" -eq 0 ] || { echo "install.sh: --json is only valid with status" >&2; exit 2; }
+    [ -z "$workspace" ] || { echo "install.sh: --workspace is only valid with install" >&2; exit 2; }
+    ;;
+esac
+
+if [ "$command" != install ] && {
+  [ "$prepare_arg" -eq 1 ] || [ "$target_arg" -eq 1 ] || [ "$resolve_only" -eq 1 ];
+}; then
+  echo "install.sh: preparation options are only valid with install" >&2
+  exit 2
+fi
+
 test_mode=${COFORGE_INSTALLER_TEST_MODE:-}
 case "$feed_url" in
   https://*) curl_proto='=https' ;;
@@ -201,22 +242,12 @@ fetch_binary() {
   esac
 }
 
-# `latest` and the checksum sidecar (below) are both tiny, feed-controlled text objects with no
-# advertised size of their own, so each download gets a small fixed ceiling rather than none.
-# curl's max-filesize option treats a literal zero as "unlimited", so neither constant below may
-# ever be zero.
 max_pointer_bytes=4096
 max_manifest_bytes=1048576
-# Fixed transport ceiling; the updater checks exact compressed and expanded manifest sizes.
 max_binary_bytes=536870912
-# Pi's image library (photon_rs_bg.wasm) is a fixed, platform-independent object (~1.8 MB); the
-# updater checks its exact recorded size against the manifest.
 max_wasm_bytes=16777216
 
 [ "$quiet_header" -eq 1 ] || step "Detected platform: $platform"
-# --prepare-directory and --resolve-only are the Computer's own calls (release/installation-source.ts
-# and release/installer-launch.ts). A plain bootstrap skips this block and installs through
-# coforge-installer below.
 if [ -n "$prepare_directory" ] || [ "$resolve_only" -eq 1 ]; then
   if [ "$version" = "latest" ]; then
     [ "$quiet_header" -eq 1 ] || step "Finding the latest CoForge Computer version"
@@ -267,9 +298,6 @@ if [ -n "$prepare_directory" ] || [ "$resolve_only" -eq 1 ]; then
 
 fi
 
-# Bootstrap: the installer feed (<feed>/installer) names its current version in one pointer, and
-# each target has one installer gzip and a sidecar checksum. The installer resolves the Computer
-# version itself, so this script fetches no Computer object.
 step "Finding the CoForge installer"
 installer_pointer_path="$temporary_directory/installer-latest"
 fetch --max-filesize "$max_pointer_bytes" --output "$installer_pointer_path" "$feed_url/installer/latest"
@@ -289,7 +317,6 @@ installer_url="$feed_url/installer/$installer_version/$target"
 step "Downloading CoForge installer"
 fetch_binary --max-filesize "$max_binary_bytes" --output "$temporary_directory/$installer_gzip" "$installer_url/$installer_gzip"
 
-# Bootstrap checks the sidecar before executing code.
 sidecar_path="$temporary_directory/coforge-installer.sha256"
 fetch --max-filesize "$max_pointer_bytes" --output "$sidecar_path" "$installer_url/coforge-installer.sha256"
 expected_sha256=$(tr -d '[:space:]' < "$sidecar_path")
@@ -302,8 +329,6 @@ if [ -z "$expected_sha256" ] || [ "${#expected_sha256}" -ne 64 ]; then
 fi
 
 installer_path="$temporary_directory/$installer_binary"
-# Limit the output both while expanding and after completion. POSIX ulimit -f is measured
-# in 512-byte blocks, so this matches max_binary_bytes without trusting gzip metadata.
 (ulimit -f 1048576; gzip -dc "$temporary_directory/$installer_gzip" > "$installer_path") || {
   echo "install.sh: compressed installer could not be decompressed safely" >&2
   exit 1
@@ -326,22 +351,32 @@ fi
 }
 
 chmod 700 "$installer_path"
-# A plain (non-exec) invocation runs the installer as a child process, so the EXIT trap above still
-# fires once it returns and the temporary directory is removed. `exec` would skip that trap.
+run_installer() {
+  case "$command" in
+    install) "$installer_path" install --version "$version" ;;
+    upgrade) "$installer_path" upgrade --request-id "$request_id" --version "$version" ;;
+    repair) "$installer_path" repair ;;
+    status)
+      if [ "$json" -eq 1 ]; then "$installer_path" status --json; else "$installer_path" status; fi
+      ;;
+    recover) "$installer_path" recover ;;
+  esac
+}
+
 installer_status=0
-"$installer_path" install --version "$version" || installer_status=$?
+run_installer || installer_status=$?
+[ "$installer_status" -eq 3 ] && [ "$command" != status ] && [ "$command" != recover ] && {
+  echo "install.sh: retrying installer once after exit 3" >&2
+  installer_status=0
+  run_installer || installer_status=$?
+}
 [ "$installer_status" -eq 0 ] || exit "$installer_status"
 
-# The installer resolves "latest" itself and this script never learns the concrete version, so the
-# messages below name the version only when the caller asked for one.
+[ "$command" = install ] || exit 0
+
 computer_label="CoForge Computer"
 [ "$version" = latest ] || computer_label="CoForge Computer $version"
 
-# This must resolve the shim directory by exactly the rule
-# packages/computer/src/paths.ts:resolveComputerBinaryDirectory applies, because the binary
-# invoked above is what actually creates the shim - if the two disagree, every hint printed below
-# names a path that does not exist. A relative XDG_BIN_HOME is not a usable PATH entry, so, as
-# there, only an absolute value is honoured.
 bin_directory=${XDG_BIN_HOME:-}
 case "$bin_directory" in
   /*) ;;

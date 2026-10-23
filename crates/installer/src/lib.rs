@@ -28,6 +28,7 @@ pub mod processes;
 pub mod receipts;
 pub mod recover;
 pub mod release_directory;
+pub mod repair;
 pub mod request_id;
 pub mod service;
 pub mod status;
