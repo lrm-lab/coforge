@@ -41,6 +41,22 @@ export type AppNotificationEventName = keyof typeof APP_NOTIFICATION_EVENT_GROUP
  * time that this is exactly the recorded set (`AppNotificationEventPayload`). */
 export const APP_NOTIFICATION_EMITTED_EVENTS = [
   "workspace.member_added",
+  "workspace.member_removed",
+  "workspace.member_role_changed",
+  "workspace.config_updated",
+  "workspace.public_channel_created",
+  "workspace.public_channel_archived",
+  "channel.archived",
+  "channel.member_added",
+  "channel.member_removed",
+  "channel.config_updated",
+  "thread.created",
+  "agent.profile_updated",
+  "agent.runtime_changed",
+  "agent.model_changed",
+  "computer.version_changed",
+  "computer.agent_started",
+  "computer.agent_stopped",
 ] as const satisfies readonly AppNotificationEventName[];
 
 /** Every event, in the order lists of them are kept and shown. */

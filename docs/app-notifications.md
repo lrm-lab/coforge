@@ -13,7 +13,7 @@ delivery) and is not a generic job API.
 
 ## Mechanism
 
-1. Domain code calls `AppNotifications.record(tx, workspace, event)` (`workspace` is the caller's `{ id, slug }`, so recording reads nothing but the flag) inside the Prisma interactive transaction
+1. Domain code calls `AppNotifications.record(tx, workspace, event)` (`workspace` is the caller's `{ id, slug }`, so recording reads nothing but the flag; a caller that holds only the Workspace id goes through `recordAppNotifications`, which reads the slug first) inside the Prisma interactive transaction
    that makes the event true. It is the only way to emit an app notification. The event is the
    [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md)
    envelope `{ id (UUIDv7), type, timestamp, workspaceId, data }`; `data` holds ids and changed
@@ -28,8 +28,8 @@ delivery) and is not a generic job API.
 3. The delivery handler (`webhook-delivery.server.ts`) POSTs the event to the installation's app
    webhook, or completes the job unsent ([HTTP delivery](#http-delivery)).
 
-Events recorded today: `workspace.member_added` with `data: { userId, role }`
-(`admitWorkspaceMember`). `AppNotificationEvent` is a discriminated union: each `type` is paired with
+Events recorded today, and what each carries and where it is recorded:
+[event data](app-notifications/subscriptions.md#event-data). `AppNotificationEvent` is a discriminated union: each `type` is paired with
 its `data` shape, so adding an event adds a member to `AppNotificationEventPayload`.
 
 Naming: Raft calls Workspace events `server.*`. CoForge's Workspace is Raft's server (the read APIs

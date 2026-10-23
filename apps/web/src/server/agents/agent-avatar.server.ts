@@ -1,3 +1,5 @@
+import { appNotificationsPossible } from "#src/server/app-notifications/app-notifications.server";
+import { recordAgentProfileUpdated } from "#src/server/app-notifications/agent-events.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { toPublicServerError } from "#src/server/errors/public-error.server";
@@ -63,11 +65,11 @@ export class AgentAvatars {
       contentType: file.type,
       previousObjectKey: current.avatarObjectKey,
       commit: async () => {
-        const updated = await this.db.agent.updateMany({
-          where: { id: agentId, avatarObjectKey: current.avatarObjectKey },
-          data: { avatarObjectKey: objectKey, avatarContentType: file.type },
+        const updated = await this.#write(workspaceId, agentId, current.avatarObjectKey, {
+          avatarObjectKey: objectKey,
+          avatarContentType: file.type,
         });
-        if (!updated.count) throw new AppError("CONFLICT");
+        if (!updated) throw new AppError("CONFLICT");
       },
       reportRemovalFailure: (error) => void toPublicServerError(error),
     });
@@ -76,9 +78,9 @@ export class AgentAvatars {
 
   async remove(workspaceId: string, userId: string, agentId: string) {
     const current = await this.#owned(workspaceId, userId, agentId);
-    await this.db.agent.updateMany({
-      where: { id: agentId, avatarObjectKey: current.avatarObjectKey },
-      data: { avatarObjectKey: null, avatarContentType: null },
+    await this.#write(workspaceId, agentId, current.avatarObjectKey, {
+      avatarObjectKey: null,
+      avatarContentType: null,
     });
     if (current.avatarObjectKey) {
       try {
@@ -87,6 +89,24 @@ export class AgentAvatars {
         toPublicServerError(error);
       }
     }
+  }
+
+  /** Compare-and-swap on the picture this change replaces; records `agent.profile_updated` for
+   * the apps installed when it wins. Says whether it did. */
+  async #write(
+    workspaceId: string,
+    agentId: string,
+    replacing: string | null,
+    data: { avatarObjectKey: string | null; avatarContentType: string | null },
+  ) {
+    const where = { id: agentId, avatarObjectKey: replacing };
+    if (!appNotificationsPossible() || replacing === data.avatarObjectKey)
+      return (await this.db.agent.updateMany({ where, data })).count > 0;
+    return this.db.$transaction(async (tx) => {
+      const { count } = await tx.agent.updateMany({ where, data });
+      if (count) await recordAgentProfileUpdated(tx, workspaceId, agentId, ["avatar"]);
+      return count > 0;
+    });
   }
 
   async read(userId: string, workspaceId: string, agentId: string) {

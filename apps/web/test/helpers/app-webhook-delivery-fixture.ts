@@ -181,7 +181,7 @@ export function jobFor(
   const event = newAppNotificationEvent({
     type: "workspace.member_added",
     workspaceId: workspace.id,
-    data: { userId: crypto.randomUUID(), role: "member" },
+    data: { user_id: crypto.randomUUID(), role: "member" },
   });
   const data: AppNotificationDeliveryJob = { eventId: event.id, installationId, event };
   return { id, retryCount, data };

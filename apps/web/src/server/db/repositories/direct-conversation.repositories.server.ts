@@ -59,6 +59,8 @@ import {
   channelMentionTargets,
   storeMessageBody,
 } from "#src/server/conversations/message-references.server";
+import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
+import { restoreDirectConversationMembers } from "#src/server/conversations/direct-conversation-members.server";
 import {
   pendingMentionActionsForMessage,
   recordPendingMentionActions,
@@ -220,25 +222,6 @@ function onlyAnchorMatch<T>(rows: T[], notFound: AgentMessageValidationMessage):
   const row = rows[0];
   if (!row) throw new AgentMessageValidationError(notFound);
   return row;
-}
-
-/**
- * Opening a direct conversation that already exists gives each of these people their member row
- * back if it is missing altogether: a Workspace removal once deleted those rows. Both kinds of
- * direct conversation (with a person, with an Agent) restore through here.
- */
-export async function restoreDirectConversationMembers(
-  db: Pick<PrismaClient, "conversationMember">,
-  input: { conversationId: string; workspaceId: string; userIds: readonly string[] },
-) {
-  await db.conversationMember.createMany({
-    data: input.userIds.map((userId) => ({
-      conversationId: input.conversationId,
-      workspaceId: input.workspaceId,
-      userId,
-    })),
-    skipDuplicates: true,
-  });
 }
 
 /**
@@ -2431,7 +2414,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       }
       // A channel mention of someone outside the channel reached nobody; the sending Agent may
       // still act on it. A DM stores every `@handle` as text, so it records nothing.
-      if (conversation.channelName)
+      if (conversation.channelName) {
         await recordPendingMentionActions(tx, {
           id: created.id,
           workspaceId: conversation.workspaceId,
@@ -2440,6 +2423,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           body: stored.body,
           createdAt: created.createdAt,
         });
+        if (root)
+          await recordThreadCreatedByReply(tx, {
+            workspaceId: conversation.workspaceId,
+            channelId: conversationId,
+            threadRootId: root.id,
+            messageId: created.id,
+          });
+      }
       await Promise.all(
         attachments.map((attachment, position) =>
           tx.attachment.update({

@@ -5,7 +5,7 @@ import type {
   ConversationRealtime,
   ConversationRealtimeMessage,
 } from "#src/server/conversations/conversation-realtime.server";
-import { enrollGeneralChannel } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 
 /**

@@ -1,3 +1,4 @@
+import { recordChannelMembersRemoved } from "#src/server/app-notifications/channel-events.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_CHANNEL_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
@@ -60,6 +61,12 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
         where: { workspaceId: input.workspaceId, agentId: input.agentId, leftAt: null },
         data: { leftAt: input.deletedAt },
       });
+      await recordChannelMembersRemoved(
+        tx,
+        input.workspaceId,
+        activeChannels.map((row) => row.conversationId),
+        { agentId: input.agentId },
+      );
       const remindersCanceled = await tx.reminder.updateMany({
         where: {
           workspaceId: input.workspaceId,

@@ -11,6 +11,8 @@ import {
 import { getPublicImageStorage } from "#src/server/files/public-image-storage.server";
 import { validateImage } from "#src/server/files/image-upload.server";
 import { replaceStoredImage } from "#src/server/files/stored-image-replacement.server";
+import { appNotificationsPossible } from "#src/server/app-notifications/app-notifications.server";
+import { recordWorkspaceConfigUpdated } from "#src/server/app-notifications/workspace-events.server";
 import { toPublicServerError } from "#src/server/errors/public-error.server";
 import { assertCanManageWorkspaceSettings } from "#src/server/workspaces/member-role.server";
 import { WORKSPACE_ADMIN_ROLES } from "#src/features/workspaces/workspace-roles";
@@ -57,15 +59,24 @@ export class WorkspaceImages {
       commit: async () => {
         // Compare-and-swap on the key this upload replaces, still as an owner or admin: of two
         // concurrent uploads one wins, and an uploader demoted meanwhile writes nothing.
-        const updated = await this.db.workspace.updateMany({
-          where: {
-            id: workspaceId,
-            iconObjectKey: previousKey,
-            members: { some: { userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } },
-          },
-          data: { iconObjectKey: objectKey, iconContentType: file.type },
-        });
-        if (!updated.count) {
+        const where = {
+          id: workspaceId,
+          iconObjectKey: previousKey,
+          members: { some: { userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } },
+        };
+        const data = { iconObjectKey: objectKey, iconContentType: file.type };
+        const updated = appNotificationsPossible()
+          ? await this.db.$transaction(async (tx) => {
+              const written = await tx.workspace.updateManyAndReturn({
+                where,
+                data,
+                select: { id: true, slug: true },
+              });
+              if (written[0]) await recordWorkspaceConfigUpdated(tx, written[0], { icon: true });
+              return written.length;
+            })
+          : (await this.db.workspace.updateMany({ where, data })).count;
+        if (!updated) {
           // Nothing matched: either the uploader is no longer an owner or admin, or another
           // upload replaced the icon first. Re-read the role so each case gets its own answer.
           const current = await this.db.workspaceMembership.findUnique({

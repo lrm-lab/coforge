@@ -14,6 +14,9 @@ import {
   channelAuthorityDeniedError,
 } from "./agent-channel-management-error.server";
 import { PublicChannels } from "./public-channels.server";
+import { softLeaveMember } from "./channel-changes.server";
+import { createChannel } from "./channel-creation.server";
+import { joinChannelAsAgent } from "./agent-channel-join.server";
 import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
 import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
 import {
@@ -182,18 +185,10 @@ export class AgentChannelManagement {
       return { target: `#${channel.channelName}`, joined: true, alreadyJoined: Boolean(before) };
     }
     await this.assertCallerNotPrivate(workspaceId, agentId, "join");
-    const existing = await this.db.conversationMember.findFirst({
-      where: { conversationId: channel.id, agentId, ...ACTIVE_MEMBER_WHERE },
-      select: { id: true },
-    });
-    await this.db.conversationMember.upsert({
-      where: { conversationId_agentId: { conversationId: channel.id, agentId } },
-      create: { conversationId: channel.id, workspaceId, agentId },
-      update: { leftAt: null },
-    });
-    if (!existing)
+    const joined = await joinChannelAsAgent(this.db, workspaceId, channel.id, agentId);
+    if (joined)
       await announceMemberChanged(this.realtime, { workspaceId, conversationIds: [channel.id] });
-    return { target: `#${channel.channelName}`, joined: true, alreadyJoined: Boolean(existing) };
+    return { target: `#${channel.channelName}`, joined: true, alreadyJoined: !joined };
   }
 
   async leave(workspaceId: string, agentId: string, target: string) {
@@ -210,7 +205,7 @@ export class AgentChannelManagement {
       await this.channels.leave(workspaceId, actor.userId!, channel.id);
       return { target: `#${channel.channelName}`, joined: false, wasMember: Boolean(before) };
     }
-    const wasMember = await this.markLeft(channel.id, { agentId });
+    const wasMember = await this.markLeft(workspaceId, channel.id, { agentId });
     if (wasMember) {
       await announceMemberChanged(this.realtime, { workspaceId, conversationIds: [channel.id] });
       await this.inboxPurge.purge({
@@ -261,14 +256,11 @@ export class AgentChannelManagement {
       archivedAt: Date | null;
     };
     try {
-      channel = await this.db.conversation.create({
-        data: {
-          workspaceId,
-          channelName: name,
-          description: description ?? "",
-          // The creator becomes the channel's first admin, same as a human creator.
-          members: { create: { agentId, channelRole: "admin" } },
-        },
+      channel = await createChannel(this.db, {
+        workspaceId,
+        name,
+        creator: { agentId },
+        description: description ?? "",
       });
     } catch (error) {
       if (isUniqueViolation(error))
@@ -480,13 +472,13 @@ export class AgentChannelManagement {
       });
       if (!agentRow) throw memberNotFound(handle);
       if (agentRow.id !== callingAgentId) await assertMayRemoveOthers();
-      wasMember = await this.markLeft(channel.id, { agentId: agentRow.id });
+      wasMember = await this.markLeft(workspaceId, channel.id, { agentId: agentRow.id });
       if (wasMember) removedAgentId = agentRow.id;
     } else {
       await assertMayRemoveOthers();
       const user = await this.db.user.findUnique({ where: { username: handle } });
       if (!user) throw memberNotFound(handle);
-      wasMember = await this.markLeft(channel.id, { userId: user.id });
+      wasMember = await this.markLeft(workspaceId, channel.id, { userId: user.id });
       if (wasMember) removedUserIds = [user.id];
     }
     if (wasMember)
@@ -523,15 +515,12 @@ export class AgentChannelManagement {
   }
 
   /** Ends one member's active membership of a channel; whether they were an active member. */
-  private async markLeft(
+  private markLeft(
+    workspaceId: string,
     conversationId: string,
     member: { agentId: string } | { userId: string },
   ): Promise<boolean> {
-    const result = await this.db.conversationMember.updateMany({
-      where: { conversationId, ...member, ...ACTIVE_MEMBER_WHERE },
-      data: { leftAt: new Date() },
-    });
-    return result.count > 0;
+    return softLeaveMember(this.db, workspaceId, conversationId, member);
   }
 
   /** A `#channel` target and the visible channel it names (400 if malformed, 404 if unknown). */

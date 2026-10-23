@@ -1,3 +1,9 @@
+import {
+  appNotificationsPossible,
+  attemptAppNotification,
+} from "#src/server/app-notifications/app-notifications.server";
+import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
+import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { AGENT_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
@@ -217,6 +223,16 @@ async function addUnmutedMember(
   input: { workspaceId: string; conversationId: string },
   agentId: string,
 ) {
+  // Whether it was in already is the emitter's own query (`null` is not in, `undefined` unknown),
+  // read only where apps can be told.
+  const wasIn = appNotificationsPossible()
+    ? await attemptAppNotification(tx, () =>
+        tx.conversationMember.findFirst({
+          where: { conversationId: input.conversationId, agentId, ...ACTIVE_MEMBER_WHERE },
+          select: { id: true },
+        }),
+      )
+    : undefined;
   await tx.conversationMember.upsert({
     where: { conversationId_agentId: { conversationId: input.conversationId, agentId } },
     create: {
@@ -227,6 +243,8 @@ async function addUnmutedMember(
     },
     update: { leftAt: null, channelMuted: false },
   });
+  if (wasIn === null)
+    await recordChannelMembersAdded(tx, input.workspaceId, input.conversationId, [{ agentId }]);
 }
 
 async function writeProvisionedProfile(

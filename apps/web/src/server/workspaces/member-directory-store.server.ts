@@ -7,6 +7,14 @@ import {
 } from "./member-directory.server";
 import { isWorkspaceMemberRole, type WorkspaceMemberRole } from "./member-role.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
+import {
+  appNotificationsPossible,
+  attemptAppNotification,
+} from "#src/server/app-notifications/app-notifications.server";
+import {
+  recordMemberRemoved,
+  recordMemberRoleChanged,
+} from "#src/server/app-notifications/workspace-events.server";
 import { unlinkDepartingMemberComputers } from "#src/server/computers/computer-membership.server";
 import {
   ACTIVE_CHANNEL_MEMBER_WHERE,
@@ -53,18 +61,28 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
   }
 
   async updateRole(workspaceId: string, userId: string, role: WorkspaceMemberRole) {
-    const row = await this.db.workspaceMembership.update({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      data: { role },
-      select: {
-        workspaceId: true,
-        userId: true,
-        role: true,
-        user: {
-          select: { username: true, displayName: true, avatarObjectKey: true },
-        },
-      },
-    });
+    const where = { workspaceId_userId: { workspaceId, userId } };
+    const select = {
+      workspaceId: true,
+      userId: true,
+      role: true,
+      user: { select: { username: true, displayName: true, avatarObjectKey: true } },
+    } as const;
+    const row = await (appNotificationsPossible()
+      ? this.db.$transaction(async (tx) => {
+          const previous = await attemptAppNotification(tx, () =>
+            tx.workspaceMembership.findUnique({ where, select: { role: true } }),
+          );
+          const updated = await tx.workspaceMembership.update({ where, data: { role }, select });
+          if (previous)
+            await recordMemberRoleChanged(tx, workspaceId, {
+              userId,
+              previousRole: asRole(previous.role),
+              role,
+            });
+          return updated;
+        })
+      : this.db.workspaceMembership.update({ where, data: { role }, select }));
     return {
       workspaceId: row.workspaceId,
       userId: row.userId,
@@ -91,7 +109,9 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
         data: { leftAt: new Date() },
       });
       const { computerIds } = await unlinkDepartingMemberComputers(tx, { workspaceId, userId });
-      return { leftChannelIds: activeChannels.map((row) => row.conversationId), computerIds };
+      const leftChannelIds = activeChannels.map((row) => row.conversationId);
+      await recordMemberRemoved(tx, workspaceId, { userId, leftChannelIds });
+      return { leftChannelIds, computerIds };
     });
   }
 }

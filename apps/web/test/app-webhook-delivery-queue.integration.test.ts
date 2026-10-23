@@ -48,7 +48,7 @@ testWithDatabase(
         const event = newAppNotificationEvent({
           type: "workspace.member_added",
           workspaceId: f.workspace.id,
-          data: { userId: crypto.randomUUID(), role: "member" },
+          data: { user_id: crypto.randomUUID(), role: "member" },
         });
         await db!.$transaction((tx) => AppNotifications.record(tx, f.workspace, event));
 

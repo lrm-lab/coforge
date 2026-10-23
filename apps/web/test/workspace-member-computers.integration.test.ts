@@ -7,7 +7,7 @@ import {
   centrifugoConnectDependencies,
 } from "#src/server/centrifugo/connect-proxy.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { generalChannelForCreator } from "#src/server/conversations/public-channels.server";
+import { generalChannelForCreator } from "#src/server/conversations/general-channel.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
 import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.server";

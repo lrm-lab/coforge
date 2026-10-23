@@ -128,7 +128,7 @@ function memberAdded(workspaceId: string) {
   return newAppNotificationEvent({
     type: "workspace.member_added",
     workspaceId,
-    data: { userId: crypto.randomUUID(), role: "member" },
+    data: { user_id: crypto.randomUUID(), role: "member" },
   });
 }
 
@@ -259,11 +259,14 @@ testWithDatabase("admitting a member records workspace.member_added", async () =
     await db!.$transaction((tx) =>
       admitWorkspaceMember(tx, { workspace, userId: joiner.id, role: "member" }),
     );
-    const [job] = await eventJobs(workspace.id);
+    // Joining also puts the member in `#general`, which records its own event.
+    const job = (await eventJobs(workspace.id)).find(
+      ({ data }) => (data as { type: string }).type === "workspace.member_added",
+    );
     expect(job?.data).toMatchObject({
       type: "workspace.member_added",
       workspaceId: workspace.id,
-      data: { userId: joiner.id, role: "member" },
+      data: { user_id: joiner.id, role: "member" },
     });
 
     // The same admission rolled back records nothing.

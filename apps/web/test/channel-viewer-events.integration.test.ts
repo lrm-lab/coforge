@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import type { ViewerEvent } from "#src/features/conversations/conversation-realtime";
-import {
-  PublicChannels,
-  enrollGeneralChannel,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
 import { arrangeConversationPins } from "#src/server/conversations/conversation-pins.server";

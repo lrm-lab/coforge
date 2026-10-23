@@ -48,6 +48,8 @@ function fakeDb(seed: AgentRow) {
     ["member-2", "member"],
   ]);
   const db = {
+    // The write runs in a transaction, which a fake runs on itself.
+    $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(db),
     agent: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         if (where.id !== row.id || where.workspaceId !== row.workspaceId) return null;

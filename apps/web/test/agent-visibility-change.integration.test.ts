@@ -8,10 +8,8 @@ import {
 } from "#src/server/db/repositories/agent-visibility-change.repositories.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import {
-  enrollGeneralChannel,
-  PublicChannels,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 
 /**

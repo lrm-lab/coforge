@@ -36,8 +36,14 @@ const AGENT_SCOUT = {
 
 function baseDb(overrides: { update?: (data: Record<string, unknown>) => void } = {}) {
   const state = { ...AGENT_SCOUT };
-  return {
+  const db = {
+    // The update runs in a transaction, which a fake runs on itself.
+    $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(db),
     agent: {
+      findUniqueOrThrow: async () => ({
+        displayName: state.displayName,
+        description: state.description,
+      }),
       findFirst: async ({ where }: { where: { name?: string } }) => {
         // A `name`-less `findFirst` is `agentVisibilityViewerForActor` resolving the calling
         // Agent's own ownerId/role; the caller here always is `scout` itself.
@@ -58,6 +64,7 @@ function baseDb(overrides: { update?: (data: Record<string, unknown>) => void } 
     },
     conversation: { findMany: async () => [] },
   };
+  return db;
 }
 
 async function getRequest(target?: string) {

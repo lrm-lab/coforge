@@ -140,7 +140,7 @@ async function fixture(db: PrismaClient, flags: Flags = "both") {
           newAppNotificationEvent({
             type,
             workspaceId: workspace.id,
-            data: { userId: crypto.randomUUID(), role: "member" },
+            data: { user_id: crypto.randomUUID(), role: "member" },
           }),
         )
       ).map((subscriber) => subscriber.installationId),

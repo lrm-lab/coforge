@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import {
-  generalChannelForCreator,
-  PublicChannels,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { generalChannelForCreator } from "#src/server/conversations/general-channel.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { UserDirectConversations } from "#src/server/conversations/user-direct-conversations.server";
 import type {
@@ -31,6 +29,7 @@ import { handleAgentAttachmentUpload } from "#src/routes/api/agent/v1/attachment
 import { handleAttachmentUploadSessionCreate } from "#src/routes/api/agent/v1/attachment-upload-sessions/index";
 import { handleAgentActionPrepare } from "#src/routes/api/agent/v1/actions/prepare";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
+import { teardown } from "./helpers/workspace-teardown";
 
 type Person = { id: string; username: string };
 
@@ -84,12 +83,6 @@ async function setup() {
   const team = await channels.create(workspace.id, owner.id, `team-${suffix}`);
   await channels.join(workspace.id, bob.id, team.id);
   return { db, directory, channels, admit, workspace, owner, bob, team };
-}
-
-async function teardown(db: PrismaClient, workspaceId: string, userIds: string[]) {
-  await db.workspace.delete({ where: { id: workspaceId } }).catch(() => {});
-  await db.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
-  await db.$disconnect();
 }
 
 /** The Workspace `/` returns to, kept in memory the way the browser keeps its cookie. */

@@ -1,3 +1,7 @@
+import {
+  requiredGroupsOf,
+  type AppNotificationEventName,
+} from "#src/features/apps/app-notification-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 
 /** A flagd definition that turns a flag on for the Workspaces with these slugs only. */
@@ -22,5 +26,26 @@ export async function subscribeToMemberAdded(db: PrismaClient, appId: string) {
   await db.appInstallation.updateMany({
     where: { appId },
     data: { approvedGroups: ["workspace"], approvedEvents: ["workspace.member_added"] },
+  });
+}
+
+/**
+ * Makes `events` effective for every installation of the app: the app declares them and the data
+ * groups they need, and its installations approved both (same as `subscribeToMemberAdded`, for
+ * any events).
+ */
+export async function subscribeTo(
+  db: PrismaClient,
+  appId: string,
+  events: readonly AppNotificationEventName[],
+) {
+  const groups = [...new Set(events.flatMap((event) => requiredGroupsOf(event)))];
+  await db.app.update({
+    where: { id: appId },
+    data: { permissionGroups: groups, notificationEvents: [...events] },
+  });
+  await db.appInstallation.updateMany({
+    where: { appId },
+    data: { approvedGroups: groups, approvedEvents: [...events] },
   });
 }

@@ -10,10 +10,8 @@ import {
   attachToMessage,
   claimUploadedAttachments,
 } from "#src/server/attachments/message-attachments.server";
-import {
-  allocateSequence,
-  restoreDirectConversationMembers,
-} from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { restoreDirectConversationMembers } from "./direct-conversation-members.server";
+import { allocateSequence } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";

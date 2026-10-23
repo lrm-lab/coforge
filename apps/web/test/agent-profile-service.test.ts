@@ -86,8 +86,14 @@ function baseDb(
   } = {},
 ) {
   const agentRecord = overrides.agent !== undefined ? overrides.agent : AGENT_SCOUT;
-  return {
+  const db = {
+    // The update runs in a transaction, which a fake runs on itself.
+    $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(db),
     agent: {
+      findUniqueOrThrow: async () => ({
+        displayName: AGENT_SCOUT.displayName,
+        description: AGENT_SCOUT.description,
+      }),
       findFirst: async ({
         where,
       }: {
@@ -118,6 +124,7 @@ function baseDb(
     },
     conversation: { findMany: async () => [] },
   };
+  return db;
 }
 
 test("profile show: defaults to the calling Agent's own profile when no target is given", async () => {

@@ -1,3 +1,4 @@
+import { recordChannelMembersRemoved } from "#src/server/app-notifications/channel-events.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
@@ -7,7 +8,7 @@ import {
   ACTIVE_CHANNEL_MEMBER_WHERE,
   VISIBLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
-import { joinGeneralChannel } from "#src/server/conversations/public-channels.server";
+import { joinGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type {
   AgentVisibilityChangePreview,
   ChangeAgentVisibilityStore,
@@ -75,6 +76,12 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
         data: { leftAt: new Date() },
         select: { conversationId: true },
       });
+      await recordChannelMembersRemoved(
+        tx,
+        input.workspaceId,
+        left.map((row) => row.conversationId),
+        { agentId: input.agentId },
+      );
       return {
         changed: true,
         leftChannelIds: left.map((row) => row.conversationId),

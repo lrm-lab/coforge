@@ -2,11 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { isAppError } from "#src/lib/app-error";
-import {
-  enrollGeneralChannel,
-  getAgentChannel,
-  PublicChannels,
-} from "#src/server/conversations/public-channels.server";
+import { getAgentChannel, PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";

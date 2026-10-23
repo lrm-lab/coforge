@@ -7,15 +7,14 @@ import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detai
 import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import {
-  enrollGeneralChannel,
-  PublicChannels,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { WorkspaceMembers } from "#src/server/workspaces/members.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { findWorkspaceUser } from "#src/server/agents/agent-user-info.server";
 import type { AgentVisibilityViewer } from "#src/server/agents/agent-visibility.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { teardown } from "./helpers/workspace-teardown";
 
 /**
  * End-to-end Agent deletion against local PostgreSQL. Drives the real `AgentDeletion`
@@ -89,12 +88,6 @@ async function setup() {
     agent: { ...agent, computerId: computer.id },
     computer,
   };
-}
-
-async function teardown(db: PrismaClient, workspaceId: string, userIds: string[]) {
-  await db.workspace.delete({ where: { id: workspaceId } }).catch(() => {});
-  await db.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
-  await db.$disconnect();
 }
 
 /** The real composition, with the runtime stop captured instead of published. */

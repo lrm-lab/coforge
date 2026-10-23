@@ -1,3 +1,8 @@
+import {
+  appNotificationsPossible,
+  attemptAppNotification,
+} from "#src/server/app-notifications/app-notifications.server";
+import { recordAgentProfileUpdated } from "#src/server/app-notifications/agent-events.server";
 import type {
   AgentProfileCreatedAgent,
   AgentProfileCreator,
@@ -214,14 +219,29 @@ export async function resolveAgentProfileUpdate(
         `description must be at most ${AGENT_PROFILE_DESCRIPTION_MAX_LENGTH} characters.`,
       );
   }
-  const agent = await db.agent.update({
-    where: { id_workspaceId: { id: principal.agentId, workspaceId: principal.workspaceId } },
-    data: {
-      ...(displayName !== undefined ? { displayName } : {}),
-      ...(description !== undefined ? { description } : {}),
-    },
-    select: { name: true },
-  });
+  const where = { id_workspaceId: { id: principal.agentId, workspaceId: principal.workspaceId } };
+  const data = {
+    ...(displayName !== undefined ? { displayName } : {}),
+    ...(description !== undefined ? { description } : {}),
+  };
+  const agent = appNotificationsPossible()
+    ? await db.$transaction(async (tx) => {
+        const before = await attemptAppNotification(tx, () =>
+          tx.agent.findUnique({ where, select: { displayName: true, description: true } }),
+        );
+        const row = await tx.agent.update({ where, data, select: { name: true } });
+        if (before)
+          await recordAgentProfileUpdated(tx, principal.workspaceId, principal.agentId, [
+            ...(displayName !== undefined && displayName !== before.displayName
+              ? (["display_name"] as const)
+              : []),
+            ...(description !== undefined && description !== before.description
+              ? (["description"] as const)
+              : []),
+          ]);
+        return row;
+      })
+    : await db.agent.update({ where, data, select: { name: true } });
   // Self-service: an Agent updating its own profile always sees the result it just wrote back
   // (the "same creator" visibility rule covers an Agent seeing itself), never a second membership
   // lookup beyond the one `agentVisibilityViewerForActor` already makes.

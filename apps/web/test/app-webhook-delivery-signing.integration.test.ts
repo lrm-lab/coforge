@@ -37,13 +37,15 @@ testWithDatabase("a delivery is signed so the secret returned at enable verifies
     expect(headers.get("webhook-id")).toBe(`msg_${job.id}`);
     expect(headers.get("content-type")).toBe("application/json");
     new Webhook(secret!).verify(body, Object.fromEntries(headers));
+    const sent = job.data.event;
+    if (sent.type !== "workspace.member_added") throw new Error("expected member_added");
     expect(JSON.parse(body)).toEqual({
       type: "workspace.member_added",
-      timestamp: job.data.event.timestamp,
+      timestamp: sent.timestamp,
       data: {
         installation_id: f.installationId,
         workspace_id: f.workspace.id,
-        user_id: job.data.event.data.userId,
+        user_id: sent.data.user_id,
         role: "member",
       },
     });

@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import {
-  generalChannelForCreator,
-  PublicChannels,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { generalChannelForCreator } from "#src/server/conversations/general-channel.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { WorkspaceJoinLinks } from "#src/server/workspaces/join-links.server";

@@ -7,10 +7,8 @@ import type {
   ConversationRealtime,
   ConversationRealtimeMessage,
 } from "#src/server/conversations/conversation-realtime.server";
-import {
-  PublicChannels,
-  enrollGeneralChannel,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 
 /**
  * A person's channel message names them on its signal (Slack's `message.user`), so their own

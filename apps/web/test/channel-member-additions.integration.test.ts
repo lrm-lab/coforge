@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import {
-  PublicChannels,
-  enrollGeneralChannel,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { isAppError } from "#src/lib/app-error";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";

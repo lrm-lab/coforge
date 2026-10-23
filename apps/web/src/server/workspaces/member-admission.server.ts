@@ -1,7 +1,7 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import { newAppNotificationEvent } from "#src/server/app-notifications/app-notification-event";
 import { AppNotifications } from "#src/server/app-notifications/app-notifications.server";
-import { enrollGeneralChannel } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type { WorkspaceMemberRole } from "./member-role.server";
 
 /**
@@ -39,7 +39,7 @@ export async function admitWorkspaceMember(
     newAppNotificationEvent({
       type: "workspace.member_added",
       workspaceId: input.workspace.id,
-      data: { userId: input.userId, role: input.role },
+      data: { user_id: input.userId, role: input.role },
     }),
   );
   return { joinedChannelIds: [general.id] };

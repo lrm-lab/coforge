@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { RedisClient } from "bun";
 import { PrismaClient } from "#src/generated/prisma/client";
-import {
-  enrollGeneralChannel,
-  PublicChannels,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { openPeopleDirectConversation } from "#src/server/conversations/user-direct-conversations.server";

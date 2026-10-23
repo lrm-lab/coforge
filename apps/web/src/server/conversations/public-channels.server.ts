@@ -2,6 +2,17 @@ import { userUploadedAttachmentWhere } from "#src/server/attachments/message-att
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { lockConversation } from "./conversation-lock.server";
+import { createChannel } from "./channel-creation.server";
+import {
+  setChannelArchived,
+  softLeaveMember,
+  updateChannelInfo,
+  upsertChannelMembers,
+} from "./channel-changes.server";
+import {
+  recordChannelMembersAdded,
+  recordThreadCreatedByReply,
+} from "#src/server/app-notifications/channel-events.server";
 import { changeChannelCoordinator } from "./channel-coordination.server";
 import { lockMemberPins, setConversationPin } from "./conversation-pins.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -98,23 +109,6 @@ import { requireWorkspaceMember } from "#src/server/workspaces/workspace-members
 export type ChannelActor = { userId: string } | { agentId: string };
 
 /**
- * Soft-leaves one member's row (sets `leftAt`) if it is currently active; a no-op (returns
- * `false`) if the row is missing or already left. `PublicChannels.leave` and `removeMember` use
- * it for a human or an Agent.
- */
-export async function softLeaveMember(
-  db: Pick<PrismaClient, "conversationMember">,
-  conversationId: string,
-  actor: ChannelActor,
-): Promise<boolean> {
-  const result = await db.conversationMember.updateMany({
-    where: { conversationId, ...channelActorMemberWhere(actor), ...ACTIVE_MEMBER_WHERE },
-    data: { leftAt: new Date() },
-  });
-  return result.count > 0;
-}
-
-/**
  * Sets fields on a person's active membership row unless they already hold `unless` (always,
  * without it), and says whether anything changed, so an unchanged write announces nothing. A person who is not an active
  * member is refused with `ACCESS_DENIED`.
@@ -135,117 +129,6 @@ async function changeMemberRow(
   if (updated.count > 0) return true;
   if ((await tx.conversationMember.count({ where })) === 0) throw new AppError("ACCESS_DENIED");
   return false;
-}
-
-/** Nested creation keeps a new Workspace's `#general` inside the Workspace creation write, with
- * its creator already in it. */
-export function generalChannelForCreator(userId: string) {
-  return {
-    create: { channelName: "general", members: { create: { userId } } },
-  };
-}
-
-/**
- * Puts every Workspace human and every public, live Agent in `#general`, creating the channel if
- * the Workspace has none. `#general` is the Workspace-wide channel: nobody leaves it, so anyone
- * whose row was soft-left is back in. Called from the write points that add someone to the
- * Workspace (`admitWorkspaceMember`, a new Agent); a new Workspace gets it through
- * `generalChannelForCreator`, and the 20260924040000 migration brought it back for older ones, so
- * reads never enroll.
- */
-export async function enrollGeneralChannel(db: Prisma.TransactionClient, workspaceId: string) {
-  await db.conversation.createMany({
-    data: { workspaceId, channelName: "general" },
-    skipDuplicates: true,
-  });
-  const general = await db.conversation.findUniqueOrThrow({
-    where: { workspaceId_channelName: { workspaceId, channelName: "general" } },
-  });
-  const members = await db.workspaceMembership.findMany({
-    where: { workspaceId },
-  });
-  // New members start already-read: the badge counts only messages sent after enrollment,
-  // never #general's pre-existing history (same rule as `join`/`addMembers`).
-  const latest = await db.message.findFirst({
-    where: { conversationId: general.id },
-    orderBy: { sequence: "desc" },
-    select: { sequence: true },
-  });
-  const readThroughSequence = latest?.sequence ?? 0;
-  await db.conversationMember.createMany({
-    data: members.map(({ userId }) => ({
-      workspaceId,
-      conversationId: general.id,
-      userId,
-      readThroughSequence,
-    })),
-    skipDuplicates: true,
-  });
-  // A private Agent is never an active channel member, #general included; making it public
-  // enrolls it again (see `PrismaChangeAgentVisibilityStore`).
-  const memoryAgent = await db.workspaceMemoryAgent.findUnique({
-    where: { workspaceId },
-    select: { agentId: true },
-  });
-  const agents = (
-    await db.agent.findMany({
-      where: { workspaceId, visibility: AGENT_VISIBILITY.PUBLIC, ...ACTIVE_AGENT_WHERE },
-      select: { id: true },
-    })
-  ).filter((agent) => agent.id !== memoryAgent?.agentId);
-  await db.conversationMember.createMany({
-    data: agents.map(({ id: agentId }) => ({
-      workspaceId,
-      conversationId: general.id,
-      agentId,
-      // An Agent joins #general muted, so ordinary chatter there does not wake every Agent in the
-      // Workspace; a personal @mention still reaches it, and it may unmute.
-      channelMuted: true,
-    })),
-    skipDuplicates: true,
-  });
-  // Nobody leaves #general: anyone whose row was soft-left is back in, a human read through its
-  // history like anyone joining, an Agent (as on any late join) able to read that history.
-  await db.conversationMember.updateMany({
-    where: {
-      conversationId: general.id,
-      leftAt: { not: null },
-      userId: { in: members.map(({ userId }) => userId) },
-    },
-    data: { leftAt: null, readThroughSequence },
-  });
-  await db.conversationMember.updateMany({
-    where: {
-      conversationId: general.id,
-      leftAt: { not: null },
-      agentId: { in: agents.map(({ id }) => id) },
-    },
-    data: { leftAt: null },
-  });
-  return general;
-}
-
-/** Puts one Agent that just became public back in `#general`, creating the channel if needed,
- * and returns the channel's id. The row is upserted so a first-time membership and a re-join
- * through a soft-left row are the same write; its read cursor and mute survive a re-join. */
-export async function joinGeneralChannel(
-  db: Prisma.TransactionClient,
-  workspaceId: string,
-  agentId: string,
-) {
-  const general = await db.conversation.upsert({
-    where: { workspaceId_channelName: { workspaceId, channelName: "general" } },
-    create: { workspaceId, channelName: "general" },
-    update: {},
-    select: { id: true },
-  });
-  await db.conversationMember.upsert({
-    where: { conversationId_agentId: { conversationId: general.id, agentId } },
-    // Muted on first joining, like every Agent in #general; a re-join keeps its own setting.
-    create: { workspaceId, conversationId: general.id, agentId, channelMuted: true },
-    update: { leftAt: null },
-  });
-  return general.id;
 }
 
 export async function getAgentChannel(
@@ -986,16 +869,12 @@ export class PublicChannels {
       archivedAt: Date | null;
     };
     try {
-      created = await this.db.conversation.create({
-        data: {
-          workspaceId,
-          channelName: name,
-          ...(projectId ? { projectId } : {}),
-          ...(description !== undefined ? { description } : {}),
-          // The creator becomes the channel's first admin.
-          members: { create: { userId, channelRole: "admin" } },
-        },
-        select: { id: true, channelName: true, description: true, archivedAt: true },
+      created = await createChannel(this.db, {
+        workspaceId,
+        name,
+        creator: { userId },
+        ...(projectId ? { projectId } : {}),
+        ...(description !== undefined ? { description } : {}),
       });
     } catch (error) {
       if (isUniqueViolation(error)) throw new AppError("CONFLICT");
@@ -1139,14 +1018,19 @@ export class PublicChannels {
       if (patch.name === "general") throw new AppError("CONFLICT");
     }
     try {
-      const updated = await this.db.conversation.update({
-        where: { id: channel.id },
-        data: {
+      const updated = await updateChannelInfo(
+        this.db,
+        workspaceId,
+        channel.id,
+        {
           ...(rename ? { channelName: patch.name } : {}),
           ...(redescribe ? { description: patch.description } : {}),
         },
-        select: { id: true, channelName: true, description: true, archivedAt: true },
-      });
+        {
+          ...(rename ? { name: patch.name } : {}),
+          ...(redescribe ? { description: patch.description } : {}),
+        },
+      );
       await announceChannelUpdated(this.realtime, {
         workspaceId,
         conversationId: channel.id,
@@ -1296,11 +1180,7 @@ export class PublicChannels {
       throw new AppError("ACCESS_DENIED");
     // Already in the asked-for state: nothing to write or announce.
     if ((channel.archivedAt !== null) === archived) return { id: channel.id, archived };
-    const changed = await this.db.conversation.update({
-      where: { id: channel.id },
-      data: { archivedAt: archived ? new Date() : null },
-      select: { channelName: true, description: true, archivedAt: true },
-    });
+    const changed = await setChannelArchived(this.db, workspaceId, channel.id, archived);
     await announceChannelUpdated(this.realtime, {
       workspaceId,
       conversationId: channel.id,
@@ -1406,6 +1286,7 @@ export class PublicChannels {
         where: { conversationId: channelId, userId },
         data: { readThroughSequence: latest?.sequence ?? 0 },
       });
+      if (active === 0) await recordChannelMembersAdded(tx, workspaceId, channelId, [{ userId }]);
       return active > 0;
     });
     if (!alreadyIn)
@@ -1452,7 +1333,7 @@ export class PublicChannels {
   async leave(workspaceId: string, userId: string, channelId: string) {
     const channel = await this.channel(workspaceId, userId, channelId);
     if (channel.channelName === "general") throw new AppError("CONFLICT");
-    const wasMember = await softLeaveMember(this.db, channel.id, { userId });
+    const wasMember = await softLeaveMember(this.db, workspaceId, channel.id, { userId });
     if (!wasMember) throw new AppError("ACCESS_DENIED");
     await announceJoinedOrLeft(this.realtime, {
       workspaceId,
@@ -1489,7 +1370,7 @@ export class PublicChannels {
       channel,
     );
     if (!authority.capabilities.remove_member) throw new AppError("ACCESS_DENIED");
-    const wasMember = await softLeaveMember(this.db, channel.id, target);
+    const wasMember = await softLeaveMember(this.db, workspaceId, channel.id, target);
     if (wasMember)
       await announceJoinedOrLeft(this.realtime, {
         workspaceId,
@@ -1743,30 +1624,17 @@ export class PublicChannels {
       select: { sequence: true },
     });
     const readThroughSequence = cursor?.sequence ?? 0;
+    await upsertChannelMembers(
+      this.db,
+      { workspaceId, channelId, readThroughSequence },
+      {
+        userIds,
+        agentIds,
+        alreadyMemberUserIds,
+        alreadyMemberAgentIds,
+      },
+    );
     const alreadyActiveUserIds = new Set(alreadyMemberUserIds);
-    await Promise.all([
-      ...userIds.map((userId) =>
-        alreadyActiveUserIds.has(userId)
-          ? Promise.resolve()
-          : this.db.conversationMember.upsert({
-              where: { conversationId_userId: { conversationId: channelId, userId } },
-              create: {
-                workspaceId,
-                conversationId: channelId,
-                userId,
-                readThroughSequence,
-              },
-              update: { leftAt: null, readThroughSequence },
-            }),
-      ),
-      ...agentIds.map((agentId) =>
-        this.db.conversationMember.upsert({
-          where: { conversationId_agentId: { conversationId: channelId, agentId } },
-          create: { workspaceId, conversationId: channelId, agentId },
-          update: { leftAt: null },
-        }),
-      ),
-    ]);
     const added =
       userIds.length - alreadyMemberUserIds.length + agentIds.length - alreadyMemberAgentIds.length;
     if (added > 0)
@@ -2296,6 +2164,13 @@ export class PublicChannels {
               },
             },
           });
+          if (root)
+            await recordThreadCreatedByReply(tx, {
+              workspaceId,
+              channelId,
+              threadRootId: root.id,
+              messageId: message.id,
+            });
           // A mention of someone outside the channel reached nobody; the sender may still act on it.
           await recordPendingMentionActions(tx, {
             id: message.id,

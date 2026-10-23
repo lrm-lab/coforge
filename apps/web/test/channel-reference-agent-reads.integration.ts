@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { RedisClient } from "bun";
-import {
-  PublicChannels,
-  enrollGeneralChannel,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";

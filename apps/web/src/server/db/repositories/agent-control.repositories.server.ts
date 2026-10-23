@@ -1,3 +1,4 @@
+import { recordComputerAgentTransition } from "#src/server/app-notifications/computer-events.server";
 import { z } from "zod";
 import { RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
@@ -284,6 +285,11 @@ export class PrismaAgentControlStore implements AgentControlStore {
       }
       if (sessionId !== before.currentSessionId)
         await tx.agent.update({ where: { id: before.id }, data: { currentSessionId: sessionId } });
+      await recordComputerAgentTransition(
+        tx,
+        { workspaceId: before.workspaceId, computerId: checked.computerId, agentId: before.id },
+        { from: before.state?.phase, to: checked.phase },
+      );
       return true;
     });
   }

@@ -5,12 +5,10 @@ import type { AppNotificationEvent } from "./app-notification-event";
 /** Standard Webhooks asks for payloads under 20 KB; the bound is on the encoded body. */
 export const WEBHOOK_BODY_MAX_BYTES = 20_000;
 
-const snakeCase = (name: string) => name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-
 /**
  * The JSON body of one delivery: `{ type, timestamp, data }`, where `timestamp` is when the event
- * happened and `data` names the installation and the Workspace, then the event's own data. Keys on
- * the wire are snake_case, like the installation read APIs; the event's camelCase fields convert.
+ * happened and `data` names the installation and the Workspace, then the event's own data, whose
+ * keys are snake_case already, as on the wire and in the installation read APIs.
  */
 export function webhookBody(event: AppNotificationEvent, installationId: string): string {
   const body = JSON.stringify({
@@ -19,7 +17,7 @@ export function webhookBody(event: AppNotificationEvent, installationId: string)
     data: {
       installation_id: installationId,
       workspace_id: event.workspaceId,
-      ...Object.fromEntries(Object.entries(event.data).map(([k, v]) => [snakeCase(k), v])),
+      ...event.data,
     },
   });
   if (Buffer.byteLength(body) > WEBHOOK_BODY_MAX_BYTES) {

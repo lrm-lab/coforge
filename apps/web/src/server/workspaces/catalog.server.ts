@@ -1,4 +1,9 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import {
+  appNotificationsPossible,
+  attemptAppNotification,
+} from "#src/server/app-notifications/app-notifications.server";
+import { recordWorkspaceConfigUpdated } from "#src/server/app-notifications/workspace-events.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { AppError } from "#src/lib/app-error";
 import { attachDefaultMemoryAgentToGeneral } from "#src/server/workspace-memory/default-memory-agent.server";
@@ -141,13 +146,19 @@ export class PrismaWorkspaceCatalogStore implements WorkspaceCatalogStore {
   }
 
   async rename(workspaceId: string, name: string) {
-    return workspaceRecord(
-      await this.db.workspace.update({
-        where: { id: workspaceId },
-        data: { name },
-        select: workspaceSelect,
-      }),
-    );
+    const where = { id: workspaceId };
+    if (!appNotificationsPossible())
+      return workspaceRecord(
+        await this.db.workspace.update({ where, data: { name }, select: workspaceSelect }),
+      );
+    return this.db.$transaction(async (tx) => {
+      const previous = await attemptAppNotification(tx, () =>
+        tx.workspace.findUnique({ where, select: { name: true } }),
+      );
+      const row = await tx.workspace.update({ where, data: { name }, select: workspaceSelect });
+      if (previous && previous.name !== name) await recordWorkspaceConfigUpdated(tx, row, { name });
+      return workspaceRecord(row);
+    });
   }
 
   async changeSlug(workspaceId: string, slug: string) {

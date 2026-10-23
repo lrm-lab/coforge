@@ -89,7 +89,7 @@ test("the remembered key is what delivery reads; none remembered means none", ()
 const event = newAppNotificationEvent({
   type: "workspace.member_added",
   workspaceId: "ws-1",
-  data: { userId: "user-1", role: "member" },
+  data: { user_id: "user-1", role: "member" },
 });
 
 test("the body is the event with the installation and Workspace, in snake_case", () => {
@@ -102,7 +102,11 @@ test("the body is the event with the installation and Workspace, in snake_case",
 });
 
 test("a body over the Standard Webhooks limit is refused", () => {
-  const big = { ...event, data: { userId: "x".repeat(21_000), role: "member" as const } };
+  const big = newAppNotificationEvent({
+    type: "workspace.member_added",
+    workspaceId: "ws-1",
+    data: { user_id: "x".repeat(21_000), role: "member" },
+  });
   expect(() => webhookBody(big, "inst-1")).toThrow("20 KB");
 });
 

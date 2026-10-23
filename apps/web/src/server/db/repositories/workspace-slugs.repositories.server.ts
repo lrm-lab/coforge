@@ -3,7 +3,14 @@ import {
   FOUNDATION_MODELS_WEEKLY_SECTIONS,
   FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME,
 } from "#src/features/records/foundation-models-weekly";
-import { generalChannelForCreator } from "#src/server/conversations/public-channels.server";
+import {
+  appNotificationsPossible,
+  attemptAppNotification,
+  recordAppNotifications,
+} from "#src/server/app-notifications/app-notifications.server";
+import { channelMemberEvents } from "#src/server/app-notifications/channel-events.server";
+import { recordWorkspaceConfigUpdated } from "#src/server/app-notifications/workspace-events.server";
+import { generalChannelForCreator } from "#src/server/conversations/general-channel.server";
 
 /**
  * A slug another Workspace has or had. It carries Prisma's unique-violation code, so callers answer
@@ -51,6 +58,26 @@ export function ownedWorkspaceCreateData(input: { slug: string; name: string; us
   };
 }
 
+/** Tells apps the new Workspace's `#general` exists, with its creator in it. The channel's id is
+ * the emitter's own query, so it runs only where apps can be told, in a savepoint. */
+async function recordGeneralChannelCreated(
+  tx: Prisma.TransactionClient,
+  input: { slug: string; userId: string },
+) {
+  if (!appNotificationsPossible()) return;
+  const general = await attemptAppNotification(tx, () =>
+    tx.conversation.findFirst({
+      where: { channelName: "general", workspace: { slug: input.slug } },
+      select: { id: true, workspaceId: true },
+    }),
+  );
+  if (!general) return;
+  await recordAppNotifications(tx, { id: general.workspaceId, slug: input.slug }, [
+    { type: "workspace.public_channel_created", data: { channel_id: general.id, name: "general" } },
+    ...channelMemberEvents("channel.member_added", [general.id], { userId: input.userId }),
+  ]);
+}
+
 /** Creates a Workspace owned by `userId`, with its `#general` and the Foundation Models Weekly
  * template, unless another Workspace had `slug` before. */
 export function createOwnedWorkspace<S extends Prisma.WorkspaceSelect>(
@@ -62,10 +89,12 @@ export function createOwnedWorkspace<S extends Prisma.WorkspaceSelect>(
     await lockSlugs(tx, [input.slug]);
     if (await tx.workspaceFormerSlug.findUnique({ where: { slug: input.slug } }))
       throw new WorkspaceSlugTakenError();
-    return tx.workspace.create({
+    const created = await tx.workspace.create({
       data: ownedWorkspaceCreateData(input),
       select,
     });
+    await recordGeneralChannelCreated(tx, input);
+    return created;
   });
 }
 
@@ -94,7 +123,10 @@ export function moveWorkspaceSlug<S extends Prisma.WorkspaceSelect>(
       if (former) await tx.workspaceFormerSlug.delete({ where: { id: former.id } });
       await tx.workspaceFormerSlug.create({ data: { workspaceId, slug: current } });
     }
-    return tx.workspace.update({ where: { id: workspaceId }, data: { slug }, select });
+    const moved = await tx.workspace.update({ where: { id: workspaceId }, data: { slug }, select });
+    if (current !== slug)
+      await recordWorkspaceConfigUpdated(tx, { id: workspaceId, slug }, { slug });
+    return moved;
   });
 }
 

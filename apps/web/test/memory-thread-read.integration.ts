@@ -3,10 +3,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { Pool } from "pg";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import {
-  PublicChannels,
-  enrollGeneralChannel,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { readAgentMessages } from "#src/server/agents/agent-messages.server";
 import { resolveMemoryDiagnosisScope } from "#src/server/workspace-memory/memory-diagnosis-scope.server";
 import { AgentMessageAttentionIndex } from "../../../packages/daemon/src/daemon-runtime/agent-message-attention-index";

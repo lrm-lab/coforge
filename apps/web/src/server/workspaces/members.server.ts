@@ -1,3 +1,5 @@
+import { appNotificationsPossible } from "#src/server/app-notifications/app-notifications.server";
+import { recordAgentProfileUpdated } from "#src/server/app-notifications/agent-events.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
@@ -124,11 +126,18 @@ export class WorkspaceMembers {
         if (!agent.weeklyReportAssistant || !agent.owner) return [];
         const shown = weeklyReportAssistantDisplayName(humanLabel(agent.owner));
         if (agent.displayName === shown) return [];
+        const rename = {
+          where: { id_workspaceId: { id: agent.id, workspaceId } },
+          data: { displayName: shown },
+        };
         return [
-          this.db.agent.update({
-            where: { id_workspaceId: { id: agent.id, workspaceId } },
-            data: { displayName: shown },
-          }),
+          appNotificationsPossible()
+            ? this.db.$transaction(async (tx) => {
+                const renamed = await tx.agent.update(rename);
+                await recordAgentProfileUpdated(tx, workspaceId, agent.id, ["display_name"]);
+                return renamed;
+              })
+            : this.db.agent.update(rename),
         ];
       }),
     );

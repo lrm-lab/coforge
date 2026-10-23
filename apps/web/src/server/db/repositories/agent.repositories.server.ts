@@ -1,8 +1,16 @@
+import {
+  appNotificationsPossible,
+  attemptAppNotification,
+} from "#src/server/app-notifications/app-notifications.server";
+import {
+  recordAgentProfileUpdated,
+  recordAgentRuntimeConfigChanged,
+} from "#src/server/app-notifications/agent-events.server";
 import { FINISHED_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { enrollGeneralChannel } from "#src/server/conversations/public-channels.server";
+import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import {
   parseAgentRuntimeConfig,
   type AgentRuntimeConfig,
@@ -231,7 +239,34 @@ export class PrismaAgentRepository implements AgentRepository {
     input: Pick<AgentRecord, "displayName" | "description"> &
       Partial<Pick<AgentRecord, "runtimeConfig" | "computerId">>,
   ) {
-    return mapAgent(await this.db.agent.update({ where: { id }, data: input }));
+    if (!appNotificationsPossible())
+      return mapAgent(await this.db.agent.update({ where: { id }, data: input }));
+    return mapAgent(
+      await this.db.$transaction(async (tx) => {
+        const before = await attemptAppNotification(tx, () =>
+          tx.agent.findUnique({
+            where: { id },
+            select: { displayName: true, description: true, runtimeConfig: true },
+          }),
+        );
+        const row = await tx.agent.update({ where: { id }, data: input });
+        if (before) {
+          await recordAgentProfileUpdated(tx, row.workspaceId, id, [
+            ...(before.displayName !== row.displayName ? (["display_name"] as const) : []),
+            ...(before.description !== row.description ? (["description"] as const) : []),
+          ]);
+          if (input.runtimeConfig)
+            await recordAgentRuntimeConfigChanged(
+              tx,
+              row.workspaceId,
+              id,
+              before.runtimeConfig,
+              input.runtimeConfig,
+            );
+        }
+        return row;
+      }),
+    );
   }
 }
 

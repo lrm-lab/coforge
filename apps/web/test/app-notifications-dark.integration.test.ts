@@ -206,13 +206,11 @@ testWithDatabase(
       captured.restore();
     }
     expect(await db!.workspaceMembership.count({ where: { userId: joiner.id } })).toBe(1);
-    expect(captured.lines).toHaveLength(1);
-    expect(captured.lines[0]).toMatchObject({
-      reason: "queue_not_started",
-      type: "workspace.member_added",
-      workspace_id: workspace.id,
-    });
-    expect(typeof captured.lines[0]!.event_id).toBe("string");
+    // Admission also enrolls the member in `#general`, which records its own event: each is skipped.
+    const [skipped] = captured.lines.filter(({ type }) => type === "workspace.member_added");
+    expect(captured.lines.every(({ reason }) => reason === "queue_not_started")).toBe(true);
+    expect(skipped).toMatchObject({ workspace_id: workspace.id });
+    expect(typeof skipped!.event_id).toBe("string");
     expect(JSON.stringify(captured.lines[0])).not.toContain(joiner.id);
     expect(await schema().exists()).toBe(true);
   },
@@ -225,7 +223,7 @@ testWithDatabase(
     const event = newAppNotificationEvent({
       type: "workspace.member_added",
       workspaceId: workspace.id,
-      data: { userId: joiner.id, role: "member" },
+      data: { user_id: joiner.id, role: "member" },
     });
     const start = startAppNotificationQueue(url);
     // The start has begun but not settled: the queue is not usable, and record must not wait.
@@ -287,7 +285,9 @@ testWithDatabase(
     const jobs = await startedAppNotificationQueue()!.findJobs(APP_NOTIFICATION_EVENT_QUEUE, {
       data: { workspaceId: on.id },
     });
-    expect(jobs).toHaveLength(1);
+    expect(jobs.map(({ data }) => (data as { type: string }).type)).toContain(
+      "workspace.member_added",
+    );
   },
   FLAG_RELOAD_DEADLINE_MS + 30_000,
 );
@@ -312,11 +312,17 @@ testWithDatabase(
       send.mockRestore();
     }
     expect(await db!.workspaceMembership.count({ where: { userId: joiner.id } })).toBe(1);
+    // Only the first send fails (the `#general` enrollment's event); the event it skipped has no
+    // job, and the events after it were recorded normally.
     expect(captured.lines).toHaveLength(1);
     expect(captured.lines[0]).toMatchObject({ reason: "send_failed", workspace_id: workspace.id });
-    expect(
-      await boss.findJobs(APP_NOTIFICATION_EVENT_QUEUE, { data: { workspaceId: workspace.id } }),
-    ).toHaveLength(0);
+    const jobs = await boss.findJobs(APP_NOTIFICATION_EVENT_QUEUE, {
+      data: { workspaceId: workspace.id },
+    });
+    expect(jobs.map(({ id }) => id)).not.toContain(captured.lines[0]!.event_id);
+    expect(jobs.map(({ data }) => (data as { type: string }).type)).toContain(
+      "workspace.member_added",
+    );
   },
 );
 
