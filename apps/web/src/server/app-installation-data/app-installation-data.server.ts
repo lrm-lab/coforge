@@ -5,6 +5,7 @@ import type {
   WorkspaceProfileRow,
 } from "#src/server/db/repositories/app-installation-data.repositories.server";
 import type { ComputerKind } from "#src/features/computers/computer-identity";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 import {
   PROFILE_IMAGE_STYLES,
   type ProfileImageStyle,
@@ -30,12 +31,14 @@ export type ComputerPresence = (
  * the Workspace, its public Agents, its public channels and its Computers. Each projection names
  * its fields; none carries a person, a role, a message, a count, or how anything is configured.
  * An image is its public CDN URL, or `null` where the deployment has no image CDN: the
- * authenticated route the Web falls back to is useless to an app.
+ * authenticated route the Web falls back to is useless to an app. An Agent without its own upload
+ * has the platform default picture, which the Web serves publicly beside `issuer`.
  */
 export class AppInstallationData {
   constructor(
     private readonly store: AppInstallationDataStore,
     private readonly presence: ComputerPresence,
+    private readonly issuer: string,
     private readonly imageUrl: PublicImageUrlResolver = publicImageUrl,
   ) {}
 
@@ -58,7 +61,9 @@ export class AppInstallationData {
       handle: agent.name,
       display_name: agent.displayName,
       description: agent.description,
-      avatar_url: this.picture(agent.avatarObjectKey, PROFILE_IMAGE_STYLES.avatar),
+      avatar_url: agent.avatarObjectKey
+        ? this.picture(agent.avatarObjectKey, PROFILE_IMAGE_STYLES.avatar)
+        : new URL(DEFAULT_AGENT_AVATAR_URL, this.issuer).href,
       created_at: agent.createdAt.toISOString(),
     }));
   }

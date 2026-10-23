@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppInstallationData } from "#src/server/app-installation-data/app-installation-data.server";
 import { PrismaAppInstallationDataStore } from "#src/server/db/repositories/app-installation-data.repositories.server";
+import { DEFAULT_AGENT_AVATAR_URL } from "#src/features/agents/agent-default-avatar";
 
 /**
  * What an installed app may read, against local PostgreSQL with migrations applied: the filtering
@@ -27,6 +28,7 @@ function dataOf(db: PrismaClient) {
   return new AppInstallationData(
     new PrismaAppInstallationDataStore(db),
     async (scopes) => scopes.map(({ computerId }) => online.has(computerId)),
+    "https://coforge.example",
     imageUrl,
   );
 }
@@ -116,6 +118,7 @@ test.skipIf(!db)(
     const f = await workspaceFixture(db!);
     try {
       const visible = await f.agent("scout", { avatarObjectKey: "agents/scout" });
+      const plain = await f.agent("plain");
       await f.agent("secret", { visibility: "private" });
       await f.agent("gone", { deletedAt: new Date() });
       await f.agent("assistant", { systemKind: "workspace-assistant" });
@@ -131,6 +134,15 @@ test.skipIf(!db)(
             description: "scout helps",
             avatar_url: imageUrl("agents/scout", "avatar192"),
             created_at: visible.createdAt.toISOString(),
+          },
+          // An Agent without its own upload shows the platform default picture, as on the Web.
+          {
+            id: plain.id,
+            handle: "plain",
+            display_name: "PLAIN",
+            description: "plain helps",
+            avatar_url: `https://coforge.example${DEFAULT_AGENT_AVATAR_URL}`,
+            created_at: plain.createdAt.toISOString(),
           },
         ]);
       } finally {

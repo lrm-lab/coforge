@@ -28,7 +28,7 @@ export function createAppInstallationApi({
   const { installationTokens } = createTokenEndpoints({ issuer, signingKeys, db, now });
   return new AppInstallationApi(
     installationTokens,
-    new AppInstallationData(new PrismaAppInstallationDataStore(db), presence),
+    new AppInstallationData(new PrismaAppInstallationDataStore(db), presence, issuer),
     issuer,
     now ?? (() => new Date()),
     getAppRateLimits().installation,

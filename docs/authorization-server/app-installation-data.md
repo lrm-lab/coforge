@@ -26,10 +26,13 @@ Each projection names its fields; the repository query selects only those column
 
 - `workspace`: the profile. `picture_url` is the Workspace icon on the public image CDN, `null`
   when it has no icon or this deployment has no image CDN (the authenticated route the Web falls
-  back to is of no use to an app; `avatar_url` follows the same rule). No members, roles or emails.
+  back to is of no use to an app; `avatar_url` follows the same rule for an uploaded Agent picture).
+  No members, roles or emails.
 - `agents`: public Agents only. A private Agent, a deleted (archived) Agent and a platform-owned
   Agent (`systemKind` set: the per-member assistants) are left out. The Workspace Memory Agent is an
   ordinary public Agent and is listed. `handle` is the Agent's unique `name` (what `@` mentions).
+  An Agent without its own upload has `avatar_url` set to the platform default picture, an
+  absolute URL on the issuer's origin.
   No owner, role, runtime configuration, Computer, messages or Activity.
 - `channels`: the Workspace's public channels. Direct conversations, archived channels and a channel
   hidden from the Workspace are left out. No members, messages or counts.
