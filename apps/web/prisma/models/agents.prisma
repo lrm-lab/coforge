@@ -10,10 +10,6 @@ model Agent {
   /// The platform mascot its creator picked (a key of `AGENT_MASCOTS`, validated at the server
   /// boundary); null shows the mascot the Agent's id chooses.
   avatarMascot              String?
-  /// Unused since Agent pictures became mascots: kept only so the previous Web build still runs
-  /// against this schema during a deploy or rollback; a later migration drops both.
-  avatarObjectKey           String?
-  avatarContentType         String?
   /// Agent's own server role for management authority: owner | admin | member (never "owner" in
   /// practice today, since only a human is ever created as a Workspace owner). Independent of
   /// `Agent.ownerId`'s WorkspaceMembership role.

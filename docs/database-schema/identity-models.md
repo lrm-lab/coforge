@@ -79,8 +79,8 @@ retired by migration `20261024130000_avatar_cartoon_people`, which rewrote
 left alone. An `Agent` has no uploaded picture: its nullable
 `avatarMascot` holds the key of the platform mascot its creator picked (one of
 seven, validated at the server boundary); null shows the mascot its id chooses.
-Its `avatarObjectKey` and `avatarContentType` are no longer read and are dropped
-once no running Web build selects them.
+Migration `20261024150000_drop_agent_avatar_columns` dropped its former
+`avatarObjectKey` and `avatarContentType` columns.
 
 Setup persistence consists of `User`, `UserIdentity`, `Workspace`,
 `WorkspaceMembership`, `Computer`, and `WorkspaceComputer`.
