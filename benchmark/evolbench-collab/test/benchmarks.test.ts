@@ -179,6 +179,7 @@ describe("episodePrompt", () => {
     expect(prompt).not.toContain("@memory");
     expect(prompt).toContain("Memory Agent:");
     expect(prompt).toContain("send_channel_message");
+    expect(prompt).toContain("memory_offer");
   });
 });
 

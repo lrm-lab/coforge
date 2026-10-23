@@ -16,9 +16,11 @@ function delay(ms: number): Promise<void> {
 }
 
 const MEMORY_OBSERVER_NOTE = [
-  "Memory Agent: you observe this channel. Consult prior experience with ov_experience_find,",
-  "then publish one short channel message with send_channel_message saying what you",
-  "consulted and what applies to this task, or that nothing applied. Do not invent evidence.",
+  "Memory Agent: you observe this channel. Consult prior experience with ov_experience_find.",
+  "If a card applies, publish ONE cited Offer to Task with memory_offer (citationRefs = the citation ids",
+  "ov_experience_find returned for the cards you rely on); Task records a disposition on it.",
+  "If nothing applies, publish one short channel message with send_channel_message saying so.",
+  "Do not invent evidence.",
 ].join(" ");
 
 export function episodePrompt(
