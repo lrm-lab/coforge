@@ -1,0 +1,17 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "onboarding_title": "完成设置",
+  "onboarding_progress_label": "设置进度",
+  "onboarding_progress_count": "{done} / {total}",
+  "onboarding_dismiss": "关闭设置清单",
+  "onboarding_complete": "设置完成",
+  "onboarding_step_assistant": "和通用助手打个招呼",
+  "onboarding_step_github": "连接 GitHub",
+  "onboarding_step_agent": "创建你的第一个 Agent",
+  "onboarding_step_task": "给 Agent 派一个任务",
+  "onboarding_step_computer": "连接自己的电脑",
+  "onboarding_step_invite": "邀请协作者",
+  "onboarding_step_done": "已完成",
+  "onboarding_step_todo": "待完成",
+  "onboarding_step_failed": "这一步没能开始，请重试。"
+}

@@ -10,8 +10,8 @@ import { workspacePath } from "#src/features/workspaces/workspace-url";
 
 export const GITHUB_STATE_COOKIE = "__Host-coforge-github-state";
 export const GITHUB_INSTALL_STATE_COOKIE = "__Host-coforge-github-install-state";
-/** The Workspace a connection or installation was started from, whose Settings the callback
- * returns to. */
+/** The Workspace a connection or installation was started from, and where in it the callback
+ * returns to: `<slug>` for its Settings, `<slug>:home` for its home page. */
 export const GITHUB_RETURN_COOKIE = "__Host-coforge-github-return";
 
 export function githubStateCookie(state: string) {
@@ -31,8 +31,13 @@ function cookieValue(header: string, name: string) {
   );
 }
 
-export function githubReturnCookie(workspaceSlug: string) {
-  return `${GITHUB_RETURN_COOKIE}=${workspaceSlug}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${workspaceSlug ? 600 : 0}`;
+/** Where in the Workspace the callback returns. A closed set: the cookie never names a path. */
+export const GITHUB_RETURN_TARGETS = ["settings", "home"] as const;
+export type GitHubReturnTarget = (typeof GITHUB_RETURN_TARGETS)[number];
+
+export function githubReturnCookie(workspaceSlug: string, target: GitHubReturnTarget = "settings") {
+  const value = target === "home" && workspaceSlug ? `${workspaceSlug}:home` : workspaceSlug;
+  return `${GITHUB_RETURN_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${workspaceSlug ? 600 : 0}`;
 }
 
 export function validGitHubInstallationState(cookie: string, state: string) {
@@ -42,15 +47,26 @@ export function validGitHubInstallationState(cookie: string, state: string) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
+/** The return cookie's Workspace slug and target; anything but `home` is Settings. */
+function returnPlace(cookieHeader: string) {
+  const [slug = "", target, ...extra] = cookieValue(cookieHeader, GITHUB_RETURN_COOKIE).split(":");
+  return { slug, home: target === "home" && extra.length === 0 };
+}
+
 /**
- * Settings' Integrations section in the Workspace the flow was started from; for an installation
- * started on GitHub, the Workspace the browser last opened (the connection is the User's, so any
- * of theirs shows it); the app root when neither is known.
+ * Where the callback returns: the Workspace home when the flow was started from there and did not
+ * fail, otherwise Settings' Integrations section (which says what went wrong) in the Workspace the
+ * flow was started from. For an installation started on GitHub, the Workspace the browser last
+ * opened (the connection is the User's, so any of theirs shows it); the app root when neither is
+ * known.
  */
-function settingsLocation(cookieHeader: string, github?: "connected" | "wrong_account" | "error") {
-  const slug =
-    cookieValue(cookieHeader, GITHUB_RETURN_COOKIE) || readPreferredWorkspaceSlug(cookieHeader);
+function returnLocation(cookieHeader: string, github?: "connected" | "wrong_account" | "error") {
+  const place = returnPlace(cookieHeader);
+  const slug = place.slug || readPreferredWorkspaceSlug(cookieHeader);
   if (!slug || !isValidWorkspaceSlug(slug)) return "/";
+  // The flow's own Workspace and a good outcome; a failure is explained in Settings.
+  if (place.slug && place.home && github !== "wrong_account" && github !== "error")
+    return workspacePath(slug);
   return workspacePath(slug, `/settings?section=integrations${github ? `&github=${github}` : ""}`);
 }
 
@@ -73,7 +89,7 @@ export async function githubCallbackHandler({ request }: { request: Request }) {
   // GitHub can return from an independently initiated installation with a code but
   // no CoForge state. Do NOT link an identity or exchange that unbound code.
   if (!state) {
-    headers.set("location", settingsLocation(cookieHeader));
+    headers.set("location", returnLocation(cookieHeader));
     headers.append("set-cookie", githubReturnCookie(""));
     return new Response(null, { status: 303, headers });
   }
@@ -114,7 +130,7 @@ export async function githubCallbackHandler({ request }: { request: Request }) {
   }
   headers.set(
     "location",
-    settingsLocation(
+    returnLocation(
       cookieHeader,
       connected === true ? "connected" : connected === "wrong_account" ? "wrong_account" : "error",
     ),
@@ -129,20 +145,20 @@ async function githubInstallationCallback(
   params: URLSearchParams,
   headers: Headers,
 ) {
-  headers.set("location", settingsLocation(cookieHeader));
+  headers.set("location", returnLocation(cookieHeader));
   headers.set("set-cookie", githubInstallationStateCookie(""));
   headers.append("set-cookie", githubReturnCookie(""));
   const state = params.get("state") ?? "";
   const cookie = cookieValue(cookieHeader, GITHUB_INSTALL_STATE_COOKIE);
   if (!validGitHubInstallationState(cookie, state)) {
-    headers.set("location", settingsLocation(cookieHeader, "error"));
+    headers.set("location", returnLocation(cookieHeader, "error"));
     return new Response(null, { status: 303, headers });
   }
   try {
     const github = await configuredGitHub();
     if (github) await github.connection.sync(userId);
   } catch {
-    headers.set("location", settingsLocation(cookieHeader, "error"));
+    headers.set("location", returnLocation(cookieHeader, "error"));
   }
   return new Response(null, { status: 303, headers });
 }

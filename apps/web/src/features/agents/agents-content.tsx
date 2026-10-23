@@ -40,7 +40,6 @@ import {
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { InviteMemberDialog } from "#src/features/workspaces/invite-member-dialog";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
@@ -48,7 +47,7 @@ import type { AgentStatusView } from "./agent-status-realtime";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { AgentDisplayAvatar, AgentStackFace } from "./agent-display-avatar";
-import { AgentCreateDialog } from "./agent-create-dialog";
+import { MemberDialogs, type MemberDialog } from "./member-dialogs";
 import { AgentDeleteDialog } from "./agent-delete-dialog";
 import type { RuntimeCatalog } from "./agent-runtime-fields";
 import type { CreateAgentInput } from "./agent.schemas";
@@ -103,7 +102,8 @@ export function AgentsContent({
   onCreate,
   onLoadRuntimeCatalog,
   onDeleteAgent,
-  defaultCreateDialogOpen = false,
+  dialog,
+  onDialogChange,
 }: {
   summary: MemberDirectorySummary;
   memberType: MemberTab;
@@ -118,7 +118,8 @@ export function AgentsContent({
   onCreate: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog: (computerId: string) => Promise<RuntimeCatalog[]>;
   onDeleteAgent: (agentId: string, confirmation: string) => Promise<void>;
-  defaultCreateDialogOpen?: boolean;
+  dialog?: MemberDialog;
+  onDialogChange: (dialog: MemberDialog | undefined) => void;
 }) {
   const { setAgentProfileTab, closeAgentProfile } = useOpenAgentProfile();
   const timeZone = appRoute.useLoaderData().timeZone;
@@ -130,8 +131,6 @@ export function AgentsContent({
     const timer = setTimeout(() => setQuery(search.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
-  const [open, setOpen] = useState(defaultCreateDialogOpen);
-  const [inviteOpen, setInviteOpen] = useState(false);
   // The target outlives `deleteOpen` so the dialog keeps its title through the close animation.
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -228,7 +227,12 @@ export function AgentsContent({
         <div className="ml-auto flex shrink-0 items-center gap-2 @2xl/members:justify-self-end">
           {onAgentTab
             ? canCreateAgent && (
-                <Button size="sm" color="primary" iconLeading={Plus} onPress={() => setOpen(true)}>
+                <Button
+                  size="sm"
+                  color="primary"
+                  iconLeading={Plus}
+                  onPress={() => onDialogChange("create-agent")}
+                >
                   {m.header_new_agent()}
                 </Button>
               )
@@ -237,7 +241,7 @@ export function AgentsContent({
                   size="sm"
                   color="primary"
                   iconLeading={UsersPlus}
-                  onPress={() => setInviteOpen(true)}
+                  onPress={() => onDialogChange("invite")}
                 >
                   {m.member_invite_humans()}
                 </Button>
@@ -444,11 +448,10 @@ export function AgentsContent({
         directoryPane
       )}
 
-      <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} />
-
-      <AgentCreateDialog
-        open={open}
-        onOpenChange={setOpen}
+      <MemberDialogs
+        dialog={dialog}
+        onDialogChange={onDialogChange}
+        allowed={canInviteMember}
         computers={computers}
         onCreate={onCreate}
         onLoadRuntimeCatalog={onLoadRuntimeCatalog}

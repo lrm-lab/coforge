@@ -36,6 +36,8 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
     owner: z.enum(["all", "mine"]).default("all").catch("all"),
     profile: profileParamSchema,
     agentTab: agentProfileTabParamSchema,
+    /** The dialog open over the page: the new-Agent or invite dialog, which the setup checklist links to. */
+    setup: z.enum(["create-agent", "invite"]).optional().catch(undefined),
   }),
   loaderDeps: ({ search }) => ({
     memberType: search.memberType,
@@ -68,7 +70,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
 
 function AgentsPage() {
   const { computers, summary, weeklyReportAssistantAgentId } = Route.useLoaderData();
-  const { memberType, owner, profile, agentTab } = Route.useSearch();
+  const { memberType, owner, profile, agentTab, setup } = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
   const create = useServerFn(createAgent);
@@ -107,6 +109,13 @@ function AgentsPage() {
       profileAgentId={agentIdFromProfileParam(profile)}
       profilePersonId={personIdFromProfileParam(profile)}
       agentTab={agentTab}
+      dialog={setup}
+      onDialogChange={(dialog) => {
+        void navigate({
+          search: (previous) => ({ ...previous, setup: dialog }),
+          resetScroll: false,
+        });
+      }}
       onLoadRuntimeCatalog={(computerId) => loadRuntimeCatalog({ data: { computerId } })}
       onCreate={async (data) => {
         const result = await create({ data });

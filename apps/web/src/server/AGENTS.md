@@ -35,6 +35,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/inbox/` — the Activity inbox read model and its Done and read-all writes.
 - `server/integrations/` — GitHub connection, configuration, and webhooks.
 - `server/notifications/` — Web Push and in-page notification delivery (its egress check is `server/egress/`).
+- `server/onboarding/` — `SetupChecklist`: which setup steps a member has done in a Workspace, computed from existing rows (no stored progress).
 - `server/profiles/` — user avatars.
 - `server/projects/` — project settings, images, and repository file download.
 - `server/records/` — Workspace Records (see the last section).

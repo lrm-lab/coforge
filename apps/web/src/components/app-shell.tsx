@@ -20,6 +20,7 @@ import type { NavItemType } from "#src/components/application/app-navigation/con
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
+import { SetupChecklistCard } from "#src/features/onboarding/setup-checklist-card";
 import { MobileDrawerProvider } from "#src/components/layout/sidebar/mobile-header";
 import {
   SidebarExpanded,
@@ -203,6 +204,19 @@ export function AppShell({
     />
   );
 
+  // The expanded sidebar and the drawer share one footer: the setup checklist above the user card.
+  // The collapsed rail shows neither the card nor the checklist.
+  const expandedFooter = (
+    <div className="flex flex-col gap-3">
+      <SetupChecklistCard
+        workspaceId={workspaceId}
+        workspaceSlug={currentWorkspace.slug}
+        userId={user.id}
+      />
+      <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
+    </div>
+  );
+
   return (
     <MobileDrawerProvider>
       <div className="flex h-svh flex-col bg-primary font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
@@ -214,13 +228,13 @@ export function AppShell({
             activeUrl={activeUrl}
             items={navItems}
             subheader={workspaceSwitcher}
-            footer={<UserMenuCard base={base} user={user} onSignOut={onSignOut} />}
+            footer={expandedFooter}
           />
           <SidebarExpanded
             activeUrl={activeUrl}
             items={navItems}
             subheader={workspaceSwitcher}
-            footer={<UserMenuCard base={base} user={user} onSignOut={onSignOut} />}
+            footer={expandedFooter}
           />
           <SidebarRail
             activeUrl={activeUrl}
