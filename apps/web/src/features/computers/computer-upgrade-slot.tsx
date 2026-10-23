@@ -20,7 +20,6 @@ import { m } from "#src/paraglide/messages";
 import { cloudImageUpdateConsequences } from "./cloud-image-update";
 import { ComputerReleaseNotesLink, useComputerRelease } from "./computer-release-notes";
 import { isPrereleaseVersion } from "./computer-identity";
-import type { UpgradeRequestErrorCopy } from "./upgrade-failure";
 import {
   upgradeSlotState,
   type ComputerUpgradeRequest,
