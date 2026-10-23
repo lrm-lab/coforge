@@ -1,4 +1,7 @@
-import { readRetainedCloudImageIds } from "#src/server/hosts/cloud-image-inventory.server";
+import {
+  readRetainedCloudImageIds,
+  readCloudImageUpdatesPaused,
+} from "#src/server/hosts/cloud-image-inventory.server";
 import {
   readAppWebhookConfiguration,
   rememberAppWebhookKey,
@@ -48,6 +51,7 @@ export async function validateStartupConfig(env: NodeJS.ProcessEnv = process.env
 
 async function readStartupConfig(env: NodeJS.ProcessEnv) {
   readRetainedCloudImageIds(env.COFORGE_RETAINED_CLOUD_IMAGE_IDS);
+  readCloudImageUpdatesPaused(env.COFORGE_CLOUD_IMAGE_UPDATES_PAUSED);
   const delivery = await readFileDeliveryConfig(env);
   const imageDelivery = readPublicImageDeliveryConfig(env);
   const imageStorage = await readPublicImageStorageConfig(env);

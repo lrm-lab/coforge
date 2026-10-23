@@ -10,7 +10,7 @@ export class HostJobError extends Error {
   }
 }
 
-/** The page copy for a refused image update. The host finds the service by name, so a missing create report is not one of these. */
+/** Page error for a refused image replacement. */
 export function cloudImageUpdateError(error: HostJobError): {
   code: "NOT_FOUND" | "ACCESS_DENIED" | "INVALID_INPUT" | "CONFLICT";
   errorId: string;
@@ -99,7 +99,11 @@ export interface ClusterJobs {
   insert(record: HostJobRecord): Promise<void>;
   /** Drops open create and attach work once the computer is being removed. */
   abandon(computerId: string, now: Date): Promise<void>;
-  next(clusterId: string, accepting: boolean): Promise<HostJobRecord | undefined>;
+  next(
+    clusterId: string,
+    accepting: boolean,
+    updatesPaused?: boolean,
+  ): Promise<HostJobRecord | undefined>;
   save(record: HostJobRecord): Promise<void>;
   findById(id: string): Promise<HostJobRecord | undefined>;
 }
@@ -134,7 +138,10 @@ export class HostJobs {
       cluster: ClusterAuth;
       keys: DaemonKeys;
       accounts: AccountUsernames;
-      imageUpdatePolicy?: (computerId: string) => Promise<"allow" | "retain" | "unknown">;
+      imageUpdatePolicy?: (
+        computerId: string,
+      ) => Promise<"allow" | "retain" | "unknown" | "paused">;
+      imageUpdatesPaused?: () => boolean;
       /** Drops provider sessions stored for this computer once its disk is gone. */
       disk?: { clear(computerId: string): Promise<void> };
     },
@@ -314,11 +321,15 @@ export class HostJobs {
   async claim(input: { token: string; now?: Date }): Promise<ClaimedHostJob | undefined> {
     const cluster = await this.deps.cluster.authenticate(input.token);
     if (!cluster) throw new HostJobError(401, "invalid host token");
-    const job = await this.deps.jobs.next(cluster.id, cluster.accepting);
+    const job = await this.deps.jobs.next(
+      cluster.id,
+      cluster.accepting,
+      this.deps.imageUpdatesPaused?.() ?? false,
+    );
     if (!job) return undefined;
     if (job.operation === "update" && this.deps.imageUpdatePolicy) {
       const policy = await this.deps.imageUpdatePolicy(job.computerId);
-      if (policy === "unknown") return undefined;
+      if (policy === "unknown" || policy === "paused") return undefined;
       if (policy === "retain") {
         job.reportedAt = input.now ?? new Date();
         job.daemonApiKey = null;

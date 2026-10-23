@@ -30,6 +30,7 @@ test("retained image deployment configuration reaches Compose without entering s
         await writeFile(join(directory, "coforge_commit_coauthor"), "C <c@x.io>");
         await writeFile(join(directory, "coforge_github_webhook_secret"), "hook-fixture");
         await writeFile(join(directory, "coforge_retained_cloud_image_ids"), "image-fixture");
+        await writeFile(join(directory, "coforge_cloud_image_updates_paused"), "true");
       }
       const child = Bun.spawn(
         [
@@ -45,9 +46,10 @@ test("retained image deployment configuration reaches Compose without entering s
           test "\${COFORGE_COMMIT_COAUTHOR-unset}" = "$5"
           test "\${COFORGE_GITHUB_WEBHOOK_SECRET-unset}" = "$6"
           test "\${COFORGE_RETAINED_CLOUD_IMAGE_IDS-unset}" = "$7"
+          test "\${COFORGE_CLOUD_IMAGE_UPDATES_PAUSED-unset}" = "$8"
         }
         load_compose_secrets
-        compose "$2" "$3" "$4" "$5" "$6" "$7"
+        compose "$2" "$3" "$4" "$5" "$6" "$7" "$8"
       `,
           "test",
           directory,
@@ -57,6 +59,7 @@ test("retained image deployment configuration reaches Compose without entering s
           configured ? "C <c@x.io>" : "",
           configured ? "hook-fixture" : "",
           configured ? "image-fixture" : "",
+          configured ? "true" : "",
         ],
         { stdout: "pipe", stderr: "pipe" },
       );

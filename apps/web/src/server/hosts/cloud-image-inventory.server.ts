@@ -56,6 +56,7 @@ export class CloudImageInventory {
       set(...args: string[]): Promise<unknown>;
     },
     private readonly retainedImages: ReadonlySet<string> = new Set(),
+    readonly updatesPaused = false,
   ) {}
 
   async replace(snapshot: CloudImageSnapshot): Promise<void> {
@@ -78,7 +79,9 @@ export class CloudImageInventory {
         computers: value.computers.map(({ computerId, imageId }) => ({
           computerId,
           imageId,
-          ...(this.retainedImages.has(imageLayerId(imageId) ?? imageId) ? { retained: true } : {}),
+          ...(this.updatesPaused || this.retainedImages.has(imageLayerId(imageId) ?? imageId)
+            ? { retained: true }
+            : {}),
         })),
       };
     } catch {
@@ -87,13 +90,15 @@ export class CloudImageInventory {
   }
 
   /** A queued shared replace must still be safe when the host asks to execute it. */
-  async replacementPolicy(computerId: string): Promise<"allow" | "retain" | "unknown"> {
+  async replacementPolicy(computerId: string): Promise<"allow" | "retain" | "unknown" | "paused"> {
+    if (this.updatesPaused) return "paused";
     const current = await this.snapshot();
     const running = current?.computers.find((computer) => computer.computerId === computerId);
     return !running ? "unknown" : running.retained ? "retain" : "allow";
   }
 
   async available(computerId: string): Promise<CloudImageUpdate | undefined> {
+    if (this.updatesPaused) return undefined;
     const current = await this.snapshot();
     return current ? cloudImageUpdateFor(current, computerId) : undefined;
   }
@@ -118,6 +123,14 @@ export function readRetainedCloudImageIds(value: string | undefined): ReadonlySe
   return new Set(ids.map((id) => id.toLowerCase()));
 }
 
+/** Reversible deployment maintenance: queues stay pending until shared replacements are enabled again. */
+export function readCloudImageUpdatesPaused(value: string | undefined): boolean {
+  const setting = value?.trim() ?? "";
+  if (!setting || setting === "false") return false;
+  if (setting === "true") return true;
+  throw new Error("COFORGE_CLOUD_IMAGE_UPDATES_PAUSED must be true or false");
+}
+
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -128,6 +141,7 @@ export function getCloudImageInventory() {
   singleton ??= new CloudImageInventory(
     openRedisClient(url),
     readRetainedCloudImageIds(process.env.COFORGE_RETAINED_CLOUD_IMAGE_IDS),
+    readCloudImageUpdatesPaused(process.env.COFORGE_CLOUD_IMAGE_UPDATES_PAUSED),
   );
   return singleton;
 }
