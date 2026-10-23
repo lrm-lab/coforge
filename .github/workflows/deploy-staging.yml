@@ -326,7 +326,14 @@ jobs:
               const snapshot = JSON.parse((await redis.get("coforge:cloud-image:v1")) ?? "null");
               if (snapshot?.observedAt >= started) {
                 const running = new Set(snapshot.computers.map((row) => row.imageId));
-                if ([...ids].some((id) => !running.has(id))) throw new Error("A configured retained cloud image is missing");
+                const missing = [...ids].filter((id) => !running.has(id));
+                if (missing.length) {
+                  // The IDs are the public `COFORGE_RETAINED_CLOUD_IMAGE_IDS` variable; naming them (and
+                  // running images no entry protects) tells the operator which entry to fix.
+                  const unlisted = [...running].filter((id) => !ids.has(id));
+                  console.error(JSON.stringify({ missingRetained: missing, runningUnlisted: unlisted }));
+                  throw new Error("A configured retained cloud image is missing");
+                }
                 const retainedRunning = ids.size;
                 console.log(JSON.stringify({ retainedConfigured: ids.size, retainedRunning, hostHeartbeatObserved: true }));
                 verified = true;
