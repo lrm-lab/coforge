@@ -82,15 +82,7 @@ class GrokSession implements AgentSession {
     command: readonly string[],
     private readonly acpTimeoutMs: number,
   ) {
-    const argv = [
-      ...command,
-      "--no-auto-update",
-      "--no-memory",
-      "--trust",
-      "agent",
-      "--no-leader",
-      "--always-approve",
-    ];
+    const argv = [...command, "--trust", "agent", "--no-leader", "--always-approve"];
     if (options.runtime?.model && options.runtime.model !== "default")
       argv.push("--model", options.runtime.model);
     if (options.runtime?.reasoning) argv.push("--reasoning-effort", options.runtime.reasoning);

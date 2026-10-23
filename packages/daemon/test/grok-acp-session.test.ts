@@ -90,14 +90,15 @@ test(
         "session/prompt",
       ]);
       expect(records[0].argv).toContain("stdio");
-      expect(records[0].argv).toContain("--no-leader");
-      expect(records[0].argv).toContain("--no-auto-update");
-      expect(records[0].argv).toContain("--trust");
+      expect(records[0].argv.filter((arg: string) => arg.startsWith("--"))).toEqual([
+        "--trust",
+        "--no-leader",
+        "--always-approve",
+      ]);
       // The standing instructions replace Grok's native system prompt; `rules` would append them.
       expect(records[2].params._meta.systemPromptOverride).toBe("Standing Grok instructions.");
       expect(records[2].params._meta).not.toHaveProperty("rules");
       expect(records[2].params._meta.yoloMode).toBe(true);
-      expect(records[0].argv).not.toContain("--no-background");
       expect(events.filter((e) => e.type === "completed")).toHaveLength(2);
       expect(events.filter((e) => e.type === "text-delta")).toHaveLength(2);
       expect(await session.readSessionIdentity!()).toEqual({

@@ -81,9 +81,9 @@ preserves the old identity and fails launch. Known risk: a session stored only
 remotely, loaded while the backend is unreachable, is indistinguishable from a
 missing one, so that case also starts a fresh session.
 
-Folder trust is limited to the Agent workspace (`--trust`). The provider keeps
-`--no-memory` and disables automatic CLI updates; it does not turn off background
-tasks.
+Folder trust is limited to the Agent workspace (`--trust`). Grok keeps its own
+automatic CLI updates and memory, as the reference Computer launches it, and
+background tasks stay on.
 
 ## Native verification
 
