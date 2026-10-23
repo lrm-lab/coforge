@@ -37,6 +37,7 @@ export function productionCloudComputers(db: PrismaClient = requireDatabaseClien
     jobs: new PrismaHostJobStore(db),
     cluster: directory,
     keys: new PrismaDaemonKeys(db),
+    imageUpdatesPaused: () => getCloudImageInventory().updatesPaused,
     imageUpdatePolicy: (computerId) => getCloudImageInventory().replacementPolicy(computerId),
     accounts: {
       displayName: async (userId) =>

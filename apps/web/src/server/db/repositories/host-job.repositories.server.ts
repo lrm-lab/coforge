@@ -191,12 +191,20 @@ export class PrismaHostJobStore implements ClusterJobs {
     });
   }
 
-  async next(clusterId: string, accepting: boolean): Promise<HostJobRecord | undefined> {
+  async next(
+    clusterId: string,
+    accepting: boolean,
+    updatesPaused = false,
+  ): Promise<HostJobRecord | undefined> {
     const rows = await this.db.hostJob.findMany({
       where: {
         hostId: clusterId,
         reportedAt: null,
-        ...(accepting ? {} : { operation: { in: ["delete", "attach"] } }),
+        ...(accepting
+          ? updatesPaused
+            ? { operation: { not: "update" } }
+            : {}
+          : { operation: { in: ["delete", "attach"] } }),
       },
     });
     return rows.map(fromRow).sort(compareJobs)[0];

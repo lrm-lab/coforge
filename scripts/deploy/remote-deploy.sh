@@ -118,15 +118,9 @@ load_compose_secrets() {
 	COFORGE_WEB_PUSH_PUBLIC_KEY="$(cat "$secrets_dir/coforge_web_push_public_key")"
 	COFORGE_WEB_PUSH_PRIVATE_KEY="$(cat "$secrets_dir/coforge_web_push_private_key")"
 	COFORGE_FILE_DELIVERY_KEY="$(cat "$secrets_dir/coforge_file_delivery_key")"
-	# Optional for production until that compose file requires it. Staging compose fails closed
-	# when the value is empty.
-	COFORGE_CLOUD_CLUSTER_TOKEN=""
-	if [ -f "$secrets_dir/coforge_cloud_cluster_token" ]; then
-		COFORGE_CLOUD_CLUSTER_TOKEN="$(cat "$secrets_dir/coforge_cloud_cluster_token")"
-	fi
 	COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="$(cat "$secrets_dir/centrifugo_token_hmac_secret_key")"
-	# Optional until the staging GitHub App has been configured.
-	for name in COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS; do
+	# Optional deployment values; required Compose fields still fail closed.
+	for name in COFORGE_CLOUD_CLUSTER_TOKEN COFORGE_CLOUD_IMAGE_UPDATES_PAUSED COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS; do
 		printf -v "$name" '%s' ""
 		if [ -f "$secrets_dir/${name,,}" ]; then
 			printf -v "$name" '%s' "$(cat "$secrets_dir/${name,,}")"
@@ -150,6 +144,7 @@ compose() {
 		COFORGE_FILE_DELIVERY_KEY="$COFORGE_FILE_DELIVERY_KEY" \
 		COFORGE_CLOUD_CLUSTER_TOKEN="$COFORGE_CLOUD_CLUSTER_TOKEN" \
 		COFORGE_RETAINED_CLOUD_IMAGE_IDS="$COFORGE_RETAINED_CLOUD_IMAGE_IDS" \
+		COFORGE_CLOUD_IMAGE_UPDATES_PAUSED="$COFORGE_CLOUD_IMAGE_UPDATES_PAUSED" \
 		COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="$COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY" \
 		COFORGE_GITHUB_CLIENT_SECRET="$COFORGE_GITHUB_CLIENT_SECRET" \
 		COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY="$COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY" \

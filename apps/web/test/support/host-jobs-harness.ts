@@ -115,12 +115,13 @@ export class MemoryJobs implements ClusterJobs {
       }
     }
   }
-  async next(clusterId: string, accepting: boolean) {
+  async next(clusterId: string, accepting: boolean, updatesPaused = false) {
     return this.records
       .filter(
         (job) =>
           job.clusterId === clusterId &&
           job.reportedAt === null &&
+          (!updatesPaused || job.operation !== "update") &&
           (accepting || (job.operation !== "create" && job.operation !== "update")),
       )
       .sort(compareJobs)[0];
@@ -135,7 +136,8 @@ export class MemoryJobs implements ClusterJobs {
 }
 
 export function harness(input?: {
-  imageUpdatePolicy?: (computerId: string) => Promise<"allow" | "retain" | "unknown">;
+  imageUpdatesPaused?: () => boolean;
+  imageUpdatePolicy?: (computerId: string) => Promise<"allow" | "retain" | "unknown" | "paused">;
   member?: boolean;
   accepting?: boolean;
   clearDisk?: (computerId: string) => Promise<void>;
@@ -166,6 +168,7 @@ export function harness(input?: {
       },
     },
     accounts: input?.accounts ?? accounts,
+    imageUpdatesPaused: input?.imageUpdatesPaused,
     imageUpdatePolicy: input?.imageUpdatePolicy,
     ...(input?.clearDisk ? { disk: { clear: input.clearDisk } } : {}),
   });

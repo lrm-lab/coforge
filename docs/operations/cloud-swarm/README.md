@@ -50,13 +50,13 @@ docker swarm init --advertise-addr <节点之间可达的地址>
 
 这台机器上如果已经有一份绑定到其他服务器的 Computer，不要用页面上的 `curl | sh` 升级它。安装器会换成这套环境的二进制，现有绑定对不上时监督进程退出（`Binding server does not match this daemon build`），然后回滚，`host` 不会启动。把 `host` 用的二进制放到单独目录。Staging 的具体步骤见 [在 staging 上启用云电脑](staging-bring-up.md)。
 
-| 变量 | 作用 |
-| --- | --- |
-| `COFORGE_SERVER_URL` | 容器能访问的 Web 源，origin 与镜像里写死的 Daemon 服务器一致 |
-| `COFORGE_CLUSTER_TOKEN` | 与服务端 `COFORGE_CLOUD_CLUSTER_TOKEN` 相同 |
-| `COFORGE_CLUSTER_NODE_KEY` | 这个管理节点的稳定密钥，1 到 200 个字符，无空白 |
-| `COFORGE_CLUSTER_NAME` | 上报的集群名称，1 到 200 个字符 |
-| `COFORGE_COMPUTER_IMAGE` | 节点上已经存在的镜像标签 |
+| 变量                       | 作用                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `COFORGE_SERVER_URL`       | 容器能访问的 Web 源，origin 与镜像里写死的 Daemon 服务器一致 |
+| `COFORGE_CLUSTER_TOKEN`    | 与服务端 `COFORGE_CLOUD_CLUSTER_TOKEN` 相同                  |
+| `COFORGE_CLUSTER_NODE_KEY` | 这个管理节点的稳定密钥，1 到 200 个字符，无空白              |
+| `COFORGE_CLUSTER_NAME`     | 上报的集群名称，1 到 200 个字符                              |
+| `COFORGE_COMPUTER_IMAGE`   | 节点上已经存在的镜像标签                                     |
 
 ```bash
 coforge-computer host
@@ -90,7 +90,7 @@ Agent 的工作目录在数据卷 `/root/.coforge/agent-workspaces` 上。换掉
 
 保护清单不依赖 Redis 中的 90 秒快照。受保护镜像不会提供通用替换，旧排队的替换任务在领取时也会终止。再次升级保留镜像仍需运维执行保留层流程，并在部署配置中登记每台当前的新 ID；旧 ID 和快照保存在运维回滚记录。部署会等待一次新的主机心跳，要求清单中的每个 ID 都仍在运行，过期清单会阻止验收。不要伪报正在运行的 image ID，也不要仅按运行程序版本相同就忽略普通镜像修复更新。
 
-升级保留镜像期间应暂停 Host 的通用替换执行，保持 native Daemon 独立运行。切换新 ID 后，先更新保护清单并部署 Web。部署的“Verify running Web retained image configuration”步骤通过既有固定 SSH 读取实际运行容器的清单，与本次预期值逐项核对，仅记录 commit、数量及 SHA-256；该步骤成功后才可恢复同一 Host 进程。随后部署最多等待 120 秒，要求新的主机心跳仍报告清单内所有镜像。仅有 Web 健康检查成功不足以恢复调度。
+升级前把 GitHub Environment `staging` 的 `COFORGE_CLOUD_IMAGE_UPDATES_PAUSED` 设为 `true` 并部署。Web 会隐藏通用替换、拒绝新的替换请求，并让已排队替换等待；领取其他操作不受阻。开关独立于镜像缓存，格式只能为空、`true` 或 `false`，错误配置阻止启动。Host 和桌面代理保持运行。部署的“Verify running Web cloud image protection”通过既有固定 SSH 核对运行容器中的实际清单和维护开关，仅记录 commit、数量、清单 SHA-256 和布尔状态；之后仍需新的主机心跳确认清单内全部镜像。两项都通过后才可逐台更新程序。完成后先登记全部当前的新 ID，再把开关设为 `false`，在同一次部署中核对实际保护状态和新心跳。维护期间不要让其他部署撤销开关。
 
 ## 核对
 

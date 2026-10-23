@@ -47,7 +47,7 @@ test("the workflow rejects live configuration mismatches before reporting succes
     "utf8",
   );
   const step = workflow
-    .split("      - name: Verify running Web retained image configuration")[1]!
+    .split("      - name: Verify running Web cloud image protection")[1]!
     .split("      - name:")[0]!;
   const script = step
     .split("        run: |\n")[1]!
@@ -57,10 +57,13 @@ test("the workflow rejects live configuration mismatches before reporting succes
   const directory = await mkdtemp(join(tmpdir(), "coforge-runtime-proof-"));
   try {
     await symlink(resolve(import.meta.dir, "../..", "scripts"), join(directory, "scripts"), "dir");
-    for (const [actual, success] of [
-      [`${second},${first}`, true],
-      [first, false],
-      ["", false],
+    for (const [actual, actualPaused, expectedPaused, success] of [
+      [`${second},${first}`, "false", "false", true],
+      [first, "false", "false", false],
+      ["", "false", "false", false],
+      [`${second},${first}`, "true", "true", true],
+      [`${second},${first}`, "false", "true", false],
+      [`${second},${first}`, "true", "false", false],
     ] as const) {
       const child = Bun.spawn(
         ["bash", "-c", `ssh() { printf '%s\n' "$ACTUAL_JSON"; }\n${script}`],
@@ -71,7 +74,8 @@ test("the workflow rejects live configuration mismatches before reporting succes
             SSH_DIR: "fixture",
             DEPLOY_SSH_USER: "fixture",
             DEPLOY_SSH_HOST: "fixture",
-            ACTUAL_JSON: JSON.stringify(actual),
+            ACTUAL_JSON: JSON.stringify({ retainedIds: actual, updatesPaused: actualPaused }),
+            EXPECTED_CLOUD_IMAGE_UPDATES_PAUSED: expectedPaused,
             EXPECTED_RETAINED_CLOUD_IMAGE_IDS: `${first},${second}`,
             GITHUB_SHA: sourceCommit,
             GITHUB_STEP_SUMMARY: join(directory, "summary"),
@@ -89,4 +93,31 @@ test("the workflow rejects live configuration mismatches before reporting succes
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("runtime attestation verifies maintenance mode together with retained identities", () => {
+  const common = { expected: first, actual: first, sourceCommit };
+  expect(
+    attestRetainedRuntime({ ...common, expectedPaused: "true", actualPaused: "true" })
+      .updatesPaused,
+  ).toBe(true);
+  for (const actualPaused of ["false", "", "yes"])
+    expect(() =>
+      attestRetainedRuntime({ ...common, expectedPaused: "true", actualPaused }),
+    ).toThrow();
+  expect(() =>
+    attestRetainedRuntime({ ...common, expectedPaused: "false", actualPaused: "true" }),
+  ).toThrow();
+  expect(() =>
+    attestRetainedRuntime({ ...common, expectedPaused: "yes", actualPaused: "true" }),
+  ).toThrow();
+  expect(
+    attestRetainedRuntime({
+      expected: "",
+      actual: "",
+      sourceCommit,
+      expectedPaused: "true",
+      actualPaused: "true",
+    }).retainedConfigured,
+  ).toBe(0);
 });
