@@ -333,7 +333,9 @@ function TaskSection({
           {m.tasks_history()}
         </Button>
         {historyOpen && (
-          <TaskHistory failed={history.isError} events={history.data} names={names} />
+          <div className="max-h-40 overflow-y-auto pr-2 sm:max-h-64">
+            <TaskHistory failed={history.isError} events={history.data} names={names} />
+          </div>
         )}
       </div>
     </section>

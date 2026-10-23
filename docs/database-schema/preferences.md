@@ -2,10 +2,11 @@
 
 ## `user_preferences`
 
-One row per user for account-level settings (time zone, time format, browser
-notifications, conversation open mode), keyed by `userId` with `ON DELETE CASCADE`. Every setting
-column is nullable and NULL means the code default; closed sets are TEXT with a
-`CHECK` constraint.
+One row per user for active account-level settings (time zone, time format and browser
+notifications), keyed by `userId` with `ON DELETE CASCADE`. Every active setting column is
+nullable and NULL means the code default. `conversationOpenMode` is a retired compatibility
+column: its historical closed-set values remain constrained, but the application neither reads
+nor writes them.
 
 ## `workspace_member_preferences`
 
