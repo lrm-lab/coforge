@@ -289,5 +289,12 @@
   "app_register_card_denied_reason": "只有工作区所有者和管理员可以注册应用。",
   "app_register_card_secret_sent": "客户端密钥已私下发送给发起请求的智能体。如果它没有收到，可以运行 coforge app rotate-secret。",
   "apps_detail_owner_agent": "负责智能体：{agent}",
-  "app_register_card_no_owner_agent": "未设置负责智能体（发起请求的智能体已不存在），因此没有发送密钥。工作区所有者或管理员可以在“设置 → 应用”中生成。"
+  "app_register_card_no_owner_agent": "未设置负责智能体（发起请求的智能体已不存在），因此没有发送密钥。工作区所有者或管理员可以在“设置 → 应用”中生成。",
+  "app_recover_card_title": "恢复应用负责智能体",
+  "app_recover_card_commit": "设为负责智能体",
+  "app_recover_card_committing": "正在设置负责智能体…",
+  "app_recover_card_request": "将 {agent} 设为 {app} 的负责智能体",
+  "app_recover_card_note": "该应用当前没有可用的负责智能体。负责智能体可以轮换客户端密钥、更新应用并申请上架。",
+  "app_recover_card_denied_reason": "只有工作区所有者和管理员可以设置应用的负责智能体。",
+  "app_recover_card_done": "{agent} 现在是负责智能体。"
 }

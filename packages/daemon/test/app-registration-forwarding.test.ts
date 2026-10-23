@@ -134,3 +134,92 @@ test("the connection sends each operation to its cloud route", async () => {
     { method: "POST", path: "/api/agent/v1/apps/owned/acme/rotate-secret", query: "", ...headers },
   ]);
 });
+
+test("the proxy hands each management operation on, a logo's large body included", async () => {
+  const calls: AgentAppRequest[] = [];
+  const { call } = proxyWith(async (request) => {
+    calls.push(request);
+    return Response.json({ ok: true });
+  });
+  const logo = {
+    operation: "logo_set",
+    clientKey: "acme",
+    contentType: "image/png",
+    dataBase64: "A".repeat(300 * 1024),
+  };
+  const bodies = [
+    { operation: "update", clientKey: "acme", changes: { name: "Acme", homepageUrl: null } },
+    logo,
+    { operation: "logo_clear", clientKey: "acme" },
+    { operation: "transfer_owner", clientKey: "acme", toAgent: "bob" },
+    { operation: "delete", clientKey: "acme" },
+    { operation: "share_link_create", clientKey: "acme", expiresDays: 7 },
+    { operation: "share_link_status", clientKey: "acme" },
+    { operation: "share_link_revoke", clientKey: "acme" },
+    { operation: "request_publish", clientKey: "acme" },
+    { operation: "request_unpublish", clientKey: "acme" },
+  ];
+  for (const body of bodies) expect((await call(body)).status).toBe(200);
+  expect(calls).toEqual(bodies as AgentAppRequest[]);
+  for (const body of [
+    { operation: "update", clientKey: "acme", changes: {} },
+    { operation: "share_link_create", clientKey: "acme", expiresDays: 400 },
+    { operation: "transfer_owner", clientKey: "acme" },
+  ])
+    expect((await call(body)).status).toBe(400);
+});
+
+test("the connection sends each management operation to its cloud route with its fields", async () => {
+  const seen: { method: string; path: string; body: string }[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      seen.push({
+        method: request.method,
+        path: new URL(request.url).pathname,
+        body: await request.text(),
+      });
+      return Response.json({ ok: true });
+    },
+  });
+  closers.push(() => void server.stop(true));
+  const transport = new DaemonConnection("wss://cloud.example", fakeClient);
+  await transport.start("daemon-token", {
+    computerId: "computer-a",
+    workspaceId: "workspace-a",
+    serverHttpUrl: server.url.origin,
+  });
+  closers.push(() => void transport.stop());
+
+  const requests: AgentAppRequest[] = [
+    { operation: "update", clientKey: "acme", changes: { scopes: [] } },
+    { operation: "logo_set", clientKey: "acme", contentType: "image/png", dataBase64: "AA==" },
+    { operation: "logo_clear", clientKey: "acme" },
+    { operation: "transfer_owner", clientKey: "acme", toAgent: "bob" },
+    { operation: "delete", clientKey: "acme" },
+    { operation: "share_link_create", clientKey: "acme", expiresDays: 30 },
+    { operation: "share_link_status", clientKey: "acme" },
+    { operation: "share_link_revoke", clientKey: "acme" },
+    { operation: "request_publish", clientKey: "acme" },
+    { operation: "request_unpublish", clientKey: "acme" },
+  ];
+  for (const request of requests) await transport.agentApp(request, AGENT_API_KEY);
+  const base = "/api/agent/v1/apps/owned/acme";
+  expect(seen).toEqual([
+    { method: "PATCH", path: base, body: '{"scopes":[]}' },
+    {
+      method: "PUT",
+      path: `${base}/logo`,
+      body: '{"contentType":"image/png","dataBase64":"AA=="}',
+    },
+    { method: "DELETE", path: `${base}/logo`, body: "" },
+    { method: "POST", path: `${base}/transfer-owner`, body: '{"toAgent":"bob"}' },
+    { method: "DELETE", path: base, body: "" },
+    { method: "POST", path: `${base}/share-link`, body: '{"expiresDays":30}' },
+    { method: "GET", path: `${base}/share-link`, body: "" },
+    { method: "DELETE", path: `${base}/share-link`, body: "" },
+    { method: "POST", path: `${base}/publish-request`, body: "" },
+    { method: "POST", path: `${base}/unpublish-request`, body: "" },
+  ]);
+});

@@ -71,4 +71,12 @@ export type ActionCardView =
       kind: "app:register";
       app: AppRegisterCardFields;
       result?: { clientKey: string; noOwnerAgent?: boolean };
+    })
+  /** The Agent that posted it asks to make `toAgent` the owner Agent of `app`, which has none
+   * alive; committing does, as a Workspace owner or admin may. */
+  | (ActionCardViewBase & {
+      kind: "app:recover_owner";
+      app: { key: string; name: string };
+      toAgent: { name: string };
+      result?: { clientKey: string; ownerAgent: string };
     });

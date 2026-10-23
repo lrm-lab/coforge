@@ -78,7 +78,7 @@ const NOT_SERVED_BY_WEB = new Map([
   ],
   [
     "/api/agent/v1/app-registrations",
-    "the Daemon's local route for app status, owned list and secret rotation: it forwards each operation to a cloud route the contract declares under cloud.appRegistrations (comment on APP_REGISTRATION_LOCAL_ROUTE)",
+    "the Daemon's local route for app status, owned list, secret rotation and app management: it forwards each operation to a cloud route the contract declares under cloud.appRegistrations (comment on APP_REGISTRATION_LOCAL_ROUTE)",
   ],
 ]);
 

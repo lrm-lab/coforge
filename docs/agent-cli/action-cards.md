@@ -35,6 +35,10 @@ yet:
   `coforge app prepare register`. A Workspace owner or admin commits it, which registers the app with
   the preparing Agent as its owner Agent; the server checks each value with the app registry's rules
   when preparing it, and the card never carries a secret ([registering an app](app-registration.md)).
+- **`app:recover_owner`**: `clientKey`, `toAgent` (a live public Agent of the Workspace), `draftHint?`;
+  prepared by `coforge app prepare recover-owner`. Only an admin-role Agent that manages the app may
+  prepare it, and only while the app has no live owner Agent. A Workspace owner or admin commits it
+  ([managing an app](app-management.md)).
 
 Identity fields (`initialHumans`, `initialAgents`, `suggestedComputer`,
 `requiredComputer`, `channel`, `humans`, `agents`) are handles the Agent
@@ -52,7 +56,7 @@ action again and refuses in the same form: `INVALID_ACTION` (with the issues),
 `INVALID_HANDLE` (naming the field; a private Agent the caller can see is
 refused because it "cannot be a channel member"), `AGENT_NOT_VISIBLE` (a
 private Agent the caller cannot see, as channel management answers it),
-`CHANNEL_EXISTS`, `AGENT_EXISTS`, `APP_EXISTS`, or, as
+`CHANNEL_EXISTS`, `AGENT_EXISTS`, `APP_EXISTS`, `APP_OWNER_ACTIVE` (an `app:recover_owner` for an app that still has a live owner Agent), or, as
 for `message send`, `DM_PEER_NOT_IN_WORKSPACE` and `TARGET_NOT_ACCESSIBLE`. The
 CLI reports its reason, code and next step. On success the CLI prints:
 

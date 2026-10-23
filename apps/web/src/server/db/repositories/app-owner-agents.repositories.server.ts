@@ -1,5 +1,9 @@
 import { APP_REGISTER_CARD_KIND, type ResolvedAppRegisterPayload } from "@lrm/coforge-sdk/agent";
+import type { AppPublishStatus } from "#src/features/apps/app-publish-status";
+import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { Prisma } from "#src/generated/prisma/client";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type {
   AppOwnerAgentStore,
   OwnedAppRow,
@@ -7,7 +11,17 @@ import type {
   RegisterCardRow,
 } from "#src/server/apps/app-owner-agents.server";
 
-const APP = { key: true, name: true, ownerWorkspaceId: true, ownerAgentId: true } as const;
+const APP = {
+  id: true,
+  key: true,
+  name: true,
+  description: true,
+  redirectUris: true,
+  logoObjectKey: true,
+  publishStatus: true,
+  ownerWorkspaceId: true,
+  ownerAgentId: true,
+} as const;
 const BY_NAME = [{ name: "asc" }, { key: "asc" }] as const;
 const CARD = {
   messageId: true,
@@ -24,7 +38,13 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
   async agent(agentId: string) {
     const row = await this.db.agent.findUnique({
       where: { id: agentId },
-      select: { id: true, workspaceId: true, role: true, deletedAt: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        role: true,
+        deletedAt: true,
+        workspace: { select: { slug: true } },
+      },
     });
     return row
       ? {
@@ -32,20 +52,54 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
           workspaceId: row.workspaceId,
           role: row.role,
           archived: row.deletedAt !== null,
+          workspaceSlug: row.workspace.slug,
         }
       : undefined;
   }
 
-  async find(key: string): Promise<OwnerAgentApp | undefined> {
-    return (await this.db.app.findUnique({ where: { key }, select: APP })) ?? undefined;
+  async candidate(workspaceId: string, handle: string) {
+    const bare = handle.startsWith("@") ? handle.slice(1) : handle;
+    const row = await this.db.agent.findFirst({
+      where: {
+        workspaceId,
+        ...ACTIVE_AGENT_WHERE,
+        visibility: AGENT_VISIBILITY.PUBLIC,
+        systemKind: null,
+        ...(UUID_LIKE_PATTERN.test(bare) ? { id: bare } : { name: bare }),
+      },
+      select: { id: true, name: true },
+    });
+    return row ?? undefined;
   }
 
-  managed(agent: { id: string; workspaceId: string }, all: boolean) {
-    return this.db.app.findMany({
+  async agentNamed(agentId: string) {
+    const row = await this.db.agent.findUnique({
+      where: { id: agentId },
+      select: { name: true, deletedAt: true },
+    });
+    return row ? { name: row.name, archived: row.deletedAt !== null } : undefined;
+  }
+
+  async setOwner(key: string, workspaceId: string, from: string | null, to: string) {
+    const updated = await this.db.app.updateMany({
+      where: { key, ownerWorkspaceId: workspaceId, ownerAgentId: from },
+      data: { ownerAgentId: to },
+    });
+    return updated.count === 1;
+  }
+
+  async find(key: string): Promise<OwnerAgentApp | undefined> {
+    const row = await this.db.app.findUnique({ where: { key }, select: APP });
+    return row ? withStatus(row) : undefined;
+  }
+
+  async managed(agent: { id: string; workspaceId: string }, all: boolean) {
+    const rows = await this.db.app.findMany({
       where: all ? { ownerWorkspaceId: agent.workspaceId } : { ownerAgentId: agent.id },
       select: APP,
       orderBy: [...BY_NAME],
     });
+    return rows.map(withStatus);
   }
 
   async withOwners(workspaceId: string): Promise<OwnedAppRow[]> {
@@ -59,7 +113,7 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
       },
     });
     return rows.map(({ ownerAgent, ...app }) => ({
-      ...app,
+      ...withStatus(app),
       ownerAgent: ownerAgent && {
         name: ownerAgent.name,
         displayName: ownerAgent.displayName,
@@ -112,6 +166,13 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
     });
     return updated.count === 1;
   }
+}
+
+/** A row as the manager sees it: `apps_publish_status_check` admits only the five statuses. */
+function withStatus<Row extends { publishStatus: string }>(
+  row: Row,
+): Omit<Row, "publishStatus"> & { publishStatus: AppPublishStatus } {
+  return { ...row, publishStatus: row.publishStatus as AppPublishStatus };
 }
 
 function card(row: {

@@ -106,7 +106,7 @@ an app is not confirmed to exist.
 
 Reached through the daemon's local proxy, `POST /api/agent/v1/app-registrations` with the body
 `{ operation: "register_status" | "owned_list" | "rotate_secret", ... }` (the same operation names
-from the CLI to the cloud). The daemon forwards each with the Agent's key:
+from the CLI to the cloud; the [management operations](app-management.md#http) share the route). The daemon forwards each with the Agent's key:
 
 | Operation                | Cloud route                                                 |
 | ------------------------ | ----------------------------------------------------------- |
@@ -126,5 +126,5 @@ Errors are `{ ok: false, errorCode, error }` as for `app token`. The rotation an
   (`app-installation-setup`), not on the card. `--when-to-use` is CoForge's one-line hint to Agents.
 - **Redirect URLs are optional**: Login with CoForge needs at least one to sign a person in, but an
   Agent-only app may omit it. Raft requires one.
-- Not built yet: update, logo, transfer-owner, recover-owner, delete, share links and publish
-  requests from the CLI.
+- Updating, the logo, ownership, deletion, share links and publish requests are in
+  [managing an app](app-management.md).

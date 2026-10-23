@@ -1,4 +1,5 @@
 import { AppError } from "#src/lib/app-error";
+import type { ManagedApp } from "#src/server/apps/managed-app";
 import {
   PUBLISH_TRANSITIONS,
   REVIEW_REASON_MAX_LENGTH,
@@ -41,7 +42,8 @@ export type PendingReview = {
 export type FileRequestInput = {
   appId: string;
   kind: AppReviewKind;
-  userId: string;
+  /** None when an Agent filed the request. */
+  userId: string | null;
   at: Date;
 };
 
@@ -126,6 +128,16 @@ export class AppPublishing {
     return this.request(actor, key, "unpublish");
   }
 
+  /** `requestPublish` for an app an Agent manages: the request records no user. */
+  async requestPublishManaged(managed: ManagedApp): Promise<AppPublishStatus> {
+    return this.requestManaged(managed, "publish");
+  }
+
+  /** `requestUnpublish` for an app an Agent manages. */
+  async requestUnpublishManaged(managed: ManagedApp): Promise<AppPublishStatus> {
+    return this.requestManaged(managed, "unpublish");
+  }
+
   /** Withdraws a pending publish request: the app is private again and the request is gone. */
   async withdrawPublish(actor: PublishingActor, key: string): Promise<AppPublishStatus> {
     const app = await this.ownedApp(actor, key);
@@ -178,23 +190,34 @@ export class AppPublishing {
     key: string,
     kind: AppReviewKind,
   ): Promise<AppPublishStatus> {
+    return this.fileRequest(actor, key, await this.ownedApp(actor, key), kind, actor.actorUserId);
+  }
+
+  private async requestManaged(managed: ManagedApp, kind: AppReviewKind) {
+    if (!(await this.enabled(managed))) throw OFF();
+    const { app } = managed;
+    const owned = { appId: app.id, publishStatus: app.publishStatus, description: app.description };
+    return this.fileRequest(managed, app.key, owned, kind, null);
+  }
+
+  private async fileRequest(
+    workspace: { workspaceId: string },
+    key: string,
+    app: { appId: string; publishStatus: AppPublishStatus; description: string },
+    kind: AppReviewKind,
+    userId: string | null,
+  ): Promise<AppPublishStatus> {
     const { from, pending } = PUBLISH_TRANSITIONS[kind];
-    const app = await this.ownedApp(actor, key);
     if (app.publishStatus === pending) return pending;
     if (!(from as readonly AppPublishStatus[]).includes(app.publishStatus)) throw NOT_ALLOWED();
     if (kind === "publish" && app.description.trim() === "") throw DESCRIPTION_REQUIRED();
-    const filed = await this.store.file({
-      appId: app.appId,
-      kind,
-      userId: actor.actorUserId,
-      at: this.now(),
-    });
-    return filed ? pending : this.settled(actor, key, pending);
+    const filed = await this.store.file({ appId: app.appId, kind, userId, at: this.now() });
+    return filed ? pending : this.settled(workspace, key, pending);
   }
 
   /** A write lost a race: answer `expected` if a concurrent request already reached it. */
   private async settled(
-    actor: PublishingActor,
+    actor: { workspaceId: string },
     key: string,
     expected: AppPublishStatus,
   ): Promise<AppPublishStatus> {

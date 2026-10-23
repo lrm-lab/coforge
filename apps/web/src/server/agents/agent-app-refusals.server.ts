@@ -40,18 +40,50 @@ export function agentAppServiceRefusal(error: unknown): Response {
   throw error;
 }
 
+/** What each errorId an Agent's management of its apps raises means for the Agent; the message
+ * names the fix. */
+const MANAGEMENT_MESSAGES: Record<string, string> = {
+  "app-published-undeletable":
+    "The app is published or waiting to leave the Marketplace, so it cannot be deleted. Ask for its removal (request-unpublish) and delete it once it is private.",
+  "app-share-status-conflict":
+    "Only a private or rejected app has a share link; this app is published or waiting for review.",
+  "app-share-expiry-invalid": "--expires-days takes a whole number from 1 to 365.",
+  "app-publish-status-conflict": "The app's publish status does not allow this request.",
+  "app-description-required":
+    "A publish request needs the app to have a description: set one with app update --description.",
+  "app-marketplace-off": "The Marketplace is not available in this Workspace.",
+  "app-agent-manifest-off": "The Agent manifest URL is not available in this Workspace.",
+  "app-redirect-uris-invalid":
+    "The redirect URLs are not acceptable. They cannot be cleared; give one or more valid URLs.",
+  "app-owner-agent-invalid":
+    "That Agent is not a live, public Agent of this Workspace, so it cannot own the app.",
+};
+
 /** The refusal for an `AppError` raised while an Agent manages the apps it registered (`coforge
- * app status|list --owned|rotate-secret`); anything else is rethrown. */
+ * app status|list --owned|rotate-secret|update|logo|clear-logo|transfer-owner|delete|share-link|
+ * request-publish|...`); anything else is rethrown. */
 export function agentAppOwnerRefusal(error: unknown): Response {
   if (isAppErrorCode(error, "NOT_FOUND"))
     return agentAppRefusal(
       "not_found",
       "No such card or app is managed by this Agent: it may not exist, belong to another Workspace, or be one this Agent is neither the owner Agent of nor an admin Agent for; or this Agent may be archived.",
     );
-  if (isAppErrorCode(error, "CONFLICT"))
+  const known = isAppErrorCode(error, "CONFLICT", "INVALID_INPUT", "ACCESS_DENIED")
+    ? error
+    : undefined;
+  if (known) {
+    const detail = known.errorId ? MANAGEMENT_MESSAGES[known.errorId] : undefined;
+    if (known.code === "CONFLICT")
+      return agentAppRefusal(
+        "conflict",
+        detail ?? "The app changed at the same time; nothing was changed.",
+      );
+    if (known.code === "ACCESS_DENIED")
+      return agentAppRefusal("access_denied", detail ?? "This Agent may not do that.");
     return agentAppRefusal(
-      "conflict",
-      "The app went while the secret was rotated; nothing was changed.",
+      "invalid_input",
+      detail ?? `A value was not acceptable${known.errorId ? ` (${known.errorId})` : ""}.`,
     );
+  }
   throw error;
 }

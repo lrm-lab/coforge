@@ -17,10 +17,10 @@ export function isAppRegistrationInvocation(invocation: {
 }
 
 /** Fails a usage mistake: the message, then the usage line. */
-type Invalid = (message: string) => never;
+export type Invalid = (message: string) => never;
 
 /** Reads `--flag value` pairs and bare flags: each named flag at most once unless repeatable. */
-function readOptions(
+export function readOptions(
   args: readonly string[],
   spec: { values: readonly string[]; repeatable?: readonly string[]; bare?: readonly string[] },
   invalid: Invalid,

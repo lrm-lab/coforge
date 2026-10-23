@@ -8,7 +8,7 @@ import {
   type AppRegistrationStatusResponse,
   type AppSecretRotationResponse,
 } from "@lrm/coforge-sdk/agent";
-import { envelopeRequest } from "./proxy-request";
+import { envelopeRequest, proxyEndpointOf } from "./proxy-request";
 
 /** `coforge app status|list --owned|rotate-secret`'s requests, through the daemon's local proxy. */
 export type AppRegistrationClient = {
@@ -28,12 +28,7 @@ export function connectAppRegistrationClient(
     operation: string,
   ) =>
     envelopeRequest(
-      (path) => {
-        const url = new URL(proxyUrl);
-        url.pathname = path;
-        url.search = "";
-        return url;
-      },
+      proxyEndpointOf(proxyUrl),
       context,
       proxyUrl,
       { method: route.method, path: route.path, body },

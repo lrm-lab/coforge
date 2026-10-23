@@ -5,6 +5,7 @@
  * `{ ok: false, errorCode, error }` error envelope as `app token`.
  */
 import { isRecord } from "#src/internal/json-record";
+import { decodeAgentAppManagementRequest, type AgentAppManagementRequest } from "./app-management";
 
 const isText = (value: unknown): value is string => typeof value === "string";
 const isFilled = (value: unknown): value is string => isText(value) && value.length > 0;
@@ -16,7 +17,7 @@ export const APP_REGISTRATION_ID_MAX_LENGTH = 64;
 export type AgentAppRegistrationRequest =
   | { operation: "register_status"; card?: string; client?: string }
   | { operation: "owned_list" }
-  | { operation: "rotate_secret"; clientKey: string };
+  | AgentAppManagementRequest;
 
 /** Exactly the fields the operation takes, or `undefined` for anything else. `register_status`
  * names a card (`card`) or an app (`client`), never both. The operation names are the request's
@@ -31,11 +32,9 @@ export function decodeAgentAppRegistrationRequest(
   const id = (field: unknown): field is string =>
     isFilled(field) && field.length <= APP_REGISTRATION_ID_MAX_LENGTH;
   if (operation === "owned_list") return keys.length === 0 ? { operation } : undefined;
-  if (operation === "rotate_secret")
-    return id(rest.clientKey) && only("clientKey")
-      ? { operation, clientKey: rest.clientKey }
-      : undefined;
-  if (operation !== "register_status" || !only("card", "client")) return undefined;
+  if (operation !== "register_status")
+    return decodeAgentAppManagementRequest(value, (field): field is string => id(field));
+  if (!only("card", "client")) return undefined;
   const { card, client } = rest;
   if (id(card) && client === undefined) return { operation, card };
   if (id(client) && card === undefined) return { operation, client };

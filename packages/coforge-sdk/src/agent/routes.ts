@@ -1,3 +1,5 @@
+import { APP_REGISTRATION_REQUEST_MAX_BYTES } from "./app-management";
+
 /** Mention delivery (`coforge mention delivery`): what became of each @mention in a message the
  * Agent sent, by the message's full id or eight-hex prefix. */
 const MENTION_DELIVERIES_ROUTE = {
@@ -48,14 +50,46 @@ const APP_ROUTES = {
 const APP_REGISTRATION_LOCAL_ROUTE = {
   method: "POST",
   path: "/api/agent/v1/app-registrations",
+  /** Room for a logo's base64 (`app logo`); the other operations are small. */
+  maxBodyBytes: APP_REGISTRATION_REQUEST_MAX_BYTES,
 } as const;
+const ownedAppPath = (clientKey: string, suffix = "") =>
+  `/api/agent/v1/apps/owned/${encodeURIComponent(clientKey)}${suffix}`;
 const APP_REGISTRATION_CLOUD_ROUTES = {
   status: { method: "GET", path: "/api/agent/v1/apps/registrations/status" },
   owned: { method: "GET", path: "/api/agent/v1/apps/owned" },
   rotateSecret: {
     method: "POST",
-    path: (clientKey: string) =>
-      `/api/agent/v1/apps/owned/${encodeURIComponent(clientKey)}/rotate-secret`,
+    path: (clientKey: string) => ownedAppPath(clientKey, "/rotate-secret"),
+  },
+  // The management operations (`app-management.ts`): one route each, named like the operation.
+  update: { method: "PATCH", path: (clientKey: string) => ownedAppPath(clientKey) },
+  delete: { method: "DELETE", path: (clientKey: string) => ownedAppPath(clientKey) },
+  logoSet: { method: "PUT", path: (clientKey: string) => ownedAppPath(clientKey, "/logo") },
+  logoClear: { method: "DELETE", path: (clientKey: string) => ownedAppPath(clientKey, "/logo") },
+  transferOwner: {
+    method: "POST",
+    path: (clientKey: string) => ownedAppPath(clientKey, "/transfer-owner"),
+  },
+  shareLinkCreate: {
+    method: "POST",
+    path: (clientKey: string) => ownedAppPath(clientKey, "/share-link"),
+  },
+  shareLinkStatus: {
+    method: "GET",
+    path: (clientKey: string) => ownedAppPath(clientKey, "/share-link"),
+  },
+  shareLinkRevoke: {
+    method: "DELETE",
+    path: (clientKey: string) => ownedAppPath(clientKey, "/share-link"),
+  },
+  requestPublish: {
+    method: "POST",
+    path: (clientKey: string) => ownedAppPath(clientKey, "/publish-request"),
+  },
+  requestUnpublish: {
+    method: "POST",
+    path: (clientKey: string) => ownedAppPath(clientKey, "/unpublish-request"),
   },
 } as const;
 

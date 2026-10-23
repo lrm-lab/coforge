@@ -79,10 +79,12 @@ An owner or admin of an app's Workspace shares the app with other Workspaces wit
 the rest; the evidence is Raft's share page and the editor's Private share link card.
 
 - One link is active per app (`app_share_links_one_active`). "Create link" makes it and "Regenerate"
-  revokes the old one and makes a new one; "Revoke" ends it. A link lives 30 days (the editor's
-  default in Raft; the agent CLI's 1 to 365 days is not offered). Only a hash is stored: the URL
-  (`/apps/share/<token>`) is shown once, in the card, and later the card shows only when the active
-  link ends. Creating needs a `private` or `rejected` app (`CONFLICT`, `app-share-status-conflict`);
+  revokes the old one and makes a new one; "Revoke" ends it. The editor makes 30-day links (Raft's
+  default); an Agent asks for 1 to 365 days (`coforge app share-link --expires-days`, Raft's agent
+  CLI range; `INVALID_INPUT`, `app-share-expiry-invalid`, outside it), and a link an Agent made
+  records no creator. Only a hash is stored: the URL (`/apps/share/<token>`) is shown once, in the
+  card or to the Agent that made it ([managing an app](agent-cli/app-management.md)), and later only
+  when the active link ends. Creating needs a `private` or `rejected` app (`CONFLICT`, `app-share-status-conflict`);
   revoking works in any status, so a link can be revoked while a request waits or after publishing.
 - The page `/apps/share/<token>` (outside any Workspace, like `/join/<token>`) is for a signed-in
   person: the app with the Marketplace detail's fields, its client ID, who shared it, the link's

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { exactPath, pathParam } from "./agent-proxy-paths";
 import {
   encodeLocalReminderRequest,
   isValidMentionSelectorArray,
@@ -399,19 +400,6 @@ async function readJsonBody(
   }
 }
 
-/** Matches one fixed pathname; such a route has no path param. */
-function exactPath(path: string) {
-  return (pathname: string) => (pathname === path ? "" : undefined);
-}
-
-/** Matches `prefix + param + suffix`, yielding the still-encoded param. */
-function pathParam(prefix: string, suffix = "") {
-  return (pathname: string) =>
-    pathname.startsWith(prefix) && pathname.endsWith(suffix)
-      ? pathname.slice(prefix.length, pathname.length - suffix.length)
-      : undefined;
-}
-
 /** Decodes a required path param; an undecodable or empty one is a `400`. */
 function decodePathParam(param: string): string | Response {
   try {
@@ -726,6 +714,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     method: LOCAL_PROXY_ROUTES.appRegistrations.method,
     match: exactPath(LOCAL_PROXY_ROUTES.appRegistrations.path),
     body: "json-object",
+    maxBodyBytes: LOCAL_PROXY_ROUTES.appRegistrations.maxBodyBytes,
     handler: "agentApp",
     parse: ({ fields }) => decodeAgentAppRegistrationRequest(fields) ?? badRequest(),
     respond: forwardResponse,

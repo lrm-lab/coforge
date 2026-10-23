@@ -30,6 +30,16 @@ export function requireProxySetup(operation: string, context: string, proxyUrl: 
   if (!proxyUrl) throw preIssuanceError(operation, "coforge agent proxy is not configured");
 }
 
+/** The URL of a daemon proxy route: the proxy's origin with `path`, and no query. */
+export function proxyEndpointOf(proxyUrl: string): (path: string) => URL {
+  return (path) => {
+    const url = new URL(proxyUrl);
+    url.pathname = path;
+    url.search = "";
+    return url;
+  };
+}
+
 /**
  * Calls a route that always answers a domain error as JSON `{ ok: false, errorCode, error }`
  * for Manual, user info, profile and App config: `errorCode` becomes the `CliError` code directly.

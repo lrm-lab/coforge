@@ -6,6 +6,9 @@ import { runGitHubCli, runGitHubCredentialHelper } from "./github-credential";
 import { runGitPrepareCommitMsg } from "./git-prepare-commit-msg";
 import { connectAppClient } from "./app-client";
 import { parseAppArgs, runAppCommand } from "./app-commands";
+import { isAppManagementInvocation } from "./app-management-args";
+import { connectAppManagementClient } from "./app-management-client";
+import { runAppManagementCommand } from "./app-management-commands";
 import { isAppRegistrationInvocation } from "./app-registration-args";
 import { connectAppRegistrationClient } from "./app-registration-client";
 import { runAppRegistrationCommand } from "./app-registration-commands";
@@ -36,6 +39,16 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
           invocation,
           {
             client: connectAppRegistrationClient(context, proxyUrl),
+            prepare: (target, action) => transport.actionPrepare!(target, action),
+          },
+          { stdout: (text) => process.stdout.write(text) },
+        );
+      } else if (isAppManagementInvocation(invocation)) {
+        const transport = connectLocal(Bun.env.COFORGE_DAEMON_SOCKET ?? "", context, proxyUrl);
+        process.exitCode = await runAppManagementCommand(
+          invocation,
+          {
+            client: connectAppManagementClient(context, proxyUrl),
             prepare: (target, action) => transport.actionPrepare!(target, action),
           },
           { stdout: (text) => process.stdout.write(text) },

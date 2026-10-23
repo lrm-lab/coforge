@@ -144,7 +144,13 @@ import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
 import { Route as WWorkspaceSlugProjectsProjectSlugTreeSplatRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.tree.$'
 import { Route as WWorkspaceSlugRecordsWeeksYearWeekRouteImport } from './routes/w.$workspaceSlug/records.weeks.$year.$week'
+import { Route as ApiAgentV1AppsOwnedClientKeyIndexRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/index'
+import { Route as ApiAgentV1AppsOwnedClientKeyLogoRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/logo'
+import { Route as ApiAgentV1AppsOwnedClientKeyPublishRequestRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/publish-request'
 import { Route as ApiAgentV1AppsOwnedClientKeyRotateSecretRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/rotate-secret'
+import { Route as ApiAgentV1AppsOwnedClientKeyShareLinkRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/share-link'
+import { Route as ApiAgentV1AppsOwnedClientKeyTransferOwnerRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/transfer-owner'
+import { Route as ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/unpublish-request'
 import { Route as ApiReleaseCatalogV1AppsAppReleasesVersionRouteImport } from './routes/api/release-catalog/v1/apps/$app/releases/$version'
 
 const IndexRoute = IndexRouteImport.update({
@@ -896,10 +902,46 @@ const WWorkspaceSlugRecordsWeeksYearWeekRoute =
     path: '/weeks/$year/$week',
     getParentRoute: () => WWorkspaceSlugRecordsRoute,
   } as any)
+const ApiAgentV1AppsOwnedClientKeyIndexRoute =
+  ApiAgentV1AppsOwnedClientKeyIndexRouteImport.update({
+    id: '/api/agent/v1/apps/owned/$clientKey/',
+    path: '/api/agent/v1/apps/owned/$clientKey/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1AppsOwnedClientKeyLogoRoute =
+  ApiAgentV1AppsOwnedClientKeyLogoRouteImport.update({
+    id: '/api/agent/v1/apps/owned/$clientKey/logo',
+    path: '/api/agent/v1/apps/owned/$clientKey/logo',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1AppsOwnedClientKeyPublishRequestRoute =
+  ApiAgentV1AppsOwnedClientKeyPublishRequestRouteImport.update({
+    id: '/api/agent/v1/apps/owned/$clientKey/publish-request',
+    path: '/api/agent/v1/apps/owned/$clientKey/publish-request',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1AppsOwnedClientKeyRotateSecretRoute =
   ApiAgentV1AppsOwnedClientKeyRotateSecretRouteImport.update({
     id: '/api/agent/v1/apps/owned/$clientKey/rotate-secret',
     path: '/api/agent/v1/apps/owned/$clientKey/rotate-secret',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1AppsOwnedClientKeyShareLinkRoute =
+  ApiAgentV1AppsOwnedClientKeyShareLinkRouteImport.update({
+    id: '/api/agent/v1/apps/owned/$clientKey/share-link',
+    path: '/api/agent/v1/apps/owned/$clientKey/share-link',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute =
+  ApiAgentV1AppsOwnedClientKeyTransferOwnerRouteImport.update({
+    id: '/api/agent/v1/apps/owned/$clientKey/transfer-owner',
+    path: '/api/agent/v1/apps/owned/$clientKey/transfer-owner',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute =
+  ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport.update({
+    id: '/api/agent/v1/apps/owned/$clientKey/unpublish-request',
+    path: '/api/agent/v1/apps/owned/$clientKey/unpublish-request',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiReleaseCatalogV1AppsAppReleasesVersionRoute =
@@ -1043,8 +1085,14 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
   '/w/$workspaceSlug/records/weeks/$year/$week': typeof WWorkspaceSlugRecordsWeeksYearWeekRoute
   '/api/agent/v1/apps/owned/': typeof ApiAgentV1AppsOwnedIndexRoute
+  '/api/agent/v1/apps/owned/$clientKey/logo': typeof ApiAgentV1AppsOwnedClientKeyLogoRoute
+  '/api/agent/v1/apps/owned/$clientKey/publish-request': typeof ApiAgentV1AppsOwnedClientKeyPublishRequestRoute
   '/api/agent/v1/apps/owned/$clientKey/rotate-secret': typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
+  '/api/agent/v1/apps/owned/$clientKey/share-link': typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
+  '/api/agent/v1/apps/owned/$clientKey/transfer-owner': typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
+  '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
+  '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -1178,8 +1226,14 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
   '/w/$workspaceSlug/records/weeks/$year/$week': typeof WWorkspaceSlugRecordsWeeksYearWeekRoute
   '/api/agent/v1/apps/owned': typeof ApiAgentV1AppsOwnedIndexRoute
+  '/api/agent/v1/apps/owned/$clientKey/logo': typeof ApiAgentV1AppsOwnedClientKeyLogoRoute
+  '/api/agent/v1/apps/owned/$clientKey/publish-request': typeof ApiAgentV1AppsOwnedClientKeyPublishRequestRoute
   '/api/agent/v1/apps/owned/$clientKey/rotate-secret': typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
+  '/api/agent/v1/apps/owned/$clientKey/share-link': typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
+  '/api/agent/v1/apps/owned/$clientKey/transfer-owner': typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
+  '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
+  '/api/agent/v1/apps/owned/$clientKey': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -1318,8 +1372,14 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/projects/$projectSlug_/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
   '/w/$workspaceSlug/records/weeks/$year/$week': typeof WWorkspaceSlugRecordsWeeksYearWeekRoute
   '/api/agent/v1/apps/owned/': typeof ApiAgentV1AppsOwnedIndexRoute
+  '/api/agent/v1/apps/owned/$clientKey/logo': typeof ApiAgentV1AppsOwnedClientKeyLogoRoute
+  '/api/agent/v1/apps/owned/$clientKey/publish-request': typeof ApiAgentV1AppsOwnedClientKeyPublishRequestRoute
   '/api/agent/v1/apps/owned/$clientKey/rotate-secret': typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
+  '/api/agent/v1/apps/owned/$clientKey/share-link': typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
+  '/api/agent/v1/apps/owned/$clientKey/transfer-owner': typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
+  '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
+  '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1457,8 +1517,14 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
     | '/w/$workspaceSlug/records/weeks/$year/$week'
     | '/api/agent/v1/apps/owned/'
+    | '/api/agent/v1/apps/owned/$clientKey/logo'
+    | '/api/agent/v1/apps/owned/$clientKey/publish-request'
     | '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
+    | '/api/agent/v1/apps/owned/$clientKey/share-link'
+    | '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
+    | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
+    | '/api/agent/v1/apps/owned/$clientKey/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1592,8 +1658,14 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
     | '/w/$workspaceSlug/records/weeks/$year/$week'
     | '/api/agent/v1/apps/owned'
+    | '/api/agent/v1/apps/owned/$clientKey/logo'
+    | '/api/agent/v1/apps/owned/$clientKey/publish-request'
     | '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
+    | '/api/agent/v1/apps/owned/$clientKey/share-link'
+    | '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
+    | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
+    | '/api/agent/v1/apps/owned/$clientKey'
   id:
     | '__root__'
     | '/'
@@ -1731,8 +1803,14 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/$projectSlug_/tree/$'
     | '/w/$workspaceSlug/records/weeks/$year/$week'
     | '/api/agent/v1/apps/owned/'
+    | '/api/agent/v1/apps/owned/$clientKey/logo'
+    | '/api/agent/v1/apps/owned/$clientKey/publish-request'
     | '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
+    | '/api/agent/v1/apps/owned/$clientKey/share-link'
+    | '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
+    | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
+    | '/api/agent/v1/apps/owned/$clientKey/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1834,8 +1912,14 @@ export interface RootRouteChildren {
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   ApiAgentV1AppsOwnedIndexRoute: typeof ApiAgentV1AppsOwnedIndexRoute
+  ApiAgentV1AppsOwnedClientKeyLogoRoute: typeof ApiAgentV1AppsOwnedClientKeyLogoRoute
+  ApiAgentV1AppsOwnedClientKeyPublishRequestRoute: typeof ApiAgentV1AppsOwnedClientKeyPublishRequestRoute
   ApiAgentV1AppsOwnedClientKeyRotateSecretRoute: typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
+  ApiAgentV1AppsOwnedClientKeyShareLinkRoute: typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
+  ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute: typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
+  ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute: typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
   ApiReleaseCatalogV1AppsAppReleasesVersionRoute: typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
+  ApiAgentV1AppsOwnedClientKeyIndexRoute: typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -2785,11 +2869,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugRecordsWeeksYearWeekRouteImport
       parentRoute: typeof WWorkspaceSlugRecordsRoute
     }
+    '/api/agent/v1/apps/owned/$clientKey/': {
+      id: '/api/agent/v1/apps/owned/$clientKey/'
+      path: '/api/agent/v1/apps/owned/$clientKey'
+      fullPath: '/api/agent/v1/apps/owned/$clientKey/'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/apps/owned/$clientKey/logo': {
+      id: '/api/agent/v1/apps/owned/$clientKey/logo'
+      path: '/api/agent/v1/apps/owned/$clientKey/logo'
+      fullPath: '/api/agent/v1/apps/owned/$clientKey/logo'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyLogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/apps/owned/$clientKey/publish-request': {
+      id: '/api/agent/v1/apps/owned/$clientKey/publish-request'
+      path: '/api/agent/v1/apps/owned/$clientKey/publish-request'
+      fullPath: '/api/agent/v1/apps/owned/$clientKey/publish-request'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyPublishRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/apps/owned/$clientKey/rotate-secret': {
       id: '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
       path: '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
       fullPath: '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
       preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/apps/owned/$clientKey/share-link': {
+      id: '/api/agent/v1/apps/owned/$clientKey/share-link'
+      path: '/api/agent/v1/apps/owned/$clientKey/share-link'
+      fullPath: '/api/agent/v1/apps/owned/$clientKey/share-link'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyShareLinkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/apps/owned/$clientKey/transfer-owner': {
+      id: '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
+      path: '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
+      fullPath: '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/apps/owned/$clientKey/unpublish-request': {
+      id: '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
+      path: '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
+      fullPath: '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/release-catalog/v1/apps/$app/releases/$version': {
@@ -3092,10 +3218,21 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute:
     ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute,
   ApiAgentV1AppsOwnedIndexRoute: ApiAgentV1AppsOwnedIndexRoute,
+  ApiAgentV1AppsOwnedClientKeyLogoRoute: ApiAgentV1AppsOwnedClientKeyLogoRoute,
+  ApiAgentV1AppsOwnedClientKeyPublishRequestRoute:
+    ApiAgentV1AppsOwnedClientKeyPublishRequestRoute,
   ApiAgentV1AppsOwnedClientKeyRotateSecretRoute:
     ApiAgentV1AppsOwnedClientKeyRotateSecretRoute,
+  ApiAgentV1AppsOwnedClientKeyShareLinkRoute:
+    ApiAgentV1AppsOwnedClientKeyShareLinkRoute,
+  ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute:
+    ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute,
+  ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute:
+    ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute,
   ApiReleaseCatalogV1AppsAppReleasesVersionRoute:
     ApiReleaseCatalogV1AppsAppReleasesVersionRoute,
+  ApiAgentV1AppsOwnedClientKeyIndexRoute:
+    ApiAgentV1AppsOwnedClientKeyIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

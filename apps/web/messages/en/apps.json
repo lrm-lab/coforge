@@ -289,5 +289,12 @@
   "app_register_card_denied_reason": "Only Workspace owners and admins can register apps.",
   "app_register_card_secret_sent": "The client secret was sent privately to the requesting Agent. If it missed it, it can run coforge app rotate-secret.",
   "apps_detail_owner_agent": "Owner Agent: {agent}",
-  "app_register_card_no_owner_agent": "No owner Agent was set (the requesting Agent is gone), so no secret was sent. A Workspace owner or admin can generate one in Settings → Applications."
+  "app_register_card_no_owner_agent": "No owner Agent was set (the requesting Agent is gone), so no secret was sent. A Workspace owner or admin can generate one in Settings → Applications.",
+  "app_recover_card_title": "Recover app owner",
+  "app_recover_card_commit": "Make owner Agent",
+  "app_recover_card_committing": "Setting the owner Agent…",
+  "app_recover_card_request": "Make {agent} the owner Agent of {app}",
+  "app_recover_card_note": "The app has no live owner Agent. The owner Agent can rotate the client secret, update the app and request its publication.",
+  "app_recover_card_denied_reason": "Only Workspace owners and admins can set an app's owner Agent.",
+  "app_recover_card_done": "{agent} is now the owner Agent."
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { AppRecoverOwnerActionCards } from "#src/server/conversations/app-recover-owner-action-cards.server";
 import { AppRegisterActionCards } from "#src/server/conversations/app-register-action-cards.server";
 import { createAppRegistrationNotices } from "#src/server/apps/app-registration-notices-composition.server";
 import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-cards.server";
@@ -109,6 +110,17 @@ export const commitAppRegisterActionCard = createServerFn({ method: "POST" })
       createAppRegistrationNotices(db, centrifugo),
     ).commit({ workspaceId, userId: user.id }, data.messageId);
   });
+
+/** `app:recover_owner`: committing the card makes the named Agent the app's owner Agent. */
+export const commitAppRecoverOwnerActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(messageIdInput)
+  .handler(async ({ data, context: { db, workspaceId, user } }) =>
+    new AppRecoverOwnerActionCards(
+      db,
+      new CentrifugoConversationRealtime(createCentrifugoServerApi()),
+    ).commit({ workspaceId, userId: user.id }, data.messageId),
+  );
 
 export const cancelActionCard = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

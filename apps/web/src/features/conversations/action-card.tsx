@@ -17,6 +17,7 @@ import {
   cancelActionCard,
   commitChannelAddMemberActionCard,
   commitAppGrantActionCard,
+  commitAppRecoverOwnerActionCard,
   commitAppRegisterActionCard,
   commitChannelCreateActionCard,
   denyAppGrantActionCard,
@@ -65,9 +66,11 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const approveAppGrant = useServerFn(commitAppGrantActionCard);
   const denyAppGrant = useServerFn(denyAppGrantActionCard);
   const registerApp = useServerFn(commitAppRegisterActionCard);
+  const recoverOwner = useServerFn(commitAppRecoverOwnerActionCard);
   const [approving, setApproving] = useState(false);
   const isAppGrant = view.kind === "app:grant_agent";
   const isAppRegister = view.kind === "app:register";
+  const isRecoverOwner = view.kind === "app:recover_owner";
   const create = useServerFn(createAgent);
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
@@ -119,7 +122,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     setApproving(true);
     setError("");
     try {
-      await registerApp({ data: { messageId: view.messageId } });
+      await (isRecoverOwner ? recoverOwner : registerApp)({ data: { messageId: view.messageId } });
       await refetch();
     } catch {
       setError(m.action_card_error());
@@ -131,7 +134,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   async function openDialog() {
     setError("");
     if (isAppGrant) return approve();
-    if (isAppRegister) return register();
+    if (isAppRegister || isRecoverOwner) return register();
     if (view.kind === "agent:create" && !computers) {
       try {
         setComputers(await loadComputers());
@@ -148,7 +151,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
       ? Hash
       : view.kind === "agent:create"
         ? Cpu
-        : isAppGrant || isAppRegister
+        : isAppGrant || isAppRegister || isRecoverOwner
           ? Key
           : UserPlus;
   const title =
@@ -160,7 +163,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           ? m.app_card_title()
           : isAppRegister
             ? m.app_register_card_title()
-            : m.action_card_title_add_member();
+            : isRecoverOwner
+              ? m.app_recover_card_title()
+              : m.action_card_title_add_member();
   const commitLabel =
     view.kind === "channel:create"
       ? m.action_card_commit_channel_create()
@@ -174,7 +179,11 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             ? approving
               ? m.app_register_card_committing()
               : m.app_register_card_commit()
-            : m.action_card_commit_add_member();
+            : isRecoverOwner
+              ? approving
+                ? m.app_recover_card_committing()
+                : m.app_recover_card_commit()
+              : m.action_card_commit_add_member();
   const deniedReason =
     view.kind === "agent:create"
       ? m.action_card_denied_agent_create()
@@ -184,7 +193,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           ? m.app_card_denied_reason()
           : isAppRegister
             ? m.app_register_card_denied_reason()
-            : undefined;
+            : isRecoverOwner
+              ? m.app_recover_card_denied_reason()
+              : undefined;
 
   const Icon = icon;
   return (
@@ -238,6 +249,17 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           <>
             <p>{m.app_card_request({ app: `${view.app.name} (${view.app.key})` })}</p>
             <p className="text-tertiary">{m.app_card_scopes({ scopes: view.scopes.join(", ") })}</p>
+          </>
+        )}
+        {view.kind === "app:recover_owner" && (
+          <>
+            <p>
+              {m.app_recover_card_request({
+                agent: view.toAgent.name,
+                app: `${view.app.name} (${view.app.key})`,
+              })}
+            </p>
+            <p className="text-tertiary">{m.app_recover_card_note()}</p>
           </>
         )}
         {view.kind === "app:register" && (
@@ -329,6 +351,12 @@ export function ActionCard({ card }: { card: ActionCardView }) {
               >
                 #{view.name}
               </Link>
+            </>
+          )}
+          {view.kind === "app:recover_owner" && view.result && (
+            <>
+              {" · "}
+              {m.app_recover_card_done({ agent: view.result.ownerAgent })}
             </>
           )}
           {view.kind === "app:register" && view.result && (

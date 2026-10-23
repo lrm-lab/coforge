@@ -31,7 +31,13 @@ export class PrismaAppShareLinkStore implements AppShareLinkStore {
     return row ?? undefined;
   }
 
-  replace(input: { appId: string; tokenHash: string; userId: string; at: Date; expiresAt: Date }) {
+  replace(input: {
+    appId: string;
+    tokenHash: string;
+    userId: string | null;
+    at: Date;
+    expiresAt: Date;
+  }) {
     return inTransaction(this.db, async (tx) => {
       await tx.$queryRaw`SELECT id FROM apps WHERE id = ${input.appId}::uuid FOR UPDATE`;
       await tx.appShareLink.updateMany({

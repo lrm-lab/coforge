@@ -19,6 +19,7 @@ import {
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
 import type { AppPublishStatus } from "#src/features/apps/app-publish-status";
+import type { ManagedApp } from "./managed-app";
 import { mintAppClientSecret } from "./app-client-secret.server";
 import { appLogoObjectKey } from "./app-logo.server";
 
@@ -167,7 +168,7 @@ export class AppRegistry {
     if (!member) throw new AppError("ACCESS_DENIED");
     const [apps, manifest] = await Promise.all([
       this.store.listForWorkspace(actor.workspaceId),
-      this.manifestAllowed(actor, member),
+      this.manifestAllowed({ workspaceId: actor.workspaceId, workspaceSlug: member.workspaceSlug }),
     ]);
     return { apps, manifest, workspaceSlug: member.workspaceSlug };
   }
@@ -204,7 +205,10 @@ export class AppRegistry {
       // transaction (`AppEditorSave.register`) is not left with a failed statement to retry after.
       if (chosen === "" && (await this.store.find(key))) continue;
       const checkedInput = checked(checkAppInput({ ...input, key }, "registration"));
-      await this.assertManifestUrlAllowed(actor, member, checkedInput);
+      await this.assertManifestUrlAllowed(
+        { workspaceId: actor.workspaceId, workspaceSlug: member.workspaceSlug },
+        checkedInput,
+      );
       const created = await create(checkedInput);
       if (created) return { app: created, clientSecret: secret };
     }
@@ -224,10 +228,26 @@ export class AppRegistry {
     patch: AppPatch,
   ): Promise<{ app: AppView; workspaceSlug: string }> {
     const { member } = await this.ownApp(actor, key);
+    const workspace = { workspaceId: actor.workspaceId, workspaceSlug: member.workspaceSlug };
+    return {
+      app: await this.applyPatch(workspace, key, patch),
+      workspaceSlug: member.workspaceSlug,
+    };
+  }
+
+  /** `updateApp` for an app an Agent manages (`AppOwnerAgents.manager` judged it). */
+  updateManagedApp(managed: ManagedApp, patch: AppPatch): Promise<AppView> {
+    return this.applyPatch(managed, managed.app.key, patch);
+  }
+
+  private async applyPatch(
+    workspace: { workspaceId: string; workspaceSlug: string },
+    key: string,
+    patch: AppPatch,
+  ): Promise<AppView> {
     const change = checked(checkAppInput(patch, "patch"));
-    await this.assertManifestUrlAllowed(actor, member, change);
-    const app = this.written(await this.store.update(actor.workspaceId, key, change));
-    return { app, workspaceSlug: member.workspaceSlug };
+    await this.assertManifestUrlAllowed(workspace, change);
+    return this.written(await this.store.update(workspace.workspaceId, key, change));
   }
 
   /** Replaces the app's client secret: the old one stops verifying at once, and the new one is in
@@ -251,7 +271,16 @@ export class AppRegistry {
    * listed in the Marketplace, or waiting to leave it, is CONFLICT (`app-published-undeletable`). */
   async deleteApp(actor: AppActor, key: string): Promise<void> {
     await this.requireOwnApp(actor, key);
-    const deleted = await this.store.delete(actor.workspaceId, key);
+    await this.removeApp(actor.workspaceId, key);
+  }
+
+  /** `deleteApp` for an app an Agent manages. */
+  deleteManagedApp(managed: ManagedApp): Promise<void> {
+    return this.removeApp(managed.workspaceId, managed.app.key);
+  }
+
+  private async removeApp(workspaceId: string, key: string): Promise<void> {
+    const deleted = await this.store.delete(workspaceId, key);
     if (deleted === "blocked")
       throw new AppError("CONFLICT", { errorId: "app-published-undeletable" });
     if (!deleted) throw new AppError("NOT_FOUND");
@@ -262,28 +291,54 @@ export class AppRegistry {
    * limit (`validateImage` with `APP_LOGO_UPLOAD_TYPES`), at once; the old logo's object is removed. */
   async setAppLogo(actor: AppActor, key: string, file: File): Promise<AppView> {
     const app = await this.requireOwnApp(actor, key);
+    return { ...app, logoObjectKey: await this.storeLogo(actor.workspaceId, app, file) };
+  }
+
+  /** `setAppLogo` for an app an Agent manages; answers the app as it is after. */
+  async setManagedLogo(managed: ManagedApp, file: File): Promise<AppView> {
+    await this.storeLogo(managed.workspaceId, managed.app, file);
+    return this.written(await this.store.find(managed.app.key));
+  }
+
+  private async storeLogo(
+    workspaceId: string,
+    app: { key: string; logoObjectKey: string | null },
+    file: File,
+  ): Promise<string> {
     await validateImage(file, APP_LOGO_UPLOAD_TYPES);
-    const objectKey = appLogoObjectKey(actor.workspaceId, key);
+    const objectKey = appLogoObjectKey(workspaceId, app.key);
     await replaceStoredImage({
       storage: await this.images.storage(),
       objectKey,
       file,
       contentType: file.type,
       previousObjectKey: app.logoObjectKey,
-      commit: () => this.swapLogo(actor, app, { objectKey, contentType: file.type }),
+      commit: () => this.swapLogo(workspaceId, app, { objectKey, contentType: file.type }),
       reportRemovalFailure: (error) => this.images.removalFailed(error),
     });
-    return { ...app, logoObjectKey: objectKey };
+    return objectKey;
   }
 
   /** Back to the monogram: the logo's object is removed. */
   async resetAppLogo(actor: AppActor, key: string): Promise<AppView> {
     const app = await this.requireOwnApp(actor, key);
-    if (app.logoObjectKey) {
-      await this.swapLogo(actor, app, null);
-      await this.removeImage(app.logoObjectKey);
-    }
+    await this.dropLogo(actor.workspaceId, app);
     return { ...app, logoObjectKey: null };
+  }
+
+  /** `resetAppLogo` for an app an Agent manages; answers the app as it is after. */
+  async resetManagedLogo(managed: ManagedApp): Promise<AppView> {
+    await this.dropLogo(managed.workspaceId, managed.app);
+    return this.written(await this.store.find(managed.app.key));
+  }
+
+  private async dropLogo(
+    workspaceId: string,
+    app: { key: string; logoObjectKey: string | null },
+  ): Promise<void> {
+    if (!app.logoObjectKey) return;
+    await this.swapLogo(workspaceId, app, null);
+    await this.removeImage(app.logoObjectKey);
   }
 
   /** The logo's bytes, for a member of a Workspace where the app is installed, or a reviewer of a
@@ -321,15 +376,13 @@ export class AppRegistry {
   /** Moves the app's logo from the one `app` was read with to `to`, leaving the old object to the
    * caller; CONFLICT when another change came first, NOT_FOUND when the app went. */
   private async swapLogo(
-    actor: AppActor,
-    app: AppView,
+    workspaceId: string,
+    app: { key: string; logoObjectKey: string | null },
     to: { objectKey: string; contentType: string } | null,
   ): Promise<void> {
-    if (!(await this.store.replaceLogo(actor.workspaceId, app.key, app.logoObjectKey, to))) {
+    if (!(await this.store.replaceLogo(workspaceId, app.key, app.logoObjectKey, to))) {
       const current = await this.store.find(app.key);
-      throw new AppError(
-        current?.ownerWorkspaceId === actor.workspaceId ? "CONFLICT" : "NOT_FOUND",
-      );
+      throw new AppError(current?.ownerWorkspaceId === workspaceId ? "CONFLICT" : "NOT_FOUND");
     }
   }
 
@@ -345,11 +398,10 @@ export class AppRegistry {
 
   /** Setting an Agent manifest URL is refused where `app-agent-manifest` is off; clearing it is not. */
   private async assertManifestUrlAllowed(
-    actor: AppActor,
-    member: AppMember,
+    workspace: { workspaceId: string; workspaceSlug: string },
     change: AppPatch,
   ): Promise<void> {
-    if (!change.agentManifestUrl || (await this.manifestAllowed(actor, member))) return;
+    if (!change.agentManifestUrl || (await this.manifestAllowed(workspace))) return;
     throw new AppError("ACCESS_DENIED", { errorId: "app-agent-manifest-off" });
   }
 
@@ -360,11 +412,12 @@ export class AppRegistry {
     return member;
   }
 
-  private async manifestAllowed(actor: AppActor, member: AppMember): Promise<boolean> {
+  private async manifestAllowed(workspace: {
+    workspaceId: string;
+    workspaceSlug: string;
+  }): Promise<boolean> {
     const flag = this.options.agentManifestEnabled;
-    return flag
-      ? flag({ workspaceId: actor.workspaceId, workspaceSlug: member.workspaceSlug })
-      : false;
+    return flag ? flag(workspace) : false;
   }
 
   /** A write's answer; none means the app went in between. */

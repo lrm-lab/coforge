@@ -10,12 +10,18 @@ import {
   type ResolvedAppRegisterPayload,
 } from "./app-register-card";
 
+import {
+  appRecoverOwnerActionSchema,
+  type ResolvedAppRecoverOwnerPayload,
+} from "./app-recover-owner-card";
+
 export * from "./app-register-card";
+export * from "./app-recover-owner-card";
 
 /**
  * Agent-prepared action card contract (`coforge action prepare`). An Agent
- * prepares exactly four card kinds: `channel:create`, `agent:create`,
- * `channel:add_member`, `app:register`. A fifth, `app:grant_agent`, only the server posts: it
+ * prepares exactly five card kinds: `channel:create`, `agent:create`,
+ * `channel:add_member`, `app:register`, `app:recover_owner`. A sixth, `app:grant_agent`, only the server posts: it
  * asks a person to approve an Agent's use of an app (`coforge app token`).
  *
  * An Agent identifies humans, Agents, channels, and computers by handle
@@ -90,6 +96,7 @@ export const actionCardActionSchema = z.discriminatedUnion("type", [
   agentCreateActionSchema,
   channelAddMemberActionSchema,
   appRegisterActionSchema,
+  appRecoverOwnerActionSchema,
 ]);
 export type ActionCardAction = z.infer<typeof actionCardActionSchema>;
 /** The server-posted approval card for an Agent's use of an app; never an Agent's action. */
@@ -150,7 +157,8 @@ export type ResolvedActionCardPayload =
   | ResolvedAgentCreatePayload
   | ResolvedChannelAddMemberPayload
   | ResolvedAppGrantAgentPayload
-  | ResolvedAppRegisterPayload;
+  | ResolvedAppRegisterPayload
+  | ResolvedAppRecoverOwnerPayload;
 
 /** `POST /api/agent/v1/actions/prepare` request body. */
 export type AgentActionPrepareRequest = {

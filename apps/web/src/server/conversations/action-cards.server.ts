@@ -11,12 +11,13 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { ActionCardError } from "./action-card-error.server";
-import { ActionCardHandles, bareHandle } from "./action-card-handles.server";
+import { ActionCardHandles } from "./action-card-handles.server";
+import { actionCardSummary } from "./action-card-summary.server";
 import {
-  appRegisterSummary,
-  appRegisterView,
-  resolveAppRegisterPayload,
-} from "./app-register-action-cards.server";
+  appRecoverOwnerView,
+  resolveAppRecoverOwnerPayload,
+} from "./app-recover-owner-action-cards.server";
+import { appRegisterView, resolveAppRegisterPayload } from "./app-register-action-cards.server";
 import { PublicChannels } from "./public-channels.server";
 import { ConversationHistory } from "./conversation-history.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
@@ -51,23 +52,6 @@ async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, userId: 
   } catch {
     return undefined;
   }
-}
-
-function ensureAt(value: string): string {
-  return value.startsWith("@") ? value : `@${value}`;
-}
-
-function ensureHash(value: string): string {
-  return value.startsWith("#") ? value : `#${value}`;
-}
-
-/** The one-line, human-readable summary that becomes the posted Message body. */
-function summaryFor(action: ActionCardAction): string {
-  if (action.type === "app:register") return appRegisterSummary(action);
-  if (action.type === "channel:create") return `Action card: create channel #${action.name}`;
-  if (action.type === "agent:create") return `Action card: create agent ${action.name}`;
-  const actors = [...(action.humans ?? []), ...(action.agents ?? [])].map(ensureAt);
-  return `Action card: add ${actors.join(", ")} to ${ensureHash(bareHandle(action.channel))}`;
 }
 
 /**
@@ -124,8 +108,8 @@ export class ActionCards {
     );
     const payload = await this.resolvePayload(principal.workspaceId, principal.agentId, action);
     const body = action.draftHint
-      ? `${summaryFor(action)}\n${action.draftHint}`
-      : summaryFor(action);
+      ? `${actionCardSummary(action)}\n${action.draftHint}`
+      : actionCardSummary(action);
 
     const created = await this.db.$transaction((tx) =>
       createActionCardMessage(tx, principal, target, {
@@ -302,6 +286,15 @@ export class ActionCards {
           // The registry's rule: a Workspace owner or admin registers apps.
           canCommit: pending && roleCan(viewerRole, "manageApps"),
           result: card.result as { clientKey: string; noOwnerAgent?: boolean } | undefined,
+        });
+      } else if (payload.type === "app:recover_owner") {
+        views.set(card.messageId, {
+          ...base,
+          kind: "app:recover_owner",
+          ...appRecoverOwnerView(payload),
+          // The same role as registering an app.
+          canCommit: pending && roleCan(viewerRole, "manageApps"),
+          result: card.result as { clientKey: string; ownerAgent: string } | undefined,
         });
       } else {
         views.set(card.messageId, {
@@ -507,6 +500,8 @@ export class ActionCards {
     action: ActionCardAction,
   ): Promise<ResolvedActionCardPayload> {
     if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
+    if (action.type === "app:recover_owner")
+      return resolveAppRecoverOwnerPayload(this.db, { workspaceId, agentId }, action);
     if (action.type === "channel:create") {
       if (action.name === "general" || (await this.handles.channelExists(workspaceId, action.name)))
         throw new ActionCardError(409, "CHANNEL_EXISTS", `channel #${action.name} already exists`);

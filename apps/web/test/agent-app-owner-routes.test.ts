@@ -1,26 +1,36 @@
 import { expect, test } from "bun:test";
 
+import type { AppAgentManagement } from "#src/server/apps/app-agent-management.server";
 import { AppError } from "#src/lib/app-error";
 import { handleAgentAppOwned } from "#src/routes/api/agent/v1/apps/owned/index";
 import { handleAgentAppRotateSecret } from "#src/routes/api/agent/v1/apps/owned/$clientKey/rotate-secret";
 import { handleAgentAppRegistrationStatus } from "#src/routes/api/agent/v1/apps/registrations/status";
 
+const stub = (methods: Partial<AppAgentManagement>) => methods as AppAgentManagement;
 const principal = { workspaceId: "ws", agentId: "agent" };
 const request = (query: string) =>
   new Request(`https://coforge.example/api/agent/v1/apps/registrations/status?${query}`);
 
 test("a rotation answers the secret with no-store, and a refusal names why", async () => {
-  const ok = await handleAgentAppRotateSecret(principal, "acme", {
-    rotateSecret: async () => ({ clientKey: "acme", clientSecret: "cfa_secret_x" }),
-  });
+  const ok = await handleAgentAppRotateSecret(
+    new Request("https://coforge.example/x", { method: "POST" }),
+    principal,
+    "acme",
+    stub({ rotateSecret: async () => ({ clientKey: "acme", clientSecret: "cfa_secret_x" }) }),
+  );
   expect(await ok.json()).toEqual({ ok: true, clientKey: "acme", clientSecret: "cfa_secret_x" });
   expect(ok.headers.get("cache-control")).toBe("no-store");
 
-  const missing = await handleAgentAppRotateSecret(principal, "acme", {
-    rotateSecret: async () => {
-      throw new AppError("NOT_FOUND");
-    },
-  });
+  const missing = await handleAgentAppRotateSecret(
+    new Request("https://coforge.example/x", { method: "POST" }),
+    principal,
+    "acme",
+    stub({
+      rotateSecret: async () => {
+        throw new AppError("NOT_FOUND");
+      },
+    }),
+  );
   expect(missing.status).toBe(404);
 });
 
