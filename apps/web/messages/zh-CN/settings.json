@@ -180,10 +180,6 @@
   "preferences_hide_empty_sidebar_sections": "隐藏空的侧栏分区",
   "preferences_hide_empty_sidebar_sections_description": "“已置顶”和自建分组为空时隐藏，拖动会话时重新出现。“频道”和“私聊”保留，方便发起会话。",
   "preferences_conversations": "会话",
-  "preferences_conversation_open_mode": "打开会话时",
-  "preferences_open_newest_read": "定位到最新消息并标记为已读",
-  "preferences_open_first_unread": "定位到最早的未读消息",
-  "preferences_open_newest_unread": "定位到最新消息但保留未读",
   "preferences_message_font_size": "消息字号",
   "preferences_message_font_size_description": "调整此设备上消息文本的大小，包括标题、代码块、行内代码和引用标签。按钮、标签和侧栏保持原来的大小。",
   "preferences_message_font_size_small": "小",
@@ -206,7 +202,6 @@
   "preferences_saved_on_device": "仅保存在此设备上。",
   "preferences_appearance_description": "使用浅色或深色，或跟随系统设置。",
   "preferences_message_full_width_description": "消息和输入框占满对话区宽度，两边不留空白。",
-  "preferences_conversation_open_mode_description": "打开频道或私聊时停在哪里，以及何时算作已读。",
   "settings_breadcrumb": "面包屑",
   "settings_applications": "应用"
 }

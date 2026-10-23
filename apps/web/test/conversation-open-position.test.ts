@@ -46,16 +46,11 @@ describe("unreadBoundary", () => {
 describe("conversationOpenPosition", () => {
   const boundary = { id: "m-2", sequence: 2 };
 
-  test("lands on the unread boundary where the viewer left off", () => {
-    expect(conversationOpenPosition("first-unread", boundary)).toBe("m-2");
+  test("lands on the oldest unread boundary", () => {
+    expect(conversationOpenPosition(boundary)).toBe("m-2");
   });
 
-  test("lands at the latest when nothing is unread", () => {
-    expect(conversationOpenPosition("first-unread", undefined)).toBeUndefined();
-  });
-
-  test("lands at the latest under both newest modes, unread or not", () => {
-    expect(conversationOpenPosition("newest-read", boundary)).toBeUndefined();
-    expect(conversationOpenPosition("newest-unread", boundary)).toBeUndefined();
+  test("lands at the latest when every message is read", () => {
+    expect(conversationOpenPosition(undefined)).toBeUndefined();
   });
 });

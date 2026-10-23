@@ -24,42 +24,35 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
   try {
     const preferences = new UserPreferences(new PrismaUserPreferencesRepository(db));
 
-    expect(await preferences.read(user.id)).toEqual({
-      timeZone: null,
-      timeFormat: null,
-      conversationOpenMode: "first-unread",
-    });
+    expect(await preferences.read(user.id)).toEqual({ timeZone: null, timeFormat: null });
     expect(await preferences.getBrowserNotificationsEnabled(user.id)).toBeFalse();
 
     expect(await preferences.set(user.id, "Asia/Tokyo")).toBe("Asia/Tokyo");
     expect(await preferences.setBrowserNotificationsEnabled(user.id, true)).toBeTrue();
-    expect(await preferences.setConversationOpenMode(user.id, "newest-unread")).toBe(
-      "newest-unread",
-    );
+    // The retired column remains for compatibility, but its historical value is no longer read.
+    await db.userPreference.update({
+      where: { userId: user.id },
+      data: { conversationOpenMode: "newest-unread" },
+    });
 
     expect(await preferences.getBrowserNotificationsEnabled(user.id)).toBeTrue();
     expect(await preferences.read(user.id)).toEqual({
       timeZone: "Asia/Tokyo",
       timeFormat: null,
-      conversationOpenMode: "newest-unread",
     });
 
     expect(await preferences.setTimeFormat(user.id, "24h")).toBe("24h");
     expect((await preferences.read(user.id)).timeFormat).toBe("24h");
 
     expect(await preferences.set(user.id, null)).toBeNull();
-    expect(await preferences.read(user.id)).toEqual({
-      timeZone: null,
-      timeFormat: "24h",
-      conversationOpenMode: "newest-unread",
-    });
+    expect(await preferences.read(user.id)).toEqual({ timeZone: null, timeFormat: "24h" });
   } finally {
     await db.user.delete({ where: { id: user.id } });
     await db.$disconnect();
   }
 });
 
-test("preferences are removed with their user and reject values outside their set", async () => {
+test("preferences are removed with their user and legacy values stay constrained", async () => {
   const db = database();
   const user = await db.user.create({
     data: {

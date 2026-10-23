@@ -13,7 +13,6 @@ import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
 import { ConversationFilesPanel } from "./conversation-files";
 import type { HeaderTabs } from "./conversation-header-tabs";
-import { useConversationReadRequiresScroll } from "./conversation-host";
 import { useMarkConversationSeen } from "./conversation-navigation";
 import type { ConversationPageTarget } from "./conversation-page-loader";
 import type { ConversationPageSearch } from "./conversation-page-search";
@@ -297,12 +296,9 @@ function ConversationPageBody({
   const { showChat, showTasks, showFiles, openTask, openTaskThread, openMessage } =
     useConversationView(page.ensureLoaded);
 
-  // Opening the conversation is reading it — except in the `newest-unread` preference, which
-  // keeps unseen messages unread until the latest is actually viewed: the badge clears
-  // immediately, but the server-side cursor only advances through `onReadLatest` below. A thread
-  // shown alone leaves the conversation out of view, so it stays unread until it is shown.
+  // Opening the conversation clears its badge and advances the server cursor through the loaded
+  // top-level end. A thread shown alone leaves the conversation out of view, so it stays unread.
   const markSeen = useMarkConversationSeen();
-  const readRequiresScroll = useConversationReadRequiresScroll();
   const threadAlone = useStandaloneThread() !== null;
   const topLevelEnd = latestTopLevelSequence(conversation.messages);
   useEffect(() => {
@@ -315,9 +311,9 @@ function ConversationPageBody({
     void persistReadCursor(() => readCursor.advance(throughSequence), readCursor.key);
   });
   useEffect(() => {
-    if (!topLevelEnd || !isMember || readRequiresScroll || threadAlone) return;
+    if (!topLevelEnd || !isMember || threadAlone) return;
     readThrough(topLevelEnd);
-  }, [readCursor.key, topLevelEnd, isMember, readRequiresScroll, threadAlone]);
+  }, [readCursor.key, topLevelEnd, isMember, threadAlone]);
   const readLatest = (throughSequence: number) => {
     if (!isMember) return;
     void persistReadCursor(() => readCursor.advance(throughSequence), `${readCursor.key}:latest`);

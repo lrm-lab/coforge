@@ -91,7 +91,6 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       timeZone: preferences.timeZone,
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
-      conversationOpenMode: preferences.conversationOpenMode,
       tabOrders,
       recordsPreview: recordsNav.preview,
     };

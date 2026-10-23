@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { saveDateTimePreferencesInputSchema } from "./settings.schemas";
 
 import { authMiddleware } from "#src/features/auth/function-auth";
@@ -8,7 +7,6 @@ import {
   PrismaUserPreferencesRepository,
   UserPreferences,
 } from "#src/server/db/repositories/user-preferences.repositories.server";
-import { CONVERSATION_OPEN_MODES } from "./conversation-open-mode";
 
 function preferences() {
   const db = requireDatabaseClient();
@@ -29,12 +27,4 @@ export const saveDateTimePreferences = createServerFn({ method: "POST" })
       timeZone: await preferences().set(userId, data.timeZone),
       timeFormat: await preferences().setTimeFormat(userId, data.timeFormat),
     };
-  });
-
-export const saveConversationOpenMode = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ mode: z.enum(CONVERSATION_OPEN_MODES) }))
-  .handler(async ({ data, context }) => {
-    const userId = context.user.id;
-    return { conversationOpenMode: await preferences().setConversationOpenMode(userId, data.mode) };
   });

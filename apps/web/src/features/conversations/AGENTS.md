@@ -118,9 +118,9 @@ These rules apply to `src/features/conversations/`.
   coordinates thread/profile panes; `conversation-pane.tsx` renders one message
   stream; `use-conversation-sync.ts` owns browser-only deep-link and read-cursor
   synchronization.
-- `conversation-host.tsx` is what a conversation reads from the page hosting
-  it (Chat, or the hosted pane): the viewer's open mode, the Workspace's
-  channels and the Saved list. A host's loader reads `savedMessagesQuery` into
+- Every main stream and thread opens at its oldest unread message, or the chronological bottom
+  when all are read or no cursor exists; an explicit message deep link/search/Saved jump wins.
+  `conversation-host.tsx` supplies the Workspace's channels and Saved list. A host's loader reads `savedMessagesQuery` into
   the Query cache, which the store starts from. Once hydrated
   the list is a TanStack DB collection (`saved-messages-collection.ts`) on the
   app's one `DbClient` (`DbProvider` in `router.tsx`, read with `useDbClient`),

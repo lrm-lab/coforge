@@ -84,8 +84,6 @@ const settingsProps = {
   onMessageFullWidthChange: () => {},
   onHideEmptySidebarSectionsChange: () => {},
   onDateTimeSave: async () => {},
-  conversationOpenMode: "first-unread" as const,
-  onConversationOpenModeChange: () => {},
   onBrowserNotificationsChange: async () => {},
   onEnableBrowserNotifications: async () => {},
   onTestBrowserNotification: async () => false,

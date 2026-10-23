@@ -146,7 +146,7 @@ export function TaskDetailDialog({
           "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none",
           // With a thread the popup is a workspace; without one it only wraps the task.
           thread
-            ? "sm:h-[min(86vh,56rem)] sm:w-[min(60rem,calc(100vw-2rem))]"
+            ? "sm:h-[min(92vh,64rem)] sm:w-[min(60rem,calc(100vw-2rem))]"
             : "sm:h-auto sm:w-[min(40rem,calc(100vw-2rem))]",
         )}
       >

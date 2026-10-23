@@ -6,7 +6,6 @@
  * "the oldest message past the cursor", so the decision lives here as a framework-free
  * function that the pane, its divider snapshot and the tests all share.
  */
-import type { ConversationOpenMode } from "#src/features/settings/conversation-open-mode";
 
 /** The unread boundary: the oldest message the viewer has not read in this pane. */
 export type UnreadBoundary = { id: string; sequence: number };
@@ -29,17 +28,7 @@ export function unreadBoundary(
   return messages.find((message) => message.sequence > readThroughSequence);
 }
 
-/**
- * The message a pane opens on, or `undefined` for the latest: the unread boundary under
- * Slack's "start where you left off", the latest message under either "start at the newest"
- * mode.
- *
- * `newest-unread` differs from `newest-read` only in when the read cursor advances, which the
- * pane's mark-read effect owns — not in where the pane lands.
- */
-export function conversationOpenPosition(
-  mode: ConversationOpenMode,
-  boundary: UnreadBoundary | undefined,
-): string | undefined {
-  return mode === "first-unread" ? boundary?.id : undefined;
+/** The oldest unread message to open on, or `undefined` to open at the latest. */
+export function conversationOpenPosition(boundary: UnreadBoundary | undefined): string | undefined {
+  return boundary?.id;
 }

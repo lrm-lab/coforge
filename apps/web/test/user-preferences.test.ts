@@ -34,7 +34,6 @@ describe("user time zone preferences", () => {
       read: async () => ({
         timeZone: saved,
         timeFormat: null,
-        conversationOpenMode: "newest-read",
       }),
       setTimeZone: async (_userId, timeZone) => {
         saved = timeZone;
@@ -45,7 +44,6 @@ describe("user time zone preferences", () => {
         browserNotificationsEnabled = enabled;
         return enabled;
       },
-      setConversationOpenMode: async (_userId, mode) => mode,
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
     };
     const preferences = new UserPreferences(repository);
@@ -62,11 +60,10 @@ describe("user time zone preferences", () => {
   test("saves the global browser notification preference", async () => {
     let enabled = false;
     const repository: UserPreferencesRepository = {
-      read: async () => ({ timeZone: null, timeFormat: null, conversationOpenMode: "newest-read" }),
+      read: async () => ({ timeZone: null, timeFormat: null }),
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => enabled,
       setBrowserNotificationsEnabled: async (_userId, next) => (enabled = next),
-      setConversationOpenMode: async (_userId, mode) => mode,
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
     };
     const preferences = new UserPreferences(repository);
@@ -108,12 +105,10 @@ describe("user time zone preferences", () => {
       read: async () => ({
         timeZone: null,
         timeFormat: saved,
-        conversationOpenMode: "first-unread",
       }),
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => false,
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
-      setConversationOpenMode: async (_userId, mode) => mode,
       setTimeFormat: async (_userId, timeFormat) => (saved = timeFormat),
     });
 
@@ -124,17 +119,16 @@ describe("user time zone preferences", () => {
     expect(await preferences.setTimeFormat("user-1", null)).toBeNull();
   });
 
-  test("reads the time zone, time format and conversation open mode from one stored row", async () => {
+  test("reads the time zone and time format from one stored row", async () => {
     let reads = 0;
     const preferences = new UserPreferences({
       read: async () => {
         reads += 1;
-        return { timeZone: "Asia/Tokyo", timeFormat: "25h", conversationOpenMode: "newest-unread" };
+        return { timeZone: "Asia/Tokyo", timeFormat: "25h" };
       },
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => false,
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
-      setConversationOpenMode: async (_userId, mode) => mode,
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
     });
 
@@ -142,7 +136,6 @@ describe("user time zone preferences", () => {
     expect(await preferences.read("user-1")).toEqual({
       timeZone: "Asia/Tokyo",
       timeFormat: null,
-      conversationOpenMode: "newest-unread",
     });
     expect(reads).toBe(1);
   });

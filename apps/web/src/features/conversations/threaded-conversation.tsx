@@ -147,7 +147,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           <ThreadPane
             {...threadPaneProps(openTaskRoot)}
             rootSlot={taskSection}
-            openAtTop
             emptyState={{
               title: m.tasks_no_replies(),
               description: "",

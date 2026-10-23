@@ -119,12 +119,8 @@ export type ConversationProps = {
    * retained pages only while this is true; deliberate reading above the tail must stand. */
   onFollowingLatestChange?: (following: boolean) => void;
   onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
-  /**
-   * The main pane reached the latest message by the user's own scrolling. Only the main pane
-   * receives it (thread panes are separate `ConversationPane` instances and must never advance
-   * the conversation cursor), and it is never fired by open positioning. Used by the
-   * `newest-unread` open mode, where the cursor advances only through this callback.
-   */
+  /** The main pane reached the latest message by the user's own scrolling. Thread panes are
+   * separate `ConversationPane` instances and never advance the conversation cursor. */
   onReadLatest?: (throughSequence: number) => void;
   /** Whether a top-level send may go "As task": the message is a Task, with every upload. */
   canSendAsTask?: boolean;

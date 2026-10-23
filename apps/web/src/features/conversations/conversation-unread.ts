@@ -373,10 +373,8 @@ export async function persistReadCursor(
  * double-count a message the server already counted.
  *
  * `suppressKeys` names the conversation the viewer is looking at right now (the open channel or
- * DM). It keeps its boundary but loses its count, exactly like
- * `applyUnreadEvent`: without this, a refresh in the `newest-unread` preference — where the
- * server cursor has deliberately not advanced yet — would re-raise the badge of the very
- * conversation being read. Leaving the conversation re-seeds it from the server.
+ * DM). It keeps its boundary but loses its count, exactly like `applyUnreadEvent`: a refresh must
+ * not re-raise the badge of the conversation being read. Leaving it re-seeds from the server.
  */
 export function replaceUnreadCounts(
   current: UnreadCounts,
@@ -591,9 +589,8 @@ export function useChannelUnread({
     [],
   );
   const replace = useCallback((next: readonly UnreadChannel[], keepIds?: ReadonlySet<string>) => {
-    // The conversation on screen keeps no badge, exactly like a live event for it: in
-    // `newest-unread` the server cursor deliberately lags, so seeding it here would
-    // re-raise the badge of the conversation being read.
+    // The conversation on screen keeps no badge, exactly like a live event for it; leaving the
+    // conversation lets the next server read seed it again.
     const open = refs.current.openConversationId;
     setCounts((current) =>
       replaceUnreadCounts(current, next, new Set(open ? [open] : []), keepIds),

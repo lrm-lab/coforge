@@ -67,10 +67,6 @@ import {
   settingsSection,
   type SettingsSection,
 } from "#src/features/settings/settings-sections";
-import {
-  isConversationOpenMode,
-  type ConversationOpenMode,
-} from "#src/features/settings/conversation-open-mode";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { formatCalendarDate } from "#src/lib/dates";
 import { isTimeFormat, localeTimeFormat, type TimeFormat } from "#src/lib/time-format";
@@ -137,8 +133,6 @@ interface SettingsContentProps {
     timeZone: string | null;
     timeFormat: TimeFormat | null;
   }) => Promise<void>;
-  conversationOpenMode: ConversationOpenMode;
-  onConversationOpenModeChange: (mode: ConversationOpenMode) => void;
   onBrowserNotificationsChange: (enabled: boolean) => Promise<void>;
   onEnableBrowserNotifications: () => Promise<void>;
   onTestBrowserNotification: () => Promise<boolean>;
@@ -664,8 +658,6 @@ function Preferences({
   onHideEmptySidebarSectionsChange,
   messageFullWidth,
   onMessageFullWidthChange,
-  conversationOpenMode,
-  onConversationOpenModeChange,
 }: SettingsContentProps) {
   const savedOnDevice = m.preferences_saved_on_device();
   const [messageFontSize, setMessageFontSize] = useMessageFontSize();
@@ -783,26 +775,6 @@ function Preferences({
               isSelected={messageFullWidth}
               onChange={onMessageFullWidthChange}
             />
-          </SettingsField>
-        </SettingsCard>
-        <SettingsCard>
-          <SettingsField
-            label={m.preferences_conversation_open_mode()}
-            description={m.preferences_conversation_open_mode_description()}
-          >
-            <Select
-              aria-label={m.preferences_conversation_open_mode()}
-              className="max-w-sm"
-              value={conversationOpenMode}
-              onChange={(key) => {
-                const mode = String(key);
-                if (isConversationOpenMode(mode)) onConversationOpenModeChange(mode);
-              }}
-            >
-              <SelectItem id="newest-read" label={m.preferences_open_newest_read()} />
-              <SelectItem id="first-unread" label={m.preferences_open_first_unread()} />
-              <SelectItem id="newest-unread" label={m.preferences_open_newest_unread()} />
-            </Select>
           </SettingsField>
         </SettingsCard>
       </SettingsGroup>

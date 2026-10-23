@@ -3,16 +3,11 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { validateTimeZone } from "#src/lib/dates";
 import { AppError } from "#src/lib/app-error";
 import { isTimeFormat } from "#src/lib/time-format";
-import {
-  isConversationOpenMode,
-  DEFAULT_CONVERSATION_OPEN_MODE,
-} from "#src/features/settings/conversation-open-mode";
 
 /** The settings every page reads together, as stored: one row, so one read. */
 export type StoredUserPreferences = {
   timeZone: string | null;
   timeFormat: string | null;
-  conversationOpenMode: string;
 };
 
 export type UserPreferencesRepository = {
@@ -20,7 +15,6 @@ export type UserPreferencesRepository = {
   setTimeZone(userId: string, timeZone: string | null): Promise<string | null>;
   getBrowserNotificationsEnabled(userId: string): Promise<boolean>;
   setBrowserNotificationsEnabled(userId: string, enabled: boolean): Promise<boolean>;
-  setConversationOpenMode(userId: string, mode: string): Promise<string>;
   setTimeFormat(userId: string, timeFormat: string | null): Promise<string | null>;
 };
 
@@ -42,7 +36,6 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
     return {
       timeZone: row?.timeZone ?? null,
       timeFormat: row?.timeFormat ?? null,
-      conversationOpenMode: row?.conversationOpenMode ?? DEFAULT_CONVERSATION_OPEN_MODE,
     };
   }
 
@@ -69,11 +62,6 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
     );
   }
 
-  async setConversationOpenMode(userId: string, mode: string) {
-    const saved = await this.write(userId, { conversationOpenMode: mode });
-    return saved.conversationOpenMode ?? DEFAULT_CONVERSATION_OPEN_MODE;
-  }
-
   async setTimeFormat(userId: string, timeFormat: string | null) {
     return (await this.write(userId, { timeFormat })).timeFormat;
   }
@@ -82,13 +70,12 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
 export class UserPreferences {
   constructor(private readonly repository: UserPreferencesRepository) {}
 
-  /** The time zone, time format and conversation open mode, read together. */
+  /** The time zone and time format, read together. */
   async read(userId: string) {
     const stored = await this.repository.read(userId);
     return {
       timeZone: stored.timeZone,
       timeFormat: isTimeFormat(stored.timeFormat) ? stored.timeFormat : null,
-      conversationOpenMode: stored.conversationOpenMode,
     };
   }
 
@@ -105,11 +92,6 @@ export class UserPreferences {
 
   setBrowserNotificationsEnabled(userId: string, enabled: boolean) {
     return this.repository.setBrowserNotificationsEnabled(userId, enabled);
-  }
-
-  async setConversationOpenMode(userId: string, mode: string) {
-    if (!isConversationOpenMode(mode)) throw new AppError("INVALID_INPUT");
-    return this.repository.setConversationOpenMode(userId, mode);
   }
 
   async setTimeFormat(userId: string, timeFormat: string | null) {

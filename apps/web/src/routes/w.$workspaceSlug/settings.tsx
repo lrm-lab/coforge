@@ -25,7 +25,6 @@ import {
 } from "#src/features/notifications/notifications.functions";
 import {
   getUserPreferences,
-  saveConversationOpenMode,
   saveDateTimePreferences,
 } from "#src/features/settings/settings.functions";
 import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
@@ -36,10 +35,6 @@ import {
   writeHideEmptySidebarSections,
 } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readMessageFullWidth, writeMessageFullWidth } from "#src/features/settings/message-width";
-import {
-  conversationOpenMode,
-  type ConversationOpenMode,
-} from "#src/features/settings/conversation-open-mode";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import type { TimeFormat } from "#src/lib/time-format";
 import { m } from "#src/paraglide/messages";
@@ -121,7 +116,6 @@ function SettingsPage() {
   const {
     timeZone: savedTimeZone,
     timeFormat: savedTimeFormat,
-    conversationOpenMode: savedOpenMode,
     members,
     createdAgents,
     generalChannelHidden,
@@ -134,7 +128,6 @@ function SettingsPage() {
   >("unsupported");
   const [showAddToHomeScreenGuide, setShowAddToHomeScreenGuide] = useState(false);
   const saveDateTime = useServerFn(saveDateTimePreferences);
-  const saveOpenMode = useServerFn(saveConversationOpenMode);
   const saveNotificationPreference = useServerFn(saveBrowserNotificationPreference);
   const subscribePush = useServerFn(subscribeBrowserPush);
   const sendTestNotification = useServerFn(sendTestBrowserNotification);
@@ -214,15 +207,6 @@ function SettingsPage() {
   async function changeDateTime(input: { timeZone: string | null; timeFormat: TimeFormat | null }) {
     await saveDateTime({ data: input });
     await router.invalidate({ sync: true });
-  }
-
-  async function changeConversationOpenMode(nextMode: ConversationOpenMode) {
-    try {
-      await saveOpenMode({ data: { mode: nextMode } });
-      await router.invalidate({ sync: true });
-    } catch {
-      toast.error(m.settings_save_error());
-    }
   }
 
   async function registerCurrentBrowser(requestPermission: boolean) {
@@ -384,8 +368,6 @@ function SettingsPage() {
       messageFullWidth={messageFullWidth}
       onMessageFullWidthChange={changeMessageFullWidth}
       onDateTimeSave={changeDateTime}
-      conversationOpenMode={conversationOpenMode(savedOpenMode)}
-      onConversationOpenModeChange={changeConversationOpenMode}
       onBrowserNotificationsChange={changeBrowserNotifications}
       onEnableBrowserNotifications={enableBrowserNotifications}
       onTestBrowserNotification={testBrowserNotification}

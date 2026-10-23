@@ -218,8 +218,7 @@ describe("replaceUnreadCounts", () => {
   });
 
   test("a suppressed conversation keeps its boundary but no badge", () => {
-    // `newest-unread`: the server cursor has deliberately not advanced for the open
-    // conversation, so a refresh must not re-raise the badge of what is on screen.
+    // A refresh must not re-raise the badge of the conversation already on screen.
     const next = replaceUnreadCounts(
       { "channel-a": 0, "channel-a:seq": 8, "channel-b": 0 },
       [

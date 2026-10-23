@@ -180,10 +180,6 @@
   "preferences_hide_empty_sidebar_sections": "Hide empty sidebar sections",
   "preferences_hide_empty_sidebar_sections_description": "Hide Pinned and your own sections when empty; they come back while you drag a conversation. Channels and Direct messages stay visible so you can start a conversation.",
   "preferences_conversations": "Conversations",
-  "preferences_conversation_open_mode": "When I view a conversation",
-  "preferences_open_newest_read": "Start at the newest message and mark it read",
-  "preferences_open_first_unread": "Start at the oldest unread message",
-  "preferences_open_newest_unread": "Start at the newest message but keep it unread",
   "preferences_message_font_size": "Message font size",
   "preferences_message_font_size_description": "Adjust message text on this device, including headings, code blocks, inline code and reference chips. Buttons, labels and the sidebar keep their size.",
   "preferences_message_font_size_small": "Small",
@@ -206,7 +202,6 @@
   "preferences_saved_on_device": "Saved on this device.",
   "preferences_appearance_description": "Use light or dark colors, or follow your system.",
   "preferences_message_full_width_description": "Let messages and the composer use the whole width of the conversation instead of leaving room on both sides.",
-  "preferences_conversation_open_mode_description": "Where a channel or direct message opens, and when it counts as read.",
   "settings_breadcrumb": "Breadcrumb",
   "settings_applications": "Applications"
 }

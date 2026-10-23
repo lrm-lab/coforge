@@ -67,7 +67,7 @@ model UserPreference {
   user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   timeZone                    String?
   browserNotificationsEnabled Boolean?
-  /// Slack's "When I view a channel" behavior: newest-read, first-unread, or newest-unread.
+  /// Retired open-mode preference; retained for compatibility and ignored by the application.
   conversationOpenMode        String?
   /// Clock display: 12h or 24h. NULL follows the display language. Display only.
   timeFormat                  String?

@@ -21,7 +21,7 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 import { attachmentFileNameSummary } from "./attachment-file-name";
-import { useConversationOpenMode, useSavedMessages } from "./conversation-host";
+import { useSavedMessages } from "./conversation-host";
 import { conversationOpenPosition, unreadBoundary } from "./conversation-open-position";
 import { latestTopLevelSequence } from "./conversation-unread";
 import { streamState, type StreamRead } from "./stream-state";
@@ -65,7 +65,6 @@ export function ConversationPane({
   onSend,
   root,
   rootSlot,
-  openAtTop,
   onClose,
   threadContext,
   composerTarget,
@@ -99,12 +98,8 @@ export function ConversationPane({
   /** Whether this stream's read has completed - see `stream-state.ts`. */
   streamRead?: StreamRead;
   root?: DirectConversationView["messages"][number];
-  /** Shown in place of a thread's header and root row, scrolling with its replies — the task
-   * popup puts the task there. */
+  /** Shown above a Task popup's independently scrolling replies. */
   rootSlot?: React.ReactNode;
-  /** Opens at the top instead of the viewer's open position — the task popup's thread opens on
-   * the task, not its latest reply. */
-  openAtTop?: boolean;
   onClose?: () => void;
   /** Where a thread lives, named after "Thread" in its header: `#channel` or `@name`. */
   threadContext?: string;
@@ -137,7 +132,6 @@ export function ConversationPane({
   /** Called exactly once per consumed jump, to strip the param one-shot like a hash. */
   onJumpMessageConsumed?: () => void;
 }) {
-  const openMode = useConversationOpenMode();
   // The candidate list keeps every member, the viewer included, because it is also what *resolves*
   // a mention of the viewer in a body or preview. Offering the viewer to the viewer is a different
   // question, and the composer answers it with its own rule: you never mention yourself.
@@ -438,26 +432,11 @@ export function ConversationPane({
           ).length;
     previousConversationIdRef.current = conversation.conversationId;
     previousLastSequenceRef.current = lastSequence;
-    if (openAtTop && firstRender) {
-      // Stays at the top; it still follows new replies when everything already fits, since a
-      // pane that cannot scroll never reports a reading position.
-      const history = historyRef.current;
-      setFollowingLatest(
-        Boolean(history) && history!.scrollHeight - history!.clientHeight <= PIN_TOLERANCE_PX,
-      );
-      return undefined;
-    }
-
     if (firstRender || changedConversation || followingLatestRef.current) {
       setNewMessageCount(0);
-      // The user's "When I view a conversation" preference decides the open position:
-      // - first-unread: land on the oldest unread (divider above it).
-      // - newest-read / newest-unread: land at the latest. `newest-unread` differs only in
-      //   when the cursor advances: it waits for `onReadLatest` below, never for the open.
-      // A message hash (deep link, task jump) or a jump to a message (a search result, a Saved
-      // card) still wins over both: the anchor and jump effects land there instead.
-      // Only an actual open positions on unread. Reaching the latest again later in the same
-      // conversation (`followingLatest`) keeps following it.
+      // Every ordinary conversation and thread opens on its oldest unread message. With nothing
+      // unread (or no cursor), it opens at the latest. A message hash, task jump or search/Saved
+      // jump still wins: the anchor and jump effects land there instead.
       const opening = firstRender || changedConversation;
       // An open with a jump target is the jump effect's to position, like a hash is the anchor
       // effect's: neither the open position nor following the latest (which scrolls a frame later)
@@ -466,7 +445,7 @@ export function ConversationPane({
         setFollowingLatest(false);
         return undefined;
       }
-      const openMessageId = opening ? conversationOpenPosition(openMode, firstUnread) : undefined;
+      const openMessageId = opening ? conversationOpenPosition(firstUnread) : undefined;
       if (openMessageId && !window.location.hash) {
         if (conversation.messages.some((message) => message.id === openMessageId)) {
           setFollowingLatest(false);
@@ -721,8 +700,7 @@ export function ConversationPane({
     setFollowingLatest(followingLatest);
     if (followingLatest) setNewMessageCount(0);
     // A genuine scroll transition into the latest run is the only signal that the user read
-    // it. Open positioning sets `followingLatest` directly and never passes through here, so
-    // it cannot mark a conversation read (the `newest-unread` mode).
+    // through it. Open positioning sets `followingLatest` directly and never passes through here.
     if (followingLatest && !wasFollowingLatest && !root) {
       const through = latestTopLevelSequence(conversation.messages);
       if (through > 0) onReadLatest?.(through);
@@ -840,7 +818,9 @@ export function ConversationPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {rootSlot ? null : root ? (
+      {rootSlot ? (
+        <div className="shrink-0 bg-primary">{rootSlot}</div>
+      ) : root ? (
         <ThreadPaneHeader
           context={threadContext}
           onScrollToTop={() => historyRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
@@ -867,7 +847,6 @@ export function ConversationPane({
           {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. A
               thread pane is already narrow and keeps none. */}
           <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-            {rootSlot}
             {root && !rootSlot && root.weeklyReportHidden !== true && (
               <div
                 aria-label={m.conversation_thread_root()}
