@@ -17,7 +17,9 @@ The command reference lives in [`docs/agent-cli/`](../../docs/agent-cli/README.m
 | `src/cli-error.ts`                          | The typed CLI failure and its rendering                                                        |
 | `src/refusal-guidance.ts`                   | What a server refusal means for the Agent's next step                                          |
 | `src/app-config.ts`                         | `app config`: read or change one of the Agent's own Apps' config                               |
-| `src/app-commands.ts`                       | `app list` and `app token`: parsing, the app list's text, the approval-required guidance       |
+| `src/app-commands.ts`                       | `app list/invoke/token`: parsing, the list text, approval-required guidance                    |
+| `src/app-actions.ts`                        | `app invoke --list-actions`: actions as text or typed JSON, text cleaned                       |
+| `src/manifest-fetch.ts`                     | An app's Agent manifest fetch: https only, 1 MiB and 10 s caps, outcomes                       |
 | `src/app-client.ts`                         | The `app list` and `app token` requests through the local proxy                                |
 | `src/app-token-exec.ts`                     | Running a program with an app token: fd 3, minimal environment, redaction, timeout, group stop |
 | `src/github-credential.ts`                  | The git credential helper and the `github gh` wrapper                                          |

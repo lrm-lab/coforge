@@ -71,6 +71,7 @@ The architecture invariants every change must respect are in
 | [packages/agent/README.md](packages/agent/README.md) | Built-in Pi-based Agent runtime |
 | [packages/coforge/README.md](packages/coforge/README.md) | Agent-facing `coforge` CLI and its module map |
 | [docs/agent-cli/](docs/agent-cli/README.md) | `coforge` Agent CLI command reference |
+| [docs/agent-manifest/](docs/agent-manifest/README.md) | `coforge-agent-manifest.v1`: the public JSON document an app publishes to tell Agents what it can do, its limits, and examples |
 | [packages/coforge-sdk/README.md](packages/coforge-sdk/README.md) | Shared contracts and transports |
 | [infra/README.md](infra/README.md) | Local Docker Compose services |
 | [docs/operations/cloud-swarm/](docs/operations/cloud-swarm/README.md) | Attach one Swarm cluster when standing up a CoForge deployment |

@@ -2,6 +2,7 @@ import type { AgentAppAccessState, AgentAppView } from "@lrm/coforge-sdk/agent";
 import type { AppClient } from "./app-client";
 import { runWithAppToken } from "./app-token-exec";
 import { CliError } from "./cli-error";
+import { runListActions, type AppActionsIo, type AppInvokeInvocation } from "./app-actions";
 
 /** `coforge app list`: the Workspace's apps, and with `all` the built-in Agent Apps too. */
 export type AppListInvocation = { command: "app-list"; all?: true; json?: true };
@@ -16,7 +17,7 @@ export type AppTokenInvocation = {
 };
 
 const APP_USAGE =
-  "Usage: coforge app list [--all] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]";
+  "Usage: coforge app list [--all] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]";
 /** How long the program may run by default; `--timeout` takes 1 to 300 seconds, as the token
  * lives five minutes. */
 export const DEFAULT_APP_TOKEN_TIMEOUT_SECONDS = 60;
@@ -35,9 +36,11 @@ function parseTimeout(raw: string): number {
   return seconds;
 }
 
-/** `coforge app list|token ...`, without the leading `app`. Everything after `--` is the
+/** `coforge app list|invoke|token ...`, without the leading `app`. Everything after `--` is the
  * program's own. */
-export function parseAppArgs(args: readonly string[]): AppListInvocation | AppTokenInvocation {
+export function parseAppArgs(
+  args: readonly string[],
+): AppListInvocation | AppInvokeInvocation | AppTokenInvocation {
   const [subcommand, ...rest] = args;
   const separator = rest.indexOf("--");
   const options = separator === -1 ? rest : rest.slice(0, separator);
@@ -50,6 +53,7 @@ export function parseAppArgs(args: readonly string[]): AppListInvocation | AppTo
       else invalid(`Unexpected argument ${option}`);
     return invocation;
   }
+  if (subcommand === "invoke") return parseInvoke(rest);
   if (subcommand !== "token") invalid(`Unknown app command ${subcommand ?? ""}`.trim());
   const values: Record<string, string> = {};
   for (let index = 0; index < options.length; index += 2) {
@@ -73,6 +77,26 @@ export function parseAppArgs(args: readonly string[]): AppListInvocation | AppTo
       ? parseTimeout(values["--timeout"])
       : DEFAULT_APP_TOKEN_TIMEOUT_SECONDS,
   };
+}
+
+function parseInvoke(rest: readonly string[]): AppInvokeInvocation {
+  const [appKey, ...options] = rest;
+  if (!appKey || appKey.startsWith("--")) invalid("coforge app invoke needs an app key");
+  const invocation: AppInvokeInvocation = { command: "app-invoke", appKey };
+  let listActions = false;
+  for (let index = 0; index < options.length; index++) {
+    const option = options[index]!;
+    if (option === "--list-actions") listActions = true;
+    else if (option === "--json") invocation.json = true;
+    else if (option === "--action") {
+      const name = options[++index];
+      if (!name || name.startsWith("--")) invalid("--action needs an action name");
+      invocation.action = name;
+    } else invalid(`Unexpected argument ${option}`);
+  }
+  if (!listActions)
+    invalid("Calling actions is not available yet; use --list-actions to see what an app offers");
+  return invocation;
 }
 
 const ACCESS: Record<AgentAppAccessState, string> = {
@@ -111,12 +135,14 @@ export type AppCommandIo = {
   stderr(chunk: string | Uint8Array): void;
   /** The CLI's environment; the program gets only a few names of it. */
   env: Record<string, string | undefined>;
+  /** Reads an app's Agent manifest; tests inject one. */
+  fetchManifest?: AppActionsIo["fetchManifest"];
 };
 
-/** Runs `coforge app list|token` and resolves to the CLI's exit code. The token is handed to the
+/** Runs `coforge app list|invoke|token` and resolves to the CLI's exit code. The token is handed to the
  * program on file descriptor 3 and never printed. */
 export async function runAppCommand(
-  invocation: AppListInvocation | AppTokenInvocation,
+  invocation: AppListInvocation | AppInvokeInvocation | AppTokenInvocation,
   client: AppClient,
   io: AppCommandIo,
 ): Promise<number> {
@@ -126,6 +152,13 @@ export async function runAppCommand(
     const shown = all ? apps : apps.filter((app) => !app.builtIn);
     io.stdout(`${invocation.json ? JSON.stringify({ apps: shown }) : formatAppList(shown, all)}\n`);
     return 0;
+  }
+  if (invocation.command === "app-invoke") {
+    const { apps } = await client.appList();
+    return runListActions(invocation, apps, {
+      stdout: (chunk) => io.stdout(chunk),
+      fetchManifest: io.fetchManifest,
+    });
   }
   const ask = () => client.appToken(invocation.appKey, invocation.target);
   // A CONFLICT is a lost race with a concurrent use of the same app: asking once more settles it.

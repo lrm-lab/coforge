@@ -19,7 +19,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
 
   try {
     // `app token` owns the program's stdio and exit code, so neither goes through `run`.
-    if (args[0] === "app" && (args[1] === "list" || args[1] === "token")) {
+    if (args[0] === "app" && (args[1] === "list" || args[1] === "invoke" || args[1] === "token")) {
       process.exitCode = await runAppCommand(
         parseAppArgs(args.slice(1)),
         connectAppClient(
