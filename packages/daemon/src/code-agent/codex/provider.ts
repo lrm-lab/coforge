@@ -7,7 +7,10 @@ import type {
 } from "@coforge/agent";
 import type { CodeAgentProvider } from "#src/code-agent/contract";
 import { CodexItemEvents } from "./item-events";
+import { rejectServerRequests } from "./server-requests";
+import { openCodexThread } from "./thread-open";
 import { codexTurnOutcome } from "./turn-outcome";
+import { CodexTurnSignals } from "./turn-signals";
 import { readCodexUsage } from "./usage";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
@@ -58,6 +61,7 @@ export class CodexProvider implements CodeAgentProvider {
         gitHooks: options.gitHooks,
       }),
     );
+    rejectServerRequests(process, options.agentId, options.runtimeId);
     try {
       await process.request({
         method: "initialize",
@@ -76,66 +80,8 @@ export class CodexProvider implements CodeAgentProvider {
         params: { cwds: [options.agentWorkspaceDirectory], forceReload: true },
       });
       assertSkillsLoaded(skillsResponse, options.agentWorkspaceDirectory);
-      const openThread = (sessionId?: string) =>
-        process.request({
-          method: sessionId ? "thread/resume" : "thread/start",
-          params: {
-            ...(sessionId ? { threadId: sessionId } : { ephemeral: false }),
-            cwd: options.agentWorkspaceDirectory,
-            developerInstructions: options.instructions,
-            ...(options.runtime?.model ? { model: options.runtime.model } : {}),
-            // Codex's own service tier for this thread; the ordinary tier is the absence of it.
-            ...(options.runtime?.fastMode ? { serviceTier: "fast" } : {}),
-            approvalPolicy: "never",
-            sandbox: "danger-full-access",
-            config: {
-              ...(options.runtime?.reasoning
-                ? { model_reasoning_effort: options.runtime.reasoning }
-                : {}),
-              // Retain the existing global-config override surface; the approved
-              // danger-full-access policy does not use workspace-write restrictions.
-              "sandbox_workspace_write.network_access": true,
-              allow_login_shell: false,
-              shell_environment_policy: {
-                inherit: "all",
-                ignore_default_excludes: false,
-                filters: {
-                  "COFORGE_*": "include",
-                  HOME: "include",
-                  PATH: "include",
-                  XDG_CONFIG_HOME: "include",
-                  XDG_DATA_HOME: "include",
-                  XDG_CACHE_HOME: "include",
-                  TMPDIR: "include",
-                  TEMP: "include",
-                  TMP: "include",
-                  LANG: "include",
-                  LC_ALL: "include",
-                },
-              },
-            },
-            ...(!sessionId ? { serviceName: "coforge_daemon" } : {}),
-          },
-        });
-      let replacedSessionId: string | undefined;
-      const response = await openThread(options.sessionId).catch(async (error: unknown) => {
-        const native =
-          error instanceof JsonlRequestError ? asRecord(error.responseError) : undefined;
-        if (
-          !options.sessionId ||
-          native?.code !== -32600 ||
-          native.message !== `no rollout found for thread id ${options.sessionId}`
-        )
-          throw error;
-        // Exact official ThreadNotFound response only, never auth/I/O or generic errors.
-        replacedSessionId = options.sessionId;
-        return openThread();
-      });
-      const thread = asRecord(asRecord(response.result)?.thread);
-      if (typeof thread?.id !== "string") throw new Error("Codex did not create a thread");
-      if (options.sessionId && !replacedSessionId && thread.id !== options.sessionId)
-        throw new Error("Codex did not resume the requested thread");
-      await options.onSessionId?.(thread.id, replacedSessionId);
+      const { threadId, result, replacedSessionId } = await openCodexThread(process, options);
+      await options.onSessionId?.(threadId, replacedSessionId);
       logger.info("Codex thread received standing instructions", {
         event: "codex.instructions.injected",
         agent_id: options.agentId,
@@ -145,14 +91,12 @@ export class CodexProvider implements CodeAgentProvider {
       });
       return new CodexAgentSession(
         process,
-        thread.id,
+        threadId,
         options.sessionId !== undefined && replacedSessionId === undefined,
         options.agentId,
         options.runtimeId,
         // Only a launch that asked for the Fast tier has anything to report about it.
-        options.runtime?.fastMode
-          ? codexServiceTierState(asRecord(response.result)?.serviceTier)
-          : undefined,
+        options.runtime?.fastMode ? codexServiceTierState(result?.serviceTier) : undefined,
       );
     } catch (error) {
       await process.dispose();
@@ -169,6 +113,7 @@ class CodexAgentSession implements AgentSession {
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #commandOutputBytes = new Map<string, number>();
   readonly #itemEvents = new CodexItemEvents();
+  readonly #signals: CodexTurnSignals;
   #state: CodexSessionState = { type: "idle" };
   #lastCompletedTurnId: string | undefined;
   #starting: Promise<void> | undefined;
@@ -191,6 +136,7 @@ class CodexAgentSession implements AgentSession {
     this.#threadId = threadId;
     this.#agentId = agentId;
     this.#runtimeId = runtimeId;
+    this.#signals = new CodexTurnSignals(threadId, agentId, runtimeId);
     this.#serviceTier = serviceTier;
     this.#identity = {
       sessionId: threadId,
@@ -347,10 +293,17 @@ class CodexAgentSession implements AgentSession {
     // Activity for an idle session, including completion before turn/start replies.
     if (
       typeof record.method === "string" &&
-      record.method.startsWith("item/") &&
-      !this.#acceptsTurnItem(params)
-    )
+      (record.method.startsWith("item/") || record.method === "thread/tokenUsage/updated")
+    ) {
+      if (!this.#acceptsTurnItem(params)) return;
+      this.#signals.markEvidence();
+      if (record.method === "thread/tokenUsage/updated") return;
+    }
+    const signalEvents = this.#signals.notification(record, params);
+    if (signalEvents) {
+      this.#emitAll(signalEvents);
       return;
+    }
     if (record.method === "error") {
       const error = asRecord(params?.error);
       if (
@@ -379,6 +332,7 @@ class CodexAgentSession implements AgentSession {
         !this.#acceptsTurnItem({ threadId: params?.threadId, turnId: turn.id })
       )
         return;
+      this.#signals.reset();
       this.#emitAll(this.#itemEvents.accept(record, params));
       return;
     }
@@ -464,11 +418,13 @@ class CodexAgentSession implements AgentSession {
           providerErrorReason: "turn_failed",
         });
       }
+      this.#emitAll(this.#signals.finish(record, status));
       this.#emit({ type: "completed", status });
     }
   }
 
   #emit(event: AgentRuntimeEvent): void {
+    this.#signals.observe(event);
     for (const listener of this.#listeners) listener(event);
   }
 

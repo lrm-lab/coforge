@@ -12,10 +12,9 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - Every shipped session exposes `hasLiveTurn` from native turn/admission state or its owned turn process.
   Never derive it from recent output or a timeout. Daemon filters idle-turn Activity and checks it before
   renewing Busy, except while a turn's background tasks still run; an unknown value never claims Idle.
-- A Provider that knows why a launch cannot start throws a typed launch error
-  from `contract.ts` (`RuntimeVersionUnsupportedError`,
-  `RuntimeModelNotFoundError`, `ModelProviderSettingError`), keeping any SDK
-  error as its `cause`. The Pi Provider maps the SDK's `PiLaunchError` policy
+- A Provider that knows why a launch cannot start throws a typed launch error from `contract.ts`
+  (`RuntimeVersionUnsupportedError`, `RuntimeModelNotFoundError`, `ModelProviderSettingError`),
+  keeping any SDK error as its `cause`. The Pi Provider maps the SDK's `PiLaunchError` policy
   codes here.
 - Adapters emit only official display events and explicit lineage, never raw reasoning.
   Claude Code text/thinking come once per completed `assistant` block, its stream deltas only as
@@ -40,13 +39,12 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   reader (`opencode models --verbose`, `agy models`). Explicit refreshes force Pi and forbid Codex's
   disk fallback; offline or failed probes are omitted, logged as `code_agent_catalog:discovery_failed`,
   and never cached. Ordinary inventory retains its existing cache fallback policy.
-- Report the maintained Claude Code model catalog when Claude Code is
-  installed. Never launch the CLI to infer a dynamic catalog; its
-  machine-readable initialization does not give a dependable list.
-  `claudeStaticCatalog(version)` lists a pinned model only when the probed CLI
-  meets the minimum `code.claude.com/docs/en/model-config` states for it
-  (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases stay, an unknown version keeps
-  every model; efforts follow Raft's catalog (`opus`/`fable`/`sonnet` all; `haiku` none).
+- Report the maintained Claude Code model catalog when Claude Code is installed. Never launch the
+  CLI to infer a dynamic catalog; its machine-readable initialization does not give a dependable
+  list. `claudeStaticCatalog(version)` lists a pinned model only when the probed CLI meets the
+  minimum `code.claude.com/docs/en/model-config` states for it
+  (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases stay, an unknown version keeps every model;
+  efforts follow Raft's catalog (`opus`/`fable`/`sonnet` all; `haiku` none).
 
 ## Standing instructions
 
@@ -76,14 +74,12 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   Code system-prompt-file option, the CoForge Agent resource-loader
   system-prompt override, and Grok ACP `_meta.systemPromptOverride`.
 - Current channel roles override names, previous sessions and local memory. Without current coordinator status or explicit human delegation, an Agent must not assign, chase or reprioritize peers. Coordination stays scoped to its channel and grants no extra permissions. Web annotates channel reads with current roles; launches preserve Agent-owned memory.
-- Do not copy the text into a provider. Do not write `AGENTS.md` or `CLAUDE.md`
-  into the user's Agent workspace for a provider that supports native
-  injection.
+- Do not copy the text into a provider. Do not write `AGENTS.md` or `CLAUDE.md` into the user's
+  Agent workspace for a provider that supports native injection.
 - Deliver Message recovery bodies directly as turn input and App Inbox wakeups
   separately. Never append them to the standing instructions.
-- When a session lacks older user-referenced context, the instructions direct
-  the Agent to lexical `coforge message search`, then a target-scoped
-  `message read --around`.
+- When a session lacks older user-referenced context, the instructions direct the Agent to lexical
+  `coforge message search`, then a target-scoped `message read --around`.
 
 ## Assigned skills
 
@@ -97,10 +93,15 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Codex
 
-- `codex/provider.ts` owns retry classification. Structured `willRetry: true`
-  notifications stay internal diagnostics. Numbered stderr reconnect lines
-  become informational `runtime_reconnecting` Activity.
+- `codex/provider.ts` owns retry classification: `willRetry: true` notifications stay internal
+  diagnostics; numbered stderr reconnect lines become informational `runtime_reconnecting` Activity.
 - Codex Activity follows the reference Computer; MCP tool names match Claude's `mcp__<server>__<tool>`.
+- Every app-server request is answered -32601 (`server-requests.ts`), from process start.
+- Resume recovery (`thread-open.ts`): archived -> `thread/unarchive` once, then resume, else a fresh
+  thread reported as replaced; active writer -> `session_in_use`; the missing-rollout match stays
+  exact. An unnamed thread is named `CoForge · <agent name>`, best effort.
+- `turn-signals.ts`: a completed turn with no evidence and a `systemError` status are errors
+  (`codex_zero_evidence_turn_completed`); warnings, waiting and blank answers are logged only.
 
 ## Per-turn providers (Cursor, OpenCode, Antigravity)
 
@@ -134,13 +135,12 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - `antigravity/tool-call.ts` maps agy tool names to canonical tools and moves
   only verified argument fields; a `subagent` step is one `invoke_subagent`
   tool call with no input, since its prompt and local paths are not Activity.
-- Account usage is `agy -p /usage --output-format json`, which answers without
-  a turn. `officialGroups` keeps every returned group and bucket, including a
-  weekly-only group, and `officialDescription` keeps `command.data.description`.
-  `primary` and `secondary` remain the tightest group's 5-hour and weekly windows
-  so an older Web still has two slots. Only an error naming sign-in or auth is
-  `UsageUnavailableError`; a signed-out answer was never captured, so that match
-  is assumed.
+- Account usage is `agy -p /usage --output-format json`, which answers without a turn.
+  `officialGroups` keeps every returned group and bucket, including a weekly-only group, and
+  `officialDescription` keeps `command.data.description`. `primary` and `secondary` remain the
+  tightest group's 5-hour and weekly windows so an older Web still has two slots. Only an error
+  naming sign-in or auth is `UsageUnavailableError`; a signed-out answer was never captured, so
+  that match is assumed.
 - The unknown-`--conversation` fallback, the `agy models` line format, and the
   SSH token-store switch are observed on agy 1.2.12/1.2.13, not documented.
   Re-check them when raising the version gate.
@@ -176,10 +176,9 @@ Behavior, compatibility and native verification: [`docs/agents/grok-acp.md`](../
 - An explicit Agent key overrides host authentication only in that session's
   in-memory model runtime. Never write it to disk or pass it in process arguments.
 - Pi and the built-in Agent report `model_request_started` at the public SDK `agent.streamFunction` seam; lifecycle/progress is not a request start, and compaction keeps its own phase.
-- Pi session files stay in the Agent's `.pi-sessions` directory. The built-in
-  CoForge Agent uses its isolated bundled resources and `.builtin-sessions`;
-  for skills, the Pi SDK still loads the user's `~/.agents/skills`, so that is
-  the one Global root its Skills metadata reports.
+- Pi session files stay in the Agent's `.pi-sessions` directory. The built-in CoForge Agent uses
+  its isolated bundled resources and `.builtin-sessions`; for skills, the Pi SDK still loads the
+  user's `~/.agents/skills`, so that is the one Global root its Skills metadata reports.
 
 ## Skills metadata (`agent-skills.ts`)
 
