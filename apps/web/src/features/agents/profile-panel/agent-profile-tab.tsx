@@ -17,7 +17,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { StatusDot } from "#src/components/ui/status-dot";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
@@ -30,18 +29,15 @@ import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-co
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/agent-skills";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
-import { InlineEditField, SECTION_CAPTION_CLASS, SUBFIELD_LABEL_CLASS } from "./inline-edit-field";
+import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { ContextUsageItem, RUNTIME_PILL_PART_CLASS } from "./agent-context-usage-item";
+import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
+import { FactRow } from "./agent-fact-row";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
-
-/** Values are never shown in the chip; the dot count hints at length without revealing it. */
-function maskEnvValue(value: string) {
-  return "•".repeat(Math.min(value.length, 8));
-}
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
 
-/** Gray badge for a short fact such as runtime, model, reasoning, or role. */
+/** Gray badge for the runtime fact. */
 function FactBadge({
   children,
   icon,
@@ -60,9 +56,9 @@ function FactBadge({
 }
 
 /**
- * The Agent profile panel's Profile tab body: label-over-value throughout, no left/right fact
- * rows, no leading row icons (`docs/design/field-display.md` §9's field-grid style, per the approved
- * prototype). Managers/owners get the pencils, INFO's Role editor, RUNTIME CONFIG's credential
+ * The Agent profile panel's Profile tab body: INFO and RUNTIME CONFIG are one fact per row, a
+ * fixed-width gray label on the left and the value on the right (`FactRow`), like the reference
+ * Agent profile; no leading row icons. Managers/owners get the pencils, INFO's Role editor, RUNTIME CONFIG's credential
  * dialog and the ACTIONS section; everyone else sees a read-only Profile.
  */
 export function AgentProfileTab({
@@ -79,17 +75,23 @@ export function AgentProfileTab({
   runtimeCredentialDialog,
   onStartRuntimeEdit,
   onLoadSkills,
-  envVars,
   onStartDelete,
   migration,
   archive,
   contextUsage,
+  fastMode,
 }: {
   profile: NonNullable<AgentProfile>;
   timeZone: string | null;
   /** The Agent's current context-window usage, or `null` when there is no reading —
    * hidden entirely in that case. Display only: coloured by risk, but nothing triggers on it. */
-  contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null;
+  contextUsage?: {
+    usedTokens: number;
+    windowTokens: number;
+    observedAtMs: number;
+  } | null;
+  /** What the launch actually observed for its Fast service tier, when the Agent asks for it. */
+  fastMode?: AgentFastModeReading | null;
   /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
   migration?: ReactNode;
   /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
@@ -108,7 +110,7 @@ export function AgentProfileTab({
   onRequestVisibilityChange?: (target: AgentVisibility) => void;
   runtimeCredentialDialog: ReactNode;
   /** Opens the container's `AgentRuntimeConfigDialog` (see `agent-profile-panel.tsx`). The
-   * RUNTIME CONFIG badges below never change; only the pencil does anything. */
+   * RUNTIME CONFIG facts below never change; only the pencil does anything. */
   onStartRuntimeEdit?: () => void;
   /** Owner-only, same as the old Agent detail page's Skills section. Omitted for a viewer who
    * does not own the Agent. */
@@ -116,11 +118,6 @@ export function AgentProfileTab({
   /** Opens the container's `AgentDeleteDialog`. Present only when the viewer holds
    * the `deleteAgents` capability and this Agent is a delete target at all. */
   onStartDelete?: () => void;
-  /** Owner-only read view of the Agent's launch environment overrides, masked; editing happens in
-   * the Runtime config dialog's Advanced disclosure (`agent-runtime-config-dialog.tsx`).
-   * `undefined` for a viewer who does not own the Agent (the GET is owner-only); an owner whose
-   * query has not resolved yet gets `{}`, same empty-state copy as a genuinely empty map. */
-  envVars?: Record<string, string>;
 }) {
   const { runtime, model, reasoning } = profile.runtimeConfig;
   const canEditRuntime = canManage && Boolean(onStartRuntimeEdit);
@@ -205,7 +202,7 @@ export function AgentProfileTab({
 
       <section className="border-b border-secondary px-6 py-5">
         <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_info()}</p>
-        <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+        <div className="mt-3 flex flex-col gap-3">
           <RoleField
             role={profile.role}
             onSave={profile.canManageAgentRole ? onSaveRole : undefined}
@@ -214,54 +211,49 @@ export function AgentProfileTab({
             visibility={profile.visibility}
             onRequest={profile.canChangeVisibility ? onRequestVisibilityChange : undefined}
           />
-        </div>
-        <div className="mt-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_computer()}</p>
-            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-primary">
-              {ComputerIcon && (
-                <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
-              )}
-              <span className="truncate font-mono">
-                {profile.computer?.label || m.agent_profile_computer_unassigned()}
-              </span>
-            </p>
-            {profile.computer && (
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-tertiary">
-                <StatusDot
-                  tone={profile.computer.online ? "online" : "offline"}
-                  className="size-1.5"
-                />
-                {profile.computer.online
-                  ? m.agent_profile_computer_connected()
-                  : m.agent_profile_computer_offline()}
-                {profile.computer.computerVersion && (
-                  <span className="font-mono">· {profile.computer.computerVersion}</span>
+          <FactRow label={m.agent_profile_computer()} className="items-start">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5">
+                  {ComputerIcon && (
+                    <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
+                  )}
+                  <span className="truncate font-mono">
+                    {profile.computer?.label || m.agent_profile_computer_unassigned()}
+                  </span>
+                </p>
+                {profile.computer && (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs font-normal text-tertiary">
+                    <StatusDot
+                      tone={profile.computer.online ? "online" : "offline"}
+                      className="size-1.5"
+                    />
+                    {profile.computer.online
+                      ? m.agent_profile_computer_connected()
+                      : m.agent_profile_computer_offline()}
+                    {profile.computer.computerVersion && (
+                      <span className="font-mono">· {profile.computer.computerVersion}</span>
+                    )}
+                  </p>
                 )}
-              </p>
-            )}
-          </div>
-          {profile.computer && (
-            <AgentDesktopButton
-              computerId={profile.computer.id}
-              agentId={profile.id}
-              title={profile.displayName}
-              kind={profile.computer.kind}
-              online={profile.computer.online === true}
-              owned={profile.computer.ownedByViewer === true}
-            />
-          )}
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4">
-          <div>
-            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_created()}</p>
-            <p className="mt-1 text-sm font-medium text-primary">
-              <RelativeTime value={profile.createdAt} timeZone={timeZone} />
-            </p>
-          </div>
-          <div>
-            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_creator()}</p>
-            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-primary">
+              </div>
+              {profile.computer && (
+                <AgentDesktopButton
+                  computerId={profile.computer.id}
+                  agentId={profile.id}
+                  title={profile.displayName}
+                  kind={profile.computer.kind}
+                  online={profile.computer.online === true}
+                  owned={profile.computer.ownedByViewer === true}
+                />
+              )}
+            </div>
+          </FactRow>
+          <FactRow label={m.agent_profile_created()}>
+            <RelativeTime value={profile.createdAt} timeZone={timeZone} />
+          </FactRow>
+          <FactRow label={m.agent_profile_creator()}>
+            <span className="flex items-center gap-1.5">
               <Avatar
                 size="xs"
                 alt=""
@@ -270,8 +262,8 @@ export function AgentProfileTab({
                 contentClassName={avatarToneClassName(creatorName)}
               />
               <span className="truncate">{creatorName}</span>
-            </p>
-          </div>
+            </span>
+          </FactRow>
         </div>
       </section>
 
@@ -297,98 +289,74 @@ export function AgentProfileTab({
             </Button>
           </div>
         )}
-        <div className={`flex flex-wrap gap-x-8 gap-y-4 ${needsComputerSetup ? "mt-4" : "mt-3"}`}>
-          <div>
-            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_runtime_field()}</p>
+        <div className={`flex flex-col gap-3 ${needsComputerSetup ? "mt-4" : "mt-3"}`}>
+          <FactRow label={m.agent_runtime_field()}>
             {/* One pill: the runtime (its usage peek) and, once reported, its context (the
-                context peek). Each part stays its own button inside it. */}
-            <p className="mt-1">
-              <FactBadge>
-                {/* A runtime without a usage reader has no peek: RuntimeUsage would hand back the
-                  bare trigger content, not a button. */}
-                {profile.runtimeUsageVisible &&
-                profile.computer &&
-                RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime] ? (
-                  <RuntimeUsage
-                    computerId={profile.computer.id}
-                    runtime={{
-                      provider: runtime,
-                      displayName: runtimeLabel,
-                      version: profile.runtimeVersion,
-                    }}
-                    computerOnline={profile.computer.online}
-                    timeZone={timeZone}
-                    trigger={(health) => (
-                      <>
-                        {runtimeIcon}
-                        {runtimeLabel}
-                        {/* Trailing, like the Computer page's runtime chips. */}
-                        <UsageHealthDot health={health} />
-                      </>
-                    )}
-                    triggerClassName={RUNTIME_PILL_PART_CLASS}
-                  />
-                ) : (
-                  <span className="inline-flex items-center gap-1.5">
-                    {runtimeIcon}
-                    {runtimeLabel}
-                  </span>
-                )}
-                {contextUsage && !profile.deletedAt && (
-                  <>
-                    {/* A hairline, not a "·": beside the health dot a dot separator reads as a
-                        second status dot. */}
-                    <span
-                      aria-hidden="true"
-                      className="mx-0.5 h-3 w-px shrink-0 bg-border-secondary"
-                    />
-                    <ContextUsageItem
-                      agentId={profile.id}
-                      contextUsage={contextUsage}
-                      timeZone={timeZone}
-                      supportsContextReport={runtime === RUNTIME_PROVIDER.CLAUDE_CODE}
-                      computerOnline={profile.computer?.online}
-                    />
-                  </>
-                )}
-              </FactBadge>
-            </p>
-          </div>
-          <div>
-            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_form_model()}</p>
-            <p className="mt-1">
-              <FactBadge mono={Boolean(model)}>
-                {model || m.agent_form_provider_default()}
-              </FactBadge>
-            </p>
-          </div>
-          <div>
-            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_form_reasoning()}</p>
-            <p className="mt-1">
-              <FactBadge>{reasoning || m.agent_form_provider_default()}</FactBadge>
-            </p>
-          </div>
-        </div>
-        {envVars && (
-          <div className="mt-4">
-            <p className={SUBFIELD_LABEL_CLASS}>{m.agent_env_title()}</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {Object.keys(envVars).length > 0 ? (
-                Object.entries(envVars).map(([key, value]) => (
-                  <Tooltip key={key} title={`${key}=${value}`}>
-                    <TooltipTrigger>
-                      <Badge color="gray" size="sm" className="font-mono">
-                        {key}={maskEnvValue(value)}
-                      </Badge>
-                    </TooltipTrigger>
-                  </Tooltip>
-                ))
+              context peek). Each part stays its own button inside it. */}
+            <FactBadge>
+              {/* A runtime without a usage reader has no peek: RuntimeUsage would hand back the
+                bare trigger content, not a button. */}
+              {profile.runtimeUsageVisible &&
+              profile.computer &&
+              RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime] ? (
+                <RuntimeUsage
+                  computerId={profile.computer.id}
+                  runtime={{
+                    provider: runtime,
+                    displayName: runtimeLabel,
+                    version: profile.runtimeVersion,
+                  }}
+                  computerOnline={profile.computer.online}
+                  timeZone={timeZone}
+                  trigger={(health) => (
+                    <>
+                      {runtimeIcon}
+                      {runtimeLabel}
+                      {/* Trailing, like the Computer page's runtime chips. */}
+                      <UsageHealthDot health={health} />
+                    </>
+                  )}
+                  triggerClassName={RUNTIME_PILL_PART_CLASS}
+                />
               ) : (
-                <p className="text-sm text-tertiary italic">{m.agent_env_none()}</p>
+                <span className="inline-flex items-center gap-1.5">
+                  {runtimeIcon}
+                  {runtimeLabel}
+                </span>
               )}
-            </div>
-          </div>
-        )}
+              {contextUsage && !profile.deletedAt && (
+                <>
+                  {/* A hairline, not a "·": beside the health dot a dot separator reads as a
+                      second status dot. */}
+                  <span
+                    aria-hidden="true"
+                    className="mx-0.5 h-3 w-px shrink-0 bg-border-secondary"
+                  />
+                  <ContextUsageItem
+                    agentId={profile.id}
+                    contextUsage={contextUsage}
+                    timeZone={timeZone}
+                    supportsContextReport={runtime === RUNTIME_PROVIDER.CLAUDE_CODE}
+                    computerOnline={profile.computer?.online}
+                  />
+                </>
+              )}
+            </FactBadge>
+          </FactRow>
+          <FactRow label={m.agent_form_model()}>
+            <span className={model ? "font-mono break-all" : ""}>
+              {model || m.agent_form_provider_default()}
+            </span>
+          </FactRow>
+          <FactRow label={m.agent_form_reasoning()}>
+            {reasoning || m.agent_form_provider_default()}
+          </FactRow>
+          <AgentFastModeFact
+            runtime={runtime}
+            requested={profile.runtimeConfig.fastMode === true}
+            reading={fastMode}
+          />
+        </div>
       </section>
 
       {archive}

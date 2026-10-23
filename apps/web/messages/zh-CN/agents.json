@@ -2,7 +2,6 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "agent_env_title": "环境变量",
   "agent_env_description": "环境变量会注入到 Agent 运行时。",
-  "agent_env_none": "没有环境变量",
   "agent_env_more": "更多",
   "agent_env_key_placeholder": "环境变量名称",
   "agent_env_value_placeholder": "环境变量值",

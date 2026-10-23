@@ -444,3 +444,27 @@ test("a private Agent without the visibility grant shows the Private badge with 
   expect(markup).toContain("Private");
   expect(markup).not.toContain("Make public");
 });
+
+test("RUNTIME CONFIG is one fact per row with a Mode row that reads Default, Fast or Not applied", () => {
+  const renderMode = (fastMode: boolean, observed?: "on" | "off") =>
+    render(
+      <AgentProfileTab
+        profile={profileFixture({
+          runtimeConfig: { ...profileFixture().runtimeConfig, fastMode },
+        })}
+        timeZone="UTC"
+        canManage={false}
+        controls={controlsFixture(true)}
+        onSaveDisplayName={noop}
+        onSaveDescription={noop}
+        runtimeCredentialDialog={null}
+        fastMode={observed ? { requested: fastMode, observed, observedAtMs: 1 } : null}
+      />,
+    );
+  const off = renderMode(false);
+  expect(off).toContain(m.agent_form_mode());
+  expect(off).toContain(m.agent_form_default_value());
+  expect(off).toContain("grid-cols-[6.5rem_minmax(0,1fr)]");
+  expect(renderMode(true, "on")).toContain(m.agent_form_fast_mode());
+  expect(renderMode(true, "off")).toContain(m.agent_form_fast_mode_not_applied());
+});

@@ -188,8 +188,7 @@ export function AgentProfilePanel({
     [agentId, readWorkspaceFile],
   );
 
-  // Shared by the RUNTIME CONFIG section's masked chips (`agent-profile-tab.tsx`) and the
-  // Runtime config dialog's Advanced disclosure — one owner-only load, not two.
+  // Owner-only env, for the Runtime config dialog.
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
   const envQuery = useQuery(agentEnvironmentQuery(agentId, owned));
@@ -419,6 +418,11 @@ export function AgentProfilePanel({
                 ? (liveAgent.display.contextUsage ?? null)
                 : (profile.display?.contextUsage ?? null)
             }
+            fastMode={
+              liveAgent?.display
+                ? (liveAgent.display.fastMode ?? null)
+                : (profile.display?.fastMode ?? null)
+            }
             onSaveDisplayName={async (value) => {
               await update({ data: baseUpdateInput({ displayName: value }) });
               await invalidate();
@@ -458,7 +462,6 @@ export function AgentProfilePanel({
             }
             onStartRuntimeEdit={onStartRuntimeEdit}
             onLoadSkills={owned ? onLoadSkills : undefined}
-            envVars={owned ? (envQuery.data ?? {}) : undefined}
             onStartDelete={profile.canDeleteAgent ? () => setDeleteDialogOpen(true) : undefined}
             archive={
               profile.deletedAt && canManageAgent(profile) ? (

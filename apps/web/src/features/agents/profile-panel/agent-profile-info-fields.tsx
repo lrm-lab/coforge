@@ -6,7 +6,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Select } from "#src/components/base/select/select";
 import { m } from "#src/paraglide/messages";
 import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
-import { SUBFIELD_LABEL_CLASS } from "./inline-edit-field";
+import { FactRow } from "./agent-fact-row";
 
 /**
  * Visibility reads as a badge, same as Role; an authorized viewer (creator or Workspace
@@ -23,9 +23,8 @@ export function VisibilityField({
 }) {
   const isPrivate = visibility === AGENT_VISIBILITY.PRIVATE;
   return (
-    <div>
-      <p className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_visibility()}</p>
-      <div className="mt-1 flex items-center gap-3">
+    <FactRow label={m.agent_profile_visibility()}>
+      <div className="flex flex-wrap items-center gap-3">
         <Badge color={isPrivate ? "gray" : "brand"} size="sm">
           {isPrivate ? m.agent_visibility_label_private() : m.agent_visibility_label_public()}
         </Badge>
@@ -43,7 +42,7 @@ export function VisibilityField({
           </Button>
         )}
       </div>
-    </div>
+    </FactRow>
   );
 }
 
@@ -57,21 +56,24 @@ export function RoleField({
 }) {
   const [editing, setEditing] = useState(false);
   return (
-    <div>
-      <div className="flex items-center gap-1.5">
-        <span className={SUBFIELD_LABEL_CLASS}>{m.agent_profile_role()}</span>
-        {onSave && !editing && (
-          <ButtonUtility
-            size="xs"
-            color="tertiary"
-            icon={Edit01}
-            aria-label={m.agent_profile_edit_role()}
-            tooltip={m.agent_profile_edit_role()}
-            onClick={() => setEditing(true)}
-          />
-        )}
-      </div>
-      <div className="mt-1">
+    <FactRow
+      label={
+        <>
+          {m.agent_profile_role()}
+          {onSave && !editing && (
+            <ButtonUtility
+              size="xs"
+              color="tertiary"
+              icon={Edit01}
+              aria-label={m.agent_profile_edit_role()}
+              tooltip={m.agent_profile_edit_role()}
+              onClick={() => setEditing(true)}
+            />
+          )}
+        </>
+      }
+    >
+      <div>
         {editing && onSave ? (
           <Select
             aria-label={m.agent_profile_edit_role()}
@@ -92,6 +94,6 @@ export function RoleField({
           </Badge>
         )}
       </div>
-    </div>
+    </FactRow>
   );
 }
