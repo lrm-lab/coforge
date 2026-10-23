@@ -1,9 +1,13 @@
-import { expect, test, spyOn } from "bun:test";
+import { expect, spyOn, test as bunTest } from "bun:test";
 import * as filesystem from "node:fs/promises";
 import { mkdtemp, mkdir, rename, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiChatFiles } from "#src/pi-chat/files";
+
+// PiChatFiles serves Cloud Computers, which are Linux, and refuses any other platform (it pins
+// each ancestor through Linux's /proc/self/fd), so these run where the code can.
+const test = bunTest.skipIf(process.platform !== "linux");
 
 test("file observations stay inside their directory if an ancestor is replaced during a read", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-chat-directory-race-"));
