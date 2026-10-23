@@ -66,6 +66,26 @@ test("the proxy forwards a token request and carries the cloud's refusal through
   ]);
 });
 
+test("the proxy forwards scopes, an empty list included, and leaves absent scopes absent", async () => {
+  const calls: AgentAppRequest[] = [];
+  const { token, endpoint } = proxyWith(async (_context, request) => {
+    calls.push(request);
+    return Response.json({ ok: true, status: "not_installed" });
+  });
+  for (const body of [{ scopes: ["email"] }, { scopes: [] }, {}])
+    await fetch(endpoint(agentApiRoutes.proxy.apps.token.path("acme-notes")), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  expect(calls).toEqual([
+    { operation: "token", appKey: "acme-notes", scopes: ["email"] },
+    { operation: "token", appKey: "acme-notes", scopes: [] },
+    { operation: "token", appKey: "acme-notes" },
+  ]);
+  expect("scopes" in calls[2]!).toBe(false);
+});
+
 test("the proxy refuses a token request outside the contract, and an unknown caller", async () => {
   const { token, endpoint } = proxyWith(async () => {
     throw new Error("should not be called");
@@ -131,6 +151,8 @@ test("the connection sends each app request to the cloud with the daemon's and t
     { operation: "token", appKey: "acme notes", target: "#ops" },
     AGENT_API_KEY,
   );
+  for (const scopes of [["email"], [], undefined])
+    await transport.agentApp({ operation: "token", appKey: "acme", scopes }, AGENT_API_KEY);
   expect([listed.status, await token.json()]).toEqual([200, { ok: true, status: "not_installed" }]);
   expect(seen).toEqual([
     {
@@ -147,5 +169,12 @@ test("the connection sends each app request to the cloud with the daemon's and t
       agentApiKey: `Bearer ${AGENT_API_KEY}`,
       body: { target: "#ops" },
     },
+    ...[{ scopes: ["email"] }, { scopes: [] }, {}].map((body) => ({
+      method: "POST",
+      path: "/api/agent/v1/apps/acme/token",
+      authorization: "Bearer daemon-token",
+      agentApiKey: `Bearer ${AGENT_API_KEY}`,
+      body,
+    })),
   ]);
 });

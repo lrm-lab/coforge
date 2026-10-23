@@ -41,7 +41,6 @@ export const AGENT_MANIFEST_LIMITS = {
   pathMaxLength: 512,
   idempotencyHeaderPattern: /^[A-Za-z0-9-]{1,64}$/,
   maxScopes: 64,
-  scopePattern: /^[A-Za-z0-9._:/-]{1,128}$/,
   /** Input and output schemas: a bounded subset of JSON Schema. */
   schemaMaxDepth: 12,
   schemaMaxNodes: 256,

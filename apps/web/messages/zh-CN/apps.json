@@ -196,6 +196,7 @@
   "app_card_denied_reason": "只有工作区所有者和管理员，或此智能体的创建者，可以批准。",
   "app_card_approving": "正在批准…",
   "app_card_denying": "正在拒绝…",
+  "app_card_request_changed": "请求已变更，请重新查看。",
   "app_card_denied": "已拒绝",
   "apps_section_setup": "安装后配置",
   "apps_section_setup_description": "告诉安装者去哪里连接外部账号或配置你的应用。",

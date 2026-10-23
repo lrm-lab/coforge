@@ -1,3 +1,4 @@
+import { APP_FIXED_SCOPES, APP_SCOPES, type AppScope } from "@lrm/coforge-sdk/internal/app-scopes";
 import { APP_KEY_PATTERN } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { hasControlOrBidiCharacter, isInvisibleText } from "#src/features/profiles/person-name";
 import { nameToSlug } from "#src/lib/slug";
@@ -19,15 +20,8 @@ export const APP_URL_MAX_LENGTH = 2048;
 /** The longest Agent manifest URL (Raft's bound). */
 export const APP_AGENT_MANIFEST_URL_MAX_LENGTH = 2000;
 
-/** The scopes an app may be allowed to request. */
-export const APP_SCOPES = ["openid", "profile", "identity", "email"] as const;
-export type AppScope = (typeof APP_SCOPES)[number];
-/** The scopes every app has: signing a person in, their name, and who they are in the Workspace. */
-export const APP_FIXED_SCOPES = [
-  "openid",
-  "profile",
-  "identity",
-] as const satisfies readonly AppScope[];
+/** The scopes an app may be allowed to request (the SDK owns the vocabulary). */
+export { APP_SCOPES, APP_FIXED_SCOPES, type AppScope };
 
 /** The scopes Login with CoForge lets an app with `allowed` ask for: the fixed ones and any
  * optional one it is allowed, in `APP_SCOPES` order (the editor and the app detail both show it). */

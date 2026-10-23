@@ -11,6 +11,13 @@ import {
   type WorkspaceMemberRole,
 } from "#src/features/workspaces/workspace-roles";
 
+/** An INVALID_INPUT (`app-scope-not-allowed`) that names the scopes the app does not allow. */
+export class AppScopeNotAllowedError extends AppError {
+  constructor(readonly scopes: readonly string[]) {
+    super("INVALID_INPUT", { errorId: "app-scope-not-allowed" });
+  }
+}
+
 /** Which Agents an installation lets use its app (`features/apps/agent-access-scope`). */
 export type AgentScope = {
   agentAccess: AgentAccessMode;
@@ -64,9 +71,16 @@ export type AgentAccessDecision =
   /**
    * A person must approve a grant of `scopes`: the grant was revoked or does not cover the
    * request, or the Agent has none and is outside a Selected Agents scope. `pendingRequestId`
-   * names the request already waiting, if there is one, and `scopes` are then that request's.
+   * names the request already waiting, if there is one, and `scopes` are then that request's and
+   * the ones this use asks for.
    */
-  | { kind: "needs_approval"; scopes: string[]; pendingRequestId?: string };
+  | {
+      kind: "needs_approval";
+      scopes: string[];
+      pendingRequestId?: string;
+      /** The waiting request lacks scopes this use asks for: `scopes` are more than it holds. */
+      widened?: true;
+    };
 
 /**
  * The use-time rule: an app installed in a Workspace is usable by its Agents, granted
@@ -77,17 +91,27 @@ export type AgentAccessDecision =
 export function decideAgentAccess(facts: AgentAccessFacts): AgentAccessDecision {
   if (!facts.installed) return { kind: "not_installed" };
   const requested = agentGrantScopes(facts.requestedScopes, facts.allowedScopes);
-  if (!requested) throw new AppError("INVALID_INPUT", { errorId: "app-scope-not-allowed" });
+  if (!requested)
+    throw new AppScopeNotAllowedError(
+      facts.requestedScopes.filter((scope) => !facts.allowedScopes.includes(scope)),
+    );
   const { grant, pendingRequest } = facts;
   if (grant && !grant.revoked && grantCovers(grant.scopes, requested))
     return { kind: "granted", scopes: allowedGrantScopes(grant.scopes, facts.allowedScopes) };
   if (!grant && facts.inScope) return { kind: "grant_automatically", scopes: requested };
-  if (pendingRequest)
+  if (pendingRequest) {
+    // The waiting request also asks for what this use needs and it lacks.
+    const scopes = allowedGrantScopes(
+      [...pendingRequest.scopes, ...requested],
+      facts.allowedScopes,
+    );
     return {
       kind: "needs_approval",
-      scopes: [...pendingRequest.scopes],
+      scopes,
       pendingRequestId: pendingRequest.id,
+      ...(grantCovers(pendingRequest.scopes, scopes) ? {} : { widened: true as const }),
     };
+  }
   const scopes =
     !grant || grant.revoked
       ? requested

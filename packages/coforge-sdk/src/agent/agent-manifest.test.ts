@@ -13,7 +13,7 @@ const action = (over: Record<string, unknown> = {}) => ({
   effect: "read",
   endpoint: { method: "GET", path: "/api/notes/{id}" },
   idempotency: "safe",
-  required_scopes: ["notes:read"],
+  required_scopes: ["email"],
   input_schema: {
     type: "object",
     properties: { id: { type: "string", minLength: 1 } },
@@ -257,9 +257,21 @@ test("effect, method and idempotency stay coherent", () => {
 });
 
 test("required_scopes are unique, sorted and bounded", () => {
-  rejects(withAction({ required_scopes: ["b", "a"] }), "/actions/0/required_scopes", "sorted");
-  rejects(withAction({ required_scopes: ["a", "a"] }), "/actions/0/required_scopes", "unique");
-  rejects(withAction({ required_scopes: ["a b"] }), "/actions/0/required_scopes/0");
+  rejects(
+    withAction({ required_scopes: ["profile", "email"] }),
+    "/actions/0/required_scopes",
+    "sorted",
+  );
+  rejects(
+    withAction({ required_scopes: ["email", "email"] }),
+    "/actions/0/required_scopes",
+    "unique",
+  );
+  rejects(
+    withAction({ required_scopes: ["notes:read"] }),
+    "/actions/0/required_scopes/0",
+    "one of",
+  );
   rejects(withAction({ required_scopes: undefined }), "/actions/0/required_scopes");
   rejects(
     withAction({

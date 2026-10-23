@@ -31,8 +31,10 @@ describe("decideAgentAccess", () => {
       scopes: FIXED,
     });
     expect(
-      decideAgentAccess(facts({ inScope: false, pendingRequest: { id: "r1", scopes: ["email"] } })),
-    ).toEqual({ kind: "needs_approval", scopes: ["email"], pendingRequestId: "r1" });
+      decideAgentAccess(
+        facts({ inScope: false, pendingRequest: { id: "r1", scopes: ALL_SCOPES } }),
+      ),
+    ).toEqual({ kind: "needs_approval", scopes: ALL_SCOPES, pendingRequestId: "r1" });
     expect(
       decideAgentAccess(facts({ inScope: false, grant: { scopes: FIXED, revoked: false } })),
     ).toEqual({ kind: "granted", scopes: FIXED });
@@ -80,6 +82,23 @@ describe("decideAgentAccess", () => {
         facts({ grant: revoked, pendingRequest: { id: "request-1", scopes: ALL_SCOPES } }),
       ),
     ).toEqual({ kind: "needs_approval", scopes: ALL_SCOPES, pendingRequestId: "request-1" });
+  });
+
+  test("a pending request is widened by the scopes a later use asks for", () => {
+    expect(
+      decideAgentAccess(
+        facts({
+          inScope: false,
+          requestedScopes: ["email"],
+          pendingRequest: { id: "r1", scopes: FIXED },
+        }),
+      ),
+    ).toEqual({
+      kind: "needs_approval",
+      scopes: ALL_SCOPES,
+      pendingRequestId: "r1",
+      widened: true,
+    });
   });
 
   test("a scope the active grant lacks needs an approval for the grant's scopes and the new one", () => {

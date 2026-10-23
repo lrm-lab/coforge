@@ -37,10 +37,13 @@ export async function handleAgentAppToken(
 ): Promise<Response> {
   const body = decodeAgentAppTokenBody(await readAgentJsonBody(request));
   if (!body)
-    return agentAppRefusal("request_invalid", "The body must be { target? } with nothing else.");
+    return agentAppRefusal(
+      "request_invalid",
+      "The body must be { target?, scopes? } with nothing else.",
+    );
   let outcome: AgentAppTokenOutcome;
   try {
-    outcome = await apps.token(principal, appKey, { target: body.target });
+    outcome = await apps.token(principal, appKey, { target: body.target, scopes: body.scopes });
   } catch (error) {
     return agentAppServiceRefusal(error);
   }

@@ -193,7 +193,7 @@ These rules apply to `src/server/conversations/`.
   `assertCanCreateAgents`, `AppAgentAccess.approve`), then marks the card `executed` with a
   conditional update; a double commit fails on that operation's uniqueness rule or is a no-op.
 - `ActionCards.cancel` (the preparing Agent's owner or a Workspace owner/admin) only moves `pending
-→ cancelled`; it refuses `app:grant_agent`, which `denyAppGrant` cancels after `AppAgentAccess.deny`.
+→ cancelled`; it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
 - Card state changes publish the existing `ConversationRealtime.messageAvailable`; do not add a card-specific realtime channel.
 - Agent-facing message reads append ` [action card: <state>]` to a card message's body so an Agent never claims a
   resource exists before a human commits it.

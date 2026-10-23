@@ -57,7 +57,7 @@ test("the service's refusals reach the Agent as a coded error body, not a server
   await expect(broken).rejects.toThrow("database down");
 });
 
-test("a token request body with anything but a target is refused", async () => {
+test("a token request body with anything but a target and scopes is refused", async () => {
   const response = await handleAgentAppToken(
     tokenRequest({ idempotencyKey: "k" }),
     principal,
@@ -66,6 +66,16 @@ test("a token request body with anything but a target is refused", async () => {
   );
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ ok: false, errorCode: "request_invalid" });
+});
+
+test("a token request naming a scope outside the vocabulary or twice is refused", async () => {
+  for (const scopes of [["notes:read"], ["email", "email"], "email"]) {
+    const response = await handleAgentAppToken(tokenRequest({ scopes }), principal, "acme-notes", {
+      token: refusing("INTERNAL_ERROR"),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ ok: false, errorCode: "request_invalid" });
+  }
 });
 
 /** An `AgentAppUse` whose access answers `outcomes` in turn, and whose card store says the
@@ -118,6 +128,7 @@ test("a request denied while its card was being posted asks again with a new req
   expect(await apps.token(principal, "acme-notes", { target: "#ops" })).toEqual({
     status: "approval_required",
     requestId: "r-2",
+    scopes: FIXED,
     actionCardMessageId: "card-r-2",
   });
   expect(posted).toEqual(["r-2"]);

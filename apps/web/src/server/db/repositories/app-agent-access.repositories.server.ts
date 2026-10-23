@@ -1,3 +1,4 @@
+import { APP_GRANT_AGENT_CARD_KIND } from "@lrm/coforge-sdk/agent";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { grantCovers, type AgentAppGrantSource } from "#src/features/apps/agent-app-access";
 import { toAgentAccessMode } from "#src/features/apps/agent-access-scope";
@@ -313,6 +314,34 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       if (isUniqueViolation(error)) return undefined;
       throw error;
     }
+  }
+
+  extendRequest(input: { requestId: string; scopes: string[] }) {
+    return this.db.$transaction(async (tx) => {
+      // The row lock makes concurrent extensions take turns, so none drops another's scope.
+      const [row] = await tx.$queryRaw<{ scopes: string[] }[]>`
+        SELECT "scopes" FROM "app_agent_access_requests"
+        WHERE "id" = ${input.requestId}::uuid AND "status" = 'pending' FOR UPDATE`;
+      if (!row) return undefined;
+      const wanted = new Set([...row.scopes, ...input.scopes]);
+      const scopes = APP_SCOPES.filter((scope) => wanted.has(scope));
+      await tx.appAgentAccessRequest.update({ where: { id: input.requestId }, data: { scopes } });
+      // The approval card shows what the request asks for.
+      const card = await tx.actionCard.findFirst({
+        where: {
+          kind: APP_GRANT_AGENT_CARD_KIND,
+          state: "pending",
+          payload: { path: ["requestId"], equals: input.requestId },
+        },
+        select: { messageId: true, payload: true },
+      });
+      if (card && typeof card.payload === "object" && card.payload !== null)
+        await tx.actionCard.update({
+          where: { messageId: card.messageId },
+          data: { payload: { ...card.payload, scopes } },
+        });
+      return scopes;
+    });
   }
 
   approveRequest(input: { requestId: string; userId: string; grant: GrantInput }) {

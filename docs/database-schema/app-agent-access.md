@@ -9,7 +9,10 @@ may use an app (`decideAgentAccess`). Migration `20261020200000_app_agent_access
   a pending request instead of a new grant; only a person's approval (or grant) gives it back.
 - A grant's scopes are the app's fixed scopes (`openid`, `profile`, `identity`) and any others the
   app allows (`email`) that were asked for. A use asking for a scope the active grant lacks also
-  waits for approval, of the grant's scopes and the new one. A use is granted only the grant's
+  waits for approval, of the grant's scopes and the new one; a waiting request is widened (and its
+  card's scopes with it) when a later use asks for more. Approval adds the request's scopes to the
+  grant, never removing one. The approval card commits the scopes it displayed; if the request
+  was widened since, the commit is a CONFLICT (`app-grant-request-changed`) and the card is shown again. A use is granted only the grant's
   scopes the app still allows, so narrowing an app's `allowedScopes` applies to the next token.
 - Workspace owners and admins, and the Agent's creator while a member, grant, revoke, approve and
   deny (`canManageAgentAppAccess`, the `manageAgentAppAccess` capability). Every member who can see

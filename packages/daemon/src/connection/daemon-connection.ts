@@ -162,6 +162,7 @@ import type { AgentRuntimeProviderConfig } from "#src/code-agent/contract";
 import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
 import { parseAgentLaunchIdentity } from "./agent-launch-identity";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { agentAppCloudRequest } from "./agent-app-cloud-request";
 import { controlPayloadShape } from "./control-payload";
 import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
@@ -1797,14 +1798,12 @@ export class DaemonConnection implements DaemonConnectionClient {
   /** `coforge app list|token`, sent on as it is; the cloud's response is the Agent's answer. */
   async agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
     this.#assertConnected();
-    const { list, token } = agentApiRoutes.cloud.apps;
-    const isToken = request.operation === "token";
-    const path = isToken ? token.path(request.appKey) : list.path;
+    const { method, path, body } = agentAppCloudRequest(request);
     return fetch(this.#serverEndpoint(`Agent app ${request.operation}`, path), {
       decompress: false,
-      method: isToken ? token.method : list.method,
-      headers: agentHeaders(this.#agentKeys(agentApiKey), isToken),
-      ...(isToken ? { body: JSON.stringify({ target: request.target }) } : {}),
+      method,
+      headers: agentHeaders(this.#agentKeys(agentApiKey), body !== undefined),
+      ...(body === undefined ? {} : { body }),
     });
   }
 

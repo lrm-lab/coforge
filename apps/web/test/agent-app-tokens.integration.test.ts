@@ -113,7 +113,12 @@ test.skipIf(!db)(
       const waiting = await token(f, f.app.key);
       expect(waiting).toEqual({
         status: 200,
-        body: { ok: true, status: "approval_required", requestId: expect.any(String) },
+        body: {
+          ok: true,
+          status: "approval_required",
+          requestId: expect.any(String),
+          scopes: ["openid", "profile", "identity"],
+        },
       });
       expect((await list(f)).apps.find((app) => app.key === f.app.key)?.access).toBe(
         "pending_approval",
@@ -144,6 +149,7 @@ test.skipIf(!db)(
         ok: true,
         status: "approval_required",
         requestId: first.body.requestId,
+        scopes: ["openid", "profile", "identity"],
         actionCardMessageId: messageId,
       });
       expect(second.body).toEqual(first.body);
@@ -182,11 +188,11 @@ test.skipIf(!db)(
 
       expect(
         isAppErrorCode(
-          await refusal(f.cards.commitAppGrant(f.as("member"), messageId, f.access)),
+          await refusal(f.grantCards.commit(f.as("member"), messageId, f.access)),
           "ACCESS_DENIED",
         ),
       ).toBe(true);
-      await f.cards.commitAppGrant(f.as("creator"), messageId, f.access);
+      await f.grantCards.commit(f.as("creator"), messageId, f.access);
       expect(await db!.actionCard.findUniqueOrThrow({ where: { messageId } })).toMatchObject({
         state: "executed",
         result: { requestId: first.body.requestId },
@@ -216,7 +222,7 @@ test.skipIf(!db)(
 
       expect(
         isAppErrorCode(
-          await refusal(f.cards.denyAppGrant(f.as("member"), messageId, f.access)),
+          await refusal(f.grantCards.deny(f.as("member"), messageId, f.access)),
           "ACCESS_DENIED",
         ),
       ).toBe(true);
@@ -225,7 +231,7 @@ test.skipIf(!db)(
       expect(
         isAppErrorCode(await refusal(f.cards.cancel(adminActor, messageId)), "INVALID_INPUT"),
       ).toBe(true);
-      await f.cards.denyAppGrant(f.as("admin"), messageId, f.access);
+      await f.grantCards.deny(f.as("admin"), messageId, f.access);
       expect(await db!.actionCard.findUniqueOrThrow({ where: { messageId } })).toMatchObject({
         state: "cancelled",
       });
@@ -344,7 +350,7 @@ test.skipIf(!db)(
       // The card's own buttons now refuse: the request was decided.
       expect(
         isAppErrorCode(
-          await refusal(f.cards.commitAppGrant(f.as("owner"), denied.messageId, f.access)),
+          await refusal(f.grantCards.commit(f.as("owner"), denied.messageId, f.access)),
           "CONFLICT",
         ),
       ).toBe(true);

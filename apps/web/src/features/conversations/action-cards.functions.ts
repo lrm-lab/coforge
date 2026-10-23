@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-cards.server";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -71,12 +72,13 @@ export const commitChannelAddMemberActionCard = createServerFn({ method: "POST" 
 /** `app:grant_agent`: approving the card approves the Agent's request for the app. */
 export const commitAppGrantActionCard = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(messageIdInput)
+  .validator(messageIdInput.extend({ scopes: z.array(z.string().max(32)).max(8) }))
   .handler(async ({ data, context: { db, workspaceId, user } }) => {
-    await actionCards(db).commitAppGrant(
+    await new AppGrantActionCards(db).commit(
       { workspaceId, userId: user.id },
       data.messageId,
       createAppAgentAccess(db),
+      data.scopes,
     );
   });
 
@@ -85,7 +87,7 @@ export const denyAppGrantActionCard = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(messageIdInput)
   .handler(async ({ data, context: { db, workspaceId, user } }) => {
-    await actionCards(db).denyAppGrant(
+    await new AppGrantActionCards(db).deny(
       { workspaceId, userId: user.id },
       data.messageId,
       createAppAgentAccess(db),

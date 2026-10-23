@@ -1,5 +1,6 @@
 import type { AgentAppErrorCode, AgentAppErrorResponse } from "@lrm/coforge-sdk/agent";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { AppScopeNotAllowedError } from "#src/server/app-agent-access/access-rules.server";
 
 /** The HTTP status of each refusal the Agent app routes (`coforge app list|token`) answer. */
 const STATUS: Record<AgentAppErrorCode, number> = {
@@ -26,6 +27,11 @@ export function agentAppServiceRefusal(error: unknown): Response {
     return agentAppRefusal(
       "conflict",
       "Another use of this app changed the Agent's access at the same time.",
+    );
+  if (error instanceof AppScopeNotAllowedError)
+    return agentAppRefusal(
+      "invalid_input",
+      `The app does not allow the scope${error.scopes.length === 1 ? "" : "s"} ${error.scopes.join(", ")}: it is not among the scopes the app is allowed to ask for.`,
     );
   if (isAppErrorCode(error, "INVALID_INPUT"))
     return agentAppRefusal("invalid_input", "The app does not allow what was asked for.");

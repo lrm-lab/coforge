@@ -56,7 +56,7 @@ export async function settleAppGrantCard(
 /**
  * The approval card an Agent's use of an app posts when a person must approve it
  * (`app:grant_agent`): at most one per request, wherever it was posted. A person commits it to
- * approve the request and cancels it to deny it (`ActionCards.commitAppGrant`/`denyAppGrant`).
+ * approve the request and cancels it to deny it (`AppGrantActionCards.commit`/`deny`).
  */
 export class AppGrantCards {
   constructor(

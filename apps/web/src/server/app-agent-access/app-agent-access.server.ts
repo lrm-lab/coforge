@@ -7,6 +7,8 @@ import {
 import {
   agentGrantScopes,
   allowedGrantScopes,
+  APP_GRANT_REQUEST_CHANGED,
+  grantCovers,
   type AgentAppGrantSource,
 } from "#src/features/apps/agent-app-access";
 import type { WorkspaceMemberRole } from "#src/features/workspaces/workspace-roles";
@@ -158,6 +160,10 @@ export interface AppAgentAccessStore {
   /** Approves the pending request and gives `grant`, atomically; an active grant keeps its scopes
    * and gains the request's, never losing one. `false` when the request is no longer pending. */
   approveRequest(input: { requestId: string; userId: string; grant: GrantInput }): Promise<boolean>;
+  /** Adds `scopes` to the pending request and its approval card if one was posted, never dropping
+   * a scope a concurrent extension added: the request's scopes then; `undefined` when the request
+   * is no longer pending. */
+  extendRequest(input: { requestId: string; scopes: string[] }): Promise<string[] | undefined>;
   /** `false` when the request is no longer pending. */
   denyRequest(input: { agentId: string; requestId: string; userId: string }): Promise<boolean>;
 }
@@ -183,7 +189,7 @@ const RESOLVE_ATTEMPTS = 3;
 export class AppAgentAccess {
   constructor(
     private readonly store: AppAgentAccessStore,
-    /** Told once a request is decided, so browsers refresh its approval card. Best effort. */
+    /** Told once a request is decided or widened, so browsers refresh its approval card. Best effort. */
     private readonly requestDecided: (
       workspaceId: string,
       requestId: string,
@@ -289,13 +295,19 @@ export class AppAgentAccess {
   }
 
   /** Approves the request: the Agent gets a grant of its scopes the app still allows, added to
-   * an active grant it may have been given meanwhile. */
+   * an active grant it may have been given meanwhile. An approval that names the `scopes` it was
+   * shown (the approval card) is a CONFLICT once the request asks for others. */
   async approve(
     actor: AgentAppAccessActor,
-    input: { agentId: string; requestId: string },
+    input: { agentId: string; requestId: string; scopes?: readonly string[] },
   ): Promise<void> {
     await this.manageAgent(actor, input.agentId);
     const request = await this.pendingRequest(input.agentId, input.requestId);
+    if (
+      input.scopes &&
+      !(grantCovers(input.scopes, request.scopes) && grantCovers(request.scopes, input.scopes))
+    )
+      throw new AppError("CONFLICT", { errorId: APP_GRANT_REQUEST_CHANGED });
     const app = await this.installedApp(actor.workspaceId, request.appKey);
     const scopes = allowedGrantScopes(request.scopes, app.allowedScopes);
     const approved = await this.store.approveRequest({
@@ -363,13 +375,26 @@ export class AppAgentAccess {
       if (decision.kind === "not_installed") return { status: "not_installed" };
       if (decision.kind === "granted")
         return { status: "granted", scopes: decision.scopes, automatic: false };
-      if (decision.kind === "needs_approval" && decision.pendingRequestId)
+      if (decision.kind === "needs_approval" && decision.pendingRequestId) {
+        let scopes = decision.scopes;
+        if (decision.widened) {
+          const extended = await this.store.extendRequest({
+            requestId: decision.pendingRequestId,
+            scopes,
+          });
+          // The request was decided meanwhile: what the use gets now is decided again.
+          if (!extended) continue;
+          scopes = extended;
+          // Its approval card shows the scopes it asks for.
+          await this.decided(agent.workspaceId, decision.pendingRequestId);
+        }
         return {
           status: "pending",
           requestId: decision.pendingRequestId,
-          scopes: decision.scopes,
+          scopes,
           appName: app.name,
         };
+      }
       const target = { appId: app.id, agentId: agent.agentId, workspaceId: agent.workspaceId };
       if (decision.kind === "grant_automatically") {
         const created = await this.store.createAutomaticGrant({

@@ -6,6 +6,7 @@ import {
   AGENT_TOKEN_TTL_SECONDS,
   mintAgentAccessToken,
 } from "#src/server/authorization-server/issued-tokens.server";
+import { withFixedScopes } from "#src/features/apps/agent-app-access";
 import type { AppGrantCards } from "#src/server/conversations/app-grant-cards.server";
 import type { AppAgentAccess } from "./app-agent-access.server";
 
@@ -18,7 +19,13 @@ export type AppUsingAgent = { workspaceId: string; agentId: string };
 
 export type AgentAppTokenOutcome =
   | { status: "issued"; accessToken: string; expiresIn: number; audience: string; scope: string }
-  | { status: "approval_required"; requestId: string; actionCardMessageId?: string }
+  | {
+      status: "approval_required";
+      requestId: string;
+      actionCardMessageId?: string;
+      /** What the waiting request asks a person to grant. */
+      scopes: string[];
+    }
   | { status: "not_installed" }
   /** This server runs no authorization server, so it issues no tokens. */
   | { status: "unavailable" }
@@ -61,7 +68,7 @@ export class AgentAppUse {
   async token(
     agent: AppUsingAgent,
     appKey: string,
-    { target }: { target?: string } = {},
+    { target, scopes }: { target?: string; scopes?: string[] } = {},
   ): Promise<AgentAppTokenOutcome> {
     const issuer = this.ports.issuer();
     if (issuer.status !== "ready") return { status: "unavailable" };
@@ -69,9 +76,11 @@ export class AgentAppUse {
     // Settled at once, so a use that issues no token leaves no unhandled rejection behind.
     workspaceSlug.catch(() => {});
     for (let attempt = 0; attempt < DECIDE_ATTEMPTS; attempt++) {
-      const outcome = await this.ports.access.resolveAgentAccess(agent, appKey);
+      const outcome = await this.ports.access.resolveAgentAccess(agent, appKey, scopes);
       if (outcome.status === "not_installed") return outcome;
       if (outcome.status === "granted") {
+        // Asked for scopes: exactly those and the fixed ones, not everything the grant holds.
+        const issuedScopes = scopes ? withFixedScopes(scopes) : outcome.scopes;
         const accessToken = await mintAgentAccessToken(
           issuer,
           {
@@ -79,7 +88,7 @@ export class AgentAppUse {
             appKey,
             workspaceId: agent.workspaceId,
             workspaceSlug: await workspaceSlug,
-            scopes: outcome.scopes,
+            scopes: issuedScopes,
           },
           this.ports.now?.() ?? new Date(),
         );
@@ -88,7 +97,7 @@ export class AgentAppUse {
           accessToken,
           expiresIn: AGENT_TOKEN_TTL_SECONDS,
           audience: appKey,
-          scope: outcome.scopes.join(" "),
+          scope: issuedScopes.join(" "),
         };
       }
       const { requestId } = outcome;
@@ -111,6 +120,7 @@ export class AgentAppUse {
       return {
         status: "approval_required",
         requestId,
+        scopes: outcome.scopes,
         ...(actionCardMessageId ? { actionCardMessageId } : {}),
       };
     }

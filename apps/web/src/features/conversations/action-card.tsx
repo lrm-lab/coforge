@@ -11,6 +11,8 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "#src/components/base/buttons/button";
 import { Badge } from "#src/components/base/badges/badges";
 import { m } from "#src/paraglide/messages";
+import { isAppErrorCode } from "#src/lib/app-error";
+import { APP_GRANT_REQUEST_CHANGED } from "#src/features/apps/agent-app-access";
 import {
   cancelActionCard,
   commitChannelAddMemberActionCard,
@@ -92,10 +94,19 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     setApproving(true);
     setError("");
     try {
-      await approveAppGrant({ data: { messageId: view.messageId } });
+      await approveAppGrant({
+        data: {
+          messageId: view.messageId,
+          scopes: view.kind === "app:grant_agent" ? view.scopes : [],
+        },
+      });
       await refetch();
-    } catch {
-      setError(m.action_card_error());
+    } catch (cause) {
+      if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === APP_GRANT_REQUEST_CHANGED) {
+        // The request asks for other scopes than the card showed: show the card again.
+        await refetch().catch(() => {});
+        setError(m.app_card_request_changed());
+      } else setError(m.action_card_error());
     } finally {
       setApproving(false);
     }

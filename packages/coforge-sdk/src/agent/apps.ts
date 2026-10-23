@@ -4,6 +4,7 @@
  * Same `{ ok: false, errorCode, error }` error envelope as `app config`.
  */
 
+import { APP_SCOPES } from "#src/internal/app-scopes";
 import { isRecord } from "#src/internal/json-record";
 
 /** The Agent's access to an installed app: it has a grant (`granted`), its first use grants one
@@ -45,7 +46,16 @@ export type AgentAppListResponse = { ok: true; apps: AgentAppView[] };
  * a person must approve the Agent's use of the app. It carries no idempotency key: asking again is
  * harmless by construction, since an Agent has at most one waiting request per app, at most one
  * card per request, and one grant per app, and each token is a fresh five-minute one. */
-export type AgentAppTokenBody = { target?: string };
+export type AgentAppTokenBody = {
+  target?: string;
+  /** The Login with CoForge scopes the token is for (an action's `required_scopes`): unique, each
+   * one of `APP_SCOPES`. The token's `scope` is exactly these plus the fixed identity scopes, and
+   * a scope the Agent's grant lacks waits for a person's approval. Absent: the grant's scopes (an
+   * older CLI sends none). A server that predates the field ignores it, and a running daemon that
+   * predates it refuses the request as `request_invalid`: the CLI checks the issued `scope` covers
+   * what it asked for, and never retries without `scopes`. */
+  scopes?: string[];
+};
 export type AgentAppTokenRequest = AgentAppTokenBody & { appKey: string };
 /** One app request as the daemon's local proxy hands it on to the cloud. */
 export type AgentAppRequest =
@@ -70,6 +80,8 @@ export type AgentAppApprovalRequired = {
   status: "approval_required";
   requestId: string;
   actionCardMessageId?: string;
+  /** The scopes the waiting request asks a person to grant (absent from an older server). */
+  scopes?: string[];
 };
 
 export type AgentAppTokenResponse =
@@ -78,8 +90,8 @@ export type AgentAppTokenResponse =
   | { ok: true; status: "not_installed" };
 
 /** `app_tokens_unavailable`: this server runs no authorization server (Login with CoForge).
- * `request_invalid`: the body is not `{ target? }`. `target_invalid`: the approval card cannot be
- * posted to the target given. `not_found`, `conflict`, `invalid_input` and `access_denied` are the
+ * `request_invalid`: the body is not `{ target?, scopes? }`. `target_invalid`: the approval card
+ * cannot be posted to the target given. `not_found`, `conflict`, `invalid_input` and `access_denied` are the
  * server's own refusals of the use (the Agent is gone, or a concurrent use won a race, say). */
 export const AGENT_APP_ERROR_CODES = [
   "app_tokens_unavailable",
@@ -173,6 +185,9 @@ export function decodeAgentAppTokenResponse(value: unknown): AgentAppTokenRespon
         status: "approval_required",
         requestId: value.requestId,
         ...(value.actionCardMessageId ? { actionCardMessageId: value.actionCardMessageId } : {}),
+        ...(Array.isArray(value.scopes) && value.scopes.every(isFilled)
+          ? { scopes: value.scopes as string[] }
+          : {}),
       };
     if (value.status === "not_installed") return { ok: true, status: "not_installed" };
   }
@@ -182,13 +197,26 @@ export function decodeAgentAppTokenResponse(value: unknown): AgentAppTokenRespon
 /** The token request body, refusing anything outside the contract. */
 export function decodeAgentAppTokenBody(value: unknown): AgentAppTokenBody | undefined {
   if (!isRecord(value)) return undefined;
-  const { target, ...rest } = value;
+  const { target, scopes, ...rest } = value;
   if (
     Object.keys(rest).length > 0 ||
     !(target === undefined || (isFilled(target) && target.length <= 200))
   )
     return undefined;
-  return target === undefined ? {} : { target };
+  if (
+    scopes !== undefined &&
+    !(
+      Array.isArray(scopes) &&
+      scopes.length <= APP_SCOPES.length &&
+      new Set(scopes).size === scopes.length &&
+      scopes.every((scope) => (APP_SCOPES as readonly unknown[]).includes(scope))
+    )
+  )
+    return undefined;
+  return {
+    ...(target === undefined ? {} : { target }),
+    ...(scopes === undefined ? {} : { scopes: scopes as string[] }),
+  };
 }
 
 export function decodeAgentAppErrorResponse(value: unknown): AgentAppErrorResponse | undefined {

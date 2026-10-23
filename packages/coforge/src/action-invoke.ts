@@ -17,7 +17,11 @@ import {
 } from "./action-response";
 import type { AppInvokeInvocation } from "./app-actions";
 import type { AppClient } from "./app-client";
-import { APPROVAL_REQUIRED_EXIT_CODE, requestAppToken } from "./app-token-request";
+import {
+  APPROVAL_REQUIRED_EXIT_CODE,
+  uncoveredScopesMessage,
+  requestAppToken,
+} from "./app-token-request";
 import {
   clean,
   outcomeError,
@@ -148,7 +152,7 @@ function printPreflight(
       : `${[
           `Would send: ${request.method} ${url.href}`,
           ...(built.body ? [`Body: ${JSON.stringify(built.body)}`] : []),
-          `Token scopes needed: ${action.required_scopes.join(", ") || "none"}`,
+          `Token scopes requested: ${action.required_scopes.join(", ") || "none named (the token carries the grant's scopes)"}`,
           ...(keyHeader
             ? [`Idempotency key: generated at send time, in the ${keyHeader} header`]
             : []),
@@ -181,9 +185,17 @@ export async function runInvoke(
   const key = callKey(keyValue);
   const unsafe = action.idempotency !== "safe";
 
-  // The token is asked for only now: scopes are not yet part of the token request, so it carries
-  // the grant the Agent holds, not the action's `required_scopes`.
-  const answer = await requestAppToken(client, app.key, invocation.target);
+  // The token is asked for only now, for exactly the action's `required_scopes`; with none the
+  // request names no scopes and the token carries the grant's.
+  const scopes = action.required_scopes;
+  const answer = await requestAppToken(client, app.key, invocation.target, scopes, outputMode);
+  const uncovered = uncoveredScopesMessage(app.key, answer, scopes);
+  if (uncovered)
+    throw fail("TOKEN_SCOPE_MISSING", uncovered, {
+      effect: "none",
+      suggestedNextAction:
+        "Ask the server's operator to update CoForge, then run this command again.",
+    });
   if (answer.status === "not_installed")
     throw fail(
       "TOKEN_NOT_INSTALLED",

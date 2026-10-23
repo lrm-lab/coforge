@@ -11,6 +11,7 @@ import {
 import type { AuthorizationServerConfiguration } from "#src/server/authorization-server/configuration.server";
 import { publicJwks } from "#src/server/authorization-server/signing-keys.server";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
+import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-cards.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ISSUER, SIGNING_KEYS } from "./oidc-token-fixture";
 
@@ -114,6 +115,7 @@ export async function fixture(db: PrismaClient) {
     },
     access: createAppAgentAccess(db, { realtime: () => realtime }),
     cards: new ActionCards(db, undefined, realtime),
+    grantCards: new AppGrantActionCards(db),
     as: (role: Person) => ({ workspaceId: workspace.id, userId: people[role].id }),
     async cleanup() {
       for (const id of [workspace.id, elsewhere.id])

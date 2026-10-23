@@ -25,8 +25,13 @@ argument or log). The CLI reads the manifest afresh, validates the input, then a
   for a body; no cookies. Redirects are not followed (a 3xx is an error, so the token never goes
   elsewhere). `--timeout` (1 to 300 seconds, default 60) bounds the call, body included; the body
   is read up to 1 MiB.
-- Token scopes: the token request has no scope parameter yet, so the token carries the Agent's
-  grant for the app, not the action's `required_scopes`. The app must enforce its own scopes.
+- Token scopes: the token is asked for exactly the action's `required_scopes` (plus the fixed
+  `openid profile identity`), so it is narrower than the Agent's grant. A scope the grant lacks
+  waits for a person's approval like `app token`; one the app is not allowed is refused
+  (`INVALID_INPUT`). An action with no `required_scopes` sends `scopes: []`, so its token
+  carries only the fixed scopes (an older server ignores the field and answers more, which is not
+  a missing scope). A token whose `scope` lacks a requested scope (a server that predates scope
+  requests) fails with `TOKEN_SCOPE_MISSING` before anything is sent.
 - `key_required` actions: the CLI generates a UUID, sends it in the declared header and prints it
   (`idempotency_key` in `--json`). Repeat a call with `--idempotency-key <key>` so it runs at most
   once; the key also appears in the errors where a retry is sensible.
@@ -37,8 +42,9 @@ argument or log). The CLI reads the manifest afresh, validates the input, then a
 
 Error codes (the usual envelope, exit status 1 unless noted): `INPUT_INVALID` (with `details.problems`),
 `ACTION_NOT_FOUND`, `NO_HTTP_ACTIONS`, `APP_NOT_FOUND`, the manifest codes above,
-`TOKEN_APPROVAL_REQUIRED` (exit status 2, as `app token` does) and `TOKEN_NOT_INSTALLED` (nothing
-was sent) with the `app token` codes in [apps.md](apps.md#app-token), `APP_REJECTED` (other 4xx; the app's own
+`TOKEN_APPROVAL_REQUIRED` (exit status 2, as `app token` does) and `TOKEN_NOT_INSTALLED`, `TOKEN_SCOPE_MISSING` and `TOKEN_SCOPES_UNSUPPORTED` (a running Computer that
+predates scoped tokens: restart it with `coforge-computer restart`; the request is never retried
+without scopes) (nothing was sent) with the `app token` codes in [apps.md](apps.md#app-token), `APP_REJECTED` (other 4xx; the app's own
 `error`/`message` text, cleaned), `APP_UNAUTHORIZED` (401/403: check the app's installation and
 grants), `APP_UNAVAILABLE` (429/5xx; retryable, with `retry-after`), `APP_UNREACHABLE` (transport,
 timeout, redirect), `OUTPUT_INVALID` (not JSON, over 1 MiB, or against `output_schema`; the body

@@ -32,7 +32,7 @@ const parsed = parseAgentManifest({
       effect: "read",
       endpoint: { method: "GET", path: "/notes/{id}" },
       idempotency: "safe",
-      required_scopes: ["notes:read"],
+      required_scopes: ["email"],
       input_schema: {
         type: "object",
         properties: {
@@ -51,12 +51,20 @@ const parsed = parseAgentManifest({
       },
     },
     {
+      name: "notes.ping",
+      effect: "read",
+      endpoint: { method: "GET", path: "/ping" },
+      idempotency: "safe",
+      required_scopes: [],
+      input_schema: { type: "object", properties: {} },
+    },
+    {
       name: "notes.create",
       effect: "create",
       endpoint: { method: "POST", path: "/notes" },
       idempotency: "key_required",
       idempotency_header: "Idempotency-Key",
-      required_scopes: ["notes:write"],
+      required_scopes: ["profile"],
       input_schema: {
         type: "object",
         properties: { title: { type: "string", pattern: "^(a+)+$" }, tags: { type: "array" } },
@@ -107,8 +115,8 @@ async function call(
   const tokenCalls: unknown[] = [];
   const client: AppClient = {
     appList: async () => ({ ok: true, apps: [APP] }),
-    appToken: async (appKey, target) => {
-      tokenCalls.push({ appKey, target });
+    appToken: async (appKey, target, scopes) => {
+      tokenCalls.push({ appKey, target, scopes });
       return (
         extra.token ?? {
           ok: true,
@@ -117,7 +125,7 @@ async function call(
           token_type: "Bearer",
           expires_in: 300,
           audience: "client",
-          scope: "notes:read",
+          scope: "openid profile identity email",
         }
       );
     },
@@ -172,7 +180,9 @@ test("GET: path params are encoded, the rest is query, Bearer is sent, no redire
     ok: true,
     data: { app: "acme-notes", action: "notes.get", status: 200, result: { title: "T" } },
   });
-  expect(result.tokenCalls).toEqual([{ appKey: "acme-notes", target: undefined }]);
+  expect(result.tokenCalls).toEqual([
+    { appKey: "acme-notes", target: undefined, scopes: ["email"] },
+  ]);
 });
 
 test("text output pretty-prints the result", async () => {
@@ -322,7 +332,7 @@ test("--preflight prints the request and the scopes, asks for no token, sends no
   ]);
   expect(result.code).toBe(0);
   expect(result.stdout).toContain("Would send: POST https://notes.acme.example/api/notes");
-  expect(result.stdout).toContain("notes:write");
+  expect(result.stdout).toContain("profile");
   expect(result.stdout).toContain("Idempotency-Key");
   expect(seen).toHaveLength(0);
   expect(result.tokenCalls).toHaveLength(0);
@@ -338,8 +348,44 @@ test("--preflight prints the request and the scopes, asks for no token, sends no
   expect(JSON.parse(asJson.stdout).data).toMatchObject({
     preflight: true,
     request: { method: "GET", query: [] },
-    required_scopes: ["notes:read"],
+    required_scopes: ["email"],
   });
+});
+
+test("the token is asked for exactly the action's required_scopes; none named asks for none", async () => {
+  const read = await call(["invoke", "acme-notes", "notes.get", "--param", "id=1"]);
+  expect(read.tokenCalls).toEqual([{ appKey: "acme-notes", target: undefined, scopes: ["email"] }]);
+  // An action naming no scope asks for none: a token of the fixed scopes only. An older server
+  // ignores the field and answers more, which is not a missing scope.
+  const ping = await call(["invoke", "acme-notes", "notes.ping"]);
+  expect(ping.code).toBe(0);
+  expect(ping.tokenCalls).toEqual([{ appKey: "acme-notes", target: undefined, scopes: [] }]);
+  const create = await call(["invoke", "acme-notes", "notes.create", "--param", "title=x"]);
+  expect(create.tokenCalls).toEqual([
+    { appKey: "acme-notes", target: undefined, scopes: ["profile"] },
+  ]);
+});
+
+test("a token whose scope lacks what was asked (an older server) fails before anything is sent", async () => {
+  seen.length = 0;
+  const older = await call(
+    ["invoke", "acme-notes", "notes.get", "--param", "id=1", "--json"],
+    undefined,
+    {
+      token: {
+        ok: true,
+        status: "issued",
+        access_token: TOKEN,
+        token_type: "Bearer",
+        expires_in: 300,
+        audience: "client",
+        scope: "openid profile identity",
+      },
+    },
+  );
+  expect(errorCode(older)).toBe("TOKEN_SCOPE_MISSING");
+  expect(older.code).toBe(1);
+  expect(seen).toHaveLength(0);
 });
 
 test("unknown app, unknown action, and approval are CliErrors", async () => {
@@ -356,7 +402,7 @@ test("unknown app, unknown action, and approval are CliErrors", async () => {
   );
   expect(errorCode(pending)).toBe("TOKEN_APPROVAL_REQUIRED");
   expect(pending.code).toBe(2);
-  expect(pending.tokenCalls).toEqual([{ appKey: "acme-notes", target: "#ops" }]);
+  expect(pending.tokenCalls).toEqual([{ appKey: "acme-notes", target: "#ops", scopes: ["email"] }]);
   expect(seen).toHaveLength(0);
 });
 

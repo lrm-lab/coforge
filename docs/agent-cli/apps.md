@@ -82,7 +82,7 @@ Calling an action (`app invoke <app-key> <action>`) is in [app-invoke.md](app-in
 ## `app token`
 
 ```
-coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]
+coforge app token --app <key> [--scope <scope>]... [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]
 ```
 
 Gets a five-minute token for the app and runs `<program> <args>` with it. The program receives the
@@ -105,6 +105,13 @@ token by design; the CLI never prints it, nor puts it in an argument or variable
 - SIGTERM, SIGINT or SIGHUP to the CLI stops the group the same way, and the command exits 128 plus
   that signal's number.
 
+`--scope <scope>` (repeatable; `email`, `identity`, `openid` or `profile`) asks for a token of exactly
+those scopes and the fixed `openid profile identity`, instead of everything the Agent's grant
+holds. A scope the grant lacks waits for approval, which adds it to the grant; one the app is not
+allowed is refused (`INVALID_INPUT`). If the token's scope lacks one asked for (a server that
+predates this option) the command exits 1 and runs nothing; a running Computer that predates it
+refuses the request (`TOKEN_SCOPES_UNSUPPORTED`): restart it with `coforge-computer restart`.
+
 The token is an RFC 9068 JWT (`typ: at+jwt`): its audience is the app's key, its subject the Agent
 id, and `type: "agent"` tells the app it is an Agent's. The app verifies it with the issuer's JWKS.
 
@@ -120,10 +127,10 @@ An app not installed in the Workspace, or a built-in app, has no token: the comm
 | ------------------------ | ----------------------------------------------------------------------------- |
 | `APP_TOKENS_UNAVAILABLE` | The server runs no Login with CoForge authorization server.                   |
 | `TARGET_INVALID`         | The approval card cannot be posted to `--target`; the request still waits.     |
-| `REQUEST_INVALID`        | The request body was not `{ target? }`.                                       |
+| `REQUEST_INVALID`        | The request body was not `{ target?, scopes? }`.                              |
 | `NOT_FOUND`              | The calling Agent is no longer in its Workspace.                              |
 | `CONFLICT`               | A concurrent use changed the Agent's access twice; the CLI already asked again. |
-| `INVALID_INPUT`          | The app does not allow what was asked for.                                    |
+| `INVALID_INPUT`          | The app does not allow what was asked for; a scope it lacks is named.          |
 | `ACCESS_DENIED`          | The Agent may not use the app this way.                                       |
 
 ## `app config`
@@ -162,9 +169,10 @@ The `workspace-cleanup` Agent Manual topic says when to raise `threshold_bytes`.
 ## HTTP
 
 `GET /api/agent/v1/apps` answers `{ ok: true, apps }`. `POST /api/agent/v1/apps/{key}/token` takes
-`{ target? }` and answers `{ ok: true, status: "issued", access_token, token_type:
+`{ target?, scopes? }` (`scopes`: unique, each of `APP_SCOPES`; `[]` asks for the fixed scopes only; absent keeps the grant's) and answers `{ ok: true, status: "issued", access_token, token_type:
 "Bearer", expires_in: 300, audience, scope }`, `{ ok: true, status: "approval_required", requestId,
-actionCardMessageId? }` or `{ ok: true, status: "not_installed" }`; a refusal is `{ ok: false,
+scopes, actionCardMessageId? }` (`scopes`: what the waiting request asks for; a later use asking
+for more widens the waiting request and its card) or `{ ok: true, status: "not_installed" }`; a refusal is `{ ok: false,
 errorCode, error }`. It takes no idempotency key, since asking again is harmless by construction:
 an Agent has at most one grant and one waiting request per app, a request has at most one card, a
 card is never posted for a request already decided, and each token is a fresh five-minute one.

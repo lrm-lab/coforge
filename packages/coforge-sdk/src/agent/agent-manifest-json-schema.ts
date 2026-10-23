@@ -1,3 +1,4 @@
+import { APP_SCOPES } from "#src/internal/app-scopes";
 import {
   AGENT_MANIFEST_EFFECTS,
   AGENT_MANIFEST_KEYS as KEYS,
@@ -77,7 +78,7 @@ const action = {
       type: "array",
       maxItems: LIMITS.maxScopes,
       uniqueItems: true,
-      items: { type: "string", pattern: LIMITS.scopePattern.source },
+      items: { enum: [...APP_SCOPES] },
     },
     input_schema: { $ref: "#/$defs/schemaNode" },
     output_schema: { $ref: "#/$defs/schemaNode" },

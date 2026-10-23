@@ -17,7 +17,7 @@
       "effect": "read",
       "endpoint": { "method": "GET", "path": "/notes/{id}" },
       "idempotency": "safe",
-      "required_scopes": ["notes:read"],
+      "required_scopes": ["email"],
       "input_schema": {
         "type": "object",
         "properties": { "id": { "type": "string", "minLength": 1 } },
@@ -36,7 +36,7 @@
       "endpoint": { "method": "POST", "path": "/notes" },
       "idempotency": "key_required",
       "idempotency_header": "Idempotency-Key",
-      "required_scopes": ["notes:read", "notes:write"],
+      "required_scopes": ["email", "profile"],
       "input_schema": {
         "type": "object",
         "properties": { "title": { "type": "string", "maxLength": 200 } },

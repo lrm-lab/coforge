@@ -1,10 +1,15 @@
+import { APP_SCOPES } from "@lrm/coforge-sdk/internal/app-scopes";
 import type { AgentAppAccessState, AgentAppView } from "@lrm/coforge-sdk/agent";
 import type { AppClient } from "./app-client";
 import { runWithAppToken } from "./app-token-exec";
 import { parseInvokeArgs } from "./app-invoke-args";
 import { INPUT_MAX_BYTES, readCappedStdin } from "./action-input";
 import { runInvoke, type ActionInvokeIo } from "./action-invoke";
-import { APPROVAL_REQUIRED_EXIT_CODE, requestAppToken } from "./app-token-request";
+import {
+  APPROVAL_REQUIRED_EXIT_CODE,
+  uncoveredScopesMessage,
+  requestAppToken,
+} from "./app-token-request";
 import { runListActions, type AppInvokeInvocation } from "./app-actions";
 
 /** `coforge app list`: the Workspace's apps, and with `all` the built-in Agent Apps too. */
@@ -14,13 +19,15 @@ export type AppTokenInvocation = {
   command: "app-token";
   appKey: string;
   target?: string;
+  /** The Login with CoForge scopes asked for, repeatable `--scope`; none: the grant's. */
+  scopes?: string[];
   program: string;
   args: string[];
   timeoutSeconds: number;
 };
 
 const APP_USAGE =
-  "Usage: coforge app list [--all] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app invoke <app-key> <action> [--param key=value]... | [--data-json <object> | --data-file <path|->] [--preflight] [--idempotency-key <key>] [--target <target>] [--timeout <seconds>] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]";
+  "Usage: coforge app list [--all] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app invoke <app-key> <action> [--param key=value]... | [--data-json <object> | --data-file <path|->] [--preflight] [--idempotency-key <key>] [--target <target>] [--timeout <seconds>] [--json] | coforge app token --app <key> [--scope <scope>]... [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]";
 /** How long the program may run by default; `--timeout` takes 1 to 300 seconds, as the token
  * lives five minutes. */
 export const DEFAULT_APP_TOKEN_TIMEOUT_SECONDS = 60;
@@ -57,12 +64,17 @@ export function parseAppArgs(
   if (subcommand === "invoke") return parseInvokeArgs(rest, invalid, parseTimeout);
   if (subcommand !== "token") invalid(`Unknown app command ${subcommand ?? ""}`.trim());
   const values: Record<string, string> = {};
+  const scopes: string[] = [];
   for (let index = 0; index < options.length; index += 2) {
     const [option, value] = [options[index]!, options[index + 1]];
-    if (!["--app", "--target", "--timeout", "--exec"].includes(option))
+    if (!["--app", "--target", "--timeout", "--exec", "--scope"].includes(option))
       invalid(`Unexpected argument ${option}`);
     if (value === undefined || value === "") invalid(`${option} needs a value`);
-    values[option] = value;
+    if (option !== "--scope") values[option] = value;
+    else if (!(APP_SCOPES as readonly string[]).includes(value))
+      invalid(`--scope takes one of ${APP_SCOPES.join(", ")}, not "${value}"`);
+    else if (scopes.includes(value)) invalid(`--scope ${value} is given twice`);
+    else scopes.push(value);
   }
   const appKey = values["--app"]?.trim();
   if (!appKey) invalid("--app is required");
@@ -72,6 +84,7 @@ export function parseAppArgs(
     command: "app-token",
     appKey,
     ...(values["--target"] ? { target: values["--target"] } : {}),
+    ...(scopes.length > 0 ? { scopes } : {}),
     program,
     args: programArgs,
     timeoutSeconds: values["--timeout"]
@@ -106,7 +119,7 @@ function formatAppList(shown: readonly AgentAppView[], all: boolean): string {
   });
   if (!all) blocks.push("Built-in apps are hidden; run coforge app list --all to include them.");
   blocks.push(
-    "Call an app with: coforge app token --app <key> [--target <target>] --exec <program> -- <args>",
+    "Call an app with: coforge app token --app <key> [--scope <scope>]... [--target <target>] --exec <program> -- <args>",
   );
   return blocks.join("\n\n");
 }
@@ -155,7 +168,17 @@ export async function runAppCommand(
       readStdin: io.readStdin ?? (() => readCappedStdin()),
     });
   }
-  const answer = await requestAppToken(client, invocation.appKey, invocation.target);
+  const answer = await requestAppToken(
+    client,
+    invocation.appKey,
+    invocation.target,
+    invocation.scopes,
+  );
+  const uncovered = uncoveredScopesMessage(invocation.appKey, answer, invocation.scopes);
+  if (uncovered) {
+    io.stderr(`coforge: ${uncovered}\n`);
+    return 1;
+  }
   if (answer.status === "issued")
     return runWithAppToken({
       token: answer.access_token,

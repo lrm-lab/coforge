@@ -1,3 +1,4 @@
+import { APP_SCOPES } from "#src/internal/app-scopes";
 import { isRecord } from "#src/internal/json-record";
 import {
   checkEndpointPath,
@@ -150,8 +151,8 @@ function parseAction(
     report(at("required_scopes"), `at most ${LIMITS.maxScopes} scopes`);
   else {
     scopes.forEach((scope, index) => {
-      if (typeof scope !== "string" || !LIMITS.scopePattern.test(scope))
-        report(pointer(at("required_scopes"), index), "must be a scope string");
+      if (typeof scope !== "string" || !(APP_SCOPES as readonly string[]).includes(scope))
+        report(pointer(at("required_scopes"), index), `must be one of ${APP_SCOPES.join(", ")}`);
     });
     const strings = scopes.filter((scope): scope is string => typeof scope === "string");
     if (new Set(strings).size !== strings.length)

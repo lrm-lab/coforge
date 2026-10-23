@@ -196,6 +196,7 @@
   "app_card_denied_reason": "Only Workspace owners and admins, or the Agent's creator, can approve this.",
   "app_card_approving": "Approving…",
   "app_card_denying": "Denying…",
+  "app_card_request_changed": "The request changed; review it again.",
   "app_card_denied": "Denied",
   "apps_section_setup": "Installation setup",
   "apps_section_setup_description": "Tell installers where to connect an external account or configure your app.",

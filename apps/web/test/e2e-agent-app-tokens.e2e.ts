@@ -10,7 +10,7 @@ import { createAgentApiKey } from "#src/server/agents/agent-api-key.server";
 import { createAppAgentAccess } from "#src/server/app-agent-access/app-agent-access-composition.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { createDaemonApiKeyFactory } from "#src/server/auth/daemon-api-key.server";
-import { ActionCards } from "#src/server/conversations/action-cards.server";
+import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-cards.server";
 import { PrismaAgentApiKeyRepository } from "#src/server/db/repositories/agent-api-key.repositories.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
 
@@ -277,7 +277,7 @@ test("an Agent lists its apps, runs a program with a token, and waits for an app
   expect(cards).toHaveLength(1);
   expect(waiting.stderr).toContain(cards[0]!.messageId);
 
-  await new ActionCards(db).commitAppGrant(
+  await new AppGrantActionCards(db).commit(
     { workspaceId: workspace.id, userId: creator.id },
     cards[0]!.messageId,
     access,

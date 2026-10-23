@@ -97,7 +97,7 @@ The token is an RFC 9068 JWT access token signed with the issuer's current key (
 | `sub` | The Agent's id |
 | `type` | `agent` |
 | `workspace_id`, `workspace_slug` | The Agent's Workspace |
-| `scope` | The grant's scopes the app still allows, space-separated |
+| `scope` | The scopes asked for plus the fixed ones, or without a request the grant's scopes the app still allows, space-separated |
 | `iat`, `exp`, `jti` | Issued, expiry (`iat` + 300), and a unique id |
 
 An app verifies it like any RFC 9068 token: the signature against `<issuer>/jwks` by `kid`, `typ`

@@ -4,7 +4,6 @@ import {
   APP_GRANT_AGENT_CARD_KIND,
   validateActionCardAction,
   type ActionCardAction,
-  type ActionCardKind,
   type ResolvedActionCardPayload,
 } from "@lrm/coforge-sdk/agent";
 import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
@@ -21,6 +20,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { ActionCardError } from "./action-card-error.server";
 import { PublicChannels } from "./public-channels.server";
 import { ConversationHistory } from "./conversation-history.server";
+import { loadPendingActionCard } from "./pending-action-card.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import {
   createActionCardMessage,
@@ -38,10 +38,6 @@ import type {
   ActionCardView,
   ActionCardViewBase,
 } from "./action-card-view.server";
-import type {
-  AgentAppAccessActor as Actor,
-  AppAgentAccess,
-} from "#src/server/app-agent-access/app-agent-access.server";
 import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import { isAdminLike } from "#src/server/workspaces/member-role.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
@@ -327,36 +323,6 @@ export class ActionCards {
   }
 
   /**
-   * Require the Workspace, readable conversation, expected kind and pending state.
-   * After the real operation, commit/cancel conditionally update pending; resource uniqueness
-   * and addMembers skipDuplicates absorb races. This early check gives a friendly error.
-   */
-  private async loadPendingCard(
-    workspaceId: string,
-    actorUserId: string,
-    messageId: string,
-    kind: ActionCardKind,
-  ) {
-    const card = await this.db.actionCard.findUnique({
-      where: { messageId },
-      select: {
-        messageId: true,
-        conversationId: true,
-        workspaceId: true,
-        kind: true,
-        payload: true,
-        state: true,
-        preparedByAgent: { select: { ownerId: true } },
-      },
-    });
-    if (!card || card.workspaceId !== workspaceId) throw new AppError("NOT_FOUND");
-    await new ConversationHistory(this.db).authorize(workspaceId, actorUserId, card.conversationId);
-    if (card.kind !== kind) throw new AppError("INVALID_INPUT");
-    if (card.state !== "pending") throw new AppError("CONFLICT");
-    return card;
-  }
-
-  /**
    * Marks a card `executed` under the committing human's identity. Ordering: the caller always
    * executes the real operation (`PublicChannels.create`/`addMembers`, or `ManageAgents.create` in
    * `agents.functions.ts`) first, then calls this. The conditional `updateMany` is the final,
@@ -396,7 +362,8 @@ export class ActionCards {
       memberAgentIds: string[];
     },
   ): Promise<{ channelId: string }> {
-    const card = await this.loadPendingCard(
+    const card = await loadPendingActionCard(
+      this.db,
       principal.workspaceId,
       principal.actorUserId,
       input.messageId,
@@ -436,7 +403,8 @@ export class ActionCards {
     principal: { workspaceId: string; actorUserId: string },
     input: { messageId: string; channelId: string; userIds: string[]; agentIds: string[] },
   ): Promise<{ channelId: string; userIds: string[]; agentIds: string[] }> {
-    const card = await this.loadPendingCard(
+    const card = await loadPendingActionCard(
+      this.db,
       principal.workspaceId,
       principal.actorUserId,
       input.messageId,
@@ -469,7 +437,13 @@ export class ActionCards {
     messageId: string,
     computerId: string,
   ): Promise<void> {
-    const card = await this.loadPendingCard(workspaceId, actorUserId, messageId, "agent:create");
+    const card = await loadPendingActionCard(
+      this.db,
+      workspaceId,
+      actorUserId,
+      messageId,
+      "agent:create",
+    );
     // `requiredComputer` is a placement contract, not a UI hint: never fall back to another Computer.
     const required = (card.payload as { requiredComputerId?: string }).requiredComputerId;
     if (required && required !== computerId) throw new AppError("INVALID_INPUT");
@@ -489,39 +463,8 @@ export class ActionCards {
     await this.markExecuted(messageId, card.conversationId, actorUserId, { agentId });
   }
 
-  /** `app:grant_agent` commit: approves the request, as `AppAgentAccess.approve` authorizes. */
-  async commitAppGrant(
-    actor: Actor,
-    messageId: string,
-    access: Pick<AppAgentAccess, "approve">,
-  ): Promise<void> {
-    await access.approve(actor, (await this.loadAppGrantCard(actor, messageId)).payload);
-  }
-
-  /** `app:grant_agent` cancel: denies the request, as `AppAgentAccess.deny` authorizes. */
-  async denyAppGrant(
-    actor: Actor,
-    messageId: string,
-    access: Pick<AppAgentAccess, "deny">,
-  ): Promise<void> {
-    await access.deny(actor, (await this.loadAppGrantCard(actor, messageId)).payload);
-  }
-
-  private async loadAppGrantCard(actor: Actor, id: string) {
-    const card = await this.loadPendingCard(
-      actor.workspaceId,
-      actor.userId,
-      id,
-      APP_GRANT_AGENT_CARD_KIND,
-    );
-    return {
-      ...card,
-      payload: card.payload as ResolvedActionCardPayload & { type: "app:grant_agent" },
-    };
-  }
-
   /** Cancel: by the preparing Agent's owner (`Agent.ownerId`) or a Workspace owner/admin; an
-   * `app:grant_agent` card only by denying it (`denyAppGrant`). */
+   * `app:grant_agent` card only by denying it (`AppGrantActionCards.deny`). */
   async cancel(
     principal: { workspaceId: string; actorUserId: string },
     messageId: string,

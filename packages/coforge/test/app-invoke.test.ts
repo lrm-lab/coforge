@@ -31,7 +31,7 @@ const parsed = parseAgentManifest({
       effect: "read",
       endpoint: { method: "GET", path: "/notes/{id}" },
       idempotency: "safe",
-      required_scopes: ["notes:read"],
+      required_scopes: ["email"],
       input_schema: {
         type: "object",
         properties: { id: { type: "string" }, verbose: { type: "boolean" } },
@@ -44,7 +44,7 @@ const parsed = parseAgentManifest({
       endpoint: { method: "POST", path: "/notes" },
       idempotency: "key_required",
       idempotency_header: "Idempotency-Key",
-      required_scopes: ["notes:read", "notes:write"],
+      required_scopes: ["email", "profile"],
       input_schema: { type: "object", properties: { title: { type: "string" } }, required: [] },
     },
   ],
@@ -108,7 +108,7 @@ test("--list-actions prints each action, with untrusted text cleaned", async () 
   expect(result.urls).toEqual([MANIFEST_URL]);
   expect(result.stdout).toContain("notes.get");
   expect(result.stdout).toContain("read  GET /notes/{id}");
-  expect(result.stdout).toContain("notes:read, notes:write");
+  expect(result.stdout).toContain("email, profile");
   expect(result.stdout).toContain("id (string, required)");
   expect(result.stdout).toContain("verbose (boolean)");
   expect(result.stdout).toContain("key_required");

@@ -11,7 +11,7 @@ import { envelopeRequest } from "./proxy-request";
 /** `coforge app list|token`'s requests, through the daemon's local proxy. */
 export type AppClient = {
   appList(): Promise<AgentAppListResponse>;
-  appToken(appKey: string, target?: string): Promise<AgentAppTokenResponse>;
+  appToken(appKey: string, target?: string, scopes?: string[]): Promise<AgentAppTokenResponse>;
 };
 
 export function connectAppClient(context: string, proxyUrl: string): AppClient {
@@ -35,7 +35,7 @@ export function connectAppClient(context: string, proxyUrl: string): AppClient {
       ),
     // No idempotency key: asking again is harmless, since a waiting request (and its card) is
     // never made twice.
-    appToken: (appKey, target) =>
+    appToken: (appKey, target, scopes) =>
       envelopeRequest(
         endpoint,
         context,
@@ -43,7 +43,7 @@ export function connectAppClient(context: string, proxyUrl: string): AppClient {
         {
           method: token.method,
           path: token.path(appKey),
-          body: target ? { target } : {},
+          body: { ...(target ? { target } : {}), ...(scopes ? { scopes } : {}) },
         },
         decodeAgentAppTokenResponse,
         decodeAgentAppErrorResponse,

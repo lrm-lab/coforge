@@ -10,9 +10,17 @@ An `http_api` manifest lists its actions in `actions` (at most 64, names unique)
 | `endpoint`           | yes            | `{ "method": GET/POST/PUT/PATCH/DELETE, "path": "/..." }`              |
 | `idempotency`        | yes            | `safe`, `idempotent`, `key_required` or `non_idempotent`               |
 | `idempotency_header` | `key_required` | HTTP header name carrying the key; allowed only with `key_required`    |
-| `required_scopes`    | yes            | Unique, sorted scope strings (`^[A-Za-z0-9._:/-]{1,128}$`), at most 64 |
+| `required_scopes`    | yes            | Unique, sorted Login with CoForge scopes: any of `email`, `identity`, `openid`, `profile` |
 | `input_schema`       | yes            | Schema subset; root `type` is `object`                                 |
 | `output_schema`      | no             | Schema subset                                                          |
+
+## Scopes
+
+`required_scopes` are Login with CoForge scopes (the SDK's `APP_SCOPES`), not scopes the app
+invents; `openid`, `profile` and `identity` are fixed and every token has them. `coforge app
+invoke` asks for a token of exactly these scopes, so each must also be among the app's allowed
+scopes (else the token request is refused `INVALID_INPUT`, `app-scope-not-allowed`). What the app
+lets the Agent do with the token is the app's own business.
 
 ## Endpoint path
 

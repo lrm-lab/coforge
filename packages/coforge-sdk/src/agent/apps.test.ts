@@ -78,6 +78,8 @@ test("a token answer is a token, a wait for approval, or no such app", () => {
   expect(decodeAgentAppTokenResponse(waiting)).toEqual(waiting);
   const carded = { ...waiting, actionCardMessageId: "m-1" };
   expect(decodeAgentAppTokenResponse({ ...carded, extra: 1 })).toEqual(carded);
+  const naming = { ...waiting, scopes: ["email"] };
+  expect(decodeAgentAppTokenResponse(naming)).toEqual(naming);
   expect(decodeAgentAppTokenResponse({ ok: true, status: "not_installed" })).toEqual({
     ok: true,
     status: "not_installed",
@@ -86,8 +88,21 @@ test("a token answer is a token, a wait for approval, or no such app", () => {
     expect(() => decodeAgentAppTokenResponse(value)).toThrow();
 });
 
-test("a token request body holds at most a target, and nothing else", () => {
+test("a token request body holds at most a target and scopes, and nothing else", () => {
   expect(decodeAgentAppTokenBody({})).toEqual({});
+  expect(decodeAgentAppTokenBody({ scopes: ["email"] })).toEqual({ scopes: ["email"] });
+  expect(decodeAgentAppTokenBody({ target: "#ops", scopes: [] })).toEqual({
+    target: "#ops",
+    scopes: [],
+  });
+  for (const scopes of [
+    ["email", "email"],
+    ["notes:read"],
+    "email",
+    [1],
+    ["a", "b", "c", "d", "e"],
+  ])
+    expect(decodeAgentAppTokenBody({ scopes })).toBeUndefined();
   expect(decodeAgentAppTokenBody({ target: "#ops" })).toEqual({ target: "#ops" });
   for (const value of [
     { target: "" },
