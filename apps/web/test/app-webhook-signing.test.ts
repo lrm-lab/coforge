@@ -35,6 +35,26 @@ test("a secret is derived from the key, the app and the generation, and is a Sta
   expect(() => new Webhook(first)).not.toThrow();
 });
 
+test("a secret is still derived after an unrelated EC key import failed on the same thread", async () => {
+  const { publicKey } = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"],
+  );
+  const jwk = await crypto.subtle.exportKey("jwk", publicKey);
+  const { key_ops: _keyOps, ...pub } = jwk;
+  const invalid = { ...pub, d: Buffer.alloc(32).toString("base64url") };
+  const importing = crypto.subtle.importKey(
+    "jwk",
+    invalid,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"],
+  );
+  await expect(importing).rejects.toThrow();
+  expect(deriveWebhookSecret(KEY, APP, 1)).toStartWith("whsec_");
+});
+
 test("a derived secret is HMAC-SHA256 of a labelled message, so the key's other uses never collide", () => {
   const expected = createHmac("sha256", KEY).update(`coforge-app-webhook-v1:${APP}:1`).digest();
   expect(deriveWebhookSecret(KEY, APP, 1)).toBe(`whsec_${expected.toString("base64")}`);

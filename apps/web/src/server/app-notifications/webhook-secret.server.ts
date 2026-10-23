@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { readEnvSecret } from "#src/server/files/env-secret.server";
 import type { WebhookRow } from "./app-webhook-store";
 
@@ -59,10 +60,12 @@ const DERIVATION_CONTEXT = "coforge-app-webhook-v1";
  * cannot reveal it; rotation is the generation going up by one.
  */
 export function deriveWebhookSecret(key: string, appId: string, generation: number): string {
-  const digest = new Bun.CryptoHasher("sha256", key)
+  // `node:crypto`, not `Bun.CryptoHasher`: Bun 1.4.4's HMAC constructor throws an error a failed Web
+  // Crypto key import left on the thread's OpenSSL queue (`test/app-webhook-signing`).
+  const digest = createHmac("sha256", key)
     .update(`${DERIVATION_CONTEXT}:${appId}:${generation}`)
-    .digest();
-  return `whsec_${Buffer.from(digest).toString("base64")}`;
+    .digest("base64");
+  return `whsec_${digest}`;
 }
 
 type SecretGenerations = Pick<
