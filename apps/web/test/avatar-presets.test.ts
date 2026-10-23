@@ -53,7 +53,7 @@ describe("platform avatar presets", () => {
 
   test("only the cartoon people's pictures are person pictures", () => {
     expect(isPersonPicture("/avatars/person-2-1.webp")).toBeTrue();
-    expect(isPersonPicture("/agent-avatars/mascot-blue-3.webp")).toBeFalse();
+    expect(isPersonPicture("/agent-avatars/mascot-blue-4.webp")).toBeFalse();
     expect(isPersonPicture("/api/me/avatar?v=a")).toBeFalse();
     expect(isPersonPicture(null)).toBeFalse();
     expect(isPersonPicture(undefined)).toBeFalse();

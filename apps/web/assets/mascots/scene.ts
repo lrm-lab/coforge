@@ -1,11 +1,12 @@
 import { allocateBrows, browXml, type BrowRig } from "./brows.ts";
 import { argb } from "./color.ts";
 import { nextId, type SharedIds } from "./contract.ts";
+import { faceOrigin, facePlacement, MOUTH_OFFSET_KEPT, turn } from "./face.ts";
 import { fitFor, OUTLINE } from "./fit.ts";
 import { LOOK_REACH, lookBinds } from "./look.ts";
 import { mouthXml, type MouthLine, type MouthRig } from "./mouth.ts";
 import type { Accessory, MascotSpec, Paint, Part } from "./spec.ts";
-import { fmt, pathBounds, pointsPathsXml, sub, type Point } from "./svg-path.ts";
+import { add, fmt, pathBounds, pointsPathsXml, sub, type Point } from "./svg-path.ts";
 import { allocateThought, thoughtXml, type ThoughtRig } from "./thought.ts";
 
 /** Bottom centre of the picture: the mascot squashes, tilts and bobs around it. */
@@ -175,15 +176,23 @@ function bounds(parts: Part[]): { minX: number; minY: number; maxX: number; maxY
   };
 }
 
-/** The idle mouth's line: centred on the mascot's own mouth, tilted half as much as the eyes, as
- * wide as that mouth allows. */
-function mouthLine(spec: MascotSpec, face: Point): MouthLine {
+/** The line mouth: at the height of the mascot's own mouth and most of the way across under the
+ * eyes (an idle mouth drawn off to one side keeps a hint of it; a line there would tip the face
+ * toward that side), tilted on screen half as much as the levelled eyes, as wide as that mouth
+ * allows. The mouth node turns by `rotation` (`face.ts`), so the line's own slope takes that turn
+ * back out. */
+function mouthLine(spec: MascotSpec, face: Point, rotation: number): MouthLine {
   const { l, r } = spec.eyes;
   const mb = bounds(spec.mouth);
+  const eyes = Math.tan(Math.atan2(r[1] - l[1], r[0] - l[0]) + rotation);
+  const screen = Math.max(-0.15, Math.min(0, eyes * 0.5));
   return {
-    centre: [(mb.minX + mb.maxX) / 2 - face[0], (mb.minY + mb.maxY) / 2 - face[1]],
+    centre: [
+      ((mb.minX + mb.maxX) / 2 - face[0]) * MOUTH_OFFSET_KEPT,
+      (mb.minY + mb.maxY) / 2 - face[1],
+    ],
     halfWidth: Math.max(1.1, Math.min(1.7, (mb.maxX - mb.minX) * 0.3)),
-    slope: Math.max(-0.15, Math.min(0, ((r[1] - l[1]) / (r[0] - l[0])) * 0.5)),
+    slope: Math.tan(Math.atan(screen) - rotation),
     poses: {
       // "Hmm": a short curve pulled toward the bubble, its far end up.
       thinking: { mid: -0.3, shrink: 0.6, shift: 0.5, tilt: -0.25 },
@@ -202,8 +211,10 @@ export interface BuiltScene {
 
 export function buildScene(spec: MascotSpec, shared: SharedIds): BuiltScene {
   const { l, r } = spec.eyes;
-  const face: Point = [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2 + 1.5];
-  const mouth = mouthXml(spec.mouth, face, mouthLine(spec, face));
+  // The face is drawn around `face` and placed on the body re-centred and levelled (`face.ts`).
+  const face = faceOrigin(spec);
+  const place = facePlacement(spec);
+  const mouth = mouthXml(spec.mouth, face, mouthLine(spec, face, place.rotation));
   // The whole figure is placed once (`fit.ts`); everything inside keeps source coordinates.
   const fit = fitFor(spec);
   const rig: Rig = {
@@ -220,12 +231,12 @@ export function buildScene(spec: MascotSpec, shared: SharedIds): BuiltScene {
     mouth: mouth.rig,
     thought: allocateThought(),
     sweat: spec.sweat ? nextId() : undefined,
-    sweatAt: spec.sweat ? sub(spec.sweat, face) : [0, 0],
+    sweatAt: spec.sweat ? turn(sub(spec.sweat, face), place.rotation) : [0, 0],
     accessories: [],
     tints: [],
-    eyeL0: sub(l, face),
-    eyeR0: sub(r, face),
-    faceAt: sub(face, PIVOT),
+    eyeL0: turn(sub(l, face), place.rotation),
+    eyeR0: turn(sub(r, face), place.rotation),
+    faceAt: add(sub(face, PIVOT), place.shift),
     converters: [],
   };
   // The look binds sit on nodes no animation keys, so they compose with every activity and with
@@ -269,7 +280,7 @@ ${browXml(rig.brows, "R", rig.eyeR0, spec.browColor)}
 </Node>
 ${eyeXml(spec, "L", rig.eyeL0, rig.eyeL, rig.pupilL, rig.closedL, eyeLook.binds)}
 ${eyeXml(spec, "R", rig.eyeR0, rig.eyeR, rig.pupilR, rig.closedR, eyeLookR.binds)}
-<Node name="Mouth">
+<Node rotation="${fmt(place.rotation)}" name="Mouth">
 ${mouth.xml}
 </Node>
 </Node>

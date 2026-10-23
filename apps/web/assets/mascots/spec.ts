@@ -122,16 +122,24 @@ export function loadSpec(id: MascotId): MascotSpec {
         dots: { side: "left", color: "#7F4FD6" },
       };
     case "green": {
-      const sparkle = (i: number, name: string): Accessory => ({
+      const sparkle = (i: number, name: string, pose?: Accessory["pose"]): Accessory => ({
         name,
         parts: [fillPart(at(i))],
         pivot: centre(at(i).attrs.d ?? ""),
         hover: { wiggle: 0, pulse: 0.3 },
+        pose,
       });
       return {
         ...base,
         body: { d: at(1).attrs.d ?? "", fill: "#62E28F" },
-        front: [sparkle(9, "Sparkle left"), sparkle(10, "Sparkle top")],
+        // The top sparkle steps right, beside the raised or worried right brow rather than on it.
+        front: [
+          sparkle(9, "Sparkle left"),
+          sparkle(10, "Sparkle top", {
+            thinking: { dx: 2, dy: 0.7, rotation: 0 },
+            error: { dx: 1.8, dy: 0.6, rotation: 0 },
+          }),
+        ],
         eyes: {
           l: [14.104, 10.04],
           r: [17.571, 9.346],
@@ -214,7 +222,8 @@ export function loadSpec(id: MascotId): MascotSpec {
             paints: [{ fill: "#FFFFFF" }, strokePart(at(6)).paints[0] as Paint],
           },
         ],
-        sweat: [19.9, 8.2],
+        // Clear of the widened right eye even when it looks right.
+        sweat: [20.3, 7.8],
         dots: { side: "left", color: "#D6335A" },
       };
   }

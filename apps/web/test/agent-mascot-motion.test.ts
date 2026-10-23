@@ -16,7 +16,7 @@ import {
   mascotStaticUrl,
 } from "#src/features/agents/mascot-contract";
 
-// Frank, 2026-10-24: a mascot animates what its Agent is doing. The Rive file is driven by the
+// Frank, 2026-10-23: a mascot animates what its Agent is doing. The Rive file is driven by the
 // five `activity` values its designer named; the presented state (`agentDisplay`) says which.
 test("a presented state picks the mascot's activity, and nothing known is idle", () => {
   const of = (activityKind: "online" | "working" | "thinking" | "error" | "offline") =>

@@ -9,7 +9,7 @@ export type MascotId = (typeof MASCOT_IDS)[number];
 
 /** Version of the still avatars (`mascot-<color>-<n>.webp`). A changed picture ships under a new
  * file name because browsers cache by URL: bump it and rebuild with `bun run build:mascots`. */
-export const STATIC_VERSION = 3;
+export const STATIC_VERSION = 4;
 
 const PICTURE_DIR = "/agent-avatars/";
 

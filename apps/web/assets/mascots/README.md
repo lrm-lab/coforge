@@ -64,15 +64,21 @@ auto-bind: it creates a new `Mascot` view model instance for each canvas (`autoB
   figure's size and place are the same in every activity (each loop starts and ends at rest), so
   a change of activity only reshapes the face, poses an accessory, mutes the colours or fades the
   bubble or sweat drop in and out.
+- At rest a mascot looks at the viewer (Frank, 2026-10-23): the source faces sit high on the
+  right of each body and tilt up toward that corner, so the scene moves the whole face across to
+  the middle of the body's round mass and a little down, short of any front accessory it would
+  crowd, and turns it most of the way level (`face.ts`). Every line mouth sits under the eyes.
+  Only thinking glances up, a little, toward its bubble.
 - Idle: both eyes open round, blinks at uneven gaps (2.2 s, 4.5 s, a quick double, 3.5 s over a
-  12 s loop), a faint float. Thinking ("pondering"): a small white-edged thought bubble inside
-  the avatar's circle, above the head and a little right (`thought.ts`; the build fails if it
-  leaves the circle), three neutral dark-grey dots lighting in turn every 2 s, one trail circle
-  toward the head; the eyes look up and wander slowly, the right brow arches, the mouth is a
+  12 s loop), a faint float. Thinking ("pondering"): a small white-edged thought bubble within
+  the avatar's box, above the head and a little right (`thought.ts`; the build fails if it
+  leaves the circle inscribed in the box, though no circle is drawn), three neutral dark-grey dots lighting in turn every 2 s, one trail circle
+  toward the head; the eyes glance up a little and wander slowly, the right brow arches, the mouth is a
   short tilted "hmm", the head tips toward the bubble and back. Working: squinted eyes scan two
   "lines" left to right with a quick return, a slight lean and one small nod per pass (no
   bouncing). Error: wider eyes, worried brows, a lowered frown, a slow sway; pink's shades slip
-  down the head and askew off the brows and a sweat drop shows. Offline: closed eyes, muted
+  down the head and askew off the brows and a sweat drop shows; green's top sparkle steps right,
+  off the raised or worried brow, in thinking and error. Offline: closed eyes, muted
   colours, slow breathing. The busy states blink now and then too.
 - The mouth morphs (`mouth.ts`): one set of shapes whose vertices every activity keys. Idle is
   the mascot's own mouth; every other activity reshapes it into a small line (its middle raised
@@ -81,8 +87,10 @@ auto-bind: it creates a new `Mascot` view model instance for each canvas (`autoB
   onto the line and fade.
 - The look is not a state machine layer: data binds drive nodes no animation keys, so the look
   composes with every activity, blink and hover pose. The pupil nodes (`Pupil L` / `Pupil R`,
-  inside the eyes) take `lookX` x 1.0 and `lookY` x 0.65 source units, a `Brows look` node 0.6
-  and 0.5, and a `Face look` node wrapping the face (brows, eyes, mouth) 0.3 on both. Each bind
+  inside the eyes) take `lookX` x 0.65 and `lookY` x 0.4 source units, a `Brows look` node 0.4
+  and 0.28, and a `Face look` node wrapping the face (brows, eyes, mouth) 0.25 and 0.16, so the
+  eyes move about 0.8 artboard units across and 0.5 up and down: a glance that reads at 24 px and
+  never pins them to a corner. The app sends the full range (`lookToward`); only this file scales it. Each bind
   owns a `DataConverterGroup` of a 0.2 s `DataConverterInterpolator` (the smoothing) and a
   clamped `DataConverterRangeMapper` (the reach), so the app writes raw values and never
   animates. Closed eyes (offline) stay shut: only the face moves with the look. `look.ts` holds
@@ -103,10 +111,11 @@ auto-bind: it creates a new `Mascot` view model instance for each canvas (`autoB
 | `spec.ts`, `svg-source.ts`, `svg-path.ts` | Per-mascot design data read from `svg/`; SVG path to Rive vertices |
 | `scene.ts`                                | Node tree of one artboard and the `Rig` of animatable objects      |
 | `fit.ts`                                  | The common scale and place of each outlined figure in its artboard |
+| `face.ts`                                 | Where the face sits on the body: re-centred and levelled           |
 | `mouth.ts`                                | The mouth's shapes and each activity's vertex pose (the morph)     |
 | `color.ts`                                | Source colours as Rive `AARRGGBB`; the offline tint                |
 | `brows.ts`                                | The brows' strokes and each activity's vertex pose                 |
-| `thought.ts`                              | The thinking bubble and its dots, inside the web's circle          |
+| `thought.ts`                              | The thinking bubble and its dots, within the avatar's box          |
 | `look.ts`                                 | The `lookX` / `lookY` data binds, their converters and reach       |
 | `timeline.ts`, `activity.ts`, `hover.ts`  | Keyframes: the five activities, the three hover poses              |
 | `machine.ts`                              | The two state machine layers and their transitions                 |

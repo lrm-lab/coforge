@@ -146,22 +146,28 @@ export function cubicAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): 
   ];
 }
 
-/** Bounds of everything `d` draws, curves included (sampled), unlike `pathBounds`. */
-export function pathExtent(d: string): { minX: number; minY: number; maxX: number; maxY: number } {
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (const s of parseSvgPath(d)) {
+/** Points along everything `d` draws, curves included (each segment sampled `steps` times), one
+ * list per subpath. */
+export function pathOutline(d: string, steps = 16): Point[][] {
+  return parseSvgPath(d).map((s) => {
+    const points: Point[] = [];
     const n = s.vertices.length;
     for (let i = 0; i < (s.closed ? n : n - 1); i++) {
       const a = s.vertices[i] as Vertex;
       const b = s.vertices[(i + 1) % n] as Vertex;
-      for (let k = 0; k <= 16; k++) {
-        const [x, y] = cubicAt(a.p, a.outHandle ?? a.p, b.inHandle ?? b.p, b.p, k / 16);
-        xs.push(x);
-        ys.push(y);
+      for (let k = 0; k <= steps; k++) {
+        points.push(cubicAt(a.p, a.outHandle ?? a.p, b.inHandle ?? b.p, b.p, k / steps));
       }
     }
-  }
+    return points;
+  });
+}
+
+/** Bounds of everything `d` draws, curves included (sampled), unlike `pathBounds`. */
+export function pathExtent(d: string): { minX: number; minY: number; maxX: number; maxY: number } {
+  const points = pathOutline(d).flat();
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
   return {
     minX: Math.min(...xs),
     minY: Math.min(...ys),

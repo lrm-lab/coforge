@@ -39,7 +39,7 @@ const POSES: Record<MascotActivity, Pose> = {
     offline: false,
   },
   thinking: {
-    eye: { dx: 0.15, dy: -0.6, sx: 1, sy: 1 },
+    eye: { dx: 0.1, dy: -0.4, sx: 1, sy: 1 },
     pupil: 1,
     closed: 0,
     offline: false,

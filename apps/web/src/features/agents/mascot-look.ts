@@ -12,7 +12,7 @@ export interface MascotLook {
 export const STRAIGHT_AHEAD: MascotLook = { x: 0, y: 0 };
 
 /** The pointer distance, in CSS pixels, at which the eyes are fully turned. */
-export const LOOK_FULL_DISTANCE_PX = 300;
+export const LOOK_FULL_DISTANCE_PX = 350;
 
 /**
  * The look for a pointer `dx` / `dy` pixels from the mascot's centre. It points the way the

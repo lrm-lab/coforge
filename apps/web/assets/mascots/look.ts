@@ -3,14 +3,14 @@ import { fmt } from "./svg-path.ts";
 
 /**
  * How far a full deflection (`lookX` / `lookY` = +-1) moves things, in source units (the mascot is
- * drawn at 0.87 of them): the eyes by up to about one unit across and less up and down, so a
- * worried pupil never runs into its brow or the mouth; the brows rise and fall with the eyes by a
- * little less; the whole face a fraction of that.
+ * drawn at 0.87 of them). A gentle glance: the eyes ride on the face, so together they move about
+ * 0.8 artboard units across and 0.5 up and down, enough to read at 24 px and never pinned to a
+ * corner; the brows (also on the face) a little less than the eyes; the whole face a fraction.
  */
 export const LOOK_REACH = {
-  eye: { x: 1, y: 0.65 },
-  brow: { x: 0.6, y: 0.5 },
-  face: { x: 0.3, y: 0.3 },
+  eye: { x: 0.65, y: 0.4 },
+  brow: { x: 0.4, y: 0.28 },
+  face: { x: 0.25, y: 0.16 },
 } as const;
 
 /** The time a look takes to settle after the app writes a new one, seconds. */

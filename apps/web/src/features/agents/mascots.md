@@ -15,9 +15,9 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   (`mascot-rive.tsx`, the only `@rive-app/*` importer); anything else stays the still picture. A
   moving mascot's eyes follow the cursor (below). Names: `mascot-contract.ts` and
   `mascot-rive-contract.ts`, shared with the generator (`assets/mascots/README.md`).
-- Every Agent mascot and every cartoon person is a sticker (Frank's references, 2026-10-23, and
-  2026-10-24 for people): `AvatarSticker` (`features/avatars/avatar-sticker.tsx`) is the one markup
-  for it, the bare white-edged figure with no circle or fill behind it (Frank, 2026-10-24) at every
+- Every Agent mascot and every cartoon person is a sticker (Frank's references, 2026-10-23, for
+  mascots and people): `AvatarSticker` (`features/avatars/avatar-sticker.tsx`) is the one markup
+  for it, the bare white-edged figure with no circle or fill behind it (Frank, 2026-10-23) at every
   size, drawn at 110% of the avatar's box, unclipped, so it passes the box by only a few percent
   (`.avatar-sticker`, `.avatar-sticker-figure` in `styles.css`), with the status dot slot (a quarter
   of the avatar, at its bottom-right with the page-coloured ring). A picture that cannot load
@@ -51,10 +51,11 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   sentence is plain text, not a live region; only the overflow count (`agent_busy_others`) is a
   message, the labels are not localized.
 - A moving mascot's eyes follow the cursor. `mascot-look.ts` (pure) maps the pointer's offset from
-  the canvas centre to `lookX` / `lookY` in [-1, 1] (full deflection at 300 px, flattening toward
+  the canvas centre to `lookX` / `lookY` in [-1, 1] (full deflection at 350 px, flattening toward
   it), and `mascot-look-tracker.ts` is the one passive document `pointermove` listener every
   moving canvas shares: at most one pass per animation frame, writing the numbers straight into
   each instance's view model (never React state). The eyes ease back when the pointer leaves the
   window or the window blurs; touch pointers and `(hover: none)` devices never feed it. The file
-  owns how far and how fast the eyes move; a mascot under a still pointer looks again at the next
+  owns how far and how fast the eyes move (a gentle glance that never pins them to a corner,
+  `assets/mascots/look.ts`); a mascot under a still pointer looks again at the next
   pointer move (scrolling does not).
