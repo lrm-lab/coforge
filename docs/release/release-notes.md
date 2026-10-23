@@ -13,18 +13,34 @@ there is no editor page. Each publication needs both languages:
 - English (`en`) and Simplified Chinese (`zh-CN`), each Markdown.
 - Written for the people who use the Computer: what changed for them, what
   they should do, what got fixed. Not a list of commit subjects, PR numbers,
-  or internal module names.
-- Only `coforge-computer` and `coforge-daemon` changes. The Web, backend,
-  cloud, and other components are not installed by the Computer and never
-  appear in the notes.
+  task numbers, or internal module names.
+- Never name another product the work was compared with or modelled on, or
+  describe a change as matching, following, or aligning with one ("aligned
+  with …", "parity with …", "like the reference client", 对齐、对标、参考).
+  Describe the effect a user sees instead: "Agents recover their thread after
+  a restart more reliably", not "thread recovery aligned with the reference".
+- Only `coforge-computer` and `coforge-daemon` changes, including the shared
+  packages they bundle such as `packages/agent`. The Web, backend, cloud, and
+  other components are not installed by the Computer and never appear in the
+  notes. Leave out test-only and refactoring commits that change nothing a
+  user sees.
 - At most 16000 characters per language after trimming surrounding
   whitespace, counted as JavaScript string length (UTF-16 code units). A
   blank language is refused.
+- Check both language versions against these points before dispatching.
 
 Notes describe what changed since the previous production version. A dev
 build's notes therefore cover its whole release line so far, not just the
 builds since the previous dev build, and the production version that ships the
-line can reuse them unchanged.
+line can reuse them unchanged. Start from the commits in that range:
+
+```sh
+prod=$(curl -s https://releases.coforge.cn/latest)
+from=$(curl -s "https://releases.coforge.cn/$prod/manifest.json" | jq -r .commit)
+git log "$from..<candidate commit>" -- packages/computer packages/daemon packages/agent
+```
+
+Add any other shared package whose change alters what the Computer does.
 
 ## Release catalog
 
