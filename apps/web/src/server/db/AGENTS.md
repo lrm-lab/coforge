@@ -52,6 +52,7 @@ These rules apply to `src/server/db/`.
   private data out in the query itself and selecting only the projected columns. The projections
   and the bearer check stay in `server/app-installation-data/`.
 - `app-notification-subscribers.repositories.server.ts` reads the Workspace and the installations an app notification is for; the flag and fan-out stay in `server/app-notifications/`.
+- `app-webhook.repositories.server.ts` persists an app's webhook row and its installations' delivery statuses: a change locks the webhook row, bumps `revision` and deletes the statuses in one transaction, and an attempt's outcome is one conditional upsert that writes only while the webhook is still at the revision the attempt started with. Who may change it, the endpoint rules and the delivery policy stay in `server/app-notifications/`.
 - `app-notification-queue-schema.repositories.server.ts` asks whether pg-boss's `pgboss` schema exists (the only raw SQL on it); starting the queue stays in `server/app-notifications/`.
 - `oauth-authorization.repositories.server.ts` persists the authorization endpoint's rows: apps
   read as OIDC clients, the Workspaces a person may authorize an app in, consents and authorization

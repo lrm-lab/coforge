@@ -1,8 +1,8 @@
 # App notifications
 
-How CoForge tells the apps installed in a Workspace what happened in it. This slice is the durable
-outbox only: events are recorded and fanned out to installations. The signed HTTP delivery, retries,
-subscriptions and the app-editor UI are later slices. The code is
+How CoForge tells the apps installed in a Workspace what happened in it: events are recorded in a
+durable outbox, fanned out to installations and delivered to each app's signed webhook
+([HTTP delivery](#http-delivery)). Subscriptions and the app-editor UI are later slices. The code is
 `apps/web/src/server/app-notifications/`; the design is the approved "App Notifications" proposal
 (phase 2), which chose [pg-boss](https://github.com/timgit/pg-boss) (MIT, Bun supported) on
 2026-10-21 for delivery. pg-boss is a PostgreSQL claim/lease job queue, so it is the exception Frank
@@ -19,11 +19,12 @@ delivery) and is not a generic job API.
    fields. pg-boss writes it as a job in the `app-notification-event` queue through its
    `fromPrisma(tx)` adapter, so the job joins the transaction.
 2. The event worker (`event-worker.server.ts`) asks `subscribersOf(event)` for the installations
-   to notify: those of the event's Workspace, while the `app-notifications` flag is on for it. It
+   to notify: those of the event's Workspace whose app has an enabled webhook, while the
+   `app-notifications` flag is on for it. It
    inserts one job per installation into `app-notification-delivery`, with the job id
    `UUIDv5(eventId:installationId)`.
-3. The delivery handler is a **no-op stub** in this slice: delivery jobs complete without sending
-   anything. The flag is off everywhere until the next slice fills the handler.
+3. The delivery handler (`webhook-delivery.server.ts`) POSTs the event to the installation's app
+   webhook, or completes the job unsent ([HTTP delivery](#http-delivery)).
 
 Events recorded today: `workspace.member_added` with `data: { userId, role }`
 (`admitWorkspaceMember`). `AppNotificationEvent` is a discriminated union: each `type` is paired with
@@ -82,6 +83,17 @@ included). pg-boss uses its own pool (4 connections, built from the same pool se
 Prisma's). Rollback: stop the server, then `DROP SCHEMA pgboss CASCADE`; domain tables are
 untouched.
 
+## HTTP delivery
+
+An app's owner or admin enables a signed webhook (Standard Webhooks) by saving an endpoint. The
+delivery handler signs each event and POSTs it, retrying with backoff and stopping per installation
+on a 410 or when retries run out. Details are topic files:
+
+- [HTTP delivery](app-notifications/http-delivery.md): the request and its headers, who is
+  notified, the outcome of an attempt, statuses and revisions, the outbound egress.
+- [Webhook secret and endpoint](app-notifications/webhook-secret.md): the derived signing secret and
+  its rotation, `COFORGE_APP_WEBHOOK_KEY` (and rotating it), the endpoint rules.
+
 ## Retries
 
 Workers poll every 2 s (`APP_NOTIFICATION_POLLING_INTERVAL_SECONDS`).
@@ -91,7 +103,8 @@ Workers poll every 2 s (`APP_NOTIFICATION_POLLING_INTERVAL_SECONDS`).
 | `app-notification-event`   | 8 retries         | 5 s, doubling, at most 1 h       | default |
 | `app-notification-delivery`| 16 retries        | 5 s, doubling, at most 24 h      | 60 s    |
 
-The delivery schedule is the proposal's; it matters once the next slice sends over HTTP.
+The delivery schedule is the proposal's (`DELIVERY_QUEUE_OPTIONS`): pg-boss waits between 1x and 2x of
+`5 s * 2^n` after the n-th failed attempt, at most a day; 17 attempts in all, about 3.4 days.
 
 ## Feature flag
 
@@ -103,6 +116,9 @@ events are not recorded at all.
 
 `app-notifications.integration.test.ts` runs against real PostgreSQL
 (`APP_NOTIFICATIONS_TEST_DATABASE_URL`, and `DATABASE_URL` naming the same database, which
-`mise run test:integration:web` sets). `app-notifications-dark.integration.test.ts` creates and
+`mise run test:integration:web` sets). `app-webhook-delivery-{signing,failures,access,queue}.integration.test.ts`, sharing `test/helpers/app-webhook-delivery-fixture.ts` (same variables), drives signing, rotation, retries,
+410, exhaustion, the egress refusals, the flag and the key against a loopback receiver (the egress under test gets a public `resolve` and a `fetch` that forwards to it), and one
+event through pg-boss with a 503 first. The pure parts are in `app-webhook-signing.test.ts` and
+`outbound-egress.test.ts`. `app-notifications-dark.integration.test.ts` creates and
 migrates its own database to prove the dark, server start, flag reload, retry, shutdown and
 skip-and-log behaviour above.

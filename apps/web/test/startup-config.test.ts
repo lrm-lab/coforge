@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { AppWebhookConfigError } from "#src/server/app-notifications/webhook-secret.server";
 import { FileDeliveryConfigError } from "#src/server/files/file-delivery.server";
 import { FileStorageConfigError } from "#src/server/files/file-storage.server";
 import { PublicImageDeliveryConfigError } from "#src/server/files/public-image-delivery.server";
@@ -50,4 +51,16 @@ test("refuses to boot when the feature flag file is set but missing, naming the 
   const promise = assertStartupConfig({ COFORGE_FEATURE_FLAGS_FILE: "/nonexistent/flags.json" });
   await expect(promise).rejects.toThrow(FeatureFlagsConfigError);
   await expect(promise).rejects.toThrow(/COFORGE_FEATURE_FLAGS_FILE/);
+});
+
+test("refuses to boot when the app webhook key is set but too short, naming the variable", async () => {
+  const promise = assertStartupConfig({ COFORGE_APP_WEBHOOK_KEY: "short" });
+  await expect(promise).rejects.toThrow(AppWebhookConfigError);
+  await expect(promise).rejects.toThrow(/COFORGE_APP_WEBHOOK_KEY/);
+});
+
+test("boots with a valid app webhook key, and without one", async () => {
+  await expect(
+    assertStartupConfig({ COFORGE_APP_WEBHOOK_KEY: "k".repeat(64) }),
+  ).resolves.toBeUndefined();
 });

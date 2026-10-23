@@ -56,6 +56,7 @@ model App {
   consents         UserAppConsent[]
   agentGrants      AppAgentGrant[]
   agentAccessRequests AppAgentAccessRequest[]
+  webhook          AppWebhook?
 
   @@index([ownerWorkspaceId])
   @@index([createdByUserId])
@@ -93,6 +94,7 @@ model AppInstallation {
   installedBy       User?     @relation("AppInstallationInstalledBy", fields: [installedByUserId], references: [id], onDelete: SetNull)
   approvedBy        User?     @relation("AppInstallationApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   agents            AppInstallationAgent[]
+  webhookStatus     AppInstallationWebhookStatus?
 
   @@unique([appId, workspaceId])
   @@index([workspaceId])

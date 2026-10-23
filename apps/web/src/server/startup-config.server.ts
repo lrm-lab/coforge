@@ -1,4 +1,8 @@
 import {
+  readAppWebhookConfiguration,
+  rememberAppWebhookKey,
+} from "#src/server/app-notifications/webhook-secret.server";
+import {
   readAuthorizationServerConfiguration,
   rememberAuthorizationServerConfiguration,
 } from "#src/server/authorization-server/configuration.server";
@@ -27,7 +31,8 @@ import { readWeeklyReportScheduleTickMs } from "#src/server/records/weekly-repor
  * `COFORGE_OIDC_ISSUER` is valid; a set issuer that is not a usable URL, or comes without a
  * usable signing keyset, is a boot failure. Feature flags too: an unset
  * `COFORGE_FEATURE_FLAGS_FILE` leaves every flag off; a set path that is not a valid flag
- * definition file is a boot failure.
+ * definition file is a boot failure. App webhooks too: an unset `COFORGE_APP_WEBHOOK_KEY` leaves them
+ * off; a set key shorter than 32 characters is a boot failure.
  */
 export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const config = await readStartupConfig(env);
@@ -47,6 +52,7 @@ async function readStartupConfig(env: NodeJS.ProcessEnv) {
   const weeklyReportScheduleTickMs = readWeeklyReportScheduleTickMs(env);
   const authorizationServer = await readAuthorizationServerConfiguration(env);
   const featureFlags = await readFeatureFlagsConfiguration(env);
+  const appWebhook = await readAppWebhookConfiguration(env);
   return {
     delivery,
     imageDelivery,
@@ -54,12 +60,14 @@ async function readStartupConfig(env: NodeJS.ProcessEnv) {
     weeklyReportScheduleTickMs,
     authorizationServer,
     featureFlags,
+    appWebhook,
   };
 }
 
 async function installStartupConfig(config: Awaited<ReturnType<typeof readStartupConfig>>) {
   rememberFileDeliveryConfig(config.delivery);
   rememberAuthorizationServerConfiguration(config.authorizationServer);
+  rememberAppWebhookKey(config.appWebhook.status === "ready" ? config.appWebhook.key : undefined);
   await installFeatureFlags(config.featureFlags);
 }
 
@@ -72,5 +80,6 @@ function startupConfigSummary(config: Awaited<ReturnType<typeof readStartupConfi
     weekly_report_schedule_tick_ms: config.weeklyReportScheduleTickMs ?? null,
     authorization_server: config.authorizationServer.status === "ready" ? "configured" : "disabled",
     feature_flags: config.featureFlags.status,
+    app_webhook: config.appWebhook.status === "ready" ? "configured" : "disabled",
   };
 }

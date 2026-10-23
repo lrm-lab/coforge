@@ -1,0 +1,60 @@
+/// An app's signed webhook, the HTTP delivery of app notifications (`server/app-notifications/`):
+/// one row per app, kept after the webhook is disabled so its secret generation only ever goes up.
+/// The signing secret is not stored: it is derived from `COFORGE_APP_WEBHOOK_KEY`, the app's id and
+/// `secretGeneration` (`deriveWebhookSecret`).
+model AppWebhook {
+  appId                    String    @id @db.Uuid
+  /// Whether deliveries are made. Disabling removes the endpoint at once (`endpointUrl` null,
+  /// `app_webhooks_enabled_endpoint_check`) and the previous secret with it; enabling again starts a
+  /// new generation, so a secret shown before is never valid again.
+  enabled                  Boolean   @default(false)
+  /// Where deliveries are POSTed: https only, canonical, no user info or fragment, at most 2000
+  /// characters (`app_webhooks_endpoint_url_check`). Whether it resolves to a public
+  /// address is checked at save and again at every delivery.
+  endpointUrl              String?
+  /// The generation the signing secret is derived at: 0 before the first enable, then one more at
+  /// each enable and rotation.
+  secretGeneration         Int       @default(0)
+  /// The generation before the last rotation, which still signs beside the current one until
+  /// `previousSecretValidUntil` (24 hours); both null outside that overlap.
+  previousSecretGeneration Int?
+  previousSecretValidUntil DateTime?
+  /// One more each time the endpoint changes, the webhook is enabled or disabled, or the secret
+  /// rotates.
+  revision                 Int       @default(0)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  app                      App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@map("app_webhooks")
+}
+
+/// How deliveries to one installation's app endpoint are going: the status shape Raft shows for a
+/// push webhook. Absent until the first attempt. Cleared (row deleted) when the app's endpoint
+/// changes, its secret rotates or the webhook is disabled or enabled, so a stale
+/// `disabledReason` never outlives the endpoint it was about. Never holds a response body.
+model AppInstallationWebhookStatus {
+  installationId      String          @id @db.Uuid
+  /// The webhook `revision` this status was written at; a status of an older revision is about
+  /// another endpoint and is ignored.
+  revision            Int
+  lastAttemptAt       DateTime?
+  lastDeliveryAt      DateTime?
+  /// A short classifier of the last failure or skip (`http_503`, `timeout`, `network`,
+  /// `key_unavailable`, ...), at most 100 characters; null after a success.
+  lastError           String?
+  /// Failed attempts of the latest failing delivery, set from its retry count (a repeated write of
+  /// one attempt counts once); 0 after a success.
+  consecutiveFailures Int             @default(0)
+  /// At the earliest when the retry of a failed delivery runs; null after a success or a stop.
+  nextAttemptAt       DateTime?
+  /// Why deliveries to this installation stopped: `endpoint_rejected` (the endpoint answered 410),
+  /// `retries_exhausted`, `payload_too_large` or `endpoint_invalid`; null while they continue.
+  disabledReason      String?
+  /// When they stopped; set exactly when `disabledReason` is.
+  disabledAt          DateTime?
+  updatedAt           DateTime        @updatedAt
+  installation        AppInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@map("app_installation_webhook_statuses")
+}

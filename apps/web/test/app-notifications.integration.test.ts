@@ -104,8 +104,9 @@ async function fixture(db: PrismaClient, { flag = "on" }: { flag?: "on" | "off" 
   );
   const installation = await db.appInstallation.findFirstOrThrow({
     where: { workspaceId: workspace.id },
-    select: { id: true },
+    select: { id: true, appId: true },
   });
+  await enableWebhook(db, installation.appId);
   return {
     workspace,
     owner,
@@ -115,6 +116,13 @@ async function fixture(db: PrismaClient, { flag = "on" }: { flag?: "on" | "off" 
       await db.user.deleteMany({ where: { id: owner.id } }).catch(() => {});
     },
   };
+}
+
+/** Gives the app an enabled webhook: events fan out only to installations whose app has one. */
+async function enableWebhook(db: PrismaClient, appId: string) {
+  await db.appWebhook.create({
+    data: { appId, enabled: true, endpointUrl: "https://hooks.example/in", secretGeneration: 1 },
+  });
 }
 
 /** A `workspace.member_added` event for a made-up member. */
@@ -284,23 +292,30 @@ testWithDatabase("admitting a member records workspace.member_added", async () =
 });
 
 testWithDatabase(
-  "running the event worker twice for one event leaves one delivery per installation",
+  "running the event worker twice for one event leaves one delivery per installation with a webhook",
   async () => {
     const { workspace, owner, installationId, cleanup } = await fixture(db!);
     try {
-      await createAppRegistry(db!).registerApp(
-        { workspaceId: workspace.id, actorUserId: owner.id },
-        {
-          key: `notify-second-${crypto.randomUUID().slice(0, 8)}`,
-          name: "Second",
-          description: "",
-          whenToUse: "",
-          homepageUrl: null,
-          redirectUris: [],
-          category: "other",
-          allowedScopes: ["openid", "profile", "identity"],
-        },
-      );
+      const register = async (key: string, webhook: boolean) => {
+        await createAppRegistry(db!).registerApp(
+          { workspaceId: workspace.id, actorUserId: owner.id },
+          {
+            key,
+            name: key,
+            description: "",
+            whenToUse: "",
+            homepageUrl: null,
+            redirectUris: [],
+            category: "other",
+            allowedScopes: ["openid", "profile", "identity"],
+          },
+        );
+        if (webhook)
+          await enableWebhook(db!, (await db!.app.findFirstOrThrow({ where: { key } })).id);
+      };
+      await register(`notify-second-${crypto.randomUUID().slice(0, 8)}`, true);
+      // An app with no webhook has nowhere to deliver, so it gets no delivery job.
+      await register(`notify-quiet-${crypto.randomUUID().slice(0, 8)}`, false);
       const event = memberAdded(workspace.id);
       const jobs = [{ data: event }] as Parameters<typeof fanOutAppNotificationEvents>[1];
       await fanOutAppNotificationEvents(boss, jobs);

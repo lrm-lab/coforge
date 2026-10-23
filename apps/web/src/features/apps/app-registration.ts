@@ -105,12 +105,14 @@ function canonicalUrl(value: unknown): URL | undefined {
   return url.href === value && !url.username && !url.password ? url : undefined;
 }
 
+/** Whether `value` is a canonical https URL (see `canonicalUrl`), as written. */
+export const isCanonicalHttpsUrl = (value: unknown): value is string =>
+  canonicalUrl(value)?.protocol === "https:";
+
 /** An https URL, or `null` for an app with no homepage. A blank string is refused: a form sends a
  * blank field as `null`. */
 const homepageUrl: FieldCheck<string | null> = (value) =>
-  value === null || canonicalUrl(value)?.protocol === "https:"
-    ? accept(value as string | null)
-    : REFUSE;
+  value === null || isCanonicalHttpsUrl(value) ? accept(value as string | null) : REFUSE;
 
 /** Whether one redirect URI passes the rule the list applies to each of its URIs. Compared later
  * by exact string match (RFC 9700 §2.1), so only accepted as written. */

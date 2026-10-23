@@ -9,3 +9,6 @@ These rules apply to `src/server/notifications/`.
   it never recomposes recipients or text.
 - `in-page-notification-publisher.server.ts` is only the Centrifugo
   `broadcast` adapter that `WebPushNotifications` publishes through.
+- `web-push-egress.server.ts` only keeps Web Push's names and error messages over
+  `server/egress/` (`OutboundEgress`), the one outbound address check shared with app webhooks;
+  change the rules there, not here.

@@ -7,6 +7,7 @@ import {
   type AppNotificationDeliveryJob,
 } from "./app-notification-jobs";
 import { subscribersOf } from "./subscribers.server";
+import { createWebhookDelivery } from "./webhook-delivery-composition.server";
 
 /**
  * Turns each event job into one delivery job per subscribed installation. The delivery job ids are
@@ -30,11 +31,10 @@ export async function fanOutAppNotificationEvents(
   }
 }
 
-/**
- * The delivery handler of this slice, deliberately empty: the signed HTTP delivery, its retries
- * and its endpoint rules are the next slice's. Until then a delivery job completes unsent, which
- * is harmless only because `app-notifications` is off everywhere.
- */
+/** The production delivery handler: signed HTTP delivery to each app's webhook
+ * (`WebhookDelivery`), over the strict egress. */
 export async function deliverAppNotifications(
-  _jobs: Job<AppNotificationDeliveryJob>[],
-): Promise<void> {}
+  jobs: Job<AppNotificationDeliveryJob>[],
+): Promise<void> {
+  await createWebhookDelivery().handle(jobs);
+}

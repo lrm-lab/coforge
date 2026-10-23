@@ -6,8 +6,9 @@ marketplace: a registered app is installed only in the Workspace that registered
 `20261020120000_app_registry`, `20261020130000_app_category_identity_scope` (the category, the
 `identity` scope, and no resource URI), `20261020140000_app_homepage_optional` (an app needs only a
 name), `20261021120000_app_logo` (its uploaded logo) `20261021180000_app_data_permissions` (the
-data it may read where it is installed) and `20261022120000_app_installation_setup` (the page it is set
-up on after installation).
+data it may read where it is installed), `20261022120000_app_installation_setup` (the page it is set
+up on after installation) and `20261023160000_app_webhooks` (the signed webhook that app
+notifications are delivered to).
 
 The built-in Agent Apps (`system.reminder`, `system.cleaner`) are not rows. They are the SDK's
 `BUILT_IN_APPS` (`packages/coforge-sdk/src/internal/app-config.ts`), run by the daemon, and
@@ -123,3 +124,41 @@ app reports, per installation, that it finished a revision.
 - The editor's Save, and a registration, write the setup with the profile and the permissions in one transaction. While the
   flag is off for a Workspace its members see none of this, declaring is refused (`ACCESS_DENIED`,
   `app-installation-setup-off`), and saving an app leaves these columns as they are.
+
+## Webhooks
+
+Behind the `app-notifications` feature flag, owned by `apps/web/src/server/app-notifications/`
+([app notifications](../app-notifications.md)). Two tables, not columns on `apps` and
+`app_installations`: the first holds one row per app that ever enabled a webhook, the second holds how
+deliveries to one installation are going, which changes on every attempt and would otherwise make
+`app_installations` the hot row of a delivery.
+
+`app_webhooks` — the app's webhook, keyed by `appId` (cascade delete):
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `appId` | UUID | Primary key; the app. |
+| `enabled` | BOOLEAN | False by default. Disabling keeps the row, so `secretGeneration` only ever goes up. |
+| `endpointUrl` | TEXT | Set exactly while `enabled` (`app_webhooks_enabled_endpoint_check`). https only, at most 2000 characters, no fragment (`app_webhooks_endpoint_url_check`); the application also requires the canonical form and no user info, and resolves the host to public addresses only, at save and at every delivery. |
+| `secretGeneration` | INTEGER | 0 before the first enable, at least 1 while enabled; one more at each enable and rotation (`app_webhooks_generation_check`). The signing secret is **derived** from it, never stored. |
+| `previousSecretGeneration`, `previousSecretValidUntil` | INTEGER, TIMESTAMP(3) | Both set or both null; set only while enabled, and below `secretGeneration` (`app_webhooks_previous_secret_check`). The generation before the last rotation, still signing until the time (24 hours after the rotation). |
+| `revision` | INTEGER | One more at every change (endpoint, enable, disable, rotation); at least 0. A delivery attempt writes its status only while the revision is the one it started with. |
+| `createdAt`, `updatedAt` | TIMESTAMP(3) | |
+
+`app_installation_webhook_statuses` — how deliveries to one installation's endpoint are going,
+keyed by `installationId` (cascade delete), absent until the first attempt:
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `installationId` | UUID | Primary key; the installation. |
+| `revision` | INTEGER | The `app_webhooks.revision` this status was written at; a delivery ignores a status of an older revision. |
+| `lastAttemptAt`, `lastDeliveryAt` | TIMESTAMP(3) | The last attempt, and the last 2xx. |
+| `lastError` | TEXT | A short classifier of the last failure (`http_503`, `timeout`, `network`, `address_not_public`, `key_unavailable` for a skipped delivery, ...), at most 100 characters; never a response body. Null after a success. |
+| `consecutiveFailures` | INTEGER | Failed attempts of the latest failing delivery, set from its retry count; 0 after a success. |
+| `nextAttemptAt` | TIMESTAMP(3) | At the earliest when the retry runs; null after a success or a stop. |
+| `disabledReason` | TEXT | `endpoint_rejected` (the endpoint answered 410), `retries_exhausted`, `payload_too_large` or `endpoint_invalid`; null while deliveries continue (`app_installation_webhook_statuses_check`). A stopped installation gets no deliveries. |
+| `disabledAt` | TIMESTAMP(3) | When deliveries stopped; set exactly when `disabledReason` is. |
+
+Every change to `app_webhooks` deletes the statuses of the app's installations in the same
+transaction, so a stop never outlives the endpoint it was about; saving the endpoint again or
+rotating the secret therefore starts deliveries again.

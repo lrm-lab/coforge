@@ -11,9 +11,11 @@ export class PrismaAppNotificationSubscribers {
     });
   }
 
+  /** The Workspace's installations whose app has an enabled webhook: the only ones an event has
+   * anywhere to go. */
   async installationsOf(workspaceId: string) {
     const rows = await this.db.appInstallation.findMany({
-      where: { workspaceId },
+      where: { workspaceId, app: { webhook: { enabled: true } } },
       select: { id: true, appId: true },
       orderBy: { id: "asc" },
     });

@@ -18,6 +18,7 @@ import { deliverAppNotifications, fanOutAppNotificationEvents } from "./event-wo
 import {
   APP_NOTIFICATION_DELIVERY_QUEUE,
   APP_NOTIFICATION_EVENT_QUEUE,
+  DELIVERY_QUEUE_OPTIONS,
   type AppNotificationDeliveryJob,
 } from "./app-notification-jobs";
 
@@ -35,16 +36,6 @@ const EVENT_QUEUE_OPTIONS = {
   retryDelay: 5,
   retryBackoff: true,
   retryDelayMax: 3_600,
-};
-
-/** Delivery jobs call a third party that may be down: retry with backoff, 5 s growing to a day
- * at most, 16 attempts (seconds). An attempt that runs past a minute is expired and retried. */
-const DELIVERY_QUEUE_OPTIONS = {
-  retryLimit: 16,
-  retryDelay: 5,
-  retryBackoff: true,
-  retryDelayMax: 86_400,
-  expireInSeconds: 60,
 };
 
 /** After a failed start, wait this long before trying again, doubling up to the cap, for at most
