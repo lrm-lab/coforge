@@ -56,6 +56,8 @@ import { followComputerLogs } from "#src/logging/computer-logs";
 import { COFORGE_COMPUTER_VERSION as VERSION } from "./version";
 import { createStatusPorts } from "#src/status/create-status-ports";
 import { createStatusCommand, type StatusCommand } from "#src/status/status-command";
+import { createDoctorCommand, type DoctorCommand } from "#src/doctor/doctor-command";
+import { registerDiagnosticCommands } from "#src/cli/diagnostic-commands";
 import { prepareContainerBinding } from "#src/host/container-binding";
 import { runHostProcess } from "#src/host/run-host";
 import { runInstallationSource } from "#src/release/installation-source";
@@ -111,6 +113,7 @@ export interface HostCommand {
 }
 
 export type { StatusCommand };
+export type { DoctorCommand };
 
 interface CliDependencies {
   login: LoginCommand;
@@ -120,6 +123,7 @@ interface CliDependencies {
   logs?: LogsCommand;
   foreground?: ForegroundCommand;
   status?: StatusCommand;
+  doctor?: DoctorCommand;
   host?: HostCommand;
 }
 
@@ -274,16 +278,16 @@ export async function runCli(
     .command("logs")
     .description("Follow the Computer log, including rotated log files.")
     .action(() => requireLogs(dependencies).follow());
-  program
-    .command("status")
-    .description(
-      "Show the Install, Supervisor, Workspaces, Agents, and locks in one place. Read-only.",
-    )
-    .option("--json", "write one stable JSON result to stdout")
-    .action((options: { json?: boolean }) => {
-      json = options.json ?? false;
-      return requireStatus(dependencies).run({ json });
-    });
+  registerDiagnosticCommands(
+    program,
+    { status: dependencies.status, doctor: dependencies.doctor },
+    (value) => {
+      json = value;
+    },
+    (value) => {
+      exitCode = value;
+    },
+  );
   program
     .command("host")
     .description("Run the Swarm manager process that places cloud Computer services.")
@@ -375,11 +379,6 @@ function requireForeground(dependencies: CliDependencies): ForegroundCommand {
   if (!dependencies.foreground)
     throw new Error("Foreground supervisor is unavailable in this build");
   return dependencies.foreground;
-}
-
-function requireStatus(dependencies: CliDependencies): StatusCommand {
-  if (!dependencies.status) throw new Error("Status is unavailable in this build");
-  return dependencies.status;
 }
 
 function hostSetting(flag: string | undefined, envName: string): string {
@@ -553,9 +552,7 @@ function createDaemonLauncher(
   });
 }
 
-/** The pieces `restartSupervisor` needs from the platform host and the local socket client;
- * satisfied in production by `createDaemonLauncher`'s return value and a plain
- * `LocalDaemonLauncher`, and by hand-written fakes in tests. */
+/** Platform and local control seams used by `restartSupervisor`. */
 export type RestartSupervisorHost = {
   assertRestartable?(): Promise<void>;
   restart(): Promise<void>;
@@ -723,7 +720,6 @@ function createLogsCommand(
   };
 }
 
-/** A thin CLI adapter: it runs one operation per command and renders the durable result. */
 export function createUpdateCommand(io: {
   stdout: (line: string) => void;
   stderr: (line: string) => void;
@@ -804,6 +800,17 @@ export async function runComputer(): Promise<void> {
         ),
         logs: createLogsCommand(computerDirectory, io),
         status: createStatusCommand(
+          io,
+          createStatusPorts({
+            platform: platform.os,
+            installDirectory,
+            stateDirectory,
+            registrations: config,
+            releaseFeedUrl: COFORGE_RELEASE_FEED_URL,
+            serverUrl: COFORGE_SERVER_URL,
+          }),
+        ),
+        doctor: createDoctorCommand(
           io,
           createStatusPorts({
             platform: platform.os,

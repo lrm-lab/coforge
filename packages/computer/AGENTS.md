@@ -49,6 +49,7 @@ relative to `src/`.
 | `daemon-client/`                     | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                 |
 | `host/`                              | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them               |
 | `status/`                            | Read-only `status` report through per-platform ports                                          |
+| `doctor/`                            | Read-only diagnostic checks built from the status report                                      |
 | `logging/`                           | Computer LogTape configuration and the `logs` follower                                        |
 | `updater.ts`                         | Reads the installed version; zod contract schemas and launcher text shared with the installer |
 | `release/upgrade-runner.ts`          | Runs the installer for one upgrade or `recover`, and returns its receipt                      |
@@ -107,7 +108,6 @@ recently used copies (ranked by use time, never hashed; a kept copy is verified 
 and sweeps what a killed run left after an hour.
 It does not launch the installer, read receipts, or touch the product's own
 upgrade transaction.
-Computer's user command tree does not own Agent message commands.
 The install and upgrade transaction is serialized by the machine
 mutation lock; do not narrow it to activation or reuse the Supervisor lifetime
 mutex as the upgrade lock.

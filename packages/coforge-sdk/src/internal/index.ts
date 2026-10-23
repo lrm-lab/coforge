@@ -341,12 +341,12 @@ export * from "./upgrade-error-code";
 
 /**
  * Every top-level `coforge-computer` command, as `packages/computer/src/cli.ts` registers them.
- * Shared here - the one module both `packages/computer` (which registers them) and `apps/web`
+ * Shared here: the module both `packages/computer` (which registers them) and `apps/web`
  * (which tells a Workspace member which one to run next, in `upgrade-failure.ts`) already
  * depend on - so a web copy string naming a command that does not exist, or a renamed CLI
  * command that copy never updated for, is one drift this constant lets a test catch instead of
  * the two packages silently disagreeing. `packages/computer/test/cli.test.ts` asserts the CLI's
- * actual registered command names equal this list.
+ * registered command names equal this list.
  */
 export const COMPUTER_CLI_COMMANDS = [
   "login",
@@ -360,6 +360,7 @@ export const COMPUTER_CLI_COMMANDS = [
   "foreground",
   "logs",
   "status",
+  "doctor",
   "host",
 ] as const;
 export type ComputerCliCommand = (typeof COMPUTER_CLI_COMMANDS)[number];
