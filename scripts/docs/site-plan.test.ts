@@ -4,11 +4,20 @@ import {
   assertDistUsable,
   cacheControlFor,
   contentTypeFor,
+  listPageQuery,
   staleKeys,
   uploadOrder,
 } from "./site-plan";
 
 describe("docs site publishing", () => {
+  test("a bucket listing page names a marker only when it continues one", () => {
+    // ali-oss signs an undefined marker differently from the request it sends, so the
+    // first page must not carry the key at all (SignatureDoesNotMatch otherwise).
+    expect(listPageQuery(undefined)).toEqual({ "max-keys": 1000 });
+    expect("marker" in listPageQuery(undefined)).toBe(false);
+    expect(listPageQuery("assets/a.js")).toEqual({ "max-keys": 1000, marker: "assets/a.js" });
+  });
+
   test("content types by extension", () => {
     expect(contentTypeFor("index.html")).toBe("text/html; charset=utf-8");
     expect(contentTypeFor("apps.md")).toBe("text/markdown; charset=utf-8");

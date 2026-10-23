@@ -52,3 +52,9 @@ export function assertDistUsable(distKeys: readonly string[]): void {
     if (!distKeys.includes(required))
       throw new Error(`dist has no ${required}; refusing to publish or delete`);
 }
+
+/** One bucket listing page's query. The marker key is present only when continuing a listing:
+ * ali-oss signs an undefined marker differently from the request it sends. */
+export function listPageQuery(marker: string | undefined): { "max-keys": number; marker?: string } {
+  return marker === undefined ? { "max-keys": 1000 } : { "max-keys": 1000, marker };
+}

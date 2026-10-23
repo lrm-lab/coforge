@@ -24,6 +24,7 @@ import {
   cacheControlFor,
   contentTypeFor,
   extensionOf,
+  listPageQuery,
   staleKeys,
   uploadOrder,
 } from "./site-plan";
@@ -49,7 +50,7 @@ async function listBucket(client: OSS): Promise<string[]> {
   let marker: string | undefined;
   try {
     do {
-      const page = await client.list({ "max-keys": 1000, marker }, {});
+      const page = await client.list(listPageQuery(marker), {});
       for (const object of page.objects ?? []) keys.push(object.name);
       marker = page.isTruncated ? page.nextMarker : undefined;
     } while (marker);
