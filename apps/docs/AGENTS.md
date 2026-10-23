@@ -31,11 +31,11 @@ Run from `apps/docs` (the root `mise run test`, `check` and `build` already run 
 
 Production only (no docs staging). The `Publish docs site (production)` workflow
 (`.github/workflows/docs-production.yml`) is started with `workflow_dispatch` from `main` (every non-CI workflow is dispatch-only; a push to
-`main` publishes nothing). After merging, run "Publish docs site (production)" from Actions; it waits
-for production approval.
+`main` publishes nothing). After merging, run "Publish docs site (production)" from Actions; it needs
+no approval.
 
 - `build` has no secrets: check, test, `DOCS_ORIGIN=https://docs.coforge.cn` build, upload the dist.
-- `deploy` runs in the `production` GitHub Environment (required reviewer approves) and assumes RAM
+- `deploy` runs in the `docs` GitHub Environment (main only, no reviewers) and assumes RAM
   role `coforge-docs-publisher` through GitHub OIDC. `scripts/docs/publish-docs-site.ts` uploads to the
   private bucket `coforge-docs-prod` (cn-beijing) with explicit Content-Type and Cache-Control
   (`site-plan.ts`), assets first and HTML last, deletes objects the dist no longer has (never from an

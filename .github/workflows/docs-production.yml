@@ -69,10 +69,10 @@ jobs:
     name: Publish docs site
     needs: build
     runs-on: ubuntu-latest
-    environment: production
+    environment: docs
     # `id-token: write` lets this job mint the GitHub OIDC token it exchanges for the Alibaba Cloud
     # STS credential of the docs publisher role, whose trust policy names only this repository's
-    # `production` environment.
+    # `docs` environment (main only, no reviewers: a static site re-published from main).
     permissions:
       contents: read
       id-token: write
