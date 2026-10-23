@@ -6,7 +6,8 @@ import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { AuthSplitLayout } from "#src/features/auth/auth-split-layout";
 import { checkWorkspaceSlug, submitDisplayName } from "#src/features/auth/first-sign-in.functions";
-import { afterSignInHref } from "#src/features/auth/return-to";
+import { afterSignInHref, localizedReturnHref } from "#src/features/auth/return-to";
+import { githubStepHref, isDefaultStartPage } from "#src/features/onboarding/github-step";
 import {
   checkPersonName,
   PERSON_NAME_MAX_LENGTH,
@@ -52,7 +53,7 @@ function SlugPrefix({ className }: { className?: string }) {
 /**
  * Where a signed-in person who has not been asked for a display name lands once, before anything is
  * created for them. Continuing saves the name, makes their personal Workspace, titled with it, and
- * goes on to `returnTo` (or the app's own start page).
+ * goes on to `returnTo`, or, with none, to the new Workspace's "Connect GitHub" step.
  */
 export function NameStepPage({
   prefill,
@@ -129,7 +130,11 @@ export function NameStepPage({
     if (!result.ok) return stop(result.problem);
     // The name is saved, so a failure from here on is not a failed save. Stay busy through the
     // navigation: the page is replaced, not returned to.
-    const destination = afterSignInHref(returnTo);
+    // With nowhere particular to go on to, the new Workspace asks about GitHub first; an invite or
+    // join link's `returnTo` goes on as it always has.
+    const destination = isDefaultStartPage(returnTo)
+      ? localizedReturnHref(githubStepHref(slug))
+      : afterSignInHref(returnTo);
     try {
       await navigate({ href: destination });
     } catch {

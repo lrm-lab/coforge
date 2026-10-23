@@ -38,3 +38,16 @@ GitHub 状态只读数据库快照（`connection.overview`），从不在加载�
 ## GitHub 回跳
 
 从清单发起的 GitHub 授权要回到首页而不是设置页。回跳 Cookie 在 Workspace 的 slug 后可带一个封闭的目标：`<slug>` 回设置页（默认），`<slug>:home` 回 `/w/<slug>`；除 `home` 外的任何值都按设置页处理，不接受任意路径。授权失败时仍回设置页，由那里的提示说明原因。
+
+## 创建 Workspace 后的「连接 GitHub」一步
+
+新建 Workspace 之后先到全页的 `/w/<slug>/connect-github`（不带侧栏，沿用 `/welcome` 的 `AuthSplitLayout`），问一次要不要连接 GitHub。路由文件 `w.$workspaceSlug_.connect-github.tsx` 在 Workspace 布局之外，所以在自己的 `beforeLoad` 里用 `openWorkspace()` 确认本人是成员（不是成员则 404，旧 slug 跳到当前 slug）。可选查询参数 `next` 是站内路径（经 `safeReturnTo` 校验，非站内一律忽略），默认 Workspace 首页。
+
+- 部署没有配置 GitHub，或本人已是 `connected`：页面不显示，直接跳到 `next`。
+- 其余状态显示主按钮：`disconnected` 连接、`pending_installation`「选择仓库」、`reauthorize`「重新授权」，都带 `returnTo: "home"`，授权完成回到 Workspace 首页；发起失败在页内提示，按钮可再点。
+- 「暂时跳过」直接去 `next`，不存任何东西；侧栏清单的 GitHub 一行继续提醒。
+- 入口共三个，都在创建 Workspace 之后：首次登录的 `/welcome`（仅当没有 `returnTo`，或 `returnTo` 就是 `/` 或语言根（`/en`、`/zh-CN`）；邀请或加入链接带的 `returnTo` 照旧）、`/workspaces/new`、Workspace 切换器的新建对话框（后两者共用 `useCreateAndOpenWorkspace`）。加入已有 Workspace 不经过这一步。
+
+读取 GitHub 状态失败时当作不需要询问，直接跳到 `next`，不阻塞进入新 Workspace。`next` 指向任何 `connect-github` 页时（会循环）退回 Workspace 首页。这一页不调用 `markShownWorkspace`：Workspace 布局在第一次加载 `/w/<slug>` 时才打开它。
+
+判断逻辑在纯函数 `features/onboarding/github-step.ts`（`githubStepPlan`），单元测试 `test/github-step.test.ts`；浏览器 E2E 是 `test/workspace-github-step.e2e.ts`。

@@ -14,5 +14,12 @@
   "onboarding_step_invite": "邀请协作者",
   "onboarding_step_done": "已完成",
   "onboarding_step_todo": "待完成",
-  "onboarding_step_failed": "这一步没能开始，请重试。"
+  "onboarding_step_failed": "这一步没能开始，请重试。",
+  "onboarding_github_step_title": "连接 GitHub",
+  "onboarding_github_step_description": "Agent 可以读写你授权的仓库，项目也可以关联仓库。",
+  "onboarding_github_step_connect": "连接 GitHub",
+  "onboarding_github_step_install": "选择仓库",
+  "onboarding_github_step_reauthorize": "重新授权",
+  "onboarding_github_step_skip": "暂时跳过",
+  "onboarding_github_step_error": "无法发起 GitHub 连接。请重试，或先跳过。"
 }

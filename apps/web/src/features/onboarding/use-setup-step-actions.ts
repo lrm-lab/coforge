@@ -1,10 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
-import {
-  startGitHubConnection,
-  startGitHubInstallation,
-  startGitHubReauthorization,
-} from "#src/features/integrations/github.functions";
+import { githubStepAction } from "./github-step";
+import { useStartGitHubFlow } from "./use-start-github-flow";
 import type { SetupStepId } from "./setup-steps";
 import type { loadSetupChecklist } from "./setup-checklist.functions";
 
@@ -14,9 +10,7 @@ type Checklist = Awaited<ReturnType<typeof loadSetupChecklist>>;
  * flow itself, which comes back to the Workspace home. */
 export function useSetupStepActions(workspaceSlug: string, checklist: Checklist) {
   const navigate = useNavigate();
-  const connect = useServerFn(startGitHubConnection);
-  const reauthorize = useServerFn(startGitHubReauthorization);
-  const install = useServerFn(startGitHubInstallation);
+  const startFlow = useStartGitHubFlow();
   const params = { workspaceSlug };
 
   const actions: Record<SetupStepId, () => Promise<void>> = {
@@ -36,13 +30,8 @@ export function useSetupStepActions(workspaceSlug: string, checklist: Checklist)
         });
         return;
       }
-      const start =
-        checklist.githubStatus === "reauthorize"
-          ? reauthorize
-          : checklist.githubStatus === "pending_installation"
-            ? install
-            : connect;
-      window.location.assign((await start({ data: { returnTo: "home" } })).url);
+      const action = githubStepAction(checklist.githubStatus);
+      if (action) await startFlow(action);
     },
     agent: () =>
       navigate({

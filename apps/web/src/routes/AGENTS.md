@@ -11,6 +11,10 @@ These rules apply to `src/routes/`.
   `records`; a direct message is `dm/$dmId`, by its conversation id. Pathless layouts (`_chat`, `_computers`) share chrome between
   pages without adding a URL segment. Old page names are not redirected; a Workspace's former
   slug is: `/w/<former>/…` goes to the same page under its current slug.
+- `w.$workspaceSlug_.connect-github` (`/w/<slug>/connect-github`, the "Connect GitHub" step after creating a
+  Workspace) is not a Workspace page: the `_` suffix escapes the layout, so it has no sidebar and
+  uses `AuthSplitLayout`. It checks sign-in, the name step and membership itself, and passes on to
+  `next` when GitHub is unconfigured, connected, or unreadable.
 - Pages opened before someone is in a Workspace — `login`, `welcome`, `join/$token`,
   `oauth/verify`, `oidc/auth`, `workspaces/new` — stay outside `/w/$workspaceSlug`; sign-in,
   the name step, invite links, and creating a first Workspace share
