@@ -304,6 +304,10 @@ export class PiChatSessions {
   }
   async execute(command: PiChatCommand): Promise<PiChatResult> {
     switch (command.action) {
+      case "files":
+      case "file":
+      case "upload":
+        throw new Error("File commands require the private worker");
       case "list":
         return { sessions: await this.list() };
       case "models":

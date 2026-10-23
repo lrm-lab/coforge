@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { PiChatFiles } from "./files";
 import { Database } from "bun:sqlite";
 import {
   piChatCommandSchema,
@@ -78,6 +79,7 @@ export async function runPiChatWorker(
   process.on("SIGINT", stop);
   const envelope = z.object({ id: z.uuid(), command: piChatCommandSchema });
   const jobs = new Set<Promise<void>>();
+  const files = new PiChatFiles(cwd);
   // SDK extensions may log; protocol output uses the saved writer, all logs go to stderr.
   const log = console.log;
   console.log = console.error;
@@ -94,7 +96,12 @@ export async function runPiChatWorker(
         const request = envelope.parse(JSON.parse(line));
         flushUpdates();
         const stream = { id: streamId, sequence };
-        const task = sessions.execute(request.command).then(
+        const command = request.command;
+        const execution =
+          command.action === "files" || command.action === "file" || command.action === "upload"
+            ? files.execute(command)
+            : sessions.execute(command);
+        const task = execution.then(
           (result) => {
             write(
               `${JSON.stringify({ id: request.id, result: options.stream ? { ...result, stream } : result })}\n`,

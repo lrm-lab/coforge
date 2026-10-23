@@ -9,6 +9,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { PiChatCopy } from "./pi-chat-copy";
 import { usePiChatDisclosure } from "./pi-chat-disclosure";
+import { piChatLocalPath, usePiChatFiles } from "./pi-chat-files-context";
 
 const CodeBlock = lazy(() => import("./pi-chat-code-block"));
 
@@ -108,6 +109,40 @@ function Raw({ text }: { text: string }) {
 }
 
 export function PiChatMessage({ message }: { message: Message }) {
+  const files = usePiChatFiles();
+  const components: Components = {
+    ...markdownComponents,
+    a({ href, children }) {
+      const path = href && piChatLocalPath(href);
+      if (path && files.supported)
+        return (
+          <Button size="sm" color="link-color" onClick={() => files.open(path)}>
+            {children}
+          </Button>
+        );
+      return <a href={href}>{children}</a>;
+    },
+    code({ children, className }) {
+      const value = String(children);
+      const path =
+        !className &&
+        !value.includes("\n") &&
+        /(?:^|\/)[^/]+\.[a-z\d]{1,12}$/i.test(value) &&
+        piChatLocalPath(value);
+      if (path && files.supported)
+        return (
+          <Button
+            size="sm"
+            color="link-color"
+            className="font-mono"
+            onClick={() => files.open(path)}
+          >
+            {children}
+          </Button>
+        );
+      return <code className={className}>{children}</code>;
+    },
+  };
   const running = message.id.startsWith("running:");
   const Status = message.isError ? XCircle : running ? Terminal : CheckCircle;
   return (
@@ -170,7 +205,7 @@ export function PiChatMessage({ message }: { message: Message }) {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeSanitize]}
-              components={markdownComponents}
+              components={components}
             >
               {message.text}
             </ReactMarkdown>
@@ -190,6 +225,20 @@ export function PiChatMessage({ message }: { message: Message }) {
           preview={inputPreview(tool.input)}
         >
           <Raw text={tool.input} />
+          {files.supported &&
+            (() => {
+              try {
+                const args = JSON.parse(tool.input);
+                const path = args.path ?? args.file_path;
+                return typeof path === "string" ? (
+                  <Button size="sm" color="link-color" onClick={() => files.open(path)}>
+                    {m.pi_chat_files_open()}
+                  </Button>
+                ) : null;
+              } catch {
+                return null;
+              }
+            })()}
         </Detail>
       ))}
     </div>

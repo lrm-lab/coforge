@@ -38,7 +38,7 @@ The architecture invariants every change must respect are in
 | [crates/installer/AGENTS.md](crates/installer/AGENTS.md) | Rust installer crate (`coforge-installer`): toolchain, commands, contract, CI, supply-chain gate |
 | [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md) | Installer module map |
 | [docs/workspace-assistant.md](docs/workspace-assistant.md) | Workspace platform assistant setup, isolated sessions, and backfill |
-| [docs/pi-chat.md](docs/pi-chat.md) | Independent cloud Pi conversations, signed host access, native history, deployment and acceptance |
+| [docs/pi-chat/README.md](docs/pi-chat/README.md) | Independent cloud Pi conversations, signed host access, native history, deployment and acceptance |
 | [docs/database-schema/](docs/database-schema/README.md) | Database schema and conversation/delivery model |
 | [docs/memory-disposition.md](docs/memory-disposition.md) | Target-only Memory Hint receipts, configuration, and validation |
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |

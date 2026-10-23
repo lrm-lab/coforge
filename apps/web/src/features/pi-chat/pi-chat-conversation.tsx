@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowDown, ArrowLeft } from "@untitledui/icons";
+import { ArrowDown, ArrowLeft, Folder } from "@untitledui/icons";
 import type { PiChatCommand, PiChatSession, PiChatResult } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -13,6 +13,7 @@ import { PiChatSessionActions } from "./pi-chat-session-actions";
 import { usePiChatScroll } from "./pi-chat-scroll";
 import { PiChatDisclosureContext } from "./pi-chat-disclosure";
 import { usePiChatStream } from "./pi-chat-stream";
+import { usePiChatFiles } from "./pi-chat-files-context";
 import {
   loadPiChatHistory,
   preparePiChatSend,
@@ -48,6 +49,7 @@ export function PiChatConversation({
   onSelect(id?: string): void;
 }) {
   const execute = useServerFn(executePiChat);
+  const files = usePiChatFiles();
   const queryClient = useQueryClient();
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -263,15 +265,20 @@ export function PiChatConversation({
           />
         }
         actions={
-          (session ?? initialSession) && (
-            <PiChatSessionActions
-              session={(session ?? initialSession)!}
-              computerId={computerId}
-              controls={controls}
-              onChanged={refresh}
-              onDeleted={() => onSelect()}
-            />
-          )
+          <>
+            <Button size="sm" color="secondary" iconLeading={Folder} onClick={() => files.open()}>
+              {m.pi_chat_files()}
+            </Button>
+            {(session ?? initialSession) && (
+              <PiChatSessionActions
+                session={(session ?? initialSession)!}
+                computerId={computerId}
+                controls={controls}
+                onChanged={refresh}
+                onDeleted={() => onSelect()}
+              />
+            )}
+          </>
         }
       />
       {(error || history.isError) && (
