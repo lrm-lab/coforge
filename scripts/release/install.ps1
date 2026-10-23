@@ -1,7 +1,24 @@
 [CmdletBinding()]
 param(
+  [Parameter(Position = 0)]
+  [ValidateSet("install", "upgrade", "repair", "status", "recover", "help")]
+  [string]$Command = "install",
   [Parameter()]
   [string]$Version = "latest",
+  [Parameter()]
+  [string]$Channel,
+  [Parameter()]
+  [string]$RequestId,
+  [Parameter()]
+  [switch]$Json,
+  [Parameter()]
+  [switch]$Setup,
+  [Parameter()]
+  [switch]$Yes,
+  [Parameter()]
+  [switch]$AllowDowngrade,
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$SetupArguments,
   [Parameter()]
   [string]$PrepareDirectory,
   [Parameter()]
@@ -17,16 +34,43 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# A version is a bare label used both as a URL segment and as a local directory name, so it is
-# restricted to a safe charset with no traversal segment - the same rule the updater itself
-# applies to a "latest" pointer or an explicit -Version. "." is rejected on its own (in addition
-# to the ".." traversal check, which does not catch a lone dot): as a directory name it is "the
-# versions directory itself", so accepting it would let a payload land directly in the versions
-# root and break the one-version-per-directory invariant. A leading "-" is rejected so the value
-# can never be mistaken for a flag by a tool this script or the updater later shells out to. The
-# pattern match uses `\z`, not `$`, because .NET regex `$` matches immediately before a trailing
-# newline as well as at the true end of string - a version string carrying a trailing "\n" would
-# otherwise slip through.
+$versionWasBound = $PSBoundParameters.ContainsKey("Version")
+$channelWasBound = $PSBoundParameters.ContainsKey("Channel")
+if ($Command -in @("install", "upgrade", "repair")) {
+  if (-not $versionWasBound -and -not $channelWasBound -and $env:RAFT_COMPUTER_VERSION) {
+    $Version = $env:RAFT_COMPUTER_VERSION
+    $versionWasBound = $true
+  }
+  if (-not $channelWasBound -and -not $versionWasBound) {
+    if ($env:INSTALL_CHANNEL_DEFAULT) { $Channel = $env:INSTALL_CHANNEL_DEFAULT; $channelWasBound = $true }
+  }
+}
+if ($versionWasBound -and $channelWasBound) {
+  throw "install.ps1: -Version and -Channel cannot be combined"
+}
+if ($Command -eq "upgrade" -and [string]::IsNullOrEmpty($RequestId)) {
+  throw "install.ps1: upgrade requires -RequestId"
+}
+if ($Command -in @("install", "status", "recover", "help")) {
+  if ($RequestId) { throw "install.ps1: -RequestId is only valid with upgrade" }
+}
+if ($Command -in @("status", "recover", "help") -and $versionWasBound) {
+  throw "install.ps1: $Command does not accept -Version"
+}
+if ($Command -in @("status", "recover", "help") -and $channelWasBound) {
+  throw "install.ps1: $Command does not accept -Channel"
+}
+if ($Setup -and $Command -notin @("install", "upgrade", "repair")) {
+  throw "install.ps1: -Setup is only valid with install, upgrade, or repair"
+}
+if ($Setup -and $Json) { throw "install.ps1: -Setup cannot be combined with -Json" }
+if ($Setup -and (-not $SetupArguments -or $SetupArguments.Count -eq 0)) {
+  throw "install.ps1: -Setup requires at least one setup argument"
+}
+if (($Yes -or $AllowDowngrade) -and $Command -notin @("install", "upgrade", "repair")) {
+  throw "install.ps1: native confirmation options are only valid with install, upgrade, or repair"
+}
+
 function Test-CoforgeVersion([string]$Value) {
   if ([string]::IsNullOrEmpty($Value)) { return $false }
   if ($Value -eq ".") { return $false }
@@ -41,20 +85,10 @@ if ($Version -ne "latest" -and -not (Test-CoforgeVersion $Version)) {
 }
 
 $defaultFeedUrl = "https://releases.coforge.cn"
-# COFORGE_RELEASE_FEED_URL is accepted unconditionally for any https:// host. This script is a
-# one-shot the user explicitly runs (`irm ... | iex`), not the long-lived compiled binary that
-# packages/computer/src/release-channel.ts hardens by inlining the feed URL at build time - an
-# attacker able to set this variable in the invoking shell can equally set PATH or a proxy
-# variable to reach the same result, so there is no additional boundary to enforce here. See
-# docs/release/per-user-installation.md. It only chooses where this script's installer comes from:
-# coforge-installer installs from its own compiled-in feed.
 $feedUrl = $env:COFORGE_RELEASE_FEED_URL
 if ([string]::IsNullOrEmpty($feedUrl)) { $feedUrl = $defaultFeedUrl }
 $feedUrl = $feedUrl.TrimEnd("/")
 
-# COFORGE_INSTALLER_TEST_MODE relaxes the HTTPS-only transport so tests can point the installer
-# at a local fixture server over plain HTTP. A real install always requires HTTPS: integrity no
-# longer comes from payload signing, only from TLS plus the sidecar SHA-256 checksum below.
 $testMode = $env:COFORGE_INSTALLER_TEST_MODE -eq "1"
 if (-not ($feedUrl.StartsWith("https://") -or ($testMode -and $feedUrl.StartsWith("http://")))) {
   throw "install.ps1: COFORGE_RELEASE_FEED_URL must use HTTPS"
@@ -98,11 +132,6 @@ function Write-CoforgeStep([string]$Message) {
   [Console]::Error.WriteLine("==> $Message")
 }
 
-# Exit status of -ResolveOnly and -PrepareDirectory when the feed could not be reached (curl
-# transport failure) or answered with a 4xx/5xx status; the Computer maps it to
-# UPDATE_DOWNLOAD_FAILED and retries. Every other failure, including the size cap (curl 63),
-# stays a thrown error (exit 1). The bootstrap path (`irm | iex`) only throws, as `exit` there
-# would end the user's own session. 75 is sysexits' EX_TEMPFAIL.
 $downloadFailedStatus = 75
 
 function Exit-CoforgeDownload([string]$Message) {
@@ -270,42 +299,50 @@ try {
     throw "install.ps1: downloaded installer failed its checksum check"
   }
 
-  & $installerPath install --version $Version
-  # Not `exit`: the documented entry point is `irm ... | iex`, which runs this script inside the
-  # user's own PowerShell process, where a top-level `exit` terminates their session - closing the
-  # window on success just as readily as on failure. Throwing surfaces the failure through the
-  # same path as every other error above and leaves the host alone. Running in-process is also
-  # what lets the PATH work below take effect in the very session that ran the installer.
-  if ($LASTEXITCODE -ne 0) {
-    throw "install.ps1: coforge-installer exited with code $LASTEXITCODE"
+  $installerArguments = @($Command)
+  switch ($Command) {
+    "install" {
+      if ($versionWasBound -or -not $channelWasBound) { $installerArguments += @("--version", $Version) }
+    }
+    "upgrade" {
+      $installerArguments += @("--request-id", $RequestId)
+      if ($versionWasBound -or -not $channelWasBound) { $installerArguments += @("--version", $Version) }
+    }
+    "repair" {
+      if ($versionWasBound) { $installerArguments += @("--version", $Version) }
+    }
+    "status" { if ($Json) { $installerArguments += "--json" } }
+    "recover" { if ($Json) { $installerArguments += "--json" } }
   }
-  # The installer resolves "latest" itself and this script never learns the concrete version, so
-  # the messages below name the version only when the caller asked for one.
+  if ($channelWasBound) { $installerArguments += @("--channel", $Channel) }
+  if ($Yes) { $installerArguments += "--yes" }
+  if ($AllowDowngrade) { $installerArguments += "--allow-downgrade" }
+  if ($Json -and $Command -in @("install", "upgrade", "repair")) { $installerArguments += "--json" }
+  & $installerPath @installerArguments
+  $installerStatus = $LASTEXITCODE
+  if ($installerStatus -eq 3 -and $Command -notin @("status", "recover", "help")) {
+    [Console]::Error.WriteLine("install.ps1: retrying installer once after exit 3")
+    & $installerPath @installerArguments
+    $installerStatus = $LASTEXITCODE
+  }
+  $homeDirectory = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+  $installedBinary = if ($env:RAFT_COMPUTER_BINARY) { $env:RAFT_COMPUTER_BINARY } elseif ($env:RAFT_COMPUTER_INSTALL_DIR) { Join-Path $env:RAFT_COMPUTER_INSTALL_DIR "coforge-computer.exe" } else { Join-Path $binDirectory "coforge-computer.cmd" }
+  $binDirectory = Split-Path -Parent $installedBinary
+  if ($installerStatus -ne 0) {
+    if ($Setup -and (Test-Path -LiteralPath $installedBinary -PathType Leaf)) {
+      & $installedBinary setup @SetupArguments
+      if ($LASTEXITCODE -eq 0) { return }
+    }
+    throw "install.ps1: coforge-installer exited with code $installerStatus"
+  }
+  if ($Command -ne "install" -and -not $Setup) { return }
   $computerLabel = if ($Version -eq "latest") { "CoForge Computer" } else { "CoForge Computer $Version" }
 
-  # Mirrors packages/computer/src/paths.ts:resolveComputerBinaryDirectory for win32, which in turn
-  # takes its home directory the way packages/computer/src/cli.ts does - HOME first, USERPROFILE
-  # second. `$HOME` is a read-only PowerShell automatic variable and is not the same thing as
-  # `$env:HOME`, so the environment variables are read explicitly.
-  $homeDirectory = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
-  $binDirectory = Join-Path $homeDirectory ".coforge\computer\bin"
-  # Windows has no directory convention that is already on PATH the way ~/.local/bin is on
-  # Linux and macOS, so the shim keeps the private directory and this script puts that directory
-  # on PATH instead. The shim is a .cmd launcher, not an .exe (packages/computer/src/updater.ts);
-  # PATHEXT is what makes it invocable as a bare `coforge-computer` from both cmd and PowerShell.
   $shimPath = Join-Path $binDirectory "coforge-computer.cmd"
   if (-not (Test-Path -LiteralPath $shimPath)) {
     throw "install.ps1: $computerLabel was installed, but no shim appeared at $shimPath - that version predates this installer. Re-run this installer once a newer version is published."
   }
 
-  # Persist to the current user's environment only - never HKLM or the "Machine" scope, which
-  # would need elevation and would change PATH for every account on the box.
-  #
-  # The registry is written through the raw API rather than
-  # [Environment]::SetEnvironmentVariable(..., "User"), which reads the value back expanded and
-  # rewrites it as a plain REG_SZ. On any user whose Path legitimately contains a reference like
-  # %USERPROFILE%, that silently bakes in today's expansion and destroys the reference. Reading
-  # with DoNotExpandEnvironmentNames and writing back as ExpandString preserves it.
   $environmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
   try {
     $storedPath = [string]$environmentKey.GetValue(
@@ -325,20 +362,20 @@ try {
   finally {
     if ($environmentKey) { $environmentKey.Close() }
   }
-  # No WM_SETTINGCHANGE broadcast: every console opened from here on reads the registry at launch,
-  # so the only processes a broadcast would reach are Explorer-spawned applications already
-  # running, which is not worth a user32 P/Invoke in a bootstrap script.
-
-  # The registry write only reaches future processes. This assignment is what makes the command
-  # usable in the session that ran the installer - it works precisely because `irm ... | iex`
-  # executes here rather than in a child process. Checked independently of the registry: either
-  # can already be true without the other.
   $sessionEntries = ($env:Path -split ";") | Where-Object { $_ -ne "" }
   $alreadyInSession = $false
   foreach ($entry in $sessionEntries) {
     if ($entry.TrimEnd("\") -ieq $binDirectory.TrimEnd("\")) { $alreadyInSession = $true }
   }
   if (-not $alreadyInSession) { $env:Path = "$binDirectory;$env:Path" }
+
+  if ($Setup) {
+    & $installedBinary setup @SetupArguments
+    if ($LASTEXITCODE -ne 0) {
+      throw "install.ps1: Computer setup exited with code $LASTEXITCODE"
+    }
+    return
+  }
 
   # Keep completion guidance out of the script's pipeline return value.
   Write-Host "   $computerLabel installed and ready to use"

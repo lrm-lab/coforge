@@ -64,9 +64,9 @@ The installer supplies this launcher; Daemon startup does not repair older
 installations. No older-client or older-installer compatibility is maintained.
 `coforge-installer repair` is the narrow recovery for a damaged activation: it verifies the
 immutable version named by `active.json` and recreates the active link and PATH shim under the
-machine mutation lock. It does not rewrite a version payload or stop the Computer service; a
-missing or corrupt version produces a failed repair receipt so the caller can choose a full
-upgrade or fresh install.
+machine mutation lock. A damaged payload is quarantined and downloaded again through the same
+manifest and checksum checks as an upgrade. Repair does not stop the Computer service; a healthy
+installation produces a held `REPAIR_NOT_NEEDED` receipt.
 Installer identity metadata (`installation.json`) now uses schema 4 and
 records the `computer` identity, the generated `agentCli` and `githubCli`
 launcher identities, and the installed `photon_rs_bg.wasm` identity. It

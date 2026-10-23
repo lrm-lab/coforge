@@ -21,6 +21,10 @@ export const UpgradeResultSchema = z.looseObject({
   schema_version: z.literal(1),
   request_id: z.string().regex(RFC_UUID_PATTERN),
   operation: z.enum(["upgrade", "repair"]),
+  /** Raft-compatible terminal operation label. Older CoForge receipts omit it. */
+  outcome: z
+    .enum(["promoted", "repaired", "rolled_back", "held", "failed", "unresolved"])
+    .optional(),
   status: z.enum(["succeeded", "failed"]),
   version: z.string().optional(),
   restoredVersion: z.string().optional(),

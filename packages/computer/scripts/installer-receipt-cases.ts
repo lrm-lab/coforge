@@ -49,6 +49,7 @@ export const ALLOWED_RECEIPTS = [
     slug: "succeeded",
     fields: {
       status: "succeeded",
+      outcome: "promoted",
       version: "0.2.0",
       supervisorRunning: true,
       runtimes: [{ bindingId: "ws_example", running: true }],
@@ -61,6 +62,7 @@ export const ALLOWED_RECEIPTS = [
     fields: {
       operation: "repair",
       status: "succeeded",
+      outcome: "repaired",
       version: "0.2.0",
       exit_code: 0,
     },
@@ -73,6 +75,7 @@ export const ALLOWED_RECEIPTS = [
       request_id: "0F8B6D5E-2A41-4C3B-BE7D-1A2B3C4D5E6F",
       status: "succeeded",
       version: "0.2.0",
+      outcome: "promoted",
       exit_code: 0,
     },
   },
@@ -80,6 +83,7 @@ export const ALLOWED_RECEIPTS = [
     slug: "failed-installer-unavailable",
     fields: {
       status: "failed",
+      outcome: "failed",
       error: "The release feed did not answer",
       errorCode: "UPGRADE_INSTALLER_UNAVAILABLE",
       exit_code: 1,
@@ -89,6 +93,7 @@ export const ALLOWED_RECEIPTS = [
     slug: "failed-installer-incompatible",
     fields: {
       status: "failed",
+      outcome: "failed",
       error: "This version needs a newer installer",
       errorCode: "UPGRADE_INSTALLER_INCOMPATIBLE",
       exit_code: 1,
@@ -98,6 +103,7 @@ export const ALLOWED_RECEIPTS = [
     slug: "failed-downgrade-refused",
     fields: {
       status: "failed",
+      outcome: "failed",
       error:
         "CoForge Computer 0.1.0 is older than the installed 0.2.0. Nothing was changed. To go back, run `coforge-computer upgrade --version 0.1.0 --allow-downgrade`.",
       errorCode: "UPGRADE_DOWNGRADE_REFUSED",
@@ -106,12 +112,18 @@ export const ALLOWED_RECEIPTS = [
   },
   {
     slug: "failed",
-    fields: { status: "failed", error: "Could not create the staging directory", exit_code: 1 },
+    fields: {
+      status: "failed",
+      outcome: "failed",
+      error: "Could not create the staging directory",
+      exit_code: 1,
+    },
   },
   {
     slug: "rolled-back",
     fields: {
       status: "failed",
+      outcome: "rolled_back",
       restoredVersion: "0.1.0",
       error: "Computer supervisor did not report 0.2.0",
       errorCode: "UPGRADE_ROLLED_BACK",
@@ -125,6 +137,7 @@ export const ALLOWED_RECEIPTS = [
     slug: "held",
     fields: {
       status: "held",
+      outcome: "held",
       error:
         "Version 0.1.0 is older than the installed 0.2.0, so the installer held the upgrade before changing anything",
       exit_code: 2,
@@ -134,6 +147,7 @@ export const ALLOWED_RECEIPTS = [
     slug: "unresolved",
     fields: {
       status: "failed",
+      outcome: "unresolved",
       error:
         "Computer supervisor did not report 0.2.0; rollback failed: Computer supervisor did not report 0.1.0",
       errorCode: "UPGRADE_ROLLBACK_FAILED",
@@ -145,6 +159,7 @@ export const ALLOWED_RECEIPTS = [
     slug: "unresolved-no-previous-version",
     fields: {
       status: "failed",
+      outcome: "unresolved",
       error: "Computer supervisor did not report 0.1.0 and no previous version existed",
       deadProcessIdentities: DEAD_PROCESS_IDENTITIES,
       exit_code: 3,

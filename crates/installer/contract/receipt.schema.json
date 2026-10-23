@@ -19,6 +19,17 @@
             "repair"
           ]
         },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "promoted",
+            "repaired",
+            "rolled_back",
+            "held",
+            "failed",
+            "unresolved"
+          ]
+        },
         "status": {
           "type": "string",
           "const": "succeeded"
@@ -124,6 +135,17 @@
           "enum": [
             "upgrade",
             "repair"
+          ]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "promoted",
+            "repaired",
+            "rolled_back",
+            "held",
+            "failed",
+            "unresolved"
           ]
         },
         "status": {
@@ -234,6 +256,17 @@
           "enum": [
             "upgrade",
             "repair"
+          ]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "promoted",
+            "repaired",
+            "rolled_back",
+            "held",
+            "failed",
+            "unresolved"
           ]
         },
         "status": {
@@ -349,6 +382,17 @@
             "repair"
           ]
         },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "promoted",
+            "repaired",
+            "rolled_back",
+            "held",
+            "failed",
+            "unresolved"
+          ]
+        },
         "status": {
           "type": "string",
           "const": "held"
@@ -457,6 +501,17 @@
           "enum": [
             "upgrade",
             "repair"
+          ]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "promoted",
+            "repaired",
+            "rolled_back",
+            "held",
+            "failed",
+            "unresolved"
           ]
         },
         "status": {

@@ -227,8 +227,9 @@ pub const ERROR_CODE_DOWNGRADE_REFUSED: &str = "UPGRADE_DOWNGRADE_REFUSED";
 /// receipt cannot pair them wrongly (`InstallerReceiptSchema` in the product has the table).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReceiptOutcome {
-    /// Exit 0.
-    Succeeded { version: String },
+    Succeeded {
+        version: String,
+    },
     /// Exit 1: failed before any change. `error_code` is one of the SDK's, never a rollback code,
     /// or `None` when none of them describes the failure.
     Failed {
@@ -240,7 +241,6 @@ pub enum ReceiptOutcome {
         error: String,
         restored_version: String,
     },
-    /// Exit 2: stopped on purpose before it settled. `error_code` as for [`Self::Failed`].
     Held {
         error: String,
         error_code: Option<String>,
@@ -253,7 +253,6 @@ pub enum ReceiptOutcome {
     },
 }
 
-/// A receipt that breaks a rule the product's schema states.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidReceipt(String);
 
@@ -265,13 +264,13 @@ impl fmt::Display for InvalidReceipt {
 
 impl std::error::Error for InvalidReceipt {}
 
-/// The JSON fields of a receipt, as they are written; [`UpgradeReceipt`] holds only ones that
-/// [`validate`] accepts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct ReceiptFields {
     schema_version: u32,
     request_id: String,
     operation: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    outcome: Option<String>,
     status: ReceiptStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     version: Option<String>,
@@ -304,14 +303,10 @@ struct ReceiptFields {
     installer_version: String,
 }
 
-/// One immutable receipt per request id under `upgrade-results`; replays return its exit status.
-/// Status, error code, and exit code are validated together as in `InstallerReceiptSchema`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpgradeReceipt(ReceiptFields);
 
 impl UpgradeReceipt {
-    /// The receipt of one upgrade. `dead_process_identities` names the processes the installer
-    /// stopped and is left out of the receipt when empty.
     pub fn new(
         request_id: &str,
         outcome: ReceiptOutcome,
@@ -320,67 +315,78 @@ impl UpgradeReceipt {
         Self::new_for_operation(request_id, "upgrade", outcome, dead_process_identities)
     }
 
-    /// Creates a receipt for one installer operation. `upgrade` is the existing public operation;
-    /// `repair` records the local activation repair separately so a daemon upgrade watcher never
-    /// mistakes a manual repair for a server-requested upgrade.
     pub fn new_for_operation(
         request_id: &str,
         operation: &str,
         outcome: ReceiptOutcome,
         dead_process_identities: Vec<DeadProcessIdentity>,
     ) -> Result<Self, InvalidReceipt> {
-        let (status, exit_code, version, restored_version, error, error_code) = match outcome {
-            ReceiptOutcome::Succeeded { version } => (
-                ReceiptStatus::Succeeded,
-                EXIT_SUCCEEDED,
-                Some(version),
-                None,
-                None,
-                None,
-            ),
-            ReceiptOutcome::Failed { error, error_code } => (
-                ReceiptStatus::Failed,
-                EXIT_FAILED,
-                None,
-                None,
-                Some(error),
-                error_code,
-            ),
-            ReceiptOutcome::RolledBack {
-                error,
-                restored_version,
-            } => (
-                ReceiptStatus::Failed,
-                EXIT_FAILED,
-                None,
-                Some(restored_version),
-                Some(error),
-                Some(ERROR_CODE_ROLLED_BACK.to_owned()),
-            ),
-            ReceiptOutcome::Held { error, error_code } => (
-                ReceiptStatus::Held,
-                EXIT_HELD,
-                None,
-                None,
-                Some(error),
-                error_code,
-            ),
-            ReceiptOutcome::Unresolved {
-                error,
-                rollback_failed,
-            } => (
-                ReceiptStatus::Failed,
-                EXIT_UNRESOLVED,
-                None,
-                None,
-                Some(error),
-                rollback_failed.then(|| ERROR_CODE_ROLLBACK_FAILED.to_owned()),
-            ),
-        };
+        let (status, exit_code, version, restored_version, error, error_code, receipt_outcome) =
+            match outcome {
+                ReceiptOutcome::Succeeded { version } => (
+                    ReceiptStatus::Succeeded,
+                    EXIT_SUCCEEDED,
+                    Some(version),
+                    None,
+                    None,
+                    None,
+                    Some(
+                        if operation == "repair" {
+                            "repaired"
+                        } else {
+                            "promoted"
+                        }
+                        .to_owned(),
+                    ),
+                ),
+                ReceiptOutcome::Failed { error, error_code } => (
+                    ReceiptStatus::Failed,
+                    EXIT_FAILED,
+                    None,
+                    None,
+                    Some(error),
+                    error_code,
+                    Some("failed".to_owned()),
+                ),
+                ReceiptOutcome::RolledBack {
+                    error,
+                    restored_version,
+                } => (
+                    ReceiptStatus::Failed,
+                    EXIT_FAILED,
+                    None,
+                    Some(restored_version),
+                    Some(error),
+                    Some(ERROR_CODE_ROLLED_BACK.to_owned()),
+                    Some("rolled_back".to_owned()),
+                ),
+                ReceiptOutcome::Held { error, error_code } => (
+                    ReceiptStatus::Held,
+                    EXIT_HELD,
+                    None,
+                    None,
+                    Some(error),
+                    error_code,
+                    Some("held".to_owned()),
+                ),
+                ReceiptOutcome::Unresolved {
+                    error,
+                    rollback_failed,
+                } => (
+                    ReceiptStatus::Failed,
+                    EXIT_UNRESOLVED,
+                    None,
+                    None,
+                    Some(error),
+                    rollback_failed.then(|| ERROR_CODE_ROLLBACK_FAILED.to_owned()),
+                    Some("unresolved".to_owned()),
+                ),
+            };
         let fields = ReceiptFields {
             schema_version: RECEIPT_SCHEMA_VERSION,
             request_id: request_id.to_owned(),
             operation: operation.to_owned(),
+            outcome: receipt_outcome,
             status,
             version,
             restored_version,

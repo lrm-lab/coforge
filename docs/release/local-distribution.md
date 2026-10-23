@@ -38,12 +38,17 @@ where the directory has the layout above. Local builds may carry a lower version
 installed one, so the developer scripts pass `--allow-downgrade`; without it the installer
 refuses an older version ([Upgrade operations](upgrade-operations.md)).
 
-The POSIX bootstrap also accepts `repair`, `status`, and `recover` subcommands and forwards them
-to the freshly verified installer. `repair` has no version or channel selector: CoForge repairs
-the version already selected by `active.json`, recreating activation links after verifying its
-immutable bytes. It does not restart the service or replace a corrupt version; that case remains a
-failed repair receipt. An installer exit 3 is retried once for install, upgrade, and repair, while
-status and recover preserve their single-attempt result.
+The POSIX and PowerShell bootstraps accept `install`, `upgrade`, `repair`, `status`, `recover`, and
+`help`, and forward the command to the freshly verified installer. `repair` follows the reference
+installer's selection surface: `--version` or `--channel main` may select a target, while an
+omitted selector repairs the active installation. A healthy installation returns a held
+`repair_not_needed` receipt; missing activation links are recreated, and a damaged immutable
+version is quarantined before the installer downloads and verifies a replacement. Repair does not
+stop or start the Computer supervisor. `RAFT_COMPUTER_VERSION` and `INSTALL_CHANNEL_DEFAULT` fill
+omitted bootstrap selections, and explicit flags win. `--setup` passes the remaining arguments to
+the installed Computer after install, upgrade, or repair, including when an operation exits 3 but
+an existing binary remains usable. An installer exit 3 is retried once for install, upgrade, and
+repair, while status, recover, and help preserve their single-attempt result.
 
 Both entry points detect the platform before resolving the version. Normal output
 is limited to platform/version, curl download progress, installation location, and

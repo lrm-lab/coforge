@@ -152,15 +152,17 @@ pub fn recover(
     .and_then(std::convert::identity)
 }
 
-/// Repairs the active version's metadata and links without downloading or replacing its immutable
-/// payload. The operation uses the same machine lock and receipt directory as upgrades.
+/// Repairs activation links or quarantines and redownloads a damaged immutable payload. The
+/// operation uses the same machine lock and receipt directory as upgrades.
 pub fn repair(
     setup: &Setup,
     request_id: &str,
+    selection: Option<&str>,
+    allow_downgrade: bool,
     stage: &mut dyn FnMut(&str),
 ) -> Result<Outcome, String> {
     with_ports(setup, &ReleaseOrigin::Feed, |ports| {
-        repair_installation(ports, request_id, stage)
+        repair_installation(ports, request_id, selection, allow_downgrade, stage)
     })
 }
 

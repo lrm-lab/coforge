@@ -1,10 +1,8 @@
 # coforge-installer instructions
-
 These rules extend the repository root `AGENTS.md` for `crates/installer/`, the Rust
 crate that builds `coforge-installer`. The root architecture invariants state
 what the installer owns and how it controls a running Computer; this file holds
 the crate's commands, toolchain, and gotchas.
-
 ## Module map
 The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it describes.
 
@@ -60,15 +58,17 @@ The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it de
 - `coforge-installer recover [--caller-pid <pid>]`: settles an unfinished upgrade (the journal).
   `--caller-pid` is the `coforge-computer recover` process that launched this installer and waits
   for it, verified and never stopped, as for `upgrade`.
-- `coforge-installer repair`: under the machine lock, verifies the `active.json` version and
-  recreates its `active` link and PATH shim. It never downloads, edits a version directory, or
-  controls the service. A bad version writes a failed `operation: "repair"` receipt with
-  `UPDATE_INTEGRITY_FAILED`; success writes a repair receipt, and request replays are supported.
+- `coforge-installer repair [--version <v> | --channel main|latest] [--yes] [--allow-downgrade]
+  [--json]`: under
+  the machine lock, repairs the active installation without stopping the service. Healthy payloads
+  only need activation links recreated; a damaged payload is quarantined and downloaded again
+  through the manifest/checksum pipeline. An unneeded repair writes a held `REPAIR_NOT_NEEDED`
+  receipt; successful repairs carry `outcome: "repaired"`, and request replays are supported.
 - `coforge-installer status [--json]`: read-only, no lock. `--json` field names are documented in
   `src/status.rs`.
 - `--version` prints the crate version.
 
-Output: each stage line is `==> <stage>` on stdout, flushed as it happens. A succeeded install,
+Output: each stage line is `==> <stage>` on stdout, flushed as it happens (stderr in JSON mode). A succeeded install,
 upgrade, or repair ends with `CoForge Computer <version> is active.`. A refusal or a failed
 receipt's message goes to stderr as `coforge-installer: <message>`, or
 `coforge-installer: <CODE>: <message>` when the receipt has an `errorCode`. A feed retry first

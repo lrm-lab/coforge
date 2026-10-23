@@ -3,7 +3,8 @@
 These rules extend `crates/installer/AGENTS.md` for `crates/installer/src/`. One line per
 module: its file and single responsibility. Update it before adding or reorganizing a module.
 
-- `src/main.rs`: command line. Parses arguments, calls `installation`, prints the
+- `src/args.rs`: command-line parser and parser tests; produces typed command intent for `main.rs`.
+- `src/main.rs`: command line. Calls `installation`, prints the
   result, maps outcomes to exit codes. No installation logic. Process tests in `tests/cli.rs`
   run the real binary against a scratch home, with no network.
 - `src/lib.rs`: crate root; declares the library modules.
@@ -120,9 +121,9 @@ module: its file and single responsibility. Update it before adding or reorganiz
   settles the journal through `switch`: keeps a recorded success or an already-active new version
   that settles, otherwise restores the previous version. Writes a receipt only when none exists;
   clears the journal only after settling. Tests in `src/recover/tests.rs`.
-- `src/repair.rs`: `coforge-installer repair`. Verifies the selected active immutable version and
-  recreates its active link and PATH shim without touching service processes; writes a repair
-  receipt. Tests live with the module.
+- `src/repair.rs`: `coforge-installer repair`. Verifies the selected immutable version, repairs
+  activation links, and quarantines and redownloads a damaged payload without touching service
+  processes; writes a repair receipt. Tests live with the module.
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
   scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,
   which can script a path's first answers), a tiny release tree, and runners
