@@ -5,6 +5,19 @@ import { join } from "node:path";
 import installSh from "../../../../scripts/release/install.sh" with { type: "text" };
 import installPs1 from "../../../../scripts/release/install.ps1" with { type: "text" };
 
+/** The install scripts' exit status for a feed that could not be reached or answered non-2xx
+ * (`download_failed_status` in install.sh, `$downloadFailedStatus` in install.ps1). */
+export const DOWNLOAD_FAILED_EXIT_STATUS = 75;
+
+/** The install script reported that the feed could not be downloaded from, as opposed to having
+ * downloaded something it refused. */
+export class InstallationDownloadError extends Error {
+  constructor(readonly status: number) {
+    super(`release feed could not be reached: download failed (exit ${status})`);
+    this.name = "InstallationDownloadError";
+  }
+}
+
 /** Run the very same installer source shipped by Web, embedded into the native executable.
  * No mutable remote script or caller-provided feed override participates in an upgrade. */
 export async function runInstallationSource(options: {
@@ -60,6 +73,7 @@ export async function runInstallationSource(options: {
       stderr: "inherit",
     });
     const [status, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
+    if (status === DOWNLOAD_FAILED_EXIT_STATUS) throw new InstallationDownloadError(status);
     if (status !== 0) throw new Error(`installer preparation failed (exit ${status})`);
     return output.trim();
   } finally {

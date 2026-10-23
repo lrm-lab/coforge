@@ -19,7 +19,7 @@ import { isValidReleaseVersion, thrownMessage } from "@lrm/coforge-sdk/internal"
 import type { z } from "zod";
 
 import { UpdateError } from "#src/updater";
-import { runInstallationSource } from "./installation-source";
+import { InstallationDownloadError, runInstallationSource } from "./installation-source";
 import { InstallerManifestSchema } from "./installer-contract";
 
 /** The same ceilings as the install scripts and the installer crate: a manifest is at most 1 MiB;
@@ -37,6 +37,9 @@ const PARTIAL_PREFIX = ".download-";
  * is taken to belong to a run that no longer exists. */
 const STALE_AFTER_MS = 60 * 60 * 1000;
 
+/** Three attempts in all, one second then four apart. */
+const DEFAULT_RETRY_DELAYS_MS = [1000, 4000] as const;
+
 const logger = getLogger(["coforge", "computer", "installer"]);
 
 export type InstallerLaunchOptions = {
@@ -47,6 +50,9 @@ export type InstallerLaunchOptions = {
   target: string;
   /** The install root; the verified copy is kept in `<install root>/installer/<sha256>/`. */
   installRoot: string;
+  /** Waits before each retry of a failed download; the number of entries is the number of
+   * retries. Defaults to 1 s then 4 s (three attempts); tests pass zeros. */
+  retryDelaysMs?: readonly number[];
 };
 
 export type VerifiedInstaller = { path: string; version: string };
@@ -60,7 +66,9 @@ type InstallerEntry = z.infer<typeof InstallerManifestSchema>["platforms"][strin
  * private, verified executable in the install root: a copy already there is used only after it
  * is hashed again, and the directory is `0700`, which keeps it as verified until it is run.
  *
- * `UPDATE_FEED_INVALID` is anything `runInstallationSource` throws (the install script failing or
+ * `UPDATE_DOWNLOAD_FAILED` is the install script reporting that the feed could not be reached or
+ * answered with a non-2xx status; it alone is retried (see `DEFAULT_RETRY_DELAYS_MS`).
+ * `UPDATE_FEED_INVALID` is any other failure of `runInstallationSource` (the install script
  * refusing a transfer, and also that function failing to write or start the script) and a pointer
  * or manifest that is not valid; `UPDATE_INTEGRITY_FAILED` is a size, checksum, or gzip check;
  * `UPDATE_UNSUPPORTED_TARGET` is a manifest with no entry for this target. This module's own
@@ -69,7 +77,8 @@ type InstallerEntry = z.infer<typeof InstallerManifestSchema>["platforms"][strin
  */
 export async function obtainInstaller(options: InstallerLaunchOptions): Promise<VerifiedInstaller> {
   const baseUrl = `${options.feedUrl.replace(/\/+$/, "")}/installer`;
-  const version = await runSource({
+  const delays = options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+  const version = await runSource(delays, {
     baseUrl,
     target: options.target,
     selection: "latest",
@@ -81,7 +90,7 @@ export async function obtainInstaller(options: InstallerLaunchOptions): Promise<
   const work = await mkdtemp(join(tmpdir(), "coforge-installer-download-"));
   try {
     const prepare = (phase: "manifest" | "installer") =>
-      runSource({
+      runSource(delays, {
         baseUrl,
         target: options.target,
         selection: version,
@@ -118,13 +127,27 @@ function integrity(message: string): UpdateError {
   return new UpdateError("UPDATE_INTEGRITY_FAILED", message);
 }
 
-/** Runs the embedded install script. Whatever it throws, including its own local failures, is
- * reported as `UPDATE_FEED_INVALID`, as `ComputerUpdater` reports the same calls. */
-async function runSource(options: Parameters<typeof runInstallationSource>[0]): Promise<string> {
-  try {
-    return await runInstallationSource(options);
-  } catch (error) {
-    throw feedInvalid(thrownMessage(error));
+/** Runs the embedded install script. A download failure is `UPDATE_DOWNLOAD_FAILED` and is tried
+ * again after each of `delays`; whatever else it throws, including its own local failures, is
+ * reported as `UPDATE_FEED_INVALID` at once. */
+async function runSource(
+  delays: readonly number[],
+  options: Parameters<typeof runInstallationSource>[0],
+): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runInstallationSource(options);
+    } catch (error) {
+      if (!(error instanceof InstallationDownloadError)) throw feedInvalid(thrownMessage(error));
+      if (attempt >= delays.length) {
+        throw new UpdateError("UPDATE_DOWNLOAD_FAILED", error.message);
+      }
+      logger.warn("Downloading from the release feed failed; trying again", {
+        attempt: attempt + 1,
+        message: error.message,
+      });
+      await Bun.sleep(delays[attempt]!);
+    }
   }
 }
 

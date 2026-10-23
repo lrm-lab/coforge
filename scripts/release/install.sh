@@ -154,12 +154,32 @@ done_step() {
   printf '%b\n' "${success}   ✓${reset} $1" >&2
 }
 
+# Exit status of --resolve-only and --prepare-directory when the feed could not be reached (curl
+# transport failure) or answered with a 4xx/5xx status; the Computer maps it to
+# UPDATE_DOWNLOAD_FAILED and retries. Every other failure, including --max-filesize exceeded
+# (curl 63), keeps exit 1. The bootstrap path (`curl | sh`) keeps exit 1 throughout. 0, 1 and 2
+# are this script's own; 75 is sysexits' EX_TEMPFAIL.
+download_failed_status=75
+
+# The status a failed download exits with: the dedicated one for the Computer's own modes when
+# the cause is transport or HTTP status (curl 63 is the size cap, a content judgement).
+download_failure() {
+  if [ "$1" -ne 63 ] && { [ -n "$prepare_directory" ] || [ "$resolve_only" -eq 1 ]; }; then
+    return "$download_failed_status"
+  fi
+  return 1
+}
+
 fetch() {
   # Metadata must not follow redirects. --fail alone accepts 3xx responses.
-  status=$(curl --fail --silent --show-error --proto "$curl_proto" --tlsv1.2 --write-out '%{http_code}' "$@") || return 1
+  curl_status=0
+  status=$(curl --fail --silent --show-error --proto "$curl_proto" --tlsv1.2 --write-out '%{http_code}' "$@") || curl_status=$?
+  [ "$curl_status" -eq 0 ] || { download_failure "$curl_status" || return $?; }
   case "$status" in
     2??) ;;
-    *) echo "install.sh: download returned HTTP $status (redirects are not followed)" >&2; return 1 ;;
+    # A redirect is the feed answering against its contract, not a failure to reach it.
+    3??) echo "install.sh: download returned HTTP $status (redirects are not followed)" >&2; return 1 ;;
+    *) echo "install.sh: download returned HTTP $status (redirects are not followed)" >&2; download_failure 0 || return $? ;;
   esac
 }
 
@@ -171,10 +191,13 @@ fetch_binary() {
   # Preserve bootstrap's HTTPS-only redirects; updater preparation refuses every redirect.
   redirects=--location
   [ -z "$prepare_directory" ] || redirects=
-  status=$(curl --fail "$progress" --show-error $redirects --proto "$curl_proto" --proto-redir "$curl_proto" --tlsv1.2 --write-out '%{http_code}' "$@") || return 1
+  curl_status=0
+  status=$(curl --fail "$progress" --show-error $redirects --proto "$curl_proto" --proto-redir "$curl_proto" --tlsv1.2 --write-out '%{http_code}' "$@") || curl_status=$?
+  [ "$curl_status" -eq 0 ] || { download_failure "$curl_status" || return $?; }
   case "$status" in
     2??) ;;
-    *) echo "install.sh: download returned HTTP $status" >&2; return 1 ;;
+    3??) echo "install.sh: download returned HTTP $status" >&2; return 1 ;;
+    *) echo "install.sh: download returned HTTP $status" >&2; download_failure 0 || return $? ;;
   esac
 }
 

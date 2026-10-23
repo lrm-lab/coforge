@@ -98,16 +98,40 @@ function Write-CoforgeStep([string]$Message) {
   [Console]::Error.WriteLine("==> $Message")
 }
 
+# Exit status of -ResolveOnly and -PrepareDirectory when the feed could not be reached (curl
+# transport failure) or answered with a 4xx/5xx status; the Computer maps it to
+# UPDATE_DOWNLOAD_FAILED and retries. Every other failure, including the size cap (curl 63),
+# stays a thrown error (exit 1). The bootstrap path (`irm | iex`) only throws, as `exit` there
+# would end the user's own session. 75 is sysexits' EX_TEMPFAIL.
+$downloadFailedStatus = 75
+
+function Stop-CoforgeDownload([string]$Message) {
+  if ($PrepareDirectory -or $ResolveOnly) {
+    # These modes run as the Computer's own child process (-File), never inside a user session.
+    [Console]::Error.WriteLine($Message)
+    exit $downloadFailedStatus
+  }
+  throw $Message
+}
+
 # Use native curl (not PowerShell's curl alias). No redirects are followed, including for
 # bodies, preserving the Windows bootstrap and updater transport policy.
 function Get-CoforgeObject([string]$Uri, [string]$OutFile, [long]$MaxBytes, [switch]$Binary) {
   $progress = if ($Binary -and -not [Console]::IsErrorRedirected) { "--progress-bar" } else { "--silent" }
   $status = & curl.exe --fail $progress --show-error --proto $curlProto --tlsv1.2 --max-filesize $MaxBytes --output $OutFile --write-out '%{http_code}' $Uri
-  if ($LASTEXITCODE -ne 0) {
-    throw "install.ps1: download failed with curl exit code $LASTEXITCODE"
+  $curlExit = $LASTEXITCODE
+  if ($curlExit -eq 63) {
+    throw "install.ps1: download failed with curl exit code $curlExit"
+  }
+  if ($curlExit -ne 0) {
+    Stop-CoforgeDownload "install.ps1: download failed with curl exit code $curlExit"
+  }
+  if ($status -cmatch '^3[0-9]{2}\z') {
+    # A redirect is the feed answering against its contract, not a failure to reach it.
+    throw "install.ps1: download returned HTTP $status (redirects are not followed)"
   }
   if ($status -cnotmatch '^2[0-9]{2}\z') {
-    throw "install.ps1: download returned HTTP $status (redirects are not followed)"
+    Stop-CoforgeDownload "install.ps1: download returned HTTP $status (redirects are not followed)"
   }
   if ((Get-Item -LiteralPath $OutFile).Length -gt $MaxBytes) {
     throw "install.ps1: download exceeded the maximum allowed size of $MaxBytes bytes"

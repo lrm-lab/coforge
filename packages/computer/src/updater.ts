@@ -132,7 +132,11 @@ export function windowsComputerLauncher(installRoot: string): string {
 
 export class UpdateError extends Error {
   constructor(
-    readonly code: "UPDATE_FEED_INVALID" | "UPDATE_INTEGRITY_FAILED" | "UPDATE_UNSUPPORTED_TARGET",
+    readonly code:
+      | "UPDATE_DOWNLOAD_FAILED"
+      | "UPDATE_FEED_INVALID"
+      | "UPDATE_INTEGRITY_FAILED"
+      | "UPDATE_UNSUPPORTED_TARGET",
     message: string,
   ) {
     super(message);

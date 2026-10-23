@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ComputerUpdater } from "#src/updater";
-import { runInstallationSource } from "#src/release/installation-source";
+import { InstallationDownloadError, runInstallationSource } from "#src/release/installation-source";
 import { runCli } from "#src/cli";
 
 // What the Computer's updater still does: read the installed version. Installing, manifest checks,
@@ -144,4 +144,23 @@ test("a version of '.' or one that starts with '-' is rejected", async () => {
   // validation would still 404 against the feed and fail the same way, which would let this test
   // pass for the wrong reason.
   expect(input.requested).toEqual([]);
+});
+
+test("a feed that answers 5xx is a download failure carrying the script's exit status", async () => {
+  const server = Bun.serve({ port: 0, fetch: () => new Response("down", { status: 503 }) });
+  servers.push(server);
+
+  const failure = await resolve(`http://localhost:${server.port}/`, "latest").catch((e) => e);
+
+  expect(failure).toBeInstanceOf(InstallationDownloadError);
+  expect(failure.message).toContain("exit 75");
+});
+
+test("a feed answering with an invalid pointer is not a download failure", async () => {
+  const { baseUrl } = feed({ latest: "../evil" });
+
+  const failure = await resolve(baseUrl, "latest").catch((e) => e);
+
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure).not.toBeInstanceOf(InstallationDownloadError);
 });

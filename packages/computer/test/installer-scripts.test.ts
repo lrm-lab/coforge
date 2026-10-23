@@ -3,55 +3,12 @@ import { mkdir, mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 
-const temporaryDirectories: string[] = [];
-const servers: Array<ReturnType<typeof Bun.serve>> = [];
+import { run, script, serveStub, servers, temporaryDirectories } from "./installer-script-runner";
 
 afterEach(async () => {
   for (const server of servers.splice(0)) server.stop(true);
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
 });
-
-/** A stub feed on 127.0.0.1, which URLs name: `localhost` may reach another process on ::1. */
-function serveStub(options: { fetch(request: Request): Response | Promise<Response> }) {
-  const server = Bun.serve({ ...options, hostname: "127.0.0.1", port: 0 });
-  servers.push(server);
-  return server;
-}
-
-const script = resolve(import.meta.dir, "../../../scripts/release/install.sh");
-
-/** Bun.spawnSync blocks the whole JS thread, including the fixture Bun.serve running in this
- * same process - a synchronous spawn here would deadlock the moment the script tries to reach
- * the fixture server. Bun.spawn keeps the event loop free so the fixture can respond. */
-async function run(
-  args: string[],
-  env: Record<string, string | undefined>,
-  isolatedHome?: string,
-  shellRoots: { zdotdir?: string; xdgConfigHome?: string } = {},
-): Promise<{ exitCode: number; stdout: string; stderr: string; home: string }> {
-  // Every installer execution gets a disposable HOME. This is a safety boundary, not just test
-  // cleanup: behavior tests exercise shell startup-file persistence and must never append to the
-  // developer's real shell configuration, even when callers spread process.env.
-  const home = isolatedHome ?? (await mkdtemp(join(tmpdir(), "coforge-installer-home-")));
-  if (!isolatedHome) temporaryDirectories.push(home);
-  const child = Bun.spawn({
-    cmd: [script, ...args],
-    env: {
-      ...env,
-      HOME: home,
-      ZDOTDIR: shellRoots.zdotdir ?? home,
-      XDG_CONFIG_HOME: shellRoots.xdgConfigHome ?? join(home, ".config"),
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { exitCode, stdout, stderr, home };
-}
 
 function sha256hex(bytes: Uint8Array): string {
   return new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
@@ -667,7 +624,7 @@ test("install.sh bounds manifest downloads at 1 MiB", async () => {
     COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}`,
     COFORGE_INSTALLER_TEST_MODE: "1",
   });
-  expect(child.exitCode).not.toBe(0);
+  expect(child.exitCode).toBe(1);
   expect(child.stderr).toContain("curl: (63)");
   expect(await Bun.file(join(directory, "coforge-computer.gz")).exists()).toBe(false);
 });
@@ -1298,7 +1255,12 @@ test("install scripts fail closed and stay within the current user's own account
   expect(powershellCode).toContain("$env:Path = ");
   // A top-level `exit` terminates the host under `irm ... | iex` - closing the user's window on
   // success as readily as on failure. Errors leave through `throw`, like everything else here.
-  expect(powershellCode).not.toMatch(/^\s*exit\b/m);
+  // The one exception is the download-failure status of the Computer's own -File calls, which a
+  // throw cannot carry (it always exits 1) and which are never run inside a user's session.
+  expect(powershellCode).not.toMatch(/^\s*exit\b(?!\s+\$downloadFailedStatus\b)/m);
+  expect(powershellCode).toMatch(
+    /if \(\$PrepareDirectory -or \$ResolveOnly\) \{[^}]*exit \$downloadFailedStatus/,
+  );
   expect(powershellCode).toContain("$LASTEXITCODE -ne 0");
   // The Windows shim is a .cmd launcher (packages/computer/src/updater.ts), not an .exe.
   expect(powershellCode).toContain("coforge-computer.cmd");
