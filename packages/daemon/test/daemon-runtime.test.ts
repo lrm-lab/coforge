@@ -408,8 +408,8 @@ test("a duplicate fenced start wakes the managed runtime without replaying recov
     });
     expect(sessions).toBe(1);
     expect(notices).toHaveLength(1);
-    expect(notices[0]).toContain("[CoForge inbox notice (restart recovery):");
-    expect(notices[0]).toContain("@ada  new: 1 message");
+    expect(notices[0]).toContain("[CoForge inbox notice:");
+    expect(notices[0]).toContain("@ada 1 new message");
     expect(notices[0]).not.toContain("wake only");
     expect(notices[0]).not.toContain("must be ignored");
     expect(notices[0]).not.toContain("@grace");
@@ -3594,9 +3594,7 @@ describe("DaemonRuntime", () => {
       target: "@agent",
     });
     expect(starts).toBe(2);
-    expect(notices).toEqual([
-      "[CoForge inbox notice:\nInbox update: 1 message delivered or held for you\n@agent  new: 1 message\nDrain each listed target with `coforge message check --target '<target>'`, or inspect with `coforge message read --target '<target>'`. Either may return nothing, because a message can already have been read.\nTargets starting with # must be quoted. Send bodies on stdin, never a positional argument; double quotes expand backticks and $, so use a single-quoted heredoc delimiter:\ncoforge message check --target '#channel'\ncoforge message send --target '#channel' <<'COFORGE_MESSAGE'\nYour reply text, with literal `backticks` and $variables preserved.\nCOFORGE_MESSAGE]",
-    ]);
+    expect(notices).toEqual(["[CoForge inbox notice:\n@agent 1 new message]"]);
     expect(acknowledgements).toEqual(["delivery-1"]);
 
     await runtime.stopAgent("agent-a");
@@ -4095,7 +4093,7 @@ describe("DaemonRuntime", () => {
       expect(acknowledgements).toEqual(["delivery-chatter"]);
       expect(launches).toBe(2);
       expect(notices).toHaveLength(1);
-      expect(notices[0]).toContain("#team  new: 1 message · latest sender @builder");
+      expect(notices[0]).toContain("#team 1 new message");
     } finally {
       await runtime.stop();
     }
@@ -4140,7 +4138,7 @@ describe("DaemonRuntime", () => {
           return {
             ...sessionSpy(),
             notify: async (notice) => {
-              events.push(`notice ${notice.match(/@agent {2}new: (\d+) messages?/)?.[1]}`);
+              events.push(`notice ${notice.match(/@agent (\d+) new messages?/)?.[1]}`);
               allAcknowledged();
             },
             onExit(listener) {
@@ -4501,7 +4499,7 @@ describe("DaemonRuntime", () => {
       expect(launchAttempts).toBe(3);
       // One notice for everything that waited; each delivery was acknowledged exactly once.
       expect(notices).toHaveLength(1);
-      expect(notices[0]).toContain("@agent  new: 3 messages");
+      expect(notices[0]).toContain("@agent 3 new messages");
       expect(acknowledgements).toEqual(["delivery-1", "delivery-2", "delivery-3"]);
     } finally {
       await runtime.stop();
@@ -4616,7 +4614,7 @@ describe("DaemonRuntime", () => {
           return {
             ...sessionSpy(),
             notify: async (notice) => {
-              events.push(`notice ${notice.match(/Inbox update: (\d+) message/)?.[1]}`);
+              events.push(`notice ${notice.match(/(\d+) new message/)?.[1]}`);
             },
             onExit(listener) {
               exits.add(listener);
@@ -4716,7 +4714,7 @@ describe("DaemonRuntime", () => {
           return {
             ...sessionSpy(),
             notify: async (notice) => {
-              events.push(`notice ${notice.match(/Inbox update: (\d+) message/)?.[1]}`);
+              events.push(`notice ${notice.match(/(\d+) new message/)?.[1]}`);
               acknowledged.resolve();
             },
             onExit(listener) {
@@ -6504,7 +6502,7 @@ describe("DaemonRuntime", () => {
       });
       expect(harness.notices).toHaveLength(2);
       expect(harness.notices[0]).toBe(introductionPrompt);
-      expect(harness.notices[1]).toContain("restart recovery");
+      expect(harness.notices[1]).toContain("#team 3 new messages");
       expect(harness.startupNotices).toEqual([]);
     } finally {
       await harness.runtime.stop();
@@ -6701,8 +6699,8 @@ describe("DaemonRuntime", () => {
     );
     await Bun.sleep(10);
     expect(harness.notices).toHaveLength(1);
-    expect(harness.notices[0]).toContain("[CoForge inbox notice (restart recovery):");
-    expect(harness.notices[0]).toContain("@ada  new: 1 message");
+    expect(harness.notices[0]).toContain("[CoForge inbox notice:");
+    expect(harness.notices[0]).toContain("@ada 1 new message");
     expect(harness.notices[0]).not.toContain("wake only");
     await harness.runtime.stop();
   });
@@ -6763,7 +6761,7 @@ describe("DaemonRuntime", () => {
     release(`sk_agent_${"a".repeat(43)}`);
     const [started, recovered] = await Promise.all([launch, recoveryForLaunch, live]);
     expect(recovered).toBe(started);
-    expect(harness.notices[0]).toContain("[CoForge inbox notice (restart recovery):");
+    expect(harness.notices[0]).toContain("@ada 1 new message");
     expect(harness.notices[0]).not.toContain("hello from recovery");
     expect(harness.notices[1]).toContain("CoForge inbox notice");
     expect(harness.acknowledgements).toEqual(["delivery-2"]);
@@ -6882,7 +6880,9 @@ describe("DaemonRuntime", () => {
     );
     expect(harness.sessions()).toBe(2);
     expect(harness.notices).toHaveLength(2);
-    expect(harness.notices.every((notice) => notice.includes("restart recovery"))).toBe(true);
+    expect(harness.notices.every((notice) => notice.startsWith("[CoForge inbox notice:"))).toBe(
+      true,
+    );
     expect(harness.notices.every((notice) => !notice.includes("retry this recovery body"))).toBe(
       true,
     );
@@ -6976,8 +6976,8 @@ describe("DaemonRuntime", () => {
     await Bun.sleep(0);
 
     expect(harness.notices).toHaveLength(2);
-    expect(harness.notices[0]).toContain("[CoForge inbox notice (restart recovery):");
-    expect(harness.notices[0]).toContain("@ada  new: 1 message");
+    expect(harness.notices[0]).toContain("[CoForge inbox notice:");
+    expect(harness.notices[0]).toContain("@ada 1 new message");
     expect(harness.notices[0]).not.toContain("wake only");
     expect(harness.notices[0]).not.toContain("must be ignored");
     expect(harness.notices[0]).not.toContain("@grace");

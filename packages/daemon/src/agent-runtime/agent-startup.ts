@@ -17,11 +17,7 @@ export function agentStartupInput(resuming: boolean): string {
 }
 
 /** Summary-only recovery is bounded catch-up, not an instruction to drain every inbox. */
-export function agentStartupCatchupInput(
-  totalCount: number,
-  rows: readonly string[],
-  fenced = false,
-): string {
+export function agentStartupCatchupInput(rows: readonly string[], fenced = false): string {
   const command = fenced
     ? "message_read with the exact target"
     : "\`coforge message read --target <target>\`";
@@ -29,8 +25,7 @@ export function agentStartupCatchupInput(
   const reading = fenced
     ? "with no before/after/around anchor, continuing while hasNewer is true"
     : "once, retrying only a failed read";
-  return `[CoForge inbox notice (restart recovery):
-Inbox update: ${totalCount} message${totalCount === 1 ? "" : "s"} delivered or held for you
+  return `[CoForge inbox notice:
 ${rows.join("\n")}
 Read each listed conversation with ${command} ${reading}, then end this turn. Do not call ${check} in this catch-up mode. Continue working only if you find a direct request, assignment, personal mention, review request, or task addressed to you. Otherwise do not send a reply.]`;
 }

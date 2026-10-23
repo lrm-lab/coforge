@@ -168,7 +168,7 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
         context.toolProfile,
         context.memoryOfferOnly ?? evalMemoryOfferOnly(),
       ),
-      "## Inbox\nAn inbox notice lists targets, not bodies. Use message_read with the exact target, including any thread suffix, and no range anchor. Continue while hasNewer is true. A read may return nothing if the messages were already consumed. Do not announce the notice or poll for messages.",
+      "## Inbox\nAn inbox notice lists targets, not bodies. Use message_read with the exact target, including any thread suffix, and no range anchor. Continue while hasNewer is true. A held count means the daemon has not shown those messages yet: a read now covers them, and otherwise they arrive in a later notice. A read may return nothing if the messages were already consumed. Do not announce the notice or poll for messages.",
       guide.safety,
     );
   } else {
@@ -226,8 +226,7 @@ message_read: ${CHANNEL_ARGUMENT_EXAMPLES.message_read}${offerOnly ? "" : `\nsen
 
 export type CoforgeCliGuideOptions = Pick<CoforgeAgentPromptContext, "extraCriticalRules">;
 
-export const CLI_CHANNEL_MESSAGE_EXAMPLE = `Targets starting with # must be quoted. Send bodies on stdin, never a positional argument; double quotes expand backticks and $, so use a single-quoted heredoc delimiter:
-coforge message check --target '#channel'
+export const CLI_CHANNEL_MESSAGE_EXAMPLE = `coforge message check --target '#channel'
 coforge message send --target '#channel' <<'COFORGE_MESSAGE'
 Your reply text, with literal \`backticks\` and $variables preserved.
 COFORGE_MESSAGE`;
@@ -242,7 +241,7 @@ ${CLI_CHANNEL_MESSAGE_EXAMPLE}
 
 Targets: \`'@handle'\` DM, \`'#channel'\` channel; add \`:12345678\` for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices are not requests.`,
     messages: `## Read and send
-Notices list targets, not bodies. Run \`coforge message check --target '<target>'\` for each. Do not announce the notice or read MEMORY.md first. Older/thread context: \`coforge message search\` then \`read --around\`.
+Notices list targets, not bodies. Run \`coforge message check --target '<target>'\` for each. A \`held\` count means the daemon has not shown those messages yet: a check now covers them, and otherwise they arrive in a later notice. Do not announce the notice or read MEMORY.md first. Older/thread context: \`coforge message search\` then \`read --around\`.
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend automatically. Do not poll for new messages.`,
     execution: `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (existing: \`--number <n>\`); avoid duplicates. Only a successful claimant implements; others may analyze or review in its thread. If a claim fails, do not start conflicting execution. Tracked work: in_review; done after human approval.

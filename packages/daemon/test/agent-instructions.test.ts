@@ -337,14 +337,27 @@ test("strict eval Memory instructions agree with the Offer-only toolset", () => 
   expect(fenced).toContain("body, not content");
 });
 
-test("CLI instructions include a quoted stdin submission example", () => {
+test("CLI instructions include a copyable stdin submission example", () => {
   expect(instructions).toContain(`coforge message check --target '#channel'
 coforge message send --target '#channel' <<'COFORGE_MESSAGE'
 Your reply text, with literal \`backticks\` and $variables preserved.
 COFORGE_MESSAGE`);
-  expect(instructions).toContain("Targets starting with # must be quoted");
-  expect(instructions).toContain("never a positional argument");
-  expect(instructions).toContain("double quotes expand backticks and $");
+  expect(instructions).not.toContain("never a positional argument");
+});
+
+test("a fenced prompt teaches the native inbox read and no CLI command", () => {
+  const prompt = instructionsForFence("openviking-memory");
+  expect(prompt).toContain("## Inbox");
+  expect(prompt).toContain("Use message_read with the exact target");
+  expect(prompt).toContain("Continue while hasNewer is true");
+  expect(prompt).toContain("A held count means");
+  expect(prompt).not.toContain("coforge message");
+});
+
+test("the standing prompt teaches a notice's held count and no notice wording", () => {
+  expect(instructions).toContain("A `held` count means");
+  expect(instructions).not.toContain("Inbox update:");
+  expect(instructions).not.toContain("delivered or held for you");
 });
 
 const ACME_NOTES = {
