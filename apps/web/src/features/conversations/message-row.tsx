@@ -45,6 +45,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
+import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import { AttachmentPreview } from "./attachment-preview";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
 import { useIsMessageSaved } from "./conversation-host";
@@ -181,7 +182,6 @@ export function attachmentUrl(attachment: { id: string }) {
   return `/api/attachments/${attachment.id}`;
 }
 
-/** An uploaded file on a message: images preview inline, other files show as a file card. */
 export function AttachmentCard({ attachment }: { attachment: MessageView["attachments"][number] }) {
   const href = attachmentUrl(attachment);
   // Prefer the signed CDN preview URL so the image never round-trips the backend; fall back to
@@ -912,7 +912,7 @@ export const MessageRow = memo(function MessageRow({
               )}
             >
               <CollapsibleMessageBody
-                body={message.weeklyReportDisplayBody ?? message.body}
+                body={attachmentMessageDisplayBody(message)}
                 mentions={message.mentions}
                 plainMentions={plainMentions}
                 viewerId={viewerId}

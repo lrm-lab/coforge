@@ -11,3 +11,23 @@ export function attachmentFileNameSummary(attachments: { fileName: string }[]): 
   if (!first) return undefined;
   return rest.length ? `${first.fileName} (+${rest.length} more)` : first.fileName;
 }
+
+/**
+ * Body shown beside message attachments. The composer uses the first filename to satisfy the
+ * non-empty body contract for an attachment-only send; for image-only messages that value is a
+ * transport placeholder rather than a caption.
+ */
+export function attachmentMessageDisplayBody(message: {
+  body: string;
+  weeklyReportDisplayBody?: string;
+  attachments: { fileName: string; contentType: string }[];
+}): string {
+  if (
+    !message.weeklyReportDisplayBody &&
+    message.attachments.length > 0 &&
+    message.attachments.every((attachment) => attachment.contentType.startsWith("image/")) &&
+    message.body === message.attachments[0]?.fileName
+  )
+    return "";
+  return message.weeklyReportDisplayBody ?? message.body;
+}
