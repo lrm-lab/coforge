@@ -51,17 +51,20 @@ function caretInCode(beforeCaret: string): boolean {
   return inline;
 }
 
-/** An `@query` (any run without whitespace, `@` or `#`) or a `#query` (channel-name characters),
- * at the text start or after a boundary character (see `activeReferenceQuery`), running to the
- * caret. */
+/** An `@query` (any run without whitespace, `@`, `＠` or `#`) or a `#query` (channel-name
+ * characters), at the text start or after a boundary character (see `activeReferenceQuery`),
+ * running to the caret. */
 // The boundary is an assertion so matches can start at the trigger itself.
-const REFERENCE_QUERY = /(?<![A-Za-z0-9._%+@#/:?=&~-])(?:@([^\s@#]*)|#([a-z0-9_-]*))$/;
+const REFERENCE_QUERY = /(?<![A-Za-z0-9._%+@＠#/:?=&~-])(?:[@＠]([^\s@＠#]*)|#([a-z0-9_-]*))$/;
 
 /**
  * The completion query at the caret: the in-progress token starts at `@` or `#` (at the text
- * start or after a boundary character, below) and runs to the caret. A `#query` uses
+ * start or after a boundary character, below) and runs to the caret. The full-width `＠`
+ * (U+FF20, what a Chinese IME types in punctuation mode) is the same trigger as `@` with the same
+ * rules and reports trigger `"@"`; `insertReference` replaces it, so a picked mention reads `@name`.
+ * A typed-but-unpicked `＠name` stays plain text at send. A `#query` uses
  * channel-name characters only; an `@query` is a person's or Agent's name as it reads, so any run
- * of characters that are not whitespace, `@` or `#` — a CJK or capitalized name opens the list
+ * of characters that are not whitespace, `@`, `＠` or `#` — a CJK or capitalized name opens the list
  * too, while a space still ends it (a name is picked from the list, not typed out with its
  * spaces).
  * Returns the trigger, the token's start offset (the trigger itself) and the typed query without
@@ -70,7 +73,7 @@ const REFERENCE_QUERY = /(?<![A-Za-z0-9._%+@#/:?=&~-])(?:@([^\s@#]*)|#([a-z0-9_-
  * or in code.
  *
  * Both triggers open at the text start or after any character except an ASCII letter or digit,
- * the email local-part characters `._%+-`, the URL characters `/:?=&~`, or another `@` or `#`
+ * the email local-part characters `._%+-`, the URL characters `/:?=&~`, or another `@`, `＠` or `#`
  * (Frank's decision in task #49): Chinese puts no space between words, so `你好@`, `（@`, `：@`
  * and `去#ra` open the list, while `a@b.com`, `foo.bar@`, `C#`, `https://x.com/@frank` and
  * `https://x.com/docs/#install` stay plain text. The send-time recognizers exclude fewer

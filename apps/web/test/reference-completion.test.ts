@@ -48,6 +48,48 @@ test("an @ straight after CJK text or punctuation opens the list (task #49)", ()
   expect(activeReferenceQuery("：@a", end("：@a"))).toEqual({ trigger: "@", start: 1, query: "a" });
 });
 
+test("a full-width ＠ (a Chinese IME in punctuation mode) opens the list like @", () => {
+  expect(activeReferenceQuery("这样＠", end("这样＠"))).toEqual({
+    trigger: "@",
+    start: 2,
+    query: "",
+  });
+  expect(activeReferenceQuery("这样＠张", end("这样＠张"))).toEqual({
+    trigger: "@",
+    start: 2,
+    query: "张",
+  });
+  expect(activeReferenceQuery("＠al", 3)).toEqual({ trigger: "@", start: 0, query: "al" });
+  expect(activeReferenceQuery("a＠", 2)).toBeUndefined();
+  expect(activeReferenceQuery("a@", 2)).toBeUndefined();
+});
+
+test("a full-width ＠ ends an @query and is not a boundary, like @", () => {
+  expect(activeReferenceQuery("@张三＠李四", end("@张三＠李四"))).toEqual({
+    trigger: "@",
+    start: 3,
+    query: "李四",
+  });
+  expect(activeReferenceQuery("＠张三@", end("＠张三@"))).toEqual({
+    trigger: "@",
+    start: 3,
+    query: "",
+  });
+  expect(activeReferenceQuery("＠＠", 2)).toBeUndefined();
+  expect(activeReferenceQuery("@＠", 2)).toBeUndefined();
+  expect(activeReferenceQuery("＠@", 2)).toBeUndefined();
+});
+
+test("picking a mention after a full-width ＠ replaces the ＠ with the plain @name", () => {
+  const typed = "这样＠";
+  const found = activeReferenceQuery(typed, end(typed));
+  expect(found).toBeDefined();
+  expect(insertReference(typed, found!.start, end(typed), "@name")).toEqual({
+    value: "这样@name ",
+    caret: 8,
+  });
+});
+
 test("an ASCII letter, digit or email-local-part character is not a boundary, so an email or a second @ stays plain text", () => {
   expect(activeReferenceQuery("foo@bar", 7)).toBeUndefined();
   expect(activeReferenceQuery("a@b", 3)).toBeUndefined();
