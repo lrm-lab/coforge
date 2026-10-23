@@ -1,4 +1,7 @@
-import { cloudImageOfferLabel, sameImageLayer } from "#src/features/computers/cloud-image-update";
+import {
+  cloudComputerImage,
+  type CloudComputerImage,
+} from "#src/features/computers/cloud-image-update";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 
@@ -42,9 +45,7 @@ export function cloudImageUpdateFor(
   snapshot: CloudImageSnapshot,
   computerId: string,
 ): CloudImageUpdate | undefined {
-  const running = snapshot.computers.find((computer) => computer.computerId === computerId);
-  if (!running || sameImageLayer(running.imageId, snapshot.image.id)) return undefined;
-  return { imageId: snapshot.image.id, version: cloudImageOfferLabel(snapshot.image) };
+  return cloudComputerImage(snapshot, computerId)?.update;
 }
 
 export class CloudImageInventory {
@@ -79,13 +80,13 @@ export class CloudImageInventory {
     return current ? cloudImageUpdateFor(current, computerId) : undefined;
   }
 
-  async availableMany(computerIds: readonly string[]): Promise<Map<string, CloudImageUpdate>> {
+  async images(computerIds: readonly string[]): Promise<Map<string, CloudComputerImage>> {
     const current = await this.snapshot();
-    const found = new Map<string, CloudImageUpdate>();
+    const found = new Map<string, CloudComputerImage>();
     if (!current) return found;
     for (const computerId of computerIds) {
-      const update = cloudImageUpdateFor(current, computerId);
-      if (update) found.set(computerId, update);
+      const image = cloudComputerImage(current, computerId);
+      if (image) found.set(computerId, image);
     }
     return found;
   }
@@ -100,4 +101,14 @@ export function getCloudImageInventory() {
   const url = redisUrlFor("cloud computer image");
   singleton ??= new CloudImageInventory(openRedisClient(url));
   return singleton;
+}
+
+/** Host snapshot rows for cloud computers in a workspace list, or none when the ids are empty. */
+export async function readCloudComputerImages(
+  computerIds: readonly string[],
+): Promise<Map<string, CloudComputerImage>> {
+  if (computerIds.length === 0) return new Map();
+  return getCloudImageInventory()
+    .images(computerIds)
+    .catch(() => new Map());
 }

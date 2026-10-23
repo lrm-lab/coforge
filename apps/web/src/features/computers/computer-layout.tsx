@@ -27,7 +27,7 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Button } from "#src/components/base/buttons/button";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { humanLabel } from "#src/lib/human-label";
-import { availableUpdateVersion, computerVersionLabel } from "./computer-identity";
+import { computerListUpdateVersion, computerVersionLabel } from "./computer-identity";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { upgradeRunning } from "./computer-upgrade-status";
 
@@ -36,6 +36,7 @@ export type ComputerListItem = ComputerIdentity &
     id: string;
     online: boolean;
     computerVersion?: string | null;
+    imageVersion?: string | null;
     imageUpdate?: { version: string } | null;
     /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
     upgrade?: ComputerUpgradeStatus | null;
@@ -116,7 +117,7 @@ export function ComputerLayout({
                     <ComputerTile
                       computer={computer}
                       online={computer.online}
-                      updateAvailableVersion={availableUpdateVersion(
+                      updateAvailableVersion={computerListUpdateVersion(
                         computer,
                         latestComputerVersion,
                       )}

@@ -64,6 +64,11 @@ export function computerVersionLabel(computer: { computerVersion?: string | null
   return computer.computerVersion || "—";
 }
 
+/** The image a cloud Computer is running. An unreported one reads as an em dash, like the runtime. */
+export function computerImageVersionLabel(computer: { imageVersion?: string | null }): string {
+  return computer.imageVersion || "—";
+}
+
 /** Compare the numeric portions of release versions without treating an unknown format as newer. */
 export function isComputerUpdateAvailable(
   currentVersion: string | null | undefined,
@@ -86,11 +91,24 @@ export function isPrereleaseVersion(version: string | null | undefined): boolean
 }
 
 /**
- * The release a Computer could move to, in full, or none: a cloud Computer's newer image, or for a
- * local one the latest release when it is newer than the running one. Every member is told; only
- * the owner can act on it (features/computers/AGENTS.md).
+ * The runtime release a local Computer could install, or none. A cloud Computer's runtime stays
+ * the image it was started from; a newer node image is not this offer (features/computers/AGENTS.md).
  */
 export function availableUpdateVersion(
+  computer: {
+    kind: string;
+    computerVersion?: string | null;
+  },
+  latestComputerVersion: string | null | undefined,
+): string | undefined {
+  if (computerKind(computer.kind) === "cloud") return undefined;
+  return isComputerUpdateAvailable(computer.computerVersion, latestComputerVersion)
+    ? (latestComputerVersion ?? undefined)
+    : undefined;
+}
+
+/** What the list badge names: a local Computer's newer runtime, or a cloud Computer's newer image. */
+export function computerListUpdateVersion(
   computer: {
     kind: string;
     computerVersion?: string | null;
@@ -98,8 +116,6 @@ export function availableUpdateVersion(
   },
   latestComputerVersion: string | null | undefined,
 ): string | undefined {
-  if (computerKind(computer.kind) === "cloud") return computer.imageUpdate?.version;
-  return isComputerUpdateAvailable(computer.computerVersion, latestComputerVersion)
-    ? (latestComputerVersion ?? undefined)
-    : undefined;
+  if (computerKind(computer.kind) === "cloud") return computer.imageUpdate?.version || undefined;
+  return availableUpdateVersion(computer, latestComputerVersion);
 }

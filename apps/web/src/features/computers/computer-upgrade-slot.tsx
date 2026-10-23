@@ -19,70 +19,16 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { cloudImageUpdateConsequences } from "./cloud-image-update";
 import { ComputerReleaseNotesLink, useComputerRelease } from "./computer-release-notes";
-import { availableUpdateVersion, isPrereleaseVersion } from "./computer-identity";
-import type { ComputerUpgradeOutcome, UpgradeRequestErrorCopy } from "./upgrade-failure";
+import { isPrereleaseVersion } from "./computer-identity";
+import type { UpgradeRequestErrorCopy } from "./upgrade-failure";
+import {
+  upgradeSlotState,
+  type ComputerUpgradeRequest,
+  type ComputerUpgradeSlotState,
+} from "./computer-upgrade-slot-state";
 
-/** An upgrade this panel asked for, with the release it asked for: in flight, held by the server,
- * or refused before the server held it (which leaves no record a reload could find). */
-export type ComputerUpgradeRequest =
-  | { state: "idle" }
-  | { state: "requesting"; version?: string }
-  | { state: "accepted"; requestId: string; version?: string }
-  | ({ state: "refused"; version?: string } & UpgradeRequestErrorCopy);
-
-/** What the slot under the Version row shows (rules in features/computers/AGENTS.md). `offer` is
- * the newer release, which an available slot installs and a failed one retries; `version` the
- * release an upgrade was to install. */
-export type ComputerUpgradeSlotState =
-  | { state: "available"; offer: string }
-  | { state: "upgrading"; version?: string; delivered: boolean }
-  | { state: "failed"; version?: string; failure: UpgradeRequestErrorCopy; offer?: string };
-
-/**
- * The slot's one reading of an upgrade, this panel's own request and the Computer: running and
- * failed upgrades and a newer release for everyone, with Upgrade and Retry only for its owner,
- * nothing otherwise. A stored failure names no release; one this panel requested names the release
- * it asked for.
- */
-export function upgradeSlotState({
-  upgrade,
-  request,
-  computer,
-  currentVersion,
-  latestComputerVersion,
-}: {
-  upgrade: ComputerUpgradeOutcome | { state: "idle" };
-  request: ComputerUpgradeRequest;
-  computer: Parameters<typeof availableUpdateVersion>[0];
-  /** The version it runs, or the one an upgrade here just reached. */
-  currentVersion: string | null | undefined;
-  latestComputerVersion: string | null | undefined;
-}): ComputerUpgradeSlotState | null {
-  // An upgrade that just succeeded used up a cloud Computer's image offer too.
-  const offer = availableUpdateVersion(
-    {
-      ...computer,
-      computerVersion: currentVersion,
-      imageUpdate: upgrade.state === "succeeded" ? null : computer.imageUpdate,
-    },
-    latestComputerVersion,
-  );
-  const requested = request.state === "idle" ? undefined : request.version;
-  if (upgrade.state === "running")
-    return {
-      state: "upgrading",
-      version: upgrade.version ?? requested,
-      delivered: request.state !== "requesting",
-    };
-  if (upgrade.state === "failed")
-    return {
-      state: "failed",
-      version: upgrade.version ?? requested,
-      failure: upgrade.failure,
-      offer,
-    };
-  return offer ? { state: "available", offer } : null;
-}
+export type { ComputerUpgradeRequest, ComputerUpgradeSlotState };
+export { upgradeSlotState };
 
 /** The release a slot is about: the one on offer, the one an upgrade is installing, or after a
  * failure the one Retry would install (the release that failed when nothing newer is on offer). */

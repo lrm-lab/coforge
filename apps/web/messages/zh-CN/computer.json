@@ -2,6 +2,7 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "computer_page_title": "电脑",
   "computer_version": "版本",
+  "computer_image_version": "镜像版本",
   "computer_os": "操作系统",
   "computer_creator": "创建者",
   "computer_metadata_unknown": "未知",

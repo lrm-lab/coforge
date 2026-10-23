@@ -38,12 +38,14 @@ import { m } from "#src/paraglide/messages";
 import { ComputerDetailHeader } from "./computer-detail-header";
 import { formatWorkspaceSize } from "./workspace-size";
 import {
-  computerKind,
+  computerImageVersionLabel,
   computerLabel,
   computerVersionLabel,
   operatingSystemLabel,
   type ComputerIdentity,
 } from "./computer-identity";
+import { DetailGroup, DetailRow } from "./computer-detail-rows";
+import { computerDetailUpgradeSlots } from "./computer-detail-upgrade-slots";
 import {
   computerUpgradeStatusQuery,
   followComputerUpgrade,
@@ -59,7 +61,6 @@ import {
   CloudImageUpdateDialog,
   ComputerUpgradeConfirmDialog,
   ComputerUpgradeSlot,
-  upgradeSlotState,
   type ComputerUpgradeRequest,
 } from "./computer-upgrade-slot";
 import { RuntimeUsage, UsageHealthDot, type UsageHealth } from "./runtime-usage";
@@ -94,6 +95,8 @@ export type ComputerDetailView = ComputerIdentity & {
   runtimeDetecting?: boolean;
   connectedAt: Date | string;
   computerVersion?: string | null;
+  /** The cloud image this computer is running. Absent for a local computer. */
+  imageVersion?: string | null;
   imageUpdate?: { version: string } | null;
   /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
   upgrade?: ComputerUpgradeStatus | null;
@@ -272,22 +275,28 @@ export function ComputerDetail({
             ? storedOutcome
             : { state: "idle" }));
   const upgrading = upgrade.state === "running";
-  const currentVersion = upgrade.state === "succeeded" ? upgrade.version : computer.computerVersion;
-  const isCloud = computerKind(computer.kind) === "cloud";
-  const upgradeSlot = upgradeSlotState({
+  const {
+    isCloud,
+    currentVersion,
+    currentImageVersion,
+    runtimeSlot,
+    imageSlot,
+    runtimeOffer,
+    imageOffer,
+  } = computerDetailUpgradeSlots({
+    kind: computer.kind,
+    computerVersion: computer.computerVersion,
+    imageVersion: computer.imageVersion,
+    imageUpdate: computer.imageUpdate,
     upgrade,
     request: upgradeRequest,
-    computer,
-    currentVersion,
     latestComputerVersion,
   });
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
-  const upgradeOffer = upgradeSlot && "offer" in upgradeSlot ? upgradeSlot.offer : undefined;
   const canEditDisplayName = computer.ownedByCurrentUser && Boolean(onUpdateDisplayName);
-  const runUpgrade = async () => {
+  const runUpgrade = async (version: string | undefined) => {
     if (!onUpgrade) return;
     const requestId = crypto.randomUUID();
-    const version = upgradeOffer;
     setUpgradeRequest({ state: "requesting", version });
     try {
       const outcome = upgradeOutcome(await onUpgrade(requestId));
@@ -471,20 +480,40 @@ export function ComputerDetail({
                   </span>
                 }
                 footer={
-                  upgradeSlot && (
+                  runtimeSlot && (
                     <ComputerUpgradeSlot
-                      slot={upgradeSlot}
+                      slot={runtimeSlot}
                       canUpgrade={canUpgrade}
                       computerName={label}
-                      cloud={isCloud}
+                      cloud={false}
                       online={computer.online}
-                      onUpgrade={() =>
-                        isCloud ? setImageUpdateOpen(true) : setUpgradeConfirmOpen(true)
-                      }
+                      onUpgrade={() => setUpgradeConfirmOpen(true)}
                     />
                   )
                 }
               />
+              {isCloud && (
+                <DetailRow
+                  label={m.computer_image_version()}
+                  value={
+                    <span className="font-mono">
+                      {computerImageVersionLabel({ imageVersion: currentImageVersion })}
+                    </span>
+                  }
+                  footer={
+                    imageSlot && (
+                      <ComputerUpgradeSlot
+                        slot={imageSlot}
+                        canUpgrade={canUpgrade}
+                        computerName={label}
+                        cloud
+                        online={computer.online}
+                        onUpgrade={() => setImageUpdateOpen(true)}
+                      />
+                    )
+                  }
+                />
+              )}
               {computer.creator && (
                 <DetailRow
                   label={m.computer_added_by()}
@@ -691,11 +720,11 @@ export function ComputerDetail({
       <CloudImageUpdateDialog
         open={imageUpdateOpen}
         name={label}
-        version={upgradeOffer}
+        version={imageOffer}
         onOpenChange={setImageUpdateOpen}
         onConfirm={async () => {
           setImageUpdateOpen(false);
-          await runUpgrade();
+          await runUpgrade(imageOffer);
         }}
       />
       <ComputerUpgradeConfirmDialog
@@ -703,10 +732,10 @@ export function ComputerDetail({
         onOpenChange={setUpgradeConfirmOpen}
         computerName={label}
         currentVersion={currentVersion}
-        targetVersion={upgradeOffer}
+        targetVersion={runtimeOffer}
         onConfirm={async () => {
           setUpgradeConfirmOpen(false);
-          await runUpgrade();
+          await runUpgrade(runtimeOffer);
         }}
       />
       {onDeleteComputer && (
@@ -1133,64 +1162,6 @@ function WorkspaceInventory({
         }}
       />
     </DetailGroup>
-  );
-}
-
-/**
- * The subtle-fill container shared by the detail groups: no border, no
- * shadow, an optional heading inset to the row text, dividers between rows
- * supplied by the child list itself (`dl`/`ul` with `divide-y`).
- */
-function DetailGroup({
-  heading,
-  headingId,
-  action,
-  children,
-}: {
-  heading?: string;
-  headingId?: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section aria-labelledby={headingId}>
-      {(heading || action) && (
-        <div className="mb-2 flex items-center justify-between gap-3 px-4">
-          {heading && (
-            <h2 id={headingId} className="text-sm font-semibold text-primary">
-              {heading}
-            </h2>
-          )}
-          {action}
-        </div>
-      )}
-      <div className="rounded-xl bg-secondary px-4">{children}</div>
-    </section>
-  );
-}
-
-/**
- * One label—value row: label left, value right, on a single line that never
- * wraps. `footer` is an optional full-width block below that line, such as
- * the upgrade slot under the Version row.
- */
-function DetailRow({
-  label,
-  value,
-  footer,
-}: {
-  label: string;
-  value: ReactNode;
-  footer?: ReactNode;
-}) {
-  return (
-    <div className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 py-3 @max-md:items-start">
-      <dt className="text-sm font-medium whitespace-nowrap text-primary">{label}</dt>
-      <dd className="flex min-h-6 min-w-0 flex-wrap items-center justify-end gap-2 text-sm text-tertiary">
-        <span className="min-w-0 truncate">{value}</span>
-      </dd>
-      {footer && <dd className="col-span-2">{footer}</dd>}
-    </div>
   );
 }
 

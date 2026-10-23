@@ -8,7 +8,10 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
-import { getCloudImageInventory } from "#src/server/hosts/cloud-image-inventory.server";
+import {
+  getCloudImageInventory,
+  readCloudComputerImages,
+} from "#src/server/hosts/cloud-image-inventory.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
 import { HostJobError } from "#src/server/hosts/host-jobs.server";
@@ -208,7 +211,7 @@ export const listComputers = createServerFn({ method: "GET" })
       .map(({ computer }) => computer.id);
     const runtimeDetection = getComputerRuntimeDetection();
     // Each read needs only the connections, so they run side by side.
-    const [statuses, agentDisplays, detecting, upgrades, imageUpdates] = await Promise.all([
+    const [statuses, agentDisplays, detecting, upgrades, images] = await Promise.all([
       // One round trip for every Computer's online lease, not one per Computer.
       computerStatus.getMany(computerScopes),
       getAgentDisplay().snapshotMany(agentScopes),
@@ -220,11 +223,7 @@ export const listComputers = createServerFn({ method: "GET" })
       getComputerUpgradeStore()
         .latestMany(computerScopes)
         .catch(() => []),
-      cloudIds.length
-        ? getCloudImageInventory()
-            .availableMany(cloudIds)
-            .catch(() => new Map())
-        : new Map(),
+      readCloudComputerImages(cloudIds),
     ]);
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
@@ -238,7 +237,8 @@ export const listComputers = createServerFn({ method: "GET" })
           displayName: computer.displayName,
           kind: computer.kind,
           cloudSlot: computer.cloudSlot,
-          imageUpdate: imageUpdates.get(computer.id) ?? null,
+          imageVersion: images.get(computer.id)?.version ?? null,
+          imageUpdate: images.get(computer.id)?.update ?? null,
           upgrade: upgrades[index] ?? null,
           computerVersion: computer.computerVersion,
           platform: computer.platform,

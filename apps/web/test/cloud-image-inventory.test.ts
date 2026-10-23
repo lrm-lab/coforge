@@ -6,6 +6,7 @@ import {
   parseHostImageReport,
 } from "#src/server/hosts/cloud-image-inventory.server";
 import {
+  cloudComputerImage,
   cloudImageUpdateAvailable,
   cloudImageUpdateConsequences,
 } from "#src/features/computers/cloud-image-update";
@@ -111,6 +112,23 @@ describe("cloud image update availability", () => {
       imageId: digest,
       version: "efefefefefef",
     });
+  });
+
+  test("the image row names the running layer, and an update only when it differs", () => {
+    expect(cloudComputerImage(snapshot, "computer-1")).toEqual({
+      version: "sha256:old",
+      update: { imageId: "sha256:new", version: "0.1.3-dev.2" },
+    });
+    expect(
+      cloudComputerImage(
+        {
+          image: { id: "sha256:new", version: "0.1.3-dev.2" },
+          computers: [{ computerId: "computer-1", imageId: "sha256:new" }],
+        },
+        "computer-1",
+      ),
+    ).toEqual({ version: "0.1.3-dev.2" });
+    expect(cloudComputerImage(snapshot, "missing")).toBeUndefined();
   });
 
   test("a computer already on the node image is not offered an update", () => {

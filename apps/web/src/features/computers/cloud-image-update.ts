@@ -32,3 +32,28 @@ export function cloudImageUpdateAvailable(
     runningImageId && availableImageId && !sameImageLayer(runningImageId, availableImageId),
   );
 }
+
+export type CloudComputerImage = {
+  /** The image this computer is running: the node image's label when the layers match. */
+  version: string;
+  /** Set when the node image is a different layer. */
+  update?: { imageId: string; version: string };
+};
+
+/** The image row for one computer in a host snapshot, or none when that computer is not running. */
+export function cloudComputerImage(
+  snapshot: {
+    image: { id: string; version: string };
+    computers: Array<{ computerId: string; imageId: string }>;
+  },
+  computerId: string,
+): CloudComputerImage | undefined {
+  const running = snapshot.computers.find((computer) => computer.computerId === computerId);
+  if (!running) return undefined;
+  const nodeVersion = cloudImageOfferLabel(snapshot.image);
+  if (sameImageLayer(running.imageId, snapshot.image.id)) return { version: nodeVersion };
+  return {
+    version: cloudImageOfferLabel({ id: running.imageId, version: "" }),
+    update: { imageId: snapshot.image.id, version: nodeVersion },
+  };
+}

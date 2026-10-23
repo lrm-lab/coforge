@@ -2,8 +2,11 @@ import { expect, test } from "bun:test";
 import { Cloud01, Monitor01 } from "@untitledui/icons";
 
 import {
+  availableUpdateVersion,
   computerIcon,
+  computerImageVersionLabel,
   computerLabel,
+  computerListUpdateVersion,
   computerVersionLabel,
 } from "#src/features/computers/computer-identity";
 
@@ -42,4 +45,29 @@ test("the version reads as the panel states it, and an unreported one as an em d
   expect(computerVersionLabel({ computerVersion: "0.1.1-dev.2" })).toBe("0.1.1-dev.2");
   expect(computerVersionLabel({ computerVersion: null })).toBe("—");
   expect(computerVersionLabel({})).toBe("—");
+});
+
+test("a cloud Computer's runtime row does not offer an image replace or a release upgrade", () => {
+  const cloud = {
+    kind: "cloud",
+    computerVersion: "0.1.7-dev.1",
+    imageUpdate: { version: "0.1.8-dev.3" },
+  };
+
+  expect(availableUpdateVersion(cloud, "0.1.8-dev.3")).toBeUndefined();
+  expect(computerListUpdateVersion(cloud, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
+});
+
+test("a local Computer's update is a newer runtime release", () => {
+  const local = { kind: "local", computerVersion: "0.1.7-dev.1" };
+
+  expect(availableUpdateVersion(local, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
+  expect(computerListUpdateVersion(local, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
+  expect(availableUpdateVersion(local, "0.1.7-dev.1")).toBeUndefined();
+});
+
+test("the image row states the running image, and an unreported one as an em dash", () => {
+  expect(computerImageVersionLabel({ imageVersion: "0.1.8-dev.3" })).toBe("0.1.8-dev.3");
+  expect(computerImageVersionLabel({ imageVersion: null })).toBe("—");
+  expect(computerImageVersionLabel({})).toBe("—");
 });
