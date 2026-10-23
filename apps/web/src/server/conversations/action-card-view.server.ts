@@ -19,6 +19,20 @@ export type ActionCardViewBase = {
   canCancel: boolean;
 };
 
+/** What an `app:register` card shows of the app it would register; the client secret is never
+ * part of it. A null `clientKey` is made from the name on commit. */
+export type AppRegisterCardFields = {
+  clientKey: string | null;
+  name: string;
+  redirectUrls: string[];
+  homepageUrl: string | null;
+  description: string;
+  whenToUse: string;
+  category: string;
+  scopes: string[];
+  agentManifestUrl: string | null;
+};
+
 export type ActionCardView =
   | (ActionCardViewBase & {
       kind: "channel:create";
@@ -50,4 +64,11 @@ export type ActionCardView =
       app: { key: string; name: string };
       scopes: string[];
       result?: { requestId: string };
+    })
+  /** The Agent that posted it asks to register `app` with itself as the owner Agent; committing
+   * registers it, as a Workspace owner or admin may. */
+  | (ActionCardViewBase & {
+      kind: "app:register";
+      app: AppRegisterCardFields;
+      result?: { clientKey: string; noOwnerAgent?: boolean };
     });

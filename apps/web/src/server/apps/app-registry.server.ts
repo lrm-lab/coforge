@@ -42,6 +42,8 @@ export type AppView = {
   /** Where the app is in Marketplace review (`server/app-marketplace/`). */
   publishStatus: AppPublishStatus;
   secretRotatedAt: Date | null;
+  /** The Agent that registered the app through an `app:register` card; Settings names it. */
+  ownerAgentId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

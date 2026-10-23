@@ -16,7 +16,7 @@ COFORGEACTION
 As with `message send`, stdin redirected from a regular file another user owns
 fails with `STDIN_FILE_NOT_OWNED` before any request.
 
-An Agent prepares three kinds; the `integration:*` kinds are not implemented
+An Agent prepares four kinds; the other `integration:*` kinds are not implemented
 yet:
 
 - **`channel:create`**: `name` (1-32 chars, `^[a-z0-9][a-z0-9_-]{0,31}$` after
@@ -30,6 +30,11 @@ yet:
   `reasoning` field — those stay human-picked.
 - **`channel:add_member`**: `channel` (handle or UUID), `humans?`,
   `agents?` (at least one of the two non-empty), `draftHint?`.
+- **`app:register`**: `name`, `clientKey?`, `redirectUrls?`, `homepageUrl?`, `description?`,
+  `whenToUse?`, `category?`, `agentManifestUrl?`, `scopes?`, `draftHint?`; prepared by
+  `coforge app prepare register`. A Workspace owner or admin commits it, which registers the app with
+  the preparing Agent as its owner Agent; the server checks each value with the app registry's rules
+  when preparing it, and the card never carries a secret ([registering an app](app-registration.md)).
 
 Identity fields (`initialHumans`, `initialAgents`, `suggestedComputer`,
 `requiredComputer`, `channel`, `humans`, `agents`) are handles the Agent
@@ -47,7 +52,7 @@ action again and refuses in the same form: `INVALID_ACTION` (with the issues),
 `INVALID_HANDLE` (naming the field; a private Agent the caller can see is
 refused because it "cannot be a channel member"), `AGENT_NOT_VISIBLE` (a
 private Agent the caller cannot see, as channel management answers it),
-`CHANNEL_EXISTS`, `AGENT_EXISTS`, or, as
+`CHANNEL_EXISTS`, `AGENT_EXISTS`, `APP_EXISTS`, or, as
 for `message send`, `DM_PEER_NOT_IN_WORKSPACE` and `TARGET_NOT_ACCESSIBLE`. The
 CLI reports its reason, code and next step. On success the CLI prints:
 

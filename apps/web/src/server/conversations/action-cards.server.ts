@@ -6,18 +6,17 @@ import {
   type ActionCardAction,
   type ResolvedActionCardPayload,
 } from "@lrm/coforge-sdk/agent";
-import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
-import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import {
-  agentVisibilityViewerForActor,
-  canSeeAgent,
-  type AgentVisibilityViewer,
-} from "#src/server/agents/agent-visibility.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { ActionCardError } from "./action-card-error.server";
+import { ActionCardHandles, bareHandle } from "./action-card-handles.server";
+import {
+  appRegisterSummary,
+  appRegisterView,
+  resolveAppRegisterPayload,
+} from "./app-register-action-cards.server";
 import { PublicChannels } from "./public-channels.server";
 import { ConversationHistory } from "./conversation-history.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
@@ -39,10 +38,9 @@ import type {
   ActionCardViewBase,
 } from "./action-card-view.server";
 import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
+import { roleCan } from "#src/features/workspaces/workspace-roles";
 import { isAdminLike } from "#src/server/workspaces/member-role.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
-
-const UUID_PATTERN = UUID_LIKE_PATTERN;
 
 export type * from "./action-card-view.server";
 export type { ActionCardTargetRepository } from "./action-card-target.server";
@@ -55,20 +53,6 @@ async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, userId: 
   }
 }
 
-/** Strips one leading `@` or `#`, if present. */
-function bareHandle(value: string): string {
-  return value.startsWith("@") || value.startsWith("#") ? value.slice(1) : value;
-}
-
-/** A handle an action names that resolves to nothing in the Workspace (422, `INVALID_HANDLE`). */
-function unknownHandle(
-  kind: "human" | "agent" | "channel" | "computer",
-  value: string,
-  field: string,
-) {
-  return new ActionCardError(422, "INVALID_HANDLE", `unknown ${kind} handle: ${value}`, { field });
-}
-
 function ensureAt(value: string): string {
   return value.startsWith("@") ? value : `@${value}`;
 }
@@ -79,6 +63,7 @@ function ensureHash(value: string): string {
 
 /** The one-line, human-readable summary that becomes the posted Message body. */
 function summaryFor(action: ActionCardAction): string {
+  if (action.type === "app:register") return appRegisterSummary(action);
   if (action.type === "channel:create") return `Action card: create channel #${action.name}`;
   if (action.type === "agent:create") return `Action card: create agent ${action.name}`;
   const actors = [...(action.humans ?? []), ...(action.agents ?? [])].map(ensureAt);
@@ -117,7 +102,11 @@ export class ActionCards {
     /** Only required by `prepare`; `viewsFor`/`commit*`/`cancel` do not need a target repository. */
     private readonly conversations?: ActionCardTargetRepository,
     private readonly realtime?: ConversationRealtime,
-  ) {}
+  ) {
+    this.handles = new ActionCardHandles(db);
+  }
+
+  private readonly handles: ActionCardHandles;
 
   async prepare(
     principal: { workspaceId: string; agentId: string },
@@ -304,6 +293,15 @@ export class ActionCards {
           canCommit: canManage,
           canCancel: canManage,
           result: card.result as { requestId: string } | undefined,
+        });
+      } else if (payload.type === "app:register") {
+        views.set(card.messageId, {
+          ...base,
+          kind: "app:register",
+          app: appRegisterView(payload),
+          // The registry's rule: a Workspace owner or admin registers apps.
+          canCommit: pending && roleCan(viewerRole, "manageApps"),
+          result: card.result as { clientKey: string; noOwnerAgent?: boolean } | undefined,
         });
       } else {
         views.set(card.messageId, {
@@ -508,12 +506,18 @@ export class ActionCards {
     agentId: string,
     action: ActionCardAction,
   ): Promise<ResolvedActionCardPayload> {
+    if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
     if (action.type === "channel:create") {
-      if (action.name === "general" || (await this.channelExists(workspaceId, action.name)))
+      if (action.name === "general" || (await this.handles.channelExists(workspaceId, action.name)))
         throw new ActionCardError(409, "CHANNEL_EXISTS", `channel #${action.name} already exists`);
       const [initialHumanIds, initialAgentIds] = await Promise.all([
-        this.resolveHumans(workspaceId, action.initialHumans, "action.initialHumans"),
-        this.resolveAgents(workspaceId, agentId, action.initialAgents, "action.initialAgents"),
+        this.handles.resolveHumans(workspaceId, action.initialHumans, "action.initialHumans"),
+        this.handles.resolveAgents(
+          workspaceId,
+          agentId,
+          action.initialAgents,
+          "action.initialAgents",
+        ),
       ]);
       return {
         type: "channel:create",
@@ -534,10 +538,18 @@ export class ActionCards {
         throw new ActionCardError(409, "AGENT_EXISTS", `agent ${action.name} already exists`);
       const [suggestedComputerId, requiredComputerId] = await Promise.all([
         action.suggestedComputer
-          ? this.resolveComputer(workspaceId, action.suggestedComputer, "action.suggestedComputer")
+          ? this.handles.resolveComputer(
+              workspaceId,
+              action.suggestedComputer,
+              "action.suggestedComputer",
+            )
           : Promise.resolve(undefined),
         action.requiredComputer
-          ? this.resolveComputer(workspaceId, action.requiredComputer, "action.requiredComputer")
+          ? this.handles.resolveComputer(
+              workspaceId,
+              action.requiredComputer,
+              "action.requiredComputer",
+            )
           : Promise.resolve(undefined),
       ]);
       return {
@@ -548,10 +560,14 @@ export class ActionCards {
         ...(requiredComputerId ? { requiredComputerId } : {}),
       };
     }
-    const channelId = await this.resolveChannel(workspaceId, action.channel, "action.channel");
+    const channelId = await this.handles.resolveChannel(
+      workspaceId,
+      action.channel,
+      "action.channel",
+    );
     const [humanIds, agentIds] = await Promise.all([
-      this.resolveHumans(workspaceId, action.humans, "action.humans"),
-      this.resolveAgents(workspaceId, agentId, action.agents, "action.agents"),
+      this.handles.resolveHumans(workspaceId, action.humans, "action.humans"),
+      this.handles.resolveAgents(workspaceId, agentId, action.agents, "action.agents"),
     ]);
     return {
       type: "channel:add_member",
@@ -559,121 +575,6 @@ export class ActionCards {
       ...(humanIds ? { humanIds } : {}),
       ...(agentIds ? { agentIds } : {}),
     };
-  }
-
-  private async channelExists(workspaceId: string, name: string): Promise<boolean> {
-    const channel = await this.db.conversation.findFirst({
-      where: { workspaceId, channelName: name },
-      select: { id: true },
-    });
-    return Boolean(channel);
-  }
-
-  private async resolveHumans(workspaceId: string, values: string[] | undefined, field: string) {
-    if (!values?.length) return undefined;
-    return Promise.all(
-      values.map((value, index) => this.resolveHuman(workspaceId, value, `${field}[${index}]`)),
-    );
-  }
-
-  /** `agentId` is the Agent preparing the card: whether it can see a private Agent decides how
-   * that Agent is refused. */
-  private async resolveAgents(
-    workspaceId: string,
-    agentId: string,
-    values: string[] | undefined,
-    field: string,
-  ) {
-    if (!values?.length) return undefined;
-    const viewer = await agentVisibilityViewerForActor(this.db, workspaceId, { agentId });
-    return Promise.all(
-      values.map((value, index) =>
-        this.resolveAgent(workspaceId, viewer, value, `${field}[${index}]`),
-      ),
-    );
-  }
-
-  private async resolveHuman(workspaceId: string, value: string, field: string): Promise<string> {
-    const bare = bareHandle(value);
-    const user = await this.db.user.findFirst({
-      where: {
-        ...(UUID_PATTERN.test(bare) ? { id: bare } : { username: bare }),
-        memberships: { some: { workspaceId } },
-      },
-      select: { id: true },
-    });
-    if (!user) throw unknownHandle("human", value, field);
-    return user.id;
-  }
-
-  private async resolveAgent(
-    workspaceId: string,
-    viewer: AgentVisibilityViewer,
-    value: string,
-    field: string,
-  ): Promise<string> {
-    const bare = bareHandle(value);
-    const agent = await this.db.agent.findFirst({
-      where: {
-        ...(UUID_PATTERN.test(bare) ? { id: bare } : { name: bare }),
-        workspaceId,
-        ...ACTIVE_AGENT_WHERE,
-      },
-      select: { id: true, ownerId: true, visibility: true, systemKind: true },
-    });
-    if (!agent) throw unknownHandle("agent", value, field);
-    // Every Agent an action card names becomes a channel member, and a private Agent never is one.
-    // As in channel management (and `user info`/`profile show`), a private Agent the caller cannot
-    // see is "not visible", and one it can see is refused with the reason; either way its display
-    // name stays out of a card rendered to the channel.
-    if (!canSeeAgent(viewer, agent))
-      throw new ActionCardError(404, "AGENT_NOT_VISIBLE", `${value} is not visible to you.`, {
-        field,
-      });
-    if (agent.visibility !== AGENT_VISIBILITY.PUBLIC)
-      throw new ActionCardError(
-        422,
-        "INVALID_HANDLE",
-        `${value} is private and cannot be a channel member`,
-        { field },
-      );
-    return agent.id;
-  }
-
-  private async resolveChannel(workspaceId: string, value: string, field: string): Promise<string> {
-    const bare = bareHandle(value);
-    const channel = await this.db.conversation.findFirst({
-      where: {
-        // By id it must still be a channel; by name `channelName` says so itself.
-        ...(UUID_PATTERN.test(bare)
-          ? { id: bare, channelName: { not: null } }
-          : { channelName: bare }),
-        workspaceId,
-        ...VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true },
-    });
-    if (!channel) throw unknownHandle("channel", value, field);
-    return channel.id;
-  }
-
-  private async resolveComputer(
-    workspaceId: string,
-    value: string,
-    field: string,
-  ): Promise<string> {
-    const bare = bareHandle(value);
-    const link = await this.db.workspaceComputer.findFirst({
-      where: {
-        workspaceId,
-        ...(UUID_PATTERN.test(bare)
-          ? { computerId: bare }
-          : { computer: { OR: [{ name: bare }, { displayName: bare }] } }),
-      },
-      select: { computerId: true },
-    });
-    if (!link) throw unknownHandle("computer", value, field);
-    return link.computerId;
   }
 }
 

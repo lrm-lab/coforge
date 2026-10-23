@@ -14,6 +14,7 @@ import { createAppInstallationSetup } from "#src/server/app-installation-setup/a
 import type { AppSetupView } from "#src/server/app-installation-setup/app-installation-setup.server";
 import { createAppWebhooks } from "#src/server/app-notifications/app-webhooks-composition.server";
 import { createAppPublishing } from "#src/server/app-marketplace/app-publishing-composition.server";
+import { createAppOwnerAgents } from "#src/server/apps/app-owner-agents-composition.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import type { AppView } from "#src/server/apps/app-registry.server";
@@ -53,6 +54,7 @@ export type AppSummary = Omit<
   | "logoObjectKey"
   | "publishStatus"
   | "secretRotatedAt"
+  | "ownerAgentId"
   | "createdAt"
   | "updatedAt"
 > & {
@@ -69,6 +71,9 @@ export type AppSummary = Omit<
   webhookStatus?: WebhookStatus;
   permissions?: AppPermissionsSummary;
   setup?: AppSetupSummary;
+  /** The Agent that registered the app and manages it with the Workspace's owners and admins;
+   * present only for an app this Workspace owns, and only for a live public Agent. */
+  ownerAgent?: { name: string };
   /** Where the app is in Marketplace review; present only for an app this Workspace owns, where
    * `app-marketplace` is on: an installing Workspace never sees the developer's review state. */
   publishStatus?: AppPublishStatus;
@@ -113,6 +118,7 @@ const summary = (
     logoObjectKey,
     publishStatus,
     secretRotatedAt: _rotated,
+    ownerAgentId: _ownerAgent,
     updatedAt: _updated,
     createdAt,
     ...app
@@ -180,6 +186,10 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
       createAppPermissions(context.db).workspacePermissions(actor),
       createAppInstallationSetup(context.db).workspaceSetups(actor),
     ]);
+    // Only an app with an owner Agent needs its name looked up.
+    const ownerAgents = apps.some((app) => app.ownerAgentId)
+      ? await createAppOwnerAgents(context.db).ownerNames(actor.workspaceId)
+      : new Map<string, string>();
     // After the member check above, which read the slug.
     const { enabled: marketplace, reviewer } = await createAppPublishing(context.db).access(
       { workspaceId: actor.workspaceId, workspaceSlug },
@@ -198,6 +208,8 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
           setups?.get(app.key),
           marketplace,
         ),
+        ...(app.ownerWorkspaceId === actor.workspaceId &&
+          ownerAgents.has(app.key) && { ownerAgent: { name: ownerAgents.get(app.key)! } }),
         ...(webhookStatuses &&
           app.ownerWorkspaceId === actor.workspaceId && {
             webhookStatus: webhookStatuses.get(app.key) ?? "off",

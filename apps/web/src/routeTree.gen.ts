@@ -124,6 +124,8 @@ import { Route as WWorkspaceSlugComputersComputerComputerIdRouteImport } from '.
 import { Route as WWorkspaceSlugProjectsProjectSlugSettingsRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.settings'
 import { Route as ApiAgentV1AppsAppIdConfigRouteImport } from './routes/api/agent/v1/apps/$appId/config'
 import { Route as ApiAgentV1AppsAppIdTokenRouteImport } from './routes/api/agent/v1/apps/$appId/token'
+import { Route as ApiAgentV1AppsOwnedIndexRouteImport } from './routes/api/agent/v1/apps/owned/index'
+import { Route as ApiAgentV1AppsRegistrationsStatusRouteImport } from './routes/api/agent/v1/apps/registrations/status'
 import { Route as ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport } from './routes/api/agent/v1/attachment-upload-sessions/$uploadId.complete'
 import { Route as ApiAgentV1ChannelsChannelArchiveRouteImport } from './routes/api/agent/v1/channels_.$channel.archive'
 import { Route as ApiAgentV1ChannelsChannelJoinRouteImport } from './routes/api/agent/v1/channels_.$channel.join'
@@ -142,6 +144,7 @@ import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
 import { Route as WWorkspaceSlugProjectsProjectSlugTreeSplatRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.tree.$'
 import { Route as WWorkspaceSlugRecordsWeeksYearWeekRouteImport } from './routes/w.$workspaceSlug/records.weeks.$year.$week'
+import { Route as ApiAgentV1AppsOwnedClientKeyRotateSecretRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/rotate-secret'
 import { Route as ApiReleaseCatalogV1AppsAppReleasesVersionRouteImport } from './routes/api/release-catalog/v1/apps/$app/releases/$version'
 
 const IndexRoute = IndexRouteImport.update({
@@ -771,6 +774,18 @@ const ApiAgentV1AppsAppIdTokenRoute =
     path: '/api/agent/v1/apps/$appId/token',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1AppsOwnedIndexRoute =
+  ApiAgentV1AppsOwnedIndexRouteImport.update({
+    id: '/api/agent/v1/apps/owned/',
+    path: '/api/agent/v1/apps/owned/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1AppsRegistrationsStatusRoute =
+  ApiAgentV1AppsRegistrationsStatusRouteImport.update({
+    id: '/api/agent/v1/apps/registrations/status',
+    path: '/api/agent/v1/apps/registrations/status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute =
   ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport.update({
     id: '/complete',
@@ -880,6 +895,12 @@ const WWorkspaceSlugRecordsWeeksYearWeekRoute =
     id: '/weeks/$year/$week',
     path: '/weeks/$year/$week',
     getParentRoute: () => WWorkspaceSlugRecordsRoute,
+  } as any)
+const ApiAgentV1AppsOwnedClientKeyRotateSecretRoute =
+  ApiAgentV1AppsOwnedClientKeyRotateSecretRouteImport.update({
+    id: '/api/agent/v1/apps/owned/$clientKey/rotate-secret',
+    path: '/api/agent/v1/apps/owned/$clientKey/rotate-secret',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ApiReleaseCatalogV1AppsAppReleasesVersionRoute =
   ApiReleaseCatalogV1AppsAppReleasesVersionRouteImport.update({
@@ -1002,6 +1023,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
   '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
+  '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
@@ -1020,6 +1042,8 @@ export interface FileRoutesByFullPath {
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
   '/w/$workspaceSlug/records/weeks/$year/$week': typeof WWorkspaceSlugRecordsWeeksYearWeekRoute
+  '/api/agent/v1/apps/owned/': typeof ApiAgentV1AppsOwnedIndexRoute
+  '/api/agent/v1/apps/owned/$clientKey/rotate-secret': typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
 }
 export interface FileRoutesByTo {
@@ -1134,6 +1158,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/attachments': typeof ApiAgentV1AttachmentsIndexRoute
   '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
+  '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
@@ -1152,6 +1177,8 @@ export interface FileRoutesByTo {
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
   '/w/$workspaceSlug/records/weeks/$year/$week': typeof WWorkspaceSlugRecordsWeeksYearWeekRoute
+  '/api/agent/v1/apps/owned': typeof ApiAgentV1AppsOwnedIndexRoute
+  '/api/agent/v1/apps/owned/$clientKey/rotate-secret': typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
 }
 export interface FileRoutesById {
@@ -1271,6 +1298,7 @@ export interface FileRoutesById {
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
   '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
+  '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/channels_/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels_/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
@@ -1289,6 +1317,8 @@ export interface FileRoutesById {
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug_/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
   '/w/$workspaceSlug/records/weeks/$year/$week': typeof WWorkspaceSlugRecordsWeeksYearWeekRoute
+  '/api/agent/v1/apps/owned/': typeof ApiAgentV1AppsOwnedIndexRoute
+  '/api/agent/v1/apps/owned/$clientKey/rotate-secret': typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
 }
 export interface FileRouteTypes {
@@ -1407,6 +1437,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/attachments/'
     | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/apps/$appId/token'
+    | '/api/agent/v1/apps/registrations/status'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/channels/$channel/archive'
     | '/api/agent/v1/channels/$channel/join'
@@ -1425,6 +1456,8 @@ export interface FileRouteTypes {
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
     | '/w/$workspaceSlug/records/weeks/$year/$week'
+    | '/api/agent/v1/apps/owned/'
+    | '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1539,6 +1572,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/attachments'
     | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/apps/$appId/token'
+    | '/api/agent/v1/apps/registrations/status'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/channels/$channel/archive'
     | '/api/agent/v1/channels/$channel/join'
@@ -1557,6 +1591,8 @@ export interface FileRouteTypes {
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
     | '/w/$workspaceSlug/records/weeks/$year/$week'
+    | '/api/agent/v1/apps/owned'
+    | '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
   id:
     | '__root__'
@@ -1675,6 +1711,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/attachments/'
     | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/apps/$appId/token'
+    | '/api/agent/v1/apps/registrations/status'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/channels_/$channel/archive'
     | '/api/agent/v1/channels_/$channel/join'
@@ -1693,6 +1730,8 @@ export interface FileRouteTypes {
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug_/tree/$'
     | '/w/$workspaceSlug/records/weeks/$year/$week'
+    | '/api/agent/v1/apps/owned/'
+    | '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
   fileRoutesById: FileRoutesById
 }
@@ -1785,6 +1824,7 @@ export interface RootRouteChildren {
   ApiAgentV1AttachmentsIndexRoute: typeof ApiAgentV1AttachmentsIndexRoute
   ApiAgentV1AppsAppIdConfigRoute: typeof ApiAgentV1AppsAppIdConfigRoute
   ApiAgentV1AppsAppIdTokenRoute: typeof ApiAgentV1AppsAppIdTokenRoute
+  ApiAgentV1AppsRegistrationsStatusRoute: typeof ApiAgentV1AppsRegistrationsStatusRoute
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute: typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   ApiAgentV1MessagesMessageIdReactionsRoute: typeof ApiAgentV1MessagesMessageIdReactionsRoute
   ApiAgentV1MessagesMessageIdResolveRoute: typeof ApiAgentV1MessagesMessageIdResolveRoute
@@ -1793,6 +1833,8 @@ export interface RootRouteChildren {
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
+  ApiAgentV1AppsOwnedIndexRoute: typeof ApiAgentV1AppsOwnedIndexRoute
+  ApiAgentV1AppsOwnedClientKeyRotateSecretRoute: typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRoute
   ApiReleaseCatalogV1AppsAppReleasesVersionRoute: typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
 }
 
@@ -2603,6 +2645,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1AppsAppIdTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/apps/owned/': {
+      id: '/api/agent/v1/apps/owned/'
+      path: '/api/agent/v1/apps/owned'
+      fullPath: '/api/agent/v1/apps/owned/'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/apps/registrations/status': {
+      id: '/api/agent/v1/apps/registrations/status'
+      path: '/api/agent/v1/apps/registrations/status'
+      fullPath: '/api/agent/v1/apps/registrations/status'
+      preLoaderRoute: typeof ApiAgentV1AppsRegistrationsStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': {
       id: '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
       path: '/complete'
@@ -2728,6 +2784,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/w/$workspaceSlug/records/weeks/$year/$week'
       preLoaderRoute: typeof WWorkspaceSlugRecordsWeeksYearWeekRouteImport
       parentRoute: typeof WWorkspaceSlugRecordsRoute
+    }
+    '/api/agent/v1/apps/owned/$clientKey/rotate-secret': {
+      id: '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
+      path: '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
+      fullPath: '/api/agent/v1/apps/owned/$clientKey/rotate-secret'
+      preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyRotateSecretRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/release-catalog/v1/apps/$app/releases/$version': {
       id: '/api/release-catalog/v1/apps/$app/releases/$version'
@@ -3011,6 +3074,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1AttachmentsIndexRoute: ApiAgentV1AttachmentsIndexRoute,
   ApiAgentV1AppsAppIdConfigRoute: ApiAgentV1AppsAppIdConfigRoute,
   ApiAgentV1AppsAppIdTokenRoute: ApiAgentV1AppsAppIdTokenRoute,
+  ApiAgentV1AppsRegistrationsStatusRoute:
+    ApiAgentV1AppsRegistrationsStatusRoute,
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute:
     ApiAgentV1MessagesMessageIdMentionDeliveriesRoute,
   ApiAgentV1MessagesMessageIdReactionsRoute:
@@ -3026,19 +3091,12 @@ const rootRouteChildren: RootRouteChildren = {
     ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute,
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute:
     ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute,
+  ApiAgentV1AppsOwnedIndexRoute: ApiAgentV1AppsOwnedIndexRoute,
+  ApiAgentV1AppsOwnedClientKeyRotateSecretRoute:
+    ApiAgentV1AppsOwnedClientKeyRotateSecretRoute,
   ApiReleaseCatalogV1AppsAppReleasesVersionRoute:
     ApiReleaseCatalogV1AppsAppReleasesVersionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

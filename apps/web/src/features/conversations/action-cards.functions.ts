@@ -3,6 +3,8 @@ import { z } from "zod";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { AppRegisterActionCards } from "#src/server/conversations/app-register-action-cards.server";
+import { createAppRegistrationNotices } from "#src/server/apps/app-registration-notices-composition.server";
 import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-cards.server";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
@@ -92,6 +94,20 @@ export const denyAppGrantActionCard = createServerFn({ method: "POST" })
       data.messageId,
       createAppAgentAccess(db),
     );
+  });
+
+/** `app:register`: committing the card registers the app for the Agent that prepared it. The
+ * client secret goes to that Agent in a private notice, never in this answer. */
+export const commitAppRegisterActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(messageIdInput)
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    const centrifugo = createCentrifugoServerApi();
+    return new AppRegisterActionCards(
+      db,
+      new CentrifugoConversationRealtime(centrifugo),
+      createAppRegistrationNotices(db, centrifugo),
+    ).commit({ workspaceId, userId: user.id }, data.messageId);
   });
 
 export const cancelActionCard = createServerFn({ method: "POST" })

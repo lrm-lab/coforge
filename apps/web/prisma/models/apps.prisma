@@ -61,9 +61,15 @@ model App {
   /// When a reviewer last approved publication; null until then (kept after an approved unpublish).
   publishedAt      DateTime?
   createdByUserId  String?           @db.Uuid
+  /// The Agent that registered the app through a committed `app:register` card and manages it
+  /// (rotates its secret) as an additional manager; the app stays owned by its Workspace. Null for
+  /// an app registered from the web app, and when that Agent is deleted. An archived Agent keeps
+  /// the column, but loses the right (`server/apps/app-owner-agents.server.ts` checks at call time).
+  ownerAgentId     String?           @db.Uuid
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   ownerWorkspace   Workspace         @relation(fields: [ownerWorkspaceId], references: [id], onDelete: Cascade)
+  ownerAgent       Agent?            @relation("AppOwnerAgent", fields: [ownerAgentId], references: [id], onDelete: SetNull)
   createdBy        User?             @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   installations    AppInstallation[]
   authorizationCodes OAuthAuthorizationCode[]
@@ -76,6 +82,7 @@ model App {
 
   @@index([ownerWorkspaceId])
   @@index([createdByUserId])
+  @@index([ownerAgentId])
   @@map("apps")
 }
 

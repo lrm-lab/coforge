@@ -1,4 +1,5 @@
 import { getAgentMigrationCapabilityLease } from "#src/server/agent-migrations/agent-migration-capability.server";
+import { getAppRegistrationNoticeCapabilityLease } from "#src/server/apps/app-registration-notice-capability.server";
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
 import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
 import {
@@ -14,6 +15,7 @@ export function daemonCapabilityLeases() {
     reminderLease,
     getAgentMigrationCapabilityLease(),
     getAppConfigCapabilityLease(),
+    getAppRegistrationNoticeCapabilityLease(),
     getPiChatCapabilityLease(),
     getPiChatControlsLease(),
     getPiChatFilesLease(),

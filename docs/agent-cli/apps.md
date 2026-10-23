@@ -7,6 +7,9 @@ A Workspace's own apps are the ones its owners and admins register in Settings â
 ([Login with CoForge](../authorization-server/README.md)); an Agent calls one with a short-lived
 token for it.
 
+An Agent can also ask for an app to be registered and manage the ones it owns:
+[registering an app](app-registration.md).
+
 ## In the standing prompt
 
 An Agent learns which apps its Workspace has from its standing prompt: an `## Apps` section lists

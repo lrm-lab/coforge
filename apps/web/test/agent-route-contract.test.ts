@@ -76,6 +76,10 @@ const NOT_SERVED_BY_WEB = new Map([
     "/api/agent/v1/inbox",
     "DaemonRuntime.inbox() assembles it from the Agent's own state and never forwards it (comment on proxy.inbox)",
   ],
+  [
+    "/api/agent/v1/app-registrations",
+    "the Daemon's local route for app status, owned list and secret rotation: it forwards each operation to a cloud route the contract declares under cloud.appRegistrations (comment on APP_REGISTRATION_LOCAL_ROUTE)",
+  ],
 ]);
 
 /** Web routes the contract does not declare. Empty: every route served here is a contract member. */

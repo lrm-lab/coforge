@@ -31,6 +31,8 @@ export type MintAppItem = Readonly<{
  * Only `until_explicit_ack` items reach disk; a `transient` item ends with this process. */
 export class AgentAppInbox {
   readonly #items = new Map<string, AgentAppItem>();
+  /** When a `ttlMs` item is forgotten, by item id: set on every mint, so a re-mint replaces it. */
+  readonly #expiresAt = new Map<string, number>();
   #mutations: Promise<unknown> = Promise.resolve();
 
   private constructor(private readonly persistence: AgentAppInboxPersistence) {}
@@ -49,10 +51,23 @@ export class AgentAppInbox {
   }
 
   list(): AgentAppItem[] {
+    this.#dropExpired();
     return [...this.#items.values()].sort(
       (left, right) =>
         right.createdAt.localeCompare(left.createdAt) || left.itemId.localeCompare(right.itemId),
     );
+  }
+
+  /** The items for the Agent's own read: a transient item that is shown once (`consumeOnRead`)
+   * is removed as it is listed, so a second read no longer holds it. */
+  async read(): Promise<AgentAppItem[]> {
+    return this.#mutate(async () => {
+      const items = this.list();
+      for (const item of items)
+        if (appInboxDefinition(item.appId, item.notificationClass).consumeOnRead)
+          this.#items.delete(item.itemId);
+      return items;
+    });
   }
 
   async upsert(input: MintAppItem): Promise<AgentAppItem> {
@@ -64,6 +79,7 @@ export class AgentAppInbox {
       const previous = this.#items.get(itemId);
       if (!previous) return false;
       this.#items.delete(itemId);
+      this.#expiresAt.delete(itemId);
       if (previous.retention === "transient") return true;
       try {
         await this.#persist();
@@ -94,6 +110,8 @@ export class AgentAppInbox {
       createdAt: previous?.createdAt ?? new Date().toISOString(),
     });
     this.#items.set(itemId, item);
+    if (definition.ttlMs === undefined) this.#expiresAt.delete(itemId);
+    else this.#expiresAt.set(itemId, Date.now() + definition.ttlMs);
     if (item.retention === "transient") return item;
     try {
       await this.#persist();
@@ -103,6 +121,15 @@ export class AgentAppInbox {
       throw error;
     }
     return item;
+  }
+
+  #dropExpired(): void {
+    const now = Date.now();
+    for (const [itemId, at] of this.#expiresAt)
+      if (at <= now) {
+        this.#items.delete(itemId);
+        this.#expiresAt.delete(itemId);
+      }
   }
 
   #persist(): Promise<void> {

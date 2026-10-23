@@ -34,6 +34,7 @@ These rules apply to `src/server/db/`.
 - `app.repositories.server.ts` persists the app registry: only the apps Workspaces register.
   A read for display never selects `clientSecretHash`, and every write is scoped to an app its
   Workspace owns, so it cannot reach another Workspace's; who may write stays in `server/apps/`.
+- `app-owner-agents.repositories.server.ts` reads the apps an Agent owns, its register cards and its Agent row, assigns the owner Agent only while the Agent is live and the app has none, and writes a rotated secret's hash only while that Agent is still the owner. Who may do what stays in `server/apps/`.
 - `app-permissions.repositories.server.ts` persists app data permissions: a declaration is one
   compare-and-set on the app's `permissionRevision` that also narrows every installation's approval
   to the groups still declared (one raw `UPDATE`, so an approval committed meanwhile is narrowed

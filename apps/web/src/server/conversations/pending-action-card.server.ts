@@ -23,6 +23,7 @@ export async function loadPendingActionCard(
       workspaceId: true,
       kind: true,
       payload: true,
+      preparedByAgentId: true,
       state: true,
       preparedByAgent: { select: { ownerId: true } },
     },

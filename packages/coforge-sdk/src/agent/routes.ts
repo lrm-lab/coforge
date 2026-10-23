@@ -42,6 +42,23 @@ const APP_ROUTES = {
   },
 } as const;
 
+/** `coforge app status|list --owned|rotate-secret`: an Agent managing the apps it registered. One
+ * local route carries an `operation`; the cloud has one route for each. The card itself is
+ * prepared with `actionPrepare`. */
+const APP_REGISTRATION_LOCAL_ROUTE = {
+  method: "POST",
+  path: "/api/agent/v1/app-registrations",
+} as const;
+const APP_REGISTRATION_CLOUD_ROUTES = {
+  status: { method: "GET", path: "/api/agent/v1/apps/registrations/status" },
+  owned: { method: "GET", path: "/api/agent/v1/apps/owned" },
+  rotateSecret: {
+    method: "POST",
+    path: (clientKey: string) =>
+      `/api/agent/v1/apps/owned/${encodeURIComponent(clientKey)}/rotate-secret`,
+  },
+} as const;
+
 /** Resumable attachment uploads. Same routes under `local` and `cloud`. */
 const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
   create: { method: "POST", path: "/api/agent/v1/attachment-upload-sessions" },
@@ -96,6 +113,7 @@ export const agentApiRoutes = {
     profile: PROFILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
+    appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
   },
   local: {
     messages: {
@@ -133,6 +151,7 @@ export const agentApiRoutes = {
     profile: PROFILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
+    appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
   },
   cloud: {
     workspace: { info: { method: "GET", path: "/api/agent/v1/workspace" } },
@@ -245,6 +264,7 @@ export const agentApiRoutes = {
     profile: PROFILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
+    appRegistrations: APP_REGISTRATION_CLOUD_ROUTES,
   },
   workspace: {
     info: {

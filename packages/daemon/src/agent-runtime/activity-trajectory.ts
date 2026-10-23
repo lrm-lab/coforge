@@ -1,3 +1,4 @@
+import { redactCredentials } from "#src/platform/credential-redaction";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
@@ -188,11 +189,5 @@ export class ActivityTrajectory {
   }
 }
 
-// Best-effort redaction of the assembled buffer, including split deltas. This
-// cannot guarantee that arbitrary model-emitted sensitive text is recognizable.
-export function redactTrajectoryText(text: string) {
-  return text
-    .replace(/((?:api[_-]?key|token|secret|password)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]")
-    .replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
-}
+// Best-effort redaction of the assembled buffer, including split deltas (`redactCredentials`).
+export const redactTrajectoryText = redactCredentials;

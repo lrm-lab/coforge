@@ -26,6 +26,7 @@ const APP_VIEW = {
   logoObjectKey: true,
   publishStatus: true,
   secretRotatedAt: true,
+  ownerAgentId: true,
   createdAt: true,
   updatedAt: true,
   ownerWorkspace: { select: { name: true } },

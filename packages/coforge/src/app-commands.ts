@@ -11,6 +11,11 @@ import {
   requestAppToken,
 } from "./app-token-request";
 import { runListActions, type AppInvokeInvocation } from "./app-actions";
+import {
+  isAppRegistrationInvocation,
+  parseAppRegistrationArgs,
+  type AppRegistrationInvocation,
+} from "./app-registration-args";
 
 /** `coforge app list`: the Workspace's apps, and with `all` the built-in Agent Apps too. */
 export type AppListInvocation = { command: "app-list"; all?: true; json?: true };
@@ -27,7 +32,7 @@ export type AppTokenInvocation = {
 };
 
 const APP_USAGE =
-  "Usage: coforge app list [--all] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app invoke <app-key> <action> [--param key=value]... | [--data-json <object> | --data-file <path|->] [--preflight] [--idempotency-key <key>] [--target <target>] [--timeout <seconds>] [--json] | coforge app token --app <key> [--scope <scope>]... [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]";
+  "Usage: coforge app list [--all | --owned] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app invoke <app-key> <action> [--param key=value]... | [--data-json <object> | --data-file <path|->] [--preflight] [--idempotency-key <key>] [--target <target>] [--timeout <seconds>] [--json] | coforge app token --app <key> [--scope <scope>]... [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...] | coforge app prepare register --target <target> --name <name> [--redirect-url <url>]... [--client-key <key>] [--homepage-url <url>] [--description <text>] [--when-to-use <text>] [--category <category>] [--agent-manifest-url <url>] [--scope <scope>]... [--draft-hint <text>] | coforge app status (--card <message-id> | --client <key>) [--json] | coforge app rotate-secret --client <key> --output <new path> [--json]";
 /** How long the program may run by default; `--timeout` takes 1 to 300 seconds, as the token
  * lives five minutes. */
 export const DEFAULT_APP_TOKEN_TIMEOUT_SECONDS = 60;
@@ -48,19 +53,25 @@ function parseTimeout(raw: string): number {
  * program's own. */
 export function parseAppArgs(
   args: readonly string[],
-): AppListInvocation | AppInvokeInvocation | AppTokenInvocation {
+): AppListInvocation | AppInvokeInvocation | AppTokenInvocation | AppRegistrationInvocation {
   const [subcommand, ...rest] = args;
   const separator = rest.indexOf("--");
   const options = separator === -1 ? rest : rest.slice(0, separator);
   const programArgs = separator === -1 ? [] : rest.slice(separator + 1);
   if (subcommand === "list") {
     const invocation: AppListInvocation = { command: "app-list" };
+    let owned = false;
     for (const option of rest)
       if (option === "--all") invocation.all = true;
       else if (option === "--json") invocation.json = true;
+      else if (option === "--owned") owned = true;
       else invalid(`Unexpected argument ${option}`);
-    return invocation;
+    if (!owned) return invocation;
+    if (invocation.all) invalid("--owned and --all cannot be combined");
+    return { command: "app-list-owned", json: invocation.json === true };
   }
+  if (subcommand === "prepare" || subcommand === "status" || subcommand === "rotate-secret")
+    return parseAppRegistrationArgs(subcommand, rest, invalid);
   if (subcommand === "invoke") return parseInvokeArgs(rest, invalid, parseTimeout);
   if (subcommand !== "token") invalid(`Unknown app command ${subcommand ?? ""}`.trim());
   const values: Record<string, string> = {};
@@ -143,10 +154,16 @@ async function readInputFile(path: string): Promise<string> {
 /** Runs `coforge app list|invoke|token` and resolves to the CLI's exit code. The token is handed to the
  * program on file descriptor 3 and never printed. */
 export async function runAppCommand(
-  invocation: AppListInvocation | AppInvokeInvocation | AppTokenInvocation,
+  invocation:
+    | AppListInvocation
+    | AppInvokeInvocation
+    | AppTokenInvocation
+    | AppRegistrationInvocation,
   client: AppClient,
   io: AppCommandIo,
 ): Promise<number> {
+  if (isAppRegistrationInvocation(invocation))
+    throw new Error("the register commands run through runAppRegistrationCommand");
   if (invocation.command === "app-list") {
     const { apps } = await client.appList();
     const all = Boolean(invocation.all);

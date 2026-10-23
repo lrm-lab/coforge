@@ -15,6 +15,10 @@ export type AppInboxDefinition = Readonly<{
   action: AppInboxAction;
   /** Longest summary this class accepts; defaults to `APP_INBOX_PREVIEW_MAX_CHARS`. */
   summaryMaxChars?: number;
+  /** A `transient` item that is shown once: listing it for the Agent's own read removes it. */
+  consumeOnRead?: boolean;
+  /** A `transient` item is forgotten this long after it was last minted, read or not. */
+  ttlMs?: number;
   normalizeSourceRef(value: unknown): AppSourceRef;
   itemId(sourceRef: AppSourceRef): string;
 }>;
@@ -89,6 +93,46 @@ function systemCleanerHint(
   };
 }
 
+/** The source of the private notice of a new app's client secret to its owner Agent (`app:register`
+ * committed): one item per app, in this process's memory only, whose id is the app's client key.
+ * It is a system notice source, not an app: it is not in `BUILT_IN_APPS`, so `app list` never names
+ * it and it has no config. */
+export const APP_REGISTRATION_NOTICE_SOURCE = "system.app_registry";
+export const APP_REGISTRY_SECRET_CLASS = "client_secret";
+
+/** The App Inbox item id of the client secret notice for the app `clientKey`. */
+export const appClientSecretItemId = (clientKey: string) =>
+  `app-registry:${APP_REGISTRY_SECRET_CLASS}:${clientKey}`;
+
+/** How long the secret stays in the Agent's inbox when nobody reads it. */
+export const APP_CLIENT_SECRET_TTL_MS = 15 * 60_000;
+
+const appClientSecret: AppInboxDefinition = {
+  retention: "transient",
+  // A label for the command that gets another secret, like the cleaner's: nothing dispatches it.
+  action: { kind: "run_command", commandId: "app.rotate_secret" },
+  // The summary carries the secret and how to get another, since an item has no other field.
+  summaryMaxChars: 420,
+  consumeOnRead: true,
+  ttlMs: APP_CLIENT_SECRET_TTL_MS,
+  normalizeSourceRef(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("app registry sourceRef must be {kind,id,revision}");
+    const input = value as Record<string, unknown>;
+    if (Object.keys(input).some((key) => !["kind", "id", "revision"].includes(key)))
+      throw new Error("app registry sourceRef contains unknown fields");
+    if (input.kind !== "app_registration")
+      throw new Error("app registry sourceRef.kind must be app_registration");
+    if (typeof input.id !== "string" || !/^[a-z][a-z0-9-]{2,63}$/.test(input.id))
+      throw new Error("app registry sourceRef.id must be a client key");
+    if (input.revision !== "1") throw new Error("app registry sourceRef.revision must be 1");
+    return { kind: "app_registration", id: input.id, revision: "1" };
+  },
+  itemId(sourceRef) {
+    return appClientSecretItemId(sourceRef.id);
+  },
+};
+
 export const AGENT_APP_REGISTRY: Readonly<
   Record<string, Readonly<Record<string, AppInboxDefinition>>>
 > = {
@@ -105,8 +149,16 @@ export const AGENT_APP_REGISTRY: Readonly<
   },
 };
 
+/** Where the daemon itself, for the cloud, leaves an Agent an App Inbox item that no built-in App
+ * owns. Keys never collide with `BUILT_IN_APPS` (the daemon test pins both). */
+export const SYSTEM_NOTICE_SOURCES: Readonly<
+  Record<string, Readonly<Record<string, AppInboxDefinition>>>
+> = {
+  [APP_REGISTRATION_NOTICE_SOURCE]: { [APP_REGISTRY_SECRET_CLASS]: appClientSecret },
+};
+
 export function appInboxDefinition(appId: string, notificationClass: string): AppInboxDefinition {
-  const app = AGENT_APP_REGISTRY[appId];
+  const app = AGENT_APP_REGISTRY[appId] ?? SYSTEM_NOTICE_SOURCES[appId];
   if (!app) throw new Error(`unknown App Inbox app: ${appId}`);
   const definition = app[notificationClass];
   if (!definition) throw new Error(`unknown App Inbox class: ${appId}/${notificationClass}`);

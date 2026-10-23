@@ -1,3 +1,4 @@
+import { redactCredentials } from "#src/platform/credential-redaction";
 import type { AgentActivity, AgentRuntimeEvent } from "@coforge/agent";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
@@ -43,10 +44,7 @@ const MAX_VISIBLE_ERROR_CHARS = 512;
  * part of consolidating every runtime-failure scrubber into this one function.
  */
 export function scrubRuntimeErrorText(message: string): string {
-  const redacted = message
-    .replace(/((?:api[_-]?key|token|secret|password)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]")
-    .replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
+  const redacted = redactCredentials(message);
   return truncateCodePoints(redacted, MAX_VISIBLE_ERROR_CHARS);
 }
 

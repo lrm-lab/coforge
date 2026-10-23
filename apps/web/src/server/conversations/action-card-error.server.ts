@@ -11,7 +11,8 @@ export type ActionCardErrorCode =
   | "INVALID_HANDLE"
   | "AGENT_NOT_VISIBLE"
   | "CHANNEL_EXISTS"
-  | "AGENT_EXISTS";
+  | "AGENT_EXISTS"
+  | "APP_EXISTS";
 
 export class ActionCardError extends Error {
   readonly status: 404 | 409 | 422;

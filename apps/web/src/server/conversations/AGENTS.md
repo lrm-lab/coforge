@@ -181,7 +181,7 @@ These rules apply to `src/server/conversations/`.
 ## Action cards
 
 - `ActionCards.prepare` resolves every handle in a `channel:create`, `agent:create`, or
-  `channel:add_member` action to a UUID, reuses the Agent message-send target resolver and
+  `channel:add_member` action to a UUID (`ActionCardHandles`; an `app:register` action is checked by the app registry's rules, `app-register-action-cards.server.ts`, whose commit registers the app, sets the owner Agent and settles the card in one transaction), reuses the Agent message-send target resolver and
   membership rule (`resolveActionCardTarget`), and creates the posted Message and the `ActionCard`
   row in one conversation-locked transaction (`createActionCardMessage`). The server alone posts
   `app:grant_agent` (`AppGrantCards`) once per waiting app access request, under its row lock;

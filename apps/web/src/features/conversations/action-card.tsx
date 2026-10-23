@@ -17,6 +17,7 @@ import {
   cancelActionCard,
   commitChannelAddMemberActionCard,
   commitAppGrantActionCard,
+  commitAppRegisterActionCard,
   commitChannelCreateActionCard,
   denyAppGrantActionCard,
   loadActionCardStates,
@@ -63,8 +64,10 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const commitAddMember = useServerFn(commitChannelAddMemberActionCard);
   const approveAppGrant = useServerFn(commitAppGrantActionCard);
   const denyAppGrant = useServerFn(denyAppGrantActionCard);
+  const registerApp = useServerFn(commitAppRegisterActionCard);
   const [approving, setApproving] = useState(false);
   const isAppGrant = view.kind === "app:grant_agent";
+  const isAppRegister = view.kind === "app:register";
   const create = useServerFn(createAgent);
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
@@ -112,9 +115,23 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     }
   }
 
+  async function register() {
+    setApproving(true);
+    setError("");
+    try {
+      await registerApp({ data: { messageId: view.messageId } });
+      await refetch();
+    } catch {
+      setError(m.action_card_error());
+    } finally {
+      setApproving(false);
+    }
+  }
+
   async function openDialog() {
     setError("");
     if (isAppGrant) return approve();
+    if (isAppRegister) return register();
     if (view.kind === "agent:create" && !computers) {
       try {
         setComputers(await loadComputers());
@@ -131,7 +148,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
       ? Hash
       : view.kind === "agent:create"
         ? Cpu
-        : isAppGrant
+        : isAppGrant || isAppRegister
           ? Key
           : UserPlus;
   const title =
@@ -141,7 +158,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         ? m.action_card_title_agent_create()
         : isAppGrant
           ? m.app_card_title()
-          : m.action_card_title_add_member();
+          : isAppRegister
+            ? m.app_register_card_title()
+            : m.action_card_title_add_member();
   const commitLabel =
     view.kind === "channel:create"
       ? m.action_card_commit_channel_create()
@@ -151,7 +170,11 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           ? approving
             ? m.app_card_approving()
             : m.agent_apps_approve()
-          : m.action_card_commit_add_member();
+          : isAppRegister
+            ? approving
+              ? m.app_register_card_committing()
+              : m.app_register_card_commit()
+            : m.action_card_commit_add_member();
   const deniedReason =
     view.kind === "agent:create"
       ? m.action_card_denied_agent_create()
@@ -159,7 +182,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         ? m.action_card_denied_add_member({ channel: view.channel.displayName })
         : isAppGrant
           ? m.app_card_denied_reason()
-          : undefined;
+          : isAppRegister
+            ? m.app_register_card_denied_reason()
+            : undefined;
 
   const Icon = icon;
   return (
@@ -215,6 +240,43 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             <p className="text-tertiary">{m.app_card_scopes({ scopes: view.scopes.join(", ") })}</p>
           </>
         )}
+        {view.kind === "app:register" && (
+          <>
+            <p>{view.app.name}</p>
+            <p className="text-tertiary">
+              {view.app.clientKey
+                ? m.app_register_card_client_key({ key: view.app.clientKey })
+                : m.app_register_card_client_key_auto()}
+            </p>
+            {view.app.redirectUrls.length > 0 && (
+              <p className="text-tertiary break-all">
+                {m.app_register_card_redirect({ urls: view.app.redirectUrls.join(", ") })}
+              </p>
+            )}
+            {view.app.homepageUrl && (
+              <p className="text-tertiary break-all">
+                {m.app_register_card_homepage({ url: view.app.homepageUrl })}
+              </p>
+            )}
+            {view.app.agentManifestUrl && (
+              <p className="text-tertiary break-all">
+                {m.app_register_card_manifest({ url: view.app.agentManifestUrl })}
+              </p>
+            )}
+            {view.app.description && <p className="text-tertiary">{view.app.description}</p>}
+            {view.app.whenToUse && (
+              <p className="text-tertiary">
+                {m.app_register_card_when_to_use({ text: view.app.whenToUse })}
+              </p>
+            )}
+            <p className="text-tertiary">
+              {m.app_register_card_category({ category: view.app.category })}
+            </p>
+            <p className="text-tertiary">
+              {m.app_register_card_scopes({ scopes: view.app.scopes.join(", ") })}
+            </p>
+          </>
+        )}
         {view.draftHint && <p className="text-xs text-tertiary italic">{view.draftHint}</p>}
       </div>
 
@@ -267,6 +329,16 @@ export function ActionCard({ card }: { card: ActionCardView }) {
               >
                 #{view.name}
               </Link>
+            </>
+          )}
+          {view.kind === "app:register" && view.result && (
+            <>
+              {" · "}
+              {view.result.clientKey}
+              <br />
+              {view.result.noOwnerAgent
+                ? m.app_register_card_no_owner_agent()
+                : m.app_register_card_secret_sent()}
             </>
           )}
           {view.kind === "agent:create" && view.result && (

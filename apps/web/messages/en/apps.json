@@ -274,5 +274,20 @@
   ],
   "apps_status_applies_at_once": "Applies at once",
   "apps_section_agent_access_description": "Which Agents may use this app. Saved on its own, not with the form's Save.",
-  "apps_agent_access_none_selected": "No Agent is selected, so no Agent will be granted this app automatically. Each one needs a person's approval."
+  "apps_agent_access_none_selected": "No Agent is selected, so no Agent will be granted this app automatically. Each one needs a person's approval.",
+  "app_register_card_title": "Register app",
+  "app_register_card_commit": "Register app",
+  "app_register_card_committing": "Registering…",
+  "app_register_card_client_key": "Client key: {key}",
+  "app_register_card_client_key_auto": "Client key: Auto-generated on commit",
+  "app_register_card_redirect": "Redirect URL: {urls}",
+  "app_register_card_homepage": "App URL: {url}",
+  "app_register_card_manifest": "Agent manifest: {url}",
+  "app_register_card_when_to_use": "When to use: {text}",
+  "app_register_card_category": "Category: {category}",
+  "app_register_card_scopes": "Scopes: {scopes}",
+  "app_register_card_denied_reason": "Only Workspace owners and admins can register apps.",
+  "app_register_card_secret_sent": "The client secret was sent privately to the requesting Agent. If it missed it, it can run coforge app rotate-secret.",
+  "apps_detail_owner_agent": "Owner Agent: {agent}",
+  "app_register_card_no_owner_agent": "No owner Agent was set (the requesting Agent is gone), so no secret was sent. A Workspace owner or admin can generate one in Settings → Applications."
 }

@@ -2,11 +2,20 @@ import { z } from "zod";
 
 import { AGENT_NAME_MAX_LENGTH, AGENT_NAME_PATTERN } from "#src/internal/agent-name";
 import { CHANNEL_NAME_PATTERN } from "#src/internal/channel-references";
+import { draftHintSchema } from "./action-card-draft-hint";
+import {
+  APP_REGISTER_CARD_KIND,
+  appRegisterActionSchema,
+  validateAppRegisterAction,
+  type ResolvedAppRegisterPayload,
+} from "./app-register-card";
+
+export * from "./app-register-card";
 
 /**
  * Agent-prepared action card contract (`coforge action prepare`). An Agent
- * prepares exactly three card kinds: `channel:create`, `agent:create`,
- * `channel:add_member`. A fourth, `app:grant_agent`, only the server posts: it
+ * prepares exactly four card kinds: `channel:create`, `agent:create`,
+ * `channel:add_member`, `app:register`. A fifth, `app:grant_agent`, only the server posts: it
  * asks a person to approve an Agent's use of an app (`coforge app token`).
  *
  * An Agent identifies humans, Agents, channels, and computers by handle
@@ -19,15 +28,7 @@ import { CHANNEL_NAME_PATTERN } from "#src/internal/channel-references";
 /** A handle (`@alice` / `alice` / `#general`) or a UUID; resolved server-side at prepare time. */
 export const idOrHandleSchema = z.string().trim().min(1).max(120);
 
-/** Why the Agent prepared this for a human. Shown below the card form; not the action itself. */
-export const draftHintSchema = z
-  .string()
-  .trim()
-  .max(2000)
-  .optional()
-  .describe(
-    "Why the agent prepared this for you. Shows below the form on the card; not the action itself.",
-  );
+export { draftHintSchema };
 
 /** Strips one leading `#` before validating against the channel name rule. */
 const channelNameSchema = z
@@ -88,6 +89,7 @@ export const actionCardActionSchema = z.discriminatedUnion("type", [
   channelCreateActionSchema,
   agentCreateActionSchema,
   channelAddMemberActionSchema,
+  appRegisterActionSchema,
 ]);
 export type ActionCardAction = z.infer<typeof actionCardActionSchema>;
 /** The server-posted approval card for an Agent's use of an app; never an Agent's action. */
@@ -103,6 +105,7 @@ export function validateActionCardAction(action: ActionCardAction): string | nul
     if (action.suggestedComputer && action.requiredComputer)
       return "agent:create must include only one of suggestedComputer or requiredComputer";
   }
+  if (action.type === APP_REGISTER_CARD_KIND) return validateAppRegisterAction(action);
   if (action.type === "channel:add_member") {
     const total = (action.humans?.length ?? 0) + (action.agents?.length ?? 0);
     if (total === 0) return "channel:add_member must include at least one human or agent";
@@ -146,7 +149,8 @@ export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload
   | ResolvedAgentCreatePayload
   | ResolvedChannelAddMemberPayload
-  | ResolvedAppGrantAgentPayload;
+  | ResolvedAppGrantAgentPayload
+  | ResolvedAppRegisterPayload;
 
 /** `POST /api/agent/v1/actions/prepare` request body. */
 export type AgentActionPrepareRequest = {

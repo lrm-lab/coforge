@@ -6,6 +6,9 @@ import { runGitHubCli, runGitHubCredentialHelper } from "./github-credential";
 import { runGitPrepareCommitMsg } from "./git-prepare-commit-msg";
 import { connectAppClient } from "./app-client";
 import { parseAppArgs, runAppCommand } from "./app-commands";
+import { isAppRegistrationInvocation } from "./app-registration-args";
+import { connectAppRegistrationClient } from "./app-registration-client";
+import { runAppRegistrationCommand } from "./app-registration-commands";
 import { COFORGE_CLI_VERSION } from "./version";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
@@ -18,20 +21,31 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
   }
 
   try {
-    // `app token` owns the program's stdio and exit code, so neither goes through `run`.
-    if (args[0] === "app" && (args[1] === "list" || args[1] === "invoke" || args[1] === "token")) {
-      process.exitCode = await runAppCommand(
-        parseAppArgs(args.slice(1)),
-        connectAppClient(
-          Bun.env.COFORGE_AGENT_CONTEXT ?? "",
-          Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
-        ),
-        {
+    // The app commands own their output and exit code, so neither goes through `run` (`app
+    // token` also owns the program's stdio).
+    if (
+      args[0] === "app" &&
+      ["list", "invoke", "token", "prepare", "status", "rotate-secret"].includes(args[1] ?? "")
+    ) {
+      const context = Bun.env.COFORGE_AGENT_CONTEXT ?? "";
+      const proxyUrl = Bun.env.COFORGE_AGENT_PROXY_URL ?? "";
+      const invocation = parseAppArgs(args.slice(1));
+      if (isAppRegistrationInvocation(invocation)) {
+        const transport = connectLocal(Bun.env.COFORGE_DAEMON_SOCKET ?? "", context, proxyUrl);
+        process.exitCode = await runAppRegistrationCommand(
+          invocation,
+          {
+            client: connectAppRegistrationClient(context, proxyUrl),
+            prepare: (target, action) => transport.actionPrepare!(target, action),
+          },
+          { stdout: (text) => process.stdout.write(text) },
+        );
+      } else
+        process.exitCode = await runAppCommand(invocation, connectAppClient(context, proxyUrl), {
           stdout: (chunk) => process.stdout.write(chunk),
           stderr: (chunk) => process.stderr.write(chunk),
           env: Bun.env,
-        },
-      );
+        });
       return;
     }
     const transport = connectLocal(

@@ -39,3 +39,19 @@ export function agentAppServiceRefusal(error: unknown): Response {
     return agentAppRefusal("access_denied", "The Agent may not use the app this way.");
   throw error;
 }
+
+/** The refusal for an `AppError` raised while an Agent manages the apps it registered (`coforge
+ * app status|list --owned|rotate-secret`); anything else is rethrown. */
+export function agentAppOwnerRefusal(error: unknown): Response {
+  if (isAppErrorCode(error, "NOT_FOUND"))
+    return agentAppRefusal(
+      "not_found",
+      "No such card or app is managed by this Agent: it may not exist, belong to another Workspace, or be one this Agent is neither the owner Agent of nor an admin Agent for; or this Agent may be archived.",
+    );
+  if (isAppErrorCode(error, "CONFLICT"))
+    return agentAppRefusal(
+      "conflict",
+      "The app went while the secret was rotated; nothing was changed.",
+    );
+  throw error;
+}

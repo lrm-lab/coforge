@@ -74,6 +74,11 @@ export function AppDetail({
           <p className="text-sm wrap-anywhere whitespace-pre-line text-secondary">
             {app.description || m.apps_detail_no_description()}
           </p>
+          {app.ownerAgent && (
+            <p className="text-sm text-tertiary">
+              {m.apps_detail_owner_agent({ agent: app.ownerAgent.name })}
+            </p>
+          )}
           {homepage && (
             <div className="grid gap-1">
               <p className="text-sm text-tertiary">{m.apps_detail_homepage()}</p>

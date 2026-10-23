@@ -152,17 +152,24 @@ import {
   type TaskResponse,
   type WeeklyReportRequest,
   type WeeklyReportResponse,
-  agentEnvironmentViolation,
   utf8Encoder,
   refusalText,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
-import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import type { AgentRuntimeProviderConfig } from "#src/code-agent/contract";
 import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
 import { parseAgentLaunchIdentity } from "./agent-launch-identity";
 import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import {
+  decodeAppRegistrationNotice,
+  type AppRegistrationNotice,
+} from "@lrm/coforge-sdk/internal/app-registration-notice";
 import { agentAppCloudRequest } from "./agent-app-cloud-request";
+import {
+  parseAgentApiKey,
+  parseAgentEnvironment,
+  parseAgentRuntimeProviderConfig,
+} from "./agent-launch-response";
 import { controlPayloadShape } from "./control-payload";
 import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
@@ -385,6 +392,7 @@ export interface DaemonConnectionClient {
   onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
   onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
   onAppConfigSync?(callback: (sync: AppConfigSync) => void): () => void;
+  onAppRegistrationNotice?(callback: (notice: AppRegistrationNotice) => void): () => void;
   onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
   onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;
   agentMigrationServer?(): AgentMigrationServer;
@@ -545,6 +553,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #agentMessage = new ListenerSlot<(message: AgentMessageDelivery) => void>();
   readonly #reminderSync = new ListenerSlot<(sync: ReminderSync) => void>();
   readonly #appConfigSync = new ListenerSlot<(sync: AppConfigSync) => void>();
+  readonly #appRegistrationNotice = new ListenerSlot<(notice: AppRegistrationNotice) => void>();
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
   readonly #queries = new DaemonQueries((method, bytes) => this.#rpc(method, bytes));
@@ -851,6 +860,10 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
     return this.#appConfigSync.set(callback);
+  }
+
+  onAppRegistrationNotice(callback: (notice: AppRegistrationNotice) => void): () => void {
+    return this.#appRegistrationNotice.set(callback);
   }
 
   onAgentMigrationLease(callback: (lease: ReceivedAgentMigrationLease) => void): () => void {
@@ -1928,6 +1941,11 @@ export class DaemonConnection implements DaemonConnectionClient {
         this.#deliver(this.#appConfigSync, sync);
         return true;
       }) ||
+      this.#route(data, decodeAppRegistrationNotice, (notice) => {
+        if (!ownsDaemon(notice)) return false;
+        this.#deliver(this.#appRegistrationNotice, notice);
+        return true;
+      }) ||
       this.#route(data, decodeAgentMigrationLease, (lease) => {
         if (!ownsDaemon(lease)) return false;
         // The lease runs from its arrival here, so no clock is compared with the server's.
@@ -2398,6 +2416,7 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#agentMessage,
       this.#reminderSync,
       this.#appConfigSync,
+      this.#appRegistrationNotice,
       this.#agentMigrationLease,
       this.#agentMigrationCancel,
       this.#reconnect,
@@ -2430,44 +2449,4 @@ function rpcData(reply: unknown): Uint8Array {
   const data = (reply as { data?: unknown }).data;
   if (!(data instanceof Uint8Array)) throw new Error("invalid RPC response payload");
   return data;
-}
-
-function parseAgentApiKey(value: unknown): string {
-  if (typeof value !== "string" || !isAgentApiKey(value))
-    throw new Error("invalid Agent API key response");
-  return value;
-}
-
-function parseAgentEnvironment(value: unknown): Record<string, string> {
-  if (value === undefined) return {};
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    agentEnvironmentViolation(value as Record<string, unknown>)
-  )
-    throw new Error("invalid Agent environment response");
-  const envVars: Record<string, string> = Object.create(null);
-  for (const [name, entry] of Object.entries(value)) envVars[name] = entry as string;
-  return envVars;
-}
-
-function parseAgentRuntimeProviderConfig(value: unknown): AgentRuntimeProviderConfig | undefined {
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== "object")
-    throw new Error("invalid Agent runtime provider config response");
-  const config = value as Record<string, unknown>;
-  if (config.kind === "default" && Object.keys(config).length === 1) return { kind: "default" };
-  if (
-    config.kind === "coforge" &&
-    typeof config.providerId === "string" &&
-    (config.apiKey === undefined || typeof config.apiKey === "string") &&
-    Object.keys(config).every((key) => key === "kind" || key === "providerId" || key === "apiKey")
-  )
-    return {
-      kind: "coforge",
-      providerId: config.providerId,
-      ...(typeof config.apiKey === "string" ? { apiKey: config.apiKey } : {}),
-    };
-  throw new Error("invalid Agent runtime provider config response");
 }

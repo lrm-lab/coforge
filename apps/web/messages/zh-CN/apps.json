@@ -274,5 +274,20 @@
   ],
   "apps_status_applies_at_once": "立即生效",
   "apps_section_agent_access_description": "哪些 Agent 可以使用此应用。单独保存，不随表单的保存一起提交。",
-  "apps_agent_access_none_selected": "尚未选择任何 Agent，因此不会自动授权给任何 Agent，每个 Agent 都需要成员批准。"
+  "apps_agent_access_none_selected": "尚未选择任何 Agent，因此不会自动授权给任何 Agent，每个 Agent 都需要成员批准。",
+  "app_register_card_title": "注册应用",
+  "app_register_card_commit": "注册应用",
+  "app_register_card_committing": "正在注册…",
+  "app_register_card_client_key": "客户端标识：{key}",
+  "app_register_card_client_key_auto": "客户端标识：提交时自动生成",
+  "app_register_card_redirect": "重定向 URL：{urls}",
+  "app_register_card_homepage": "应用网址：{url}",
+  "app_register_card_manifest": "智能体清单：{url}",
+  "app_register_card_when_to_use": "适用场景：{text}",
+  "app_register_card_category": "分类：{category}",
+  "app_register_card_scopes": "权限范围：{scopes}",
+  "app_register_card_denied_reason": "只有工作区所有者和管理员可以注册应用。",
+  "app_register_card_secret_sent": "客户端密钥已私下发送给发起请求的智能体。如果它没有收到，可以运行 coforge app rotate-secret。",
+  "apps_detail_owner_agent": "负责智能体：{agent}",
+  "app_register_card_no_owner_agent": "未设置负责智能体（发起请求的智能体已不存在），因此没有发送密钥。工作区所有者或管理员可以在“设置 → 应用”中生成。"
 }

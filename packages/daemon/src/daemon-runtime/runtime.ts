@@ -205,6 +205,8 @@ import {
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
+import { controlCodeField } from "./control-error-code";
+import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnostic-error-code";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
@@ -222,31 +224,6 @@ const SHORT_THREAD_TARGET = new RegExp(
 const NOT_RUNNING = "daemon runtime is not running";
 const CLEANUP_UNCONFIRMED =
   "Agent process cleanup could not be confirmed. Replacement launch is blocked.";
-
-/**
- * `AgentControl`'s fixed rejection messages (agent-runtime/agent-control.ts). They are stable,
- * low-cardinality identifiers, safe to log verbatim as `control_code` — unlike an arbitrary error
- * message, which `diagnosticErrorCode` deliberately never logs raw.
- */
-const CONTROL_ERROR_CODES = new Set([
-  "previous_control_not_completed",
-  "previous_process_stop_unconfirmed",
-  "stale_control_request",
-  "control_request_mismatch",
-  "control_record_missing",
-  "control_epoch_required",
-  "agent_already_running",
-  "confirmed_stop_required",
-  // The server mints and supplies launchId for every managed start; a managed
-  // intent that somehow arrives without one is a protocol bug, not a normal race.
-  "agent_launch_id_required",
-]);
-
-/** `{ control_code }` when `error` is one of AgentControl's fixed rejection messages, else `{}`. */
-function controlCodeField(error: unknown): { control_code: string } | Record<string, never> {
-  const message = error instanceof Error ? error.message : undefined;
-  return message !== undefined && CONTROL_ERROR_CODES.has(message) ? { control_code: message } : {};
-}
 
 type ActivityLaunch = PublishedActivityLaunch & {
   startup?: AgentStartup;
@@ -1254,6 +1231,14 @@ export class DaemonRuntime {
         }),
       );
       this.#subscribe(this.#transport.onAppConfigSync?.((sync) => this.#appConfigs.apply(sync)));
+      this.#subscribe(
+        this.#transport.onAppRegistrationNotice?.((notice) => {
+          void acceptAppRegistrationNotice(notice, {
+            isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
+            mint: (agentId, item) => this.mintAppItem(agentId, item),
+          }).catch(() => {});
+        }),
+      );
       const migrations = this.#migrations;
       if (migrations) {
         // Before any lease is taken, so nothing it clears can belong to a run.
@@ -3841,7 +3826,7 @@ export class DaemonRuntime {
           kind: "message_target" as const,
           messageTarget: { ...messageTarget, flags: [...messageTarget.flags] },
         })),
-        ...inbox.list().map((app) => ({ kind: "app" as const, app })),
+        ...(await inbox.read()).map((app) => ({ kind: "app" as const, app })),
       ],
     };
   }

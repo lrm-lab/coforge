@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
   encodeLocalReminderRequest,
-  isChannelOperation,
   isValidMentionSelectorArray,
   isValidReactionEmoji,
   validateTaskRequest,
@@ -22,9 +21,7 @@ import {
   utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
 import {
-  actionCardActionSchema,
   agentApiRoutes,
-  validateActionCardAction,
   type AgentActionPrepareRequest,
   type AgentActionPrepareResponse,
   type AgentManualGetRequest,
@@ -46,6 +43,7 @@ import {
   type AgentAppConfigResponse,
   type AgentAppConfigUpdateRequest,
   decodeAgentAppConfigPatch,
+  decodeAgentAppRegistrationRequest,
   decodeAgentAppTokenBody,
   type AgentAppRequest,
   AGENT_MENTION_ACTION_MAX_IDS,
@@ -57,6 +55,7 @@ import {
   type AgentMentionDeliveryResponse,
 } from "@lrm/coforge-sdk/agent";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
+import { parseActionPrepareRequest, parseChannelCommand } from "./agent-proxy-request-parsers";
 import { classifyAgentProxyFailure, AGENT_PROXY_CORRELATION_HEADER } from "./agent-proxy-failure";
 import * as domain from "./agent-proxy-domain-failures";
 import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
@@ -467,44 +466,6 @@ function parseProfileUpdateFields(fields: JsonObject): AgentProfileUpdateRequest
   };
 }
 
-function parseChannelCommand(payload: JsonObject): ChannelCommand | Response {
-  if (
-    typeof payload.idempotencyKey !== "string" ||
-    payload.idempotencyKey.length === 0 ||
-    !isChannelOperation(payload.operation) ||
-    (payload.target !== undefined && typeof payload.target !== "string") ||
-    (payload.name !== undefined && typeof payload.name !== "string") ||
-    (payload.description !== undefined && typeof payload.description !== "string") ||
-    (payload.user !== undefined && typeof payload.user !== "string") ||
-    (payload.agent !== undefined && typeof payload.agent !== "string") ||
-    (payload.operation !== "create" && typeof payload.target !== "string") ||
-    (payload.operation === "create" && typeof payload.name !== "string") ||
-    (payload.operation === "update" &&
-      payload.name === undefined &&
-      payload.description === undefined) ||
-    (["add-member", "remove-member"].includes(payload.operation) &&
-      (payload.user === undefined) === (payload.agent === undefined))
-  )
-    return badRequest();
-  return {
-    idempotencyKey: payload.idempotencyKey,
-    operation: payload.operation,
-    target: payload.target,
-    name: payload.name,
-    description: payload.description,
-    user: payload.user,
-    agent: payload.agent,
-  };
-}
-
-function parseActionPrepareRequest(payload: JsonObject): AgentActionPrepareRequest | Response {
-  if (typeof payload.target !== "string" || !payload.target) return badRequest();
-  const parsedAction = actionCardActionSchema.safeParse(payload.action);
-  if (!parsedAction.success) return badRequest();
-  if (validateActionCardAction(parsedAction.data)) return badRequest();
-  return { target: payload.target, action: parsedAction.data };
-}
-
 function parseGithubCredentialRequest(payload: JsonObject): GitHubCredentialRequest | Response {
   if (Object.keys(payload).length !== 0) return badRequest();
   return {};
@@ -758,6 +719,15 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
       if (appKey instanceof Response) return appKey;
       return body ? { operation: "token" as const, appKey, ...body } : badRequest();
     },
+    respond: forwardResponse,
+  }),
+  defineRoute({
+    family: "agent-api/app-registration",
+    method: LOCAL_PROXY_ROUTES.appRegistrations.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.appRegistrations.path),
+    body: "json-object",
+    handler: "agentApp",
+    parse: ({ fields }) => decodeAgentAppRegistrationRequest(fields) ?? badRequest(),
     respond: forwardResponse,
   }),
   defineRoute({

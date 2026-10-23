@@ -6,6 +6,7 @@
 
 import { APP_SCOPES } from "#src/internal/app-scopes";
 import { isRecord } from "#src/internal/json-record";
+import type { AgentAppRegistrationRequest } from "./app-registration";
 
 /** The Agent's access to an installed app: it has a grant (`granted`), its first use grants one
  * (`automatic`), a person must approve it (`needs_approval`), or its request waits for a person
@@ -60,7 +61,8 @@ export type AgentAppTokenRequest = AgentAppTokenBody & { appKey: string };
 /** One app request as the daemon's local proxy hands it on to the cloud. */
 export type AgentAppRequest =
   | { operation: "list" }
-  | ({ operation: "token" } & AgentAppTokenRequest);
+  | ({ operation: "token" } & AgentAppTokenRequest)
+  | AgentAppRegistrationRequest;
 
 /** A token for the app: an RFC 9068 JWT whose audience is the app's client ID, for five minutes. */
 export type AgentAppTokenIssued = {

@@ -195,7 +195,9 @@ test("credentials never ride along in the detail that is returned and logged", (
     new Error(`upstream rejected ${key} sent as Bearer sfp_${"b".repeat(43)}`),
     context,
   );
-  expect(classified.logFields.detail).toBe("upstream rejected [redacted] sent as [redacted]");
+  expect(classified.logFields.detail).toBe(
+    "upstream rejected [REDACTED] sent as Bearer [REDACTED]",
+  );
   expect(JSON.stringify(classified.body)).not.toContain(key);
 });
 
