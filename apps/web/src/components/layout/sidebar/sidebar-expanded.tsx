@@ -2,6 +2,7 @@ import type { FC, ReactNode } from "react";
 import { LayoutLeft } from "@untitledui/icons";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { MobileNavigationHeader } from "#src/components/layout/sidebar/mobile-header";
 import { writeSidebarExpanded } from "#src/features/settings/sidebar-expanded";
 import { m } from "#src/paraglide/messages";
@@ -63,7 +64,7 @@ function SidebarExpandedPanel({
       className="flex h-full w-full max-w-full flex-col bg-sidebar lg:bg-transparent"
     >
       <div className="mt-2 flex h-12 shrink-0 items-center gap-2.5 px-4">
-        <img src="/logo.svg" alt="" className="size-7 shrink-0" />
+        <CoForgeMark className="h-6" />
         <span className="text-lg font-bold text-primary">CoForge</span>
         {onCollapse && (
           <ButtonUtility

@@ -1,4 +1,5 @@
 import { Button } from "#src/components/base/buttons/button";
+import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { AuthSplitLayout } from "#src/features/auth/auth-split-layout";
 import { signOut } from "#src/features/auth/sign-out";
 import { m } from "#src/paraglide/messages";
@@ -17,7 +18,7 @@ export function FirstWorkspacePage({ viewerAccount }: { viewerAccount: string })
     <AuthSplitLayout>
       <div className="flex w-full flex-col gap-8">
         <div className="flex flex-col items-center gap-6 text-center">
-          <img src="/logo.svg" alt="" className="size-12" />
+          <CoForgeMark className="h-10" />
           <div className="flex flex-col gap-2 md:gap-3">
             <h1 className="text-display-xs font-semibold text-primary md:text-display-sm">
               {m.workspace_first_title()}

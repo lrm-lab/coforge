@@ -45,9 +45,11 @@ export function runtimeProviderLabel(provider: RuntimeProvider): string {
   return labels[provider];
 }
 
-/** Every provider's mark (icon). */
-export const RUNTIME_PROVIDER_MARK: Record<RuntimeProvider, string> = {
-  [RUNTIME_PROVIDER.COFORGE]: "/logo.svg",
+/** Every provider's mark (icon) except CoForge's own, which renders as the inline `CoForgeMark` SVG. */
+export const RUNTIME_PROVIDER_MARK: Record<
+  Exclude<RuntimeProvider, typeof RUNTIME_PROVIDER.COFORGE>,
+  string
+> = {
   [RUNTIME_PROVIDER.PI]: piMark,
   [RUNTIME_PROVIDER.CODEX]: codexMark,
   [RUNTIME_PROVIDER.CLAUDE_CODE]: claudeCodeMark,
@@ -60,8 +62,10 @@ export const RUNTIME_PROVIDER_MARK: Record<RuntimeProvider, string> = {
 
 /** Whether that mark is a full-color icon rendered as an `<img>`, as opposed to a monochrome
  * glyph that must be recolored with a CSS mask to match the current theme. */
-export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<RuntimeProvider, boolean> = {
-  [RUNTIME_PROVIDER.COFORGE]: true,
+export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<
+  Exclude<RuntimeProvider, typeof RUNTIME_PROVIDER.COFORGE>,
+  boolean
+> = {
   [RUNTIME_PROVIDER.PI]: false,
   [RUNTIME_PROVIDER.CODEX]: true,
   [RUNTIME_PROVIDER.CLAUDE_CODE]: true,

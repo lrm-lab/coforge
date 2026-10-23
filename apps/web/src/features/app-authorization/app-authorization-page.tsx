@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { signOutHref } from "#src/features/auth/return-to";
 import { signOut } from "#src/features/auth/sign-out";
 import { AUTHORIZATION_ENDPOINT_PATH } from "#src/lib/oidc-paths";
@@ -33,7 +34,7 @@ export function AppAuthorizationPage({
             <span className="text-sm font-semibold text-tertiary">
               {m.app_authorization_sign_in_with()}
             </span>
-            <img src="/logo.svg" alt="CoForge" className="size-6" />
+            <CoForgeMark title="CoForge" className="h-5" />
           </div>
           {account === null ? null : (
             // Signing out goes through Authing, then back to sign-in and this request.

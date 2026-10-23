@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { LandingBrandPanel } from "#src/features/landing/landing-brand-panel";
 
 /**
@@ -13,7 +14,7 @@ export function AuthSplitLayout({ children }: { children: ReactNode }) {
     <div className="grid min-h-dvh bg-primary lg:grid-cols-2">
       <div className="flex flex-col px-4 py-8 md:px-8">
         <Link to="/" aria-label="CoForge" className="self-start">
-          <img src="/logo.svg" alt="" className="size-8" />
+          <CoForgeMark className="h-7" />
         </Link>
         <main className="flex flex-1 items-center justify-center py-12">
           <div className="w-full max-w-sm">{children}</div>

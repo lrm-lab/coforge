@@ -15,7 +15,9 @@ test("provides an installable standalone app manifest for iPhone and iPad", asyn
     sizes: "180x180",
     type: "image/png",
   });
-  expect(
-    await Bun.file(new URL("../public/apple-touch-icon.png", import.meta.url)).exists(),
-  ).toBeTrue();
+  // The PNG's IHDR chunk carries its width and height, which must match the declared 180x180.
+  const png = new DataView(
+    await Bun.file(new URL("../public/apple-touch-icon.png", import.meta.url)).arrayBuffer(),
+  );
+  expect([png.getUint32(16), png.getUint32(20)]).toEqual([180, 180]);
 });
