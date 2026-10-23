@@ -81,7 +81,11 @@ export function AppCard({
             )}
             {view === "installed" && (
               <Badge size="sm" color="gray">
-                {app.owned ? m.apps_this_workspace() : m.apps_from_marketplace()}
+                {app.owned
+                  ? m.apps_this_workspace()
+                  : app.listed
+                    ? m.apps_from_marketplace()
+                    : m.apps_shared_privately()}
               </Badge>
             )}
             {installationSetup && installationSetup.status !== "not_required" && (

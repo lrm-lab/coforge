@@ -132,6 +132,7 @@ describe("an app form's homepage", () => {
       homepageUrl: null,
       logoUrl: null,
       owned: true,
+      listed: false,
       developer: "Acme",
       createdAt: "2026-10-20T00:00:00.000Z",
     };

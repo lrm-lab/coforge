@@ -172,7 +172,8 @@ export class PrismaAppRegistryStore implements AppRegistryStore {
       where: {
         ...owned(workspaceId, key),
         // A member of a Workspace where it is installed, or any signed-in person while the app is
-        // listed: the Marketplace shows its logo before an install.
+        // listed: the Marketplace shows its logo before an install. A private share page reads it
+        // through its token instead (`readSharedAppLogo`).
         OR: [
           {
             installations: { some: { workspace: { members: { some: { userId: viewerUserId } } } } },

@@ -4,9 +4,9 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { createAppInstallations } from "#src/server/app-marketplace/app-installations-composition.server";
-import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { actorOf } from "./app-actor";
 import type { AppCategory } from "./app-category";
+import { toMarketplaceApp } from "./marketplace-app.server";
 import { APP_KEY_MAX_LENGTH } from "./app-registration";
 
 /**
@@ -17,8 +17,8 @@ import { APP_KEY_MAX_LENGTH } from "./app-registration";
 
 const keyInput = z.object({ key: z.string().max(APP_KEY_MAX_LENGTH) });
 
-/** A published app as the Marketplace tab shows it. */
-export type MarketplaceApp = {
+/** What the Marketplace tab and a private share page show of an app. */
+export type MarketplaceAppInfo = {
   key: string;
   name: string;
   description: string;
@@ -37,35 +37,15 @@ export type MarketplaceApp = {
   permissionRevision: number;
   logoUrl: string | null;
   installCount: number;
-  installed: boolean;
-  /** An install approves exactly the declarations shown (`app-data-permissions` is on here). */
-  approvesOnInstall: boolean;
   publishedAt: string | null;
 };
 
-/** The host of a stored URL; `null` for none or one that is not a URL. */
-function hostOf(url: string | null): string | null {
-  if (url === null) return null;
-  try {
-    return new URL(url).host;
-  } catch {
-    return null;
-  }
-}
-
-/** The hosts of the callback URLs, once each, in the order given; a value that is not a URL is
- * skipped. */
-function callbackDomains(redirectUris: readonly string[]): string[] {
-  const hosts = new Set<string>();
-  for (const uri of redirectUris) {
-    try {
-      hosts.add(new URL(uri).host);
-    } catch {
-      // Stored URIs are validated; skip anything that is not.
-    }
-  }
-  return [...hosts];
-}
+/** A published app as the Marketplace tab shows it. */
+export type MarketplaceApp = MarketplaceAppInfo & {
+  installed: boolean;
+  /** An install approves exactly the declarations shown (`app-data-permissions` is on here). */
+  approvesOnInstall: boolean;
+};
 
 /** The apps other Workspaces published (every member), with whether this one installed each. */
 export const loadMarketplaceApps = createServerFn({ method: "GET" })
@@ -75,16 +55,7 @@ export const loadMarketplaceApps = createServerFn({ method: "GET" })
     const { listings, approvesOnInstall } = await createAppInstallations(context.db).browse(
       actorOf(context),
     );
-    return listings.map(
-      ({ appId: _appId, ownerWorkspaceId, logoObjectKey, redirectUris, publishedAt, ...app }) => ({
-        ...app,
-        approvesOnInstall,
-        homepageHost: hostOf(app.homepageUrl),
-        callbackDomains: callbackDomains(redirectUris),
-        logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey),
-        publishedAt: publishedAt?.toISOString() ?? null,
-      }),
-    );
+    return listings.map((listing) => toMarketplaceApp(listing, approvesOnInstall));
   });
 
 /** Installs a listed app in the Workspace (owners and admins) and approves the `revision` of its

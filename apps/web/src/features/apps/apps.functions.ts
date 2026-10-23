@@ -1,3 +1,4 @@
+import { LISTED_STATUSES } from "./app-publish-status";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
@@ -60,6 +61,9 @@ export type AppSummary = Omit<
   /** This Workspace registered the app (it is its developer); otherwise it installed it from the
    * Marketplace and only uninstalls it. */
   owned: boolean;
+  /** The Marketplace lists the app now (`published`, or `unpublish_requested`). An installed app
+   * that is not owned and not listed came in by a private share link. */
+  listed: boolean;
   /** The app's signed webhook state; present only for an app this Workspace owns, to an owner or
    * admin, where `app-notifications` is on. */
   webhookStatus?: WebhookStatus;
@@ -123,6 +127,7 @@ const summary = (
   ...app,
   logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey),
   owned: ownerWorkspaceId === viewerWorkspaceId,
+  listed: LISTED_STATUSES.includes(publishStatus),
   createdAt: createdAt.toISOString(),
   ...(permissions && { permissions: permissionsSummary(permissions) }),
   ...(setup && { setup: setupSummary(setup) }),

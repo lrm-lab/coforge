@@ -406,6 +406,7 @@ function AppEditorForm({
           {app && declares.marketplace && (
             <DistributionSection
               id={ids.distribution}
+              appKey={app.key}
               status={app.publishStatus ?? "private"}
               actions={{
                 requestPublish: () => saveThenRequestPublish(app),

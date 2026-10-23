@@ -45,7 +45,7 @@ The architecture invariants every change must respect are in
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
 | [docs/authorization-server/](docs/authorization-server/README.md) | "Login with CoForge": the OpenID Connect authorization server for third-party apps, its configuration and endpoints |
 | [docs/app-notifications.md](docs/app-notifications.md) | App notifications: the pg-boss outbox that records events in the domain transaction and fans them out to installed apps |
-| [docs/app-marketplace.md](docs/app-marketplace.md) | App Marketplace review: publish and offline requests, the platform operator who decides, and the first operator's grant |
+| [docs/app-marketplace.md](docs/app-marketplace.md) | App Marketplace: publish and offline review, installing a listed app, private share links, the platform operator who decides, and the first operator's grant |
 | [docs/feature-flags.md](docs/feature-flags.md) | Feature flags: turning a dark feature on per Workspace with a flagd definition file |
 | [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
 | [docs/local-gemma-evaluation.md](docs/local-gemma-evaluation.md) | Local SWE evaluation, Gemma service management, Docker and token audits |

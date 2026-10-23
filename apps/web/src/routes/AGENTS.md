@@ -16,6 +16,7 @@ These rules apply to `src/routes/`.
   uses `AuthSplitLayout`. It checks sign-in, the name step and membership itself, and passes on to
   `next` when GitHub is unconfigured, connected, or unreadable.
 - Pages opened before someone is in a Workspace — `login`, `welcome`, `join/$token`,
+  `apps/share/$token` (a private app share link: the person picks a Workspace to install in),
   `oauth/verify`, `oidc/auth`, `workspaces/new` — stay outside `/w/$workspaceSlug`; sign-in,
   the name step, invite links, and creating a first Workspace share
   `features/auth/auth-split-layout.tsx`. A signed-in User in no Workspace is sent

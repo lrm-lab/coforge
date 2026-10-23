@@ -41,3 +41,25 @@ model AppReviewRequest {
   @@index([requestedAt])
   @@map("app_review_requests")
 }
+
+/// A private share link for an app (`server/app-marketplace/`): an owner or admin of another
+/// Workspace installs the app from it without Marketplace review. Only the token's hash is stored,
+/// and the token is shown once. An app has at most one unrevoked link
+/// (`app_share_links_one_active`); creating another revokes the old one. Usable while `revokedAt`
+/// is null and `expiresAt` is ahead; installing does not use it up.
+model AppShareLink {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  appId           String    @db.Uuid
+  /// SHA-256 (hex) of the `cfa_share_…` token.
+  tokenHash       String    @unique
+  createdByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  createdBy       User?     @relation("AppShareLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([appId], map: "app_share_links_one_active", where: raw("\"revokedAt\" IS NULL"))
+  @@index([createdByUserId])
+  @@map("app_share_links")
+}

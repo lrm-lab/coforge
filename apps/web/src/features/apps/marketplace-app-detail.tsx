@@ -4,18 +4,10 @@ import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
 import { m } from "#src/paraglide/messages";
-import {
-  AppDialogShell,
-  DialogCloseButton,
-  HomepageLink,
-  LoginScopeList,
-} from "./app-dialog-parts";
+import { AppDialogShell, DialogCloseButton } from "./app-dialog-parts";
 import { isPermissionsChanged } from "./app-form";
 import type { MarketplaceApp } from "./app-marketplace.functions";
-import { APP_NOTIFICATION_EVENT_LABELS } from "./app-notification-copy";
-import { APP_NOTIFICATION_EVENT_NAMES } from "./app-notification-events";
-import { APP_PERMISSION_GROUP_COPY } from "./app-permission-copy";
-import { APP_PERMISSION_GROUPS } from "./app-permissions";
+import { MarketplaceAppFields } from "./marketplace-app-fields";
 
 /**
  * A published app's detail with what installing it approves: who made it, its homepage and
@@ -58,10 +50,6 @@ export function MarketplaceAppDetail({
     }
   }
 
-  const groups = app ? APP_PERMISSION_GROUPS.filter((g) => app.permissionGroups.includes(g)) : [];
-  const events = app
-    ? APP_NOTIFICATION_EVENT_NAMES.filter((e) => app.notificationEvents.includes(e))
-    : [];
   function close() {
     setProblem(null);
     onClose();
@@ -102,45 +90,7 @@ export function MarketplaceAppDetail({
     >
       {app && (
         <>
-          <p className="text-sm wrap-anywhere whitespace-pre-line text-secondary">
-            {app.description || m.apps_detail_no_description()}
-          </p>
-          <Field label={m.apps_marketplace_developer()}>
-            <span className="text-sm wrap-anywhere text-secondary">{app.developer}</span>
-          </Field>
-          {app.homepageUrl && app.homepageHost && (
-            <Field label={m.apps_marketplace_homepage()}>
-              <HomepageLink href={app.homepageUrl} host={app.homepageHost} />
-            </Field>
-          )}
-          <Field label={m.apps_marketplace_callbacks()}>
-            {app.callbackDomains.length === 0 ? (
-              <span className="text-sm text-secondary">{m.apps_marketplace_callbacks_none()}</span>
-            ) : (
-              <ul className="grid gap-1">
-                {app.callbackDomains.map((domain) => (
-                  <li key={domain} className="font-mono text-xs wrap-anywhere text-secondary">
-                    {domain}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Field>
-          <Field label={m.apps_marketplace_scopes()}>
-            <LoginScopeList allowedScopes={app.allowedScopes} />
-          </Field>
-          <Field label={m.apps_marketplace_data()}>
-            <Badges
-              items={groups.map((group) => APP_PERMISSION_GROUP_COPY[group].label())}
-              none={m.apps_marketplace_data_none()}
-            />
-          </Field>
-          <Field label={m.apps_marketplace_events()}>
-            <Badges
-              items={events.map((event) => APP_NOTIFICATION_EVENT_LABELS[event]())}
-              none={m.apps_marketplace_events_none()}
-            />
-          </Field>
+          <MarketplaceAppFields app={app} />
           {canManage && !app.installed && app.approvesOnInstall && (
             <p className="text-sm text-tertiary">{m.apps_marketplace_install_records()}</p>
           )}
@@ -154,27 +104,5 @@ export function MarketplaceAppDetail({
         </>
       )}
     </AppDialogShell>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <section className="grid gap-1.5">
-      <h3 className="text-sm text-tertiary">{label}</h3>
-      {children}
-    </section>
-  );
-}
-
-function Badges({ items, none }: { items: readonly string[]; none: string }) {
-  if (items.length === 0) return <span className="text-sm text-secondary">{none}</span>;
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {items.map((item) => (
-        <Badge key={item} size="sm" color="gray">
-          {item}
-        </Badge>
-      ))}
-    </div>
   );
 }

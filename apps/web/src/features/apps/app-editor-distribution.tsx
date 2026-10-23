@@ -7,6 +7,7 @@ import { appFormProblem } from "./app-form";
 import { canRequestPublish, type AppPublishStatus } from "./app-publish-status";
 import { publishStatusLabel } from "./app-publish-status-badge";
 import { EditorSection } from "./app-editor-fields";
+import { ShareLinkCard } from "./app-share-link-card";
 
 /** The requests the Distribution section makes; each throws when the server refuses it. */
 export type PublishingActions = {
@@ -17,17 +18,19 @@ export type PublishingActions = {
 
 /**
  * The editor's Distribution section (behind `app-marketplace`): the app's Marketplace status, a
- * hint while a request waits, and what can be done in that status: withdraw a pending publish
- * request; request publication when private or rejected (saving the editor first); a note once
+ * hint while a request waits, the private share link card, and what can be done in that status:
+ * withdraw a pending publish request; request publication when private or rejected (saving the editor first); a note once
  * published. Asking for removal from the Marketplace is the Danger zone's. Each action acts at
  * once, apart from the form's Save.
  */
 export function DistributionSection({
   id,
+  appKey,
   status,
   actions,
 }: {
   id: string;
+  appKey: string;
   status: AppPublishStatus;
   actions: PublishingActions;
 }) {
@@ -57,6 +60,7 @@ export function DistributionSection({
       description={m.apps_section_distribution_description()}
     >
       {error && <Alert color="error" title={error} />}
+      <ShareLinkCard appKey={appKey} canShare={status === "private" || status === "rejected"} />
       {status === "publish_requested" && (
         <>
           <Alert color="warning" title={m.apps_publish_hint_review_pending()} />

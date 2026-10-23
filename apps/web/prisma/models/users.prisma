@@ -26,6 +26,7 @@ model User {
   platformOperatorsGranted    PlatformOperator[]              @relation("PlatformOperatorGrantedBy")
   appReviewsRequested         AppReviewRequest[]              @relation("AppReviewRequestedBy")
   appReviewsDecided           AppReviewRequest[]              @relation("AppReviewDecidedBy")
+  appShareLinksCreated        AppShareLink[]                  @relation("AppShareLinkCreatedBy")
   pendingMentionActions       PendingMentionAction[]
   createdJoinLinks            WorkspaceJoinLink[]
   agents                      Agent[]                     @relation("AgentOwner")

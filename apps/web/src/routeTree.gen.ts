@@ -49,6 +49,7 @@ import { Route as ApiInternalDesktopAuthorizeRouteImport } from './routes/api/in
 import { Route as ApiInternalWeeklyReportScheduleRouteImport } from './routes/api/internal/weekly-report-schedule'
 import { Route as ApiMeAvatarRouteImport } from './routes/api/me/avatar'
 import { Route as ApiWorkspacesSlugRouteImport } from './routes/api/workspaces.$slug'
+import { Route as AppsShareTokenRouteImport } from './routes/apps.share.$token'
 import { Route as OidcDotwellKnownOpenidConfigurationRouteImport } from './routes/oidc.[.]well-known.openid-configuration'
 import { Route as WWorkspaceSlugChatRouteImport } from './routes/w.$workspaceSlug/_chat'
 import { Route as WWorkspaceSlugComputersRouteImport } from './routes/w.$workspaceSlug/_computers'
@@ -114,6 +115,7 @@ import { Route as ApiAgentV1MentionActionsExecuteRouteImport } from './routes/ap
 import { Route as ApiAgentV1MentionActionsPendingRouteImport } from './routes/api/agent/v1/mention-actions_.pending'
 import { Route as ApiAgentV1MessagesSearchRouteImport } from './routes/api/agent/v1/messages_.search'
 import { Route as ApiAgentV1UsersNameRouteImport } from './routes/api/agent/v1/users/$name'
+import { Route as ApiAppsShareTokenLogoRouteImport } from './routes/api/apps/share/$token/logo'
 import { Route as ApiHostsJobsJobIdReportRouteImport } from './routes/api/hosts/jobs/$jobId/report'
 import { Route as ApiProjectsProjectIdRawSplatRouteImport } from './routes/api/projects.$projectId.raw.$'
 import { Route as WWorkspaceSlugChatChannelChannelIdRouteImport } from './routes/w.$workspaceSlug/_chat.channel.$channelId'
@@ -349,6 +351,11 @@ const ApiMeAvatarRoute = ApiMeAvatarRouteImport.update({
 const ApiWorkspacesSlugRoute = ApiWorkspacesSlugRouteImport.update({
   id: '/api/workspaces/$slug',
   path: '/api/workspaces/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppsShareTokenRoute = AppsShareTokenRouteImport.update({
+  id: '/apps/share/$token',
+  path: '/apps/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OidcDotwellKnownOpenidConfigurationRoute =
@@ -712,6 +719,11 @@ const ApiAgentV1UsersNameRoute = ApiAgentV1UsersNameRouteImport.update({
   path: '/api/agent/v1/users/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAppsShareTokenLogoRoute = ApiAppsShareTokenLogoRouteImport.update({
+  id: '/api/apps/share/$token/logo',
+  path: '/api/apps/share/$token/logo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHostsJobsJobIdReportRoute = ApiHostsJobsJobIdReportRouteImport.update({
   id: '/api/hosts/jobs/$jobId/report',
   path: '/api/hosts/jobs/$jobId/report',
@@ -917,6 +929,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/weekly-report-schedule': typeof ApiInternalWeeklyReportScheduleRoute
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
+  '/apps/share/$token': typeof AppsShareTokenRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
@@ -977,6 +990,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
+  '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
   '/api/projects/$projectId/raw/$': typeof ApiProjectsProjectIdRawSplatRoute
   '/w/$workspaceSlug/channel/$channelId': typeof WWorkspaceSlugChatChannelChannelIdRoute
@@ -1049,6 +1063,7 @@ export interface FileRoutesByTo {
   '/api/internal/weekly-report-schedule': typeof ApiInternalWeeklyReportScheduleRoute
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
+  '/apps/share/$token': typeof AppsShareTokenRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
@@ -1107,6 +1122,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
+  '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
   '/api/projects/$projectId/raw/$': typeof ApiProjectsProjectIdRawSplatRoute
   '/w/$workspaceSlug/channel/$channelId': typeof WWorkspaceSlugChatChannelChannelIdRoute
@@ -1180,6 +1196,7 @@ export interface FileRoutesById {
   '/api/internal/weekly-report-schedule': typeof ApiInternalWeeklyReportScheduleRoute
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
+  '/apps/share/$token': typeof AppsShareTokenRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/_chat': typeof WWorkspaceSlugChatRouteWithChildren
   '/w/$workspaceSlug/_computers': typeof WWorkspaceSlugComputersRouteWithChildren
@@ -1242,6 +1259,7 @@ export interface FileRoutesById {
   '/api/agent/v1/mention-actions_/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages_/search': typeof ApiAgentV1MessagesSearchRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
+  '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
   '/api/projects/$projectId/raw/$': typeof ApiProjectsProjectIdRawSplatRoute
   '/w/$workspaceSlug/_chat/channel/$channelId': typeof WWorkspaceSlugChatChannelChannelIdRoute
@@ -1316,6 +1334,7 @@ export interface FileRouteTypes {
     | '/api/internal/weekly-report-schedule'
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
+    | '/apps/share/$token'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
@@ -1376,6 +1395,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions/pending'
     | '/api/agent/v1/messages/search'
     | '/api/agent/v1/users/$name'
+    | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
     | '/api/projects/$projectId/raw/$'
     | '/w/$workspaceSlug/channel/$channelId'
@@ -1448,6 +1468,7 @@ export interface FileRouteTypes {
     | '/api/internal/weekly-report-schedule'
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
+    | '/apps/share/$token'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
@@ -1506,6 +1527,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions/pending'
     | '/api/agent/v1/messages/search'
     | '/api/agent/v1/users/$name'
+    | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
     | '/api/projects/$projectId/raw/$'
     | '/w/$workspaceSlug/channel/$channelId'
@@ -1578,6 +1600,7 @@ export interface FileRouteTypes {
     | '/api/internal/weekly-report-schedule'
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
+    | '/apps/share/$token'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/_chat'
     | '/w/$workspaceSlug/_computers'
@@ -1640,6 +1663,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions_/pending'
     | '/api/agent/v1/messages_/search'
     | '/api/agent/v1/users/$name'
+    | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
     | '/api/projects/$projectId/raw/$'
     | '/w/$workspaceSlug/_chat/channel/$channelId'
@@ -1711,6 +1735,7 @@ export interface RootRouteChildren {
   ApiInternalDesktopAuthorizeRoute: typeof ApiInternalDesktopAuthorizeRoute
   ApiInternalWeeklyReportScheduleRoute: typeof ApiInternalWeeklyReportScheduleRoute
   ApiWorkspacesSlugRoute: typeof ApiWorkspacesSlugRoute
+  AppsShareTokenRoute: typeof AppsShareTokenRoute
   OidcDotwellKnownOpenidConfigurationRoute: typeof OidcDotwellKnownOpenidConfigurationRoute
   WWorkspaceSlugConnectGithubRoute: typeof WWorkspaceSlugConnectGithubRoute
   ApiAgentV1ChannelsRoute: typeof ApiAgentV1ChannelsRoute
@@ -1752,6 +1777,7 @@ export interface RootRouteChildren {
   ApiAgentV1MentionActionsPendingRoute: typeof ApiAgentV1MentionActionsPendingRoute
   ApiAgentV1MessagesSearchRoute: typeof ApiAgentV1MessagesSearchRoute
   ApiAgentV1UsersNameRoute: typeof ApiAgentV1UsersNameRoute
+  ApiAppsShareTokenLogoRoute: typeof ApiAppsShareTokenLogoRoute
   ApiHostsJobsJobIdReportRoute: typeof ApiHostsJobsJobIdReportRoute
   ApiProjectsProjectIdRawSplatRoute: typeof ApiProjectsProjectIdRawSplatRoute
   ApiAgentV1AppsIndexRoute: typeof ApiAgentV1AppsIndexRoute
@@ -2050,6 +2076,13 @@ declare module '@tanstack/react-router' {
       path: '/api/workspaces/$slug'
       fullPath: '/api/workspaces/$slug'
       preLoaderRoute: typeof ApiWorkspacesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/apps/share/$token': {
+      id: '/apps/share/$token'
+      path: '/apps/share/$token'
+      fullPath: '/apps/share/$token'
+      preLoaderRoute: typeof AppsShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/oidc/.well-known/openid-configuration': {
@@ -2507,6 +2540,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1UsersNameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/apps/share/$token/logo': {
+      id: '/api/apps/share/$token/logo'
+      path: '/api/apps/share/$token/logo'
+      fullPath: '/api/apps/share/$token/logo'
+      preLoaderRoute: typeof ApiAppsShareTokenLogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/hosts/jobs/$jobId/report': {
       id: '/api/hosts/jobs/$jobId/report'
       path: '/api/hosts/jobs/$jobId/report'
@@ -2910,6 +2950,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalDesktopAuthorizeRoute: ApiInternalDesktopAuthorizeRoute,
   ApiInternalWeeklyReportScheduleRoute: ApiInternalWeeklyReportScheduleRoute,
   ApiWorkspacesSlugRoute: ApiWorkspacesSlugRoute,
+  AppsShareTokenRoute: AppsShareTokenRoute,
   OidcDotwellKnownOpenidConfigurationRoute:
     OidcDotwellKnownOpenidConfigurationRoute,
   WWorkspaceSlugConnectGithubRoute: WWorkspaceSlugConnectGithubRoute,
@@ -2961,6 +3002,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1MentionActionsPendingRoute: ApiAgentV1MentionActionsPendingRoute,
   ApiAgentV1MessagesSearchRoute: ApiAgentV1MessagesSearchRoute,
   ApiAgentV1UsersNameRoute: ApiAgentV1UsersNameRoute,
+  ApiAppsShareTokenLogoRoute: ApiAppsShareTokenLogoRoute,
   ApiHostsJobsJobIdReportRoute: ApiHostsJobsJobIdReportRoute,
   ApiProjectsProjectIdRawSplatRoute: ApiProjectsProjectIdRawSplatRoute,
   ApiAgentV1AppsIndexRoute: ApiAgentV1AppsIndexRoute,

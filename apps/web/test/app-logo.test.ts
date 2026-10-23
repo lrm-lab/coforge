@@ -327,4 +327,13 @@ describe("an app logo's URL", () => {
       "/api/workspaces/workspace-1/apps/acme-notes/logo?v=logo-1",
     );
   });
+
+  test("on a share page is the CDN's, or otherwise the link's own route", () => {
+    expect(appLogoUrl(WORKSPACE, ownApp.key, key, () => null, "cfa_share_a b")).toBe(
+      "/api/apps/share/cfa_share_a%20b/logo",
+    );
+    expect(appLogoUrl(WORKSPACE, ownApp.key, key, cdn, "tok")).toBe(
+      `https://images-staging.coforge.cn/${key}?x-oss-process=style/icon256`,
+    );
+  });
 });

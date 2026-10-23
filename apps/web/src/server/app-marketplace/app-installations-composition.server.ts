@@ -13,6 +13,7 @@ export function createAppInstallations(db: PrismaClient) {
       inTransaction(db, (tx) =>
         work({ store: new PrismaAppInstallationStore(tx), permissions: createAppPermissions(tx) }),
       ),
+    new PrismaAppInstallationStore(db),
     (workspace) => isFeatureEnabled("app-marketplace", workspace),
     (workspace) => isFeatureEnabled("app-data-permissions", workspace),
   );

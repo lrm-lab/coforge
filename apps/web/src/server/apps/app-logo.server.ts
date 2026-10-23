@@ -10,18 +10,24 @@ import {
  * Where the browser reads an app's logo: the image CDN when this deployment has one, at the icon
  * size, so anyone shown the app (the consent page, later people of other Workspaces) can load it;
  * otherwise the app's own route, which serves people of a Workspace where it is installed,
- * versioned by the object. `null` without a logo: the surface shows the monogram.
+ * versioned by the object. `null` without a logo: the surface shows the monogram. A private share
+ * page (`shareToken`) reads it through the token's own route instead, which checks the link on
+ * every read, because the person opening it has not installed the app yet.
  */
 export function appLogoUrl(
   ownerWorkspaceId: string,
   appKey: string,
   objectKey: string | null,
   publicUrl: PublicImageUrlResolver = publicImageUrl,
+  shareToken?: string,
 ): string | null {
   return publicImageUrlOrFallback(
     objectKey,
     PROFILE_IMAGE_STYLES.icon,
-    (key) => versionedImagePath(`/api/workspaces/${ownerWorkspaceId}/apps/${appKey}/logo`, key),
+    (key) =>
+      shareToken === undefined
+        ? versionedImagePath(`/api/workspaces/${ownerWorkspaceId}/apps/${appKey}/logo`, key)
+        : `/api/apps/share/${encodeURIComponent(shareToken)}/logo`,
     publicUrl,
   );
 }

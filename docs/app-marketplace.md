@@ -1,8 +1,8 @@
 # App Marketplace review
 
 How an app registered in one Workspace asks to be listed in the Marketplace, how a platform
-operator decides, and how another Workspace finds a listed app and installs it. Private share links
-come later. The code is `apps/web/src/server/app-marketplace/` (`AppPublishing`, `AppInstallations`);
+operator decides, how another Workspace finds a listed app and installs it, and how an app is
+shared privately with a few Workspaces without review. The code is `apps/web/src/server/app-marketplace/` (`AppPublishing`, `AppInstallations`, `AppShareLinks`, and `marketplace-access.server.ts`, the member, role and flag gate they share);
 everything is behind the
 `app-marketplace` [feature flag](feature-flags.md), checked for the Workspace a request comes from,
 and refused with `ACCESS_DENIED` (`app-marketplace-off`) where it is off. The design follows Raft
@@ -45,7 +45,7 @@ Every member of a Workspace where the flag is on browses the Marketplace (`AppIn
 the apps whose status is `published` or `unpublish_requested` (Raft keeps an app listed and
 installable while its removal waits) that the Workspace does not own. Owners and admins (who manage
 apps) install and uninstall. A private, requested or rejected app, and the Workspace's own, is
-`NOT_FOUND` to another Workspace; with the flag off every read and write is `ACCESS_DENIED`
+`NOT_FOUND` to another Workspace (unless the person holds a live [share link](#private-share-links)); with the flag off every read and write is `ACCESS_DENIED`
 (`app-marketplace-off`).
 
 - An install writes the same `app_installations` row registering an app does (Agent access `all`,
@@ -72,6 +72,41 @@ apps) install and uninstall. A private, requested or rejected app, and the Works
   install); a private app's only by members of a Workspace where it is installed or, while pending,
   by an operator.
 
+## Private share links
+
+An owner or admin of an app's Workspace shares the app with other Workspaces without listing it
+(`AppShareLinks`, Raft's "Share a private app with another server"). Behind `app-marketplace` like
+the rest; the evidence is Raft's share page and the editor's Private share link card.
+
+- One link is active per app (`app_share_links_one_active`). "Create link" makes it and "Regenerate"
+  revokes the old one and makes a new one; "Revoke" ends it. A link lives 30 days (the editor's
+  default in Raft; the agent CLI's 1 to 365 days is not offered). Only a hash is stored: the URL
+  (`/apps/share/<token>`) is shown once, in the card, and later the card shows only when the active
+  link ends. Creating needs a `private` or `rejected` app (`CONFLICT`, `app-share-status-conflict`);
+  revoking works in any status, so a link can be revoked while a request waits or after publishing.
+- The page `/apps/share/<token>` (outside any Workspace, like `/join/<token>`) is for a signed-in
+  person: the app with the Marketplace detail's fields, its client ID, who shared it, the link's
+  expiry, and a picker of the Workspaces where they own or administer and the flag is on (the app's
+  own Workspace is marked installed). A link that is unknown, revoked or expired, or whose token is
+  malformed, is one `NOT_FOUND` page ("Private app invite not found").
+- `AppInstallations.installShared` installs through the Marketplace's own path (`installListing`):
+  the same approval of the declaration shown, `CONFLICT` (`app-permissions-changed`) when it moved
+  on, an owner or admin only, the flag checked for the target Workspace. Installing does not use the
+  link up, so it serves any number of Workspaces until it ends. It works whatever the app's status.
+  The app's own Workspace is `NOT_FOUND`.
+- Revoking stops new installs and removes none: each installing Workspace keeps the app until its own
+  owner or admin uninstalls it. Requesting publication, a pending review and a rejection touch
+  neither the link nor an install (Raft: private sharing and review are independent).
+- Approving an offline request removes every other Workspace's installation of the app, those made
+  from a link included: Raft's publish page says "every installed server loses access" and does not
+  exempt private installs. The link itself stays valid, so the app can be installed from it again.
+- Visibility: the app is never listed. Only its Workspace and Workspaces that installed it see it
+  (Installed), and Login with CoForge offers it only where it is installed. The share page
+  shows the logo through `/api/apps/share/<token>/logo` (without an image CDN), which checks the
+  token on every read and is never cached, so revoking ends it; the viewer-based logo route still
+  serves only listed apps and Workspaces with the app. An installed app that is not the Workspace's
+  own and not listed is labelled "Shared privately" in Installed, "From Marketplace" when listed.
+
 ## Platform operators
 
 `platform_operators` (`userId` primary key, cascade delete with the user; `role`, today only
@@ -92,7 +127,9 @@ and no operator-grants-operator path yet.
 
 ## Pages
 
-- Settings -> Applications, app editor, Distribution section (editing only): status badge; while
+- Settings -> Applications, app editor, Distribution section (editing only): status badge; the
+  Private share link card (Create link or Regenerate, Revoke, the active link's expiry, the URL
+  once; with no link it shows only while the app is `private` or `rejected`); while
   `publish_requested` a hint and "Withdraw request"; while `private` or `rejected` "Request publish",
   which saves the editor first; a note once `published`. "Request offline review" is a row of the
   Danger zone (Raft's "Marketplace lifecycle"), shown only while `published`.
