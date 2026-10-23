@@ -19,9 +19,9 @@ groups it needs (`APP_NOTIFICATION_EVENT_GROUPS`); the editor lists it under the
 | `computer.online`, `offline`, `version_changed` | computer |
 | `computer.agent_started`, `agent_stopped` | computer, agent |
 
-The catalog is the types an app may subscribe to. **Emitted today:** every event above except the
-three whose state lives only in Redis leases (`agent.status_changed`, `computer.online`,
-`computer.offline`, [below](#events-not-emitted)). `APP_NOTIFICATION_EMITTED_EVENTS` lists them; a
+The catalog is the types an app may subscribe to. **Emitted today:** every event above; the three
+whose state lives only in Redis leases (`agent.status_changed`, `computer.online`,
+`computer.offline`) are [presence events](presence.md). `APP_NOTIFICATION_EMITTED_EVENTS` lists them; a
 compile-time assertion in `app-notification-event.ts` keeps it equal to the recorded types, and the
 editor offers only emitted events. Raft's `server.plan_changed` and `thread.resolved` have no
 CoForge counterpart and are not in the catalog.
@@ -51,6 +51,8 @@ secret. Its keys are snake_case in the stored event and on the wire alike
 | `agent.model_changed` | `agent_id`, `fields` (`model`, `model_provider`, `reasoning`, `fast_mode`), `previous_model`, `model` | `AgentRepository.update` (runtime config diff) |
 | `computer.version_changed` | `computer_id`, `previous_version`, `version` | `recordComputerObservation`, once per Workspace the Computer is linked to |
 | `computer.agent_started`, `computer.agent_stopped` | `computer_id`, `agent_id` | `PrismaAgentControlStore.replace`, when the Computer's answer to a Start or Stop is stored (a restart is a stop, then a start) |
+| `agent.status_changed` | `agent_id`, `from`, `to` (`active`, `inactive`), `observed_at` | `RedisAgentStatusCache.put` and `PresenceSweep` ([presence events](presence.md)), outside a transaction |
+| `computer.online`, `computer.offline` | `computer_id`, `from`, `to` (`online`, `offline`), `observed_at` | `RedisComputerStatusCache.put` and `PresenceSweep` ([presence events](presence.md)), outside a transaction |
 
 A no-op records nothing: a repeat join, add or archive, an edit that changes no field, a first
 version report (no earlier version), an API key or environment change alone. `thread.created` is
@@ -70,12 +72,11 @@ everything an emitter does besides the domain write (that read, a previous-value
 check, building the events) runs in a SAVEPOINT (`attemptAppNotification`), so a failing emitter query
 rolls back to it and the write commits (`app-notification-emitters-resilience.integration.test.ts`).
 
-## Events not emitted
+## Events without a transaction
 
-`agent.status_changed`, `computer.online` and `computer.offline` come from Redis leases (the 90 s
-status keys written by `RedisAgentStatusCache.put` and `RedisComputerStatusCache.put`) with no
-PostgreSQL write, so there is no transaction to join. They would be best effort, recorded outside a
-transaction, like Agent Activity; they are not built yet.
+`agent.status_changed`, `computer.online` and `computer.offline` come from Redis leases with no
+PostgreSQL write, so there is no transaction to join: they are best effort, recorded outside one
+([presence events](presence.md)).
 
 ## Subscribing and approving
 

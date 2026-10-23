@@ -1,4 +1,5 @@
 import type { APP_NOTIFICATION_EMITTED_EVENTS } from "#src/features/apps/app-notification-events";
+import type { AgentPresenceState, ComputerPresenceState } from "./presence-observer";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
 /**
@@ -61,7 +62,26 @@ export type AppNotificationEventPayload =
       data: { computer_id: string; previous_version: string; version: string };
     }
   | { type: "computer.agent_started"; data: { computer_id: string; agent_id: string } }
-  | { type: "computer.agent_stopped"; data: { computer_id: string; agent_id: string } };
+  | { type: "computer.agent_stopped"; data: { computer_id: string; agent_id: string } }
+  | {
+      /** The status field moved; an Agent with no status reads `inactive`. Never a heartbeat. */
+      type: "agent.status_changed";
+      data: {
+        agent_id: string;
+        from: AgentPresenceState;
+        to: AgentPresenceState;
+        observed_at: string;
+      };
+    }
+  | { type: "computer.online"; data: ComputerPresenceData }
+  | { type: "computer.offline"; data: ComputerPresenceData };
+
+type ComputerPresenceData = {
+  computer_id: string;
+  from: ComputerPresenceState;
+  to: ComputerPresenceState;
+  observed_at: string;
+};
 
 /** Who a channel membership event is about: a person (by Workspace user id) or an Agent. */
 type ChannelMemberData = { user_id: string } | { agent_id: string };
@@ -87,12 +107,14 @@ export type AppNotificationEvent = AppNotificationEventPayload & {
   workspaceId: string;
 };
 
+/** `id` and `timestamp` are given by an event that is derived rather than written by a
+ * transaction (presence), so recording it twice is recording it once. */
 export function newAppNotificationEvent(
-  input: AppNotificationEventPayload & { workspaceId: string },
+  input: AppNotificationEventPayload & { workspaceId: string; id?: string; timestamp?: string },
 ): AppNotificationEvent {
   return {
     ...input,
-    id: Bun.randomUUIDv7(),
-    timestamp: new Date().toISOString(),
+    id: input.id ?? Bun.randomUUIDv7(),
+    timestamp: input.timestamp ?? new Date().toISOString(),
   };
 }

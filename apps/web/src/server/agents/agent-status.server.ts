@@ -2,6 +2,14 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type { AgentStatus } from "@lrm/coforge-sdk/internal";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
+import {
+  PRESENCE_EXPIRY_KEY,
+  REDIS_NOW_MS_LUA,
+} from "#src/server/app-notifications/presence-expiry.server";
+import {
+  getPresenceObserver,
+  type PresenceObserver,
+} from "#src/server/app-notifications/presence-observer";
 
 const ACTIVE_TTL_SECONDS = "90";
 export const AGENT_STATUS_LEASE_MS = Number(ACTIVE_TTL_SECONDS) * 1_000;
@@ -28,7 +36,9 @@ end
 return out
 `;
 
-const PUT_AGENT_STATUS = `
+/** The ordering rule of a put, shared by both write scripts: `reject` is what a script returns
+ * for a status that is not newer than the one stored. */
+const ORDERED_BY_INSTANCE_AND_SEQ = (reject: string) => `
 local raw = redis.call("GET", KEYS[1])
 if raw then
   local decoded, current = pcall(cjson.decode, raw)
@@ -47,11 +57,36 @@ if raw then
       accepted = tonumber(current.observedAtMs) and
         tonumber(ARGV[4]) > tonumber(current.observedAtMs)
     end
-    if not accepted then return 0 end
+    if not accepted then ${reject} end
   end
 end
-redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[6])
+`;
+
+const PUT_AGENT_STATUS = `${ORDERED_BY_INSTANCE_AND_SEQ("return 0")}redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[6])
 return 1
+`;
+
+/**
+ * The write while app notifications are in use: the same ordering and the same SET, and in the
+ * same script the previous status goes back to the caller and the expiry index (KEYS[2], see
+ * `presence-expiry.server.ts`) follows the status: an active Agent is filed under the millisecond
+ * its lease ends, any other is removed. Returns `{accepted, previous}`, the previous status
+ * being `inactive` when there was none.
+ */
+const PUT_AGENT_STATUS_TRACKED = `
+local previous = "inactive"
+local before = redis.call("GET", KEYS[1])
+if before then
+  local decoded, stored = pcall(cjson.decode, before)
+  if decoded and type(stored) == "table" and stored.status == "active" then previous = "active" end
+end
+${ORDERED_BY_INSTANCE_AND_SEQ('return {0, ""}')}${REDIS_NOW_MS_LUA}redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[6])
+if ARGV[5] == "active" then
+  redis.call("ZADD", KEYS[2], now_ms + tonumber(ARGV[6]) * 1000, KEYS[1])
+else
+  redis.call("ZREM", KEYS[2], KEYS[1])
+end
+return {1, previous}
 `;
 
 export interface AgentStatusCache {
@@ -77,9 +112,19 @@ export class RedisAgentStatusCache implements AgentStatusCache {
       get(key: string): Promise<string | null>;
       ttl(key: string): Promise<number>;
     },
+    /** `presence` (default: the process's `getPresenceObserver()`) is told of each change of
+     * status while app notifications are in use (`enabled()`); otherwise a put is the one script
+     * it always was. */
+    private readonly options: {
+      presence?: PresenceObserver;
+      expiryKey?: string;
+      ttlSeconds?: string;
+    } = {},
   ) {}
 
   async put(status: AgentStatusScope & OrderedAgentStatus): Promise<boolean> {
+    const presence = this.options.presence ?? getPresenceObserver();
+    if (presence.enabled()) return this.putTracked(status, presence);
     const key = this.key(status);
     const record: OrderedAgentStatus = {
       status: status.status,
@@ -96,9 +141,44 @@ export class RedisAgentStatusCache implements AgentStatusCache {
       status.clientSeq,
       status.observedAtMs,
       status.status,
-      ACTIVE_TTL_SECONDS,
+      this.options.ttlSeconds ?? ACTIVE_TTL_SECONDS,
     );
     return accepted === 1;
+  }
+
+  private async putTracked(
+    status: AgentStatusScope & OrderedAgentStatus,
+    presence: PresenceObserver,
+  ): Promise<boolean> {
+    const result = await this.redis.eval(
+      PUT_AGENT_STATUS_TRACKED,
+      2,
+      this.key(status),
+      this.options.expiryKey ?? PRESENCE_EXPIRY_KEY,
+      JSON.stringify({
+        status: status.status,
+        daemonInstanceId: status.daemonInstanceId,
+        clientSeq: status.clientSeq,
+        observedAtMs: status.observedAtMs,
+      } satisfies OrderedAgentStatus),
+      status.daemonInstanceId,
+      status.clientSeq,
+      status.observedAtMs,
+      status.status,
+      this.options.ttlSeconds ?? ACTIVE_TTL_SECONDS,
+    );
+    if (!Array.isArray(result) || result[0] !== 1) return false;
+    const from = result[1] === "active" ? "active" : "inactive";
+    if (from !== status.status)
+      presence.agentStatus({
+        workspaceId: status.workspaceId,
+        agentId: status.agentId,
+        from,
+        to: status.status,
+        observedAtMs: status.observedAtMs,
+        idSeed: `${status.workspaceId}:${status.agentId}:status:${status.clientSeq}:${status.daemonInstanceId}:${status.status}`,
+      });
+    return true;
   }
 
   async get(scope: AgentStatusScope): Promise<AgentStatus["status"]> {

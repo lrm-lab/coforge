@@ -1,4 +1,4 @@
-import { fromPrisma } from "pg-boss";
+import { fromPrisma, type PgBoss } from "pg-boss";
 
 import type { Prisma } from "#src/generated/prisma/client";
 import {
@@ -50,6 +50,32 @@ export const AppNotifications = {
       } catch {
         // The transaction itself is gone; the caller's next statement reports that.
       }
+      skipped("send_failed", event);
+    }
+  },
+
+  /**
+   * For an event that no PostgreSQL write makes true (a presence change seen in Redis): the same
+   * flag check and the same queue, but the job is sent on the queue's own connection, not in a
+   * transaction, so it is best effort twice over: no commit decides it, and a failure of any kind
+   * (the flag lookup, a queue that is not running, the send) is logged as `record_skipped` and
+   * never thrown. The caller derives `event.id`, so sending the same event again changes nothing.
+   * Callers do not await it on a request path.
+   */
+  async recordDetached(
+    workspace: { id: string; slug: string },
+    event: AppNotificationEvent,
+    deps: {
+      enabled: (workspace: { id: string; slug: string }) => Promise<boolean>;
+      queue: () => Pick<PgBoss, "send"> | undefined;
+    } = { enabled: appNotificationsEnabled, queue: startedAppNotificationQueue },
+  ): Promise<void> {
+    try {
+      if (!(await deps.enabled(workspace))) return;
+      const boss = deps.queue();
+      if (!boss) return skipped("queue_not_started", event);
+      await boss.send(APP_NOTIFICATION_EVENT_QUEUE, event, { id: event.id });
+    } catch {
       skipped("send_failed", event);
     }
   },

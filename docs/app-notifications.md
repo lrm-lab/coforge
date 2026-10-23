@@ -41,7 +41,8 @@ map server to workspace), so the same events are `workspace.*` here.
 - Recording an event id again changes nothing (the job id is the event id), and rerunning the event
   worker enqueues no duplicate delivery (the delivery job id is derived).
 - At least once from the outbox on: a worker crash makes pg-boss run the job again. Events with no
-  Postgres write (Redis-lease status changes) are not part of this slice and would be best effort.
+  Postgres write (Redis-lease status changes) are [presence events](app-notifications/presence.md):
+  best effort, recorded outside a transaction.
 - A flag-off Workspace records nothing: `record` returns before it writes a job, so it can never
   fail the domain transaction and needs no `DATABASE_URL` for pg-boss.
 - **Best effort, never blocking:** notifications never affect the operation that emits them
@@ -96,6 +97,8 @@ on a 410 or when retries run out. Details are topic files:
 - [Subscriptions and the editor](app-notifications/subscriptions.md): the event catalog and the
   data group each event needs, how an app subscribes and an installation approves, the effective
   events, and the App notifications section of the app editor.
+- [Presence events](app-notifications/presence.md): `agent.status_changed`, `computer.online` and
+  `computer.offline`, from Redis leases, outside a transaction.
 - [Webhook secret and endpoint](app-notifications/webhook-secret.md): the derived signing secret and
   its rotation, `COFORGE_APP_WEBHOOK_KEY` (and rotating it), the endpoint rules.
 

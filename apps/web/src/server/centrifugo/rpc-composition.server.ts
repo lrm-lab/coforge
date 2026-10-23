@@ -120,7 +120,7 @@ import { createAgentAppConfigs } from "#src/server/agent-app-configs/agent-app-c
 import { daemonControlChannel } from "./server-api.server";
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
-import { ensureAgentActivitySweep } from "#src/server/agents/agent-activity-sweep.server";
+import { registerBackgroundSweeps } from "#src/server/sweeps/background-sweeps.server";
 
 const unavailable: CentrifugoRpcError = {
   code: 503,
@@ -232,7 +232,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
     const agentAuthorization = new RepositoryAgentAuthorization(agentRepository);
     const centrifugo = createCentrifugoServerApi();
     // Real traffic: idempotent per process, inert until this composition runs.
-    ensureAgentActivitySweep();
+    registerBackgroundSweeps();
     const controlStore = new PrismaAgentControlStore(db);
     const directConversations = new PrismaDirectConversationRepository(db);
     const mentionReports = new MentionDeliveryReports(

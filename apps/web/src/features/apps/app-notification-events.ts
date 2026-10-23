@@ -57,6 +57,9 @@ export const APP_NOTIFICATION_EMITTED_EVENTS = [
   "computer.version_changed",
   "computer.agent_started",
   "computer.agent_stopped",
+  "agent.status_changed",
+  "computer.online",
+  "computer.offline",
 ] as const satisfies readonly AppNotificationEventName[];
 
 /** Every event, in the order lists of them are kept and shown. */
