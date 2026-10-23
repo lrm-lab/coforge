@@ -106,6 +106,7 @@ services:
       # its hash. Plaintext arrives from the host secret file via remote-deploy.sh; an empty
       # value refuses cloud computers.
       COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:?staging cloud cluster token}
+      COFORGE_RETAINED_CLOUD_IMAGE_IDS: ${COFORGE_RETAINED_CLOUD_IMAGE_IDS:-}
       # Private user files (chat attachments, avatars) live in the staging OSS bucket; see
       # docs/operations/aliyun-oss-cdn/. No AccessKey pair: the ECS instance carries the
       # `coforge-staging-web` RAM role and the SDK reads its STS token from the instance

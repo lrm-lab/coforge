@@ -194,6 +194,7 @@ jobs:
           COFORGE_GITHUB_WEBHOOK_SECRET: ${{ secrets.COFORGE_GITHUB_WEBHOOK_SECRET }}
           COFORGE_FILE_DELIVERY_KEY: ${{ secrets.COFORGE_FILE_DELIVERY_KEY }}
           COFORGE_CLOUD_CLUSTER_TOKEN: ${{ secrets.COFORGE_CLOUD_CLUSTER_TOKEN }}
+          COFORGE_RETAINED_CLOUD_IMAGE_IDS: ${{ vars.COFORGE_RETAINED_CLOUD_IMAGE_IDS }}
         run: |
           for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY OTEL_EXPORTER_OTLP_TRACES_ENDPOINT COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_FILE_DELIVERY_KEY COFORGE_CLOUD_CLUSTER_TOKEN; do
             value="${!name}"
@@ -215,7 +216,7 @@ jobs:
           printf '%s' "$COFORGE_WEB_PUSH_PRIVATE_KEY" > "$tar_dir/coforge_web_push_private_key"
           printf '%s' "$COFORGE_FILE_DELIVERY_KEY" > "$tar_dir/coforge_file_delivery_key"
           printf '%s' "$COFORGE_CLOUD_CLUSTER_TOKEN" > "$tar_dir/coforge_cloud_cluster_token"
-          for name in COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_WEBHOOK_SECRET; do
+          for name in COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS; do
             printf '%s' "${!name}" > "$tar_dir/${name,,}"
           done
           tar -czf "$payload" -C "$tar_dir" .
@@ -234,7 +235,7 @@ jobs:
              chmod 600 \"\$incoming/authing_app_id\" \"\$incoming/authing_app_secret\" \"\$incoming/coforge_session_secret\" \"\$incoming/coforge_agent_credential_encryption_key\" \"\$incoming/otel_traces_endpoint\" \"\$incoming/coforge_web_push_public_key\" \"\$incoming/coforge_web_push_private_key\" \"\$incoming/coforge_file_delivery_key\" \"\$incoming/coforge_cloud_cluster_token\"; \
              mkdir -p \"\$secrets_dir\"; \
              chmod 700 \"\$secrets_dir\"; \
-             for name in authing_app_id authing_app_secret coforge_session_secret coforge_agent_credential_encryption_key otel_traces_endpoint coforge_web_push_public_key coforge_web_push_private_key coforge_file_delivery_key coforge_cloud_cluster_token coforge_github_app_slug coforge_commit_coauthor coforge_github_client_secret coforge_github_credential_encryption_key coforge_github_webhook_secret; do \
+             for name in authing_app_id authing_app_secret coforge_session_secret coforge_agent_credential_encryption_key otel_traces_endpoint coforge_web_push_public_key coforge_web_push_private_key coforge_file_delivery_key coforge_cloud_cluster_token coforge_github_app_slug coforge_commit_coauthor coforge_github_client_secret coforge_github_credential_encryption_key coforge_github_webhook_secret coforge_retained_cloud_image_ids; do \
                chmod 600 \"\$incoming/\$name\"; \
                mv -f \"\$incoming/\$name\" \"\$secrets_dir/\$name\"; \
              done" \
@@ -288,6 +289,39 @@ jobs:
         run: |
           curl --fail --silent --show-error --max-time 10 \
             "https://staging.coforge.cn/health" >/dev/null
+
+      - name: Verify retained cloud image protection after a fresh host heartbeat
+        if: vars.COFORGE_RETAINED_CLOUD_IMAGE_IDS != ''
+        run: |
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            'docker exec -i "$(docker ps -q --filter label=com.docker.compose.project=coforge-staging --filter label=com.docker.compose.service=web)" bun -' <<'JS'
+          import { RedisClient } from "bun";
+          const ids = new Set((Bun.env.COFORGE_RETAINED_CLOUD_IMAGE_IDS ?? "").trim().split(/[,\s]+/).filter(Boolean));
+          if (!ids.size) throw new Error("Retained cloud image configuration is missing");
+          const redis = new RedisClient(Bun.env.REDIS_URL);
+          const started = Date.now();
+          let verified = false;
+          try {
+            while (Date.now() - started < 30000) {
+              const snapshot = JSON.parse((await redis.get("coforge:cloud-image:v1")) ?? "null");
+              if (snapshot?.observedAt >= started) {
+                const running = new Set(snapshot.computers.map((row) => row.imageId));
+                if ([...ids].some((id) => !running.has(id))) throw new Error("A configured retained cloud image is missing");
+                const retainedRunning = ids.size;
+                console.log(JSON.stringify({ retainedConfigured: ids.size, retainedRunning, hostHeartbeatObserved: true }));
+                verified = true;
+                break;
+              }
+              await Bun.sleep(200);
+            }
+            if (!verified) throw new Error("A fresh host heartbeat was not observed");
+          } finally {
+            redis.close();
+          }
+          JS
 
       - name: Verify HTTP redirects to HTTPS and HTTPS sends HSTS
         run: bash scripts/deploy/check-https-entry.sh staging.coforge.cn

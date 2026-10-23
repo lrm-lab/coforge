@@ -44,13 +44,15 @@ export type CloudComputerImage = {
 export function cloudComputerImage(
   snapshot: {
     image: { id: string; version: string };
-    computers: Array<{ computerId: string; imageId: string }>;
+    computers: Array<{ computerId: string; imageId: string; retained?: boolean }>;
   },
   computerId: string,
 ): CloudComputerImage | undefined {
   const running = snapshot.computers.find((computer) => computer.computerId === computerId);
   if (!running) return undefined;
   const nodeVersion = cloudImageOfferLabel(snapshot.image);
+  if (running.retained)
+    return { version: cloudImageOfferLabel({ id: running.imageId, version: "" }) };
   if (sameImageLayer(running.imageId, snapshot.image.id)) return { version: nodeVersion };
   return {
     version: cloudImageOfferLabel({ id: running.imageId, version: "" }),

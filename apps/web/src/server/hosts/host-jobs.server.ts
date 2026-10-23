@@ -134,6 +134,7 @@ export class HostJobs {
       cluster: ClusterAuth;
       keys: DaemonKeys;
       accounts: AccountUsernames;
+      imageUpdatePolicy?: (computerId: string) => Promise<"allow" | "retain" | "unknown">;
       /** Drops provider sessions stored for this computer once its disk is gone. */
       disk?: { clear(computerId: string): Promise<void> };
     },
@@ -289,6 +290,8 @@ export class HostJobs {
       (item) => item.id === input.computerId && item.deletedAt === null,
     );
     if (!computer) throw new HostJobError(404, "cloud computer not found");
+    if (this.deps.imageUpdatePolicy && (await this.deps.imageUpdatePolicy(computer.id)) !== "allow")
+      throw new HostJobError(409, "cloud image replacement is unavailable");
     const imageId = requireText(input.imageId, "invalid image id");
     const key = `cloud-update:${computer.id}:${imageId}`;
     const existing = await this.deps.jobs.findByIdempotency(input.userId, key);
@@ -308,11 +311,21 @@ export class HostJobs {
     return view(computer, job.id);
   }
 
-  async claim(input: { token: string }): Promise<ClaimedHostJob | undefined> {
+  async claim(input: { token: string; now?: Date }): Promise<ClaimedHostJob | undefined> {
     const cluster = await this.deps.cluster.authenticate(input.token);
     if (!cluster) throw new HostJobError(401, "invalid host token");
     const job = await this.deps.jobs.next(cluster.id, cluster.accepting);
     if (!job) return undefined;
+    if (job.operation === "update" && this.deps.imageUpdatePolicy) {
+      const policy = await this.deps.imageUpdatePolicy(job.computerId);
+      if (policy === "unknown") return undefined;
+      if (policy === "retain") {
+        job.reportedAt = input.now ?? new Date();
+        job.daemonApiKey = null;
+        await this.deps.jobs.save(job);
+        return undefined;
+      }
+    }
     if (job.operation !== "delete" && job.operation !== "update" && !job.daemonApiKey)
       return undefined;
     return {

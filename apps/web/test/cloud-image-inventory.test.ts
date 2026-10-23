@@ -4,6 +4,7 @@ import {
   CloudImageInventory,
   cloudImageUpdateFor,
   parseHostImageReport,
+  readRetainedCloudImageIds,
 } from "#src/server/hosts/cloud-image-inventory.server";
 import {
   cloudComputerImage,
@@ -178,4 +179,46 @@ describe("cloud image inventory", () => {
     });
     expect(await inventory.available("computer-2")).toBeUndefined();
   });
+});
+
+test("retained image protection survives heartbeat refresh and blocks server offers", async () => {
+  const values = new Map<string, string>();
+  const retained = `sha256:${"ab".repeat(32)}`;
+  const inventory = new CloudImageInventory(
+    {
+      get: async (key) => values.get(key) ?? null,
+      set: async (key, value) => {
+        values.set(key, value);
+        return "OK";
+      },
+    },
+    new Set([retained]),
+  );
+  const report = {
+    image: { id: "sha256:shared", version: "0.1.8-dev.4" },
+    computers: [
+      { computerId: "preserved", imageId: `coforge-computer:private@${retained}` },
+      { computerId: "ordinary", imageId: "sha256:ordinary" },
+    ],
+  };
+  for (let refresh = 0; refresh < 2; refresh++) {
+    await inventory.replace(report);
+    expect(await inventory.available("preserved")).toBeUndefined();
+    expect(await inventory.replacementPolicy("preserved")).toBe("retain");
+    expect(await inventory.replacementPolicy("missing")).toBe("unknown");
+    expect(await inventory.replacementPolicy("ordinary")).toBe("allow");
+    const images = await inventory.images(["preserved", "ordinary"]);
+    expect(images.get("preserved")).toEqual({ version: "abababababab" });
+    expect(images.get("ordinary")?.update?.version).toBe("0.1.8-dev.4");
+    expect((await inventory.snapshot())?.computers[0]?.imageId).toBe(report.computers[0]!.imageId);
+  }
+});
+
+test("retained deployment configuration accepts exact image identities and rejects typos", () => {
+  const id = `sha256:${"ab".repeat(32)}`;
+  expect(readRetainedCloudImageIds(undefined).size).toBe(0);
+  expect([...readRetainedCloudImageIds(`${id}, ${id}`)]).toEqual([id]);
+  expect(() => readRetainedCloudImageIds("coforge-computer:staging")).toThrow(
+    "COFORGE_RETAINED_CLOUD_IMAGE_IDS",
+  );
 });
