@@ -1,3 +1,4 @@
+import { EXPERIENCE_CARD_URI_PREFIX } from "./openviking-memory-reads";
 import type { OpenVikingPolicyGateway } from "./policy-gateway.server";
 
 /** Current source ACL only: do not redo discovery eligibility or inspect hint text. */
@@ -15,6 +16,11 @@ export function createMemorySourceAccess({
   ): Promise<boolean> => {
     const binding = await bindings.get(workspaceId);
     if (!binding || binding.accountId !== source.accountId) return false;
+    // Experience cards are served by ov_experience_find under a synthetic URI that has no
+    // filesystem entry, so fs/stat would always 404 and every Task disposition on a card Offer
+    // would come back not_actionable. The citation was grounded in this workspace's own account
+    // (checked above), which is the access boundary for cards.
+    if (source.uri.startsWith(EXPERIENCE_CARD_URI_PREFIX)) return true;
     const result = await gateway.forward(
       { kind: "agent", agentId },
       {
