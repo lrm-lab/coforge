@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
-import type { AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
 
 export const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 
@@ -182,4 +182,15 @@ export async function controlledClaude(
       feed.stop();
     },
   };
+}
+
+export async function waitForEvent(
+  events: AgentRuntimeEvent[],
+  type: AgentRuntimeEvent["type"],
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (events.some((event) => event.type === type)) return;
+    await Bun.sleep(5);
+  }
+  throw new Error(`timed out waiting for ${type}`);
 }

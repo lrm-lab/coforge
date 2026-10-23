@@ -6,13 +6,12 @@ import {
 } from "#src/code-agent/contract";
 import { InterruptTracker } from "#src/code-agent/interrupt-tracker";
 import type { AgentSession, AgentSessionIdentity, AgentSessionOptions } from "@coforge/agent";
-import { agentEnvironment } from "#src/code-agent/environment";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { RUNTIME_PROVIDER, type AgentServiceTierObserved } from "@lrm/coforge-sdk/internal";
 import { readClaudeCodeUsage } from "./usage";
 import { readClaudeCodeContextReport } from "./context-report";
 import type { AgentContextReport } from "@lrm/coforge-sdk/internal";
-import { claudeLaunchCommand, withoutClaudeCodeMarker } from "./launch-args";
+import { claudeLaunchCommand, claudeLaunchEnvironment } from "./launch-args";
 import { createPromptFile } from "./prompt-file";
 import { claudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
@@ -75,16 +74,12 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
           createSessionId,
         });
       const initialFreshSessionId = options.sessionId ? undefined : crypto.randomUUID();
+      const { environment, autoCompactWindow } = claudeLaunchEnvironment(options);
       const spawn = (sessionId?: string, freshSessionId?: string) =>
         new JsonlProcess(
           command(sessionId, freshSessionId),
           options.agentWorkspaceDirectory,
-          withoutClaudeCodeMarker(
-            agentEnvironment(options.environment, Bun.env, undefined, {
-              envVars: options.runtime?.envVars,
-              gitHooks: options.gitHooks,
-            }),
-          ),
+          environment,
         );
       process = spawn(options.sessionId, initialFreshSessionId);
       const session = new ClaudeCodeAgentSession(
@@ -98,6 +93,7 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
         },
         initialFreshSessionId,
         options.runtime?.model,
+        autoCompactWindow,
       );
       await session.ready();
       return session;
@@ -184,6 +180,8 @@ class ClaudeCodeAgentSession implements AgentSession {
     /** The Agent's configured model, if any: matched against `result.modelUsage`'s
      * keys/`canonicalModel` to select the context-window reading's window size. */
     private readonly configuredModel?: string,
+    /** The child's auto-compact window; caps the window of context readings. */
+    private readonly autoCompactWindow?: number,
   ) {
     this.#process = process;
     this.#removePrompt = removePrompt;
@@ -629,7 +627,7 @@ class ClaudeCodeAgentSession implements AgentSession {
       }
       // A context-window reading is a session fact observed at every top-level
       // result, independent of the turn's own running/interrupting/idle state below.
-      const contextUsage = claudeContextUsage(record, this.configuredModel);
+      const contextUsage = claudeContextUsage(record, this.configuredModel, this.autoCompactWindow);
       if (contextUsage)
         this.#emit({
           type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,

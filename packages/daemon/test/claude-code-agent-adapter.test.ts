@@ -19,6 +19,7 @@ import {
   claudeFixtureProvider,
   controlledClaude,
   TEST_AGENT_INSTRUCTIONS,
+  waitForEvent,
 } from "./fixtures/claude-feed";
 
 test.each(["missing-resume", "missing-before-initialize"])(
@@ -640,90 +641,6 @@ test("Claude Code exposes account rate-limit events as partial usage snapshots",
         },
       },
     });
-
-    await session.dispose();
-  } finally {
-    await rm(agentWorkspaceDirectory, { recursive: true, force: true });
-  }
-});
-
-test("Claude Code reports a context-window reading, selecting the largest model entry when none is configured", async () => {
-  const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-context-usage-"));
-
-  try {
-    const session = await claudeFixtureProvider().createAgentSession({
-      agentWorkspaceDirectory,
-      instructions: TEST_AGENT_INSTRUCTIONS,
-    });
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-
-    await session.sendMessage("context-usage");
-    await waitForEvent(events, "completed");
-    expect(events.find((event) => event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE)).toEqual({
-      type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-      usedTokens: 27_908,
-      windowTokens: 200_000,
-      occurredAt: expect.any(String),
-    });
-
-    await session.dispose();
-  } finally {
-    await rm(agentWorkspaceDirectory, { recursive: true, force: true });
-  }
-});
-
-test("Claude Code selects the configured model's context window over the largest entry", async () => {
-  const agentWorkspaceDirectory = await mkdtemp(
-    join(tmpdir(), "coforge-claude-context-usage-model-"),
-  );
-
-  try {
-    const session = await claudeFixtureProvider().createAgentSession({
-      agentWorkspaceDirectory,
-      instructions: TEST_AGENT_INSTRUCTIONS,
-      runtime: {
-        provider: "claude-code",
-        model: "claude-sonnet-5",
-        reasoning: "",
-      },
-    });
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-
-    await session.sendMessage("context-usage");
-    await waitForEvent(events, "completed");
-    expect(events.find((event) => event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE)).toEqual({
-      type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-      usedTokens: 27_908,
-      windowTokens: 1_000_000,
-      occurredAt: expect.any(String),
-    });
-
-    await session.dispose();
-  } finally {
-    await rm(agentWorkspaceDirectory, { recursive: true, force: true });
-  }
-});
-
-test("Claude Code emits no context-usage event when no modelUsage entry carries a contextWindow", async () => {
-  const agentWorkspaceDirectory = await mkdtemp(
-    join(tmpdir(), "coforge-claude-context-usage-absent-"),
-  );
-
-  try {
-    const session = await claudeFixtureProvider().createAgentSession({
-      agentWorkspaceDirectory,
-      instructions: TEST_AGENT_INSTRUCTIONS,
-    });
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-
-    await session.sendMessage("context-usage-no-window");
-    await waitForEvent(events, "completed");
-    expect(events.some((event) => event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE)).toBe(
-      false,
-    );
 
     await session.dispose();
   } finally {
@@ -1831,14 +1748,3 @@ test("Claude makes a subagent's type single-line and capped where its lineage is
     await fixture.dispose();
   }
 });
-
-async function waitForEvent(
-  events: AgentRuntimeEvent[],
-  type: AgentRuntimeEvent["type"],
-): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (events.some((event) => event.type === type)) return;
-    await Bun.sleep(5);
-  }
-  throw new Error(`timed out waiting for ${type}`);
-}

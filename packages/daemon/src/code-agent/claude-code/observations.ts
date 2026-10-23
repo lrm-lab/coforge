@@ -29,11 +29,13 @@ export function claudeServiceTierState(
  * `windowTokens` is the `modelUsage` entry whose key or `canonicalModel` matches
  * `configuredModel`, or, when unconfigured or unmatched, the entry with the largest
  * `inputTokens + cacheReadInputTokens + cacheCreationInputTokens` (a subagent turn adds extra
- * models to this map).
+ * models to this map), capped at `autoCompactWindow` when given: Claude Code compacts there, so
+ * the context can never fill the model's larger window.
  */
 export function claudeContextUsage(
   record: Readonly<Record<string, unknown>>,
   configuredModel: string | undefined,
+  autoCompactWindow?: number,
 ):
   | {
       usedTokens: number;
@@ -73,8 +75,9 @@ export function claudeContextUsage(
         ? candidate
         : largest,
     );
-  const windowTokens = nonNegativeNumber(selected.value.contextWindow);
-  if (!windowTokens) return undefined;
+  const modelWindow = nonNegativeNumber(selected.value.contextWindow);
+  if (!modelWindow) return undefined;
+  const windowTokens = Math.min(modelWindow, autoCompactWindow ?? Infinity);
   return { usedTokens, windowTokens, occurredAt: eventTime(record) };
 }
 

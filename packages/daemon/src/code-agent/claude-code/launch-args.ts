@@ -1,4 +1,5 @@
 import type { AgentSessionOptions } from "@coforge/agent";
+import { agentEnvironment } from "#src/code-agent/environment";
 
 /**
  * Claude tools a headless Agent must not use: plan mode waits for a human approval no one can give,
@@ -49,4 +50,58 @@ export function withoutClaudeCodeMarker(
 ): Record<string, string> {
   const { CLAUDECODE: _marker, ...rest } = environment;
   return rest;
+}
+
+/** Env var naming the token count at which Claude Code auto-compacts (model-config docs, "Set the
+ * auto-compact window"). Chosen over `--autocompact` because an older CLI rejects an unknown flag
+ * but ignores an unknown variable. */
+export const CLAUDE_AUTO_COMPACT_WINDOW_ENV = "CLAUDE_CODE_AUTO_COMPACT_WINDOW";
+
+/** The auto-compact window a long-lived Agent gets unless its `envVars` or the Daemon's own
+ * environment set one: a 1M-context model would otherwise compact only near 967k. A plain token
+ * count, which every Claude Code version reads (the `k`/`M` suffixes need 2.1.304+). */
+export const DEFAULT_CLAUDE_AUTO_COMPACT_WINDOW = 512_000;
+
+const CLAUDE_AUTO_COMPACT_WINDOW_MIN = 100_000;
+const CLAUDE_AUTO_COMPACT_WINDOW_MAX = 1_000_000;
+const UNIT_TOKENS: Readonly<Record<string, number>> = { "": 1, k: 1_000, m: 1_000_000 };
+
+/** The host environment with the default auto-compact window beneath it: passed as
+ * `agentEnvironment`'s inherited layer, so a value from the Daemon's own environment or the Agent's
+ * `envVars` still wins. */
+export function withDefaultAutoCompactWindow(
+  inherited: Readonly<Record<string, string | undefined>>,
+): Record<string, string | undefined> {
+  return {
+    [CLAUDE_AUTO_COMPACT_WINDOW_ENV]: String(DEFAULT_CLAUDE_AUTO_COMPACT_WINDOW),
+    ...inherited,
+  };
+}
+
+/**
+ * The auto-compact window, in tokens, Claude Code derives from a `CLAUDE_CODE_AUTO_COMPACT_WINDOW`
+ * value: a plain integer token count, or one with a `k`/`M` suffix, clamped to 100k..1M. A value
+ * that is not a usable size is ignored by Claude Code, so it is `undefined` here.
+ */
+export function parseClaudeAutoCompactWindow(value: string | undefined): number | undefined {
+  const match = /^(\d+)([kKmM]?)$/.exec(value?.trim() ?? "");
+  if (!match) return undefined;
+  const tokens = Number(match[1]) * UNIT_TOKENS[match[2]!.toLowerCase()]!;
+  return Math.min(Math.max(tokens, CLAUDE_AUTO_COMPACT_WINDOW_MIN), CLAUDE_AUTO_COMPACT_WINDOW_MAX);
+}
+
+/** A Claude Code Agent's child environment, and the auto-compact window it sets, if usable. */
+export function claudeLaunchEnvironment(
+  options: Pick<AgentSessionOptions, "environment" | "runtime" | "gitHooks">,
+): { environment: Record<string, string>; autoCompactWindow: number | undefined } {
+  const environment = withoutClaudeCodeMarker(
+    agentEnvironment(options.environment, withDefaultAutoCompactWindow(Bun.env), undefined, {
+      envVars: options.runtime?.envVars,
+      gitHooks: options.gitHooks,
+    }),
+  );
+  return {
+    environment,
+    autoCompactWindow: parseClaudeAutoCompactWindow(environment[CLAUDE_AUTO_COMPACT_WINDOW_ENV]),
+  };
 }

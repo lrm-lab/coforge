@@ -152,10 +152,6 @@ import {
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
-import {
-  ContextHandoffCoordinator,
-  contextHandoffActivity,
-} from "#src/agent-runtime/context-handoff";
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { deleteAgentWorkspaceFiles } from "#src/agent-runtime/agent-workspace-files";
@@ -489,8 +485,6 @@ export class DaemonRuntime {
   /** Agents whose launch has already been warned that Fast mode was requested but is not applied.
    * One warning per launch, forgotten with the usage report. */
   readonly #fastModeWarned = new Set<string>();
-  /** One early handoff request per native session; reset when a new launch starts. */
-  readonly #contextHandoffs = new Map<string, ContextHandoffCoordinator>();
   readonly #agentProxy?: AgentProxy;
   readonly #activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   /** Runner-hold reason while this runtime is refusing new turns; undefined when not held.
@@ -1857,8 +1851,6 @@ export class DaemonRuntime {
     this.#interruptIfBusy(agentId, activityLaunch);
     this.#activityPublisher.forgetBusy(agentId);
     this.#disposeLaunchObservations(agentId);
-    for (const key of this.#contextHandoffs.keys())
-      if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
     this.#revokeLocalLaunch(agentId);
     // An abandoned launch is teardown, not a person's Stop: an offline error's record must
     // survive so later deliveries still restate the failure that took the Agent down.
@@ -1946,8 +1938,6 @@ export class DaemonRuntime {
     this.#deliveryQueue.setProvider(agentId, config.provider);
     this.#usageReport.forget(agentId);
     this.#fastModeWarned.delete(agentId);
-    for (const key of this.#contextHandoffs.keys())
-      if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
     // AgentControl's fresh retry after a kiro/pi AgentSessionRecoveryError: the invalidate was
     // already reported before this launch (see `invalidateSession` above); narrate the cold
     // start here, where the real launch's ActivityLaunch now exists. `invalidateReason` is
@@ -2166,8 +2156,6 @@ export class DaemonRuntime {
         if (this.#currentActivityLaunches.get(agentId) !== launch) return;
         // No leaked watchdog timer, and a later launch for this Agent starts clean.
         this.#disposeLaunchObservations(agentId);
-        for (const key of this.#contextHandoffs.keys())
-          if (key === agentId || key.startsWith(`${agentId}:`)) this.#contextHandoffs.delete(key);
         this.#collectSkillAgents.delete(agentId);
         this.#introducedAgents.delete(agentId);
         this.#messageAttention.clearAgent(agentId);
@@ -2449,37 +2437,6 @@ export class DaemonRuntime {
         event.usedTokens,
         event.windowTokens,
       );
-      const handoffKey = event.conversation
-        ? `${agentId}:${event.conversation.conversationId}`
-        : agentId;
-      let handoff = this.#contextHandoffs.get(handoffKey);
-      if (!handoff) {
-        handoff = new ContextHandoffCoordinator(({ prompt, percent }) => {
-          publish(
-            agentId,
-            launch,
-            this.#activity(
-              agentId,
-              AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
-              "info",
-              contextHandoffActivity(percent),
-            ),
-          );
-          const session = this.#agentProcessManager.session(agentId);
-          if (!session?.notify) return;
-          void session
-            .notify(prompt, event.conversation ? { conversation: event.conversation } : undefined)
-            .catch((error: unknown) => {
-              logger.warning("Context handoff request was not accepted", {
-                event: "agent.context_handoff.request_failed",
-                agent_id: agentId,
-                error_code: diagnosticErrorName(error),
-              });
-            });
-        });
-        this.#contextHandoffs.set(handoffKey, handoff);
-      }
-      handoff.observe(event.usedTokens, event.windowTokens);
       return;
     }
     if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {

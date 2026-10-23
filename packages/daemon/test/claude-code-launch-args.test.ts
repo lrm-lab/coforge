@@ -6,6 +6,8 @@ import { join } from "node:path";
 import {
   CLAUDE_DISALLOWED_TOOLS,
   claudeLaunchCommand,
+  parseClaudeAutoCompactWindow,
+  withDefaultAutoCompactWindow,
 } from "#src/code-agent/claude-code/launch-args";
 import { claudeCliEnvironment } from "#src/code-agent/claude-code/process";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
@@ -157,4 +159,89 @@ test("the version probe drops CLAUDECODE for Claude only", async () => {
 
 test("other providers' Agent environment keeps CLAUDECODE", () => {
   expect(agentEnvironment(undefined, { CLAUDECODE: "1" }).CLAUDECODE).toBe("1");
+});
+
+test.each([
+  ["512000", 512_000],
+  ["512k", 512_000],
+  ["512K", 512_000],
+  ["1M", 1_000_000],
+  [" 200000 ", 200_000],
+  ["200", 100_000],
+  ["50k", 100_000],
+  ["2000000", 1_000_000],
+  ["2M", 1_000_000],
+  ["abc", undefined],
+  ["", undefined],
+  ["1.5M", undefined],
+  ["-5", undefined],
+  [undefined, undefined],
+])("auto-compact window %p parses to %p", (value, expected) => {
+  expect(parseClaudeAutoCompactWindow(value)).toBe(expected);
+});
+
+test("the default auto-compact window sits beneath the host environment", () => {
+  expect(withDefaultAutoCompactWindow({ A: "1" })).toEqual({
+    A: "1",
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW: "512000",
+  });
+  expect(withDefaultAutoCompactWindow({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: "1M" })).toEqual({
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW: "1M",
+  });
+});
+
+async function launchedAutoCompactWindow(options: {
+  envVars?: Record<string, string>;
+  daemonValue?: string;
+}): Promise<string> {
+  const previous = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+  if (options.daemonValue === undefined) delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+  else process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = options.daemonValue;
+  const directory = await mkdtemp(join(tmpdir(), "coforge-claude-compact-env-"));
+  try {
+    const workspace = join(directory, "workspace");
+    const bin = join(directory, "bin");
+    await mkdir(workspace);
+    await mkdir(bin);
+    const out = join(directory, "seen");
+    const executable = join(bin, "claude");
+    await writeFile(
+      executable,
+      '#!/bin/sh\nprintf "%s" "${CLAUDE_CODE_AUTO_COMPACT_WINDOW-unset}" > "$COFORGE_SEEN"\nexec "$COFORGE_BUN_EXEC" "$COFORGE_CLAUDE_FIXTURE" -- "$@"\n',
+    );
+    await chmod(executable, 0o755);
+    const session = await new ClaudeCodeProvider().createAgentSession({
+      agentWorkspaceDirectory: workspace,
+      instructions: "Test Agent instructions.",
+      runtime: { provider: "claude-code", model: "", reasoning: "", envVars: options.envVars },
+      environment: {
+        PATH: bin,
+        COFORGE_SEEN: out,
+        COFORGE_BUN_EXEC: process.execPath,
+        COFORGE_CLAUDE_FIXTURE: new URL("./fixtures/claude-stream-json.ts", import.meta.url)
+          .pathname,
+      },
+    });
+    const seen = await readFile(out, "utf8");
+    await session.dispose();
+    return seen;
+  } finally {
+    if (previous === undefined) delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    else process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+test("a launched Claude process gets the 512k auto-compact window by default", async () => {
+  expect(await launchedAutoCompactWindow({})).toBe("512000");
+});
+
+test("an Agent's own auto-compact window wins over the default", async () => {
+  expect(
+    await launchedAutoCompactWindow({ envVars: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: "300k" } }),
+  ).toBe("300k");
+});
+
+test("the Daemon's own auto-compact window wins over the default", async () => {
+  expect(await launchedAutoCompactWindow({ daemonValue: "1M" })).toBe("1M");
 });
