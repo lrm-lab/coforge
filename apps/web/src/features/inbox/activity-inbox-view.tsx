@@ -1,12 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  keepPreviousData,
-  useInfiniteQuery,
-  useQueryClient,
-  type InfiniteData,
-} from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AtSign,
@@ -68,11 +63,12 @@ import {
 } from "./activity-inbox.functions";
 import { useActivityInboxRealtime } from "./use-activity-inbox-realtime";
 import {
-  ACTIVITY_INBOX_LISTS_KEY,
   ACTIVITY_INBOX_QUERY_PREFIX,
   activityInboxQuery,
-  type ActivityInboxPage,
+  cancelActivityInboxListReads,
+  type ActivityCompletionItem,
 } from "./activity-inbox-queries";
+import { useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityConversationPane } from "./activity-conversation-pane";
 import { activityChatLink, activityOpenTarget, openedItemKey } from "./activity-open-target";
@@ -105,23 +101,33 @@ export function ActivityInboxView({
   const workspaceId = currentWorkspace?.id ?? "";
   const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
+  const {
+    start: startDone,
+    settle: settleDone,
+    project: projectDone,
+  } = useActivityDoneProjection();
 
   // Switching views keeps the current rows on screen until the next view has loaded.
   const query = useInfiniteQuery({
     ...activityInboxQuery(workspaceId, filter),
     placeholderData: keepPreviousData,
   });
+  // Re-project pending Done rows after placeholder selection, which may reuse selected data.
+  const projectedData = useMemo(
+    () => (query.data ? projectDone(query.data) : undefined),
+    [query.data, projectDone],
+  );
 
-  const firstPage = query.data?.pages[0];
+  const firstPage = projectedData?.pages[0];
   const pinned = useMemo(() => firstPage?.pinned ?? [], [firstPage]);
   // Pages are offsets into a list that can move between fetches; an item that slid onto the next
   // page is shown once, and never again below Pinned.
   const items = useMemo(() => {
     const seen = new Set(pinned.map((item) => item.key));
-    return (query.data?.pages ?? [])
+    return (projectedData?.pages ?? [])
       .flatMap((page) => page.items)
       .filter((item) => !seen.has(item.key) && seen.add(item.key));
-  }, [query.data, pinned]);
+  }, [projectedData, pinned]);
 
   const currentKey = useMemo(
     () => openedItemKey([...pinned, ...items], opened),
@@ -154,6 +160,8 @@ export function ActivityInboxView({
     workspaceId,
     onChanged: refresh,
     onFailure: setFailure,
+    onDoneStarted: startDone,
+    onDoneSettled: settleDone,
   });
 
   // Reads only what the list showed: the server's own clock at the time it read the list.
@@ -438,10 +446,14 @@ function useActivityItemActions({
   workspaceId,
   onChanged,
   onFailure,
+  onDoneStarted,
+  onDoneSettled,
 }: {
   workspaceId: string;
   onChanged: () => Promise<void>;
   onFailure: (failure: { retry: () => void } | null) => void;
+  onDoneStarted: (item: ActivityCompletionItem) => void;
+  onDoneSettled: (item: ActivityCompletionItem) => void;
 }) {
   const queryClient = useQueryClient();
   const markChannelRead = useServerFn(markPublicChannelRead);
@@ -455,14 +467,23 @@ function useActivityItemActions({
   const setMentionRead = useServerFn(setActivityMentionRead);
 
   return useMemo(() => {
-    function run(action: () => Promise<unknown>) {
+    function run(
+      action: () => Promise<unknown>,
+      lifecycle?: { start: () => void; settle: () => void },
+    ) {
       onFailure(null);
-      // Through a resolved promise, so an action that throws before it returns a promise is
-      // reported like one that rejects.
+      lifecycle?.start();
+      // Through a resolved promise, so a synchronous throw is reported like a rejection.
       void Promise.resolve()
         .then(action)
-        .catch(() => onFailure({ retry: () => run(action) }))
-        .finally(onChanged);
+        .catch(() => onFailure({ retry: () => run(action, lifecycle) }))
+        .finally(async () => {
+          try {
+            await onChanged();
+          } finally {
+            lifecycle?.settle();
+          }
+        });
     }
 
     function read({
@@ -513,37 +534,37 @@ function useActivityItemActions({
           }),
         );
       },
-      done: (item: ActivityInboxItem) => {
-        queryClient.setQueriesData<InfiniteData<ActivityInboxPage>>(
-          // Every view of this Workspace: the counts cover them all.
-          { queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] },
-          (data) => data && withoutItem(data, item),
-        );
-        run(() =>
-          markDone({
-            data: item.mentionAction
-              ? { kind: "mention_action", resolutionId: item.mentionAction.resolutionId }
-              : item.thread
-                ? {
-                    kind: "thread",
-                    conversationId: item.place.conversationId,
-                    rootMessageId: item.thread.root.id,
-                    throughSequence: item.latestSequence,
-                  }
-                : {
-                    kind: "conversation",
-                    conversationId: item.place.conversationId,
-                    throughSequence: item.latestSequence,
-                  },
-          }),
-        );
-      },
+      done: (item: ActivityInboxItem) =>
+        run(
+          async () => {
+            await cancelActivityInboxListReads(queryClient, workspaceId);
+            await markDone({
+              data: item.mentionAction
+                ? { kind: "mention_action", resolutionId: item.mentionAction.resolutionId }
+                : item.thread
+                  ? {
+                      kind: "thread",
+                      conversationId: item.place.conversationId,
+                      rootMessageId: item.thread.root.id,
+                      throughSequence: item.latestSequence,
+                    }
+                  : {
+                      kind: "conversation",
+                      conversationId: item.place.conversationId,
+                      throughSequence: item.latestSequence,
+                    },
+            });
+          },
+          { start: () => onDoneStarted(item), settle: () => onDoneSettled(item) },
+        ),
     };
   }, [
     queryClient,
     workspaceId,
     onChanged,
     onFailure,
+    onDoneStarted,
+    onDoneSettled,
     markChannelRead,
     markChannelThreadRead,
     markDirectRead,
@@ -554,31 +575,6 @@ function useActivityItemActions({
     markDone,
     setMentionRead,
   ]);
-}
-
-/**
- * A cached view of the item's Workspace without the item, until the refetch lands. The tab counts
- * and the active count cover every view, so each view drops the item from them, whether or not it
- * lists the item. A pinned conversation stays under Pinned after Done, so the Pinned section keeps
- * it and it still counts as active.
- */
-function withoutItem(
-  data: InfiniteData<ActivityInboxPage>,
-  item: ActivityInboxItem,
-): InfiniteData<ActivityInboxPage> {
-  return {
-    ...data,
-    pages: data.pages.map((page) => ({
-      ...page,
-      items: page.items.filter((entry) => entry.key !== item.key),
-      unreadItemCount: Math.max(0, page.unreadItemCount - (item.unreadCount > 0 ? 1 : 0)),
-      unreadMentionItemCount: Math.max(
-        0,
-        page.unreadMentionItemCount - (item.unreadMention ? 1 : 0),
-      ),
-      activeItemCount: Math.max(0, page.activeItemCount - (item.pinned ? 0 : 1)),
-    })),
-  };
 }
 
 /** A message's text rendered as inline Markdown, or its first attachment's name. */
