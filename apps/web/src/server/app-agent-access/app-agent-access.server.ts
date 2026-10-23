@@ -9,8 +9,11 @@ import type { WorkspaceMemberRole } from "#src/features/workspaces/workspace-rol
 import { canSeeAgent } from "#src/server/agents/agent-visibility.server";
 import {
   canManageAgentAppAccess,
+  agentInScope,
+  appsVisibleToAgent,
   decideAgentAccess,
   type AgentAccessDecision,
+  type AgentScope,
 } from "./access-rules.server";
 
 /** A person acting in the Workspace the request names. */
@@ -73,7 +76,7 @@ export type AgentAccessOutcome =
   /** `appName` names the app to whoever approves. */
   | { status: "pending"; requestId: string; scopes: string[]; appName: string };
 
-type InstalledApp = InstalledAppView & { id: string };
+type InstalledApp = InstalledAppView & { id: string } & AgentScope;
 type AgentRow = { ownerId: string; visibility: string; systemKind: string | null };
 /** A grant to give: its row is created, or the one revoked or given before is replaced. */
 type GrantInput = {
@@ -169,11 +172,19 @@ export class AppAgentAccess {
       this.store.listActiveGrants(agentId),
       this.store.listPendingRequests(agentId),
     ]);
-    return { canManage, apps: apps.map(({ id: _id, ...app }) => app), grants, pendingRequests };
+    return {
+      canManage,
+      apps: apps.map(
+        ({ id: _id, agentAccess: _access, selectedAgentIds: _selected, ...app }) => app,
+      ),
+      grants,
+      pendingRequests,
+    };
   }
 
-  /** The apps installed in the Agent's Workspace, as the Agent sees them: what its next use of each
-   * gets (`decideAgentAccess`, asking for no more than the fixed scopes). */
+  /** The apps installed in the Agent's Workspace that the Agent is told about (`appsVisibleToAgent`:
+   * its scope includes it, or it has an active grant), with what its next use of each gets
+   * (`decideAgentAccess`, asking for no more than the fixed scopes). */
   async listForAgent(agent: {
     workspaceId: string;
     agentId: string;
@@ -185,15 +196,24 @@ export class AppAgentAccess {
       this.store.listGrantStates(agent.agentId),
       this.store.listPendingRequests(agent.agentId),
     ]);
-    return apps.map(({ id, allowedScopes, logoUrl: _logo, ...app }) => {
+    return appsVisibleToAgent(apps, grants, agent.agentId).map((installedApp) => {
+      const {
+        id,
+        allowedScopes,
+        logoUrl: _logo,
+        agentAccess: _access,
+        selectedAgentIds: _selected,
+        ...view
+      } = installedApp;
       const decision = decideAgentAccess({
         installed: true,
         allowedScopes,
         requestedScopes: [],
         grant: grants.find((grant) => grant.appId === id),
-        pendingRequest: pendingRequests.find((request) => request.appKey === app.key),
+        inScope: agentInScope(installedApp, agent.agentId),
+        pendingRequest: pendingRequests.find((request) => request.appKey === view.key),
       });
-      return { ...app, access: accessState(decision) };
+      return { ...view, access: accessState(decision) };
     });
   }
 
@@ -297,6 +317,7 @@ export class AppAgentAccess {
         allowedScopes: app.allowedScopes,
         requestedScopes,
         grant,
+        inScope: agentInScope(app, agent.agentId),
         pendingRequest,
       });
       if (decision.kind === "not_installed") return { status: "not_installed" };

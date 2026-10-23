@@ -237,7 +237,7 @@ test.skipIf(!db)(
         await registry.registerApp(mine.actor("owner"), { ...registration(key), name });
       await registry.registerApp(theirs.actor("owner"), registration(`theirs-${theirs.suffix}`));
 
-      const directory = await agentLaunchApps(db!, mine.workspace.id);
+      const directory = await agentLaunchApps(db!, mine.workspace.id, crypto.randomUUID());
       expect(directory).toEqual([
         {
           key: `acme-${mine.suffix}`,

@@ -6,6 +6,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
+import { AgentAccessScope } from "./agent-access-field";
 import { InstallationCard } from "./app-editor-installation";
 import { InstallationApproval } from "./app-editor-permissions";
 import { SetupStatusCard } from "./app-editor-setup";
@@ -17,10 +18,11 @@ import type { AppSummary } from "./apps.functions";
 
 /**
  * The detail of an installed app, read-only for every role: who it is, what it does, the scopes
- * Login with CoForge lets it ask for and, where their flags are on (`declares`), its setup status
- * and the data it reads. An owner or admin (`canManage`) also continues setup, approves a pending
- * permissions update and sees the installation ID; a member is told to ask one. Editing the app is
- * the editor's, behind the card's Edit button.
+ * Login with CoForge lets it ask for, which Agents may use it (an owner or admin changes that
+ * here) and, where their flags are on (`declares`), its setup status and the data it reads. An
+ * owner or admin (`canManage`) also continues setup, approves a pending permissions update and
+ * sees the installation ID; a member is told to ask one. Editing the app is the editor's, behind
+ * the card's Edit button.
  */
 export function AppDetail({
   open,
@@ -113,6 +115,7 @@ export function AppDetail({
                     ))}
                   </ul>
                 </section>
+                <AgentAccessScope appKey={app.key} canManage={canManage} />
                 {declares.setup && setup?.installation && (
                   <SetupStatusCard
                     installation={setup.installation}

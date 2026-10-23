@@ -83,11 +83,16 @@ model AppInstallation {
   /// When the app first reported that revision complete; set and cleared with `setupCompletedRevision`
   /// (`app_installations_setup_completion_check`).
   setupCompletedAt  DateTime?
+  /// Which Agents may use the app: `all` (the default, every Agent in the Workspace, new ones
+  /// included) or `selected` (only those in `agents`; `app_installations_agent_access_check`). A
+  /// CoForge extension: Raft has no per-Agent install scope. Switching it revokes no grant.
+  agentAccess       String    @default("all")
   createdAt         DateTime  @default(now())
   app               App       @relation(fields: [appId], references: [id], onDelete: Cascade)
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   installedBy       User?     @relation("AppInstallationInstalledBy", fields: [installedByUserId], references: [id], onDelete: SetNull)
   approvedBy        User?     @relation("AppInstallationApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  agents            AppInstallationAgent[]
 
   @@unique([appId, workspaceId])
   @@index([workspaceId])

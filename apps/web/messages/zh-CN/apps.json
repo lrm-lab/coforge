@@ -230,5 +230,41 @@
   "apps_detail_no_description": "此应用没有描述。",
   "apps_detail_login_summary": "通过 CoForge 登录时，此应用可以申请以下权限范围。",
   "apps_detail_eyebrow": "已安装应用",
-  "apps_setup_admin_manages_note": "此应用的配置由所有者或管理员管理。"
+  "apps_setup_admin_manages_note": "此应用的配置由所有者或管理员管理。",
+  "apps_agent_access_title": "Agent 访问范围",
+  "apps_agent_access_loading": "正在加载 Agent 访问范围…",
+  "apps_agent_access_load_error": "无法加载 Agent 访问范围。请关闭后重新打开此应用。",
+  "apps_agent_access_save_error": "无法保存 Agent 访问范围，请重试。",
+  "apps_agent_access_all": "所有 Agent",
+  "apps_agent_access_all_hint": "本工作区的每个 Agent（包括之后创建的）首次使用时都会自动获得此应用的授权。",
+  "apps_agent_access_selected": "指定 Agent",
+  "apps_agent_access_selected_hint": "只有你选择的 Agent 首次使用时会自动获得授权，其他 Agent 需要成员批准。这是 CoForge 在 Raft 之外的扩展。",
+  "apps_agent_access_pick": [
+    {
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
+      "match": {
+        "p=one": "已选择 {count} 个 Agent",
+        "p=other": "已选择 {count} 个 Agent"
+      }
+    }
+  ],
+  "apps_agent_access_no_agents": "此工作区还没有 Agent。",
+  "apps_agent_access_grants_kept": "更改不会撤销已有授权。请在 Agent 的“应用”标签页撤销授权。",
+  "apps_agent_access_save": "保存 Agent 访问范围",
+  "apps_agent_access_saving": "正在保存…",
+  "apps_agent_access_all_summary": "所有 Agent 可用",
+  "apps_agent_access_selected_summary": [
+    {
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
+      "match": {
+        "p=one": "{count} 个 Agent 可用",
+        "p=other": "{count} 个 Agent 可用"
+      }
+    }
+  ],
+  "apps_status_applies_at_once": "立即生效",
+  "apps_section_agent_access_description": "哪些 Agent 可以使用此应用。单独保存，不随表单的保存一起提交。",
+  "apps_agent_access_none_selected": "尚未选择任何 Agent，因此不会自动授权给任何 Agent，每个 Agent 都需要成员批准。"
 }

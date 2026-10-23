@@ -60,9 +60,27 @@ does not. A logo that does not load falls back to the monogram.
 `app_installations` — an app installed in a Workspace: `appId` (cascade), `workspaceId` (cascade),
 `installedByUserId` (set null), `approvedGroups` (TEXT[], empty by default;
 `app_installations_approved_groups_check` limits the values to the four groups, the application keeps
-their order), `approvedRevision` (INTEGER, 0 before any approval), `approvedAt`, `approvedByUserId` (set null when the User is deleted), `setupCompletedRevision` (INTEGER, null until the app reports setup done) and `setupCompletedAt` (TIMESTAMP(3); null exactly when the revision is: `app_installations_setup_completion_check`), `createdAt`, unique (`appId`,
+their order), `approvedRevision` (INTEGER, 0 before any approval), `approvedAt`, `approvedByUserId` (set null when the User is deleted), `setupCompletedRevision` (INTEGER, null until the app reports setup done) and `setupCompletedAt` (TIMESTAMP(3); null exactly when the revision is: `app_installations_setup_completion_check`), `agentAccess` (TEXT, `all` by default or `selected`; `app_installations_agent_access_check`), `createdAt`, unique (`appId`,
 `workspaceId`). Today only the registering Workspace installs its app; the table is where a later
 install elsewhere goes. A Workspace's delete removes its apps and installations.
+
+`app_installation_agents` — the Agents selected for an installation (migration
+`20261023140000_app_installation_agent_access`): `installationId` (cascade) and `agentId` (cascade,
+so deleting an Agent removes its row), primary key both. The rows count only while the installation's
+`agentAccess` is `selected` and stay, unused, under `all`.
+
+## Agent access scope
+
+An installation's `agentAccess` says which Agents may use the app: `all` (the default, every Agent in
+the Workspace, later ones included) or `selected` (only the Agents in `app_installation_agents`).
+All Agents is Raft's behaviour; Selected Agents is a CoForge extension beyond Raft, which has no
+per-Agent install scope. Owned by `apps/web/src/server/app-agent-access/` (`InstallationAgentScope`);
+the rule is [Agents' app access](app-agent-access.md).
+
+- Owners and admins (`manageApps`) change it in the app editor and the app detail; the change applies
+  at once, on its own Server Function, and the last write wins (no revision guard). Members read the
+  mode and the number of Agents. Registering an app starts at `all`, with no selection.
+- Switching revokes no grant. Selecting an Agent that is not a live Agent of the Workspace that is neither a system Agent (the per-member assistants) nor the Workspace Memory Agent (it gets no Apps section) is refused.
 
 ## Data permissions
 

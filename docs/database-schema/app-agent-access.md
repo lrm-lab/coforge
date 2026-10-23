@@ -21,6 +21,15 @@ may use an app (`decideAgentAccess`). Migration `20261020200000_app_agent_access
   the request), posted with the request row locked and only while it is pending: committing the card approves the request, cancelling it denies the request, and a
   request decided anywhere else (the Agent's Apps tab, a person's grant) settles its card in the
   same transaction: `executed` when approved, `cancelled` when denied.
+- An installation can limit Agents to a selection ([Agent access scope](apps.md#agent-access-scope)).
+  Under `selected`, an Agent outside it that has no grant is not granted automatically: its use opens
+  a pending request, as after a revoke. A person's grant works for any Agent. The Agent is told of
+  an app (the launch prompt's Apps list, `coforge app list`) only when it is in scope or has an
+  active grant. Switching to `all`, or adding an Agent to the selection, restores the automatic grant
+  for the Agents then in scope that have no row, and approves their pending requests in the same
+  transaction (grant source `automatic`; the request's and the card's deciding person is the owner or admin who
+  changed the scope, and the approval card is settled `executed` and refreshed in open browsers, best effort); an
+  Agent with a revoked row still needs a person.
 
 `app_agent_grants` — one row per app and Agent:
 

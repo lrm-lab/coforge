@@ -230,5 +230,41 @@
   "apps_detail_no_description": "This app has no description.",
   "apps_detail_login_summary": "Signing in with CoForge, this app may ask for these scopes.",
   "apps_detail_eyebrow": "Installed app",
-  "apps_setup_admin_manages_note": "An owner or admin manages this app's configuration."
+  "apps_setup_admin_manages_note": "An owner or admin manages this app's configuration.",
+  "apps_agent_access_title": "Agent access",
+  "apps_agent_access_loading": "Loading Agent access…",
+  "apps_agent_access_load_error": "Agent access could not be loaded. Close and open this app again.",
+  "apps_agent_access_save_error": "Agent access could not be saved. Try again.",
+  "apps_agent_access_all": "All Agents",
+  "apps_agent_access_all_hint": "Every Agent in this Workspace, including Agents created later, is granted the app on first use.",
+  "apps_agent_access_selected": "Selected Agents",
+  "apps_agent_access_selected_hint": "Only the Agents you choose are granted the app on first use; any other Agent needs a person's approval. This is a CoForge extension beyond Raft.",
+  "apps_agent_access_pick": [
+    {
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
+      "match": {
+        "p=one": "{count} Agent selected",
+        "p=other": "{count} Agents selected"
+      }
+    }
+  ],
+  "apps_agent_access_no_agents": "This Workspace has no Agents yet.",
+  "apps_agent_access_grants_kept": "Changing this revokes no existing grant. Revoke a grant on the Agent's Apps tab.",
+  "apps_agent_access_save": "Save Agent access",
+  "apps_agent_access_saving": "Saving…",
+  "apps_agent_access_all_summary": "Available to all Agents",
+  "apps_agent_access_selected_summary": [
+    {
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
+      "match": {
+        "p=one": "Available to {count} Agent",
+        "p=other": "Available to {count} Agents"
+      }
+    }
+  ],
+  "apps_status_applies_at_once": "Applies at once",
+  "apps_section_agent_access_description": "Which Agents may use this app. Saved on its own, not with the form's Save.",
+  "apps_agent_access_none_selected": "No Agent is selected, so no Agent will be granted this app automatically. Each one needs a person's approval."
 }

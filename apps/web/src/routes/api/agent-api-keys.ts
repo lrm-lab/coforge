@@ -176,7 +176,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
-          apps: await agentLaunchApps(db, agent.workspaceId),
+          apps: await agentLaunchApps(db, agent.workspaceId, agent.id),
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

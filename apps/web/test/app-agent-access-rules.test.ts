@@ -16,6 +16,7 @@ const FIXED = ["openid", "profile", "identity"];
 
 const facts = (overrides: Partial<Parameters<typeof decideAgentAccess>[0]> = {}) => ({
   installed: true,
+  inScope: true,
   allowedScopes: ALL_SCOPES,
   requestedScopes: [],
   grant: undefined,
@@ -24,6 +25,19 @@ const facts = (overrides: Partial<Parameters<typeof decideAgentAccess>[0]> = {})
 });
 
 describe("decideAgentAccess", () => {
+  test("an Agent outside a Selected Agents scope with no grant needs an approval, not an automatic grant", () => {
+    expect(decideAgentAccess(facts({ inScope: false }))).toEqual({
+      kind: "needs_approval",
+      scopes: FIXED,
+    });
+    expect(
+      decideAgentAccess(facts({ inScope: false, pendingRequest: { id: "r1", scopes: ["email"] } })),
+    ).toEqual({ kind: "needs_approval", scopes: ["email"], pendingRequestId: "r1" });
+    expect(
+      decideAgentAccess(facts({ inScope: false, grant: { scopes: FIXED, revoked: false } })),
+    ).toEqual({ kind: "granted", scopes: FIXED });
+  });
+
   test("an app not installed in the Agent's Workspace is not usable, whatever its grant", () => {
     expect(decideAgentAccess(facts({ installed: false }))).toEqual({ kind: "not_installed" });
     expect(

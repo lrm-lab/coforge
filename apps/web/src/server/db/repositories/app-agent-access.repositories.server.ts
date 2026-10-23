@@ -1,7 +1,8 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { grantCovers, type AgentAppGrantSource } from "#src/features/apps/agent-app-access";
+import { toAgentAccessMode } from "#src/features/apps/agent-access-scope";
 import { APP_SCOPES } from "#src/features/apps/app-registration";
-import { isWorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
+import { findWorkspaceMemberRole } from "./workspace-member-role.repositories.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type { AppAgentAccessStore } from "#src/server/app-agent-access/app-agent-access.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
@@ -20,6 +21,12 @@ const INSTALLED_APP = {
   logoObjectKey: true,
 } as const;
 
+/** What an installation's Agent access scope reads; the app is installed once per Workspace. */
+export const SCOPE_SELECT = {
+  agentAccess: true,
+  agents: { where: { agent: ACTIVE_AGENT_WHERE }, select: { agentId: true } },
+} as const;
+
 /** An app row's logo, as the one fact about it that leaves the server: its URL. */
 const LOGO = { key: true, ownerWorkspaceId: true, logoObjectKey: true } as const;
 const logoUrlOf = (app: Prisma.AppGetPayload<{ select: typeof LOGO }>) =>
@@ -28,16 +35,37 @@ const logoUrlOf = (app: Prisma.AppGetPayload<{ select: typeof LOGO }>) =>
 const installed = ({
   ownerWorkspaceId,
   logoObjectKey,
+  installations,
   ...app
-}: Prisma.AppGetPayload<{ select: typeof INSTALLED_APP }>) => ({
+}: Prisma.AppGetPayload<{
+  select: typeof INSTALLED_APP & { installations: { select: typeof SCOPE_SELECT } };
+}>) => ({
   ...app,
   logoUrl: logoUrlOf({ key: app.key, ownerWorkspaceId, logoObjectKey }),
+  agentAccess: toAgentAccessMode(installations[0]?.agentAccess ?? ""),
+  selectedAgentIds: installations[0]?.agents.map((row) => row.agentId) ?? [],
 });
 
 const PENDING = "pending";
 
 type Tx = Prisma.TransactionClient;
 type GrantInput = Parameters<AppAgentAccessStore["giveGrant"]>[0];
+
+/** Approves the Agent's request while it is still pending, and settles its approval card as
+ * executed by `userId` (null for none); `false` when it is no longer pending. The one step every
+ * approval shares, so a decided request never leaves its card waiting. */
+export async function approvePendingRequest(
+  tx: Tx,
+  input: { requestId: string; agentId: string; userId: string | null },
+) {
+  const { count } = await tx.appAgentAccessRequest.updateMany({
+    where: { id: input.requestId, agentId: input.agentId, status: PENDING },
+    data: { status: "approved", decidedAt: new Date(), decidedByUserId: input.userId },
+  });
+  if (count !== 1) return false;
+  await settleAppGrantCard(tx, input.requestId, { approved: true, userId: input.userId });
+  return true;
+}
 
 /** Gives `grant`: creates the Agent's row for the app, or replaces the one it had. */
 function upsertGrant(tx: Tx, grant: GrantInput) {
@@ -65,12 +93,8 @@ function upsertGrant(tx: Tx, grant: GrantInput) {
 export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
   constructor(private readonly db: PrismaClient) {}
 
-  async findMemberRole(workspaceId: string, userId: string) {
-    const row = await this.db.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { role: true },
-    });
-    return row && isWorkspaceMemberRole(row.role) ? row.role : undefined;
+  findMemberRole(workspaceId: string, userId: string) {
+    return findWorkspaceMemberRole(this.db, workspaceId, userId);
   }
 
   async findAgent(workspaceId: string, agentId: string) {
@@ -84,7 +108,10 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
   async listInstalledApps(workspaceId: string) {
     const rows = await this.db.app.findMany({
       where: { installations: { some: { workspaceId } } },
-      select: INSTALLED_APP,
+      select: {
+        ...INSTALLED_APP,
+        installations: { where: { workspaceId }, select: SCOPE_SELECT },
+      },
       orderBy: [{ name: "asc" }, { key: "asc" }],
     });
     return rows.map(installed);
@@ -93,7 +120,10 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
   async findInstalledApp(workspaceId: string, appKey: string) {
     const row = await this.db.app.findFirst({
       where: { key: appKey, installations: { some: { workspaceId } } },
-      select: INSTALLED_APP,
+      select: {
+        ...INSTALLED_APP,
+        installations: { where: { workspaceId }, select: SCOPE_SELECT },
+      },
     });
     return row ? installed(row) : undefined;
   }
@@ -191,13 +221,12 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
         select: { id: true, scopes: true },
       });
       if (!pending || !grantCovers(grant.scopes, pending.scopes)) return undefined;
-      const { count } = await tx.appAgentAccessRequest.updateMany({
-        where: { id: pending.id, status: PENDING },
-        data: { status: "approved", decidedAt: new Date(), decidedByUserId: grant.grantedByUserId },
+      const approved = await approvePendingRequest(tx, {
+        requestId: pending.id,
+        agentId: grant.agentId,
+        userId: grant.grantedByUserId,
       });
-      if (count !== 1) return undefined;
-      await settleAppGrantCard(tx, pending.id, { approved: true, userId: grant.grantedByUserId });
-      return pending.id;
+      return approved ? pending.id : undefined;
     });
   }
 
@@ -248,13 +277,13 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
 
   approveRequest(input: { requestId: string; userId: string; grant: GrantInput }) {
     return this.db.$transaction(async (tx) => {
-      const { count } = await tx.appAgentAccessRequest.updateMany({
-        where: { id: input.requestId, agentId: input.grant.agentId, status: PENDING },
-        data: { status: "approved", decidedAt: new Date(), decidedByUserId: input.userId },
-      });
-      if (count !== 1) return false;
-      await settleAppGrantCard(tx, input.requestId, { approved: true, userId: input.userId });
       const { grant } = input;
+      const approved = await approvePendingRequest(tx, {
+        requestId: input.requestId,
+        agentId: grant.agentId,
+        userId: input.userId,
+      });
+      if (!approved) return false;
       const active = await tx.appAgentGrant.findFirst({
         where: { appId: grant.appId, agentId: grant.agentId, revokedAt: null },
         select: { scopes: true },

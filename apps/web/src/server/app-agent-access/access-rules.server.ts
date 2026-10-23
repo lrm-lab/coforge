@@ -4,11 +4,38 @@ import {
   allowedGrantScopes,
   grantCovers,
 } from "#src/features/apps/agent-app-access";
+import type { AgentAccessMode } from "#src/features/apps/agent-access-scope";
 import {
   roleCan,
   WORKSPACE_MEMBER_ROLES,
   type WorkspaceMemberRole,
 } from "#src/features/workspaces/workspace-roles";
+
+/** Which Agents an installation lets use its app (`features/apps/agent-access-scope`). */
+export type AgentScope = {
+  agentAccess: AgentAccessMode;
+  /** The selected Agents; used only while `agentAccess` is `selected`. */
+  selectedAgentIds: readonly string[];
+};
+
+/** Whether the installation's scope includes the Agent: every Agent under `all`, only the
+ * selection under `selected`. */
+export const agentInScope = (scope: AgentScope, agentId: string) =>
+  scope.agentAccess === "all" || scope.selectedAgentIds.includes(agentId);
+
+/** The apps the Agent is told about: those whose scope includes it, and those it holds an active
+ * grant for, since a person's grant works for any Agent. */
+export function appsVisibleToAgent<App extends AgentScope & { id: string }>(
+  apps: readonly App[],
+  grants: readonly { appId: string; revoked: boolean }[],
+  agentId: string,
+): App[] {
+  return apps.filter(
+    (app) =>
+      agentInScope(app, agentId) ||
+      grants.some((grant) => grant.appId === app.id && !grant.revoked),
+  );
+}
 
 /** What is known when an Agent asks to use an app: the facts `decideAgentAccess` judges. */
 export type AgentAccessFacts = {
@@ -20,6 +47,8 @@ export type AgentAccessFacts = {
   requestedScopes: readonly string[];
   /** The Agent's grant for the app, active or revoked; `undefined` when it never had one. */
   grant: { scopes: readonly string[]; revoked: boolean } | undefined;
+  /** Whether the installation's scope includes the Agent (`agentInScope`). */
+  inScope: boolean;
   /** The Agent's request for the app that waits for a person, and the scopes it asks for. */
   pendingRequest: { id: string; scopes: readonly string[] } | undefined;
 };
@@ -29,35 +58,40 @@ export type AgentAccessDecision =
   /** The active grant covers the request; `scopes` are the grant's the app still allows, so
    * narrowing an app's allowed scopes takes effect for the next token. */
   | { kind: "granted"; scopes: string[] }
-  /** The Agent never had a grant for the app: it gets one now, with `scopes`. */
+  /** The Agent never had a grant for the app and the app's scope includes it: it gets one now,
+   * with `scopes`. */
   | { kind: "grant_automatically"; scopes: string[] }
-  /** A person must approve a grant of `scopes`: the grant was revoked, or does not cover the
-   * request. `pendingRequestId` names the request already waiting, if there is one, and `scopes`
-   * are then that request's. */
+  /**
+   * A person must approve a grant of `scopes`: the grant was revoked or does not cover the
+   * request, or the Agent has none and is outside a Selected Agents scope. `pendingRequestId`
+   * names the request already waiting, if there is one, and `scopes` are then that request's.
+   */
   | { kind: "needs_approval"; scopes: string[]; pendingRequestId?: string };
 
 /**
  * The use-time rule: an app installed in a Workspace is usable by its Agents, granted
  * automatically the first time an Agent asks. Once a person revoked an Agent's grant, the Agent
- * needs a person's approval for that app again. A scope the app may not ask for is INVALID_INPUT.
+ * needs a person's approval for that app again; so does an Agent outside an installation's Selected
+ * Agents that has no grant. A scope the app may not ask for is INVALID_INPUT.
  */
 export function decideAgentAccess(facts: AgentAccessFacts): AgentAccessDecision {
   if (!facts.installed) return { kind: "not_installed" };
   const requested = agentGrantScopes(facts.requestedScopes, facts.allowedScopes);
   if (!requested) throw new AppError("INVALID_INPUT", { errorId: "app-scope-not-allowed" });
   const { grant, pendingRequest } = facts;
-  if (!grant) return { kind: "grant_automatically", scopes: requested };
-  if (!grant.revoked && grantCovers(grant.scopes, requested))
+  if (grant && !grant.revoked && grantCovers(grant.scopes, requested))
     return { kind: "granted", scopes: allowedGrantScopes(grant.scopes, facts.allowedScopes) };
+  if (!grant && facts.inScope) return { kind: "grant_automatically", scopes: requested };
   if (pendingRequest)
     return {
       kind: "needs_approval",
       scopes: [...pendingRequest.scopes],
       pendingRequestId: pendingRequest.id,
     };
-  const scopes = grant.revoked
-    ? requested
-    : allowedGrantScopes([...grant.scopes, ...requested], facts.allowedScopes);
+  const scopes =
+    !grant || grant.revoked
+      ? requested
+      : allowedGrantScopes([...grant.scopes, ...requested], facts.allowedScopes);
   return { kind: "needs_approval", scopes };
 }
 

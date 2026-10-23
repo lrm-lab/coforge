@@ -15,6 +15,8 @@ type InstalledApp = {
   homepageUrl: string | null;
   logoUrl: string | null;
   allowedScopes: string[];
+  agentAccess: "all" | "selected";
+  selectedAgentIds: string[];
 };
 
 const app = (key: string, patch: Partial<InstalledApp> = {}): InstalledApp => ({
@@ -26,10 +28,13 @@ const app = (key: string, patch: Partial<InstalledApp> = {}): InstalledApp => ({
   homepageUrl: "https://app.example/",
   logoUrl: null,
   allowedScopes: ["openid"],
+  agentAccess: "all",
+  selectedAgentIds: [],
   ...patch,
 });
 
 const storeOf = (apps: InstalledApp[], seen: string[] = []) => ({
+  listGrantStates: async () => [],
   listInstalledApps: async (workspaceId: string) => {
     seen.push(workspaceId);
     return apps;
@@ -41,6 +46,7 @@ test("the launch directory is the Agent's Workspace's apps in the store's order,
   const directory = await listAgentLaunchApps(
     storeOf([app("acme-notes", { name: "Acme Notes" }), app("zeta-board", { name: "Zeta" })], seen),
     "workspace-1",
+    "agent-1",
   );
   expect(seen).toEqual(["workspace-1"]);
   expect(directory).toEqual([
@@ -64,6 +70,7 @@ test("a built-in Agent App never appears, even if a store returned one", async (
   const directory = await listAgentLaunchApps(
     storeOf([app(builtIn.key, { name: builtIn.name }), app("acme-notes")]),
     "workspace-1",
+    "agent-1",
   );
   expect(directory.map((entry) => entry.key)).toEqual(["acme-notes"]);
 });
@@ -72,7 +79,7 @@ test("the directory is bounded and normalised by the SDK's rule: at most the cap
   const many = Array.from({ length: AGENT_LAUNCH_APPS_MAX_COUNT + 5 }, (_, index) =>
     app(`app-${String(index).padStart(2, "0")}`),
   );
-  expect(await listAgentLaunchApps(storeOf(many), "workspace-1")).toHaveLength(
+  expect(await listAgentLaunchApps(storeOf(many), "workspace-1", "agent-1")).toHaveLength(
     AGENT_LAUNCH_APPS_MAX_COUNT,
   );
 
@@ -85,6 +92,7 @@ test("the directory is bounded and normalised by the SDK's rule: at most the cap
       }),
     ]),
     "workspace-1",
+    "agent-1",
   );
   expect(entry!.name).toBe("Acme Notes 'v2'");
   expect(entry!.whenToUse).toBe("Read the notes.");
@@ -98,6 +106,7 @@ test("an empty description or when-to-use is omitted, not sent empty", async () 
   const [entry] = await listAgentLaunchApps(
     storeOf([app("acme-notes", { description: "", whenToUse: "   " })]),
     "workspace-1",
+    "agent-1",
   );
   expect(entry).toEqual({ key: "acme-notes", name: "App acme-notes" });
 });
@@ -107,11 +116,13 @@ test("a failure listing the apps leaves the directory empty instead of failing t
   try {
     const directory = await listAgentLaunchApps(
       {
+        listGrantStates: async () => [],
         listInstalledApps: async () => {
           throw new Error("database unavailable");
         },
       },
       "workspace-1",
+      "agent-1",
     );
     expect(directory).toEqual([]);
     expect(String(warn.mock.calls[0]?.[0])).toContain("agent_launch:apps_unavailable");

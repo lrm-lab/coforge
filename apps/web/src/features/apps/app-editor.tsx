@@ -10,6 +10,7 @@ import { Alert } from "#src/components/ui/alert";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { AgentAccessScope } from "./agent-access-field";
 import { DangerZoneRows } from "./app-editor-danger";
 import {
   EditorSection,
@@ -142,6 +143,7 @@ function AppEditorForm({
     login: `${idPrefix}login`,
     permissions: `${idPrefix}permissions`,
     setup: `${idPrefix}setup`,
+    agentAccess: `${idPrefix}agent-access`,
     danger: `${idPrefix}danger`,
   };
   const sections: Section[] = [
@@ -149,6 +151,7 @@ function AppEditorForm({
     { id: ids.login, title: m.apps_section_login() },
     ...(declares.setup ? [{ id: ids.setup, title: m.apps_section_setup() }] : []),
     ...(declares.permissions ? [{ id: ids.permissions, title: m.apps_section_permissions() }] : []),
+    ...(editing ? [{ id: ids.agentAccess, title: m.apps_agent_access_title() }] : []),
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
   const [active, setActive] = useActiveSection(scroller, sections);
@@ -347,6 +350,16 @@ function AppEditorForm({
                 }}
                 installationShownAbove={declares.setup && installationId !== undefined}
               />
+            </EditorSection>
+          )}
+          {app && (
+            <EditorSection
+              id={ids.agentAccess}
+              title={m.apps_agent_access_title()}
+              status={m.apps_status_applies_at_once()}
+              description={m.apps_section_agent_access_description()}
+            >
+              <AgentAccessScope appKey={app.key} canManage showTitle={false} />
             </EditorSection>
           )}
           {editing && (

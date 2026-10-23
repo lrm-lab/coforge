@@ -2,6 +2,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AgentAppUse } from "#src/server/app-agent-access/agent-app-use.server";
 import { listAgentLaunchApps } from "#src/server/app-agent-access/agent-launch-apps.server";
 import { AppAgentAccess } from "#src/server/app-agent-access/app-agent-access.server";
+import { InstallationAgentScope } from "#src/server/app-agent-access/installation-agent-scope.server";
 import {
   authorizationServerConfiguration,
   type AuthorizationServerConfiguration,
@@ -13,6 +14,7 @@ import {
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
 import { PrismaAppAgentAccessStore } from "#src/server/db/repositories/app-agent-access.repositories.server";
+import { PrismaInstallationAgentScopeStore } from "#src/server/db/repositories/app-installation-agent-scope.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 /** Agents' app access over PostgreSQL; a decided request's approval card is refreshed through
@@ -69,7 +71,20 @@ export function createAgentAppUse(
   });
 }
 
-/** The apps installed in the Workspace, over PostgreSQL, for an Agent's launch identity. */
-export function agentLaunchApps(db: PrismaClient, workspaceId: string) {
-  return listAgentLaunchApps(new PrismaAppAgentAccessStore(db), workspaceId);
+/** The apps installed in the Workspace that the Agent is told about, over PostgreSQL, for its
+ * launch identity. */
+export function agentLaunchApps(db: PrismaClient, workspaceId: string, agentId: string) {
+  return listAgentLaunchApps(new PrismaAppAgentAccessStore(db), workspaceId, agentId);
+}
+
+/** Which Agents may use an installed app, over PostgreSQL; a request its change settles has its
+ * approval card refreshed through `realtime`. */
+export function createInstallationAgentScope(
+  db: PrismaClient,
+  { realtime = centrifugoRealtime }: { realtime?: () => ConversationRealtime | undefined } = {},
+) {
+  const cards = appGrantCards(db, realtime);
+  return new InstallationAgentScope(new PrismaInstallationAgentScopeStore(db), (workspaceId, id) =>
+    cards.publishDecided(workspaceId, id),
+  );
 }
