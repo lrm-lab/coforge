@@ -419,11 +419,6 @@ export function AgentProfilePanel({
                 ? (liveAgent.display.contextUsage ?? null)
                 : (profile.display?.contextUsage ?? null)
             }
-            fastMode={
-              liveAgent?.display
-                ? (liveAgent.display.fastMode ?? null)
-                : (profile.display?.fastMode ?? null)
-            }
             onSaveDisplayName={async (value) => {
               await update({ data: baseUpdateInput({ displayName: value }) });
               await invalidate();
