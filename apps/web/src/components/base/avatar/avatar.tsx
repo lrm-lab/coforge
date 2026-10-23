@@ -3,7 +3,6 @@ import { User01 } from "@untitledui/icons";
 import { cx } from "#src/utils/cx";
 import { AvatarOnlineIndicator, VerifiedTick } from "./base-components";
 import { AvatarCount } from "#src/components/base/avatar/base-components/avatar-count";
-import { isMascotPicture } from "#src/features/agents/mascot-contract";
 
 export interface AvatarProps {
     size?: "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
@@ -57,14 +56,6 @@ export interface AvatarProps {
      * A placeholder to display if no image is available.
      */
     placeholder?: ReactNode;
-    /**
-     * Show the picture alone: no tile fill, outline or border, and no clipping, the whole picture
-     * contained. For a platform mascot, whose shape does not fill a circle. Defaults to whether
-     * `src` is a mascot picture; the fill and text colours of `contentClassName` and the ring,
-     * radius and fill classes of `className` (and `border`) are dropped, anything else (a greyed
-     * archived Agent) still applies.
-     */
-    bare?: boolean;
 
     /**
      * Whether the avatar should show a focus ring when the parent group is in focus.
@@ -84,8 +75,6 @@ const styles = {
     "2xl": { root: "size-16", rootWithBorder: "p-0.5", initials: "text-display-xs font-semibold", icon: "size-8" },
 };
 
-const BARE_DROPPED_CLASSES = /(?:^|\s)(?:[\w-]+:)*(?:ring|rounded|bg)(?:-\S+)?(?=\s|$)/g;
-
 export const Avatar = ({
     size = "md",
     src,
@@ -102,21 +91,15 @@ export const Avatar = ({
     rounded = true,
     className,
     contentClassName,
-    bare = isMascotPicture(src),
 }: AvatarProps) => {
     const [isFailed, setIsFailed] = useState(false);
     useEffect(() => setIsFailed(false), [src]);
 
     const canShowImage = src && !isFailed;
-    // A bare picture carries no outline of its own: a caller's ring, radius or fill would draw one
-    // around the mascot's silhouette, so they go with it.
-    const rootClassName = bare ? className?.replace(BARE_DROPPED_CLASSES, "") : className;
-    // A bare mascot that cannot load shows a tile, never initials on nothing.
-    const styledPlaceholder = bare && !canShowImage;
 
     const renderMainContent = () => {
         if (canShowImage) {
-            return <img data-avatar-img className={cx("size-full", bare ? "object-contain" : "object-cover")} src={src} alt={alt} onError={() => setIsFailed(true)} />;
+            return <img data-avatar-img className="size-full object-cover" src={src} alt={alt} onError={() => setIsFailed(true)} />;
         }
 
         if (initials) {
@@ -154,25 +137,21 @@ export const Avatar = ({
                 rounded && "rounded-full",
                 // Focus styles
                 focusable && "outline-transparent group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-focus-ring",
-                border && !bare && "ring-1 ring-secondary_alt",
-                border && !bare && styles[size].rootWithBorder,
+                border && "ring-1 ring-secondary_alt",
+                border && styles[size].rootWithBorder,
                 styles[size].root,
-                rootClassName,
+                className,
             )}
         >
             <div
-                className={
-                    bare && !styledPlaceholder
-                        ? cx("relative inline-flex size-full shrink-0 items-center justify-center", contentClassName?.replace(/(?:^|\s)(?:\*:)?(?:bg|text)-\S+/g, ""))
-                        : cx(
-                              "relative inline-flex size-full shrink-0 items-center justify-center overflow-hidden rounded-md bg-tertiary outline-[0.5px] -outline-offset-[0.5px] outline-black/16 before:inset-[0.5px]",
-                              rounded && "rounded-full",
-                              canShowImage &&
-                                  size !== "xs" &&
-                                  "before:absolute before:inset-0 before:rounded-[inherit] before:border before:border-white/32 before:mask-[linear-gradient(to_bottom,black_0%,transparent_25%,transparent_75%,black_100%)]",
-                              contentClassName,
-                          )
-                }
+                className={cx(
+                    "relative inline-flex size-full shrink-0 items-center justify-center overflow-hidden rounded-md bg-tertiary outline-[0.5px] -outline-offset-[0.5px] outline-black/16 before:inset-[0.5px]",
+                    rounded && "rounded-full",
+                    canShowImage &&
+                        size !== "xs" &&
+                        "before:absolute before:inset-0 before:rounded-[inherit] before:border before:border-white/32 before:mask-[linear-gradient(to_bottom,black_0%,transparent_25%,transparent_75%,black_100%)]",
+                    contentClassName,
+                )}
             >
                 {renderMainContent()}
             </div>

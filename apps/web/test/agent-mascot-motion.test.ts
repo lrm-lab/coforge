@@ -57,7 +57,7 @@ test("the contract names one artboard and one picture per mascot, and one Rive f
   expect(MASCOT_ACTIVITIES).toEqual(["idle", "thinking", "working", "error", "offline"]);
 });
 
-test("a mascot picture is recognised for drawing it without a tile, and nothing else is", () => {
+test("a mascot picture is recognised for drawing it as a sticker, and nothing else is", () => {
   for (const id of MASCOT_IDS) expect(isMascotPicture(mascotStaticUrl(id))).toBeTrue();
   expect(isMascotPicture("/uploads/someone.png")).toBeFalse();
   expect(isMascotPicture(null)).toBeFalse();

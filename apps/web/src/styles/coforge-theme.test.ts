@@ -16,6 +16,7 @@ const FLAT_ON_PURPOSE = new Map([
   ["--color-avatar-4", "avatar placeholder tones carry their own contrast with white initials"],
   ["--color-avatar-5", "avatar placeholder tones carry their own contrast with white initials"],
   ["--color-avatar-6", "avatar placeholder tones carry their own contrast with white initials"],
+  ["--color-avatar-outline", "a sticker's edge matches the mascot artwork's, white in both themes"],
 ]);
 
 // Comments are stripped first: the file's own prose quotes `.dark-mode { ... }` when it explains

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { MascotId } from "#src/features/agents/mascot-contract";
+import type { MascotActivity } from "#src/features/agents/mascot-rive-contract";
 import { pathBounds, type Point } from "./svg-path.ts";
 import { drawnElements, type SvgElement } from "./svg-source.ts";
 
@@ -23,6 +24,8 @@ export interface Accessory {
   /** Pivot, in SVG coordinates, the hover wiggle or pulse turns around. */
   pivot: Point;
   hover: { wiggle: number; pulse: number };
+  /** Where an activity moves it off its place, in source units and radians (default: stays). */
+  pose?: Partial<Record<MascotActivity, { dx: number; dy: number; rotation: number }>>;
 }
 
 export interface Glint {
@@ -40,13 +43,16 @@ export interface MascotSpec {
   /** Drawn over the body, under the face. */
   front: Accessory[];
   eyes: { l: Point; r: Point; radius: number; color: string; glints: Glint[] };
-  /** The mascot's own mouth, shown while idle. */
+  /** The mascot's own mouth while idle; every other activity morphs it into a line (`mouth.ts`). */
   mouth: Part[];
-  mouthLineColor: string;
   /** Colour of closed eyes. */
   featureColor: string;
   browColor: string;
-  dots: { points: Point[]; color: string };
+  /** The thinking dots: the top corner they rise into (the one the mascot's shape leaves free,
+   * where its eyes look while thinking) and their colour. */
+  dots: { side: "left" | "right"; color: string };
+  /** Where an error's sweat drop sits beside the face, if this mascot sweats. */
+  sweat?: Point;
 }
 
 const DIR = join(import.meta.dir, "svg");
@@ -89,14 +95,10 @@ export function loadSpec(id: MascotId): MascotSpec {
     if (!e) throw new Error(`mascot-${id}.svg has no drawn element ${i}`);
     return e;
   };
-  const base: Pick<
-    MascotSpec,
-    "id" | "behind" | "front" | "mouthLineColor" | "featureColor" | "browColor"
-  > = {
+  const base: Pick<MascotSpec, "id" | "behind" | "front" | "featureColor" | "browColor"> = {
     id,
     behind: [],
     front: [],
-    mouthLineColor: DARK,
     featureColor: DARK,
     browColor: DARK,
   };
@@ -107,17 +109,9 @@ export function loadSpec(id: MascotId): MascotSpec {
         body: { d: at(1).attrs.d ?? "", fill: DARK },
         eyes: { l: [12, 10.5], r: [15.5, 9.6], radius: 1, color: LIGHT, glints: [] },
         mouth: [strokePart(at(6))],
-        mouthLineColor: LIGHT,
         featureColor: LIGHT,
         browColor: LIGHT,
-        dots: {
-          points: [
-            [15.6, 2.0],
-            [18.0, 2.4],
-            [20.4, 3.4],
-          ],
-          color: "#7C8493",
-        },
+        dots: { side: "left", color: "#6B7586" },
       };
     case "purple":
       return {
@@ -125,14 +119,7 @@ export function loadSpec(id: MascotId): MascotSpec {
         body: { d: at(1).attrs.d ?? "", fill: "#BB8EFF" },
         eyes: { l: [12, 10.5], r: [15.5, 9.6], radius: 1, color: DARK, glints: [] },
         mouth: [strokePart(at(4))],
-        dots: {
-          points: [
-            [15.6, 2.0],
-            [18.0, 2.4],
-            [20.4, 3.4],
-          ],
-          color: "#8E5BE0",
-        },
+        dots: { side: "left", color: "#7F4FD6" },
       };
     case "green": {
       const sparkle = (i: number, name: string): Accessory => ({
@@ -153,14 +140,7 @@ export function loadSpec(id: MascotId): MascotSpec {
           glints: GREEN_GLINTS,
         },
         mouth: [strokePart(at(8))],
-        dots: {
-          points: [
-            [13.2, 1.6],
-            [15.6, 1.9],
-            [18.0, 2.7],
-          ],
-          color: "#2DB868",
-        },
+        dots: { side: "right", color: "#1E9E57" },
       };
     }
     case "yellow":
@@ -177,14 +157,7 @@ export function loadSpec(id: MascotId): MascotSpec {
         ],
         eyes: { l: [13.4, 9.9], r: [17.9, 9.0], radius: 1, color: DARK, glints: [] },
         mouth: [fillPart(at(3))],
-        dots: {
-          points: [
-            [15.6, 2.0],
-            [18.0, 2.4],
-            [20.4, 3.4],
-          ],
-          color: "#E58312",
-        },
+        dots: { side: "right", color: "#E07B0C" },
       };
     case "blue":
       return {
@@ -200,14 +173,7 @@ export function loadSpec(id: MascotId): MascotSpec {
         ],
         eyes: { l: [13.2, 10.3], r: [17.2, 9.0], radius: 1, color: DARK, glints: [] },
         mouth: [strokePart(at(3))],
-        dots: {
-          points: [
-            [15.6, 2.0],
-            [18.0, 2.4],
-            [20.4, 3.4],
-          ],
-          color: "#3C93E8",
-        },
+        dots: { side: "right", color: "#2F7FDB" },
       };
     case "orange":
       return {
@@ -219,14 +185,7 @@ export function loadSpec(id: MascotId): MascotSpec {
           { d: "M10.7 11.5L17.25 10.25L17.33 11.24L11.54 12.4Z", paints: [{ fill: "#FFFFFF" }] },
           fillPart(at(2), DARK),
         ],
-        dots: {
-          points: [
-            [15.6, 2.0],
-            [18.0, 2.4],
-            [20.4, 3.4],
-          ],
-          color: "#E5701A",
-        },
+        dots: { side: "right", color: "#E2681A" },
       };
     case "pink":
       return {
@@ -238,6 +197,12 @@ export function loadSpec(id: MascotId): MascotSpec {
             parts: [fillPart(at(2)), fillPart(at(3))],
             pivot: [13, 5],
             hover: { wiggle: 0.04, pulse: 0 },
+            // Startled, the shades slip down the head and askew, off the worried brows; pondering,
+            // they slide a little way down the same slope, off the raised brow and the bubble.
+            pose: {
+              error: { dx: -1.6, dy: 0.5, rotation: -0.3 },
+              thinking: { dx: -1.3, dy: 0.2, rotation: -0.22 },
+            },
           },
         ],
         eyes: { l: [13.15, 10.4], r: [16.85, 9.4], radius: 1, color: DARK, glints: [] },
@@ -249,15 +214,8 @@ export function loadSpec(id: MascotId): MascotSpec {
             paints: [{ fill: "#FFFFFF" }, strokePart(at(6)).paints[0] as Paint],
           },
         ],
-        browColor: "#FFFFFF",
-        dots: {
-          points: [
-            [2.4, 1.8],
-            [4.8, 1.5],
-            [7.2, 1.9],
-          ],
-          color: "#E03A63",
-        },
+        sweat: [19.9, 8.2],
+        dots: { side: "left", color: "#D6335A" },
       };
   }
 }

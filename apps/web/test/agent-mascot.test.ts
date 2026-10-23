@@ -28,7 +28,7 @@ test("the creator's mascot wins over the id's, and an unknown key falls back to 
   const fallback = defaultAgentMascot("agent-1");
   const other = AGENT_MASCOTS.find((mascot) => mascot !== fallback)!;
   expect(agentMascot("agent-1", other)).toBe(other);
-  expect(agentAvatarUrl("agent-1", other)).toBe(`/agent-avatars/mascot-${other}-2.webp`);
+  expect(agentAvatarUrl("agent-1", other)).toBe(`/agent-avatars/mascot-${other}-3.webp`);
   expect(agentMascot("agent-1", "teal")).toBe(fallback);
   expect(isAgentMascot("teal")).toBeFalse();
   expect(AGENT_MASCOTS.every(isAgentMascot)).toBeTrue();

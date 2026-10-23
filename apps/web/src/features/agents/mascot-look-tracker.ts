@@ -20,21 +20,19 @@ interface LookSink {
 }
 
 const sinks = new Set<LookSink>();
-let pointerX = 0;
-let pointerY = 0;
-let pointerInside = false;
+/** Where the pointer was last seen in the window, or `null` while it is outside or unknown. */
+let pointer: { x: number; y: number } | null = null;
 let frame = 0;
-let listening = false;
 
 function flush(): void {
   frame = 0;
   for (const sink of sinks) {
     let look = STRAIGHT_AHEAD;
-    if (pointerInside) {
+    if (pointer) {
       const box = sink.element.getBoundingClientRect();
       look = lookToward(
-        pointerX - (box.left + box.width / 2),
-        pointerY - (box.top + box.height / 2),
+        pointer.x - (box.left + box.width / 2),
+        pointer.y - (box.top + box.height / 2),
       );
     }
     if (look.x === sink.x && look.y === sink.y) continue;
@@ -50,14 +48,12 @@ function schedule(): void {
 
 function onPointerMove(event: PointerEvent): void {
   if (event.pointerType === "touch") return;
-  pointerX = event.clientX;
-  pointerY = event.clientY;
-  pointerInside = true;
+  pointer = { x: event.clientX, y: event.clientY };
   schedule();
 }
 
 function onPointerGone(): void {
-  pointerInside = false;
+  pointer = null;
   schedule();
 }
 
@@ -65,7 +61,6 @@ function listen(): void {
   document.addEventListener("pointermove", onPointerMove, { passive: true });
   document.documentElement.addEventListener("pointerleave", onPointerGone, { passive: true });
   window.addEventListener("blur", onPointerGone);
-  listening = true;
 }
 
 function unlisten(): void {
@@ -74,8 +69,7 @@ function unlisten(): void {
   window.removeEventListener("blur", onPointerGone);
   if (frame !== 0) cancelAnimationFrame(frame);
   frame = 0;
-  pointerInside = false;
-  listening = false;
+  pointer = null;
 }
 
 const hasHover = (): boolean => !window.matchMedia("(hover: none)").matches;
@@ -87,12 +81,12 @@ const hasHover = (): boolean => !window.matchMedia("(hover: none)").matches;
 export function followPointer(element: Element, apply: (look: MascotLook) => void): () => void {
   if (!hasHover()) return () => {};
   const sink: LookSink = { element, apply, x: STRAIGHT_AHEAD.x, y: STRAIGHT_AHEAD.y };
+  // The first mascot starts the listener and the last one to leave stops it.
+  if (sinks.size === 0) listen();
   sinks.add(sink);
-  if (!listening) listen();
   // A mascot that appears under a pointer already seen looks at it right away.
-  if (pointerInside) schedule();
+  if (pointer) schedule();
   return () => {
-    sinks.delete(sink);
-    if (sinks.size === 0 && listening) unlisten();
+    if (sinks.delete(sink) && sinks.size === 0) unlisten();
   };
 }

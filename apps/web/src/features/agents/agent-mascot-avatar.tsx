@@ -1,4 +1,4 @@
-import { Avatar, type AvatarProps } from "#src/components/base/avatar/avatar";
+import type { AvatarProps } from "#src/components/base/avatar/avatar";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
@@ -6,12 +6,13 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { agentDisplay } from "./agent-activity-presentation";
 import type { AgentMascot } from "./agent-mascot";
 import { AgentMascotView } from "./agent-mascot-view";
+import { AvatarSticker } from "./avatar-sticker";
 import { DELETED_AGENT_PICTURE_CLASS } from "./deleted-agent";
 import { mascotActivity } from "./mascot-activity";
 
 /**
  * An Agent's avatar where its mascot is the subject and may move: a message in the stream, the
- * Agent card, the profile. The mascot stands alone, with no tile, border or clip, and acts out
+ * Agent card, the profile. The mascot is a sticker on the avatar backdrop, unclipped, and acts out
  * the Agent's `display` (`mascotActivity`). A deleted Agent's is greyed, still and without a dot.
  */
 export function AgentMascotAvatar({
@@ -44,25 +45,22 @@ export function AgentMascotAvatar({
 }) {
   const view = agentDisplay(display, { stopped });
   const avatar = (
-    <Avatar
+    <AvatarSticker
       size={size}
       className={className}
-      alt=""
-      bare
-      placeholder={
-        <AgentMascotView
-          mascot={mascot}
-          activity={mascotActivity(view.kind)}
-          still={still || deleted}
-        />
-      }
       contentClassName={deleted ? DELETED_AGENT_PICTURE_CLASS : undefined}
       badge={
         cornerDot && display && !deleted ? (
           <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />
         ) : undefined
       }
-    />
+    >
+      <AgentMascotView
+        mascot={mascot}
+        activity={mascotActivity(view.kind)}
+        still={still || deleted}
+      />
+    </AvatarSticker>
   );
   return announced ? (
     <span

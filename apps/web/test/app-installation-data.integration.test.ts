@@ -132,7 +132,7 @@ test.skipIf(!db)(
             handle: "scout",
             display_name: "SCOUT",
             description: "scout helps",
-            avatar_url: "https://coforge.example/agent-avatars/mascot-orange-2.webp",
+            avatar_url: "https://coforge.example/agent-avatars/mascot-orange-3.webp",
             created_at: visible.createdAt.toISOString(),
           },
           // An Agent whose creator picked no mascot shows the one its id chooses, as on the Web.

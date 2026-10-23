@@ -36,7 +36,7 @@ test(
         if (extension === "sh") expect(body.startsWith("#!/bin/sh")).toBe(true);
       }
       // Agents without their own upload show these pictures; the image must ship them.
-      const picture = await fetch("http://127.0.0.1:3000/agent-avatars/mascot-blue-2.webp", {
+      const picture = await fetch("http://127.0.0.1:3000/agent-avatars/mascot-blue-3.webp", {
         signal: AbortSignal.timeout(1_000),
       });
       expect(picture.status).toBe(200);

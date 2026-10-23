@@ -9,7 +9,7 @@ export type MascotId = (typeof MASCOT_IDS)[number];
 
 /** Version of the still avatars (`mascot-<color>-<n>.webp`). A changed picture ships under a new
  * file name because browsers cache by URL: bump it and rebuild with `bun run build:mascots`. */
-export const STATIC_VERSION = 2;
+export const STATIC_VERSION = 3;
 
 const PICTURE_DIR = "/agent-avatars/";
 
@@ -18,8 +18,9 @@ export function mascotStaticUrl(id: MascotId): string {
   return `${PICTURE_DIR}mascot-${id}-${STATIC_VERSION}.webp`;
 }
 
-/** Whether a picture URL is one this app serves for a mascot. For styling only (a mascot is drawn
- * without a tile); which mascot an Agent shows is its key, never read back from a URL. */
+/** Whether a picture URL is one this app serves for a mascot. For presentation only (a mascot is
+ * drawn as a sticker, `AvatarSticker`); which mascot an Agent shows is its key, never read back
+ * from a URL. */
 export function isMascotPicture(url: string | null | undefined): boolean {
   return typeof url === "string" && url.startsWith(PICTURE_DIR);
 }

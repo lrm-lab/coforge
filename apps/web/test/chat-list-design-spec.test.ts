@@ -29,6 +29,15 @@ test("Chat list avatars: a 48px circle for a DM and a channel, 38px round for th
   expect(group).toContain("--avatar-group-size: 3rem");
   expect(group).toContain("border-radius: 9999px");
   expect(group).not.toContain("gradient");
+  // Frank's references: an Agent's mascot is a sticker on a light circle, drawn a little larger
+  // than the circle and unclipped; a channel's members sit on the same circle.
+  expect(group).toContain("background: var(--color-avatar-backdrop)");
+  expect(rule(".avatar-sticker")).toContain("background: var(--color-avatar-backdrop)");
+  expect(rule("[data-avatar][data-avatar-sticker]")).toContain("border-radius: 9999px");
+  const figure = rule(".avatar-sticker-figure");
+  expect(figure).toContain("position: absolute");
+  expect(Number(figure.match(/width: (\d+)%/)?.[1])).toBeGreaterThan(100);
+  expect(figure).not.toContain("overflow");
   expect(cssText).not.toContain("avatar-group-grid");
   // A round avatar's status dot sits on the circle edge, not off its corner.
   expect(cssText).toContain("[data-avatar].avatar-dm > .avatar-status-dot");

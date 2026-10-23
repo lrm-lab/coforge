@@ -7,6 +7,8 @@ import { m } from "#src/paraglide/messages";
 import { DELETED_AGENT_AVATAR_CLASS, DELETED_AGENT_PICTURE_CLASS } from "./deleted-agent";
 import { agentDisplay } from "./agent-activity-presentation";
 import { agentAvatarUrl } from "./agent-mascot";
+import { AvatarSticker, IdentityAvatar, StickerInitial, StickerPicture } from "./avatar-sticker";
+import { isMascotPicture } from "./mascot-contract";
 
 export type AvatarSize = NonNullable<AvatarProps["size"]>;
 
@@ -40,47 +42,64 @@ export function AgentDisplayAvatar({
   className?: string;
 }) {
   const view = agentDisplay(display, { stopped });
+  const picture = src ?? agentAvatarUrl(agentId);
+  const badge =
+    cornerDot && display && !deleted ? (
+      <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />
+    ) : undefined;
   return (
     <span
       role="img"
       aria-label={`${name}, ${deleted ? m.agent_deleted_badge() : view.label}`}
       className="relative flex shrink-0 rounded-[inherit]"
     >
-      <Avatar
-        size={size}
-        className={className}
-        alt=""
-        src={src ?? agentAvatarUrl(agentId)}
-        initials={avatarInitial(name)}
-        contentClassName={
-          deleted
-            ? cx(DELETED_AGENT_AVATAR_CLASS, DELETED_AGENT_PICTURE_CLASS)
-            : avatarToneClassName(name)
-        }
-        badge={
-          cornerDot && display && !deleted ? (
-            <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />
-          ) : undefined
-        }
-      />
+      {isMascotPicture(picture) ? (
+        <AvatarSticker
+          size={size}
+          className={className}
+          contentClassName={deleted ? DELETED_AGENT_PICTURE_CLASS : undefined}
+          badge={badge}
+        >
+          <StickerPicture
+            src={picture}
+            fallback={<StickerInitial initial={avatarInitial(name)} />}
+          />
+        </AvatarSticker>
+      ) : (
+        <Avatar
+          size={size}
+          className={className}
+          alt=""
+          src={picture}
+          initials={avatarInitial(name)}
+          contentClassName={
+            deleted
+              ? cx(DELETED_AGENT_AVATAR_CLASS, DELETED_AGENT_PICTURE_CLASS)
+              : avatarToneClassName(name)
+          }
+          badge={badge}
+        />
+      )}
     </span>
   );
 }
 
-/** One face in an overlapping stack of Agents: no status dot, which the overlap would half cover,
- * and no separator ring, because a mascot stands alone. */
+/** One face in an overlapping stack of Agents: its sticker with no status dot, which the overlap
+ * would half cover, and the same page-coloured separator ring as the stack's "+N" chip, so the
+ * overlapping backdrops read as separate faces. */
 export function AgentStackFace({
   agent,
 }: {
   agent: { id: string; displayName: string; avatarUrl?: string | null };
 }) {
   return (
-    <Avatar
+    <IdentityAvatar
       size="xs"
       alt=""
       src={agent.avatarUrl ?? agentAvatarUrl(agent.id)}
       initials={avatarInitial(agent.displayName)}
       contentClassName={avatarToneClassName(agent.displayName)}
+      className="ring-2 ring-bg-primary"
     />
   );
 }

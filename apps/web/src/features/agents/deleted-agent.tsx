@@ -16,7 +16,7 @@ import { m } from "#src/paraglide/messages";
  */
 export const DELETED_AGENT_AVATAR_CLASS = "bg-avatar-deleted text-white";
 
-/** A deleted Agent's mascot, which has no tile to grey: the picture itself is greyed. */
+/** A deleted Agent's mascot sticker, which has no tile to grey: the sticker itself is greyed. */
 export const DELETED_AGENT_PICTURE_CLASS = "grayscale opacity-60";
 
 /** The `ARCHIVED` (已归档) marker shown beside a deleted Agent's name. */

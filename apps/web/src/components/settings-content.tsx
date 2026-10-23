@@ -25,6 +25,7 @@ import { Avatar } from "#src/components/base/avatar/avatar";
 import AnimatedGradient from "#src/components/spell/animated-gradient";
 import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
 import { AvatarPicker } from "#src/features/profiles/avatar-picker";
+import { CreatedAgentFaces } from "#src/features/agents/created-agent-faces";
 import profileBanner from "#src/features/profiles/profile-banner.webp?inline";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -607,18 +608,7 @@ function AccountSettings({
                   {m.settings_created_agents()}
                 </dt>
                 <dd className="flex min-w-0 flex-wrap gap-2 text-sm text-primary">
-                  {createdAgents.length === 0
-                    ? "-"
-                    : createdAgents.map((agent) => (
-                        <Avatar
-                          key={agent.id}
-                          size="xs"
-                          src={agent.avatarUrl}
-                          alt={agent.name}
-                          initials={avatarInitial(agent.name)}
-                          contentClassName={avatarToneClassName(agent.name)}
-                        />
-                      ))}
+                  <CreatedAgentFaces agents={createdAgents} />
                 </dd>
               </div>
             </dl>

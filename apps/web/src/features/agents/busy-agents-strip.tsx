@@ -5,6 +5,7 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 import { AgentMascotView } from "./agent-mascot-view";
+import { AvatarSticker } from "./avatar-sticker";
 import { busyAgentsAmong, summarizeBusyAgents, type BusyAgent } from "./busy-agents-summary";
 import { useLiveAgents } from "./workspace-agents-realtime";
 import "./busy-agents-strip.css";
@@ -20,8 +21,9 @@ type Shown = {
 };
 
 /**
- * One 24px slot showing the busy Agents' mascots in turn, each acting out its own work. It is
- * decorative: the line beside it names the Agents, so a switch announces nothing.
+ * One 24px avatar showing the busy Agents' mascots in turn, each acting out its own work, as
+ * stickers on the avatar backdrop like every other Agent avatar. It is decorative: the line beside
+ * it names the Agents, so a switch announces nothing.
  */
 function BusyAvatar({ agents }: { agents: readonly BusyAgent[] }) {
   const reducedMotion = usePrefersReducedMotion();
@@ -39,22 +41,24 @@ function BusyAvatar({ agents }: { agents: readonly BusyAgent[] }) {
   if (!current) return null;
   const leaving = cycling && shown.leaving?.id !== current.id ? shown.leaving : undefined;
   return (
-    <span aria-hidden="true" className="relative size-6 shrink-0">
-      {leaving && (
+    <span aria-hidden="true" className="flex shrink-0">
+      <AvatarSticker size="xs">
+        {leaving && (
+          <span
+            key={leaving.id}
+            className="busy-avatar-out absolute inset-0"
+            onAnimationEnd={() => setShown((previous) => ({ ...previous, leaving: undefined }))}
+          >
+            <AgentMascotView mascot={leaving.mascot} activity={leaving.activity} still />
+          </span>
+        )}
         <span
-          key={leaving.id}
-          className="busy-avatar-out absolute inset-0"
-          onAnimationEnd={() => setShown((previous) => ({ ...previous, leaving: undefined }))}
+          key={current.id}
+          className={`absolute inset-0 ${reducedMotion ? "" : "busy-avatar-in"}`}
         >
-          <AgentMascotView mascot={leaving.mascot} activity={leaving.activity} still />
+          <AgentMascotView mascot={current.mascot} activity={current.activity} />
         </span>
-      )}
-      <span
-        key={current.id}
-        className={`absolute inset-0 ${reducedMotion ? "" : "busy-avatar-in"}`}
-      >
-        <AgentMascotView mascot={current.mascot} activity={current.activity} />
-      </span>
+      </AvatarSticker>
     </span>
   );
 }

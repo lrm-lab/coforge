@@ -12,7 +12,7 @@ import {
   Settings01,
   XCircle,
 } from "@untitledui/icons";
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -116,7 +116,7 @@ export function ProjectDetail({
                         params={{ workspaceSlug, channelId: conversation.id }}
                         className="flex min-w-0 items-center gap-3 px-4 py-4 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2"
                       >
-                        <Avatar
+                        <IdentityAvatar
                           size="xs"
                           src={conversation.lastSender?.avatarUrl ?? undefined}
                           initials={
@@ -299,7 +299,7 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
           <>
             {latestCommit && (
               <div className="flex min-w-0 items-center gap-3 border-b border-secondary px-4 py-3">
-                <Avatar
+                <IdentityAvatar
                   size="xs"
                   src={latestCommit.authorAvatarUrl ?? undefined}
                   initials={avatarInitial(latestCommit.author)}
@@ -428,7 +428,7 @@ function CommitIdentity({
   return (
     <Tooltip title={`${name} · ${role}`} description={email ?? undefined}>
       <TooltipTrigger className="flex rounded-full">
-        <Avatar
+        <IdentityAvatar
           size="xs"
           src={avatarUrl ?? undefined}
           initials={avatarInitial(name)}

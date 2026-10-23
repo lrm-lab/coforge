@@ -58,11 +58,11 @@ test("only the creator picks an Agent's mascot", async () => {
 
   const picked = await mascots.set("workspace-1", "owner-1", "agent-1", "pink");
   expect(row.avatarMascot).toBe("pink");
-  expect(picked.avatarUrl).toBe("/agent-avatars/mascot-pink-2.webp");
+  expect(picked.avatarUrl).toBe("/agent-avatars/mascot-pink-3.webp");
 
   const replaced = await mascots.set("workspace-1", "owner-1", "agent-1", "black");
   expect(row.avatarMascot).toBe("black");
-  expect(replaced.avatarUrl).toBe("/agent-avatars/mascot-black-2.webp");
+  expect(replaced.avatarUrl).toBe("/agent-avatars/mascot-black-3.webp");
 });
 
 test("a deleted Agent, or one of another Workspace, has no mascot to change", async () => {

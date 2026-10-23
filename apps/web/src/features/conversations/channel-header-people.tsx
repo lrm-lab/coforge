@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Folder } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Badge } from "#src/components/base/badges/badges";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -77,7 +77,7 @@ export function MemberProfileCard({
         {userId ? (
           <MemberAvatar size="md" userId={userId} name={name} src={src ?? null} />
         ) : (
-          <Avatar
+          <IdentityAvatar
             size="md"
             alt=""
             src={src ?? undefined}
@@ -165,7 +165,7 @@ export function ChannelHeaderFaces({
           {shown.map((entry) => {
             const avatarNode = (
               <>
-                <Avatar
+                <IdentityAvatar
                   size="xs"
                   alt=""
                   src={entry.avatarUrl ?? undefined}
@@ -223,7 +223,7 @@ export function ChannelHeaderFaces({
                 className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
                 onPress={onOpenMembers}
               >
-                <Avatar
+                <IdentityAvatar
                   size="xs"
                   alt=""
                   initials={`+${more}`}

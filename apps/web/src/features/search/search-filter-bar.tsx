@@ -8,7 +8,7 @@ import {
   useFilter,
 } from "react-aria-components";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
@@ -52,7 +52,7 @@ function senderAvatar(sender: Sender): FC<{ className?: string }> {
     // it (the official Avatar does not forward `aria-hidden`). Sized like the menu's own avatars.
     return (
       <span aria-hidden="true" className="mr-2 shrink-0">
-        <Avatar
+        <IdentityAvatar
           size="xs"
           alt=""
           src={sender.avatarUrl ?? undefined}

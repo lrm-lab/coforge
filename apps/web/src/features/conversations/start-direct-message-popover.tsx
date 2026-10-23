@@ -7,7 +7,7 @@ import { Heading, Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -202,7 +202,7 @@ function DirectMessagePicker({ onDone, onCreate }: { onDone: () => void; onCreat
                         isDisabled={opening}
                         onPress={() => void select(member.peer)}
                         iconLeading={
-                          <Avatar
+                          <IdentityAvatar
                             size="xs"
                             alt={member.name}
                             src={member.avatarUrl ?? undefined}

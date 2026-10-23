@@ -23,7 +23,7 @@ export const MASCOT_RIVE = {
 
 /** Version of the Rive file (`mascots-<n>.riv`); bumped with the file name for the same reason as
  * `STATIC_VERSION`. */
-export const RIV_VERSION = 2;
+export const RIV_VERSION = 4;
 
 /** The one Rive file that animates every mascot. */
 export function mascotRivUrl(): string {

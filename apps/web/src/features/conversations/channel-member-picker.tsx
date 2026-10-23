@@ -1,6 +1,6 @@
 import { Checkbox as AriaCheckbox } from "react-aria-components";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { BadgeWithButton } from "#src/components/base/badges/badges";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
@@ -218,7 +218,7 @@ function ChannelCandidateRow({
         {({ isSelected: on, isDisabled, isFocusVisible }) => (
           <>
             <CheckboxBase isSelected={on} isDisabled={isDisabled} isFocusVisible={isFocusVisible} />
-            <Avatar
+            <IdentityAvatar
               size="xs"
               // A rounded square, as the roster's member avatars (styles.css), in both pickers.
               className="avatar-square"

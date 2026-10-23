@@ -27,6 +27,7 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useVisualViewportTop } from "#src/hooks/use-visual-viewport-top";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { assigneeFace } from "./assignee-face";
 import { StatusBadge, TaskHistory, type TimelineNames } from "./task-history";
 import { TaskPerson } from "./task-owner";
 import { getTaskMoveCommand, taskStatusOptions } from "./task-move";
@@ -497,7 +498,7 @@ function AssigneeMenu({
                   member.kind === "agent" ? `${member.label} ${member.handle}` : member.label
                 }
                 label={member.label}
-                avatarUrl={member.avatarUrl ?? undefined}
+                icon={member.avatarUrl ? assigneeFace(member.avatarUrl) : undefined}
                 // An Agent is told from a person by its `@handle`; a person is only their name.
                 addon={member.kind === "agent" ? `@${member.handle}` : undefined}
               />

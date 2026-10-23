@@ -1,12 +1,12 @@
 /**
- * Where each member of a channel's group avatar sits inside its round frame. `left`, `top` and
- * `size` are fractions of the frame's side, so one layout serves every frame size; `css` is the
- * same placement as ready inline-style values (the frame's side is the `--avatar-group-size`
- * custom property, which scales the initials). Slots overlap by at most two units of 48 so each
- * face reads whole (an Agent's mascot is drawn unclipped, a person's photo in a circle); later
- * ones draw over earlier ones. At most four are shown; above four members the first three are shown and the fourth slot
- * is the overflow "…" circle (`overflow: true`). No members has no collage (`[]`): the row shows
- * the channel's icon instead.
+ * Where each member of a channel's group avatar sits on its round frame. `left`, `top` and `size`
+ * are fractions of the frame's side, so one layout serves every frame size; `css` is the same
+ * placement as ready inline-style values (the frame's side is the `--avatar-group-size` custom
+ * property, which scales the initials). Members are stickers: each slot is about half the frame
+ * or more, they overlap one another, the cluster sits on the frame's centre and may pass its edge
+ * a little, and a later slot draws over an earlier one. At most four are shown; above four
+ * members the first three are shown and the fourth slot is the overflow "…" sticker
+ * (`overflow: true`). No members has no collage (`[]`): the row shows the channel's icon instead.
  */
 export type CollageSlot = {
   left: number;
@@ -39,20 +39,21 @@ function slot(left: number, top: number, size: number, overflow = false): Collag
 }
 
 const FOUR: readonly CollageSlot[] = [
-  // 2 by 2, one unit of overlap; the corners lie just outside the round frame's edge.
-  slot(1.5, 1.5, 23),
-  slot(23.5, 1.5, 23),
-  slot(1.5, 23.5, 23),
-  slot(23.5, 23.5, 23),
+  // A tight 2 by 2, each a little off the grid so it reads as a handful of stickers: top-left
+  // behind, top-right over it, then the bottom row, bottom-right over everything it touches.
+  slot(3, 3, 26),
+  slot(19, 2, 26),
+  slot(2, 19, 26),
+  slot(19, 20, 26),
 ];
 
 const LAYOUTS: readonly (readonly CollageSlot[])[] = [
   [],
   [slot(0, 0, 48)],
-  // Diagonal pair: top-left under bottom-right, meeting at their corners.
-  [slot(1, 1, 24), slot(23, 23, 24)],
-  // Two on top, one centred below.
-  [slot(2, 3, 22), slot(24, 3, 22), slot(13, 24, 22)],
+  // Diagonal pair: the second lower right, over the first.
+  [slot(1, 1, 29), slot(18, 18, 29)],
+  // One at the top centre behind, two overlapping below it, the right one a little higher.
+  [slot(10, 1, 28), slot(0, 20, 28), slot(20, 18, 28)],
   FOUR,
 ];
 

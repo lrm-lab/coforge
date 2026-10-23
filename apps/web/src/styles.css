@@ -216,9 +216,15 @@ html[data-drag-cursor] * {
     border-radius: 9999px;
   }
 
-  /* A channel row's group avatar (`group-avatar.tsx`): a 48 × 48px circle on a neutral fill. The
-     member circles are placed inside it by percentage (`collage-layout.ts`) and size their
-     initials from `--avatar-group-size`. */
+  /* An Agent's mascot sticker (`AvatarSticker`) is a circle at every size, as in Frank's
+     references, profile sizes included. */
+  [data-avatar][data-avatar-sticker] {
+    border-radius: 9999px;
+  }
+
+  /* A channel row's group avatar (`group-avatar.tsx`): a 48 × 48px circle on the stickers'
+     backdrop. The member stickers are placed on it by percentage (`collage-layout.ts`), may pass
+     its edge a little, and size their initials from `--avatar-group-size`. */
   .avatar-group {
     position: relative;
     flex-shrink: 0;
@@ -226,7 +232,35 @@ html[data-drag-cursor] * {
     width: var(--avatar-group-size);
     height: var(--avatar-group-size);
     border-radius: 9999px;
-    background: var(--color-bg-secondary);
+    background: var(--color-avatar-backdrop);
+  }
+
+  /* A person's photo (or initial, or the "…") among a group avatar's stickers: a circle the size
+     of a mascot figure in the same slot, with a white sticker edge and nothing else clipping it. */
+  .avatar-group-photo {
+    position: absolute;
+    inset: 9%;
+    overflow: hidden;
+    border-radius: 9999px;
+    box-shadow: 0 0 0 calc(var(--avatar-group-size) * 0.04) var(--color-avatar-outline);
+  }
+
+  /* An Agent's mascot as a sticker (`AvatarSticker` in `features/agents`): the avatar's own box
+     and shape (inherited inside `[data-avatar]`) is a light backdrop, and the picture is drawn
+     larger than it, unclipped, so the white-edged figure, which keeps a margin inside its 24-unit
+     artboard (more above, for the hover hop), fills the circle and its edges pass it a little.
+     Nudged up to centre the figure. */
+  .avatar-sticker {
+    position: relative;
+    background: var(--color-avatar-backdrop);
+  }
+
+  .avatar-sticker-figure {
+    position: absolute;
+    left: -5%;
+    top: -6.5%;
+    width: 110%;
+    height: 110%;
   }
 
   /* The group avatar at the message avatar's 38 × 38px (an Activity row). */
@@ -257,7 +291,8 @@ html[data-drag-cursor] * {
   [data-avatar].size-8 > span.ring-bg-primary,
   [data-avatar].size-8 > .avatar-status-dot,
   [data-avatar].avatar-dm > span.ring-bg-primary,
-  [data-avatar].avatar-dm > .avatar-status-dot {
+  [data-avatar].avatar-dm > .avatar-status-dot,
+  [data-avatar][data-avatar-sticker] > .avatar-status-dot {
     right: calc(var(--avatar-size) * 0.0214);
     bottom: calc(var(--avatar-size) * 0.0214);
   }

@@ -1,4 +1,4 @@
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import type { ThreadedConversationProps } from "./conversation-types";
 import { ThreadedConversation } from "./threaded-conversation";
@@ -29,7 +29,7 @@ export function DirectThreadedConversation({
       emptyState={{
         ...emptyState,
         media: (
-          <Avatar
+          <IdentityAvatar
             size="2xl"
             alt={avatar.name}
             src={avatar.src ?? undefined}

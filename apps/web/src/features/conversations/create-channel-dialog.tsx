@@ -5,7 +5,7 @@ import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import { XClose } from "@untitledui/icons";
 import { Checkbox as AriaCheckbox, Heading, Text } from "react-aria-components";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox, CheckboxBase } from "#src/components/base/checkbox/checkbox";
@@ -362,7 +362,7 @@ function CreateChannelForm({
             <ul className="flex flex-col gap-1">
               {selectedGroupChatCandidates(candidates, selectedKeys).map((entry) => (
                 <li key={entry.key} className="flex items-center gap-3 py-1">
-                  <Avatar
+                  <IdentityAvatar
                     size="xs"
                     alt=""
                     src={entry.avatarUrl ?? undefined}
@@ -470,7 +470,7 @@ function GroupChatPickerPane({
                       isDisabled={isDisabled}
                       isFocusVisible={isFocusVisible}
                     />
-                    <Avatar
+                    <IdentityAvatar
                       size="xs"
                       alt=""
                       src={entry.avatarUrl ?? undefined}

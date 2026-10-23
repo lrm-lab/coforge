@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 import { ChevronDown, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -370,7 +370,7 @@ const MemberRow = memo(function MemberRow({
           onPress={namePress}
           triggerClassName={avatarTriggerClassName}
           trigger={
-            <Avatar
+            <IdentityAvatar
               size="sm"
               alt=""
               src={member.avatarUrl ?? undefined}

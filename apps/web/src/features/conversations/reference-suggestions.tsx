@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Hash01 as Hash } from "@untitledui/icons";
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Badge } from "#src/components/base/badges/badges";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
@@ -196,7 +196,7 @@ function MentionRow({
           size="xs"
         />
       ) : (
-        <Avatar
+        <IdentityAvatar
           size="xs"
           alt=""
           src={mention.avatarUrl}

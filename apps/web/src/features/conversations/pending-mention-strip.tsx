@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Bell01, Check, Plus } from "@untitledui/icons";
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Button } from "#src/components/base/buttons/button";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
@@ -141,7 +141,7 @@ export function PendingMentionStrip({
                 leaving.has(mention.resolutionId) && "opacity-0",
               )}
             >
-              <Avatar
+              <IdentityAvatar
                 size="xs"
                 alt=""
                 src={mention.targetAvatarUrl}

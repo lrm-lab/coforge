@@ -3,7 +3,6 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-qu
 import { Link, useRouter } from "@tanstack/react-router";
 import { MessageTextSquare01, SearchLg } from "@untitledui/icons";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -25,7 +24,6 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { computerLabel } from "#src/features/computers/computer-identity";
 import { messagePlainText } from "#src/features/conversations/selection-copy";
-import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { searchTerms } from "#src/lib/search-terms";
 import { m } from "#src/paraglide/messages";
 import type { MessageSearchHit } from "#src/server/conversations/message-search.server";
@@ -49,6 +47,7 @@ import {
 } from "./search-shortcut";
 import { useSearchMemory } from "./use-search-memory";
 import { SearchFilterBar } from "./search-filter-bar";
+import { SearchMessageSender } from "./search-message-sender";
 import { clearedFilters, hasActiveFilter, type SearchFilters } from "./search-filters";
 import { messageSearchQuery, searchDirectoryQuery } from "./search-queries";
 import { SEARCH_QUERY_MAX_LENGTH } from "./search.schemas";
@@ -562,17 +561,10 @@ function SearchResultRow({
               {m.search_archived()}
             </Badge>
           )}
-          <span className="inline-flex min-w-0 items-center gap-1.5">
-            <Avatar
-              size="xs"
-              src={message.senderAvatarUrl ?? null}
-              initials={avatarInitial(message.senderName)}
-              contentClassName={avatarToneClassName(message.senderName)}
-              alt=""
-              className="size-4 shrink-0"
-            />
-            <span className="truncate font-semibold text-secondary">{message.senderName}</span>
-          </span>
+          <SearchMessageSender
+            name={message.senderName}
+            avatarUrl={message.senderAvatarUrl ?? null}
+          />
           <RelativeTime value={message.createdAt} />
         </div>
         <p className="mt-1 line-clamp-2 text-sm break-words text-secondary">

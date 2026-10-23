@@ -1,6 +1,6 @@
 import { ChevronRight, MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { RelativeTime } from "#src/components/ui/relative-time";
@@ -8,7 +8,6 @@ import { UnreadDot } from "#src/components/ui/unread-marker";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
-import { DELETED_AGENT_AVATAR_CLASS } from "#src/features/agents/deleted-agent";
 import { replyCountLabel, withUnreadCount } from "./conversation-labels";
 import { useThreadBodyFormat, useThreadSummary, useThreadUnread } from "./thread-store";
 
@@ -100,16 +99,13 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
         {/* The newest few only; the side pane holds the full thread. */}
         {summary.latestReplies.map((reply) => (
           <span key={reply.id} className="flex min-w-0 items-center gap-2">
-            <Avatar
+            <IdentityAvatar
               size="xs"
               alt={reply.senderName}
               src={reply.senderAvatarUrl}
               initials={avatarInitial(reply.senderName)}
-              contentClassName={
-                reply.senderDeleted
-                  ? DELETED_AGENT_AVATAR_CLASS
-                  : avatarToneClassName(reply.senderName)
-              }
+              contentClassName={avatarToneClassName(reply.senderName)}
+              deleted={reply.senderDeleted}
               className="shrink-0"
             />
             <span className="message-text shrink-0 text-md font-medium text-primary">

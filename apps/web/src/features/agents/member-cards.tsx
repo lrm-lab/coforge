@@ -1,7 +1,7 @@
 import { GridListItem } from "react-aria-components";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Archive, Calendar, DotsVertical, Edit01, Monitor01 as Monitor } from "@untitledui/icons";
-import { Avatar } from "#src/components/base/avatar/avatar";
+import { IdentityAvatar } from "./avatar-sticker";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -92,7 +92,12 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
                 <AgentStackFace key={agent.id} agent={agent} />
               ))}
               {more > 0 && (
-                <Avatar size="xs" alt="" initials={`+${more}`} className="ring-2 ring-bg-primary" />
+                <IdentityAvatar
+                  size="xs"
+                  alt=""
+                  initials={`+${more}`}
+                  className="ring-2 ring-bg-primary"
+                />
               )}
             </TooltipTrigger>
           </Tooltip>
@@ -150,7 +155,7 @@ export function AgentCard({
             size="lg"
           />
         ) : (
-          <Avatar
+          <IdentityAvatar
             size="lg"
             alt={member.displayName}
             src={member.avatarUrl ?? undefined}
@@ -239,7 +244,7 @@ export function AgentCard({
       <div className="mt-auto flex min-w-0 items-center gap-4 pt-1 text-sm text-tertiary">
         <Tooltip title={m.member_created_by()} arrow>
           <TooltipTrigger className="flex min-w-0 cursor-default items-center gap-2 rounded-sm outline-focus-ring focus-visible:outline-2">
-            <Avatar
+            <IdentityAvatar
               size="xs"
               alt=""
               src={member.owner.avatarUrl ?? undefined}

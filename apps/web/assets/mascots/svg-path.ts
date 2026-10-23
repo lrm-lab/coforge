@@ -5,6 +5,9 @@ const SUPPORTED_COMMANDS = "M, L, C, H, V, Z (absolute)";
 
 export type Point = readonly [number, number];
 
+export const add = (a: Point, b: Point, k = 1): Point => [a[0] + b[0] * k, a[1] + b[1] * k];
+export const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]];
+
 interface Vertex {
   p: Point;
   inHandle: Point | null;
@@ -120,6 +123,43 @@ export function pathBounds(d: string): { minX: number; minY: number; maxX: numbe
     for (const v of s.vertices) {
       xs.push(v.p[0]);
       ys.push(v.p[1]);
+    }
+  }
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+}
+
+/** The point at `t` of the cubic from `p0` to `p3` with handles `p1`, `p2`. */
+export function cubicAt(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
+  const u = 1 - t;
+  const a = u * u * u;
+  const b = 3 * u * u * t;
+  const c = 3 * u * t * t;
+  const d = t * t * t;
+  return [
+    a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+    a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+  ];
+}
+
+/** Bounds of everything `d` draws, curves included (sampled), unlike `pathBounds`. */
+export function pathExtent(d: string): { minX: number; minY: number; maxX: number; maxY: number } {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const s of parseSvgPath(d)) {
+    const n = s.vertices.length;
+    for (let i = 0; i < (s.closed ? n : n - 1); i++) {
+      const a = s.vertices[i] as Vertex;
+      const b = s.vertices[(i + 1) % n] as Vertex;
+      for (let k = 0; k <= 16; k++) {
+        const [x, y] = cubicAt(a.p, a.outHandle ?? a.p, b.inHandle ?? b.p, b.p, k / 16);
+        xs.push(x);
+        ys.push(y);
+      }
     }
   }
   return {

@@ -1,4 +1,5 @@
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
+import { AvatarSticker, StickerInitial, StickerPicture } from "#src/features/agents/avatar-sticker";
 import { isMascotPicture } from "#src/features/agents/mascot-contract";
 import { cx } from "#src/utils/cx";
 import { collageLayout } from "./collage-layout";
@@ -11,16 +12,13 @@ export type GroupAvatarMember = {
   avatarUrl: string | null;
 };
 
-const CIRCLE_CLASS = "absolute overflow-hidden rounded-full";
-/** A mascot is drawn whole on its own: no circle clipping it and no separator ring around it. */
-const MASCOT_CLASS = "absolute";
-/** The separator between overlapping circles; a lone member fills the frame and needs none. */
-const SEPARATOR_CLASS = "ring-2 ring-bg-primary";
-
 /**
- * A channel's group avatar: up to four overlapping member circles laid out by `collageLayout`
- * inside a round frame (`.avatar-group` in `styles.css` sets its size and frame). Above four
- * members the fourth circle is a "…". Decorative: the row's label names the channel.
+ * A channel's group avatar: up to four overlapping member stickers laid out by `collageLayout` on
+ * a round backdrop (`.avatar-group` in `styles.css` sets its size and colour). An Agent is its
+ * white-edged mascot, unclipped; a person is their round photo (or initial) with a white sticker
+ * edge (`.avatar-group-photo`); above four members the fourth sticker is a "…". A lone member is
+ * drawn like a single avatar: a mascot as an `AvatarSticker`, a photo filling the circle.
+ * Decorative: the row's label names the channel.
  */
 export function GroupAvatar({
   members,
@@ -29,60 +27,64 @@ export function GroupAvatar({
   members: readonly GroupAvatarMember[];
   className?: string;
 }) {
+  const alone = members.length === 1;
   return (
     <span aria-hidden="true" className={cx("avatar-group", className)}>
       {collageLayout(members.length).map((placed, index) => {
         if (placed.overflow) {
           return (
-            <span
-              key="overflow"
-              className={cx(
-                CIRCLE_CLASS,
-                SEPARATOR_CLASS,
-                "flex items-center justify-center bg-tertiary font-semibold text-tertiary",
-              )}
-              style={placed.css}
-            >
-              …
+            <span key="overflow" className="absolute" style={placed.css}>
+              <span className="avatar-group-photo flex items-center justify-center bg-tertiary font-semibold text-tertiary">
+                …
+              </span>
             </span>
           );
         }
         // A non-overflow slot exists only for a member at its index.
         const member = members[index]!;
         if (isMascotPicture(member.avatarUrl)) {
+          const initial = avatarInitial(member.name);
           return (
-            <span key={member.id} className={MASCOT_CLASS} style={placed.css}>
-              <img
-                src={member.avatarUrl!}
-                alt=""
-                loading="lazy"
-                className="size-full object-contain"
-              />
+            <span key={member.id} className="absolute" style={placed.css}>
+              {alone ? (
+                <AvatarSticker size="fill">
+                  <StickerPicture
+                    src={member.avatarUrl!}
+                    fallback={<StickerInitial initial={initial} />}
+                  />
+                </AvatarSticker>
+              ) : (
+                // A mascot that cannot load falls back to its initial on a round sticker.
+                <StickerPicture
+                  src={member.avatarUrl!}
+                  fallback={
+                    <span className="avatar-group-photo flex items-center justify-center bg-tertiary font-semibold text-tertiary">
+                      {initial}
+                    </span>
+                  }
+                />
+              )}
             </span>
           );
         }
-        return (
+        const face = member.avatarUrl ? (
+          <img src={member.avatarUrl} alt="" loading="lazy" className="size-full object-cover" />
+        ) : (
           <span
-            key={member.id}
-            className={cx(CIRCLE_CLASS, placed.size < 1 && SEPARATOR_CLASS)}
-            style={placed.css}
+            className={cx(
+              "flex size-full items-center justify-center font-semibold",
+              avatarToneClassName(member.name),
+            )}
           >
-            {member.avatarUrl ? (
-              <img
-                src={member.avatarUrl}
-                alt=""
-                loading="lazy"
-                className="size-full object-cover"
-              />
+            {avatarInitial(member.name)}
+          </span>
+        );
+        return (
+          <span key={member.id} className="absolute" style={placed.css}>
+            {alone ? (
+              <span className="absolute inset-0 overflow-hidden rounded-full">{face}</span>
             ) : (
-              <span
-                className={cx(
-                  "flex size-full items-center justify-center font-semibold",
-                  avatarToneClassName(member.name),
-                )}
-              >
-                {avatarInitial(member.name)}
-              </span>
+              <span className="avatar-group-photo">{face}</span>
             )}
           </span>
         );

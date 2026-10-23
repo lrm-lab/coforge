@@ -1,7 +1,7 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 
-import { Avatar } from "#src/components/base/avatar/avatar";
-import { DELETED_AGENT_AVATAR_CLASS, DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { IdentityAvatar } from "#src/features/agents/avatar-sticker";
+import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
@@ -17,12 +17,12 @@ export function TaskPerson({
     <span
       className={cn("flex min-w-0 items-center gap-2 text-sm font-medium text-primary", className)}
     >
-      <Avatar
+      <IdentityAvatar
         size="xs"
         initials={person.name.trim().charAt(0).toUpperCase()}
         alt=""
         src={person.avatarUrl ?? undefined}
-        contentClassName={person.deleted ? DELETED_AGENT_AVATAR_CLASS : undefined}
+        deleted={person.deleted}
       />
       <span className="truncate">{person.name}</span>
       {/* A Task's holder can be a deleted Agent: its Tasks stay readable, so the card says the
@@ -45,12 +45,12 @@ export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {
       </span>
       <span aria-hidden="true" className="flex">
         {owner ? (
-          <Avatar
+          <IdentityAvatar
             size="xs"
             initials={owner.name.trim().charAt(0).toUpperCase()}
             alt=""
             src={owner.avatarUrl ?? undefined}
-            contentClassName={owner.deleted ? DELETED_AGENT_AVATAR_CLASS : undefined}
+            deleted={owner.deleted}
           />
         ) : (
           <span className="size-6 shrink-0 rounded-full border border-dashed border-primary" />
