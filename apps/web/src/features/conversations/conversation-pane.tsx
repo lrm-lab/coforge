@@ -78,6 +78,7 @@ export function ConversationPane({
   onLoadOwnMessages,
   onLoadMessageAround,
   onShowLatest,
+  onFollowingLatestChange,
   onReadLatest,
   canSendAsTask,
   onToggleReaction,
@@ -199,18 +200,18 @@ export function ConversationPane({
         }
       : undefined,
   );
-  const [followingLatest, followingLatestRef, setFollowingLatest] = useStateWithRef(true);
+  const [followingLatest, followingLatestRef, setFollowingLatestState] = useStateWithRef(true);
+  const setFollowingLatest = (following: boolean) => {
+    setFollowingLatestState(following);
+    onFollowingLatestChange?.(following);
+  };
   const [loadingOlder, loadingOlderRef, setLoadingOlder] = useStateWithRef(false);
   const [, loadingNewerRef, setLoadingNewer] = useStateWithRef(false);
   const historyRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLOListElement>(null);
-  /** Distance from the bottom as of the last scroll. The pinning observer decides from this
-   * rather than from a fresh measurement, because by the time it runs the resize is already in
-   * `scrollHeight`. */
+  /** Distance from the bottom before the next resize; the pinning observer's source of truth. */
   const bottomDistanceRef = useRef(0);
-  /** The sentinel above the oldest loaded message and the one below the newest. Coming into view
-   * is what asks for the next page of history or for the evicted tail — the reader never has to
-   * press anything. */
+  /** Sentinels load more history or the evicted tail when they approach the viewport. */
   const olderSentinelRef = useRef<HTMLDivElement>(null);
   const newerSentinelRef = useRef<HTMLDivElement>(null);
   /** The current `loadOlder`/`loadNewer`, so a sentinel's observer never calls a stale one. */

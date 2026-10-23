@@ -37,6 +37,9 @@ type PageRequest = {
   limit?: number;
 };
 
+/** The query observer's live reading-position signal; absent for loader-only initial reads. */
+type ConversationPageQueryMeta = { conversationFollowingLatest?: () => boolean };
+
 /** The oldest loaded message bounds the next page of history (a page holds top-level messages). */
 const beforeFirstMessage = (messages: PageMessage[]) => messages[0]?.sequence;
 
@@ -48,18 +51,27 @@ export function conversationPages<M extends PageMessage, T extends ConversationP
   // read, dropping the page at the far end from the fetch (see `lib/conversation-window.ts`).
   const query = infiniteQueryOptions({
     queryKey,
-    queryFn: ({ client, queryKey, pageParam }) => {
+    queryFn: ({ client, queryKey, pageParam, meta }) => {
       const cursor = pageParam as ConversationWindowCursor;
       // While a fetch runs, the query's state still holds the window from before it, and its
       // `fetchMeta` already says whether this is a page more (`fetchMore`) or a full refetch.
       const held = client.getQueryState<InfiniteData<T>>(queryKey);
+      const fullRefetch = !held?.fetchMeta?.fetchMore;
+      const windowAtTail = !held?.data?.pages.at(-1)?.hasNewer;
+      const followingLatest =
+        (meta as ConversationPageQueryMeta | undefined)?.conversationFollowingLatest?.() ?? true;
+      // A full refetch otherwise walks forward from the oldest retained page only as many times as
+      // there were pages before it. No finite page limit can guarantee that walk reaches a live
+      // tail that realtime has grown without bound. Restart from the uncursored newest page only
+      // while the viewport is following it; an active reader keeps the retained cursors and rows.
+      const requestCursor = fullRefetch && windowAtTail && followingLatest ? undefined : cursor;
       return loadPage({
-        beforeSequence: cursor?.before,
-        afterSequence: cursor?.after,
+        beforeSequence: requestCursor?.before,
+        afterSequence: requestCursor?.after,
         limit: windowPageLimit({
-          forward: cursor?.after !== undefined,
-          fullRefetch: !held?.fetchMeta?.fetchMore,
-          windowAtTail: !held?.data?.pages.at(-1)?.hasNewer,
+          forward: requestCursor?.after !== undefined,
+          fullRefetch,
+          windowAtTail,
         }),
       });
     },

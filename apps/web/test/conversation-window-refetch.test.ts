@@ -12,11 +12,11 @@ import {
   type ConversationWindowCursor,
 } from "#src/lib/conversation-window";
 
-// A full refetch of the stream (window focus, an invalidation, a reconnect) re-reads every held
-// page: the first from its own cursor, each later one forward from the page before it. Realtime
-// messages are folded into the newest page, so it grows past a page's size; a refetch that read it
-// back at that size stopped short of the tail, and the pane jumped to older history behind the
-// "back to latest" button (task #65).
+// A full refetch of the stream (window focus, an invalidation, a reconnect) normally re-reads
+// every held page: the first from its own cursor, each later one forward from the page before it.
+// Realtime messages can grow the live tail by more rows than that fixed page walk can recover. A
+// window that was already at the tail therefore restarts its refetch from the uncursored newest
+// page; a history window keeps its cursors (task #65).
 
 type Message = {
   id: string;
@@ -69,10 +69,18 @@ const QUERY_KEY = ["conversation", "channel", "channel-1"];
 
 function openWindow(server: ReturnType<typeof fakeServer>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const { query } = conversationPages(QUERY_KEY, server.loadPage);
+  const followingLatest = { current: true };
+  const base = conversationPages(QUERY_KEY, server.loadPage).query;
+  const query = {
+    ...base,
+    meta: {
+      ...base.meta,
+      conversationFollowingLatest: () => followingLatest.current,
+    },
+  };
   const observer = new InfiniteQueryObserver(client, query);
   const window = () => client.getQueryData<Window>(QUERY_KEY)!;
-  return { client, observer, window };
+  return { client, followingLatest, observer, query, window };
 }
 
 /** Folds newly sent messages into the newest page as the reconciler does
@@ -100,7 +108,7 @@ const newestPage = (window: Window) => window.pages.at(-1)!;
 test("a refetch after paging up keeps the live tail that realtime grew", async () => {
   const server = fakeServer(200);
   const opened = openWindow(server);
-  await opened.client.fetchInfiniteQuery(conversationPages(QUERY_KEY, server.loadPage).query);
+  await opened.client.fetchInfiniteQuery(opened.query);
   await opened.observer.fetchPreviousPage();
   expect(opened.window().pages).toHaveLength(2);
 
@@ -114,18 +122,58 @@ test("a refetch after paging up keeps the live tail that realtime grew", async (
   const after = newestPage(opened.window());
   expect(after.messages.at(-1)).toEqual(tail);
   expect(after.hasNewer).toBe(false);
-  // Page 0 is re-read from its own cursor at the ordinary size; the forward page asks for the
-  // server's maximum, so the walk reaches the tail again.
+  // A refetch at the live tail resets to one uncursored newest page. It never relies on walking
+  // forward through the old number of pages, so the server cap cannot strand it behind the tail.
   expect(server.requests).toEqual([
-    { beforeSequence: 181, afterSequence: undefined, limit: CONVERSATION_WINDOW_PAGE_SIZE },
-    { beforeSequence: undefined, afterSequence: 180, limit: CONVERSATION_WINDOW_SERVER_PAGE_LIMIT },
+    {
+      beforeSequence: undefined,
+      afterSequence: undefined,
+      limit: CONVERSATION_WINDOW_PAGE_SIZE,
+    },
   ]);
+});
+
+test("a refetch stays at the live tail when more than one server page arrived", async () => {
+  const server = fakeServer(200);
+  const opened = openWindow(server);
+  await opened.client.fetchInfiniteQuery(opened.query);
+  await opened.observer.fetchPreviousPage();
+
+  receive(opened, server, CONVERSATION_WINDOW_SERVER_PAGE_LIMIT + 7);
+  const tail = newestPage(opened.window()).messages.at(-1)!;
+  expect(tail.sequence).toBe(307);
+
+  await opened.client.refetchQueries({ queryKey: QUERY_KEY });
+
+  const after = newestPage(opened.window());
+  expect(after.messages.at(-1)).toEqual(tail);
+  expect(after.hasNewer).toBe(false);
+});
+
+test("a refetch preserves an active reader's retained row", async () => {
+  const server = fakeServer(200);
+  const opened = openWindow(server);
+  await opened.client.fetchInfiniteQuery(opened.query);
+  await opened.observer.fetchPreviousPage();
+  const reading = opened
+    .window()
+    .pages.flatMap((page) => page.messages)
+    .find((row) => row.sequence === 170)!;
+
+  receive(opened, server, CONVERSATION_WINDOW_SERVER_PAGE_LIMIT + 7);
+  opened.followingLatest.current = false;
+  await opened.client.refetchQueries({ queryKey: QUERY_KEY });
+
+  expect(opened.window().pages.flatMap((page) => page.messages)).toContainEqual(reading);
+  // The reader keeps their row; the ordinary forward walk honestly reports that a newer page
+  // remains, so scrolling back down can fetch the rest instead of silently creating a gap.
+  expect(newestPage(opened.window()).hasNewer).toBe(true);
 });
 
 test("paging up or down asks for one ordinary page", async () => {
   const server = fakeServer(200);
   const opened = openWindow(server);
-  await opened.client.fetchInfiniteQuery(conversationPages(QUERY_KEY, server.loadPage).query);
+  await opened.client.fetchInfiniteQuery(opened.query);
   // Enough pages of history that the window evicts its tail, so there is a newer page to fetch.
   for (let page = 0; page < CONVERSATION_WINDOW_MAX_PAGES; page++)
     await opened.observer.fetchPreviousPage();
@@ -141,7 +189,7 @@ test("paging up or down asks for one ordinary page", async () => {
 test("a refetch of a window that is not at the tail keeps the ordinary page size", async () => {
   const server = fakeServer(200);
   const opened = openWindow(server);
-  await opened.client.fetchInfiniteQuery(conversationPages(QUERY_KEY, server.loadPage).query);
+  await opened.client.fetchInfiniteQuery(opened.query);
   for (let page = 0; page < CONVERSATION_WINDOW_MAX_PAGES; page++)
     await opened.observer.fetchPreviousPage();
   const before = opened.window();

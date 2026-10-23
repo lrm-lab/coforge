@@ -115,6 +115,9 @@ export type ConversationProps = {
   }>;
   onLoadMessageAround?: (messageId: string) => Promise<void>;
   onShowLatest?: () => Promise<void>;
+  /** Whether the main stream's viewport is following its newest row. A full refetch may replace
+   * retained pages only while this is true; deliberate reading above the tail must stand. */
+  onFollowingLatestChange?: (following: boolean) => void;
   onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
   /**
    * The main pane reached the latest message by the user's own scrolling. Only the main pane

@@ -200,8 +200,18 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   onRealtime?: () => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
+  /** The pane updates this synchronously from its real scroll position. Query meta lets a focus or
+   * invalidation refetch read it without putting viewport state in the cache's data. */
+  const followingLatestRef = useRef(true);
+  const observedQuery = {
+    ...query,
+    meta: {
+      ...query.meta,
+      conversationFollowingLatest: () => followingLatestRef.current,
+    },
+  };
   const { data, error, hasPreviousPage, hasNextPage, fetchPreviousPage, fetchNextPage } =
-    useSuspenseInfiniteQuery(query);
+    useSuspenseInfiniteQuery(observedQuery);
   // A refetch that finds the conversation gone (a channel hidden from the Workspace) keeps the
   // stale pages; hand the error to the route's error view, which leaves for Chat. The cached
   // pages and error go too, so opening it again later (after a restore) fetches afresh.
@@ -402,6 +412,10 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     conversation,
     reconciliation,
     mergeUpdates,
+    /** Tell refetch whether replacing the retained window with the newest page may discard rows. */
+    setFollowingLatest: (following: boolean) => {
+      followingLatestRef.current = following;
+    },
     /** The viewer read a thread through a reply: its summary and cursor follow, on whichever page
      * holds its root, without a refetch. */
     applyThreadRead: (rootId: string, throughSequence: number) =>

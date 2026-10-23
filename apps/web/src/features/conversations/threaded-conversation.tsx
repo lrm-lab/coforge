@@ -117,6 +117,8 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     channelNames,
     channels: channelList,
     onLoadMessageAround,
+    // A thread has its own scroll position; it must never steer the main stream's refetch policy.
+    onFollowingLatestChange: undefined,
     root,
     conversation: { ...conversation, readThroughSequence: threadCursor(root.id) },
     onSend: (
