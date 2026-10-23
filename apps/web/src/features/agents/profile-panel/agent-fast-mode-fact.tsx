@@ -18,7 +18,8 @@ export type AgentFastModeReading = {
 /**
  * The Agent's Fast service tier row, drawn the way the reference Computer draws its `Mode` row:
  * the configured value, except that a launch which reported anything other than "on" reads
- * "Not applied" (the Activity feed carries the runtime's own reason).
+ * "Not applied" (the Activity feed carries the runtime's own reason). Hidden while Fast is off —
+ * a lone "Default" says nothing.
  */
 export function AgentFastModeFact({
   runtime,
@@ -29,17 +30,15 @@ export function AgentFastModeFact({
   requested: boolean;
   reading?: AgentFastModeReading | null;
 }) {
-  if (!RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[runtime]) return null;
+  if (!requested || !RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[runtime]) return null;
   return (
     <div>
       <p className={SUBFIELD_LABEL_CLASS}>{m.agent_form_mode()}</p>
       <p className="mt-1">
         <Badge color="gray" size="md" className="gap-1.5 font-medium">
-          {requested
-            ? reading && reading.observed !== "on"
-              ? m.agent_form_fast_mode_not_applied()
-              : m.agent_form_fast_mode()
-            : m.agent_form_default_value()}
+          {reading && reading.observed !== "on"
+            ? m.agent_form_fast_mode_not_applied()
+            : m.agent_form_fast_mode()}
         </Badge>
       </p>
     </div>

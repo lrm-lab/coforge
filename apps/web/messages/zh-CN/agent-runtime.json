@@ -1,7 +1,6 @@
 {
   "agent_form_fast_mode": "快速模式",
   "agent_form_mode": "模式",
-  "agent_form_default_value": "默认",
   "agent_form_fast_mode_help": "以更快的速度运行，每 token 费用更高。",
   "agent_form_fast_mode_not_applied": "未生效",
   "agent_migration_error_fast_mode_unsupported": "{computer} 上的 {runtime} 无法使用快速模式，而这个智能体正在使用它。请关闭快速模式，或选择其他电脑。"
