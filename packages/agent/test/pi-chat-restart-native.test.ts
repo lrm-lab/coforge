@@ -160,7 +160,7 @@ test("a real worker resumes after a crash without repeating a committed tool or 
       }),
     ]);
     expect(await Bun.file(join(cwd, "marker.txt")).text()).toBe("once\n");
-    const store = new FilePiChatStore(cwd);
+    const store = await FilePiChatStore.open(cwd);
     const checkpoint = await store.checkpoint(session.id);
     expect(checkpoint?.requestId).toBe(requestId);
     await current.close();

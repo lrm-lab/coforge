@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 import { piChatSessionSchema, type PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
-import { PI_SESSION_DIR } from "#src/paths";
+import { PI_SESSION_DIR, prepareAgentSessionDirectory } from "#src/paths";
 import { storedChatMessages } from "./runtime";
 import type { PiChatStore } from "./sessions";
 import { piChatCheckpointSchema, type PiChatCheckpoint } from "./checkpoint";
@@ -11,8 +11,14 @@ import { piChatCheckpointSchema, type PiChatCheckpoint } from "./checkpoint";
 /** Metadata only; Pi's JSONL retains the complete native transcript, including compaction history. */
 export class FilePiChatStore implements PiChatStore {
   readonly #metadata: string;
-  constructor(private readonly cwd: string) {
+  private constructor(readonly cwd: string) {
     this.#metadata = join(cwd, ".chat-index");
+  }
+  /** Prepare the session boundary once and keep its canonical workspace for every operation.
+   * Pi compares the header's cwd exactly; a symlink alias must not hide a saved transcript. */
+  static async open(cwd: string) {
+    const workspace = await prepareAgentSessionDirectory(cwd, join(cwd, PI_SESSION_DIR));
+    return new FilePiChatStore(workspace);
   }
   #path(id: string) {
     return join(this.#metadata, `${piChatSessionSchema.shape.id.parse(id)}.json`);

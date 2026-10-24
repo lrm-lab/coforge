@@ -19,8 +19,10 @@ export async function runPiChatWorker(
   userId: string,
   options: { shutdownTimeoutMs?: number; stream?: boolean } = {},
 ) {
-  const cwd = join(root, z.uuid().parse(workspaceId), z.uuid().parse(userId));
-  await mkdir(cwd, { recursive: true, mode: 0o700 });
+  const directory = join(root, z.uuid().parse(workspaceId), z.uuid().parse(userId));
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const store = await FilePiChatStore.open(directory);
+  const cwd = store.cwd;
   // OS-released SQLite ownership also fences workers left alive by a host restart.
   const owner = new Database(join(cwd, ".chat-owner.sqlite"));
   try {
@@ -59,7 +61,7 @@ export async function runPiChatWorker(
     else updateTimer ??= setTimeout(flushUpdates, 40);
   };
   const sessions = new PiChatSessions(
-    new FilePiChatStore(cwd),
+    store,
     (id, model) => createPiChatRuntime(cwd, id, undefined, notify, model),
     notify,
     () => listPiChatModels(cwd),

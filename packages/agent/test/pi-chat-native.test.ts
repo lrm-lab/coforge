@@ -118,10 +118,11 @@ test("native Pi streams a tool call and preserves full tool output and reply aft
     const id = runtime.id;
     await runtime.dispose();
     runtime = undefined;
-    expect((await new FilePiChatStore(cwd).messages(id)).at(-1)?.text).toBe(reply);
-    expect(
-      (await new FilePiChatStore(cwd).messages(id)).find((message) => message.toolName === "edit"),
-    ).toEqual(edit);
+    const stored = await FilePiChatStore.open(cwd);
+    expect((await stored.messages(id)).at(-1)?.text).toBe(reply);
+    expect((await stored.messages(id)).find((message) => message.toolName === "edit")).toEqual(
+      edit,
+    );
     runtime = await createPiChatRuntime(cwd, id, agentDir);
     expect(runtime.id).toBe(id);
     expect(runtime.messages().at(-1)?.text).toBe(reply);

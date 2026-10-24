@@ -79,7 +79,10 @@ the user's cloud Computer; this is not an additional filesystem sandbox.
 Pi's native `.pi-sessions` JSONL files remain authoritative for model context
 and transcript. The sibling `.chat-index` holds titles, status and accepted
 request IDs. History reads native entries, including entries preceding a
-compaction, instead of Activity summaries. Data remains on the existing
+compaction, instead of Activity summaries. The store prepares and retains one
+canonical working directory for creation, lookup and deletion, so a symlinked
+Computer directory still reopens its history and deletes the matching JSONL.
+Data remains on the existing
 Computer volume; this feature adds no PostgreSQL migration. Deleting a chat
 removes its native transcript and index record; files created by its tools
 remain in the working directory. Content-free accepted request IDs are retained

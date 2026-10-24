@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { RedisClient } from "bun";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -45,7 +45,10 @@ test("thinking, file tools and partial answers arrive before completion and hist
   const redisUrl = Bun.env.PI_CHAT_TEST_REDIS_URL;
   if (!redisUrl || !/^redis:\/\/(127\.0\.0\.1|localhost):/.test(redisUrl))
     throw new Error("PI_CHAT_TEST_REDIS_URL must point to isolated local Redis");
-  const root = await mkdtemp(join(tmpdir(), "pi-chat-stream-e2e-"));
+  const directory = await mkdtemp(join(tmpdir(), "pi-chat-stream-e2e-"));
+  const root = join(directory, "linked");
+  await mkdir(join(directory, "physical"));
+  await symlink(join(directory, "physical"), root, "dir");
   const scope = {
     workspaceId: crypto.randomUUID(),
     computerId: crypto.randomUUID(),
@@ -299,6 +302,6 @@ test("thinking, file tools and partial answers arrive before completion and hist
       if (value === undefined) delete Bun.env[key];
       else Bun.env[key] = value;
     }
-    await rm(root, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);
