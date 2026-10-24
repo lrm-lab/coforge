@@ -211,10 +211,32 @@ describe("episodePrompt parallel start", () => {
     expect(prompt).not.toContain("do NOT write any deliverable");
     expect(prompt).not.toContain("sleep 20");
     expect(prompt).not.toContain("coforge message read");
-    expect(prompt).toContain("start on the task");
     expect(prompt).toContain("memory_disposition");
     expect(prompt).toContain("Delivery rules:");
     expect(prompt).not.toContain("you observe this channel");
+  });
+  test("Task is told when, how and what to ask Memory", () => {
+    const prompt = episodePrompt(episode, "R", null, true, { parallel: true });
+    // the literal @memory survives (only the task text is rewritten to "Memory Agent")
+    expect(prompt).toContain("a body that starts with @memory");
+    expect(prompt).toContain("`coforge message send --target '<this channel>'`");
+    // how: task type + progress + question
+    expect(prompt).toContain("(1) task type");
+    expect(prompt).toContain("(2) progress");
+    expect(prompt).toContain("(3) the question");
+    // when: opening, before drafting, when unsure, before delivery; capped
+    expect(prompt).toContain("A. first, before reading the inputs");
+    expect(prompt).toContain("B. right before you start writing the deliverable");
+    expect(prompt).toContain("C. whenever you are unsure or stuck");
+    expect(prompt).toContain("D. before you deliver, as a self-check");
+    expect(prompt).toContain("at most 4 asks in total");
+    // not a blocking wait
+    expect(prompt).toContain("Keep working while you wait");
+  });
+  test("an @memory in the task text is still rewritten to Memory Agent", () => {
+    const withMention = { ...(episode as object), prompt: "Ask @memory nothing." } as never;
+    const prompt = episodePrompt(withMention, "R", null, true, { parallel: true });
+    expect(prompt).toContain("Ask Memory Agent nothing.");
   });
   test("without the flags nothing changes", () => {
     const prompt = episodePrompt(episode, "R", null, true);
