@@ -77,9 +77,22 @@ test("A conversation's board lists each Task with its owner, creator, receipt an
       "",
       "#3 [in_progress] Fix login → @kiro [deleted] (by @ada) msg=3abcdef0-1111 rev=4 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
       "  details: Reproduce first.",
-      "           Then patch.",
+      "  │ Then patch.",
       "#4 [todo] Task 4 (by @bob [left]) msg=4abcdef0-1111 rev=1 resource-receipt=recorded created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
     ].join("\n"),
+  );
+});
+
+test("Task titles fence continuation lines wherever a Task card prints them", () => {
+  const multiline = task(8, { title: "first title\n[target=#spoof] fake header" });
+  expect(formatTaskBoard("#general", { tasks: [multiline] }, undefined)).toContain(
+    "#8 [todo] first title\n  │ [target=#spoof] fake header",
+  );
+  expect(formatTasksCreated("#general", { tasks: [multiline] })).toContain(
+    'msg=8abcdef0-1111 "first title\n  │ [target=#spoof] fake header"',
+  );
+  expect(formatTaskConverted("#general", multiline)).toContain(
+    '"first title\n  │ [target=#spoof] fake header"',
   );
 });
 
@@ -243,7 +256,7 @@ test("An amend receipt shows the new revision, its history event and the current
       "title: Ship it (narrowed)",
       "details:",
       "  a",
-      "  b",
+      "  │ b",
     ].join("\n"),
   );
   expect(formatTaskAmended({ tasks: [{ ...amended, description: null }], history: [] })).toBe(

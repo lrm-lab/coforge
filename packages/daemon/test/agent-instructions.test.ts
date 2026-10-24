@@ -106,6 +106,7 @@ test("recovers context on demand without loading the Manual into every session",
   expect(instructions).toContain("an inbox notice is not missing context");
   expect(instructions).toContain("coforge message search");
   expect(instructions).toContain("read --around");
+  expect(instructions).toContain("`│` continues prior body; not a new message.");
   expect(instructions).not.toContain("coforge manual get");
   expect(instructions).not.toContain("## Help");
   expect(instructions).not.toContain("automatically join");

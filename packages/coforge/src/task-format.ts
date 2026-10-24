@@ -9,6 +9,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 import { formatUtcTimestamp } from "#src/message-format";
+import { fenceMessageBody } from "#src/message-body-format";
 
 /** The status filter a `task list` was given; `undefined` when none was passed. */
 export type TaskListStatus = TaskStatus | "all" | undefined;
@@ -39,10 +40,8 @@ function boardRow(task: TaskView): string {
   const owner = task.owner ? ` → @${task.owner.handle}${ownerMark ? ` [${ownerMark}]` : ""}` : "";
   const creatorMark = departure(task.creator);
   const creator = ` (by @${task.creator.handle}${creatorMark ? ` [${creatorMark}]` : ""})`;
-  const details = task.description
-    ? `\n  details: ${task.description.replace(/\n/g, "\n           ")}`
-    : "";
-  return `#${task.number} [${task.status}] ${task.title}${owner}${creator} msg=${shortId(task.messageId)} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
+  const details = task.description ? `\n  details: ${fenceMessageBody(task.description)}` : "";
+  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} msg=${shortId(task.messageId)} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
 }
 
 /** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
@@ -106,7 +105,7 @@ function threadReply(target: string, task: TaskView): string {
 export function formatTasksCreated(target: string, result: TaskResult): string {
   const rows = result.tasks.map(
     (task) =>
-      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} msg=${shortId(task.messageId)}${resourceReceipt(task)} "${task.title}"`,
+      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} msg=${shortId(task.messageId)}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
   );
   const receipt = result.assignmentReceipt
     ? [
@@ -135,7 +134,7 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
 /** The Task `coforge task convert` made from a message, and its thread. */
 export function formatTaskConverted(target: string, task: TaskView): string {
   return [
-    `Converted msg=${shortId(task.messageId)} to task #${task.number} [${task.status}] ${assigneeField(task)} "${task.title}"`,
+    `Converted msg=${shortId(task.messageId)} to task #${task.number} [${task.status}] ${assigneeField(task)} "${fenceMessageBody(task.title)}"`,
     "",
     "To follow up in the task's thread:",
     threadReply(target, task),
@@ -168,13 +167,10 @@ export function formatTaskAmended(result: TaskResult): string {
   const details =
     task.description === null || task.description === undefined
       ? "details: <none>"
-      : `details:\n${task.description
-          .split("\n")
-          .map((line) => `  ${line}`)
-          .join("\n")}`;
+      : `details:\n  ${fenceMessageBody(task.description)}`;
   return [
     `#${task.number} amended — revision ${task.revision}${event ? `, event seq ${event.seq}.` : "; no change recorded."}`,
-    `title: ${task.title}`,
+    `title: ${fenceMessageBody(task.title)}`,
     details,
   ].join("\n");
 }

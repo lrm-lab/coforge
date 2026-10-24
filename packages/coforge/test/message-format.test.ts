@@ -127,7 +127,7 @@ test("formatMessageLine renders the shared bracket line with attachment and task
 test("channel role context does not consume the message summary budget", () => {
   const context = "[CoForge current channel role: member; coordinator=none]\n";
   const rendered = formatMessageLine(message({ body: context + "x".repeat(201) }));
-  expect(rendered).toContain(context + "x".repeat(200) + "…(+1 chars,");
+  expect(rendered).toContain(context + "  │ " + "x".repeat(200) + "…(+1 chars,");
 });
 
 test("formatMessageLine summarizes a long plain-channel body and keeps DM/thread text intact", () => {

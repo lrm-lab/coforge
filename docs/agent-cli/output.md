@@ -7,7 +7,8 @@ The CLI renders five plain-text formats:
   attachment suffix (naming every attachment on the message, e.g.
   `[2 attachments: a.txt (id:...), b.png (id:...) — use ... to download]`)
   and/or a task suffix when present. `--json` output always carries an
-  `attachments` array (possibly empty) on every message.
+  `attachments` array (possibly empty) on every message. A line beginning with
+  `│` is a continuation of the preceding message body, not a new message.
 - **Read window** (`message read`): a header reporting how many messages
   were returned and whether older/newer messages exist, with the exact
   `--before`/`--after` cursor command to paste; numbered lines each carry a

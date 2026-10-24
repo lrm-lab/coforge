@@ -1,25 +1,19 @@
 import { channelSummaryBody } from "./message-summary";
+import { fenceMessageBody } from "./message-body-format";
 import {
   renderMessageSender,
   UUID_LIKE_PATTERN,
   type AgentMessageRecord,
 } from "@lrm/coforge-sdk/internal";
 
-/** The sender exactly as an Agent-visible message line shows it:
- * `system` for a system message, `@handle — description` when a description exists, `@handle`
- * alone otherwise. */
 function messageSender(message: AgentMessageRecord): string {
   return renderMessageSender(message.senderKind, message.senderHandle, message.senderDescription);
 }
 
-/** Any target containing `:` is a thread target (a channel/DM plus a rooting message id). */
 function isThreadTarget(target: string): boolean {
   return target.includes(":");
 }
 
-/** The short form of a message id: its first twelve hex characters with the first dash kept
- * (`xxxxxxxx-xxxx`) — the full UUIDv7 millisecond timestamp, so it stays unambiguous except for
- * ids minted in the same millisecond. */
 function shortId(id: string): string {
   return id.slice(0, 13);
 }
@@ -28,7 +22,6 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-/** Renders an ISO `createdAt` timestamp as UTC `YYYY-MM-DD HH:MM:SSZ`. */
 export function formatUtcTimestamp(createdAt: string): string {
   const date = new Date(createdAt);
   const year = date.getUTCFullYear();
@@ -66,7 +59,7 @@ export function formatTaskWorkflowHint(messages: readonly AgentMessageRecord[]):
 /** The message line shared by `message check`, `message resolve`, and held Task context. */
 export function formatMessageLine(message: AgentMessageRecord): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
-  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${channelSummaryBody(message)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
+  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(channelSummaryBody(message))}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
 }
 
 /** What an Agent notified of a channel message from outside that channel may do about it. */
@@ -106,7 +99,7 @@ export function formatReadWindow(
   messages.forEach((message, index) => {
     const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
     lines.push(
-      `[${index + 1}/${messages.length} msg=${message.id} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}] ${messageSender(message)}: ${message.body}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}`,
+      `[${index + 1}/${messages.length} msg=${message.id} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}] ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}`,
     );
   });
 
@@ -232,7 +225,7 @@ export function formatSearchResults(query: string, response: SearchResponse): st
       `Time: ${formatUtcTimestamp(message.createdAt)}`,
       "",
       "<preview>",
-      renderSearchPreview(message.body, query),
+      fenceMessageBody(renderSearchPreview(message.body, query)),
       "</preview>",
       "</result>",
     ].join("\n"),
