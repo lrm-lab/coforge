@@ -176,8 +176,6 @@ export type AttachmentUploadInvocation = {
 };
 export type InboxInvocation = { command: "inbox-check"; json?: boolean };
 export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
-/** `channel info|members|join|leave|create|update|lifecycle|add-member|remove-member`, disjoint
- * from `ChannelInvocation` above (`mute`/`unmute`, unchanged). */
 export type ChannelManagementInvocation = {
   command: "channel-manage";
   channel: Omit<ChannelCommand, "idempotencyKey">;
@@ -773,6 +771,7 @@ function parseWorkspaceInfoArgs(args: readonly string[]): WorkspaceInfoInvocatio
       (flag !== "--agents" &&
         flag !== "--humans" &&
         flag !== "--projects" &&
+        flag !== "--computers" &&
         flag !== "--full" &&
         !args[i + 1])
     )
@@ -782,6 +781,7 @@ function parseWorkspaceInfoArgs(args: readonly string[]): WorkspaceInfoInvocatio
     if (flag === "--agents") result.agents = true;
     else if (flag === "--humans") result.humans = true;
     else if (flag === "--projects") result.projects = true;
+    else if (flag === "--computers") result.computers = true;
     else if (flag === "--full") result.full = true;
     else if (flag === "--query") result.query = args[++i]!.trim() || undefined;
     else {
