@@ -120,9 +120,12 @@ test.skipIf(!connectionString)(
       const recent = (await freshness.readRecent(3)).unseen;
       recording = false;
       const bodies = (rows: readonly { body: string }[]) => rows.map((row) => row.body);
-      expect(bodies(pending)).toEqual(["message 20004", "message 20005", "message 20006"]);
+      const expected = ["message 20004", "message 20005", "message 20006"].map(
+        (body) => `[CoForge current channel role: member; coordinator=none]\n${body}`,
+      );
+      expect(bodies(pending)).toEqual(expected);
       expect(count).toBe(5);
-      expect(bodies(recent)).toEqual(["message 20004", "message 20005", "message 20006"]);
+      expect(bodies(recent)).toEqual(expected);
 
       let touched = 0;
       for (const { query, params } of reads) {

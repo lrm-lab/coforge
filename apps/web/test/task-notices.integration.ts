@@ -426,7 +426,7 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
   );
   expect(pending.filter((delivery) => delivery.messageId === agentReceipt.messageId)).toEqual([
     expect.objectContaining({
-      body: agentReceipt.content,
+      body: `[CoForge current channel role: member; coordinator=none]\n${agentReceipt.content}`,
       target: `#${channel.channelName}`,
       mentionsAgent: true,
     }),
