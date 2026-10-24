@@ -199,7 +199,7 @@ test("formatReadWindow reports older/newer availability and includes an around l
   );
   const lines = output.split("\n");
   expect(lines[0]).toBe(
-    'Read window: 2 returned, oldest to newest. Older exist: coforge message read --target "#general" --before 11111111-0000. Newer exist: coforge message read --target "#general" --after 22222222-0000.',
+    'Read window: 2 returned, seq 1, oldest to newest. Older exist: coforge message read --target "#general" --before 11111111-0000. Newer exist: coforge message read --target "#general" --after 22222222-0000.',
   );
   expect(lines[1]).toContain("Coverage: top-level messages");
   expect(lines[2]).toBe(
@@ -222,7 +222,7 @@ test("formatReadWindow says No older/No newer when neither exists and omits the 
     hasOlder: false,
     hasNewer: false,
   });
-  expect(output).toContain("Read window: 1 returned, oldest to newest. No older. No newer.");
+  expect(output).toContain("Read window: 1 returned, seq 1, oldest to newest. No older. No newer.");
   expect(output).not.toContain("Around:");
 });
 

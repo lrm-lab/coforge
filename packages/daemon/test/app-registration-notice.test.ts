@@ -178,6 +178,15 @@ test("a running Agent reads the secret from its inbox; it is on no disk and in n
           return `sk_agent_${"a".repeat(43)}`;
         },
         async revokeAgentApiKey() {},
+        async agentMessage(request: { idempotencyKey: string }) {
+          return {
+            idempotencyKey: request.idempotencyKey,
+            accepted: true,
+            attentionCount: 0,
+            messages: [],
+            hasMore: false,
+          };
+        },
         onAppRegistrationNotice(callback: (value: AppRegistrationNotice) => void) {
           receive = callback;
           return () => {};
@@ -201,6 +210,13 @@ test("a running Agent reads the secret from its inbox; it is on no disk and in n
     // The Agent is told only that an item is waiting; the secret is read from the inbox.
     expect(notices).toEqual(["New app item available. Run coforge inbox check."]);
     const context = runtime.issueAgentContext("agent-a");
+    // An empty `message check` only counts the waiting items; it must not consume them.
+    const checked = await runtime.agentMessage(
+      context,
+      { idempotencyKey: "message-check", context, operation: "check" },
+      `sk_agent_${"a".repeat(43)}`,
+    );
+    expect(checked.appItemsPending).toBe(1);
     const inbox = await runtime.inbox(context, {
       idempotencyKey: "check",
       context,

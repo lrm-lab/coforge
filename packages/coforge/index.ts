@@ -102,6 +102,7 @@ import {
 
 export type { WorkspaceInfoInvocation, WorkspaceInfoOptions, WorkspaceInfoResult };
 import { parseMessageSearchArgs, type MessageSearchOptions } from "#src/message-search-args";
+import { formatMessageCheck, type MessageCheckResult } from "#src/message-check-format";
 import { parseMessageReadArgs, type MessageReadOptions } from "#src/message-read-args";
 
 export type { MessageSearchOptions };
@@ -274,7 +275,7 @@ export type MentionInvocation =
       json?: boolean;
     };
 export type MessageTransport = {
-  check(target?: string): Promise<{ messages: AgentMessageRecord[]; hasMore?: boolean }>;
+  check(target?: string): Promise<MessageCheckResult>;
   read(target: string, options?: MessageReadOptions): Promise<unknown>;
   search?(options: MessageSearchOptions): Promise<unknown>;
   send(
@@ -1398,25 +1399,11 @@ function formatVersionInfo(info: VersionInfo): string {
   return lines.join("\n");
 }
 
-function formatMessageCheck(result: { messages: AgentMessageRecord[]; hasMore?: boolean }): string {
-  if (result.messages.length === 0) return "No new messages.";
-  const footer = result.hasMore
-    ? "More messages are pending. Run `coforge message check` again."
-    : "No more new messages.";
-  const body = result.messages.map(formatMessage).join("\n");
-  const hint = formatTaskWorkflowHint(result.messages);
-  return hint ? `${body}\n\n${hint}\n${footer}` : `${body}\n\n${footer}`;
-}
-
-function formatMessage(message: AgentMessageRecord): string {
-  return formatMessageLine(message);
-}
-
 function formatMessageResolve(result: unknown): string {
   const response = result as { messages?: AgentMessageRecord[] };
   const message = response.messages?.[0];
   if (!message) throw new Error("message not found or not visible to this Agent");
-  const line = formatMessage(message);
+  const line = formatMessageLine(message);
   const hint = formatTaskWorkflowHint([message]);
   return hint ? `${line}\n${hint}` : line;
 }
@@ -2355,7 +2342,7 @@ function formatHeldTaskRequest(result: TaskResult, reviewerIsolation: boolean): 
     const count = result.newMessageCount ?? result.withheldMessageCount ?? 0;
     return `Reviewer-isolation freshness hold: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
   }
-  const messages = result.heldMessages?.map(formatMessage).join("\n");
+  const messages = result.heldMessages?.map(formatMessageLine).join("\n");
   return `Task request held.${messages ? ` Review newer messages:\n${messages}` : ""}`;
 }
 

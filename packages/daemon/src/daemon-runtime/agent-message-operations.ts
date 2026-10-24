@@ -9,7 +9,6 @@ import {
   type LocalAgentMessageRequest,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
-import { AGENT_MESSAGE_DRAFT_TTL_MS } from "#src/persistence/agent-message-draft-store";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import {
@@ -24,7 +23,7 @@ import {
 } from "./agent-inbox-freshness-activity";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AGENT_MESSAGE_BODY_REQUIRED_MESSAGE, agentMessageBody } from "./agent-message-body";
-import { AgentPreflightError } from "./agent-preflight-error";
+import { AgentPreflightError, expiredDraftError } from "./agent-preflight-error";
 import { settleAgentSend } from "./agent-send-settlement";
 import { settleHistoryRead } from "./agent-history-read";
 import { searchPage, searchFields } from "./search-page";
@@ -38,26 +37,6 @@ const logger = getLogger(["coforge", "daemon", "agent-message"]);
 
 /** Bounds how many events pages one `check` drains before reporting `hasMore: true` and yielding. */
 const MAX_EVENT_DRAIN_ROUNDS = 50;
-
-/** `SEND_DRAFT_EXPIRED`: nothing is sent. The entry is gone, so the discarded body travels once,
- * in `details.discarded_draft`, which the CLI prints as its last copy. */
-function expiredDraftError(target: string, content: string, savedAt: number): AgentPreflightError {
-  const savedAtIso = new Date(savedAt).toISOString();
-  return new AgentPreflightError(
-    `The saved draft for this target expired and was discarded: drafts are kept for ${AGENT_MESSAGE_DRAFT_TTL_MS / 60_000} minutes, and this one was saved at ${savedAtIso}. This command did not send anything.`,
-    "SEND_DRAFT_EXPIRED",
-    {
-      draftSaved: false,
-      retryable: false,
-      suggestedNextAction:
-        "If this draft came from a failed send whose outcome was never confirmed, the original " +
-        "may already have been delivered under its idempotency key: read the target and confirm " +
-        "before resending, or you may post it twice. To send the discarded body, send it normally: " +
-        `\`coforge message send --target ${JSON.stringify(target)}\` with the body on stdin.`,
-    },
-    { discarded_draft: { content, saved_at: savedAtIso } },
-  );
-}
 
 /** An activity is narrated for exactly the two hold decisions; a send that reached the provider
  * (`forward`/`bypass`) has none. */
@@ -73,6 +52,8 @@ export type AgentMessageOperationsPorts = Readonly<{
   isMemoryAgent?(agentId: string): boolean;
   /** The Agent's send drafts. */
   inbox(agentId: string): AgentInboxStateMachine;
+  /** How many App Inbox items wait for the Agent. */
+  appItemsPending?(agentId: string): Promise<number>;
   /** The current transport, read at each request; the runtime has checked it can carry Agent
    * messages. */
   readonly transport: Pick<DaemonConnectionClient, "agentMessage" | "reconcileAgentSend">;
@@ -173,6 +154,9 @@ export class AgentMessageOperations {
       messages,
       messageId: "",
       hasMore,
+      // The App Inbox is read only to say so when a check found no message.
+      appItemsPending:
+        messages.length === 0 ? await this.#ports.appItemsPending?.(agentId) : undefined,
     };
   }
 

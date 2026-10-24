@@ -10,6 +10,7 @@ import {
   messageDeliveryTarget,
   toAgentMessage,
   type DirectConversationMessageRow,
+  readPositionReport,
   readWindowAround,
 } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
@@ -1504,13 +1505,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           : false,
       modelSeenUpToSeq,
       consumptionScope,
-      ...(page.unread
-        ? {
-            unreadCursorBefore: readThrough,
-            readPositionAfter: modelSeenUpToSeq ?? readThrough,
-            moreUnread: hasMore,
-          }
-        : {}),
+      ...readPositionReport(page.unread, isHistoryRead, {
+        readThrough,
+        modelSeenUpToSeq,
+        hasMore,
+      }),
     };
   }
 

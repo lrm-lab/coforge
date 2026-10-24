@@ -14,8 +14,6 @@ import {
   LocalRpcRequestSchema,
   LocalRpcResponseSchema,
   AgentMessageResponseSchema,
-  UsageScanRequestSchema,
-  UsageScanResponseSchema,
 } from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
 import { assertValidMessageSender, type MessageSenderKind } from "./message-sender";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
@@ -36,34 +34,6 @@ export const LOCAL_RPC_METHODS = {
   USAGE_SCAN: "usage:scan",
 } as const;
 export * from "./local-inbox";
-export type UsageScanRequest = { protocolMajor: number; requestId: string; provider: string };
-export type UsageScanResponse = {
-  protocolMajor: number;
-  requestId: string;
-  accepted: boolean;
-  status: string;
-  message?: string;
-  snapshotJson?: Uint8Array;
-};
-export const encodeUsageScanRequest = (v: UsageScanRequest) =>
-  toBinary(UsageScanRequestSchema, create(UsageScanRequestSchema, v));
-export const decodeUsageScanRequest = (b: Uint8Array): UsageScanRequest => {
-  const v = fromBinary(UsageScanRequestSchema, b);
-  return { protocolMajor: v.protocolMajor, requestId: v.requestId, provider: v.provider };
-};
-export const encodeUsageScanResponse = (v: UsageScanResponse) =>
-  toBinary(UsageScanResponseSchema, create(UsageScanResponseSchema, v));
-export const decodeUsageScanResponse = (b: Uint8Array): UsageScanResponse => {
-  const v = fromBinary(UsageScanResponseSchema, b);
-  return {
-    protocolMajor: v.protocolMajor,
-    requestId: v.requestId,
-    accepted: v.accepted,
-    status: v.status,
-    message: v.message || undefined,
-    snapshotJson: v.snapshotJson.length ? v.snapshotJson : undefined,
-  };
-};
 /** A structured @mention binding: a handle claimed to name a specific actor. */
 export type LocalMentionSelector = { type: "user" | "agent"; id: string; name: string };
 
@@ -265,6 +235,7 @@ export type AgentMessageResponse = LocalSearchPaging & {
   foldedMessageCount?: number;
   foldedFromSequence?: number;
   foldedThroughSequence?: number;
+  appItemsPending?: number;
   /** `message send` only: pending messages a bypassed hold chose not to review; empty otherwise. */
   recentUnread?: AgentMessageRecord[];
   /** `message send` only: mentions of people outside the channel, which notified no one. */
@@ -387,6 +358,7 @@ export function encodeAgentMessageResponse(value: AgentMessageResponse): Uint8Ar
         safeValue.readPositionAfter === undefined ? undefined : BigInt(safeValue.readPositionAfter),
       moreUnread: safeValue.moreUnread,
       foldedMessageCount: safeValue.foldedMessageCount,
+      appItemsPending: safeValue.appItemsPending,
       foldedFromSequence:
         safeValue.foldedFromSequence === undefined
           ? undefined
@@ -472,6 +444,7 @@ export function decodeAgentMessageResponse(bytes: Uint8Array): AgentMessageRespo
     readPositionAfter: v.readPositionAfter === undefined ? undefined : Number(v.readPositionAfter),
     moreUnread: v.moreUnread,
     foldedMessageCount: v.foldedMessageCount,
+    appItemsPending: v.appItemsPending,
     foldedFromSequence:
       v.foldedFromSequence === undefined ? undefined : Number(v.foldedFromSequence),
     foldedThroughSequence:

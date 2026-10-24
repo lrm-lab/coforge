@@ -44,6 +44,10 @@ test("a history read anchored by sequence number reads what the unread read's re
     const again = await read({ after: String(unread.unreadCursorBefore) });
     expect(sequences(again)).toEqual(sequences(unread));
 
+    // A plain read says where the position stood before it; an anchored one says nothing of it.
+    expect((await read({ after: "0" })).unreadCursorBefore).toBeUndefined();
+    expect((await read({})).unreadCursorBefore).toBe(three.sequence);
+
     // Sequence zero is the start of the conversation; there is nothing older.
     const fromStart = await read({ after: "0", limit: 2 });
     expect(sequences(fromStart)).toEqual([one.sequence, two.sequence]);

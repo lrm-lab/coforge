@@ -2145,7 +2145,7 @@ test("message check hides server ordering fields", async () => {
   });
 
   expect(output).toBe(
-    "[target=@ada msg=message-7 time=2026-09-03 10:00:00Z type=human] @ada: Can you investigate?\n\nNo more new messages.",
+    "[target=@ada msg=message-7 time=2026-09-03 10:00:00Z type=human] @ada: Can you investigate?\n\nNo more new inbox messages.",
   );
 });
 
@@ -2202,17 +2202,6 @@ test("thread target and short parent range anchor pass through without a separat
   ).toThrow();
 });
 
-test("message check says plainly when there are no pending messages", async () => {
-  const output = await run(["message", "check"], {
-    check: async () => ({ accepted: true, messages: [] }),
-    read: async () => undefined,
-    send: async () => undefined,
-    view: async () => ({ bytes: new Uint8Array() }),
-  });
-
-  expect(output).toBe("No new messages.");
-});
-
 test("message check prints one Tasks manual pointer for a window with tracked work", async () => {
   const output = await run(["message", "check"], {
     check: async () => ({
@@ -2253,7 +2242,7 @@ test("message check prints one Tasks manual pointer for a window with tracked wo
   expect(output).toContain("[task #8 status=todo]");
   expect(output).toContain("Tracked Tasks: coforge manual get tasks");
   expect((output as string).split("coforge manual get tasks")).toHaveLength(2);
-  expect(output).toContain("No more new messages.");
+  expect(output).toContain("No more new inbox messages.");
 });
 
 test("message read hides server ordering fields", async () => {

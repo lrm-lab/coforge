@@ -771,12 +771,9 @@ export {
   encodeLocalAttachment,
   encodeLocalAttachments,
   decodeLocalAttachments,
-  encodeUsageScanRequest,
-  decodeUsageScanRequest,
-  encodeUsageScanResponse,
-  decodeUsageScanResponse,
 } from "./local-daemon";
 export * from "./runner-hold";
+export * from "./usage-scan";
 export type {
   AgentMessageRecord,
   MessageTaskMetadata,
@@ -801,8 +798,6 @@ export type {
   InboxResponse,
   InboxEntry,
   AppInboxItem,
-  UsageScanRequest,
-  UsageScanResponse,
 } from "./local-daemon";
 export {
   encodeDaemonRuntimeReadyRequest,

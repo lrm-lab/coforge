@@ -111,6 +111,8 @@ message AgentMessageResponse {
   optional uint32 folded_message_count = 35;
   optional uint64 folded_from_sequence = 36;
   optional uint64 folded_through_sequence = 37;
+  // `message check` only, when it returned no messages: App Inbox items waiting for the Agent.
+  optional uint32 app_items_pending = 38;
   reserved 7, 9;
   reserved "side_effect_decision", "anyway_allowed";
 }

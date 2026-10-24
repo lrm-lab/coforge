@@ -83,7 +83,8 @@ function readWindowHeader(
   const newer = response.hasNewer
     ? `Newer exist: coforge message read --target "${target}" --after ${shortId(messages.at(-1)!.id)}.`
     : "No newer.";
-  return `Read window: ${messages.length} returned, oldest to newest. ${older} ${newer}`;
+  const range = sequenceRange(messages[0]!.sequence, messages.at(-1)!.sequence);
+  return `Read window: ${messages.length} returned, ${range}, oldest to newest. ${older} ${newer}`;
 }
 
 export function formatReadWindow(
@@ -124,6 +125,10 @@ export function formatReadWindow(
       `Around: ${options.around}. Your read position did not move. To read new messages and mark them read, use --unread.`,
     );
   if (folded) lines.push(folded);
+  if (!options.unread && response.unreadCursorBefore !== undefined)
+    lines.push(
+      `Server unread cursor before this read: seq ${response.unreadCursorBefore}. Use coforge message read --target "${target}" --after ${response.unreadCursorBefore} to browse newer messages.`,
+    );
   const taskHint = formatTaskWorkflowHint(messages);
   if (taskHint) lines.push(taskHint);
   lines.push("");

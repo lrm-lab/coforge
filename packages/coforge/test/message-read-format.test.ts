@@ -146,3 +146,14 @@ test("an unread page with nothing from others but more beyond it says to keep re
     'More unread remain. Next: coforge message read --target "#general" --unread',
   ]);
 });
+
+test("a plain read names the server unread cursor even when it is 0", () => {
+  const output = formatReadWindow(
+    "#general",
+    { messages: [message(1)], unreadCursorBefore: 0 },
+    {},
+  );
+  expect(output).toContain(
+    'Server unread cursor before this read: seq 0. Use coforge message read --target "#general" --after 0 to browse newer messages.',
+  );
+});

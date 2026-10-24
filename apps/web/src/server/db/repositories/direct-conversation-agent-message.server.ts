@@ -204,3 +204,22 @@ export async function readWindowAround(
     hasNewer: afterRows.length > afterCount,
   };
 }
+
+/**
+ * Where the Agent's read position stood before a read and where it moved to, for the reads that
+ * move it from the position: an unread read reports both and whether more remain, and a plain
+ * read without an anchor reports where it started, so the CLI can say what lies newer.
+ */
+export function readPositionReport(
+  unread: boolean | undefined,
+  isHistoryRead: boolean,
+  read: { readThrough: number; modelSeenUpToSeq: number | null; hasMore: boolean },
+) {
+  if (unread)
+    return {
+      unreadCursorBefore: read.readThrough,
+      readPositionAfter: read.modelSeenUpToSeq ?? read.readThrough,
+      moreUnread: read.hasMore,
+    };
+  return isHistoryRead ? {} : { unreadCursorBefore: read.readThrough };
+}

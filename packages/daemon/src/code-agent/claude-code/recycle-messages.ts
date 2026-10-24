@@ -8,7 +8,7 @@ import { readTranscriptTailLines, transcriptRecords } from "./session-transcript
  * `coforge` CLI. Inbound: a tool result of `coforge message check|read|resolve` holds lines
  * `[target=#coforge:01a16774-5cc3 msg=01a16779-a316 time=2026-10-23 06:36:27Z type=human] @user: body`
  * (`read` prints `[1/5 msg=<full id> time=... type=...] @user: body`), ended by
- * `No more new messages.` or a blank line. Outbound: a Bash `tool_use` running
+ * `No more new inbox messages.` (`No more new messages.` in older output) or a blank line. Outbound: a Bash `tool_use` running
  * `coforge message send --target '<target>'` with the body as a heredoc on stdin; its result says
  * `Message sent to ...`, or a held draft that `--send-draft` sends later.
  */

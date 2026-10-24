@@ -34,6 +34,7 @@ import {
 } from "./stalled-turn-indicator";
 import { interruptAgentTurn } from "./turn-interrupt";
 import { heldTaskResult } from "./held-task-result";
+import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
 import {
   OutstandingBackgroundTasks,
   subagentProgressDetail,
@@ -257,35 +258,6 @@ type ActivityLaunch = PublishedActivityLaunch & {
    * fails reports it instead of a generic launch failure, and a delivery to the offline Agent is
    * kept (queued and ACKed) with this Activity restated. */
   offlineError?: ReturnType<typeof buildRuntimeErrorActivity>;
-};
-
-type SessionMode = "create" | "resume";
-
-/** Cloud-supplied identity for one launch; every field falls back to the previous reference. */
-type LaunchRequest = {
-  sessionId?: string;
-  /** The launch's first turn, in place of message recovery (see `AgentStartIntent`). */
-  resumePrompt?: string;
-  /** Server-written text for an Agent that has not introduced itself to its creator; it opens
-   * the launch ahead of recovery and `resumePrompt` (see `AgentStartIntent`). */
-  introductionPrompt?: string;
-  requestId?: string;
-  previousLaunchId?: string;
-  sessionMode?: SessionMode;
-  control?: { controlEpoch?: number; launchId: string };
-  replacedSessionId?: string;
-  /** Set only alongside `replacedSessionId`, threaded from `AgentControl.start()`'s retry
-   * launch through `Runtime.launch(...)`; narrates the retry's cold-start Activity with the
-   * reason that was actually reported. Replaces the old `#pendingSessionInvalidateReason`
-   * side-channel map: a reason can no longer outlive its launch or attach to an unrelated one,
-   * and is never set without being consumed. */
-  invalidateReason?: AgentSessionInvalidateReason;
-};
-
-type AgentProxy = {
-  url: string;
-  issue(agentId: string, agentApiKey: string): string;
-  revoke(token: string): void;
 };
 
 function generateRuntimeInstanceId(): string {
@@ -686,6 +658,7 @@ export class DaemonRuntime {
       attention: this.#messageAttention,
       isMemoryAgent: (agentId) => Boolean(this.memoryFence(agentId)),
       inbox: (agentId) => this.#agentInbox(agentId),
+      appItemsPending: async (agentId) => (await this.#appInbox(agentId)).list().length,
       get transport() {
         return runtime.#transport;
       },
