@@ -30,7 +30,8 @@ const MEMORY_OBSERVER_NOTE = [
 export const MEMORY_PARALLEL_NOTE = [
   "Memory Agent and Task Agent start together on this message.",
   "Memory Agent: retrieve now with ov_experience_find, then publish ONE cited Offer to Task with memory_offer",
-  "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). Do not invent evidence.",
+  "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). If ov_experience_find",
+  "returns no card, publish one short send_channel_message saying no card applies. Do not invent evidence.",
   "Answer every later @memory question from Task the same way, using the task type and progress it states.",
   "Task Agent: ask Memory Agent for prior experience yourself, do not wait for a Hint to show up.",
   "Ask by sending a channel message to the channel this task came from, e.g.",
