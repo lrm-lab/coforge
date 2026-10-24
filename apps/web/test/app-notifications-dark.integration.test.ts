@@ -25,6 +25,7 @@ import {
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.server";
+import { inFreshTestProcess } from "./helpers/fresh-test-process";
 
 /**
  * `app-notifications` ships dark: while the flag file does not define the flag nothing starts
@@ -346,23 +347,30 @@ testWithDatabase(
 
 testWithDatabase(
   "a flag change after shutdown began does not start the queue",
-  async () => {
-    await shutdownAppNotifications();
-    expect(isAppNotificationQueueStarted()).toBe(false);
-    stopListening = undefined;
-    // A reload after shutdown that leaves the flag defined: wait until the module has seen it.
-    const { promise: reloaded, resolve } = Promise.withResolvers<void>();
-    const unlisten = onFeatureFlagsChanged(() => {
-      if (isFeatureDefined("app-notifications")) resolve();
-    });
-    try {
-      await writeFlags({ definesNotifications: true, revision: 1 });
-      await reloaded;
-    } finally {
-      unlisten();
-    }
-    expect(isAppNotificationQueueStarted()).toBe(false);
-    await expect(startAppNotificationQueue(url)).rejects.toThrow();
-  },
-  FLAG_RELOAD_DEADLINE_MS,
+  () =>
+    inFreshTestProcess(
+      import.meta.path,
+      "a flag change after shutdown began does not start the queue",
+      async () => {
+        stopListening = startAppNotificationQueueAtServerStart(db!, url);
+        await shutdownAppNotifications();
+        expect(isAppNotificationQueueStarted()).toBe(false);
+        stopListening = undefined;
+        // A reload after shutdown that leaves the flag defined: wait until the module has seen it.
+        const { promise: reloaded, resolve } = Promise.withResolvers<void>();
+        const unlisten = onFeatureFlagsChanged(() => {
+          if (isFeatureDefined("app-notifications")) resolve();
+        });
+        try {
+          await writeFlags({ definesNotifications: true, revision: 1 });
+          await reloaded;
+        } finally {
+          unlisten();
+        }
+        expect(isAppNotificationQueueStarted()).toBe(false);
+        await expect(startAppNotificationQueue(url)).rejects.toThrow();
+      },
+    ),
+  // The child repeats this file's database setup before watching the flag reload.
+  120_000 + FLAG_RELOAD_DEADLINE_MS,
 );
