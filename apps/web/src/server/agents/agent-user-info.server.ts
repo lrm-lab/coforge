@@ -221,6 +221,7 @@ async function sharedChannelMemberships(
       ...VISIBLE_CONVERSATION_WHERE,
       members: { some: { agentId: callerAgentId, leftAt: null } },
     },
+    orderBy: { channelName: "asc" },
     select: {
       channelName: true,
       members: {

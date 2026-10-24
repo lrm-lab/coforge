@@ -235,13 +235,25 @@ test("pages with --limit and --offset and prints the command for the next page",
     ].join("\n"),
   );
   expect(info(["--agents", "--limit", "1", "--query", "e"])).toContain(
-    'More: coforge workspace info --agents --offset 1 --limit 1 --query "e"',
+    "More: coforge workspace info --agents --offset 1 --limit 1 --query 'e'",
   );
 });
 
-test("the query matches any text field of a row, ignoring case, but not the last post time", () => {
+test("the query matches the text a row is shown as, ignoring case", () => {
   expect(info(["--humans", "--query", "FOUNDER"])).toContain("@ada");
-  expect(info(["--channels", "--query", "2026"])).toContain("Showing 0-0 of 0.");
+  expect(info(["--projects", "--query", "github=acme"])).toContain("Core");
+  expect(info(["--projects", "--query", "p"])).toContain("Showing 0-0 of 0.");
+  expect(info(["--agents", "--query", "member"])).toContain("Showing 0-0 of 0.");
+});
+
+test("a page past the last row says nothing was shown, and the More command quotes the query", () => {
+  expect(info(["--agents", "--offset", "10"])).toContain("(none)\nShowing 0-0 of 2.\n");
+  expect(
+    info(["--agents", "--limit", "1", "--query", "it's $x"], {
+      ...RICH,
+      agents: [agent("it's $x-a"), agent("it's $x-b")],
+    }),
+  ).toContain("More: coforge workspace info --agents --offset 1 --limit 1 --query 'it'\\''s $x'");
 });
 
 test("several sections print one after another", () => {

@@ -38,10 +38,11 @@ export function formatUserInfo(
       lines.push(`${membership.channel} [${[...status, "not archived"].join(", ")}]`);
     }
   const total = memberships.length;
-  const start = total === 0 ? 0 : Math.min(offset + 1, total);
-  const end = Math.min(offset + limit, total);
+  const past = offset >= total;
+  const start = past ? 0 : offset + 1;
+  const end = past ? 0 : Math.min(offset + limit, total);
   const footer = [`\nShowing ${start}-${end} of ${total}.`];
-  if (end < total)
+  if (!past && end < total)
     footer.push(`More: coforge user info @${page.name} --offset ${end} --limit ${limit}`);
   return `${lines.join("\n")}${footer.join("\n")}\n`;
 }

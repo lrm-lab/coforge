@@ -155,21 +155,21 @@ function computerRow(computer: WorkspaceInfoComputer): string {
 }
 
 function pageFooter(page: Page): string {
-  const start = page.total === 0 ? 0 : Math.min(page.offset + 1, page.total);
-  const end = Math.min(page.offset + page.limit, page.total);
+  const past = page.offset >= page.total;
+  const start = past ? 0 : page.offset + 1;
+  const end = past ? 0 : Math.min(page.offset + page.limit, page.total);
   const lines = [`\nShowing ${start}-${end} of ${page.total}.`];
   if (page.nextCommand && end < page.total) lines.push(`More: ${page.nextCommand}`);
   return `${lines.join("\n")}\n`;
 }
 
-/** The row matches when any of its text fields contains the query, ignoring case. */
-function includesQuery(row: object, query: string | undefined): boolean {
+/** The row matches when the text it is shown as contains the query, ignoring case. */
+function includesQuery(text: string, query: string | undefined): boolean {
   const needle = query?.trim().toLowerCase();
-  if (!needle) return true;
-  return Object.entries(row)
-    .filter(([key]) => key !== "lastPostAt")
-    .some(([, value]) => typeof value === "string" && value.toLowerCase().includes(needle));
+  return !needle || text.toLowerCase().includes(needle);
 }
+
+const shellQuoted = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 function nextCommand(
   section: WorkspaceInfoSection,
@@ -186,7 +186,7 @@ function nextCommand(
     `--offset ${nextOffset}`,
     `--limit ${limit}`,
   ];
-  if (options.query?.trim()) parts.push(`--query ${JSON.stringify(options.query.trim())}`);
+  if (options.query?.trim()) parts.push(`--query ${shellQuoted(options.query.trim())}`);
   if (options.joined) parts.push("--joined");
   return parts.join(" ");
 }
@@ -235,7 +235,7 @@ function section(
     rows: readonly T[],
     row: (item: T) => string,
   ) => {
-    const matching = rows.filter((item) => includesQuery(item, options.query));
+    const matching = rows.filter((item) => includesQuery(row(item), options.query));
     const lines = [`## ${title}`, "", ...intro];
     const shown = matching.slice(offset, offset + limit);
     if (shown.length === 0) lines.push("(none)");

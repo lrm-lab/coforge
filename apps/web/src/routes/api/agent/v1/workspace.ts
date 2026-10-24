@@ -117,7 +117,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
               status,
               activity: null,
               activityDetail: availability ?? null,
-              role: agent.role,
+              role: agent.id === principal.agentId ? (serverRole ?? agent.role) : agent.role,
             })),
             projects,
             ...(serverRole ? { serverRole } : {}),

@@ -182,7 +182,7 @@ test("workspace info never includes another Agent's runtime data", async () => {
       status: "online",
       activity: null,
       activityDetail: null,
-      role: "admin",
+      role: "member",
     },
     {
       name: "helper",
