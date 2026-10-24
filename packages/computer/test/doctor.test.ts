@@ -144,6 +144,21 @@ test("doctor reports a held mutation lock as an actionable local condition", () 
   });
 });
 
+test("doctor treats an unattached machine as an actionable setup condition", () => {
+  const report = createDoctorReport({
+    ...HEALTHY_REPORT,
+    workspaces: { readable: true, workspaces: [] },
+  });
+
+  expect(report.ok).toBe(false);
+  expect(report.checks).toContainEqual({
+    name: "workspaces",
+    ok: false,
+    detail: "no workspace bindings configured",
+  });
+  expect(renderDoctorHuman(report)).toContain("  Next: coforge-computer setup --workspace <slug>");
+});
+
 test("doctor fails when the active install is not discoverable on PATH", () => {
   const report = createDoctorReport({
     ...HEALTHY_REPORT,

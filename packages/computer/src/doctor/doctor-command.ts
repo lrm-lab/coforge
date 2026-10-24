@@ -152,7 +152,12 @@ function nextDoctorCommand(name: string, detail: string): string | undefined {
     if (detail.startsWith("machine mutation lock is held")) return "coforge-computer status";
     return "coforge-computer restart --supervisor";
   }
-  if (name === "workspaces") return "coforge-computer status";
+  if (name === "workspaces") {
+    if (detail === "no workspace bindings configured") {
+      return "coforge-computer setup --workspace <slug>";
+    }
+    return "coforge-computer status";
+  }
   if (name === "leftover-upgrade-jobs") return "coforge-computer restart --supervisor";
   return undefined;
 }
@@ -173,7 +178,7 @@ function checkWorkspaces(status: ComputerStatusReport): DoctorCheck {
     return { name: "workspaces", ok: false, detail: status.workspaces.error };
   }
   if (status.workspaces.workspaces.length === 0) {
-    return { name: "workspaces", ok: true, detail: "no workspace bindings configured" };
+    return { name: "workspaces", ok: false, detail: "no workspace bindings configured" };
   }
   const failures = status.workspaces.workspaces.flatMap(workspaceProblems);
   if (failures.length > 0) return { name: "workspaces", ok: false, detail: failures.join("; ") };
