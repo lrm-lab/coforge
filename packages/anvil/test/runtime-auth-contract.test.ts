@@ -6,7 +6,7 @@ import {
   type RuntimeAuthLoginEvent,
   isRuntimeAuthProvider,
   normalizeRuntimeAuthCode,
-} from "@lrm/coforge-anvil";
+} from "#src/contract";
 
 test("runtime auth is limited to the providers with a supported login flow", () => {
   expect(RUNTIME_AUTH_PROVIDERS).toEqual(["claude-code", "codex"]);
