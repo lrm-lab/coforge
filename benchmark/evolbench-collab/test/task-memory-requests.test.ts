@@ -295,6 +295,7 @@ test("IR par protocol: Task searches documents itself, Memory only offers experi
   expect(text).not.toContain("hidden-answer");
   expect(text).toContain("[12345]");
   expect(text).toContain("you never search documents");
+  expect(text).toContain("none of the returned cards applies");
   expect(text).toContain("a body that starts with @memory");
   expect(text).toContain("(1) question type");
   expect(text).toContain("A. first, before your first search");

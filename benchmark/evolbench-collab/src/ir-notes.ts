@@ -5,6 +5,8 @@ export const MEMORY_PARALLEL_NOTE_IR = [
   "Memory Agent: you never search documents. Retrieve prior search and verification experience with ov_experience_find",
   "(describe the question type and the failure to avoid; deliverable 'text'), then publish ONE cited Offer to Task with memory_offer",
   "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). Do not invent evidence.",
+  "If nothing was returned, or none of the returned cards applies to this question, send ONE short plain channel message",
+  "saying no card applies (if the server first refuses it because an Offer is required, send the same message once more).",
   "Answer every later @memory question from Task the same way, using the question type and progress it states.",
   "Task Agent: search the corpus yourself with ov_find / ov_read and start right away; also ask Memory Agent for experience",
   "yourself, do not wait for a Hint to show up. Ask by sending a channel message to the channel this task came from, e.g.",
