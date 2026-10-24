@@ -39,6 +39,7 @@ export function createDoctorReport(status: ComputerStatusReport): DoctorReport {
   const checks = [
     checkInstall(status),
     checkSupervisor(status),
+    checkLocks(status),
     checkLoginShellPath(status),
     checkWorkspaces(status),
     checkLeftoverJobs(status),
@@ -58,9 +59,12 @@ export function renderDoctorJson(report: DoctorReport): string {
 export function renderDoctorHuman(report: DoctorReport): string[] {
   return [
     "CoForge Computer doctor",
-    ...report.checks.map(
-      (check) => `${check.ok ? "✓" : "✗"} ${check.name}: ${terminalText(check.detail)}`,
-    ),
+    ...report.checks.flatMap((check) => {
+      const lines = [`${check.ok ? "✓" : "✗"} ${check.name}: ${terminalText(check.detail)}`];
+      const next = check.ok ? undefined : nextDoctorCommand(check.name, check.detail);
+      if (next) lines.push(`  Next: ${next}`);
+      return lines;
+    }),
     `Result: ${report.ok ? "healthy" : "action required"}`,
   ];
 }
@@ -105,6 +109,52 @@ function checkSupervisor(status: ComputerStatusReport): DoctorCheck {
     return { name: "supervisor", ok: false, detail: "supervisor job is not loaded" };
   }
   return { name: "supervisor", ok: true, detail: "local RPC is reachable" };
+}
+
+function checkLocks(status: ComputerStatusReport): DoctorCheck {
+  if (status.locks.machineMutationLock === "held") {
+    return {
+      name: "locks",
+      ok: false,
+      detail:
+        "machine mutation lock is held; an install, upgrade, repair, or recovery may be running",
+    };
+  }
+  if (status.locks.machineMutationLock === "unknown") {
+    return {
+      name: "locks",
+      ok: false,
+      detail: "machine mutation lock could not be inspected",
+    };
+  }
+  if (!status.supervisor.loaded && status.locks.supervisorLock.present) {
+    return {
+      name: "locks",
+      ok: false,
+      detail: `supervisor lock is held by pid ${status.locks.supervisorLock.ownerPid ?? "unknown"}, but the supervisor job is not loaded`,
+    };
+  }
+  return {
+    name: "locks",
+    ok: true,
+    detail: `machine mutation lock free; supervisor lock ${
+      status.locks.supervisorLock.present
+        ? `held by pid ${status.locks.supervisorLock.ownerPid ?? "unknown"}`
+        : "free"
+    }`,
+  };
+}
+
+function nextDoctorCommand(name: string, detail: string): string | undefined {
+  if (name === "install") return "coforge-computer install";
+  if (name === "supervisor") return "coforge-computer restart --supervisor";
+  if (name === "locks") {
+    if (detail.startsWith("machine mutation lock is held")) return "coforge-computer status";
+    return "coforge-computer restart --supervisor";
+  }
+  if (name === "workspaces") return "coforge-computer status";
+  if (name === "leftover-upgrade-jobs") return "coforge-computer restart --supervisor";
+  return undefined;
 }
 
 function checkLoginShellPath(status: ComputerStatusReport): DoctorCheck {

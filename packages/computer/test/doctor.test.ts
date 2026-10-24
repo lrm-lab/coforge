@@ -65,6 +65,11 @@ test("doctor reports a healthy machine from the read-only status snapshot", () =
   expect(report.checks).toEqual([
     { name: "install", ok: true, detail: "active version 1.4.2 is selected" },
     { name: "supervisor", ok: true, detail: "local RPC is reachable" },
+    {
+      name: "locks",
+      ok: true,
+      detail: "machine mutation lock free; supervisor lock held by pid 4821",
+    },
     { name: "login-shell-path", ok: true, detail: "imported from /bin/zsh" },
     { name: "workspaces", ok: true, detail: "1 enabled workspace is running and connected" },
     { name: "leftover-upgrade-jobs", ok: true, detail: "none" },
@@ -106,6 +111,11 @@ test("doctor identifies actionable failures without mutating the status snapshot
       ok: false,
       detail: "local RPC is unreachable: connect ENOENT daemon.sock",
     },
+    {
+      name: "locks",
+      ok: true,
+      detail: "machine mutation lock free; supervisor lock held by pid 4821",
+    },
     { name: "login-shell-path", ok: true, detail: "imported from /bin/zsh" },
     {
       name: "workspaces",
@@ -114,6 +124,24 @@ test("doctor identifies actionable failures without mutating the status snapshot
     },
     { name: "leftover-upgrade-jobs", ok: false, detail: "1 leftover upgrade job" },
   ]);
+});
+
+test("doctor reports a held mutation lock as an actionable local condition", () => {
+  const report = createDoctorReport({
+    ...HEALTHY_REPORT,
+    locks: {
+      machineMutationLock: "held",
+      supervisorLock: { present: false, ownerPid: null },
+    },
+  });
+
+  expect(report.ok).toBe(false);
+  expect(report.checks).toContainEqual({
+    name: "locks",
+    ok: false,
+    detail:
+      "machine mutation lock is held; an install, upgrade, repair, or recovery may be running",
+  });
 });
 
 test("doctor fails when the active install is not discoverable on PATH", () => {
@@ -144,6 +172,35 @@ test("doctor renders stable JSON and concise human output", async () => {
   expect(human.join("\n")).toContain("✓ install: active version 1.4.2 is selected");
   expect(human.at(-1)).toBe("Result: healthy");
   expect(renderDoctorJson(createDoctorReport(HEALTHY_REPORT))).not.toContain("\n");
+});
+
+test("doctor human output gives the next command for failed checks", () => {
+  const lines = renderDoctorHuman(
+    createDoctorReport({
+      ...HEALTHY_REPORT,
+      install: {
+        readable: true,
+        active: null,
+        binaryOnPath: null,
+        resolvesToActive: null,
+        releaseFeedUrl: "https://releases.coforge.cn/",
+      },
+      supervisor: {
+        ...HEALTHY_REPORT.supervisor,
+        loaded: false,
+        rpc: { reachable: false, error: "connect ENOENT daemon.sock" },
+      },
+      workspaces: { readable: true, workspaces: [] },
+      leftoverJobs: {
+        supported: true,
+        jobs: [{ label: "cn.coforge.upgrade.old", pid: null, runs: 1 }],
+      },
+    }),
+  );
+
+  expect(lines).toContain("  Next: coforge-computer install");
+  expect(lines).toContain("  Next: coforge-computer restart --supervisor");
+  expect(lines).toContain("  Next: coforge-computer restart --supervisor");
 });
 
 test("doctor CLI forwards JSON mode and preserves a failing diagnostic exit code", async () => {

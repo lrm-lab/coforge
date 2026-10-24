@@ -83,9 +83,10 @@ machine still exits 0; the one exception is an unreadable or corrupt
 `STATUS_INSTALL_UNREADABLE`.
 
 Use `coforge-computer doctor` (or `doctor --json`) for a concise health check
-of the active install, supervisor RPC, login-shell PATH import, enabled
-Workspaces, and leftover upgrade jobs. It is read-only and exits 1 when any
-diagnostic check fails; `--json` emits one stable report object.
+of the active install, supervisor RPC, machine locks, login-shell PATH import,
+enabled Workspaces, and leftover upgrade jobs. Failed checks include the next
+local command to run. It is read-only and exits 1 when any diagnostic check
+fails; `--json` emits one stable report object.
 
 The executable runs on Bun and uses [Commander.js](https://github.com/tj/commander.js)
 for commands, arguments, validation, generated help, suggestions, and version
