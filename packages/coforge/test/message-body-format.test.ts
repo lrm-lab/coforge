@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
-import { formatMessageLine, formatReadWindow } from "#src/message-format";
+import { formatMessageLine } from "#src/message-format";
+import { formatReadWindow } from "#src/message-read-format";
 import { formatSearchResults } from "#src/search-format";
 
 function message(body: string): AgentMessageRecord {

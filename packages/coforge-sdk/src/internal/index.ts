@@ -726,6 +726,7 @@ export type AgentMessageRequest = {
   workspaceId: string;
   fromSequence?: number;
   throughSequence?: number;
+  unread?: boolean;
   operation:
     | "check"
     | "read"
@@ -826,13 +827,8 @@ export {
   decodeUsageScanRequest,
   encodeUsageScanResponse,
   decodeUsageScanResponse,
-  encodeDaemonHoldRequest,
-  decodeDaemonHoldRequest,
-  encodeDaemonHoldResponse,
-  decodeDaemonHoldResponse,
-  RUNNER_HOLD_REASONS,
-  isRunnerHoldReason,
 } from "./local-daemon";
+export * from "./runner-hold";
 export type {
   AgentMessageRecord,
   MessageTaskMetadata,
@@ -859,10 +855,6 @@ export type {
   AppInboxItem,
   UsageScanRequest,
   UsageScanResponse,
-  DaemonHoldRequest,
-  DaemonHoldResponse,
-  HeldBusyAgent,
-  RunnerHoldReason,
 } from "./local-daemon";
 export {
   encodeDaemonRuntimeReadyRequest,

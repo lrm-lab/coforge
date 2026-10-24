@@ -193,8 +193,8 @@ import {
 } from "./agent-http-wire";
 import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
+import { adaptAgentHistoryResponse } from "./agent-history-response";
 import {
-  adaptAgentHistoryResponse,
   adaptAgentSearchResponse,
   adaptAgentSendResponse,
   adaptAgentResolveResponse,
@@ -1124,6 +1124,11 @@ export class DaemonConnection implements DaemonConnectionClient {
     return this.#requireClient().rpc(method, data);
   }
 
+  /** The URL of an Agent message route. */
+  #messageEndpoint(path: string): string {
+    return this.#serverEndpoint("Agent message HTTP", path);
+  }
+
   /** The server endpoint for one Agent HTTP path; `what` names the caller in the error. */
   #serverEndpoint(what: string, path: string): string {
     if (!this.#serverHttpUrl) throw new Error(`${what} endpoint is not configured`);
@@ -1184,7 +1189,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     } = this.agentMessageHttpClient;
     if (request.operation === "check") {
       if (!requestEvents) throw new Error("unsupported Agent message operation: check");
-      const url = this.#serverEndpoint("Agent message HTTP", agentApiRoutes.cloud.events.path);
+      const url = this.#messageEndpoint(agentApiRoutes.cloud.events.path);
       const events = await requestEvents({ url, ...this.#agentKeys(agentApiKey), request });
       return {
         idempotencyKey: events.idempotencyKey,
@@ -1202,7 +1207,7 @@ export class DaemonConnection implements DaemonConnectionClient {
       const path = muted
         ? agentApiRoutes.cloud.channels.mute.path(request.target)
         : agentApiRoutes.cloud.channels.unmute.path(request.target);
-      const url = this.#serverEndpoint("Agent message HTTP", path);
+      const url = this.#messageEndpoint(path);
       const result = await requestChannelMute({
         url,
         ...this.#agentKeys(agentApiKey),
@@ -1219,10 +1224,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     if (request.operation === "thread-unfollow") {
       if (!requestThreadUnfollow)
         throw new Error("unsupported Agent message operation: thread-unfollow");
-      const url = this.#serverEndpoint(
-        "Agent message HTTP",
-        agentApiRoutes.cloud.threads.unfollow.path(request.target),
-      );
+      const url = this.#messageEndpoint(agentApiRoutes.cloud.threads.unfollow.path(request.target));
       const result = await requestThreadUnfollow({ url, ...this.#agentKeys(agentApiKey), request });
       return {
         idempotencyKey: result.idempotencyKey,
@@ -1234,8 +1236,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     }
     if (request.operation === "resolve") {
       if (!requestResolve) throw new Error("unsupported Agent message operation: resolve");
-      const url = this.#serverEndpoint(
-        "Agent message HTTP",
+      const url = this.#messageEndpoint(
         agentApiRoutes.cloud.messages.resolve.path(request.messageId ?? ""),
       );
       return adaptAgentResolveResponse(
@@ -1245,8 +1246,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     if (request.operation === "react" || request.operation === "unreact") {
       if (!requestReaction)
         throw new Error(`unsupported Agent message operation: ${request.operation}`);
-      const url = this.#serverEndpoint(
-        "Agent message HTTP",
+      const url = this.#messageEndpoint(
         agentApiRoutes.cloud.messages.reactions.path(request.messageId ?? ""),
       );
       const method =
@@ -1259,30 +1259,21 @@ export class DaemonConnection implements DaemonConnectionClient {
     }
     if (request.operation === "read") {
       if (!requestRead) throw new Error("unsupported Agent message operation: read");
-      const url = this.#serverEndpoint(
-        "Agent message HTTP",
-        agentApiRoutes.cloud.messages.list.path,
-      );
+      const url = this.#messageEndpoint(agentApiRoutes.cloud.messages.list.path);
       return adaptAgentHistoryResponse(
         await requestRead({ url, ...this.#agentKeys(agentApiKey), request }),
       );
     }
     if (request.operation === "search") {
       if (!requestSearch) throw new Error("unsupported Agent message operation: search");
-      const url = this.#serverEndpoint(
-        "Agent message HTTP",
-        agentApiRoutes.cloud.messages.search.path,
-      );
+      const url = this.#messageEndpoint(agentApiRoutes.cloud.messages.search.path);
       return adaptAgentSearchResponse(
         await requestSearch({ url, ...this.#agentKeys(agentApiKey), request }),
       );
     }
     if (request.operation === "send") {
       if (!requestSend) throw new Error("unsupported Agent message operation: send");
-      const url = this.#serverEndpoint(
-        "Agent message HTTP",
-        agentApiRoutes.cloud.messages.send.path,
-      );
+      const url = this.#messageEndpoint(agentApiRoutes.cloud.messages.send.path);
       return adaptAgentSendResponse(
         await requestSend({ url, ...this.#agentKeys(agentApiKey), request }),
       );
@@ -1299,7 +1290,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     if (!requestSendReconciliation)
       throw new Error("unsupported Agent message operation: send reconciliation");
     return requestSendReconciliation({
-      url: this.#serverEndpoint("Agent message HTTP", agentApiRoutes.cloud.messages.send.path),
+      url: this.#messageEndpoint(agentApiRoutes.cloud.messages.send.path),
       ...this.#agentKeys(agentApiKey),
       request,
     });

@@ -83,6 +83,12 @@ export async function handleAgentMessagesGet(
     const before = query.get("before") ?? undefined;
     const after = query.get("after") ?? undefined;
     const around = query.get("around") ?? undefined;
+    const unread = query.get("unread") === "true";
+    if (unread && (before || after || around || fromSequence !== undefined))
+      return Response.json(
+        { error: "unread cannot be combined with before, after, around or fromSequence" },
+        { status: 400 },
+      );
     // A window start is a read from a sequence, an anchor a read around a message: together they
     // would page across a range the anchor alone does not describe.
     if (fromSequence !== undefined && (before || after || around))
@@ -97,6 +103,7 @@ export async function handleAgentMessagesGet(
       limit: query.has("limit") ? Number(query.get("limit")) : undefined,
       fromSequence,
       throughSequence,
+      ...(unread ? { unread } : {}),
     });
     const messages = result.messages as AgentMessage[];
     const response: AgentHistoryResponse = {
@@ -107,6 +114,9 @@ export async function handleAgentMessagesGet(
       olderCursor: messages[0]?.id,
       newerCursor: messages.at(-1)?.id,
       modelSeenUpToSeq: result.modelSeenUpToSeq,
+      unreadCursorBefore: result.unreadCursorBefore,
+      readPositionAfter: result.readPositionAfter,
+      moreUnread: result.moreUnread,
       ...(result.consumptionScope ? { consumptionScope: result.consumptionScope } : {}),
     };
     return Response.json(response);

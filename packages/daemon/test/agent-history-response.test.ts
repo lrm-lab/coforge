@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentHistoryResponse } from "@lrm/coforge-sdk/agent";
-import { adaptAgentHistoryResponse } from "#src/connection/agent-http-clients";
+import { adaptAgentHistoryResponse } from "#src/connection/agent-history-response";
 
 /** A read response as the wire might carry it: `fields` may be malformed, as a server's could be. */
 const response = (fields: Record<string, unknown> = {}) =>

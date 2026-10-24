@@ -10,11 +10,11 @@ export function messageSender(message: AgentMessageRecord): string {
   return renderMessageSender(message.senderKind, message.senderHandle, message.senderDescription);
 }
 
-function isThreadTarget(target: string): boolean {
+export function isThreadTarget(target: string): boolean {
   return target.includes(":");
 }
 
-function shortId(id: string): string {
+export function shortId(id: string): string {
   return id.slice(0, 13);
 }
 
@@ -46,7 +46,7 @@ export function formatLocalTimeWithOffset(createdAt: string): string {
   );
 }
 
-function attachmentSuffix(message: AgentMessageRecord): string {
+export function attachmentSuffix(message: AgentMessageRecord): string {
   const attachments = message.attachments ?? [];
   if (attachments.length === 0) return "";
   const noun = attachments.length === 1 ? "attachment" : "attachments";
@@ -75,48 +75,6 @@ export function formatMessageLine(message: AgentMessageRecord): string {
 
 export const NON_MEMBER_MENTION_NOTICE =
   "[CoForge notice: You were notified as a non-member, so you cannot reply in that channel. If no reply is needed, no action is required. Otherwise, DM the person who mentioned you or join the channel to participate.]";
-
-type ReadWindowResponse = {
-  messages?: AgentMessageRecord[];
-  hasOlder?: boolean;
-  hasNewer?: boolean;
-};
-
-export function formatReadWindow(
-  target: string,
-  response: ReadWindowResponse,
-  options: { around?: string } = {},
-): string {
-  const messages = response.messages ?? [];
-  if (messages.length === 0) return `No messages in ${target}.`;
-
-  const first = messages[0]!;
-  const last = messages[messages.length - 1]!;
-  const older = response.hasOlder
-    ? `Older exist: coforge message read --target "${target}" --before ${shortId(first.id)}.`
-    : "No older.";
-  const newer = response.hasNewer
-    ? `Newer exist: coforge message read --target "${target}" --after ${shortId(last.id)}.`
-    : "No newer.";
-
-  const lines = [`Read window: ${messages.length} returned, oldest to newest. ${older} ${newer}`];
-  if (options.around) lines.push(`Around: ${options.around}.`);
-  const taskHint = formatTaskWorkflowHint(messages);
-  if (taskHint) lines.push(taskHint);
-  lines.push("");
-
-  const includeReplyTarget = !isThreadTarget(target);
-  messages.forEach((message, index) => {
-    const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
-    lines.push(
-      `[${index + 1}/${messages.length} msg=${message.id} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}] ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}`,
-    );
-  });
-
-  lines.push("");
-  lines.push(`End of window: ${messages.length}/${messages.length} shown.`);
-  return lines.join("\n");
-}
 
 const STRUCTURAL_TAG_PATTERN = /<\/?(?:result|preview|match)>|<omit \/>/g;
 const REFERENCE_BOUNDARY = String.raw`[\s\[\]\(\)\{\}"'` + "`]";
@@ -373,7 +331,7 @@ export function formatUndeliveredMentions(
   return lines.join("\n");
 }
 
-function memoryHintSuffix(message: AgentMessageRecord): string {
+export function memoryHintSuffix(message: AgentMessageRecord): string {
   return message.memoryHint
     ? `\n[Memory Hint hint_id=${message.memoryHint.hint_id} tool=${message.memoryHint.tool}]`
     : "";

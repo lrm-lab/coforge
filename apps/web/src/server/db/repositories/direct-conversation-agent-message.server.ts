@@ -1,4 +1,4 @@
-import type { Prisma } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { MessageTaskMetadata, TaskStatus } from "@lrm/coforge-sdk/internal";
 import type { AttachmentMetadata } from "./direct-conversation.repositories.server";
 import { humanLabel, type HumanNames } from "#src/lib/human-label";
@@ -159,5 +159,48 @@ function messageTask(
           },
         }
       : {}),
+  };
+}
+
+/**
+ * The messages around `anchorSequence` in `scope`, oldest first: the anchor, and as many before and
+ * after it as `limit` allows (the anchor takes one of the `limit` places, the earlier side takes
+ * the smaller half). Reports whether either side had more.
+ */
+export async function readWindowAround(
+  db: Pick<PrismaClient, "message">,
+  scope: Prisma.MessageWhereInput,
+  anchorSequence: number,
+  limit: number,
+) {
+  const beforeCount = Math.floor((limit - 1) / 2);
+  const afterCount = limit - 1 - beforeCount;
+  const [beforeRows, anchorRows, afterRows] = await Promise.all([
+    db.message.findMany({
+      where: { ...scope, sequence: { lt: anchorSequence } },
+      orderBy: { sequence: "desc" },
+      take: beforeCount + 1,
+      include: AGENT_MESSAGE_INCLUDE,
+    }),
+    db.message.findMany({
+      where: { ...scope, sequence: anchorSequence },
+      take: 1,
+      include: AGENT_MESSAGE_INCLUDE,
+    }),
+    db.message.findMany({
+      where: { ...scope, sequence: { gt: anchorSequence } },
+      orderBy: { sequence: "asc" },
+      take: afterCount + 1,
+      include: AGENT_MESSAGE_INCLUDE,
+    }),
+  ]);
+  return {
+    rows: [
+      ...beforeRows.slice(0, beforeCount).reverse(),
+      ...anchorRows,
+      ...afterRows.slice(0, afterCount),
+    ],
+    hasOlder: beforeRows.length > beforeCount,
+    hasNewer: afterRows.length > afterCount,
   };
 }

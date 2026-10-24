@@ -1,11 +1,21 @@
-import { isChannelOperation, type ChannelCommand } from "@lrm/coforge-sdk/internal";
+import {
+  isChannelOperation,
+  UUID_LIKE_PATTERN,
+  type ChannelCommand,
+} from "@lrm/coforge-sdk/internal";
 import {
   actionCardActionSchema,
+  AGENT_MENTION_ACTION_MAX_IDS,
+  isAgentMentionActionKind,
+  type AgentMentionExecuteRequest,
+  type AgentProfileUpdateRequest,
+  type GitHubCommitTrailersRequest,
+  type GitHubCredentialRequest,
   validateActionCardAction,
   type AgentActionPrepareRequest,
 } from "@lrm/coforge-sdk/agent";
 
-/** Readers of the local proxy's channel and action-card request bodies; each answers the request
+/** Readers of the local proxy's channel, action-card, mention, profile and GitHub request bodies; each answers the request
  * it stands for, or a `400`. */
 
 type JsonObject = Record<string, unknown>;
@@ -67,4 +77,45 @@ export function parseSearchPosition(payload: JsonObject) {
     offset: typeof offset === "number" ? offset : undefined,
     cursor: typeof cursor === "string" ? cursor : undefined,
   };
+}
+
+export function parseMentionExecuteFields(
+  fields: JsonObject,
+): AgentMentionExecuteRequest | Response {
+  const { action, resolutionIds: ids } = fields;
+  if (
+    !isAgentMentionActionKind(action) ||
+    !Array.isArray(ids) ||
+    ids.length < 1 ||
+    ids.length > AGENT_MENTION_ACTION_MAX_IDS ||
+    ids.some((id) => typeof id !== "string" || !UUID_LIKE_PATTERN.test(id))
+  )
+    return badRequest();
+  return { action, resolutionIds: ids as string[] };
+}
+
+export function parseProfileUpdateFields(fields: JsonObject): AgentProfileUpdateRequest | Response {
+  if (
+    (fields.displayName !== undefined && typeof fields.displayName !== "string") ||
+    (fields.description !== undefined && typeof fields.description !== "string")
+  )
+    return badRequest();
+  return {
+    ...(fields.displayName !== undefined ? { displayName: fields.displayName as string } : {}),
+    ...(fields.description !== undefined ? { description: fields.description as string } : {}),
+  };
+}
+
+export function parseGithubCredentialRequest(
+  payload: JsonObject,
+): GitHubCredentialRequest | Response {
+  if (Object.keys(payload).length !== 0) return badRequest();
+  return {};
+}
+
+export function parseGithubCommitTrailersRequest(
+  payload: JsonObject,
+): GitHubCommitTrailersRequest | Response {
+  if (payload.repository !== null && typeof payload.repository !== "string") return badRequest();
+  return { repository: payload.repository };
 }

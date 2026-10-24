@@ -10,6 +10,7 @@ import {
   messageDeliveryTarget,
   toAgentMessage,
   type DirectConversationMessageRow,
+  readWindowAround,
 } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
@@ -30,7 +31,7 @@ import {
   type MessageSenderKind,
   type MessageTaskMetadata,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentTargetFreshness } from "#src/server/agents/agent-messages.server";
+import type { AgentTargetFreshness } from "#src/server/agents/agent-target-freshness.server";
 import { agentHistoryModelSeenBoundary } from "#src/server/agents/agent-history-boundary.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
@@ -165,6 +166,8 @@ export type DirectConversationPageOptions = {
   limit?: number;
   fromSequence?: number;
   throughSequence?: number;
+  /** Reads from the Agent's read position and reports where it stood and where it moved. */
+  unread?: boolean;
 };
 
 export type AgentRecoveryContext = {
@@ -1426,36 +1429,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     const map = (rows: DirectConversationMessageRow[]) =>
       rows.map((row) => toAgentMessage(row, canonicalTarget, agentId, coordination));
     if (page.around && anchor) {
-      const beforeCount = Math.floor((limit - 1) / 2);
-      const afterCount = limit - 1 - beforeCount;
-      const [beforeRows, anchorRows, afterRows] = await Promise.all([
-        this.db.message.findMany({
-          where: { ...scope, sequence: { lt: anchor.sequence } },
-          orderBy: { sequence: "desc" },
-          take: beforeCount + 1,
-          include,
-        }),
-        this.db.message.findMany({
-          where: { ...scope, sequence: anchor.sequence },
-          take: 1,
-          include,
-        }),
-        this.db.message.findMany({
-          where: { ...scope, sequence: { gt: anchor.sequence } },
-          orderBy: { sequence: "asc" },
-          take: afterCount + 1,
-          include,
-        }),
-      ]);
-      const messages = map([
-        ...beforeRows.slice(0, beforeCount).reverse(),
-        ...anchorRows,
-        ...afterRows.slice(0, afterCount),
-      ]);
+      const window = await readWindowAround(this.db, scope, anchor.sequence, limit);
       return {
-        messages,
-        hasOlder: beforeRows.length > beforeCount,
-        hasNewer: afterRows.length > afterCount,
+        messages: map(window.rows),
+        hasOlder: window.hasOlder,
+        hasNewer: window.hasNewer,
         modelSeenUpToSeq: null,
         consumptionScope,
       };
@@ -1480,7 +1458,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       include,
     });
     const hasMore = rows.length > limit;
-    const messages = map(rows.slice(0, limit).sort((a, b) => a.sequence - b.sequence));
+    const pageRows = rows.slice(0, limit).sort((a, b) => a.sequence - b.sequence);
+    // An unread read lists what others wrote; the Agent's own messages sit under the same
+    // read-through the page moves, so they are consumed without being listed.
+    const messages = map(
+      page.unread ? pageRows.filter((row) => row.sender?.agentId !== agentId) : pageRows,
+    );
     const hasOlder = page.after ? Boolean(anchor) : page.before ? hasMore : false;
     // Decided against the read-through as it was before this read moves it.
     const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
@@ -1488,8 +1471,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       anchorSequence: anchor?.sequence,
       fromSequence: page.fromSequence,
       readThrough,
-      minSequence: messages[0]?.sequence,
-      maxSequence: messages.at(-1)?.sequence,
+      minSequence: pageRows[0]?.sequence,
+      maxSequence: pageRows.at(-1)?.sequence,
       hasOlder,
     });
     // One contiguity rule: a page that joins what the Agent had read both reports its boundary and
@@ -1521,6 +1504,13 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       hasNewer: page.before ? Boolean(anchor) : page.after || !isHistoryRead ? hasMore : false,
       modelSeenUpToSeq,
       consumptionScope,
+      ...(page.unread
+        ? {
+            unreadCursorBefore: readThrough,
+            readPositionAfter: modelSeenUpToSeq ?? readThrough,
+            moreUnread: hasMore,
+          }
+        : {}),
     };
   }
 

@@ -186,6 +186,9 @@ export type AgentMessageTransportResponse = LocalSearchPaging & {
   /** `read` only: the server's contiguous model-seen boundary (`model_seen_up_to_seq`); `null`
    * when the page does not join what the Agent had read. */
   modelSeenUpToSeq?: number | null;
+  unreadCursorBefore?: number;
+  readPositionAfter?: number;
+  moreUnread?: boolean;
   /** `read` only: the conversation the read consumed (`consumption_scope`). */
   consumptionScope?: AgentHistoryConsumptionScope;
   freshnessContextMode?: "inline" | "withheld";
@@ -200,46 +203,6 @@ export type AgentMessageTransportResponse = LocalSearchPaging & {
   pendingMentionActions?: AgentSendDecisionResponse["pendingMentionActions"];
   unresolvedMentionHandles?: string[];
 };
-
-/** Adapts the read route's response into the shape `DaemonRuntime` consumes. A boundary or a scope
- * that is not well formed is not trusted: a malformed or missing boundary reads as "no boundary"
- * (`null`), and a malformed scope is dropped. */
-export function adaptAgentHistoryResponse(
-  response: AgentHistoryResponse,
-): AgentMessageTransportResponse {
-  const boundary: unknown = response.modelSeenUpToSeq;
-  return {
-    idempotencyKey: response.idempotencyKey,
-    accepted: true,
-    attentionCount: 0,
-    messages: response.messages,
-    hasOlder: response.hasOlder,
-    hasNewer: response.hasNewer,
-    olderCursor: response.olderCursor,
-    newerCursor: response.newerCursor,
-    modelSeenUpToSeq:
-      typeof boundary === "number" && Number.isSafeInteger(boundary) && boundary > 0
-        ? boundary
-        : null,
-    consumptionScope: historyConsumptionScope(response.consumptionScope),
-  };
-}
-
-function historyConsumptionScope(value: unknown): AgentHistoryConsumptionScope | undefined {
-  if (!isRecord(value)) return undefined;
-  const { agentId, conversationId, channelType, target } = value;
-  if (
-    typeof agentId !== "string" ||
-    !agentId ||
-    typeof conversationId !== "string" ||
-    !conversationId ||
-    (channelType !== "dm" && channelType !== "thread") ||
-    typeof target !== "string" ||
-    !target
-  )
-    return undefined;
-  return { agentId, conversationId, channelType, target };
-}
 
 /** Adapts the dedicated search route's response into the shape `DaemonRuntime` consumes. */
 export function adaptAgentSearchResponse(
@@ -393,6 +356,7 @@ export const createAgentMessageHttpClient = (
         limit: request.limit,
         fromSequence: request.fromSequence,
         throughSequence: request.throughSequence,
+        unread: request.unread ? "true" : undefined,
       },
       validate: validateAgentMessageArrayShape("messages"),
     }),

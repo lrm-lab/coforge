@@ -65,6 +65,7 @@ import {
   unknownDeliveryNextAction,
 } from "./cli-error";
 import type { MessageSearchOptions } from "./message-search-args";
+import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import {
   envelopeRequest,
@@ -492,10 +493,8 @@ export function connectLocal(
       return call("thread-unfollow", target);
     },
     check: (target?: string) => call("check", target),
-    read: (
-      target: string,
-      options?: { before?: string; after?: string; around?: string; limit?: number },
-    ) => call("read", target, undefined, options),
+    read: (target: string, options?: MessageReadOptions) =>
+      call("read", target, undefined, options),
     search: (options: MessageSearchOptions) => call("search", options.target, undefined, options),
     send: (
       target: string,

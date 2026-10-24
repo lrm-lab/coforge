@@ -16,8 +16,6 @@ import {
   AgentMessageResponseSchema,
   UsageScanRequestSchema,
   UsageScanResponseSchema,
-  DaemonHoldRequestSchema,
-  DaemonHoldResponseSchema,
 } from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
 import { assertValidMessageSender, type MessageSenderKind } from "./message-sender";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
@@ -112,6 +110,7 @@ export type LocalAgentMessageRequest = LocalMessageSearchFields & {
   after?: string;
   around?: string;
   limit?: number;
+  unread?: boolean;
   freshnessContextMode?: "inline" | "withheld";
   messageId?: string;
   emoji?: string;
@@ -260,6 +259,12 @@ export type AgentMessageResponse = LocalSearchPaging & {
   newerCursor?: string;
   freshnessContextMode?: "inline" | "withheld";
   withheldMessageCount?: number;
+  unreadCursorBefore?: number;
+  readPositionAfter?: number;
+  moreUnread?: boolean;
+  foldedMessageCount?: number;
+  foldedFromSequence?: number;
+  foldedThroughSequence?: number;
   /** `message send` only: pending messages a bypassed hold chose not to review; empty otherwise. */
   recentUnread?: AgentMessageRecord[];
   /** `message send` only: mentions of people outside the channel, which notified no one. */
@@ -374,6 +379,22 @@ export function encodeAgentMessageResponse(value: AgentMessageResponse): Uint8Ar
       incomplete: safeValue.incomplete ?? false,
       searchedMessages: safeValue.searchedMessages,
       searchedThrough: safeValue.searchedThrough,
+      unreadCursorBefore:
+        safeValue.unreadCursorBefore === undefined
+          ? undefined
+          : BigInt(safeValue.unreadCursorBefore),
+      readPositionAfter:
+        safeValue.readPositionAfter === undefined ? undefined : BigInt(safeValue.readPositionAfter),
+      moreUnread: safeValue.moreUnread,
+      foldedMessageCount: safeValue.foldedMessageCount,
+      foldedFromSequence:
+        safeValue.foldedFromSequence === undefined
+          ? undefined
+          : BigInt(safeValue.foldedFromSequence),
+      foldedThroughSequence:
+        safeValue.foldedThroughSequence === undefined
+          ? undefined
+          : BigInt(safeValue.foldedThroughSequence),
     }),
   );
 }
@@ -446,6 +467,15 @@ export function decodeAgentMessageResponse(bytes: Uint8Array): AgentMessageRespo
     hasNewer: v.hasNewer || undefined,
     olderCursor: v.olderCursor || undefined,
     newerCursor: v.newerCursor || undefined,
+    unreadCursorBefore:
+      v.unreadCursorBefore === undefined ? undefined : Number(v.unreadCursorBefore),
+    readPositionAfter: v.readPositionAfter === undefined ? undefined : Number(v.readPositionAfter),
+    moreUnread: v.moreUnread,
+    foldedMessageCount: v.foldedMessageCount,
+    foldedFromSequence:
+      v.foldedFromSequence === undefined ? undefined : Number(v.foldedFromSequence),
+    foldedThroughSequence:
+      v.foldedThroughSequence === undefined ? undefined : Number(v.foldedThroughSequence),
     freshnessContextMode: (v.freshnessContextMode || undefined) as
       | "inline"
       | "withheld"
@@ -700,98 +730,6 @@ export function readLocalRpcFrames(buffer: Uint8Array): {
     remainder = remainder.slice(frame.byteLength + 4);
   }
   return { frames, remainder };
-}
-
-/**
- * Runner hold. `daemon:hold` tells a daemon to stop admitting new Agent turns and report which
- * Agents are still busy; `daemon:release` lifts it. Both are idempotent, and neither is persisted,
- * so a restarted daemon is never born held.
- */
-export type DaemonHoldRequest = {
-  protocolMajor: number;
-  requestId: string;
-  expectedServerUrl: string;
-  /** Required by a hold, which the daemon refuses without one. A release names none. */
-  reason?: RunnerHoldReason;
-};
-
-/**
- * Why a runner hold was asked for. A hold precedes a deliberate restart, so a Workspace daemon that
- * shuts down while held names the matching reason in its shutdown notice. A Computer upgrade is not
- * a hold: the installer's recovery journal is what names it.
- */
-export const RUNNER_HOLD_REASONS = {
-  /** The Coordinator restarting one Workspace daemon. */
-  WORKSPACE_RESTART: "restart",
-  /** `coforge-computer restart` restarting the whole Coordinator. */
-  COMPUTER_RESTART: "restart-supervisor",
-} as const;
-export type RunnerHoldReason = (typeof RUNNER_HOLD_REASONS)[keyof typeof RUNNER_HOLD_REASONS];
-
-export function isRunnerHoldReason(value: unknown): value is RunnerHoldReason {
-  return Object.values(RUNNER_HOLD_REASONS).some((reason) => reason === value);
-}
-
-/** One Agent whose last emitted Activity is still a busy detail kind. */
-export type HeldBusyAgent = {
-  workspaceId: string;
-  agentId: string;
-  detailKind: string;
-  busySinceMs: number;
-};
-
-export type DaemonHoldResponse = {
-  protocolMajor: number;
-  requestId: string;
-  accepted: boolean;
-  held: boolean;
-  busyAgents: HeldBusyAgent[];
-  /** Workspaces that did not answer in time; a Coordinator reports rather than blocks on them. */
-  unreachableWorkspaceIds: string[];
-};
-
-export function encodeDaemonHoldRequest(value: DaemonHoldRequest): Uint8Array {
-  return toBinary(DaemonHoldRequestSchema, create(DaemonHoldRequestSchema, value));
-}
-
-export function decodeDaemonHoldRequest(bytes: Uint8Array): DaemonHoldRequest {
-  const value = fromBinary(DaemonHoldRequestSchema, bytes);
-  return {
-    protocolMajor: value.protocolMajor,
-    requestId: value.requestId,
-    expectedServerUrl: value.expectedServerUrl,
-    reason: isRunnerHoldReason(value.reason) ? value.reason : undefined,
-  };
-}
-
-export function encodeDaemonHoldResponse(value: DaemonHoldResponse): Uint8Array {
-  return toBinary(
-    DaemonHoldResponseSchema,
-    create(DaemonHoldResponseSchema, {
-      ...value,
-      busyAgents: value.busyAgents.map((agent) => ({
-        ...agent,
-        busySinceMs: BigInt(agent.busySinceMs),
-      })),
-    }),
-  );
-}
-
-export function decodeDaemonHoldResponse(bytes: Uint8Array): DaemonHoldResponse {
-  const value = fromBinary(DaemonHoldResponseSchema, bytes);
-  return {
-    protocolMajor: value.protocolMajor,
-    requestId: value.requestId,
-    accepted: value.accepted,
-    held: value.held,
-    busyAgents: value.busyAgents.map((agent) => ({
-      workspaceId: agent.workspaceId,
-      agentId: agent.agentId,
-      detailKind: agent.detailKind,
-      busySinceMs: Number(agent.busySinceMs),
-    })),
-    unreachableWorkspaceIds: [...value.unreachableWorkspaceIds],
-  };
 }
 
 function connectionFields(value: { cloudConnection?: string; cloudConnectionError?: string }) {

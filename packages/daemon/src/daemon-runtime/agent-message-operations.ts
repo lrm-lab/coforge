@@ -8,7 +8,6 @@ import {
   type AgentMessageResponse,
   type LocalAgentMessageRequest,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentMessageTransportResponse } from "#src/connection/agent-http-clients";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
 import { AGENT_MESSAGE_DRAFT_TTL_MS } from "#src/persistence/agent-message-draft-store";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
@@ -27,6 +26,7 @@ import type { AgentMessageAttentionIndex } from "./agent-message-attention-index
 import { AGENT_MESSAGE_BODY_REQUIRED_MESSAGE, agentMessageBody } from "./agent-message-body";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { settleAgentSend } from "./agent-send-settlement";
+import { settleHistoryRead } from "./agent-history-read";
 import { searchPage, searchFields } from "./search-page";
 import {
   fenceChannelTranscriptForMemory,
@@ -593,18 +593,26 @@ export class AgentMessageOperations {
         after: request.after,
         around: request.around,
         limit: request.limit,
+        unread: request.unread,
         ...searchFields(request),
         messageId: request.messageId,
         emoji: request.emoji,
       },
       agentApiKey,
     );
-    if (operation === "read" && target && result.accepted)
-      this.#consumeHistoryRead(agentId, target, request, result, unpaged, attentionUpperBound);
+    const { messages: unfolded, folded } =
+      operation === "read" && target && result.accepted
+        ? settleHistoryRead(this.#ports.attention, agentId, target, {
+            request,
+            result,
+            unpaged,
+            attentionUpperBound,
+          })
+        : { messages: result.messages, folded: undefined };
     const messages =
-      this.#ports.isMemoryAgent?.(agentId) && result.messages.length
-        ? fenceChannelTranscriptForMemory(result.messages)
-        : result.messages;
+      this.#ports.isMemoryAgent?.(agentId) && unfolded.length
+        ? fenceChannelTranscriptForMemory(unfolded)
+        : unfolded;
     return {
       idempotencyKey: request.idempotencyKey,
       accepted: result.accepted,
@@ -617,53 +625,13 @@ export class AgentMessageOperations {
       olderCursor: result.olderCursor,
       newerCursor: result.newerCursor,
       ...searchPage(result),
+      unreadCursorBefore: result.unreadCursorBefore,
+      readPositionAfter: result.readPositionAfter,
+      moreUnread: result.moreUnread,
+      foldedMessageCount: folded?.count,
+      foldedFromSequence: folded?.fromSequence,
+      foldedThroughSequence: folded?.throughSequence,
     };
-  }
-
-  /**
-   * What a history read showed the Agent (the `message read` bookkeeping), kept under the target
-   * the server resolved the read to (its consumption scope; a channel's top level has none and is
-   * already canonical). An anchored `--around` read, and a page the server does not call
-   * contiguous (`modelSeenUpToSeq` null, such as a `--before` page), record the exact sequences
-   * they showed and nothing else. A read with a boundary moves the frontier there, records what
-   * it showed above it as exact, and reviews the target; so does a read that returned nothing. A
-   * consumption scope for this Agent settles what the read returned in every spelling of its
-   * conversation.
-   */
-  #consumeHistoryRead(
-    agentId: string,
-    requestedTarget: string,
-    request: LocalAgentMessageRequest,
-    result: AgentMessageTransportResponse,
-    unpaged: boolean,
-    attentionUpperBound: number | undefined,
-  ): void {
-    const scope =
-      result.consumptionScope?.agentId === agentId ? result.consumptionScope : undefined;
-    const target = scope?.target ?? requestedTarget;
-    const shown: number[] = [];
-    let visibleSequence = 0;
-    for (const message of result.messages)
-      if (message.target === target) {
-        shown.push(message.sequence);
-        if (message.sequence > visibleSequence) visibleSequence = message.sequence;
-      }
-    const through = request.around ? 0 : (result.modelSeenUpToSeq ?? 0);
-    this.#ports.attention.recordHistoryRead(agentId, {
-      spelling: requestedTarget,
-      target,
-      shown,
-      through,
-      // The thread-mismatch guard's read context: a read that joined what the Agent had read, or
-      // found nothing, reviews `target` and remembers the newest message it showed.
-      review:
-        !request.around && (through > 0 || result.messages.length === 0)
-          ? { sequence: visibleSequence }
-          : undefined,
-      scope,
-    });
-    if (unpaged && result.messages.length === 0 && attentionUpperBound !== undefined)
-      this.#ports.attention.clearThrough(agentId, target, attentionUpperBound);
   }
 
   /** The log's correlation field is `request_id`; on the Agent HTTP path it carries the request's

@@ -7,6 +7,7 @@ export type AgentMessageOperation = "read" | "search" | "send";
 
 export type AgentMessagesReadRequest = {
   target: string;
+  unread?: boolean;
   before?: string;
   after?: string;
   around?: string;
@@ -103,6 +104,9 @@ export type AgentHistoryResponse = {
    * without a gap, or `null` when this page does not join what it had already read (an anchored
    * `around` read never does). */
   modelSeenUpToSeq: number | null;
+  unreadCursorBefore?: number;
+  readPositionAfter?: number;
+  moreUnread?: boolean;
   consumptionScope?: AgentHistoryConsumptionScope;
 };
 

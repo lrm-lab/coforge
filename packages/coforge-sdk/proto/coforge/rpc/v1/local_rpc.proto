@@ -104,6 +104,13 @@ message AgentMessageResponse {
   bool incomplete = 29;
   optional uint32 searched_messages = 30;
   string searched_through = 31;
+  optional uint64 unread_cursor_before = 32;
+  optional uint64 read_position_after = 33;
+  optional bool more_unread = 34;
+  // `message read --unread` only: messages the Agent was already shown, left out of `messages`.
+  optional uint32 folded_message_count = 35;
+  optional uint64 folded_from_sequence = 36;
+  optional uint64 folded_through_sequence = 37;
   reserved 7, 9;
   reserved "side_effect_decision", "anyway_allowed";
 }

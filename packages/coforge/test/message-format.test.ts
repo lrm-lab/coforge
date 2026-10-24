@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
+import { formatReadWindow } from "#src/message-read-format";
 import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import {
   formatHeldSend,
   formatMessageLine,
-  formatReadWindow,
   formatSendSuccess,
   formatUtcTimestamp,
   neutralizeReferenceLiterals,
@@ -201,12 +201,15 @@ test("formatReadWindow reports older/newer availability and includes an around l
   expect(lines[0]).toBe(
     'Read window: 2 returned, oldest to newest. Older exist: coforge message read --target "#general" --before 11111111-0000. Newer exist: coforge message read --target "#general" --after 22222222-0000.',
   );
-  expect(lines[1]).toBe("Around: 22222222.");
-  expect(lines[2]).toBe("");
-  expect(lines[3]).toBe(
+  expect(lines[1]).toContain("Coverage: top-level messages");
+  expect(lines[2]).toBe(
+    "Around: 22222222. Your read position did not move. To read new messages and mark them read, use --unread.",
+  );
+  expect(lines[3]).toBe("");
+  expect(lines[4]).toBe(
     "[1/2 msg=11111111-0000-4000-8000-000000000001 time=2026-09-07 10:00:00Z type=human replyTarget=#general:11111111-0000] @ada: first",
   );
-  expect(lines[4]).toBe(
+  expect(lines[5]).toBe(
     "[2/2 msg=22222222-0000-4000-8000-000000000002 time=2026-09-07 10:00:00Z type=human replyTarget=#general:22222222-0000] @ada: second",
   );
   expect(lines.at(-2)).toBe("");

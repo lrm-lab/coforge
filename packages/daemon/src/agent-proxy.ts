@@ -47,8 +47,6 @@ import {
   decodeAgentAppRegistrationRequest,
   decodeAgentAppTokenBody,
   type AgentAppRequest,
-  AGENT_MENTION_ACTION_MAX_IDS,
-  isAgentMentionActionKind,
   type AgentMentionExecuteRequest,
   type AgentMentionExecuteResponse,
   type AgentMentionPendingResponse,
@@ -60,6 +58,10 @@ import {
   invalidSearchPosition,
   parseActionPrepareRequest,
   parseChannelCommand,
+  parseGithubCommitTrailersRequest,
+  parseGithubCredentialRequest,
+  parseMentionExecuteFields,
+  parseProfileUpdateFields,
   parseSearchPosition,
 } from "./agent-proxy-request-parsers";
 import { classifyAgentProxyFailure, AGENT_PROXY_CORRELATION_HEADER } from "./agent-proxy-failure";
@@ -434,43 +436,6 @@ function parseAppConfigUpdate(
   return { appId, ...change, idempotencyKey };
 }
 
-function parseMentionExecuteFields(fields: JsonObject): AgentMentionExecuteRequest | Response {
-  const { action, resolutionIds: ids } = fields;
-  if (
-    !isAgentMentionActionKind(action) ||
-    !Array.isArray(ids) ||
-    ids.length < 1 ||
-    ids.length > AGENT_MENTION_ACTION_MAX_IDS ||
-    ids.some((id) => typeof id !== "string" || !UUID.test(id))
-  )
-    return badRequest();
-  return { action, resolutionIds: ids as string[] };
-}
-
-function parseProfileUpdateFields(fields: JsonObject): AgentProfileUpdateRequest | Response {
-  if (
-    (fields.displayName !== undefined && typeof fields.displayName !== "string") ||
-    (fields.description !== undefined && typeof fields.description !== "string")
-  )
-    return badRequest();
-  return {
-    ...(fields.displayName !== undefined ? { displayName: fields.displayName as string } : {}),
-    ...(fields.description !== undefined ? { description: fields.description as string } : {}),
-  };
-}
-
-function parseGithubCredentialRequest(payload: JsonObject): GitHubCredentialRequest | Response {
-  if (Object.keys(payload).length !== 0) return badRequest();
-  return {};
-}
-
-function parseGithubCommitTrailersRequest(
-  payload: JsonObject,
-): GitHubCommitTrailersRequest | Response {
-  if (payload.repository !== null && typeof payload.repository !== "string") return badRequest();
-  return { repository: payload.repository };
-}
-
 function parseInboxRequest(
   payload: JsonObject,
   binding: TokenBinding,
@@ -540,6 +505,7 @@ function parseMessageRequest(
       (!Array.isArray(payload.attachmentIds) ||
         payload.attachmentIds.some((id) => typeof id !== "string" || !UUID.test(id)))) ||
     (payload.targetConfirmed !== undefined && typeof payload.targetConfirmed !== "boolean") ||
+    (payload.unread !== undefined && typeof payload.unread !== "boolean") ||
     (payload.mentions !== undefined && !isValidMentionSelectorArray(payload.mentions))
   )
     return badRequest();
@@ -565,6 +531,7 @@ function parseMessageRequest(
     after: typeof payload.after === "string" ? payload.after : undefined,
     around: typeof payload.around === "string" ? payload.around : undefined,
     limit: typeof payload.limit === "number" ? payload.limit : undefined,
+    unread: payload.unread === true || undefined,
     query: typeof payload.query === "string" ? payload.query : undefined,
     sender: typeof payload.sender === "string" ? payload.sender : undefined,
     sort: payload.sort === "relevance" || payload.sort === "recent" ? payload.sort : undefined,
