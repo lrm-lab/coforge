@@ -9,6 +9,10 @@ loopback diagnostics (`18080` web, `18000` centrifugo). HTTPS responses carry
 HSTS, and port 80 serves only the permanent redirect to the same URL over
 HTTPS.
 
+The same Caddy also fronts apps hosted on this machine: `research.coforge.cn`
+is PiResearch, its own Compose project on the `coforge-staging-apps` network,
+deployed from its own repository. Staging does not depend on it.
+
 Web reaches staging only when an operator dispatches **Deploy Web (staging)**
 from `main`; a merge to `main` does not deploy
 ([Main to staging](../../release/main-to-staging.md#cloud-application)):

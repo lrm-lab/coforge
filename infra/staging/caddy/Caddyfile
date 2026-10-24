@@ -43,3 +43,21 @@ staging.coforge.cn {
 		reverse_proxy web:3000
 	}
 }
+
+# PiResearch (github.com/lrm-lab/PiResearch), a CoForge App hosted on this machine. It runs as its
+# own Compose project on the `coforge-staging-apps` network; while it is down this site answers 502
+# and staging is unaffected. Its sidecar owns the Agent manifest and /api/coforge/*.
+research.coforge.cn {
+	@root path /
+	redir @root /galaxy/ 302
+
+	@coforge path /.well-known/coforge-agent-manifest.json /api/coforge/*
+	handle @coforge {
+		reverse_proxy piresearch-coforge-app:3000
+	}
+
+	handle {
+		encode
+		reverse_proxy piresearch:8766
+	}
+}

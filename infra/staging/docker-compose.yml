@@ -43,6 +43,7 @@ services:
       - caddy_config:/config
     networks:
       - coforge
+      - apps
     depends_on:
       web:
         condition: service_healthy
@@ -125,6 +126,9 @@ services:
       # primary key, mounted as a secret; it is not an OSS credential.
       COFORGE_FILE_DELIVERY_URL: https://files-staging.coforge.cn
       COFORGE_FILE_DELIVERY_KEY_FILE: /run/secrets/coforge_file_delivery_key
+      # Login with CoForge for staging, with its own issuer and keyset (never production's).
+      COFORGE_OIDC_ISSUER: https://staging.coforge.cn/oidc
+      COFORGE_OIDC_SIGNING_JWKS_FILE: /run/secrets/coforge_oidc_signing_jwks
       # Avatars and project icons are published as anonymous, never-expiring URLs on their own
       # domain and bucket, so a browser caches one copy of each. Both settings go live
       # together: the URL without the bucket refuses to boot. The Web role reads that bucket
@@ -173,6 +177,10 @@ services:
         gid: "1000"
         mode: 0400
       - source: coforge_file_delivery_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_oidc_signing_jwks
         uid: "1000"
         gid: "1000"
         mode: 0400
@@ -317,6 +325,11 @@ services:
 
 networks:
   coforge: {}
+  # Apps hosted beside staging (see caddy/Caddyfile) join this network from their own Compose
+  # project as `external`, so Caddy can reach them by container name. A fixed name, because the
+  # other project refers to it; no CoForge service but Caddy is on it.
+  apps:
+    name: coforge-staging-apps
 
 volumes:
   caddy_data: {}
@@ -350,6 +363,8 @@ secrets:
   # 600 file, which the rootless daemon maps to root, so the `bun` user could not read it.
   coforge_file_delivery_key:
     environment: COFORGE_FILE_DELIVERY_KEY
+  coforge_oidc_signing_jwks:
+    environment: COFORGE_OIDC_SIGNING_JWKS
   redis_password:
     file: ./secrets/redis_password
   postgres_password:
