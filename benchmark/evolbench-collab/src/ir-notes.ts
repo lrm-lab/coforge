@@ -26,3 +26,24 @@ export const IR_DOCS_NOTE = [
   "Documents: search the corpus with ov_find and read sources with ov_read (your tool instructions show the arguments).",
   "The document id to cite is the file name in the URI without .md, e.g. viking://resources/evo-ir/documents/12345.md is [12345].",
 ].join(" ");
+
+/** The official task text tells the agent to use only a "search" tool and no other tool, which contradicts the
+ * channel protocol (messages to Memory, final answer in the channel). With document tools the CRITICAL RULES block is
+ * replaced by the same advice phrased for ov_find / ov_read; the question and the answer format are untouched. */
+const IR_TASK_DOCS_RULES = [
+  "## RULES",
+  "- Find evidence with the ov_find and ov_read document tools; do not use web search or any source outside the corpus.",
+  "- You may search many times with different queries.",
+  "- Think step by step: decompose the question into constraints, search for the most specific ones first.",
+  "- After finding a candidate answer, verify ALL constraints before responding.",
+  "- If you cannot find the exact answer, give your best guess.",
+  "",
+].join("\n");
+
+export function irTaskDocsPrompt(prompt: string): string {
+  const start = prompt.indexOf("## CRITICAL RULES");
+  const end = prompt.indexOf("## Response Format");
+  return start >= 0 && end > start
+    ? `${prompt.slice(0, start)}${IR_TASK_DOCS_RULES}\n${prompt.slice(end)}`
+    : prompt;
+}

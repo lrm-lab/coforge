@@ -311,3 +311,25 @@ test("without the doc-tools flag IR keeps the legacy Memory-retrieval reminder",
   const text = episodePrompt(episode, "R", null, true, { parallel: true });
   expect(text).not.toContain("[12345]");
 });
+
+test("the official 'only use the search tool' rules are replaced when the Task uses document tools", () => {
+  const official = {
+    ...episode,
+    prompt: [
+      "Intro.",
+      '## CRITICAL RULES\n- You MUST ONLY use the "search" tool. Do NOT use any other tools (no exec).',
+      "## Response Format\nExact Answer: {x}",
+      "## Question\n\nfind the bird.",
+      "## How to call search in this environment\npython3 x/ir_search.py q",
+    ].join("\n\n"),
+  };
+  const text = episodePrompt(official, "R", null, false, {
+    taskDocTools: true,
+  });
+  expect(text).not.toContain("MUST ONLY use");
+  expect(text).not.toContain("ir_search.py");
+  expect(text).toContain("ov_find and ov_read");
+  expect(text).toContain("## Response Format");
+  expect(text).toContain("find the bird.");
+  expect(episodePrompt(official, "R", null, false)).toContain("MUST ONLY use");
+});

@@ -1,5 +1,9 @@
 import type { MemoryDispositionRecord } from "@lrm/coforge-sdk/agent";
-import { IR_DOCS_NOTE, MEMORY_PARALLEL_NOTE_IR } from "./ir-notes";
+import {
+  IR_DOCS_NOTE,
+  MEMORY_PARALLEL_NOTE_IR,
+  irTaskDocsPrompt,
+} from "./ir-notes";
 import { RedisClient } from "bun";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { PublicChannels } from "../../../apps/web/src/server/conversations/public-channels.server";
@@ -75,12 +79,16 @@ export function episodePrompt(
         .replaceAll("%TASK_ID%", episode.taskId)
         .replaceAll("%EPISODE_ID%", episode.episodeId)}`
     : "";
-  const prompt =
+  const stripped =
     episode.domain === "information_retrieval"
       ? episode.prompt
           .split("## How to call search in this environment")[0]!
           .trimEnd()
       : episode.prompt;
+  const prompt =
+    episode.domain === "information_retrieval" && options.taskDocTools
+      ? irTaskDocsPrompt(stripped)
+      : stripped;
   const parallel = options.parallel === true;
   const ir = episode.domain === "information_retrieval";
   const docsNote = ir && options.taskDocTools ? `\n\n${IR_DOCS_NOTE}` : "";
