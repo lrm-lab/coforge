@@ -163,7 +163,9 @@ function pageFooter(page: Page): string {
   return `${lines.join("\n")}\n`;
 }
 
-/** The row matches when the text it is shown as contains the query, ignoring case. */
+/** The row matches when the text it is shown as contains the query, ignoring case. Raft matches
+ * every string field of the row instead, which also hits ids, URLs and the role of an ordinary
+ * member that the row never shows, so `--query member` would match every Agent. */
 function includesQuery(text: string, query: string | undefined): boolean {
   const needle = query?.trim().toLowerCase();
   return !needle || text.toLowerCase().includes(needle);
@@ -192,9 +194,6 @@ function nextCommand(
 }
 
 function summary(result: WorkspaceInfoResult): string {
-  // Unlike Raft, the Agent's authoritative runtime leads the summary, so a plain
-  // `workspace info` still answers which Computer and runtime this Agent is on.
-  const runtime = formatCurrentRuntimeBlock(cliRuntimeContext(result.runtimeContext));
   const channels = result.channels ?? [];
   const hints = [
     ...WORKSPACE_INFO_SECTIONS.map((section) => `${WORKSPACE_INFO_COMMAND} --${section}`),
@@ -204,7 +203,6 @@ function summary(result: WorkspaceInfoResult): string {
   return `${[
     "## Workspace",
     "",
-    ...(runtime ? [runtime, ""] : []),
     `Channels: ${channels.length} visible (${channels.filter((channel) => channel.joined).length} joined)`,
     `Agents: ${result.agents.length}`,
     `Humans: ${result.humans.length}`,

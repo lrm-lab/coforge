@@ -170,11 +170,10 @@ test("the summary counts what is visible and points at the narrower queries", ()
   );
 });
 
-test("the summary leads with the Agent's authoritative runtime when it is known", () => {
+test("the summary leaves the runtime block to --full", () => {
   const withRuntime = { ...BASE, runtimeContext: { agentName: "scout", runtime: "codex" } };
-  expect(info([], withRuntime)).toContain(
-    "## Workspace\n\n### Current Runtime\nAuthoritative context for this Agent process. Do not infer Computer identity from hostname or cwd when this section is present.\n- Agent: @scout\n- Provider: codex\n\nChannels: 0 visible (0 joined)",
-  );
+  expect(info([], withRuntime)).not.toContain("Current Runtime");
+  expect(info(["--full"], withRuntime)).toContain("### Current Runtime");
 });
 
 test("lists channels with membership, authority, mute, archive and last post", () => {
@@ -304,7 +303,7 @@ test("fills the Agent workspace path from the environment into the runtime block
   Bun.env.COFORGE_CURRENT_AGENT_WORKSPACE_PATH = "/home/agent/workspaces/w/agents/agent-1";
   try {
     const withId = { ...BASE, runtimeContext: { agentId: "agent-1" } };
-    expect(info([], withId)).toContain(
+    expect(info(["--full"], withId)).toContain(
       "- Agent workspace: /home/agent/workspaces/w/agents/agent-1",
     );
     expect(JSON.parse(info(["--json"], withId)).runtimeContext).toEqual({

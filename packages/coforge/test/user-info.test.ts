@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run } from "../index";
+import { CliError } from "#src/cli-error";
 import type { AgentUserInfoResponse } from "@lrm/coforge-sdk/agent";
 
 const TRANSPORT = {
@@ -115,5 +116,22 @@ test("shows an Agent's status and runtime facts after the common lines", async (
   })) as string;
   expect(output).toContain(
     "User: @scout\nKind: agent\nStatus: online\nDisplay name: Scout\nComputer: mac-1\nProvider: codex\nModel: gpt-5\nSelf: yes\n",
+  );
+});
+
+test("an unknown user gets the next step to find them", async () => {
+  const error = (await run(["user", "info", "ghost"], {
+    ...TRANSPORT,
+    userInfo: async () => {
+      throw new CliError({
+        code: "USER_NOT_FOUND",
+        message: "User not found or not visible: @ghost",
+      });
+    },
+  }).catch((caught: unknown) => caught)) as CliError;
+  expect(error).toBeInstanceOf(CliError);
+  expect(error.message).toBe("User not found or not visible: @ghost");
+  expect(error.suggestedNextAction).toBe(
+    "Run `coforge workspace info --agents --query <name>` or `coforge workspace info --humans --query <name>` to inspect visible users.",
   );
 });

@@ -1,3 +1,7 @@
+import type { AgentUserInfoResponse } from "@lrm/coforge-sdk/agent";
+import { CliError } from "#src/cli-error";
+import { formatUserInfo } from "#src/user-format";
+
 export type UserInfoInvocation = {
   command: "user-info";
   name: string;
@@ -43,4 +47,30 @@ export function parseUserInfoArgs(args: readonly string[]): UserInfoInvocation {
     ...(limit !== undefined ? { limit } : {}),
     ...(offset !== undefined ? { offset } : {}),
   };
+}
+
+/** A name the server does not know gets Raft's next step, built here because the envelope that
+ * carries the refusal has room only for its message. */
+function withUserNotFoundHint(error: unknown): unknown {
+  if (!(error instanceof CliError) || error.code !== "USER_NOT_FOUND") return error;
+  return new CliError({
+    code: error.code,
+    message: error.message,
+    retryable: error.retryable,
+    correlationId: error.correlationId,
+    proxy: error.proxy,
+    suggestedNextAction:
+      "Run `coforge workspace info --agents --query <name>` or `coforge workspace info --humans --query <name>` to inspect visible users.",
+  });
+}
+
+/** `user info <name>`: the server's answer as JSON, or formatted and paged. */
+export async function runUserInfo(
+  userInfo: (name: string) => Promise<AgentUserInfoResponse>,
+  invocation: UserInfoInvocation,
+): Promise<AgentUserInfoResponse | string> {
+  const result = await userInfo(invocation.name).catch((error) => {
+    throw withUserNotFoundHint(error);
+  });
+  return invocation.json ? result : formatUserInfo(result, invocation);
 }

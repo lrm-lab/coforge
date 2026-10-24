@@ -55,8 +55,8 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { COFORGE_CLI_VERSION } from "#src/version";
 import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
-import { formatProfile, formatUserInfo } from "#src/user-format";
-import { parseUserInfoArgs, type UserInfoInvocation } from "#src/user-info";
+import { formatProfile } from "#src/user-format";
+import { parseUserInfoArgs, runUserInfo, type UserInfoInvocation } from "#src/user-info";
 
 export type { UserInfoInvocation };
 import { parseAppConfigArgs, runAppConfig, type AppConfigInvocation } from "#src/app-config";
@@ -1067,8 +1067,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   if (invocation.command === "user-info") {
     if (!transport.userInfo) throw new Error("User info transport is unavailable");
-    const result = await transport.userInfo(invocation.name);
-    return invocation.json ? result : formatUserInfo(result, invocation);
+    return runUserInfo(transport.userInfo.bind(transport), invocation);
   }
   if (invocation.command === "profile-show") {
     if (!transport.profileShow) throw new Error("Profile transport is unavailable");
