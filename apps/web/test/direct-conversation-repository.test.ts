@@ -382,7 +382,7 @@ describe("PrismaDirectConversationRepository", () => {
       attachments: [],
     }));
     const db = {
-      agent: { findFirst: async () => null },
+      agent: { findMany: async () => [] },
       user: { findUnique: async () => ({ id: "user-1" }) },
       conversation: { findUnique: async () => ({ id: "conversation-1" }) },
       conversationMember: {
@@ -461,7 +461,7 @@ describe("PrismaDirectConversationRepository", () => {
     ];
     let read = 0;
     const db = {
-      agent: { findFirst: async () => null },
+      agent: { findMany: async () => [] },
       user: { findUnique: async () => ({ id: "user-1" }) },
       $executeRaw: async () => 1,
       conversationMember: {
@@ -531,7 +531,7 @@ describe("PrismaDirectConversationRepository", () => {
     ];
     let read = 0;
     const db = {
-      agent: { findFirst: async () => null },
+      agent: { findMany: async () => [] },
       user: { findUnique: async () => ({ id: "user-1" }) },
       $executeRaw: async () => 1,
       conversationMember: {
@@ -583,7 +583,7 @@ describe("PrismaDirectConversationRepository", () => {
   test("an unanchored canonical read advances across a missing sequence", async () => {
     const updates: object[] = [];
     const db = {
-      agent: { findFirst: async () => null },
+      agent: { findMany: async () => [] },
       user: { findUnique: async () => ({ id: "user-1" }) },
       conversationMember: {
         findUnique: async () => ({ agentReadThroughSequence: 1 }),
@@ -626,7 +626,7 @@ describe("PrismaDirectConversationRepository", () => {
   test("bounds and monotonically advances only the authorized Agent conversation", async () => {
     const updates: object[] = [];
     const db = {
-      agent: { findFirst: async () => null },
+      agent: { findMany: async () => [] },
       user: { findUnique: async () => ({ id: "user-1" }) },
       message: { findFirst: async () => ({ sequence: 9 }) },
       conversationMember: {
@@ -680,7 +680,7 @@ describe("PrismaDirectConversationRepository", () => {
   test("returns zero without advancing when the authorized conversation has no messages", async () => {
     let updates = 0;
     const db = {
-      agent: { findFirst: async () => null },
+      agent: { findMany: async () => [] },
       user: { findUnique: async () => ({ id: "user-1" }) },
       message: { findFirst: async () => null },
       conversationMember: { updateMany: async () => void updates++ },

@@ -127,7 +127,7 @@ async function unreadThreads(
  *   equal times is extended to the end of the run, so nothing is skipped or repeated.
  */
 export async function listAgentInbox(
-  db: Pick<PrismaClient, "$queryRaw" | "user" | "agent">,
+  db: Pick<PrismaClient, "$queryRaw" | "user" | "agent" | "conversation" | "workspaceMembership">,
   workspaceId: string,
   agentId: string,
   { view = "unread", before }: { view?: AgentInboxView; before?: number } = {},

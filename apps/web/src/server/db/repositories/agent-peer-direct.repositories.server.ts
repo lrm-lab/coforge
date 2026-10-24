@@ -60,22 +60,52 @@ async function resolveDirectPeer(
 }
 
 async function usableAgent(db: Db, scope: { workspaceId: string; agentId: string }, name: string) {
-  const peer = await db.agent.findFirst({
+  return (await usableAgents(db, scope, [name])).get(name);
+}
+
+/**
+ * The Agents among `names` that the reader may address: live, ordinary (no platform assistant or
+ * app bot), not the reader itself, and either visible to it (`canSeeAgent`) or already in a
+ * conversation with it. The one rule for resolving a target and for deciding that a name needs a
+ * suffix, so a name the reader cannot see neither blocks a bare `@name` nor shows that it exists.
+ */
+async function usableAgents(
+  db: Db,
+  scope: { workspaceId: string; agentId: string },
+  names: readonly string[],
+) {
+  const unique = [...new Set(names)];
+  const usable = new Map<string, { id: string }>();
+  if (!unique.length) return usable;
+  const candidates = await db.agent.findMany({
     where: {
       workspaceId: scope.workspaceId,
-      name,
+      name: { in: unique },
       systemKind: null,
       id: { not: scope.agentId },
       ...ACTIVE_AGENT_WHERE,
     },
-    select: { id: true, ownerId: true, visibility: true, systemKind: true },
+    select: { id: true, name: true, ownerId: true, visibility: true, systemKind: true },
   });
-  if (!peer) return null;
-  if (await findAgentPeerConversation(db, scope.workspaceId, scope.agentId, peer.id)) return peer;
-  const viewer = await agentVisibilityViewerForActor(db, scope.workspaceId, {
-    agentId: scope.agentId,
-  });
-  return canSeeAgent(viewer, peer) ? peer : null;
+  if (!candidates.length) return usable;
+  const [viewer, talking] = await Promise.all([
+    agentVisibilityViewerForActor(db, scope.workspaceId, { agentId: scope.agentId }),
+    db.conversation.findMany({
+      where: {
+        workspaceId: scope.workspaceId,
+        directKey: { in: candidates.map((c) => agentPeerDirectKey(scope.agentId, c.id)) },
+      },
+      select: { directKey: true },
+    }),
+  ]);
+  const talkingKeys = new Set(talking.map((conversation) => conversation.directKey));
+  for (const candidate of candidates)
+    if (
+      talkingKeys.has(agentPeerDirectKey(scope.agentId, candidate.id)) ||
+      canSeeAgent(viewer, candidate)
+    )
+      usable.set(candidate.name, { id: candidate.id });
+  return usable;
 }
 
 /** The two Agents' conversation, or `null`: a lookup never starts one. */
@@ -134,23 +164,23 @@ export type DirectSeat = { name: string; kind: "human" | "agent" };
 /**
  * `@name` for each seat, with the suffix that keeps it executable as shown: `~human` on a person
  * whose name a live ordinary Agent also holds, `~agent` on an Agent whose name a Workspace member
- * also holds (a bare name in those cases is `AMBIGUOUS_TARGET`). One read per kind for the whole
+ * also holds (a bare name in those cases is `AMBIGUOUS_TARGET`); an Agent the reader cannot address does not count (`usableAgents`). One read per kind for the whole
  * batch, never one per row.
  */
 export async function directRefs(
-  db: Pick<PrismaClient, "user" | "agent">,
+  db: Db,
   workspaceId: string,
   readerAgentId: string,
   seats: readonly DirectSeat[],
 ) {
   const namesOf = (kind: DirectSeat["kind"]) =>
     seats.flatMap((seat) => (seat.kind === kind ? [seat.name] : []));
-  const [agentNames, memberNames] = await Promise.all([
-    agentNamesAmong(db, workspaceId, readerAgentId, namesOf("human")),
+  const [agents, memberNames] = await Promise.all([
+    usableAgents(db, { workspaceId, agentId: readerAgentId }, namesOf("human")),
     memberUsernamesAmong(db, workspaceId, namesOf("agent")),
   ]);
   return ({ name, kind }: DirectSeat) =>
-    `@${name}${kind === "human" ? (agentNames.has(name) ? "~human" : "") : memberNames.has(name) ? "~agent" : ""}`;
+    `@${name}${kind === "human" ? (agents.has(name) ? "~human" : "") : memberNames.has(name) ? "~agent" : ""}`;
 }
 
 /** What `conversationTarget` reads of a conversation to name it from a reader's seat. */
@@ -166,7 +196,7 @@ export type DirectTargetOf = (conversation: TargetConversation) => string | unde
 
 /** `directRefs` for each direct conversation in the batch: its person, or its Agent peer. */
 export async function directTargets(
-  db: Pick<PrismaClient, "user" | "agent">,
+  db: Db,
   workspaceId: string,
   readerAgentId: string,
   conversations: readonly TargetConversation[],
@@ -223,7 +253,7 @@ export function dmParentTarget(target: string) {
 /** The target of a conversation between two Agents as `readerAgentId` sees it, from its members as
  * a send loaded them. */
 export async function peerSeatTarget(
-  db: Pick<PrismaClient, "user" | "agent">,
+  db: Db,
   conversation: { workspaceId: string; directKey: string | null },
   members: { agentId: string | null; agent?: { name: string } | null }[],
   readerAgentId: string,
@@ -267,31 +297,9 @@ async function memberUsernamesAmong(
   return new Set(users.map((user) => user.username));
 }
 
-/** Which of `names` are the name of a live ordinary Agent other than the reader. */
-async function agentNamesAmong(
-  db: Pick<PrismaClient, "agent">,
-  workspaceId: string,
-  readerAgentId: string,
-  names: readonly string[],
-) {
-  const unique = [...new Set(names)];
-  if (!unique.length) return new Set<string>();
-  const agents = await db.agent.findMany({
-    where: {
-      workspaceId,
-      name: { in: unique },
-      systemKind: null,
-      id: { not: readerAgentId },
-      ...ACTIVE_AGENT_WHERE,
-    },
-    select: { name: true },
-  });
-  return new Set(agents.map((agent) => agent.name));
-}
-
 /** A person's `@username` as the Agent should address it back: `~human` if an Agent holds it too. */
 export async function humanRef(
-  db: Pick<PrismaClient, "user" | "agent">,
+  db: Db,
   workspaceId: string,
   readerAgentId: string,
   username: string,
@@ -302,7 +310,7 @@ export async function humanRef(
 
 /** `directRefs` for the direct rows of an Agent recovery batch (`otherUsername`, `agentPeer`). */
 export async function recoveryRefs(
-  db: Pick<PrismaClient, "user" | "agent">,
+  db: Db,
   workspaceId: string,
   readerAgentId: string,
   rows: readonly Pick<AgentRecoveryRow, "channelName" | "otherUsername" | "agentPeer">[],

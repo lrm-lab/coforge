@@ -19,6 +19,7 @@ function fakeDb(options: { assistant?: boolean } = {}) {
   };
   const db = {
     agent: {
+      findMany: async () => [],
       findFirst: async () => ({
         systemKind: options.assistant ? WORKSPACE_ASSISTANT_KIND : null,
         workspaceAssistantSession: options.assistant

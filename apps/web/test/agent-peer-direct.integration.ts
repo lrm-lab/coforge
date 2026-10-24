@@ -217,3 +217,25 @@ test("a person who shares a name with an Agent is shown to the Agent as ~human, 
   const read = await repository.readMessages(workspaceId, alpha.id, bobRef);
   expect(read.map((m) => m.target)).toEqual([bobRef]);
 });
+
+test("an Agent the reader cannot see neither blocks the bare name nor shows that it exists", async () => {
+  // A private Agent of Bob's holds Ada's username; Alpha (Ada's) cannot see it.
+  await db.agent.create({
+    data: {
+      workspaceId,
+      ownerId: bob.id,
+      name: usernames[0]!,
+      displayName: "Hidden twin",
+      visibility: "private",
+      runtimeConfig: {},
+    },
+  });
+  const { conversationId, senderMemberId } = await repository.memberForUser(
+    workspaceId,
+    ada.id,
+    alpha.id,
+  );
+  const sent = await repository.sendMessage(conversationId, senderMemberId, ada.id, "hi again");
+  expect(sent.deliveryTarget).toBe(`@${usernames[0]}`);
+  await send(alpha, `@${usernames[0]}`, "bare name still reaches the person");
+});
