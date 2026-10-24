@@ -8,6 +8,7 @@ import type {
 } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { deliveryMentionsAgent } from "./mentions.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
@@ -132,14 +133,21 @@ export class SendDirectMessage {
         idempotencyKey: input.idempotencyKey,
       },
       async () => {
-        const persisted = await this.conversations.sendAgentMessage?.(
-          conversation.id,
-          input.agentId,
-          input.body,
-          input.attachmentIds,
-          input.target.split(":")[1],
-          input.mentions,
-        );
+        const persisted = await this.conversations
+          .sendAgentMessage?.(
+            conversation.id,
+            input.agentId,
+            input.body,
+            input.attachmentIds,
+            input.target.split(":")[1],
+            input.mentions,
+          )
+          .catch(async (error: unknown) => {
+            // A limit between two Agents is told to whoever reads their conversation, once.
+            if (isAppErrorCode(error, "AGENT_DM_CHAIN_LIMIT", "AGENT_DM_RATE_LIMIT"))
+              await this.conversations.noteAgentDmLimit?.(conversation.id, input.workspaceId);
+            throw error;
+          });
         if (!persisted) throw new Error("agent message persistence is unavailable");
         return persisted;
       },

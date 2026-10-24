@@ -40,6 +40,8 @@ export function handleRequestError(error: unknown): HandledRequestError {
       // retry another way, not treat it as a permanent failure.
       PUSH_SERVICE_UNREACHABLE: 503,
       AMBIGUOUS_TARGET: 409,
+      AGENT_DM_CHAIN_LIMIT: 429,
+      AGENT_DM_RATE_LIMIT: 429,
     }[error.code];
     return { code, message: error.message };
   }

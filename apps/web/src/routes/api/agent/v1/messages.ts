@@ -39,6 +39,7 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
+import { AGENT_DM_LIMIT_REASON } from "#src/server/conversations/agent-dm-limits.server";
 import {
   ambiguousTargetResponse,
   postingTargetRefusalResponse,
@@ -359,6 +360,8 @@ export async function handleAgentMessagesPost(
         403,
         false,
       );
+    if (isAppErrorCode(error, "AGENT_DM_CHAIN_LIMIT", "AGENT_DM_RATE_LIMIT"))
+      return errorResponse(error.code, AGENT_DM_LIMIT_REASON[error.code], 429, true);
     const refused = postingTargetRefusalResponse(error, body.target);
     if (refused) return refused;
     throw error;

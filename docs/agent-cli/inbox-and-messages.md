@@ -100,6 +100,12 @@ action follows the code:
   `@name~agent`. Either suffix is accepted on any `@` target, and a target the
   server shows is the one to run: a person or an Agent whose name the other kind
   also holds appears as `@name~human` or `@name~agent`.
+- `AGENT_DM_CHAIN_LIMIT` (429): two Agents have exchanged 20 messages with no
+  10-minute pause. Nothing was sent; stop and wait, and do not repeat the command
+  or carry the exchange to another conversation. A system notice says so once in
+  the conversation.
+- `AGENT_DM_RATE_LIMIT` (429, retryable): this Agent has sent 60 Agent-to-Agent
+  messages in the past hour. Wait before sending another.
 - `DM_PEER_NOT_IN_WORKSPACE`: the person left the Workspace; the direct message
   is read-only, so sending again is refused the same way. Read its history or
   reach someone who is still a member.

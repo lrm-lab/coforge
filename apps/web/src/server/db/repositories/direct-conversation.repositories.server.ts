@@ -15,10 +15,7 @@ import {
 } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
-import {
-  TRACKED_MENTION_STATE_SELECT,
-  type TrackedMentionState,
-} from "./mention-delivery.repositories.server";
+import { type TrackedMentionState } from "./mention-delivery.repositories.server";
 import {
   anchorSideHasMessages,
   assertMessageAnchor,
@@ -27,6 +24,11 @@ import {
   sequenceAnchor,
 } from "./direct-conversation-anchor.server";
 import { advanceThreadRead } from "./thread-read-position.server";
+import {
+  assertAgentDmWithinLimits,
+  noteAgentDmLimit,
+} from "#src/server/conversations/agent-dm-limits.server";
+import { receiveDeliveryAck } from "./delivery-ack.repositories.server";
 import { humanUsernameTarget } from "./agent-peer-target.server";
 import {
   findUserAgentConversation,
@@ -240,6 +242,7 @@ export type HistoryWindow = { beforeSequence?: number; afterSequence?: number; l
 
 export type DirectConversationRepository = {
   userIdForUsername?(target: string): Promise<string>;
+  noteAgentDmLimit?(conversationId: string, workspaceId: string): Promise<void>;
   openAgentDirect?(
     workspaceId: string,
     agentId: string,
@@ -774,6 +777,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     );
   }
 
+  /** Tells a conversation between Agents, once, that a limit stopped it. */
+  noteAgentDmLimit(conversationId: string, workspaceId: string) {
+    return noteAgentDmLimit(this.db, conversationId, workspaceId);
+  }
+
   /** The conversation a direct send names, started if need be, and who it is with. */
   openAgentDirect(workspaceId: string, agentId: string, parentTarget: string) {
     return openDirectPeerConversation(this.db, { workspaceId, agentId }, parentTarget, {
@@ -1246,31 +1254,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     };
   }
 
-  async receiveDeliveryAck(input: {
-    workspaceId: string;
-    computerId: string;
-    agentId: string;
-    deliveryId: string;
-    messageId: string;
-    sequence: number;
-  }) {
-    // Returns the delivery's tracked-mention state from the same write, so an untracked ACK needs
-    // nothing more.
-    const acked = await this.db.agentMessageDelivery.updateManyAndReturn({
-      where: {
-        deliveryId: input.deliveryId,
-        workspaceId: input.workspaceId,
-        agentId: input.agentId,
-        messageId: input.messageId,
-        sequence: input.sequence,
-        agent: { computerId: input.computerId },
-      },
-      data: { receivedAt: new Date() },
-      select: TRACKED_MENTION_STATE_SELECT,
-    });
-    if (acked.length !== 1) throw new Error("delivery acknowledgement is not authorized");
-    // The migration's CHECK constraints hold these columns to their closed sets.
-    return acked[0] as TrackedMentionState;
+  receiveDeliveryAck(input: Parameters<typeof receiveDeliveryAck>[1]) {
+    return receiveDeliveryAck(this.db, input);
   }
 
   async readPendingAgentDeliveries(
@@ -2164,6 +2149,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         }
       }
       const sequence = await allocateSequence(tx, conversationId);
+      if (peer)
+        await assertAgentDmWithinLimits(tx, {
+          conversationId,
+          workspaceId: conversation.workspaceId,
+          senderAgentId: agentId,
+        });
       // Require the sending Agent's own uploads before creating the message; link messageId
       // and position afterward in the same transaction.
       const requestedAttachmentIds = attachmentIds ?? [];

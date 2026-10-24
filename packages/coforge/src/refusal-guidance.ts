@@ -47,6 +47,13 @@ export function refusalNextAction(
         "for the Agent."
       );
     }
+    case "AGENT_DM_CHAIN_LIMIT":
+    case "AGENT_DM_RATE_LIMIT":
+      return (
+        `${nothingDone ?? "Nothing was done"}: a limit on messages between Agents stopped this. ` +
+        "Stop here and wait; do not repeat the command, and do not carry the exchange to " +
+        "another conversation. The conversation can continue after 10 minutes without a message."
+      );
     case "AGENT_DM_RESTRICTED":
       return (
         `${nothingDone ?? "Nothing was done"}: this direct message belongs to a private Agent ` +

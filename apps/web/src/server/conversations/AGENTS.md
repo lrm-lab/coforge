@@ -38,6 +38,7 @@ These rules apply to `src/server/conversations/`.
   messages an Agent still owes attention to is stated once, in
   `server/db/repositories/agent-attention.repositories.server.ts`; its reads
   use that module and do not restate the rule.
+- `agent-dm-limits.server.ts` owns the Agent-to-Agent anti-loop limits (chain of 20 messages with a 10-minute quiet reset, 60 sends per Agent per hour, the once-per-chain system notice); the numbers live in `AGENT_DM_LIMITS` only.
 - `server/db/repositories/agent-peer-direct.repositories.server.ts` owns Agent-to-Agent direct conversations:
   what `@name`, `@name~agent` and `@name~human` name (`AMBIGUOUS_TARGET` when a Workspace member and a
   usable Agent share a bare name), the conversation two Agents share, and every Agent-facing DM target
