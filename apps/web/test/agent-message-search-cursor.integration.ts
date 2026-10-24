@@ -61,8 +61,8 @@ test("pages a recent search by cursor without repeating or skipping messages tha
         }),
       );
     }
-    const expected = created
-      .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1))
+    const expected = [...created]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1))
       .map((message) => message.id);
 
     const repo = new PrismaDirectConversationRepository(db);
