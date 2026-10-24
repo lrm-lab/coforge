@@ -1,4 +1,7 @@
 {
   "agent_profile_edit_visibility": "编辑可见性",
-  "agent_form_computer_locked": "这个智能体已经分配了电脑，要换请用「迁移到其他电脑」。"
+  "agent_form_computer_locked": "这个智能体已经分配了电脑，要换请用「迁移到其他电脑」。",
+  "agent_profile_section_peer_dms": "Agent 私信",
+  "agent_peer_dm_paused": "已暂停",
+  "agent_peer_dm_last_line": "{speaker}：{preview}"
 }

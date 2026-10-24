@@ -3,6 +3,7 @@ import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 
 import { getAgentEnvironment, getAgentProfile } from "#src/features/agents/agents.functions";
+import { getAgentPeerConversations } from "#src/features/agents/agent-peer-conversations.functions";
 
 const agentProfileKey = (agentId: string) => ["agent-profile", agentId] as const;
 export const agentEnvironmentKey = (agentId: string) => ["agent-environment", agentId] as const;
@@ -14,6 +15,15 @@ export function agentProfileQuery(agentId: string | undefined) {
     queryKey: agentProfileKey(agentId ?? ""),
     queryFn: async () => getAgentProfile({ data: agentId! }),
     enabled: Boolean(agentId),
+    staleTime: 15_000,
+  });
+}
+
+/** The Profile tab's AGENT DMS cards: previews of the Agent's conversations with other Agents. */
+export function agentPeerConversationsQuery(agentId: string) {
+  return queryOptions({
+    queryKey: ["agent-peer-conversations", agentId] as const,
+    queryFn: async () => getAgentPeerConversations({ data: agentId }),
     staleTime: 15_000,
   });
 }
