@@ -12,6 +12,8 @@ const ALLOWANCE_TTL_MS = 10 * 60_000;
 const allowances = new Map<string, number>();
 /** Per Memory Agent: when its latest retrieval returned items, and how many plain messages were refused since. */
 const hits = new Map<string, { at: number; refused: number }>();
+/** Per Memory Agent: explicit questions asked up to this time were answered by a "no applicable card" message. */
+const answeredThrough = new Map<string, number>();
 
 const key = (workspaceId: string, agentId: string) =>
   `${workspaceId}:${agentId}`;
@@ -47,7 +49,29 @@ export function refusalBecomesNoCardAllowance(
     return false;
   }
   hits.delete(key(workspaceId, agentId));
+  allowances.set(key(workspaceId, agentId), now);
   return true;
+}
+
+/**
+ * The allowed plain message went out: it answers every explicit question asked so far, so later plain messages from
+ * this Memory Agent (a failed diagnosis notice, a thank-you) are no longer refused for those questions.
+ */
+export function markNoCardAnswered(
+  workspaceId: string,
+  agentId: string,
+  now = Date.now(),
+): void {
+  if (!hasNoCardAllowance(workspaceId, agentId, now)) return;
+  answeredThrough.set(key(workspaceId, agentId), now);
+  allowances.delete(key(workspaceId, agentId));
+}
+
+export function noCardAnsweredThrough(
+  workspaceId: string,
+  agentId: string,
+): number {
+  return answeredThrough.get(key(workspaceId, agentId)) ?? 0;
 }
 
 export function hasNoCardAllowance(

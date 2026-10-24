@@ -15,7 +15,7 @@ import {
   MEMORY_OFFER_REQUIRED_MESSAGE,
 } from "@lrm/coforge-sdk/internal";
 import { createPrismaMemoryAgentDirectory } from "#src/server/workspace-memory/memory-agent-http.server";
-import { clearNoCardAllowance } from "#src/server/workspace-memory/no-card-allowance";
+import { clearNoCardAllowance, markNoCardAnswered } from "#src/server/workspace-memory/no-card-allowance";
 import { explicitMemoryQuestionRequiresOffer } from "#src/server/workspace-memory/explicit-memory-answer";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -405,6 +405,7 @@ export const Route = createFileRoute("/api/agent/v1/messages")({
           ...agentMessagesPostDependencies(db),
           onMessageSent: ({ messageId, target, body: messageBody }) => {
             // The one plain message a "no applicable card" retrieval allows has been used.
+            markNoCardAnswered(principal.workspaceId, principal.agentId);
             clearNoCardAllowance(principal.workspaceId, principal.agentId);
             return applyIncomingWeeklyReportBodyEdit(db, {
               workspaceId: principal.workspaceId,

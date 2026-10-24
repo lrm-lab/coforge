@@ -9,6 +9,8 @@ import {
 } from "./explicit-memory-answer";
 import {
   clearNoCardAllowance,
+  markNoCardAnswered,
+  noCardAnsweredThrough,
   recordMemoryRetrieval,
 } from "./no-card-allowance";
 
@@ -257,4 +259,49 @@ test("retrieval with items but none applicable: the second plain message passes 
   expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
     true,
   );
+});
+
+test("an allowed no-card message answers the questions asked so far; a newer question needs an Offer again", async () => {
+  const input = {
+    workspaceId: "ws-a",
+    agentId: "mem-a",
+    conversationId: "c-a",
+  };
+  let askedAt = new Date("2026-10-24T05:00:00.000Z");
+  const db = {
+    message: {
+      findMany: async () => [
+        {
+          body: "@task @memory write it",
+          createdAt: askedAt,
+          conversationId: "c-a",
+          sender: { agentId: null },
+        },
+      ],
+    },
+    memoryOfferRecord: { findMany: async () => [] },
+  } as never;
+  const designated = async () => true;
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 0);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  markNoCardAnswered(input.workspaceId, input.agentId);
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  // Later plain messages (a failed-diagnosis notice) are no longer refused for that question...
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  // ...but a question asked after it is a new obligation.
+  askedAt = new Date(Date.now() + 1000);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  // marking without an allowance changes nothing
+  markNoCardAnswered("ws-a", "never-allowed");
+  expect(noCardAnsweredThrough("ws-a", "never-allowed")).toBe(0);
 });

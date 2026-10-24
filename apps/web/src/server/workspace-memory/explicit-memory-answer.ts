@@ -6,6 +6,7 @@
 
 import {
   hasNoCardAllowance,
+  noCardAnsweredThrough,
   refusalBecomesNoCardAllowance,
 } from "./no-card-allowance";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -68,6 +69,12 @@ export async function explicitMemoryQuestionRequiresOffer(
     input.agentId,
   );
   if (question === null) return false;
+  // A "no applicable card" message already answered this question.
+  if (
+    noCardAnsweredThrough(input.workspaceId, input.agentId) >=
+    question.createdAt.getTime()
+  )
+    return false;
   // Nothing citable came back from this Memory Agent's own retrieval: one plain "no applicable card" message may pass.
   if (hasNoCardAllowance(input.workspaceId, input.agentId)) return false;
   // Items came back but the Memory Agent insists none applies (second plain message): let it say so once.
