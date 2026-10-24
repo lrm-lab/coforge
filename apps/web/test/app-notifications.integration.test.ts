@@ -23,6 +23,7 @@ import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.ser
 import { fanOutAppNotificationEvents } from "#src/server/app-notifications/event-worker.server";
 import { flagOnFor, subscribeToMemberAdded } from "./helpers/app-notification-subscription";
 import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.server";
+import { cleanNotificationFixtureJobs } from "./helpers/app-notification-fixture-jobs";
 
 /**
  * The app notification outbox against local PostgreSQL with migrations applied: an event is a
@@ -43,6 +44,7 @@ const ON_SLUGS = Array.from({ length: 16 }, (_, index) => `notify-on-${RUN}-${in
 let nextOnSlug = 0;
 let flagDirectory: string | undefined;
 let boss: Awaited<ReturnType<typeof startAppNotificationQueue>>;
+const workspaceIds = new Set<string>();
 
 beforeAll(async () => {
   if (!db || !connectionString) return;
@@ -65,6 +67,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (boss) await cleanNotificationFixtureJobs(boss, workspaceIds);
   await stopAppNotificationQueue();
   await installFeatureFlags({ status: "disabled" });
   if (flagDirectory) await rm(flagDirectory, { recursive: true, force: true });
@@ -85,6 +88,7 @@ async function fixture(db: PrismaClient, { flag = "on" }: { flag?: "on" | "off" 
       members: { create: [{ userId: owner.id, role: "owner" }] },
     },
   });
+  workspaceIds.add(workspace.id);
   const key = `notify-${suffix}`;
   await createAppRegistry(db).registerApp(
     { workspaceId: workspace.id, actorUserId: owner.id },

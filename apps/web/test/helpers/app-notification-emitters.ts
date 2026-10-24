@@ -17,6 +17,7 @@ import {
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
+import { cleanNotificationFixtureJobs } from "./app-notification-fixture-jobs";
 import { subscribeTo } from "./app-notification-subscription";
 
 /**
@@ -63,6 +64,7 @@ export async function startEmitterEnvironment() {
     await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: path }),
   );
   const boss = await startAppNotificationQueue(connectionString);
+  const workspaceIds = new Set<string>();
   let nextOnSlug = 0;
   const onSlug = () => `${onPrefix}${nextOnSlug++}`;
 
@@ -93,6 +95,7 @@ export async function startEmitterEnvironment() {
         allowedScopes: ["openid", "profile", "identity"],
       },
     );
+    workspaceIds.add(workspace.id);
     const { appId } = await db.appInstallation.findFirstOrThrow({
       where: { workspaceId: workspace.id },
       select: { appId: true },
@@ -156,6 +159,7 @@ export async function startEmitterEnvironment() {
     /** A slug the flag is on for, which no Workspace has yet. */
     onSlug,
     async stop() {
+      await cleanNotificationFixtureJobs(boss, workspaceIds);
       await stopAppNotificationQueue();
       await installFeatureFlags({ status: "disabled" });
       await rm(directory, { recursive: true, force: true });
