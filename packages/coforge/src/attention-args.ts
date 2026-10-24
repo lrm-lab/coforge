@@ -77,9 +77,9 @@ function parseUnfollowArgs(args: readonly string[]): ThreadInvocation {
   return { command: "thread-unfollow", target, ...(reason ? { reason } : {}) };
 }
 
-const INBOX_USAGE = "Usage: coforge inbox check [--view unread|mentions] [--before <seq>] [--json]";
+const INBOX_USAGE = "Usage: coforge inbox check [--view unread|mentions] [--before <n>] [--json]";
 
-/** `inbox check [--view unread|mentions] [--before <seq>] [--json]`. */
+/** `inbox check [--view unread|mentions] [--before <n>] [--json]`. */
 function parseInboxCheckArgs(args: readonly string[]): InboxInvocation {
   let view: string | undefined;
   let before: string | undefined;
@@ -104,7 +104,7 @@ function parseInboxCheckArgs(args: readonly string[]): InboxInvocation {
     throw refuse(`--view must be one of ${AGENT_INBOX_VIEWS.join(", ")}; got ${view}`);
   if (before !== undefined && !/^[1-9][0-9]*$/.test(before))
     throw refuse(
-      `--before must be a positive integer seq (copy it from the More: line); got ${before}`,
+      `--before must be a positive integer cursor (the value printed on the More: line); got ${before}`,
     );
   return {
     command: "inbox-check",

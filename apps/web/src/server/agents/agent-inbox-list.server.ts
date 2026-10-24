@@ -75,7 +75,7 @@ async function unreadConversations(
  *   mute, ordinary messages do not wake the Agent.
  * - `mentions` view lists the conversations with an unread mention; `totals` always cover every
  *   unread conversation, whatever the view or page.
- * - Paging is by activity time: `beforeSeq` (epoch milliseconds, copied from `nextBeforeSeq`)
+ * - Paging is by activity time: `before` (epoch milliseconds, copied from `nextBefore`)
  *   keeps conversations whose latest unread message is older. A page that ends inside a run of
  *   equal times is extended to the end of the run, so nothing is skipped or repeated.
  */
@@ -83,7 +83,7 @@ export async function listAgentInbox(
   db: Pick<PrismaClient, "$queryRaw">,
   workspaceId: string,
   agentId: string,
-  { view = "unread", beforeSeq }: { view?: AgentInboxView; beforeSeq?: number } = {},
+  { view = "unread", before }: { view?: AgentInboxView; before?: number } = {},
   pageSize = AGENT_INBOX_PAGE_SIZE,
 ): Promise<AgentInboxListResponse> {
   const unread = await unreadConversations(db, workspaceId, agentId);
@@ -94,7 +94,7 @@ export async function listAgentInbox(
   };
   const inView = unread
     .filter((row) => (view === "mentions" ? row.mentions > 0 : true))
-    .filter((row) => beforeSeq === undefined || row.latestAt.getTime() < beforeSeq)
+    .filter((row) => before === undefined || row.latestAt.getTime() < before)
     .sort(
       (a, b) =>
         b.latestAt.getTime() - a.latestAt.getTime() ||
@@ -123,7 +123,7 @@ export async function listAgentInbox(
     items,
     totals,
     hasMore,
-    nextBeforeSeq: hasMore ? page[page.length - 1]!.latestAt.getTime() : null,
+    nextBefore: hasMore ? page[page.length - 1]!.latestAt.getTime() : null,
   };
 }
 

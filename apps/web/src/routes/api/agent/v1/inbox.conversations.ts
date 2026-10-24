@@ -8,8 +8,8 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { listAgentInbox } from "#src/server/agents/agent-inbox-list.server";
 
 /**
- * `GET /api/agent/v1/inbox/conversations[?view=unread|mentions][&before_seq=<n>]` — the unread
- * list of `coforge inbox check`. `before_seq` is the `nextBeforeSeq` of the previous page.
+ * `GET /api/agent/v1/inbox/conversations[?view=unread|mentions][&before=<n>]` — the unread
+ * list of `coforge inbox check`. `before` is the `nextBefore` of the previous page.
  */
 export async function handleAgentInboxListGet(
   request: Request,
@@ -17,13 +17,13 @@ export async function handleAgentInboxListGet(
 ): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const view = params.get("view") ?? "unread";
-  const rawBefore = params.get("before_seq");
-  const beforeSeq = rawBefore === null ? undefined : Number(rawBefore);
+  const rawBefore = params.get("before");
+  const before = rawBefore === null ? undefined : Number(rawBefore);
   if (!isAgentInboxView(view))
     return Response.json({ error: "view must be unread or mentions" }, { status: 400 });
-  if (beforeSeq !== undefined && (!Number.isSafeInteger(beforeSeq) || beforeSeq < 1))
-    return Response.json({ error: "before_seq must be a positive integer" }, { status: 400 });
-  return Response.json(await list({ view, beforeSeq }));
+  if (before !== undefined && (!Number.isSafeInteger(before) || before < 1))
+    return Response.json({ error: "before must be a positive integer" }, { status: 400 });
+  return Response.json(await list({ view, before }));
 }
 
 export const Route = createFileRoute("/api/agent/v1/inbox/conversations")({

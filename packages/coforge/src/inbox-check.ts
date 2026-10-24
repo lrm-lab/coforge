@@ -50,7 +50,7 @@ export async function runInboxCheck(
   if (!transport.inboxList || !transport.inboxCheck)
     throw new Error("App Inbox transport is unavailable");
   const [list, daemon] = await Promise.all([
-    transport.inboxList({ view, beforeSeq: before }),
+    transport.inboxList({ view, before: before }),
     (transport.inboxCheck() as Promise<DaemonInbox>).then(
       (inbox) => ({ inbox }),
       (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),

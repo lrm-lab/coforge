@@ -13,10 +13,12 @@ export function isAgentInboxView(value: unknown): value is AgentInboxView {
   return (AGENT_INBOX_VIEWS as readonly unknown[]).includes(value);
 }
 
-/** Conversations in one page of the list; the next page is `before_seq=nextBeforeSeq`. */
+/** Conversations in one page of the list; the next page is `before=nextBefore`. The cursor is
+ * opaque to callers (a message seq counts per conversation, so it is not one): copy it, never
+ * read it as a message seq. */
 export const AGENT_INBOX_PAGE_SIZE = 50;
 
-export type AgentInboxRequest = { view?: AgentInboxView; beforeSeq?: number };
+export type AgentInboxRequest = { view?: AgentInboxView; before?: number };
 
 /** One unread conversation: a `#channel` or an `@user` direct chat. */
 export type AgentInboxItem = {
@@ -39,8 +41,8 @@ export type AgentInboxTotals = {
   mentions: number;
 };
 
-/** Response for `GET /api/agent/v1/inbox/conversations[?view=<view>][&before_seq=<n>]`, newest
- * activity first. `nextBeforeSeq` is the latest-activity time (epoch milliseconds) of the page's
+/** Response for `GET /api/agent/v1/inbox/conversations[?view=<view>][&before=<n>]`, newest
+ * activity first. `nextBefore` is the latest-activity time (epoch milliseconds) of the page's
  * last conversation: conversation sequences are per conversation, so activity time is what orders
  * the list across them. */
 export type AgentInboxListResponse = {
@@ -49,7 +51,7 @@ export type AgentInboxListResponse = {
   items: AgentInboxItem[];
   totals: AgentInboxTotals;
   hasMore: boolean;
-  nextBeforeSeq: number | null;
+  nextBefore: number | null;
 };
 
 const isCount = (value: unknown): value is number =>
@@ -79,7 +81,7 @@ export function decodeAgentInboxListResponse(value: unknown): AgentInboxListResp
     !isCount(value.totals.dms) ||
     !isCount(value.totals.mentions) ||
     typeof value.hasMore !== "boolean" ||
-    !(value.nextBeforeSeq === null || isCount(value.nextBeforeSeq))
+    !(value.nextBefore === null || isCount(value.nextBefore))
   )
     throw new Error("invalid Agent inbox list response");
   return {
@@ -92,6 +94,6 @@ export function decodeAgentInboxListResponse(value: unknown): AgentInboxListResp
       mentions: value.totals.mentions,
     },
     hasMore: value.hasMore,
-    nextBeforeSeq: value.nextBeforeSeq as number | null,
+    nextBefore: value.nextBefore as number | null,
   };
 }

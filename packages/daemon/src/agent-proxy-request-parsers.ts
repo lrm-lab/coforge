@@ -109,15 +109,14 @@ export function parseAppConfigUpdate(
   return { appId, ...change, idempotencyKey };
 }
 
-/** `inbox check`'s unread list: an optional `view` and `before_seq`, each valid or a `400`. */
+/** `inbox check`'s unread list: an optional `view` and `before`, each valid or a `400`. */
 export function parseInboxListQuery(params: URLSearchParams): AgentInboxRequest | Response {
   const view = params.get("view") ?? undefined;
-  const before = params.get("before_seq");
-  const beforeSeq = before === null ? undefined : Number(before);
+  const raw = params.get("before");
+  const before = raw === null ? undefined : Number(raw);
   if (view !== undefined && !isAgentInboxView(view)) return badRequest();
-  if (beforeSeq !== undefined && (!Number.isSafeInteger(beforeSeq) || beforeSeq < 1))
-    return badRequest();
-  return { view, beforeSeq };
+  if (before !== undefined && (!Number.isSafeInteger(before) || before < 1)) return badRequest();
+  return { view, before };
 }
 
 /** `mention pending`'s optional `limit`: an integer from 1 to the server's maximum page. */

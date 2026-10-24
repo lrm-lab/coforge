@@ -8,7 +8,7 @@ const PAGE: AgentInboxListResponse = {
   items: [],
   totals: { conversations: 0, dms: 0, mentions: 0 },
   hasMore: false,
-  nextBeforeSeq: null,
+  nextBefore: null,
 };
 
 const get = (query: string) => {
@@ -23,26 +23,20 @@ const get = (query: string) => {
   return { response, calls };
 };
 
-test("the view defaults to unread and before_seq to the newest page", async () => {
+test("the view defaults to unread and before to the newest page", async () => {
   const { response, calls } = get("");
   expect((await response).status).toBe(200);
-  expect(calls).toEqual([{ view: "unread", beforeSeq: undefined }]);
+  expect(calls).toEqual([{ view: "unread", before: undefined }]);
 });
 
 test("a view and a position are handed on", async () => {
-  const { response, calls } = get("?view=mentions&before_seq=1790000000000");
+  const { response, calls } = get("?view=mentions&before=1790000000000");
   expect(await (await response).json()).toEqual(PAGE);
-  expect(calls).toEqual([{ view: "mentions", beforeSeq: 1790000000000 }]);
+  expect(calls).toEqual([{ view: "mentions", before: 1790000000000 }]);
 });
 
 test("an unknown view or a position that is not a positive integer is refused", async () => {
-  for (const query of [
-    "?view=all",
-    "?before_seq=0",
-    "?before_seq=-3",
-    "?before_seq=x",
-    "?before_seq=",
-  ]) {
+  for (const query of ["?view=all", "?before=0", "?before=-3", "?before=x", "?before="]) {
     const { response, calls } = get(query);
     expect((await response).status).toBe(400);
     expect(calls).toEqual([]);

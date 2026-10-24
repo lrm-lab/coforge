@@ -15,7 +15,7 @@ const LIST = {
   items: [],
   totals: { conversations: 0, dms: 0, mentions: 0 },
   hasMore: false,
-  nextBeforeSeq: null,
+  nextBefore: null,
 };
 
 async function askProxy(search: string) {
@@ -41,21 +41,21 @@ async function askProxy(search: string) {
 }
 
 test("the proxy hands a valid view and before to the runtime", async () => {
-  const { response, requests } = await askProxy("?view=mentions&before_seq=42");
+  const { response, requests } = await askProxy("?view=mentions&before=42");
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual(LIST);
-  expect(requests).toEqual([{ view: "mentions", beforeSeq: 42 }]);
+  expect(requests).toEqual([{ view: "mentions", before: 42 }]);
 });
 
-test("the proxy refuses a bad view or before_seq before any request", async () => {
-  for (const search of ["?view=all", "?before_seq=0", "?before_seq=x", "?before_seq=1.5"]) {
+test("the proxy refuses a bad view or before before any request", async () => {
+  for (const search of ["?view=all", "?before=0", "?before=x", "?before=1.5"]) {
     const { response, requests } = await askProxy(search);
     expect(response.status).toBe(400);
     expect(requests).toEqual([]);
   }
 });
 
-test("the HTTP transport sends view and before_seq, and none when the CLI sent none", async () => {
+test("the HTTP transport sends view and before, and none when the CLI sent none", async () => {
   const urls: string[] = [];
   const client = createAgentMessageHttpClient(async (input) => {
     urls.push(String(input));
@@ -66,7 +66,7 @@ test("the HTTP transport sends view and before_seq, and none when the CLI sent n
     agentApiKey: `sk_agent_${"a".repeat(43)}`,
     daemonApiKey: "daemon-token",
   };
-  await client.requestInboxList!({ ...keys, request: { view: "mentions", beforeSeq: 42 } });
+  await client.requestInboxList!({ ...keys, request: { view: "mentions", before: 42 } });
   await client.requestInboxList!({ ...keys, request: {} });
-  expect(urls).toEqual([`${keys.url}?view=mentions&before_seq=42`, keys.url]);
+  expect(urls).toEqual([`${keys.url}?view=mentions&before=42`, keys.url]);
 });

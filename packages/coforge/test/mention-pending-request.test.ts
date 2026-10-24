@@ -48,22 +48,22 @@ test("thread list GETs the followed threads through the Proxy and names a failur
   expect(failure.code).toBe("THREAD_LIST_FAILED");
 });
 
-test("inbox list sends view and before_seq as query parameters through the Proxy", async () => {
+test("inbox list sends view and before as query parameters through the Proxy", async () => {
   const body = {
     ok: true as const,
     view: "mentions" as const,
     items: [],
     totals: { conversations: 0, dms: 0, mentions: 0 },
     hasMore: false,
-    nextBeforeSeq: null,
+    nextBefore: null,
   };
   const fetch = spyOn(globalThis, "fetch").mockImplementation((async () =>
     Response.json(body)) as unknown as typeof globalThis.fetch);
   const client = connectLocal("", context, proxy);
-  expect(await client.inboxList({ view: "mentions", beforeSeq: 42 })).toEqual(body);
+  expect(await client.inboxList({ view: "mentions", before: 42 })).toEqual(body);
   await client.inboxList({});
   const [filtered, plain] = fetch.mock.calls.map(([url]) => String(url));
   const base = `http://127.0.0.1:1${agentApiRoutes.local.inboxList.path}`;
-  expect(filtered).toBe(`${base}?view=mentions&before_seq=42`);
+  expect(filtered).toBe(`${base}?view=mentions&before=42`);
   expect(plain).toBe(base);
 });

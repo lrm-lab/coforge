@@ -150,7 +150,7 @@ test("lists unread conversations by the definition in the code, newest activity 
     expect(all.items[3]).toMatchObject({ target: "#ops", unread: 1, mentions: 0 });
     expect(all.totals).toEqual({ conversations: 4, dms: 1, mentions: 2 });
     expect(all.hasMore).toBe(false);
-    expect(all.nextBeforeSeq).toBeNull();
+    expect(all.nextBefore).toBeNull();
 
     const mentions = await listAgentInbox(db, workspace.id, agent.id, { view: "mentions" });
     expect(mentions.items.map((item) => item.target)).toEqual(["#general", "#loud"]);
@@ -160,12 +160,12 @@ test("lists unread conversations by the definition in the code, newest activity 
     const first = await listAgentInbox(db, workspace.id, agent.id, {}, 2);
     expect(first.items.map((item) => item.target)).toEqual([`@${peer.username}`, "#general"]);
     expect(first.hasMore).toBe(true);
-    expect(first.nextBeforeSeq).toBe(day(6).getTime());
+    expect(first.nextBefore).toBe(day(6).getTime());
     const second = await listAgentInbox(
       db,
       workspace.id,
       agent.id,
-      { beforeSeq: first.nextBeforeSeq! },
+      { before: first.nextBefore! },
       2,
     );
     expect(second.items.map((item) => item.target)).toEqual(["#loud", "#ops"]);
@@ -216,7 +216,7 @@ test("a page that ends inside a run of equal activity times is extended to the e
       db,
       workspace.id,
       agent.id,
-      { beforeSeq: first.nextBeforeSeq! },
+      { before: first.nextBefore! },
       2,
     );
     expect(second.items.map((item) => item.target)).toEqual(["#tie-3"]);

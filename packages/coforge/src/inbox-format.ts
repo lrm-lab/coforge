@@ -115,13 +115,13 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
     top +=
       before === undefined
         ? " Newest activity first."
-        : ` Activity before seq ${before}, newest first.`;
+        : ` Activity before the More: cursor, newest first.`;
   const sections = [top];
   if (rows.length > 0) sections.push(rows.flatMap((row) => row.lines).join("\n"));
   const viewFlag = view === "mentions" ? " --view mentions" : "";
   const trailer: string[] = [];
-  if (list.hasMore && list.nextBeforeSeq !== null)
-    trailer.push(`More: coforge inbox check${viewFlag} --before ${list.nextBeforeSeq}`);
+  if (list.hasMore && list.nextBefore !== null)
+    trailer.push(`More: coforge inbox check${viewFlag} --before ${list.nextBefore}`);
   if (rows.length > 0) trailer.push(`Next: ${rows[0]!.next}`);
   else if (before !== undefined && list.totals.conversations > 0)
     trailer.push(

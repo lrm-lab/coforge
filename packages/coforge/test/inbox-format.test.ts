@@ -22,7 +22,7 @@ const result = (over: Partial<InboxCheckResult> = {}): InboxCheckResult => ({
     items: [],
     totals: { conversations: 0, dms: 0, mentions: 0 },
     hasMore: false,
-    nextBeforeSeq: null,
+    nextBefore: null,
   },
   pendingRows: [],
   appItems: [],
@@ -73,7 +73,7 @@ test("shows More with the view and nothing-unread when empty", () => {
         items: [item({ mentions: 1 })],
         totals: { conversations: 3, dms: 0, mentions: 2 },
         hasMore: true,
-        nextBeforeSeq: 700,
+        nextBefore: 700,
       },
     }),
     NOW,
@@ -81,7 +81,7 @@ test("shows More with the view and nothing-unread when empty", () => {
   expect(output).toContain(
     "Inbox: 2 conversations with unread mentions (of 3 unread conversations).",
   );
-  expect(output).toContain("Activity before seq 900, newest first.");
+  expect(output).toContain("Activity before the More: cursor, newest first.");
   expect(output).toContain("More: coforge inbox check --view mentions --before 700");
 });
 

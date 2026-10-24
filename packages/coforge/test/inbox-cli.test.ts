@@ -7,7 +7,7 @@ const list = (over = {}) => ({
   items: [],
   totals: { conversations: 0, dms: 0, mentions: 0 },
   hasMore: false,
-  nextBeforeSeq: null,
+  nextBefore: null,
   ...over,
 });
 
@@ -32,7 +32,7 @@ test("inbox check parses view, before and json", () => {
     "--view must be one of unread, mentions; got all",
   );
   expect(() => parseArgs(["inbox", "check", "--before", "0"])).toThrow(
-    "--before must be a positive integer seq (copy it from the More: line); got 0",
+    "--before must be a positive integer cursor (the value printed on the More: line); got 0",
   );
 });
 
@@ -46,7 +46,7 @@ test("inbox check reads the server list and the daemon together", async () => {
     },
     inboxCheck: async () => ({ entries: [] }),
   });
-  expect(requests).toEqual([{ view: "mentions", beforeSeq: 9 }]);
+  expect(requests).toEqual([{ view: "mentions", before: 9 }]);
   expect(output).toContain("Inbox: nothing unread.");
 });
 

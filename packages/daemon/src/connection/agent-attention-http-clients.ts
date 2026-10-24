@@ -45,7 +45,7 @@ export const createAgentAttentionHttpClient = (
       {
         ...keys,
         what: "agent inbox list",
-        query: { view: request.view, before_seq: request.beforeSeq?.toString() },
+        query: { view: request.view, before: request.before?.toString() },
       },
       plainError,
     ),

@@ -30,7 +30,7 @@ export function inboxListRequest(
   proxyEndpoint: (path: string) => URL,
   context: string,
   proxyUrl: string,
-  { view, beforeSeq }: AgentInboxRequest,
+  { view, before }: AgentInboxRequest,
 ): Promise<AgentInboxListResponse> {
   return envelopeRequest(
     proxyEndpoint,
@@ -40,7 +40,7 @@ export function inboxListRequest(
       ...agentApiRoutes.local.inboxList,
       query: {
         ...(view ? { view } : {}),
-        ...(beforeSeq === undefined ? {} : { before_seq: String(beforeSeq) }),
+        ...(before === undefined ? {} : { before: String(before) }),
       },
     },
     decodeAgentInboxListResponse,
