@@ -166,7 +166,7 @@ for (const code of [
       } else {
         expect(stdout).toEqual([]);
         expect(output).toContain(code);
-        expect(output).toContain("Hint:");
+        expect(output).toContain("Next:");
       }
     }
   });
@@ -189,7 +189,7 @@ test("unexpected login failures are normalized without exposing diagnostics", as
 
   expect(exitCode).toBe(1);
   expect(stderr.join("\n")).toContain("AUTH_FAILED");
-  expect(stderr.join("\n")).toContain("Hint:");
+  expect(stderr.join("\n")).toContain("Next:");
   expect(stderr.join("\n")).not.toContain("access-secret");
 });
 
@@ -302,7 +302,7 @@ test("an invalid --workspace slug fails locally without reaching the setup comma
 
   expect(exitCode).toBe(1);
   expect(stderr.join("\n")).toContain("SETUP_WORKSPACE_INVALID");
-  expect(stderr.join("\n")).toContain("Hint:");
+  expect(stderr.join("\n")).toContain("Next:");
 });
 
 test("an empty --workspace value is rejected rather than falling back to the setup intent", async () => {
@@ -408,7 +408,7 @@ test("unexpected setup failures are normalized without exposing diagnostics", as
 
   expect(exitCode).toBe(1);
   expect(stderr.join("\n")).toContain("SETUP_FAILED");
-  expect(stderr.join("\n")).toContain("Hint:");
+  expect(stderr.join("\n")).toContain("Next:");
   expect(stderr.join("\n")).not.toContain("access-secret");
 });
 
@@ -751,7 +751,7 @@ test("a status failure that cannot even read the install reports exit code 1, hu
   });
   expect(humanExitCode).toBe(1);
   expect(stderr.join("\n")).toContain("STATUS_INSTALL_UNREADABLE");
-  expect(stderr.join("\n")).toContain("Hint:");
+  expect(stderr.join("\n")).toContain("Next:");
 
   const stdout: string[] = [];
   const jsonExitCode = await runCli(["status", "--json"], dependencies, {

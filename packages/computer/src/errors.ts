@@ -55,11 +55,44 @@ export class TransportError extends Error {
 
 export function safeErrorDetail(error: unknown): string {
   const detail = error instanceof Error ? error.message : "unknown error";
-  return detail.replace(
-    /(token|secret|credential|authorization|request body)[^\s]*/gi,
+  return redactDiagnosticText(detail);
+}
+
+/** Redacts credentials and URL query material before error text reaches a terminal or JSON
+ * diagnostic. The Computer often includes remote error text verbatim, so this is deliberately
+ * independent of any one provider's token spelling. */
+export function redactDiagnosticText(text: string): string {
+  let result = text.replace(/https?:\/\/[^\s"'<>]+/gi, redactUrl);
+  for (const pattern of SECRET_PATTERNS) result = result.replace(pattern, "[redacted]");
+  return result.replace(
+    /(token|secret|credential|authorization|request body)\s*[:=]\s*[^\s"',;]+/gi,
     "$1=[redacted]",
   );
 }
+
+function redactUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.search) url.search = "?[REDACTED_QUERY]";
+    if (url.username) url.username = "[REDACTED_USER]";
+    if (url.password) url.password = "[REDACTED_PASSWORD]";
+    return url.toString();
+  } catch {
+    return value.replace(/\?.*$/, "?[REDACTED_QUERY]");
+  }
+}
+
+const SECRET_PATTERNS = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
+  /\b(?:sk|sk-ant|sk-proj|xox[baprs]?)-[A-Za-z0-9_-]{8,}\b/g,
+  /\bgh[oprsu]_[A-Za-z0-9]{20,}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{12,124}\b/g,
+  /\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g,
+  /\bxai-[A-Za-z0-9]{20,}\b/g,
+  /\beyJ[A-Za-z0-9._-]{20,}/g,
+];
 
 export const LOGIN_HINTS = {
   AUTH_LOGIN_EXPIRED: "Run `coforge-computer login` to renew your login, then rerun setup.",

@@ -19,10 +19,12 @@ function capture(
 }
 
 describe("writeCliFailure", () => {
-  test("a CliError prints its code, message and hint", () => {
+  test("a CliError prints what happened, the next command, and the state guarantee", () => {
     expect(capture(new CliError("X_FAILED", "It failed.", "Try again."))).toEqual({
       stdout: [],
-      stderr: ["X_FAILED: It failed.\nHint: Try again."],
+      stderr: [
+        "What happened (X_FAILED): It failed.\nNext: coforge-computer doctor\nState: No local Computer state change was confirmed by this command.",
+      ],
     });
   });
 
@@ -38,7 +40,21 @@ describe("writeCliFailure", () => {
 
   test("any login failure keeps its cause, without token-shaped detail", () => {
     expect(capture(new Error("fetch failed: token=abc"), { login: true }).stderr).toEqual([
-      `AUTH_FAILED: Login failed: fetch failed: token=[redacted]\nHint: ${LOGIN_HINTS.AUTH_FAILED}`,
+      "What happened (AUTH_FAILED): Login failed: fetch failed: token=[redacted]\nNext: coforge-computer login\nState: No local Computer state change was confirmed by this command.",
+    ]);
+  });
+
+  test("human failures redact URL query credentials and expose the next command", () => {
+    expect(
+      capture(
+        new CliError(
+          "AUTH_NETWORK_ERROR",
+          "Could not reach https://user:password@example.test/login?access_token=secret.",
+          LOGIN_HINTS.AUTH_NETWORK_ERROR,
+        ),
+      ).stderr,
+    ).toEqual([
+      "What happened (AUTH_NETWORK_ERROR): Could not reach https://%5BREDACTED_USER%5D:%5BREDACTED_PASSWORD%5D@example.test/login?[REDACTED_QUERY]\nNext: coforge-computer login\nState: No local Computer state change was confirmed by this command.",
     ]);
   });
 
@@ -55,16 +71,20 @@ describe("writeCliFailure", () => {
     ]);
   });
 
-  test("other commands print an UpdateError's code, and anything else only its message", () => {
+  test("other commands use the same human failure contract", () => {
     expect(capture(new UpdateError("UPDATE_FEED_INVALID", "Bad feed.")).stderr).toEqual([
-      "UPDATE_FEED_INVALID: Bad feed.",
+      "What happened (UPDATE_FEED_INVALID): Bad feed.\nNext: coforge-computer upgrade\nState: No completed upgrade was confirmed by this command.",
     ]);
     // --json only shapes the login, setup and CliError results.
     expect(capture(new Error("disk full"), { json: true })).toEqual({
       stdout: [],
-      stderr: ["disk full"],
+      stderr: [
+        "What happened (COMPUTER_FAILED): disk full\nNext: coforge-computer doctor\nState: No local Computer state change was confirmed by this command.",
+      ],
     });
-    expect(capture("not an error").stderr).toEqual(["coforge-computer failed"]);
+    expect(capture("not an error").stderr).toEqual([
+      "What happened (COMPUTER_FAILED): coforge-computer failed\nNext: coforge-computer doctor\nState: No local Computer state change was confirmed by this command.",
+    ]);
   });
 
   test("a failed upgrade prints its receipt's error code with its message, when it has one", () => {
@@ -79,7 +99,11 @@ describe("writeCliFailure", () => {
       capture(
         new UpgradeFailedError(result.error, { ...result, errorCode: "UPDATE_DOWNLOAD_FAILED" }),
       ).stderr,
-    ).toEqual(["UPDATE_DOWNLOAD_FAILED: manifest.json: Connection reset by peer (os error 104)"]);
-    expect(capture(new UpgradeFailedError(result.error, result)).stderr).toEqual([result.error]);
+    ).toEqual([
+      "What happened (UPDATE_DOWNLOAD_FAILED): manifest.json: Connection reset by peer (os error 104)\nNext: coforge-computer upgrade\nState: No completed upgrade was confirmed by this command.",
+    ]);
+    expect(capture(new UpgradeFailedError(result.error, result)).stderr).toEqual([
+      "What happened (UPGRADE_FAILED): manifest.json: Connection reset by peer (os error 104)\nNext: coforge-computer upgrade\nState: No completed upgrade was confirmed by this command.",
+    ]);
   });
 });

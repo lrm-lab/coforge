@@ -1,13 +1,16 @@
-import { CliError, loginError, safeErrorDetail, setupError } from "#src/errors";
+import {
+  CliError,
+  loginError,
+  redactDiagnosticText,
+  safeErrorDetail,
+  setupError,
+} from "#src/errors";
 import { UpgradeFailedError } from "#src/release/upgrade-receipt";
 import { UpdateError } from "#src/updater";
 
 /**
- * Reports a command failure that is not a Commander parse outcome. A `CliError`, or any failure
- * of `login` or `setup` (wrapped in their own error), prints its code, message and hint, as one
- * JSON result on stdout when `--json` was given. Any other `UpdateError`, or an
- * `UpgradeFailedError` whose receipt names an `errorCode`, prints its code and message, and
- * anything else only its message.
+ * Reports a command failure that is not a Commander parse outcome. JSON keeps its existing
+ * stable shape; human output follows the reference Computer's actionable three-line contract.
  */
 export function writeCliFailure(
   io: { stdout: (line: string) => void; stderr: (line: string) => void },
@@ -18,7 +21,7 @@ export function writeCliFailure(
   // server with no device endpoint, a DNS failure, a malformed discovery document - collapses
   // into one indistinguishable "Login failed." under a fixed hint about server configuration
   // that is unrelated to most of them, leaving nothing to diagnose from.
-  // safeErrorDetail strips anything token-shaped out of the message.
+  // safeErrorDetail strips credential-shaped material out of the message.
   const failure =
     error instanceof CliError
       ? error
@@ -31,16 +34,63 @@ export function writeCliFailure(
     io.stdout(
       JSON.stringify({
         ok: false,
-        error: { code: failure.code, message: failure.message, hint: failure.hint },
+        error: {
+          code: failure.code,
+          message: redactDiagnosticText(failure.message),
+          hint: redactDiagnosticText(failure.hint),
+        },
       }),
     );
-  } else if (failure) {
-    io.stderr(`${failure.code}: ${failure.message}\nHint: ${failure.hint}`);
-  } else if (error instanceof UpdateError) {
-    io.stderr(`${error.code}: ${error.message}`);
-  } else if (error instanceof UpgradeFailedError && error.result.errorCode) {
-    io.stderr(`${error.result.errorCode}: ${error.message}`);
   } else {
-    io.stderr(error instanceof Error ? error.message : "coforge-computer failed");
+    const code = failure?.code ?? failureCode(error);
+    const message = failure?.message ?? failureMessage(error);
+    const hint = failure?.hint;
+    io.stderr(formatHumanFailure(code, message, hint));
   }
+}
+
+/** Formats one stable, actionable human failure. Keep this independent of Commander so the same
+ * contract can be reused by commands that report errors from application modules. */
+export function formatHumanFailure(code: string, message: string, hint?: string): string {
+  const safeMessage = redactDiagnosticText(message).replace(/\s+/g, " ").trim();
+  const next = nextCommand(code, hint ?? message);
+  return [
+    `What happened (${code}): ${safeMessage}`,
+    `Next: ${next}`,
+    `State: ${stateGuarantee(code)}`,
+  ].join("\n");
+}
+
+function failureCode(error: unknown): string {
+  if (error instanceof UpdateError) return error.code;
+  if (error instanceof UpgradeFailedError) return error.result.errorCode ?? "UPGRADE_FAILED";
+  return "COMPUTER_FAILED";
+}
+
+function failureMessage(error: unknown): string {
+  if (error instanceof UpdateError || error instanceof UpgradeFailedError) return error.message;
+  return error instanceof Error ? error.message : "coforge-computer failed";
+}
+
+function nextCommand(code: string, text: string): string {
+  const command = text.match(/`(coforge-computer\s+[^`]+)`/)?.[1];
+  if (command) return command.replace(/[.!?]+$/, "");
+  if (code.startsWith("UPGRADE_") || code.startsWith("UPDATE_")) return "coforge-computer upgrade";
+  if (code.startsWith("AUTH_")) return "coforge-computer login";
+  if (code.startsWith("SETUP_")) return "coforge-computer setup";
+  if (code.startsWith("STATUS_")) return "coforge-computer status";
+  if (code.startsWith("RESTART_")) return "coforge-computer restart";
+  if (code === "CONCURRENT_OPERATION") return "coforge-computer status";
+  if (code === "MUTATION_LOCK_COMPROMISED") return "coforge-computer doctor";
+  return "coforge-computer doctor";
+}
+
+function stateGuarantee(code: string): string {
+  if (code.startsWith("UPGRADE_") || code.startsWith("UPDATE_"))
+    return "No completed upgrade was confirmed by this command.";
+  if (code.startsWith("STATUS_") || code.startsWith("DOCTOR_"))
+    return "This read-only command did not change local Computer state.";
+  if (code === "CONCURRENT_OPERATION")
+    return "This command did not start because another Computer operation is already running.";
+  return "No local Computer state change was confirmed by this command.";
 }
