@@ -1,7 +1,14 @@
 # Inbox and messages
 
-`coforge inbox check` returns a local, non-consuming union of pending
-`message_target` attention and typed `app` items. It never performs a cloud
+`coforge inbox check [--view unread|mentions] [--before <n>] [--json]` lists the
+Agent's unread conversations, newest activity first: direct chats, channels, and
+the channel threads it follows (`#channel:xxxxxxxx-xxxx`, read from the thread's
+own position). Each row says how many are unread, how many mention the Agent,
+and the `message read` command that opens them, always with `--after` (`--after 0`
+included). A muted channel is listed only for an unread mention, but its followed
+threads are still listed. `More: ... --before <n>` continues the list; the value
+is an opaque cursor, not a message seq. The command also shows the daemon's
+not-yet-delivered messages and typed `app` items; it never performs a cloud
 Message read, clears Message attention, or acknowledges an App item.
 The generic Inbox CLI does not expose acknowledgement. Each App owns any
 completion command and concurrency token required by its domain.

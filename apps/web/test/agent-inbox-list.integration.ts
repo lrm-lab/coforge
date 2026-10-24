@@ -140,6 +140,7 @@ test("lists unread conversations by the definition in the code, newest activity 
       "#ops",
     ]);
     expect(all.items[1]).toEqual({
+      kind: "channel",
       target: "#general",
       unread: 2,
       mentions: 1,
@@ -147,6 +148,7 @@ test("lists unread conversations by the definition in the code, newest activity 
       latestSenderName: peer.username,
       lastReadSeq: 1,
     });
+    expect(all.items[0]!.kind).toBe("dm");
     expect(all.items[3]).toMatchObject({ target: "#ops", unread: 1, mentions: 0 });
     expect(all.totals).toEqual({ conversations: 4, dms: 1, mentions: 2 });
     expect(all.hasMore).toBe(false);
@@ -246,7 +248,7 @@ test("hundreds of conversations and hundreds of thousands of messages answer in 
         userId: owner.id,
       })),
     });
-    await db.conversationMember.createMany({
+    const selves = await db.conversationMember.createManyAndReturn({
       data: conversations.map((conversation, index) => ({
         conversationId: conversation.id,
         workspaceId: workspace.id,
@@ -275,13 +277,60 @@ test("hundreds of conversations and hundreds of thousands of messages answer in 
       });
     }
 
+    // Eight followed threads per conversation, three replies each; every other thread is read.
+    const threadsPerConversation = 8;
+    const repliesPerThread = 3;
+    const roots = await db.message.findMany({
+      where: {
+        sequence: { lte: threadsPerConversation },
+        conversationId: { in: conversations.map((c) => c.id) },
+      },
+      select: { id: true, conversationId: true, sequence: true },
+    });
+    const selfOf = new Map(selves.map((member) => [member.conversationId, member.id]));
+    await db.threadFollow.createMany({
+      data: roots.map((root) => ({
+        memberId: selfOf.get(root.conversationId)!,
+        rootMessageId: root.id,
+        conversationId: root.conversationId,
+        workspaceId: workspace.id,
+      })),
+    });
+    await db.threadRead.createMany({
+      data: roots
+        .filter((root) => root.sequence % 2 === 0)
+        .map((root) => ({
+          memberId: selfOf.get(root.conversationId)!,
+          rootMessageId: root.id,
+          conversationId: root.conversationId,
+          workspaceId: workspace.id,
+          readThroughSequence: 10_000,
+        })),
+    });
+    for (let start = 0; start < roots.length; start += 800) {
+      await db.message.createMany({
+        data: roots.slice(start, start + 800).flatMap((root) =>
+          Array.from({ length: repliesPerThread }, (_, index) => ({
+            conversationId: root.conversationId,
+            workspaceId: workspace.id,
+            senderMemberId: humanOf.get(root.conversationId)!,
+            body: `r${index}`,
+            threadRootId: root.id,
+            sequence: messagesPerConversation + (root.sequence - 1) * repliesPerThread + index + 1,
+            createdAt: new Date(base + 1_000_000 + root.sequence * 1000 + index),
+          })),
+        ),
+      });
+    }
+
     const started = performance.now();
     const inbox = await listAgentInbox(db, workspace.id, agent.id);
     const elapsedMs = performance.now() - started;
     console.log(
-      `listAgentInbox: ${conversationCount} conversations, ${conversationCount * messagesPerConversation} messages in ${elapsedMs.toFixed(1)} ms`,
+      `listAgentInbox: ${conversationCount} conversations, ${conversationCount * messagesPerConversation} messages, ${roots.length} followed threads in ${elapsedMs.toFixed(1)} ms`,
     );
-    expect(inbox.totals.conversations).toBe(300);
+    // 300 unread conversations, and half of the followed threads are unread.
+    expect(inbox.totals.conversations).toBe(300 + roots.length / 2);
     expect(inbox.items.length).toBeGreaterThanOrEqual(50);
     expect(inbox.hasMore).toBe(true);
   } finally {
@@ -326,6 +375,144 @@ test("a channel's history from before the Agent joined is not unread", async () 
       });
     const listed = await listAgentInbox(db, workspace.id, agent.id, { view: "unread" }, 50);
     expect(listed.items.map((item) => [item.target, item.unread])).toEqual([["#backlog", 1]]);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+/**
+ * A thread the Agent follows is listed on its own, from the thread's read position. A muted
+ * channel does not hide it: a followed thread keeps delivering after the channel is muted, and only
+ * leaving the channel ends that.
+ */
+test("followed threads with unread replies are listed as threads, muted channel or not", async () => {
+  const db = connection();
+  const suffix = crypto.randomUUID();
+  try {
+    const { owner, workspace, agent } = await workspaceWithAgent(db, suffix);
+    const day = (n: number) => new Date(Date.UTC(2026, 9, n, 12, 0, 0));
+    const channel = async (name: string, options: { muted?: boolean; left?: boolean } = {}) => {
+      const conversation = await db.conversation.create({
+        data: { workspaceId: workspace.id, channelName: name },
+      });
+      const human = await db.conversationMember.create({
+        data: { conversationId: conversation.id, workspaceId: workspace.id, userId: owner.id },
+      });
+      const self = await db.conversationMember.create({
+        data: {
+          conversationId: conversation.id,
+          workspaceId: workspace.id,
+          agentId: agent.id,
+          joinedAt: new Date(0),
+          // The channel itself is read, so only the threads can be unread.
+          agentReadThroughSequence: 100,
+          channelMuted: options.muted ?? false,
+          leftAt: options.left ? new Date() : null,
+        },
+      });
+      let sequence = 0;
+      const post = (
+        createdAt: Date,
+        extra: { root?: string; own?: boolean; mention?: boolean } = {},
+      ) =>
+        db.message
+          .create({
+            data: {
+              conversationId: conversation.id,
+              workspaceId: workspace.id,
+              senderMemberId: extra.own ? self.id : human.id,
+              body: `m${sequence + 1}`,
+              sequence: ++sequence,
+              createdAt,
+              threadRootId: extra.root ?? null,
+            },
+          })
+          .then(async (message) => {
+            if (extra.mention)
+              await db.messageMention.create({
+                data: {
+                  messageId: message.id,
+                  memberId: self.id,
+                  conversationId: conversation.id,
+                  workspaceId: workspace.id,
+                  kind: "agent",
+                  actorId: agent.id,
+                  handle: agent.name,
+                },
+              });
+            return message;
+          });
+      const follow = async (rootId: string, readThrough?: number) => {
+        await db.threadFollow.create({
+          data: {
+            memberId: self.id,
+            rootMessageId: rootId,
+            conversationId: conversation.id,
+            workspaceId: workspace.id,
+          },
+        });
+        if (readThrough !== undefined)
+          await db.threadRead.create({
+            data: {
+              memberId: self.id,
+              rootMessageId: rootId,
+              conversationId: conversation.id,
+              workspaceId: workspace.id,
+              readThroughSequence: readThrough,
+            },
+          });
+      };
+      return { conversation, post, follow };
+    };
+
+    const open = await channel("open");
+    const openRoot = await open.post(day(1));
+    await open.follow(openRoot.id);
+    await open.post(day(3), { root: openRoot.id });
+    await open.post(day(4), { root: openRoot.id, mention: true });
+    await open.post(day(5), { root: openRoot.id, own: true });
+
+    const readRoot = await open.post(day(2));
+    await open.follow(readRoot.id, 100);
+    await open.post(day(6), { root: readRoot.id });
+
+    const muted = await channel("quiet", { muted: true });
+    const mutedRoot = await muted.post(day(1));
+    await muted.follow(mutedRoot.id);
+    await muted.post(day(7), { root: mutedRoot.id });
+
+    const gone = await channel("gone", { left: true });
+    const goneRoot = await gone.post(day(1));
+    await gone.follow(goneRoot.id);
+    await gone.post(day(8), { root: goneRoot.id });
+
+    const notFollowed = await channel("unfollowed");
+    const strangerRoot = await notFollowed.post(day(1));
+    await notFollowed.post(day(9), { root: strangerRoot.id });
+
+    const reference = (name: string, rootId: string) => `#${name}:${rootId.slice(0, 13)}`;
+    const peer = await db.user.findUniqueOrThrow({ where: { id: owner.id } });
+    const all = await listAgentInbox(db, workspace.id, agent.id);
+    expect(all.items.map((item) => [item.kind, item.target])).toEqual([
+      ["thread", reference("quiet", mutedRoot.id)],
+      ["thread", reference("open", openRoot.id)],
+    ]);
+    expect(all.items[1]).toEqual({
+      kind: "thread",
+      target: reference("open", openRoot.id),
+      unread: 2,
+      mentions: 1,
+      latestAt: day(4).toISOString(),
+      latestSenderName: peer.username,
+      lastReadSeq: 0,
+    });
+    expect(all.items[0]).toMatchObject({ unread: 1, mentions: 0 });
+    // A thread counts as a conversation; it is not a DM.
+    expect(all.totals).toEqual({ conversations: 2, dms: 0, mentions: 1 });
+
+    const mentions = await listAgentInbox(db, workspace.id, agent.id, { view: "mentions" });
+    expect(mentions.items.map((item) => item.target)).toEqual([reference("open", openRoot.id)]);
+    expect(mentions.totals).toEqual(all.totals);
   } finally {
     await db.$disconnect();
   }

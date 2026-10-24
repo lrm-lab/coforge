@@ -5,6 +5,7 @@ import { formatInboxCheck, type InboxCheckResult } from "#src/inbox-format";
 const NOW = Date.parse("2026-10-25T12:00:00Z");
 
 const item = (over: Partial<AgentInboxItem>): AgentInboxItem => ({
+  kind: "channel",
   target: "#general",
   unread: 1,
   mentions: 0,
@@ -59,6 +60,33 @@ test("renders unread rows with mentions, age and the read command", () => {
   expect(output).toContain('open: coforge message read --target "#general" --after 4');
   expect(output).toContain(
     'Next: open the first conversation above: coforge message read --target "@ada"',
+  );
+});
+
+test("a followed thread is a row like a conversation, read from its own position", () => {
+  const output = formatInboxCheck(
+    result({
+      list: {
+        ...result().list,
+        items: [
+          item({
+            kind: "thread",
+            target: "#general:3f4b1fd4-aaaa",
+            unread: 3,
+            mentions: 1,
+            lastReadSeq: 0,
+          }),
+        ],
+        totals: { conversations: 1, dms: 0, mentions: 1 },
+      },
+    }),
+    NOW,
+  );
+  expect(output).toContain(
+    "#general:3f4b1fd4-aaaa · 3 unread · mentions you · latest @scout 1h ago",
+  );
+  expect(output).toContain(
+    'open: coforge message read --target "#general:3f4b1fd4-aaaa" --after 0',
   );
 });
 

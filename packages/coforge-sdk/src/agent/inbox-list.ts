@@ -20,10 +20,16 @@ export const AGENT_INBOX_PAGE_SIZE = 50;
 
 export type AgentInboxRequest = { view?: AgentInboxView; before?: number };
 
-/** One unread conversation: a `#channel` or an `@user` direct chat. */
+export const AGENT_INBOX_ITEM_KINDS = ["dm", "channel", "thread"] as const;
+export type AgentInboxItemKind = (typeof AGENT_INBOX_ITEM_KINDS)[number];
+
+/** One unread conversation: an `@user` direct chat, a `#channel`, or a followed thread
+ * `#channel:xxxxxxxx-xxxx`. */
 export type AgentInboxItem = {
+  kind: AgentInboxItemKind;
   target: string;
-  /** Other people's top-level messages after the Agent's read position. */
+  /** Other people's messages after the Agent's read position: top-level ones for a conversation,
+   * replies for a thread. */
   unread: number;
   /** How many of those mention the Agent. */
   mentions: number;
@@ -34,10 +40,10 @@ export type AgentInboxItem = {
 };
 
 export type AgentInboxTotals = {
-  /** Every unread conversation, whatever the view or page. */
+  /** Every unread conversation and followed thread, whatever the view or page. */
   conversations: number;
   dms: number;
-  /** Conversations with an unread mention. */
+  /** Conversations and threads with an unread mention. */
   mentions: number;
 };
 
@@ -60,6 +66,7 @@ const isCount = (value: unknown): value is number =>
 function isInboxItem(value: unknown): value is AgentInboxItem {
   return (
     isRecord(value) &&
+    (AGENT_INBOX_ITEM_KINDS as readonly unknown[]).includes(value.kind) &&
     typeof value.target === "string" &&
     isCount(value.unread) &&
     isCount(value.mentions) &&
