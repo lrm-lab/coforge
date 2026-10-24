@@ -80,8 +80,11 @@ test("a changed Workspace URL keeps its old slug for that Workspace and no other
       slug: slug("user"),
     });
   } finally {
-    // Setup may have stopped part way, so clean up by the run's suffix rather than by created rows.
-    await db.workspace.deleteMany({ where: { slug: { endsWith: suffix } } });
+    // A conflicting personal URL gains a suffix, so find every fixture owner's Workspace by
+    // membership instead of the final URL. Delete Workspaces (cascading Agents) before their owners.
+    await db.workspace.deleteMany({
+      where: { members: { some: { role: "owner", user: { username: { contains: suffix } } } } },
+    });
     await db.user.deleteMany({ where: { username: { contains: suffix } } });
     await db.$disconnect();
   }
