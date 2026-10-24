@@ -114,17 +114,19 @@ test("single-file installation provides management and Agent CLI without a Daemo
     async fetch(request) {
       const path = new URL(request.url).pathname;
       requests.push(path);
-      // `inbox check` lists unread conversations with a body-less GET; everything else posts.
-      if (request.method === "GET" && path === "/api/agent/v1/inbox/conversations")
-        return Response.json({
-          ok: true,
-          view: "unread",
-          items: [],
-          totals: { conversations: 0, dms: 0, mentions: 0 },
-          hasMore: false,
-          nextBefore: null,
-        });
       if (path.startsWith("/api/agent/v1/")) {
+        // A GET or HEAD carries no body to read. `inbox check` lists unread conversations that way.
+        if (request.method === "GET" || request.method === "HEAD")
+          return path === "/api/agent/v1/inbox/conversations"
+            ? Response.json({
+                ok: true,
+                view: "unread",
+                items: [],
+                totals: { conversations: 0, dms: 0, mentions: 0 },
+                hasMore: false,
+                nextBefore: null,
+              })
+            : new Response(`no fake for ${request.method} ${path}`, { status: 501 });
         const body = await request.json();
         agentRequests.push({ path, body });
         return Response.json({ operation: body.operation, body: body.body, messages: [] });
