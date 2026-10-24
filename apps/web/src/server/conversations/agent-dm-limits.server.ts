@@ -37,6 +37,18 @@ export const AGENT_DM_LIMIT_NOTICE = {
 
 export type AgentDmLimitCode = keyof typeof AGENT_DM_LIMIT_NOTICE;
 
+/** Whether a conversation's latest system message is a limit notice still inside the quiet window. */
+export function agentDmIsLimited(
+  latestSystem: { body: string; createdAt: Date } | undefined,
+  now: Date,
+) {
+  return (
+    latestSystem !== undefined &&
+    Object.values<string>(AGENT_DM_LIMIT_NOTICE).includes(latestSystem.body) &&
+    now.getTime() - latestSystem.createdAt.getTime() < AGENT_DM_LIMITS.quietMs
+  );
+}
+
 /**
  * How many of the messages (newest first) belong to the chain ending now: each is less than the
  * quiet window after the one before it, the newest less than that before `now`.
