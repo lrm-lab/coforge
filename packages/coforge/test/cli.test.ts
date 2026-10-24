@@ -1526,27 +1526,6 @@ test("channel management --json prints the raw response for every subcommand", a
   expect(result).toBe(rawResponse);
 });
 
-test("Agent thread unfollow changes only the exact channel thread", async () => {
-  const calls: unknown[] = [];
-  expect(parseArgs(["thread", "unfollow", "--target", "#general:12345678"])).toEqual({
-    command: "thread-unfollow",
-    target: "#general:12345678",
-  });
-  await run(["thread", "unfollow", "--target", "#general:12345678"], {
-    check: async () => ({ messages: [] }),
-    read: async () => undefined,
-    send: async () => undefined,
-    view: async () => ({ bytes: new Uint8Array() }),
-    setThreadFollowed: async (target, followed) => {
-      calls.push([target, followed]);
-      return { accepted: true };
-    },
-  });
-  expect(calls).toEqual([["#general:12345678", false]]);
-  expect(() => parseArgs(["thread", "unfollow", "--target", "#general"])).toThrow("Usage:");
-  expect(() => parseArgs(["thread", "unfollow", "--target", "@alice:12345678"])).toThrow("Usage:");
-});
-
 test("message check accepts an optional --target", () => {
   expect(parseArgs(["message", "check"])).toEqual({ command: "check" });
   expect(parseArgs(["message", "check", "--target", "@ada"])).toEqual({

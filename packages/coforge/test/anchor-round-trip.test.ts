@@ -50,7 +50,7 @@ describe("the short thread form the CLI prints round-trips through its own gramm
   test(`a nine-plus-hex undashed anchor stays refused as a send target`, () => {
     expect(isChannelMessageTarget("#coforge:abcdef123")).toBe(false);
     expect(() => parseArgs(["thread", "unfollow", "--target", "#coforge:abcdef123"])).toThrow(
-      "Usage:",
+      "Thread must be a thread target",
     );
   });
 });
