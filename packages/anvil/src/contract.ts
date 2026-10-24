@@ -121,17 +121,62 @@ export type RuntimeAuthFailure =
   | "process_failed"
   | "cancelled";
 
+/** Provider-neutral login progress. Values are sanitized before an adapter emits them. */
+export type RuntimeAuthLoginEvent =
+  | Readonly<{ kind: "auth_url"; verificationUrl: string }>
+  | Readonly<{
+      kind: "device_code";
+      verificationUrl?: string;
+      userCode: string;
+      expiresAtMs: number;
+    }>
+  | Readonly<{ kind: "code_prompt"; message: string }>
+  | Readonly<{ kind: "info"; message: string }>;
+
+export type RuntimeAuthLoginResult =
+  | Readonly<{ status: "logged_in"; authStatus: RuntimeAuthStatus }>
+  | Readonly<{
+      status: "failed";
+      reason: Exclude<RuntimeAuthFailure, "cancelled">;
+      detail?: string;
+    }>
+  | Readonly<{ status: "cancelled" }>;
+
+export type RuntimeAuthLogoutResult =
+  | Readonly<{ status: "logged_out"; authStatus: RuntimeAuthStatus }>
+  | Readonly<{
+      status: "failed";
+      reason: "still_logged_in" | "version_too_old" | "process_failed";
+      detail?: string;
+    }>;
+
+export type RuntimeAuthLoginInteraction = Readonly<{
+  onEvent(event: RuntimeAuthLoginEvent): void;
+  prompt(input: { kind: "manual_code"; message?: string }): Promise<string>;
+  signal?: AbortSignal;
+}>;
+
+/** Lets an adapter register raw provider secrets with the caller's redactor immediately. */
+export type RuntimeAuthSecretSink = (secret: string) => void;
+
 /** The provider-neutral adapter seam; provider output parsing stays below this contract. */
 export interface RuntimeAuthAdapter {
   readonly provider: RuntimeAuthProvider;
   readStatus(options: { workingDirectory: string; timeoutMs?: number }): Promise<RuntimeAuthStatus>;
-  startLogin(options: {
-    workingDirectory: string;
-    timeoutMs?: number;
-  }): Promise<RuntimeAuthChallenge>;
+  startLogin(
+    options: {
+      workingDirectory: string;
+      timeoutMs?: number;
+      onSecret?: RuntimeAuthSecretSink;
+    },
+    interaction: RuntimeAuthLoginInteraction,
+  ): Promise<RuntimeAuthLoginResult>;
   submitCode(options: { operationId: string; code: string }): Promise<void>;
   cancel(options: { operationId: string }): Promise<void>;
-  logout(options: { workingDirectory: string; timeoutMs?: number }): Promise<void>;
+  logout(options: {
+    workingDirectory: string;
+    timeoutMs?: number;
+  }): Promise<RuntimeAuthLogoutResult>;
 }
 export type CodeAgentProviderFactory = (provider: RuntimeProvider) => CodeAgentProvider;
 export interface CodeAgentProbe {
