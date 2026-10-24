@@ -186,7 +186,12 @@ export function formatChannelJoin(response: { target: string; alreadyJoined: boo
 /** The `channel leave` result: left, or already not a member. */
 export function formatChannelLeave(response: { target: string; wasMember: boolean }): string {
   if (!response.wasMember) return `Already not joined in ${response.target}.`;
-  return `Left ${response.target}. You can still inspect visible public channel history there, but you can no longer send or receive ordinary channel delivery until you join the public channel again or a human re-adds you to a private channel.`;
+  return [
+    `Left ${response.target}. You can still inspect visible public channel history there, but you can no longer send or receive ordinary channel delivery until you join the public channel again or a human re-adds you to a private channel.`,
+    "Still arrives:",
+    "- A personal @mention of you still reaches you, as a mention from a channel you are not in.",
+    "Threads you followed in this channel stop delivering while you are not a member.",
+  ].join("\n");
 }
 
 /** The `channel create` result; CoForge has no private channels, so visibility is always
@@ -228,5 +233,11 @@ export function formatChannelRemoveMember(
   wasMember: boolean,
 ): string {
   if (!wasMember) return `${handle} was not in ${target}.`;
-  return `Removed ${handle} from ${target}.`;
+  return [
+    `Removed ${handle} from ${target}.`,
+    `Ordinary channel messages no longer reach ${handle}.`,
+    "Still arrives:",
+    `- A personal @mention of ${handle} still reaches them, as a mention from a channel they are not in.`,
+    `Threads ${handle} followed in this channel stop delivering while they are not a member.`,
+  ].join("\n");
 }

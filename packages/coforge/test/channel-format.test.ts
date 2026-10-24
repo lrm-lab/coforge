@@ -348,7 +348,12 @@ test("formatChannelJoin renders the join confirmation, including the still-arriv
 
 test("formatChannelLeave renders the leave confirmation and its not-a-member variant", () => {
   expect(formatChannelLeave({ target: "#engineering", wasMember: true })).toBe(
-    "Left #engineering. You can still inspect visible public channel history there, but you can no longer send or receive ordinary channel delivery until you join the public channel again or a human re-adds you to a private channel.",
+    [
+      "Left #engineering. You can still inspect visible public channel history there, but you can no longer send or receive ordinary channel delivery until you join the public channel again or a human re-adds you to a private channel.",
+      "Still arrives:",
+      "- A personal @mention of you still reaches you, as a mention from a channel you are not in.",
+      "Threads you followed in this channel stop delivering while you are not a member.",
+    ].join("\n"),
   );
   expect(formatChannelLeave({ target: "#engineering", wasMember: false })).toBe(
     "Already not joined in #engineering.",
@@ -396,7 +401,13 @@ test("formatChannelAddMember renders the add-member confirmation, agent vs. user
 
 test("formatChannelRemoveMember renders the remove-member confirmation and its not-a-member variant", () => {
   expect(formatChannelRemoveMember("#engineering", "@alice", true)).toBe(
-    "Removed @alice from #engineering.",
+    [
+      "Removed @alice from #engineering.",
+      "Ordinary channel messages no longer reach @alice.",
+      "Still arrives:",
+      "- A personal @mention of @alice still reaches them, as a mention from a channel they are not in.",
+      "Threads @alice followed in this channel stop delivering while they are not a member.",
+    ].join("\n"),
   );
   expect(formatChannelRemoveMember("#engineering", "@alice", false)).toBe(
     "@alice was not in #engineering.",
