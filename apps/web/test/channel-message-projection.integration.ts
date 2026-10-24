@@ -5,6 +5,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 // Pins the browser-facing shape of a channel message as `PublicChannels.open`, `updates` and
 // `send` return it: every field, for a person, a since-deleted Agent, a thread reply and a
@@ -243,6 +244,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
 
     // `send` returns the stored row, not the browser view: its sender is the wider Agent-delivery
     // projection, and the rest are the same columns the view is built from.
+    sent.deliveries.sort((a, b) => a.agentId.localeCompare(b.agentId));
     expect(sent).toStrictEqual({
       id: sent.id,
       sequence: 1,
@@ -272,10 +274,14 @@ test("a channel message reaches the browser in one shape from open, updates and 
       ],
       reactionVersion: 0,
       reactions: [],
-      // The Agent is a channel member, so the send delivered to it.
-      deliveries: [
-        { deliveryId: expect.any(String), agentId: agent.id, agent: { computerId: null } },
-      ],
+      // Both the picked Agent and default Memory Agent are channel members.
+      deliveries: [agent.id, await defaultMemoryAgentId(db, workspace.id)]
+        .sort()
+        .map((agentId) => ({
+          deliveryId: expect.any(String),
+          agentId,
+          agent: { computerId: null },
+        })),
       unresolvedMentionHandles: [],
       pendingMentionActions: [],
     });

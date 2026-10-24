@@ -9,6 +9,7 @@ import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.se
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { PrismaChangeAgentVisibilityStore } from "#src/server/db/repositories/agent-visibility-change.repositories.server";
+import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 /**
  * `#general` is the Workspace-wide channel: every human member and every public, live Agent is in
@@ -84,12 +85,18 @@ test.skipIf(!connectionString)(
 
       expect(await generalMembers(db, fromCatalog.id)).toEqual({
         archived: false,
-        members: [`user:${alice.id}`],
+        members: [
+          `user:${alice.id}`,
+          `agent:${await defaultMemoryAgentId(db, fromCatalog.id)}`,
+        ].sort(),
         muted: [],
       });
       expect(await generalMembers(db, fromEnrollment)).toEqual({
         archived: false,
-        members: [`user:${bob.id}`],
+        members: [
+          `user:${bob.id}`,
+          `agent:${await defaultMemoryAgentId(db, fromEnrollment)}`,
+        ].sort(),
         muted: [],
       });
     } finally {
@@ -169,7 +176,12 @@ test.skipIf(!connectionString)(
 
       const enrolled = await generalMembers(db, workspace.id);
       expect(enrolled?.members).toEqual(
-        [`user:${owner.id}`, `user:${returning.id}`, `agent:${helper.id}`].sort(),
+        [
+          `user:${owner.id}`,
+          `user:${returning.id}`,
+          `agent:${helper.id}`,
+          `agent:${await defaultMemoryAgentId(db, workspace.id)}`,
+        ].sort(),
       );
       expect(enrolled?.members).not.toContain(`agent:${secret.id}`);
       // An Agent joins #general muted, so ordinary chatter there does not wake every Agent in the

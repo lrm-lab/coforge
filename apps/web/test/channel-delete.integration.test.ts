@@ -8,6 +8,7 @@ import type { AgentInboxPurgeRequest } from "#src/server/agents/agent-inbox-purg
 import type { BulkFileRemoval } from "#src/server/files/file-storage.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 /**
  * A Workspace owner or admin deletes a channel for good: the channel and everything in it — its
@@ -191,14 +192,14 @@ test.skipIf(!connectionString)(
       expect(await status(inChannel.id)).toBe("canceled");
       expect(await status(inThread.id)).toBe("canceled");
       expect(await status(elsewhere.id)).toBe("scheduled");
-      expect(purged).toEqual([
-        {
+      expect([...purged].sort((a, b) => a.agentId.localeCompare(b.agentId))).toEqual(
+        [agent.id, await defaultMemoryAgentId(db, workspace.id)].sort().map((agentId) => ({
           workspaceId: workspace.id,
-          agentId: agent.id,
+          agentId,
           conversationIds: [team.id],
           reason: "member_removed",
-        },
-      ]);
+        })),
+      );
       // Every sidebar drops the row from the event alone.
       expect(updated).toEqual([{ conversationId: team.id, gone: true }]);
       // Open Tasks pages drop the channel's Tasks.

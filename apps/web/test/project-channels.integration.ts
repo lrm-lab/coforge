@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { ProjectSettings } from "#src/server/projects/project-settings.server";
+import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 test("one project owns multiple discussion channels without crossing Workspace boundaries", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -150,12 +151,21 @@ test("one project owns multiple discussion channels without crossing Workspace b
     await settings.delete(workspace.id, user.id, project.id, "Renamed launch");
     expect(await db.project.findUnique({ where: { id: project.id } })).toBeNull();
     for (const id of [existing.id, created.id]) {
-      expect(
-        await db.conversation.findUnique({ where: { id }, include: { members: true } }),
-      ).toMatchObject({
-        projectId: null,
-        members: [{ userId: user.id }],
+      const channel = await db.conversation.findUniqueOrThrow({
+        where: { id },
+        include: { members: true },
       });
+      expect(channel.projectId).toBeNull();
+      expect(
+        channel.members
+          .map((member) => (member.userId ? `user:${member.userId}` : `agent:${member.agentId}`))
+          .sort(),
+      ).toEqual(
+        [
+          `user:${user.id}`,
+          ...(id === created.id ? [`agent:${await defaultMemoryAgentId(db, workspace.id)}`] : []),
+        ].sort(),
+      );
     }
     expect(await db.message.findUnique({ where: { id: message.id } })).toMatchObject({
       body: "Keep this history",
