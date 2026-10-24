@@ -99,7 +99,7 @@ export type RuntimeAuthStatus = Readonly<{
   accountLabel?: string;
   plan?: string;
   loginMethod?: string;
-  unavailableReason?: "not_installed" | "version_too_old" | "unsupported_installation";
+  unavailableReason?: "not_installed" | "version_unsupported" | "unsupported_installation";
 }>;
 
 export type RuntimeAuthFailure =
