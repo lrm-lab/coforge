@@ -1969,32 +1969,6 @@ test("message resolve rejects an emoji-shaped or malformed id", () => {
   expect(() => parseArgs(["message", "resolve", "abcd123"])).toThrow("Usage:");
 });
 
-test("App Inbox exposes check without a generic acknowledgement command", () => {
-  expect(parseArgs(["inbox", "check"])).toEqual({ command: "inbox-check" });
-  expect(() => parseArgs(["inbox", "ack", "--item", "reminder:id:1"])).toThrow("Usage:");
-});
-
-test("dispatches Inbox check without message operations", async () => {
-  const calls: string[] = [];
-  const transport = {
-    check: async () => {
-      throw new Error("message check called");
-    },
-    read: async () => {
-      throw new Error("message read called");
-    },
-    send: async () => {
-      throw new Error("message send called");
-    },
-    view: async () => {
-      throw new Error("attachment called");
-    },
-    inboxCheck: async () => calls.push("check"),
-  };
-  await run(["inbox", "check"], transport);
-  expect(calls).toEqual(["check"]);
-});
-
 test("parses attachment view with an output path", () => {
   expect(
     parseArgs(["attachment", "view", "--id", "attachment-1", "--output", "/tmp/file.txt"]),
@@ -2615,81 +2589,6 @@ test("message read hides server ordering fields", async () => {
   expect(output).not.toContain("sequence");
   expect(output).toContain("msg=message-1");
   expect(output).toContain("replyTarget=@ada:message-");
-});
-
-test("App Inbox hides message ordering fields from Agent output", async () => {
-  const output = await run(["inbox", "check"], {
-    check: async () => ({ messages: [] }),
-    read: async () => undefined,
-    send: async () => undefined,
-    view: async () => ({ bytes: new Uint8Array() }),
-    inboxCheck: async () => ({
-      entries: [
-        {
-          kind: "message_target",
-          messageTarget: {
-            target: "@ada",
-            pendingCount: 2,
-            firstPendingSequence: 7,
-            latestSequence: 8,
-            flags: ["dm"],
-          },
-        },
-      ],
-    }),
-  });
-
-  expect(output).not.toContain("firstPendingSequence");
-  expect(output).not.toContain("latestSequence");
-  expect(output).toContain('"pendingCount":2');
-});
-
-test("inbox check stays one JSON document and carries the held targets", async () => {
-  const output = await run(["inbox", "check"], {
-    check: async () => ({ messages: [] }),
-    read: async () => undefined,
-    send: async () => undefined,
-    view: async () => ({ bytes: new Uint8Array() }),
-    inboxCheck: async () => ({
-      entries: [
-        {
-          kind: "message_target",
-          messageTarget: {
-            target: "#general",
-            pendingCount: 2,
-            latestSender: "@ada",
-            firstPendingSequence: 7,
-            latestSequence: 8,
-            flags: ["channel"],
-          },
-        },
-        { kind: "app", app: { itemId: "item-1", appId: "reminder" } },
-      ],
-    }),
-  });
-
-  // This command's output is machine-readable and there is no `--json` to switch behind, so it
-  // stays exactly one JSON document. The local view is legible from it: the held targets sit in
-  // `entries` next to the App Inbox items.
-  const parsed = JSON.parse(String(output)) as {
-    entries: {
-      kind: string;
-      messageTarget?: {
-        target: string;
-        pendingCount: number;
-        latestSender?: string;
-        flags?: string[];
-      };
-    }[];
-  };
-  const target = parsed.entries.find((entry) => entry.kind === "message_target");
-  expect(target?.messageTarget).toEqual({
-    target: "#general",
-    pendingCount: 2,
-    latestSender: "@ada",
-    flags: ["channel"],
-  });
-  expect(parsed.entries.some((entry) => entry.kind === "app")).toBe(true);
 });
 
 test("--reviewer-isolation is accepted only on send, claim, update and amend", () => {

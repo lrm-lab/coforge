@@ -106,6 +106,7 @@ import {
   withOutputMode,
 } from "#src/cli-error";
 import { attachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
+import { formatInboxCheck } from "#src/inbox-format";
 import {
   claimRefusal,
   formatClaimResults,
@@ -173,7 +174,7 @@ export type AttachmentUploadInvocation = {
   mimeType?: string;
   json?: boolean;
 };
-export type InboxInvocation = { command: "inbox-check" };
+export type InboxInvocation = { command: "inbox-check"; json?: boolean };
 export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
 /** `channel info|members|join|leave|create|update|lifecycle|add-member|remove-member`, disjoint
  * from `ChannelInvocation` above (`mute`/`unmute`, unchanged). */
@@ -426,8 +427,10 @@ export function parseArgs(
     ).test(args[3] ?? "")
   )
     return { command: "thread-unfollow", target: args[3]! };
-  if (args[0] === "inbox" && args[1] === "check" && args.length === 2)
-    return { command: "inbox-check" };
+  if (args[0] === "inbox" && args[1] === "check") {
+    if (args.length === 2) return { command: "inbox-check" };
+    if (args.length === 3 && args[2] === "--json") return { command: "inbox-check", json: true };
+  }
   if (args[0] === "attachment" && args[1] === "view") {
     let positionalId: string | undefined;
     let explicitId: string | undefined;
@@ -1448,7 +1451,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   if (invocation.command === "inbox-check") {
     if (!transport.inboxCheck) throw new Error("App Inbox transport is unavailable");
-    return formatInboxCheck(await transport.inboxCheck());
+    return formatInboxCheck(await transport.inboxCheck(), invocation.json === true);
   }
   if (invocation.command === "attachment.view") {
     const result = await transport.view(invocation.attachmentId);
@@ -1946,33 +1949,6 @@ function heldSendCliError(
     draftSaved: true,
     contextText: formatHeldSend(target, result),
     suggestedNextAction: HELD_SEND_NEXT_ACTION,
-  });
-}
-
-function formatInboxCheck(result: unknown): string {
-  if (!result || typeof result !== "object") return JSON.stringify(result);
-  const response = result as { entries?: unknown[]; [key: string]: unknown };
-  // One JSON document, as before. The held message targets are already in `entries` (the daemon
-  // returns them next to the App Inbox items), so an Agent can read the local view from this
-  // output; a human-readable rendering would change machine output that callers parse today, and
-  // this command has no `--json` escape hatch to change it behind.
-  return JSON.stringify({
-    ...response,
-    ...(response.entries
-      ? {
-          entries: response.entries.map((entry) => {
-            if (!entry || typeof entry !== "object") return entry;
-            const value = entry as { messageTarget?: Record<string, unknown> };
-            if (!value.messageTarget) return entry;
-            const {
-              firstPendingSequence: _first,
-              latestSequence: _latest,
-              ...messageTarget
-            } = value.messageTarget;
-            return { ...entry, messageTarget };
-          }),
-        }
-      : {}),
   });
 }
 
