@@ -23,15 +23,28 @@ const MEMORY_OBSERVER_NOTE = [
   "Do not invent evidence.",
 ].join(" ");
 
-/** Memory and Task are woken by the same message (both @-mentioned) and work in parallel. Nothing forces
- * Task to wait for Memory: a hint that arrives in time is simply handled like any other Memory Hint. */
+/** Memory and Task are woken by the same message (both @-mentioned) and work in parallel. Task does not wait
+ * passively for a Hint: it asks Memory for experience at fixed points and says where it stands, so Memory can
+ * match the question to the right card. Nothing forces Task to stop and wait; an answer is used when it arrives.
+ * The literal @memory must stay out of the replace() in episodePrompt, so these notes are appended after it. */
 export const MEMORY_PARALLEL_NOTE = [
   "Memory Agent and Task Agent start together on this message.",
   "Memory Agent: retrieve now with ov_experience_find, then publish ONE cited Offer to Task with memory_offer",
   "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). Do not invent evidence.",
-  "Task Agent: Memory Agent is retrieving prior experience in this channel at the same time; start on the task",
-  "right away. When a Memory Hint arrives, call memory_disposition (adopt, reject or defer, with a reason)",
-  "before applying it.",
+  "Answer every later @memory question from Task the same way, using the task type and progress it states.",
+  "Task Agent: ask Memory Agent for prior experience yourself, do not wait for a Hint to show up.",
+  "Ask by sending a channel message to the channel this task came from, e.g.",
+  "`coforge message send --target '<this channel>'` with a body that starts with @memory and has three parts:",
+  "(1) task type: deliverable format and occupation, e.g. 'docx contract, paralegal';",
+  "(2) progress: what is already done and what you do next;",
+  "(3) the question: which experience cards, verify checks or known pitfalls apply, with citations.",
+  "Ask at these moments, one short message each, at most 4 asks in total, never the same question twice:",
+  "A. first, before reading the inputs in depth ('@memory Task type: ... Progress: just started. Any experience card for this kind of task?');",
+  "B. right before you start writing the deliverable ('Progress: inputs read, about to draft <outline>. Which checks or pitfalls apply?');",
+  "C. whenever you are unsure or stuck on a requirement, a format or a tool error ('Stuck on: <one sentence>. Any card on this?');",
+  "D. before you deliver, as a self-check ('Progress: draft saved as <file>. Which pre-submission checks apply to this deliverable?').",
+  "Keep working while you wait; read the reply with `coforge message check`. When a Memory Hint arrives,",
+  "call memory_disposition (adopt, reject or defer, with a reason) before applying it.",
 ].join(" ");
 
 /** Delivery rules that mirror what the 8745 scorer can actually see (found by the warm-log analysis). */
@@ -67,10 +80,8 @@ export function episodePrompt(
       ? `\n\n${MEMORY_OBSERVER_NOTE}`
       : "";
   const rules = options.deliveryRules ? `\n\n${DELIVERY_RULES_NOTE}` : "";
-  const body = `${prompt}${note}\n\n${reminder}${rules}${observerNote}`.replace(
-    /@memory\b/g,
-    "Memory Agent",
-  );
+  const task = `${prompt}${note}\n\n${reminder}`.replace(/@memory\b/g, "Memory Agent");
+  const body = `${task}${rules}${observerNote}`;
   // An explicit @memory question can only be answered by a cited Offer, which an empty
   // corpus cannot give; observer mode leaves Memory to publish an ordinary channel message.
   return memoryObserver && !parallel ? `@task ${body}` : `@task @memory ${body}`;

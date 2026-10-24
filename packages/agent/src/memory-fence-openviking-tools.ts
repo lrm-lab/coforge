@@ -196,7 +196,7 @@ export function memoryFenceOpenVikingTools(
     [OPENVIKING_TOOL_NAMES.offer]: openvikingTool(
       OPENVIKING_TOOL_NAMES.offer,
       "Publish Memory Offer",
-      "Publish one visible, cited Memory Offer. Partial findings and explicit unresolved constraints are valid; do not wait to solve the whole Task. This is the only visible answer to an explicit @memory question. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient. This completes the retrieval round: include unresolved constraints and suggested next queries; do not promise autonomous continued searching.",
+      "Publish one visible, cited Memory Offer. Partial findings and explicit unresolved constraints are valid; do not wait to solve the whole Task. This is the visible answer to an explicit @memory question; when your retrieval returned no citable card, one plain send_channel_message saying no card applies is allowed instead. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient. This completes the retrieval round: include unresolved constraints and suggested next queries; do not promise autonomous continued searching.",
       "offer",
       {
         operationId: Type.String({

@@ -5,7 +5,9 @@ import {
   fifoOldestUnansweredQuestion,
   isExplicitMemoryQuestion,
   pickObserverOfferTarget,
+  explicitMemoryQuestionRequiresOffer,
 } from "./explicit-memory-answer";
+import { clearNoCardAllowance, recordMemoryRetrieval } from "./no-card-allowance";
 
 test("an explicit @memory question is a token, not a substring", () => {
   expect(isExplicitMemoryQuestion("@memory When did Caroline go?")).toBe(true);
@@ -146,4 +148,37 @@ test("observer mode: an Offer goes to the Agent the latest message addressed, ne
       null,
     ),
   ).toBeNull();
+});
+
+test("no-card allowance lets one plain Memory message through an unanswered @memory question", async () => {
+  const input = { workspaceId: "ws-q", agentId: "mem-q", conversationId: "c-q" };
+  const db = {
+    message: {
+      findMany: async () => [
+        {
+          body: "@task @memory write it",
+          createdAt: new Date("2026-10-24T05:00:00.000Z"),
+          conversationId: "c-q",
+          sender: { agentId: null },
+        },
+      ],
+    },
+    memoryOfferRecord: { findMany: async () => [] },
+  } as never;
+  const designated = async () => true;
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  // Unanswered question, nothing retrieved yet: a plain message is still refused.
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(true);
+  // Retrieval came back empty: the plain "no applicable card" message may pass...
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 0);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(false);
+  // ...and after it was sent the rule is back in force.
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(true);
+  // A retrieval with hits never grants the allowance.
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 3);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(true);
+  // The allowance expires.
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 0, Date.now() - 11 * 60_000);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(true);
 });

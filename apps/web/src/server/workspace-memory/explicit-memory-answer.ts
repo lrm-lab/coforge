@@ -4,6 +4,7 @@
  * The channel and recipient are bound here when the model omits them.
  */
 
+import { hasNoCardAllowance } from "./no-card-allowance";
 import type { PrismaClient } from "#src/generated/prisma/client";
 
 const EXPLICIT_MEMORY_QUESTION = /(?:^|\s)@memory\b/;
@@ -63,7 +64,9 @@ export async function explicitMemoryQuestionRequiresOffer(
     [input.conversationId],
     input.agentId,
   );
-  return question !== null;
+  if (question === null) return false;
+  // Nothing citable came back from this Memory Agent's own retrieval: one plain "no applicable card" message may pass.
+  return !hasNoCardAllowance(input.workspaceId, input.agentId);
 }
 
 export async function resolveUnansweredMemoryOfferTarget(

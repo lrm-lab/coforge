@@ -23,6 +23,7 @@ import {
   MemoryReadCapabilityError,
   type OpenVikingMemoryReads,
 } from "#src/server/openviking/openviking-memory-reads";
+import { clearNoCardAllowance, recordMemoryRetrieval } from "./no-card-allowance";
 import { DEFAULT_OFFER_RATIONALE, MemoryOfferTargetError } from "./explicit-memory-answer";
 
 export const MEMORY_AGENT_TRIGGER_HEADER = "x-coforge-trigger-message-id";
@@ -124,12 +125,27 @@ export function createMemoryAgentCommands(deps: {
           if (!deps.diagnose) throw new Error("diagnosis_unavailable");
           return { ok: true, response: await deps.diagnose({ ...input, ...command }) };
         }
-        return { ok: true, response: await handleOpenViking(deps, input, command) };
+        const response = await handleOpenViking(deps, input, command);
+        trackRetrieval(input, command, response);
+        return { ok: true, response };
       } catch (error) {
         return translateError(command, error);
       }
     },
   };
+}
+
+/** Keeps the "nothing citable" fallback in step with what this Memory Agent's retrieval returned. */
+function trackRetrieval(
+  input: { workspaceId: string; agentId: string },
+  command: OpenVikingAgentCommand,
+  response: OpenVikingAgentResponse,
+): void {
+  if (command.op === "offer") return clearNoCardAllowance(input.workspaceId, input.agentId);
+  const finds = ["experience_find", "fork_find", "search_context"];
+  if (!finds.includes(command.op)) return;
+  const items = (response as { items?: unknown }).items;
+  if (Array.isArray(items)) recordMemoryRetrieval(input.workspaceId, input.agentId, items.length);
 }
 
 async function offerDelivery(
