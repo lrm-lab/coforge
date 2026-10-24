@@ -5,5 +5,16 @@
   "agent_mascot_green": "Green",
   "agent_mascot_purple": "Purple",
   "agent_mascot_black": "Black",
-  "agent_mascot_yellow": "Yellow"
+  "agent_mascot_yellow": "Yellow",
+  "agent_busy_agents": "Active Agents",
+  "agent_busy_agents_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} active Agent",
+        "countPlural=other": "{count} active Agents"
+      }
+    }
+  ]
 }

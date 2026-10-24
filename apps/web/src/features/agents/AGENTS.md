@@ -19,6 +19,16 @@ These rules apply to `src/features/agents/`.
   (`useLiveAgent`, `useLiveAgentDisplay`) re-renders only when that Agent
   changes, so a list row reads its own Agent rather than the whole list.
   `useRefreshAgentDirectory` re-reads that store after a committed write; a failed read preserves the snapshot and rejects to the caller without replacing the Workspace route.
+- The Agents of the Workspace beyond the viewer's roster (`loadExtraAgents`, scoped like the
+  Members directory and without the viewer's own) are one query in the provider, and each is a named
+  `isExtra` entry of `useAgentStatuses`' list, so the status publications on the shared channel and
+  on a private Agent's own channel update it in place, and a private one gets its per-Agent
+  subscriptions. The provider's `refresh` reads the roster and these together, the extras failing
+  soft, so the display-expiry timer, a resubscribe gap and directory and visibility events cover
+  them with no listener of their own; `useLiveAgents` leaves them out. The chat list header reads
+  the busy ones through `useWorkspaceBusyAgents` (`useLiveWorkspaceAgents` selects from the store).
+  Never subscribe to a private Agent's channel a second time (`useRealtimeSubscriptions` is not
+  ref-counted).
 - The model beside an Agent's name in chat (`agent-models.ts`, Settings → Show
   agent model) is one query per Workspace over every Agent the viewer may see
   (`listVisibleAgentModels`, scoped by `visibleAgentWhere`), wider than
@@ -90,8 +100,9 @@ These rules apply to `src/features/agents/`.
   [mascots.md](mascots.md).
 - The Agent card (`agent-hover-card.tsx`) peeks from the avatars and the
   @mention chips (`conversations/mention-chip-hover.tsx`; a person's chip peeks
-  `conversations/person-hover-card.tsx`) in a message stream only; conversation and profile
-  headers show a plain avatar. Its
+  `conversations/person-hover-card.tsx`) in a message stream, and from the chat list header's
+  busy Agents ([mascots.md](mascots.md)), only; conversation and profile headers show a plain
+  avatar. Its
   Recent activity goes only to the viewers who get the panel's Activity tab
   (`canManageAgent`): the five newest rows, "finished" status rows included,
   oldest at the top, each as clock, round marker and truncated label. The
@@ -171,7 +182,8 @@ These rules apply to `src/features/agents/`.
   avatar components fall back to `agentAvatarUrl(agentId)`, never initials, while
   an Agent's data is loading.
 - `agent-visibility.ts` holds the `AgentVisibility` vocabulary outside any
-  `.server.ts` file so browser validators can import it.
+  `.server.ts` file so browser validators can import it, and `normalizeAgentVisibility`: read a
+  stored value through it, since anything but exactly `public` is private.
 - The environment editor edits only user-declared Agent environment overrides.
 - The Apps tab (`agent-apps-tab.tsx`, after Raft's web UI) shows every viewer of a live
   Agent its pending requests and active grants; Approve, Deny, Grant access and Revoke only when

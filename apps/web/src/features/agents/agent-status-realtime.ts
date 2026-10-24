@@ -246,15 +246,11 @@ export function mergeAgentStatusSnapshot<T extends StatusTrackedAgent>(
 }
 
 /**
- * Appends any `extraAgents` entries not already present in `list` by id. `list` is a
- * primary Agent list (e.g. `listAgents`'s owned-Agents roster) that a fresh refresh always
- * replaces wholesale; `extraAgents` are Agents visible to the viewer but outside that primary
- * list — e.g. an owner/admin's view of another member's private Agent — represented as
- * placeholders (status "inactive" until a live publication says otherwise) so they are never
- * silently dropped by `mergeAgentStatusSnapshot`'s "the fresh snapshot is authoritative" rule,
- * and so they receive the same per-Agent channel subscription every other private Agent in
- * `visibleAgents` gets. If the primary list ever comes to include the same id (e.g. a broader
- * roster in a later change), that entry wins and the placeholder is dropped.
+ * Appends any `extraAgents` entries not already present in `list` by id. `list` is a primary
+ * Agent list (the viewer's `listAgents` roster); `extraAgents` are named Agents visible to the
+ * viewer beyond it (another member's Agents), so the props paths keep them in the tracked list. A
+ * `refresh()` result is not merged: it carries the extras it read, so it is authoritative for
+ * them. If the primary list includes the same id, that entry wins.
  */
 export function mergeExtraAgents<T extends StatusTrackedAgent>(list: T[], extraAgents: T[]): T[] {
   const ids = new Set(list.map((agent) => agent.id));
@@ -321,14 +317,12 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   workspaceId?: string;
   refresh: () => Promise<T[]>;
   getConnectionToken: () => Promise<string>;
-  /** Placeholder entries for Agents visible to the viewer but outside their own
-   * primary `agents` list — e.g. an owner/admin's view of another member's private Agent.
-   * Merged in (via `mergeExtraAgents`) alongside every fresh `agents`/`refresh()` result so a
-   * refresh never silently drops them; a live publication updates them in place exactly like any
-   * other tracked Agent once merged. */
+  /** Named entries for Agents visible to the viewer beyond their own `agents` roster. Merged
+   * (via `mergeExtraAgents`) into each new `agents` value; `refresh()` returns its own extras,
+   * so its result is never merged with these. A live publication updates them in place. */
   extraAgents?: T[];
-  /** Called whenever this hook observes `agent:visibility_changed`, so a caller
-   * tracking a separate id list (e.g. the `extraAgents` source query) can refetch it too. */
+  /** Called whenever this hook observes `agent:visibility_changed`, so the caller can
+   * invalidate what else follows an Agent's visibility. */
   onVisibilityChangedEvent?: () => void;
   /** Called whenever an Agent directory event arrives. The caller can invalidate other
    * Workspace-scoped projections (for example channel mention directories). */
@@ -396,9 +390,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
         .then((refreshed) => {
           if (disposed || !mounted.current || currentWorkspaceId.current !== refreshWorkspaceId)
             return;
-          setVisibleAgents((current) =>
-            mergeAgentStatusSnapshot(current, mergeExtraAgents(refreshed, extraAgents)),
-          );
+          setVisibleAgents((current) => mergeAgentStatusSnapshot(current, refreshed));
         })
         .catch(() => {
           if (!disposed && mounted.current && currentWorkspaceId.current === refreshWorkspaceId)
@@ -410,29 +402,22 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [refresh, visibleAgents, workspaceId, extraAgents]);
+  }, [refresh, visibleAgents, workspaceId]);
 
   const refreshSnapshot = useCallback(async () => {
     const refreshed = await refresh();
     if (mounted.current && currentWorkspaceId.current === workspaceId)
       setVisibleAgents((current) =>
-        expireAgentStatuses(
-          mergeAgentStatusSnapshot(current, mergeExtraAgents(refreshed, extraAgents)),
-          Date.now(),
-        ),
+        expireAgentStatuses(mergeAgentStatusSnapshot(current, refreshed), Date.now()),
       );
-  }, [refresh, extraAgents, workspaceId]);
+  }, [refresh, workspaceId]);
 
   const handleStatusPublication = (data: unknown) => {
     try {
       const value = publicationData(data);
       if (isAgentVisibilityChangedEvent(value)) {
-        // Refetch immediately —
-        // `mergeAgentStatusSnapshot` already drops any Agent absent from the fresh list, and
-        // subscribing/unsubscribing its per-Agent channels follows from that same fresh list
-        // wherever it is consumed (see `WorkspaceAgentsProvider`). A caller tracking a separate
-        // "extra visible Agents" id list (an owner/admin's view beyond their own roster) gets
-        // the same signal to refetch that list too.
+        // Refetch immediately: `mergeAgentStatusSnapshot` drops any Agent absent from the fresh
+        // list (extras included), and its per-Agent channels follow from that same list.
         void refreshSnapshot().catch(() => {});
         onVisibilityChangedEvent?.();
         onDirectoryChangedEvent?.();
@@ -441,8 +426,8 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
         // so create/delete/rename changes also update the status-dot store and private visibility
         // subscriptions without exposing directory data on the shared status channel.
         void refreshSnapshot().catch(() => {});
-        // A created/deleted private Agent may change the viewer's separately authorized id list,
-        // so reuse the same reconciliation hook as the visibility event.
+        // A created/deleted Agent may change what the viewer can see, so reuse the visibility
+        // event's hook.
         onVisibilityChangedEvent?.();
         onDirectoryChangedEvent?.();
       } else if (Reflect.get(value as object, "type") === "agent:display") {

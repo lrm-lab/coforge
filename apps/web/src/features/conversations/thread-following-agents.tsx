@@ -1,9 +1,4 @@
-import {
-  Dialog as AriaDialog,
-  DialogTrigger as AriaDialogTrigger,
-  Heading,
-  Popover as AriaPopover,
-} from "react-aria-components";
+import { DialogTrigger as AriaDialogTrigger, Heading } from "react-aria-components";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, XClose } from "@untitledui/icons";
@@ -11,9 +6,13 @@ import { AlertCircle, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
-import { AgentDisplayAvatar, AgentStackFace } from "#src/features/agents/agent-display-avatar";
+import { AgentStackFace } from "#src/features/agents/agent-display-avatar";
+import {
+  AgentListPopover,
+  AgentListRow,
+  AgentListRows,
+} from "#src/features/agents/agent-list-popover";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
   loadPublicChannelThreadFollowingAgents,
@@ -50,46 +49,25 @@ function FollowingAgentRow({
   onUnfollow: (agentId: string) => void;
 }) {
   const live = useLiveAgent(agent.id);
-  const identity = (
-    <>
-      <AgentDisplayAvatar
-        agentId={agent.id}
-        name={agent.displayName}
-        src={agent.avatarUrl}
-        display={live?.display}
-        size="sm"
-      />
-      <span className="min-w-0 truncate text-sm font-medium text-primary">{agent.displayName}</span>
-    </>
-  );
   return (
-    <li className="flex items-center gap-2 px-3 py-2">
-      {onOpenProfile ? (
-        <Button
-          color="tertiary"
-          noTextPadding
-          aria-label={m.agent_open_profile({ name: agent.displayName })}
-          onPress={() => onOpenProfile(agent.id)}
-          // Base Button wraps children in an inline `span[data-text]`; without this the
-          // block-level avatar forces the name onto its own line (and drags the status
-          // dot to the row's right edge). Make the wrapper the flex row instead.
-          className="h-auto min-w-0 flex-1 justify-start gap-2 rounded p-0 hover:bg-transparent [&>[data-text]]:flex [&>[data-text]]:min-w-0 [&>[data-text]]:flex-1 [&>[data-text]]:items-center [&>[data-text]]:gap-2"
-        >
-          {identity}
-        </Button>
-      ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-2">{identity}</div>
-      )}
-      {canUnfollow && (
-        <ButtonUtility
-          icon={XClose}
-          size="sm"
-          color="tertiary"
-          tooltip={m.conversation_thread_unfollow_agent({ name: agent.displayName })}
-          onClick={() => onUnfollow(agent.id)}
-        />
-      )}
-    </li>
+    <AgentListRow
+      agentId={agent.id}
+      name={agent.displayName}
+      src={agent.avatarUrl}
+      display={live?.display}
+      onOpenProfile={onOpenProfile ? () => onOpenProfile(agent.id) : undefined}
+      action={
+        canUnfollow && (
+          <ButtonUtility
+            icon={XClose}
+            size="sm"
+            color="tertiary"
+            tooltip={m.conversation_thread_unfollow_agent({ name: agent.displayName })}
+            onClick={() => onUnfollow(agent.id)}
+          />
+        )
+      }
+    />
   );
 }
 
@@ -165,59 +143,41 @@ export function ThreadFollowingAgents({
           </>
         )}
       </Button>
-      <AriaPopover
-        placement="bottom end"
-        offset={8}
-        className={(state) =>
-          cn(
-            "origin-(--trigger-anchor-point) overflow-hidden rounded-lg bg-primary shadow-lg ring-1 ring-secondary_alt will-change-transform",
-            state.isEntering &&
-              "duration-150 ease-out animate-in fade-in placement-bottom:slide-in-from-top-0.5",
-            state.isExiting &&
-              "duration-100 ease-in animate-out fade-out placement-bottom:slide-out-to-top-0.5",
-            "w-[min(20rem,calc(100vw-2.5rem))]",
-          )
-        }
-      >
-        <AriaDialog
-          aria-label={m.conversation_thread_following_agents()}
-          className="outline-hidden"
-        >
-          {({ close }) => (
-            <>
-              <div className="border-b border-secondary px-3 py-2">
-                <Heading slot="title" className="text-sm font-semibold text-primary">
-                  {m.conversation_thread_following_agents()}
-                </Heading>
-              </div>
-              {failed ? (
-                <p role="alert" className="px-3 py-3 text-sm text-error-primary">
-                  {m.conversation_thread_following_agents_error()}
-                </p>
-              ) : (
-                <ul className="max-h-72 divide-y divide-secondary overflow-y-auto py-1 [scrollbar-width:thin]">
-                  {agents.map((agent) => (
-                    <FollowingAgentRow
-                      key={agent.id}
-                      agent={agent}
-                      canUnfollow={canUnfollow}
-                      onOpenProfile={
-                        onOpenAgentProfile
-                          ? (agentId) => {
-                              close();
-                              onOpenAgentProfile(agentId);
-                            }
-                          : undefined
-                      }
-                      onUnfollow={(agentId) => void unfollowAgent(agentId)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </AriaDialog>
-      </AriaPopover>
+      <AgentListPopover label={m.conversation_thread_following_agents()}>
+        {(close) => (
+          <>
+            <div className="border-b border-secondary px-3 py-2">
+              <Heading slot="title" className="text-sm font-semibold text-primary">
+                {m.conversation_thread_following_agents()}
+              </Heading>
+            </div>
+            {failed ? (
+              <p role="alert" className="px-3 py-3 text-sm text-error-primary">
+                {m.conversation_thread_following_agents_error()}
+              </p>
+            ) : (
+              <AgentListRows>
+                {agents.map((agent) => (
+                  <FollowingAgentRow
+                    key={agent.id}
+                    agent={agent}
+                    canUnfollow={canUnfollow}
+                    onOpenProfile={
+                      onOpenAgentProfile
+                        ? (agentId) => {
+                            close();
+                            onOpenAgentProfile(agentId);
+                          }
+                        : undefined
+                    }
+                    onUnfollow={(agentId) => void unfollowAgent(agentId)}
+                  />
+                ))}
+              </AgentListRows>
+            )}
+          </>
+        )}
+      </AgentListPopover>
     </AriaDialogTrigger>
   );
 }

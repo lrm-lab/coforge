@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import {
   directListsOf,
   directRowsOf,
+  listedDirectAgentIds,
   listedDirectIds,
 } from "#src/features/conversations/sidebar-rows";
 
@@ -124,4 +125,10 @@ test("the listed DMs are the open ones with a member, or with an Agent that is s
   ]);
   // A deleted Agent's DM is not listed.
   expect(listedDirectIds(lists, [])).toEqual(["dm-grace"]);
+});
+
+test("the open DMs with an Agent are found by Agent id; a closed one is not, a closed one that is pinned is", () => {
+  const lists = directListsOf(directRowsOf(preferences, {}));
+  // helper's DM is closed but pinned, so it is listed; scout's is closed; grace is a member.
+  expect([...listedDirectAgentIds(lists)]).toEqual([["helper", "dm-helper"]]);
 });

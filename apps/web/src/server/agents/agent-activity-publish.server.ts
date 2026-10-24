@@ -21,7 +21,7 @@ import {
   agentActivityChannelFor,
   isRunStartMarker,
 } from "#src/features/agents/agent-activity";
-import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
 
 type AgentActivityPublicationDependencies = {
@@ -224,14 +224,11 @@ export function publicationAgentLookups(db: PrismaClient): PublicationAgentLooku
       const agent = await read(agentId);
       return agent?.workspaceId === workspaceId && agent.computerId === computerId;
     },
-    // An unrecognized persisted value fails closed to private, as `canSeeAgent` and
-    // `visibleAgentWhere` treat it.
+    // An unrecognized persisted value fails closed to private (`normalizeAgentVisibility`).
     agentVisibility: async (workspaceId, agentId) => {
       const agent = await read(agentId);
       if (agent?.workspaceId !== workspaceId) return undefined;
-      return agent.visibility === AGENT_VISIBILITY.PUBLIC
-        ? AGENT_VISIBILITY.PUBLIC
-        : AGENT_VISIBILITY.PRIVATE;
+      return normalizeAgentVisibility(agent.visibility);
     },
     currentRuntimeFence: async (workspaceId, computerId, agentId) => {
       const agent = await read(agentId);

@@ -3,7 +3,8 @@
 Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
 
 - A mascot moves only where `AgentMascotView` draws it, and only on these surfaces: the
-  busy-Agents line above a main composer, the Direct-message list rows (`DirectAgentAvatar` in
+  busy-Agents line above a main composer, the chat list header's busy Agents (below), the
+  Direct-message list rows (`DirectAgentAvatar` in
   `features/conversations/`, through `AgentMascotAvatar`; the row's pointer state reaches it as
   `hovered` through `useRowHovered`, so a hover repaints only the mascot), the Agent hover card, the
   Agent profile card (not its header, which repeats it) and the mascot picker
@@ -50,6 +51,25 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   one a still picture (`busy-agents-strip.css`); reduced motion stops the cycle and the fade. The
   sentence is plain text, not a live region; only the overflow count (`agent_busy_others`) is a
   message, the labels are not localized.
+- The chat list header (`busy-agents-stage.tsx`, after the "Chat" heading) shows the Workspace's
+  Agents that are working or thinking, every one the viewer may see and not only their own
+  (`busy-agents.ts`, `use-workspace-busy-agents.ts`: Agents with a Direct message first, then
+  the viewer's own, then the others, each group by name) as 24px moving stickers, with no names or
+  words: as many as fit, one per 34px, three to five (`stageCapacity`). The rest wait behind a
+  count in the thread following-Agents trigger's style, which opens all of them in that popover's
+  style (`agent-list-popover.tsx`, shared with it), each row with its current label. Who may be
+  seen is the Members directory's rule (`listExtraAgents`, `visibleAgentWhere`); the Agents are the
+  provider's extras, kept live by the status publications `useAgentStatuses` already holds
+  ([AGENTS.md](AGENTS.md), "Agent state in the browser"). `busy-agents-cast.ts` (pure) decides who
+  is on stage: they rotate (14–40s on, one at a time, a newly busy Agent first, then the one shown
+  least recently), an Agent that stops goes back and stays off, one the viewer points at or reads
+  the card of stays. `busy-agents-motion.ts` (pure) moves them: a slide with a small hop, no legs
+  or walk cycle, in and out from behind the count's edge, which masks them; they may pass each
+  other. `busy-agents-stage-loop.ts` runs both in one animation-frame loop that writes their
+  transforms (only when one changed) and only while the stage is on screen, so React renders only
+  when the cast changes. Each is the Agent's avatar as in a message stream: it peeks at the Agent
+  card and opens the profile on a press (any visible Agent's profile opens, not only the viewer's
+  own). Reduced motion leaves still faces and the count, with no rotation and no loop.
 - A moving mascot's eyes follow the cursor. `mascot-look.ts` (pure) maps the pointer's offset from
   the canvas centre to `lookX` / `lookY` in [-1, 1] (full deflection at 350 px, flattening toward
   it), and `mascot-look-tracker.ts` is the one passive document `pointermove` listener every

@@ -15,6 +15,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Spinner } from "#src/components/ui/spinner";
 import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
 import { ConversationListContext } from "./conversation-list-button";
 import { ConversationDirectory } from "./conversation-directory";
 import { m } from "#src/paraglide/messages";
@@ -246,7 +247,15 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             >
               <PageHeader
                 heading={m.navigation_chat()}
-                meta={<ConnectionStatusPill whenConnected={<SavingChangesBadge />} />}
+                meta={
+                  <>
+                    <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
+                    <ChatHeaderBusyAgents
+                      directs={directs}
+                      onConversationPage={Boolean(channel || openDm)}
+                    />
+                  </>
+                }
               />
               {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
                   row and the bookmark path is inset another 0.125rem, so the rule

@@ -170,7 +170,8 @@ function PeopleDirectConversationPage({
           onChanged={data.page.invalidate}
         />
       )}
-      // No Agent profile here (a member DM has no Agent to open), only the people's own.
+      // A member DM has no Agent of its own, but the chat list header opens any visible Agent's
+      // profile beside whatever conversation is open: the panel needs its tab handler.
       conversation={({
         jumpMessage,
         onJumpMessageConsumed,
@@ -179,6 +180,7 @@ function PeopleDirectConversationPage({
         onShowFiles,
         onReadLatest,
         agentProfile,
+        onAgentProfileTabChange,
         onOpenPersonProfile,
         onCloseAgentProfile,
       }) => (
@@ -193,6 +195,7 @@ function PeopleDirectConversationPage({
           onShowFiles={onShowFiles}
           onReadLatest={onReadLatest}
           agentProfile={agentProfile}
+          onAgentProfileTabChange={onAgentProfileTabChange}
           onOpenPersonProfile={onOpenPersonProfile}
           onCloseAgentProfile={onCloseAgentProfile}
         />

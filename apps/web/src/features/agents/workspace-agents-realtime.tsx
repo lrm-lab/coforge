@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { createStore, useSelector, type Store } from "@tanstack/react-store";
 import { useQuery, useQueryClient, skipToken } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -11,7 +11,6 @@ import {
   getAgentActivitySubscriptionTokenForAgent,
   getAgentStatusSubscriptionToken,
   getAgentStatusSubscriptionTokenForAgent,
-  listVisiblePrivateAgentIds,
 } from "./agents.functions";
 import { useAgentStatuses, type AgentStatusView } from "./agent-status-realtime";
 import {
@@ -28,6 +27,8 @@ import {
 } from "./agent-activity-queries";
 import { agentModelsQueryKey } from "./agent-models";
 import type { AgentMascot } from "./agent-mascot";
+import type { ExtraAgent } from "./extra-agent";
+import { loadExtraAgents } from "./extra-agents.functions";
 
 const EMPTY_ACTIVITY: ActivityEntry[] = [];
 
@@ -36,9 +37,8 @@ export type LiveAgent = {
   name: string;
   displayName: string;
   avatarUrl?: string | null;
-  /** The mascot the Agent shows (`agentMascot`). Optional like `avatarUrl`: an `isExtra`
-   * placeholder does not know it, and an Agent shape from a path that never set it reads as the
-   * mascot its id chooses. */
+  /** The mascot the Agent shows (`agentMascot`). Optional like `avatarUrl`: an Agent
+   * shape from a path that never set it reads as the mascot its id chooses. */
   mascot?: AgentMascot;
   status: AgentStatusView;
   display?: AgentDisplaySnapshot;
@@ -46,10 +46,11 @@ export type LiveAgent = {
    * set it) reads as `"public"`, matching the same fail-open default the create/list paths use
    * for Agents created before visibility existed. */
   visibility?: AgentVisibility;
-  /** Set only on a placeholder standing in for an Agent visible to the viewer but
-   * outside their own `listAgents` roster (`extraAgentPlaceholder`) — no real name/description,
-   * so `useLiveAgents()` (the Members directory, DM sidebar, mention list) filters it out;
-   * `useLiveAgent(id)` still returns it so the profile panel gets its live status/Activity. */
+  /** Set only on an Agent visible to the viewer but outside their own `listAgents` roster
+   * (`extraLiveAgent`): its name, mascot and display, no description, so `useLiveAgents()` (the
+   * Members directory, DM sidebar, mention list) filters it out; `useLiveAgent(id)` still returns
+   * it so the profile panel gets its live status/Activity, and `useLiveWorkspaceAgents` returns it
+   * for the chat list header. */
   isExtra?: true;
 };
 
@@ -61,8 +62,24 @@ const LiveAgentStoreContext = createContext<Store<LiveAgent[]>>(createStore<Live
 const WorkspaceIdContext = createContext<string | undefined>(undefined);
 const RefreshAgentDirectoryContext = createContext<(() => Promise<void>) | null>(null);
 
-const visiblePrivateAgentIdsKey = (workspaceId: string | undefined) =>
-  ["agent-visibility", "visible-private-ids", workspaceId ?? null] as const;
+const extraAgentsQueryKey = (workspaceId: string | undefined) =>
+  ["extra-agents", workspaceId ?? null] as const;
+
+/** An Agent beyond the viewer's roster as the store holds it: "inactive" until a live publication
+ * says otherwise, matching `listAgents`'s own "nothing heard yet" default. */
+function extraLiveAgent(agent: ExtraAgent): LiveAgent {
+  return { ...agent, status: { value: "inactive", expiresAt: null }, isExtra: true };
+}
+
+/** What a refresh hands `useAgentStatuses`: the roster and, when they were read, the extras. The
+ * result is authoritative for the extras it carries, so one it dropped (an Agent the viewer lost
+ * sight of, or that was deleted) leaves the store with it. */
+export function refreshedAgents(
+  roster: LiveAgent[],
+  extras: readonly ExtraAgent[] | undefined,
+): LiveAgent[] {
+  return extras ? [...roster, ...extras.map(extraLiveAgent)] : roster;
+}
 
 type TimeoutScheduler = {
   set(callback: () => void, delayMs: number): number;
@@ -95,22 +112,6 @@ export function createAgentDirectoryInvalidator(
   };
 }
 
-/** Realtime gap: a placeholder `LiveAgent` for an Agent visible to the viewer but
- * outside their own `listAgents` roster (e.g. an owner/admin viewing another member's private
- * Agent) — "inactive" until a live per-Agent publication says otherwise, matching `listAgents`'s
- * own "nothing heard yet" default. Its name/description are blank; any surface reading it (the
- * profile panel) already prefers its own authorized `getAgentProfile` fetch for those fields. */
-function extraAgentPlaceholder(id: string): LiveAgent {
-  return {
-    id,
-    name: "",
-    displayName: "",
-    visibility: AGENT_VISIBILITY.PRIVATE,
-    status: { value: "inactive", expiresAt: null },
-    isExtra: true,
-  };
-}
-
 /**
  * Owns the app shell's one Agent status subscription and one Activity
  * subscription, and shares both through context. Must be rendered inside
@@ -131,7 +132,7 @@ export function WorkspaceAgentsProvider({
   const getStatusToken = useServerFn(getAgentStatusSubscriptionToken);
   const getPrivateActivityToken = useServerFn(getAgentActivitySubscriptionTokenForAgent);
   const getPrivateStatusToken = useServerFn(getAgentStatusSubscriptionTokenForAgent);
-  const getVisiblePrivateIds = useServerFn(listVisiblePrivateAgentIds);
+  const readExtraAgents = useServerFn(loadExtraAgents);
   const queryClient = useQueryClient();
   const directoryInvalidator = useMemo(
     () =>
@@ -145,26 +146,39 @@ export function WorkspaceAgentsProvider({
   );
   useEffect(() => () => directoryInvalidator.cancel(), [directoryInvalidator]);
 
-  // Realtime gap: ids of private Agents visible to this viewer beyond their own
-  // `listAgents` roster (an owner/admin, or a private Agent's creator viewing it from outside
-  // their own roster). Refetched on `agent:visibility_changed` below (a viewer gaining or losing
-  // sight of an already-existing Agent); refetching on focus/reconnect also catches a private
-  // Agent CREATED by someone else meanwhile, since creation has no dedicated realtime signal.
-  const visiblePrivateIdsQuery = useQuery({
-    queryKey: visiblePrivateAgentIdsKey(workspaceId),
-    queryFn: workspaceId ? () => getVisiblePrivateIds() : skipToken,
-    staleTime: Infinity,
+  // The Agents visible to this viewer beyond their own `listAgents` roster (another member's
+  // public Agents, and, for an owner/admin or a private Agent's creator, private ones): each is a
+  // named entry the status publications update in place, and a private one gets its per-Agent
+  // subscriptions. `refreshWithExtras` below reads them again with the roster on every gap,
+  // directory or visibility event and display expiry `useAgentStatuses` handles; the query's own
+  // refetch covers focus and reconnect.
+  const extraAgentsQuery = useQuery({
+    queryKey: extraAgentsQueryKey(workspaceId),
+    queryFn: workspaceId ? () => readExtraAgents() : skipToken,
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
+    notifyOnChangeProps: ["data"],
   });
-  const ownAgentIds = useMemo(() => new Set(agents.map((agent) => agent.id)), [agents]);
   const extraAgents = useMemo(
-    () =>
-      (visiblePrivateIdsQuery.data ?? [])
-        .filter((id) => !ownAgentIds.has(id))
-        .map(extraAgentPlaceholder),
-    [visiblePrivateIdsQuery.data, ownAgentIds],
+    () => (extraAgentsQuery.data ?? []).map(extraLiveAgent),
+    [extraAgentsQuery.data],
   );
+  const refreshWithExtras = useCallback(async (): Promise<LiveAgent[]> => {
+    const [roster, extras] = await Promise.all([
+      refreshAgents(),
+      workspaceId
+        ? queryClient
+            .fetchQuery({
+              queryKey: extraAgentsQueryKey(workspaceId),
+              queryFn: () => readExtraAgents(),
+              staleTime: 0,
+            })
+            // The extras are an addition: without a fresh read the last ones read stay.
+            .catch(() => queryClient.getQueryData<ExtraAgent[]>(extraAgentsQueryKey(workspaceId)))
+        : undefined,
+    ]);
+    return refreshedAgents(roster, extras);
+  }, [refreshAgents, readExtraAgents, queryClient, workspaceId]);
 
   // `useAgentStatuses` derives its own per-Agent status subscriptions from its own current
   // state (see agent-status-realtime.ts), so a freshly-private Agent is subscribed the moment
@@ -172,12 +186,11 @@ export function WorkspaceAgentsProvider({
   const { agents: visibleAgents, refresh: refreshDirectory } = useAgentStatuses<LiveAgent>({
     agents,
     workspaceId,
-    refresh: refreshAgents,
+    refresh: refreshWithExtras,
     getConnectionToken: getStatusToken,
     extraAgents,
     onVisibilityChangedEvent: workspaceId
       ? () => {
-          void queryClient.invalidateQueries({ queryKey: visiblePrivateAgentIdsKey(workspaceId) });
           // A model label follows the Agent's visibility too (`agent-models.ts`).
           void queryClient.invalidateQueries({ queryKey: agentModelsQueryKey(workspaceId) });
         }
@@ -245,7 +258,7 @@ export function useRefreshAgentDirectory() {
   return refresh;
 }
 
-/** Whether an Agent is in the viewer's own roster, not an `isExtra` placeholder. */
+/** Whether an Agent is in the viewer's own roster, not an `isExtra` Agent. */
 function inRoster(agent: { isExtra?: true }) {
   return !agent.isExtra;
 }
@@ -254,15 +267,27 @@ function inRoster(agent: { isExtra?: true }) {
  * The live Agent list (with realtime status), for the sidebar's Direct message section.
  *
  * The Members directory / DM sidebar / mention list roster: never includes an `isExtra`
- * placeholder, since those carry no real name/description and exist only so
- * `useLiveAgent(id)` can serve live status/Activity for an Agent outside the viewer's own
- * roster.
+ * Agent. Those carry no description and are read through `useLiveAgent(id)` (live status and
+ * Activity for the profile panel) and `useLiveWorkspaceAgents` (the chat list header).
  */
 export function useLiveAgents(): LiveAgent[] {
   const agents = useSelector(useContext(LiveAgentStoreContext), (state) => state);
   // One list per store value, not per call: consumers memoize on it, and a fresh array on every
   // render would invalidate all of them.
   return useMemo(() => agents.filter(inRoster), [agents]);
+}
+
+/**
+ * The Agents of the Workspace the viewer may see — their own roster and the others' — picked by
+ * `pick`, which must give the same Agents the same objects. Repaints only when the picked list
+ * changes, so an Agent that `pick` leaves out costs nothing.
+ */
+export function useLiveWorkspaceAgents<T extends LiveAgent>(
+  pick: (agents: readonly LiveAgent[]) => T[],
+): T[] {
+  return useSelector(useContext(LiveAgentStoreContext), pick, {
+    compare: (a, b) => a.length === b.length && a.every((agent, index) => agent === b[index]),
+  });
 }
 
 /** Each live Agent's latest display by id, for avatars' status dots. */
@@ -283,9 +308,9 @@ export function useLiveAgent(agentId: string): LiveAgent | undefined {
   );
 }
 
-/** One Agent's mascot from the live roster, or nothing for an Agent outside it (an `isExtra`
- * placeholder, an archived Agent): its key is not known there, so its avatar stays a still
- * picture. Repaints only when that key changes. */
+/** One Agent's mascot from the viewer's live roster, or nothing for an Agent outside it: an
+ * `isExtra` Agent (the store holds its mascot, but only the roster's avatars animate) or an
+ * archived one, whose avatar stays a still picture. Repaints only when that key changes. */
 export function useLiveAgentMascot(agentId: string): AgentMascot | undefined {
   return useSelector(
     useContext(LiveAgentStoreContext),
@@ -293,8 +318,8 @@ export function useLiveAgentMascot(agentId: string): AgentMascot | undefined {
   );
 }
 
-/** One live Agent's display, or nothing for an Agent not in the viewer's roster (an `isExtra`
- * placeholder, as `useLiveAgents` leaves out) or not live here. */
+/** One live Agent's display for an avatar's status dot, or nothing for an Agent not in the
+ * viewer's roster (an `isExtra` Agent, which `useLiveAgents` leaves out too) or not live here. */
 export function liveAgentDisplay(
   agents: readonly { id: string; display?: AgentDisplaySnapshot; isExtra?: true }[],
   agentId: string,

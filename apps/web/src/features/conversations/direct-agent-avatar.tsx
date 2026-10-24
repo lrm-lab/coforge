@@ -6,8 +6,8 @@ import { useRowHovered } from "./row-hover";
 /**
  * The face of a Direct-message row with an Agent: its moving mascot, which reacts to the pointer
  * being anywhere over the row (`useRowHovered`). The row already holds the live Agent, so its
- * `display` and `mascot` come down as props; nothing here subscribes to the roster. An Agent whose
- * mascot is not known (an `isExtra` placeholder) stays a still picture.
+ * `display` and `mascot` come down as props; nothing here subscribes to the roster. An Agent
+ * without a `mascot` on the row stays a still picture.
  */
 export function DirectAgentAvatar({ agent }: { agent: LiveAgent }) {
   const hovered = useRowHovered();

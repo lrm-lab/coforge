@@ -16,7 +16,7 @@ import {
   updateAgentInputSchema,
   updateAgentRoleInputSchema,
 } from "./agent.schemas";
-import { AGENT_VISIBILITY } from "./agent-visibility";
+import { normalizeAgentVisibility } from "./agent-visibility";
 import {
   publishAgentDirectoryChanged,
   publishAgentVisibilityChanged,
@@ -26,7 +26,6 @@ import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.s
 import { PrismaChangeAgentVisibilityStore } from "#src/server/db/repositories/agent-visibility-change.repositories.server";
 import { setAgentRole } from "#src/server/agents/agent-role.server";
 import { AppError, isAppErrorCode } from "#src/lib/app-error";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { listVisibleAgentModels } from "#src/server/agents/agent-models.server";
 import { AGENT_MASCOTS, agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
 import { AgentMascots } from "#src/server/agents/agent-mascot.server";
@@ -50,7 +49,6 @@ import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detai
 import {
   agentVisibilityViewerForUser,
   assertAgentVisible,
-  visiblePrivateAgentWhere,
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
@@ -260,21 +258,6 @@ export const listAgentModels = createServerFn({ method: "GET" })
   .handler(async ({ context: { user, workspaceId, db } }) => {
     const viewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
     return listVisibleAgentModels(db, workspaceId, viewer);
-  });
-
-/**
- * Realtime subscriptions need all authorized private Agent ids, beyond the viewer's own roster.
- * Return ids only; the profile panel fetches each row through its authorized detail endpoint.
- */
-export const listVisiblePrivateAgentIds = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context: { user, workspaceId, db } }) => {
-    const viewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
-    const rows = await db.agent.findMany({
-      where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...visiblePrivateAgentWhere(viewer) },
-      select: { id: true },
-    });
-    return rows.map((row) => row.id);
   });
 
 export const createAgent = createServerFn({ method: "POST" })
@@ -494,10 +477,7 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     canDeleteAgent,
     // Fails closed the same way `canSeeAgent`/`visibleAgentWhere` do: anything but exactly
     // `"public"` displays as private, since that is also how the authorization seam treats it.
-    visibility:
-      result.visibility === AGENT_VISIBILITY.PUBLIC
-        ? AGENT_VISIBILITY.PUBLIC
-        : AGENT_VISIBILITY.PRIVATE,
+    visibility: normalizeAgentVisibility(result.visibility),
     canChangeVisibility,
     runtimeUsageVisible: Boolean(ownedRuntime),
     runtimeVersion: ownedRuntime?.version,

@@ -5,5 +5,7 @@
   "agent_mascot_green": "绿色",
   "agent_mascot_purple": "紫色",
   "agent_mascot_black": "黑色",
-  "agent_mascot_yellow": "黄色"
+  "agent_mascot_yellow": "黄色",
+  "agent_busy_agents": "活跃的 Agent",
+  "agent_busy_agents_count": "{count} 个活跃的 Agent"
 }

@@ -72,17 +72,32 @@ export function directListsOf(unordered: readonly DirectRow[]) {
   };
 }
 
+/** The rows the sidebar does not close: the one place a closed DM is told from a listed one. */
+function openDirectRows(lists: ReturnType<typeof directListsOf>): DirectRow[] {
+  const closed = new Set(lists.closedIds);
+  return lists.rows.filter((row) => !closed.has(row.conversationId));
+}
+
 /** The direct messages the sidebar lists, by conversation id: each open one with a member, or with
  * an Agent that is still in the Workspace. */
 export function listedDirectIds(
   lists: ReturnType<typeof directListsOf>,
   agents: readonly { id: string }[],
 ): string[] {
-  const closed = new Set(lists.closedIds);
   const live = new Set(agents.map((agent) => agent.id));
-  return lists.rows.flatMap((row) =>
-    !closed.has(row.conversationId) && (row.peer.kind === "people" || live.has(row.peer.agentId))
-      ? [row.conversationId]
-      : [],
+  return openDirectRows(lists).flatMap((row) =>
+    row.peer.kind === "people" || live.has(row.peer.agentId) ? [row.conversationId] : [],
+  );
+}
+
+/** The Agents the viewer has an open DM with, by Agent id to that DM's conversation id: the DMs the
+ * sidebar lists with an Agent (`listedDirectIds`), whether or not the Agent is still there. */
+export function listedDirectAgentIds(
+  lists: ReturnType<typeof directListsOf>,
+): ReadonlyMap<string, string> {
+  return new Map(
+    openDirectRows(lists).flatMap((row) =>
+      row.peer.kind === "agent" ? [[row.peer.agentId, row.conversationId] as const] : [],
+    ),
   );
 }

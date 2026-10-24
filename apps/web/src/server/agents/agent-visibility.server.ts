@@ -28,7 +28,7 @@ export type AgentVisibilityViewer =
 /** The Workspace-member id a private Agent must be owned by for `viewer` to count as its
  * creator: the human's own id, or the acting Agent's own `ownerId` ("same creator"
  * includes the Agent seeing itself). */
-function viewerCreatorId(viewer: AgentVisibilityViewer): string {
+export function viewerCreatorId(viewer: AgentVisibilityViewer): string {
   return viewer.kind === "user" ? viewer.userId : viewer.ownerId;
 }
 
@@ -165,22 +165,6 @@ export function visibleAgentWhere(viewer: AgentVisibilityViewer): Prisma.AgentWh
     AND: [assistantScope],
     OR: [{ visibility: AGENT_VISIBILITY.PUBLIC }, { ownerId: viewerCreatorId(viewer) }],
   };
-}
-
-/**
- * The `Prisma.AgentWhereInput` fragment for every non-public Agent `viewer` can currently see:
- * their own private Agent(s), or — for an elevated viewer — every non-public Agent
- * in the Workspace. Composed with `ACTIVE_AGENT_WHERE` and a `workspaceId` scope by the caller.
- * Built for the realtime per-Agent subscription set: a viewer's own `listAgents` roster (their
- * owned Agents) is narrower than what they are authorized to see — an owner/admin, or a private
- * Agent's creator viewing it from somewhere other than their own roster, still needs its id to
- * subscribe the matching per-Agent channels. Matches the routing rule every realtime publisher
- * already applies — anything other than exactly `"public"`, not just the literal string
- * `"private"` — so this list and the channel a given Agent's frames actually land on never
- * disagree.
- */
-export function visiblePrivateAgentWhere(viewer: AgentVisibilityViewer): Prisma.AgentWhereInput {
-  return { NOT: { visibility: AGENT_VISIBILITY.PUBLIC }, ...visibleAgentWhere(viewer) };
 }
 
 /**

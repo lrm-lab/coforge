@@ -8,6 +8,12 @@ import { useCallback, useRef } from "react";
  * Undefined stays undefined, so a child can still tell an absent action from a present one.
  */
 export function useLatestCallback<Args extends unknown[], Result>(
+  handler: (...args: Args) => Result,
+): (...args: Args) => Result;
+export function useLatestCallback<Args extends unknown[], Result>(
+  handler: ((...args: Args) => Result) | undefined,
+): ((...args: Args) => Result) | undefined;
+export function useLatestCallback<Args extends unknown[], Result>(
   handler: ((...args: Args) => Result) | undefined,
 ): ((...args: Args) => Result) | undefined {
   const handlerRef = useRef(handler);

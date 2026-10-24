@@ -206,10 +206,10 @@ test("snapshot merges membership and fields without letting unordered status rep
   ]);
 });
 
-// The exact sequence `useAgentStatuses` runs on every refresh/agent:visibility_changed
-// cycle for an "extra" (owner/admin-visible-but-not-owned) Agent — `mergeExtraAgents` re-appends
-// its bare placeholder, then `mergeAgentStatusSnapshot` must carry its already-live status and
-// display forward rather than resetting it back to the placeholder's "inactive"/no-display.
+// The sequence `useAgentStatuses` runs when new `agents` props arrive for an "extra"
+// (visible-but-not-in-the-roster) Agent — `mergeExtraAgents` re-appends its entry, then
+// `mergeAgentStatusSnapshot` must carry its already-live status and display forward rather than
+// resetting it back to the entry's "inactive"/no-display.
 test("mergeAgentStatusSnapshot preserves an extra Agent's live status and display across a refresh", () => {
   const extraId = "extra-agent";
   type ExtraTrackedAgent = {

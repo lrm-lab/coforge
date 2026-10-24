@@ -1,5 +1,7 @@
-import { useRouter } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import {
   agentIdFromProfileParam,
   agentProfileSearchWithoutThread,
@@ -97,4 +99,36 @@ export function useConversationAgentProfile({
     onAgentProfileTabChange: setAgentProfileTab,
     onCloseAgentProfile: closeAgentProfile,
   };
+}
+
+/**
+ * How the chat list header opens an Agent's profile. The function never changes identity, so the
+ * header's memoized stage is not repainted by a navigation. On a conversation page
+ * the panel opens beside it, as from any other avatar there. Elsewhere in Chat (no conversation
+ * open, Saved) there is no panel: the viewer's open Direct message with the Agent
+ * (`directConversations`, by Agent id) opens with the panel, else the Members page does.
+ */
+export function useOpenHeaderAgent(
+  onConversationPage: boolean,
+  directConversations: ReadonlyMap<string, string>,
+): OpenAgentProfile {
+  const { openAgentProfile } = useOpenAgentProfile();
+  const navigate = useNavigate();
+  const workspaceSlug = useWorkspaceSlug();
+  const open: OpenAgentProfile = (agentId, tab) => {
+    if (onConversationPage) return openAgentProfile(agentId, tab);
+    const dmId = directConversations.get(agentId);
+    if (dmId)
+      return void navigate({
+        to: "/w/$workspaceSlug/dm/$dmId",
+        params: { workspaceSlug, dmId },
+        search: { profile: formatAgentProfileParam(agentId), ...(tab ? { agentTab: tab } : {}) },
+      });
+    void navigate({
+      to: "/w/$workspaceSlug/agent/$agentId",
+      params: { workspaceSlug, agentId },
+      search: tab ? { agentTab: tab } : {},
+    });
+  };
+  return useLatestCallback(open);
 }

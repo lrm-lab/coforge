@@ -24,6 +24,10 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   `ACTIVE_AGENT_WHERE`), `canSeeAgent` (the same rule in memory), and
   `assertAgentVisible` (throws `AGENT_NOT_VISIBLE` for by-id, name, or handle
   lookups).
+- `extra-agents.server.ts` lists the Agents the viewer may see beyond their own roster: the
+  Members directory's rule (`visibleAgentWhere` with `ROSTER_AGENT_WHERE`) minus the viewer's
+  own, with one batched display read that leaves the rows without one when it fails. Reuse the
+  rule; do not write a second one, and do not cap or filter by activity here.
 - Build an `AgentVisibilityViewer` from a human's existing
   `resolveActorServerRole` lookup or an already-resolved Agent principal. Never
   issue a second query for it.

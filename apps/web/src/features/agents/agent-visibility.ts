@@ -26,3 +26,12 @@ const AGENT_VISIBILITIES: ReadonlySet<string> = new Set(AGENT_VISIBILITY_VALUES)
 export function isAgentVisibility(value: string): value is AgentVisibility {
   return AGENT_VISIBILITIES.has(value);
 }
+
+/**
+ * The visibility a persisted value means, failing closed: anything but exactly `"public"` (an
+ * unrecognized value included) is private, as every authorization check and realtime publisher
+ * treats it.
+ */
+export function normalizeAgentVisibility(value: string | null | undefined): AgentVisibility {
+  return value === AGENT_VISIBILITY.PUBLIC ? AGENT_VISIBILITY.PUBLIC : AGENT_VISIBILITY.PRIVATE;
+}

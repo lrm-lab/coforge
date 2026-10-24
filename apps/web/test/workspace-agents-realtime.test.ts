@@ -1,6 +1,21 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
-import { createAgentDirectoryInvalidator } from "#src/features/agents/workspace-agents-realtime";
+import { mergeAgentStatusSnapshot } from "#src/features/agents/agent-status-realtime";
+import { AGENT_MASCOTS } from "#src/features/agents/agent-mascot";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import type { ExtraAgent } from "#src/features/agents/extra-agent";
+import {
+  createAgentDirectoryInvalidator,
+  refreshedAgents,
+  type LiveAgent,
+} from "#src/features/agents/workspace-agents-realtime";
+
+const live = (id: string): LiveAgent => ({
+  id,
+  name: id,
+  displayName: id,
+  status: { value: "inactive", expiresAt: null },
+});
 
 test("coalesces a burst of Agent directory events into one invalidation", () => {
   let nextTimer = 0;
@@ -30,4 +45,36 @@ test("coalesces a burst of Agent directory events into one invalidation", () => 
   expect(invalidations).toBe(1);
   invalidator.cancel();
   expect(invalidations).toBe(1);
+});
+
+describe("refreshedAgents", () => {
+  const roster = [live("own")];
+  const extra = (id: string): ExtraAgent => ({
+    id,
+    name: id,
+    displayName: id,
+    avatarUrl: "",
+    mascot: AGENT_MASCOTS[0],
+    visibility: AGENT_VISIBILITY.PRIVATE,
+  });
+
+  test("a refresh that read the extras again is authoritative: an extra it dropped is gone", () => {
+    const current = refreshedAgents(roster, [extra("x"), extra("y")]);
+    expect(current.map((agent) => agent.id)).toEqual(["own", "x", "y"]);
+    const refreshed = refreshedAgents(roster, [extra("y")]);
+    expect(mergeAgentStatusSnapshot(current, refreshed).map((agent) => agent.id)).toEqual([
+      "own",
+      "y",
+    ]);
+  });
+
+  test("the extras it read are marked and start inactive", () => {
+    const [, first] = refreshedAgents(roster, [extra("x")]);
+    expect(first).toMatchObject({ id: "x", isExtra: true, status: { value: "inactive" } });
+  });
+
+  test("with no extras read the roster stands alone", () => {
+    expect(refreshedAgents(roster, undefined)).toEqual(roster);
+    expect(refreshedAgents(roster, [])).toEqual(roster);
+  });
 });
