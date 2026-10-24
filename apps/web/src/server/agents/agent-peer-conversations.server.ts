@@ -95,7 +95,9 @@ export async function listAgentPeerCards(
 
   const conversationIds = visible.map(({ conversationId }) => conversationId);
   // The newest spoken and the newest system message of each conversation: two index seeks on
-  // (conversationId, sequence) per conversation, never a sort of its messages.
+  // (conversationId, sequence) per conversation, never a sort of its messages. The system lookup
+  // filters `senderMemberId IS NULL`, so a conversation with none reads back through all of it; if
+  // that ever matters, add a partial index on `senderMemberId IS NULL`.
   const latest = await db.$queryRaw<
     {
       conversationId: string;
