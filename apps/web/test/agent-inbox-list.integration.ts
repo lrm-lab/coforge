@@ -70,6 +70,7 @@ test("lists unread conversations by the definition in the code, newest activity 
           workspaceId: workspace.id,
           agentId: agent.id,
           agentReadThroughSequence: options.read ?? 0,
+          joinedAt: new Date(0),
           channelMuted: options.muted ?? false,
           leftAt: options.left ? new Date() : null,
         },
@@ -190,7 +191,12 @@ test("a page that ends inside a run of equal activity times is extended to the e
         data: { conversationId: conversation.id, workspaceId: workspace.id, userId: owner.id },
       });
       await db.conversationMember.create({
-        data: { conversationId: conversation.id, workspaceId: workspace.id, agentId: agent.id },
+        data: {
+          conversationId: conversation.id,
+          workspaceId: workspace.id,
+          agentId: agent.id,
+          joinedAt: new Date(0),
+        },
       });
       await db.message.create({
         data: {
@@ -245,6 +251,7 @@ test("hundreds of conversations and hundreds of thousands of messages answer in 
         conversationId: conversation.id,
         workspaceId: workspace.id,
         agentId: agent.id,
+        joinedAt: new Date(0),
         // Half the conversations are read up to the middle, a quarter fully.
         agentReadThroughSequence:
           index % 4 === 0 ? messagesPerConversation : index % 2 === 0 ? 250 : 0,
@@ -281,3 +288,45 @@ test("hundreds of conversations and hundreds of thousands of messages answer in 
     await db.$disconnect();
   }
 }, 120_000);
+
+test("a channel's history from before the Agent joined is not unread", async () => {
+  const db = connection();
+  const suffix = crypto.randomUUID();
+  try {
+    const { owner, workspace, agent } = await workspaceWithAgent(db, suffix);
+    const conversation = await db.conversation.create({
+      data: { workspaceId: workspace.id, channelName: "backlog" },
+    });
+    const human = await db.conversationMember.create({
+      data: { conversationId: conversation.id, workspaceId: workspace.id, userId: owner.id },
+    });
+    const joinedAt = new Date(Date.UTC(2026, 9, 10));
+    await db.conversationMember.create({
+      data: {
+        conversationId: conversation.id,
+        workspaceId: workspace.id,
+        agentId: agent.id,
+        joinedAt,
+      },
+    });
+    for (const [sequence, day] of [
+      [1, 5],
+      [2, 9],
+      [3, 11],
+    ] as const)
+      await db.message.create({
+        data: {
+          conversationId: conversation.id,
+          workspaceId: workspace.id,
+          senderMemberId: human.id,
+          body: `m${sequence}`,
+          sequence,
+          createdAt: new Date(Date.UTC(2026, 9, day)),
+        },
+      });
+    const listed = await listAgentInbox(db, workspace.id, agent.id, { view: "unread" }, 50);
+    expect(listed.items.map((item) => [item.target, item.unread])).toEqual([["#backlog", 1]]);
+  } finally {
+    await db.$disconnect();
+  }
+});

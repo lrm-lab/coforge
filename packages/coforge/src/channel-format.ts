@@ -189,7 +189,7 @@ export function formatChannelLeave(response: { target: string; wasMember: boolea
   return [
     `Left ${response.target}. You can still inspect visible public channel history there, but you can no longer send or receive ordinary channel delivery until you join the public channel again or a human re-adds you to a private channel.`,
     "Still arrives:",
-    "- A personal @mention of you still reaches you, as a mention from a channel you are not in.",
+    "- A personal @mention of you reaches you only if its sender notifies you (coforge mention notify); you are no longer a member.",
     "Threads you followed in this channel stop delivering while you are not a member.",
   ].join("\n");
 }
@@ -237,7 +237,7 @@ export function formatChannelRemoveMember(
     `Removed ${handle} from ${target}.`,
     `Ordinary channel messages no longer reach ${handle}.`,
     "Still arrives:",
-    `- A personal @mention of ${handle} still reaches them, as a mention from a channel they are not in.`,
+    `- A personal @mention of ${handle} reaches them only if its sender notifies them (coforge mention notify); they are no longer a member.`,
     `Threads ${handle} followed in this channel stop delivering while they are not a member.`,
   ].join("\n");
 }

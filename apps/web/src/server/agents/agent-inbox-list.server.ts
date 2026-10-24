@@ -38,7 +38,8 @@ async function unreadConversations(
            mine."readSeq", u.unread, u.mentions, u."latestSeq", u."latestAt"
     FROM (
       SELECT m.id AS "memberId", m."conversationId", c."channelName",
-             m."channelMuted" AS muted, m."agentReadThroughSequence" AS "readSeq"
+             m."channelMuted" AS muted, m."agentReadThroughSequence" AS "readSeq",
+             m."joinedAt" AS "joinedAt"
       FROM "conversation_members" m
       JOIN "conversations" c ON c.id = m."conversationId" AND c."workspaceId" = m."workspaceId"
       WHERE m."workspaceId" = ${workspaceId}::uuid AND m."agentId" = ${agentId}::uuid
@@ -53,7 +54,9 @@ async function unreadConversations(
              max(x.sequence)::int AS "latestSeq", max(x."createdAt") AS "latestAt"
       FROM "messages" x
       WHERE x."conversationId" = mine."conversationId" AND x."threadRootId" IS NULL
-        AND x.sequence > mine."readSeq" AND x."senderMemberId" IS DISTINCT FROM mine."memberId"
+        AND x.sequence > mine."readSeq"
+        AND (mine."channelName" IS NULL OR x."createdAt" >= mine."joinedAt")
+        AND x."senderMemberId" IS DISTINCT FROM mine."memberId"
     ) u
     LEFT JOIN LATERAL (
       SELECT COALESCE(usr.username, agt.name) AS handle
