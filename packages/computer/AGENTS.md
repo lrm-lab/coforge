@@ -29,38 +29,38 @@ Keep `src` organized by responsibility. New code belongs in the owning module;
 do not grow `cli.ts` or `setup/` into an application god module. Paths are
 relative to `src/`.
 
-| Path                                 | Single responsibility                                                                         |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `main.ts`                            | Binary entrypoint: dispatches the internal modes or the Computer CLI                          |
-| `cli.ts`                             | Commander command tree and thin command actions                                               |
-| `cli/`                               | Human output for command results, including upgrade and install wording (`upgrade-output.ts`) |
-| `errors.ts`                          | Stable user-facing CLI error stages                                                           |
-| `terminal-output.ts`                 | Terminal-safe text                                                                            |
-| `setup/`                             | Computer setup business flow                                                                  |
-| `workspace/`                         | Direct Workspace lookup and slug validation for setup intent                                  |
-| `registration/`                      | Computer registration idempotency                                                             |
-| `cloud-rpc-transport.ts`             | User-authenticated HTTPS RPC for `workspace:get` and `computer:register`                      |
-| `login.ts`, `oauth-device-client.ts` | Device-code authorization                                                                     |
-| `credential-store.ts`                | File-backed User credentials                                                                  |
-| `machine-id.ts`, `platform.ts`       | Machine identity and platform metadata                                                        |
-| `paths.ts`                           | Platform-native state and credential paths                                                    |
-| `local-config.ts`                    | Reading and validating the persisted profile                                                  |
-| `release-channel.ts`                 | Compiled official feed/server mapping                                                         |
-| `daemon-client/`                     | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                 |
-| `host/`                              | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them               |
-| `status/`                            | Read-only `status` report through per-platform ports                                          |
-| `doctor/`                            | Read-only diagnostic checks built from the status report                                      |
-| `logging/`                           | Computer LogTape configuration and the `logs` follower                                        |
-| `updater.ts`                         | Reads the installed version; zod contract schemas and launcher text shared with the installer |
-| `release/upgrade-runner.ts`          | Runs the installer for one upgrade or `recover`, and returns its receipt                      |
+| Path                                 | Single responsibility                                                                               |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `main.ts`                            | Binary entrypoint: dispatches the internal modes or the Computer CLI                                |
+| `cli.ts`                             | Commander command tree and thin command actions                                                     |
+| `cli/`                               | Human output for command results, including upgrade and install wording (`upgrade-output.ts`)       |
+| `errors.ts`                          | Stable user-facing CLI error stages                                                                 |
+| `terminal-output.ts`                 | Terminal-safe text                                                                                  |
+| `setup/`                             | Computer setup business flow                                                                        |
+| `workspace/`                         | Direct Workspace lookup and slug validation for setup intent                                        |
+| `registration/`                      | Computer registration idempotency                                                                   |
+| `cloud-rpc-transport.ts`             | User-authenticated HTTPS RPC for `workspace:get` and `computer:register`                            |
+| `login.ts`, `oauth-device-client.ts` | Device-code authorization                                                                           |
+| `credential-store.ts`                | File-backed User credentials                                                                        |
+| `machine-id.ts`, `platform.ts`       | Machine identity and platform metadata                                                              |
+| `paths.ts`                           | Platform-native state and credential paths                                                          |
+| `local-config.ts`                    | Reading and validating the persisted profile                                                        |
+| `release-channel.ts`                 | Compiled official feed/server mapping                                                               |
+| `daemon-client/`                     | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                       |
+| `host/`                              | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |
+| `status/`                            | Read-only `status` report through per-platform ports                                                |
+| `doctor/`                            | Read-only diagnostic checks built from the status report                                            |
+| `logging/`                           | Computer LogTape configuration and the `logs` follower                                              |
+| `updater.ts`                         | Reads the installed version; zod contract schemas and launcher text shared with the installer       |
+| `release/upgrade-runner.ts`          | Runs the installer for one upgrade or `recover`, and returns its receipt                            |
 | `release/remote-upgrade.ts`          | Runs one server-triggered upgrade, records redacted launch output, then removes its finished OS job |
-| `release/upgrade-receipt.ts`         | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)   |
-| `release/upgrade-operation.ts`       | One upgrade operation record, built from CLI or `__remote-upgrade` arguments                  |
-| `release/installer-contract.ts`      | Shapes shared only with `coforge-installer` (release manifest, lifecycle)                     |
-| `release/supervisor-status.ts`       | What the supervisor runs: live snapshot, or persisted bindings when stopped                   |
-| `release/lifecycle-command.ts`       | Hidden `__lifecycle` command: the installer's read-only JSON surface                          |
-| `release/installer-launch.ts`        | Fetches, verifies, and caches the `coforge-installer` binary for this machine                 |
-| `version.ts`                         | Build version                                                                                 |
+| `release/upgrade-receipt.ts`         | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)         |
+| `release/upgrade-operation.ts`       | One upgrade operation record, built from CLI or `__remote-upgrade` arguments                        |
+| `release/installer-contract.ts`      | Shapes shared only with `coforge-installer` (release manifest, lifecycle)                           |
+| `release/supervisor-status.ts`       | What the supervisor runs: live snapshot, or persisted bindings when stopped                         |
+| `release/lifecycle-command.ts`       | Hidden `__lifecycle` command: the installer's read-only JSON surface                                |
+| `release/installer-launch.ts`        | Fetches, verifies, and caches the `coforge-installer` binary for this machine                       |
+| `version.ts`                         | Build version                                                                                       |
 
 `coforge-computer __lifecycle protocol|status` is how the installer reads a
 Computer. It prints exactly one JSON object on stdout (the `Lifecycle*` shapes),

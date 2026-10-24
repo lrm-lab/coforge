@@ -47,10 +47,13 @@ EOF
 fi
 exit 0
 `);
-  const files = new Map<string, Uint8Array>([
+  const files = new Map<string, Uint8Array<ArrayBuffer>>([
     ["/installer/latest", Buffer.from("0.1.0\n")],
     [installerPath, Bun.gzipSync(installer)],
-    [`/installer/0.1.0/${target}/coforge-installer.sha256`, Buffer.from(`${checksum(installer)}\n`)],
+    [
+      `/installer/0.1.0/${target}/coforge-installer.sha256`,
+      Buffer.from(`${checksum(installer)}\n`),
+    ],
   ]);
   const requested: string[] = [];
   const server = serveStub({
@@ -168,7 +171,8 @@ exit 3
       const path = new URL(request.url).pathname;
       if (path === "/installer/latest") return new Response("0.1.0\n");
       if (path === installerPath) return new Response(Bun.gzipSync(installer));
-      if (path.endsWith("coforge-installer.sha256")) return new Response(`${checksum(installer)}\n`);
+      if (path.endsWith("coforge-installer.sha256"))
+        return new Response(`${checksum(installer)}\n`);
       return new Response("not found", { status: 404 });
     },
   });
@@ -195,7 +199,8 @@ exit 3
       const path = new URL(request.url).pathname;
       if (path === "/installer/latest") return new Response("0.1.0\n");
       if (path === installerPath) return new Response(Bun.gzipSync(installer));
-      if (path.endsWith("coforge-installer.sha256")) return new Response(`${checksum(installer)}\n`);
+      if (path.endsWith("coforge-installer.sha256"))
+        return new Response(`${checksum(installer)}\n`);
       return new Response("not found", { status: 404 });
     },
   });
