@@ -434,8 +434,6 @@ export function parseArgs(
     let output: string | undefined;
     let json = false;
     let index = 2;
-    // A positional id (`coforge attachment view <id> --output <path>`) in addition to
-    // `--id <id>`.
     if (
       args[index] !== undefined &&
       args[index] !== "--id" &&
@@ -1585,7 +1583,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     if (!transport.search) throw new Error("Message search transport is unavailable");
     const { command: _command, ...options } = invocation;
     const response = (await transport.search(options)) as { messages: AgentMessageRecord[] };
-    return formatSearchResults(options.query ?? "", response);
+    return formatSearchResults(options.query ?? "", response, options);
   }
   if (command === "resolve") {
     if (!transport.resolve) throw new Error("Message resolve transport is unavailable");

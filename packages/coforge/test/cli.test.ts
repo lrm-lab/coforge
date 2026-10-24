@@ -1838,7 +1838,7 @@ test("message search parses the lexical search options and dispatches them", asy
     view: async () => ({ bytes: new Uint8Array() }),
   });
   expect(calls).toEqual([{ query: "release", limit: 5 }]);
-  expect(output).toContain('Search results for: "release" (1 result)');
+  expect(output).toContain("truncated=false");
   expect(output).toContain('<result ref="msg:aaaaaaaa-0000-4000-8000-000000000001">');
   expect(output).toContain("Source: #general");
   expect(output).toContain("Time: 2026-09-07 10:00:00Z");

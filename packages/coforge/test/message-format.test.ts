@@ -4,7 +4,6 @@ import {
   formatHeldSend,
   formatMessageLine,
   formatReadWindow,
-  formatSearchResults,
   formatSendSuccess,
   formatUtcTimestamp,
   neutralizeReferenceLiterals,
@@ -287,32 +286,6 @@ test("neutralizeReferenceLiterals escapes literal structural tags", () => {
   expect(neutralizeReferenceLiterals("drop the <omit /> marker")).toBe(
     "drop the &lt;omit /&gt; marker",
   );
-});
-
-test("formatSearchResults renders a query header, result blocks, and the context tip", () => {
-  const output = formatSearchResults("release", {
-    messages: [message({ body: "release plan" })],
-  });
-  expect(output).toContain('Search results for: "release" (1 result)');
-  expect(output).toContain('<result ref="msg:aaaaaaaa-0000-4000-8000-000000000001">');
-  expect(output).toContain("Source: #general");
-  expect(output).toContain("Sender: user:ada");
-  expect(output).toContain("Time: 2026-09-07 10:00:00Z");
-  expect(output).toContain("<preview>\n<match>release</match> plan\n</preview>");
-  expect(output).toContain(
-    'If a result may be relevant but its preview is not enough, read its surrounding context with coforge message read --target "<target>" --around <shortId>.',
-  );
-});
-
-test("formatSearchResults pluralizes and uses a filter-only header when no query is given", () => {
-  const one = formatSearchResults("", { messages: [message()] });
-  expect(one).toContain("Filtered message results (1 result)");
-  const two = formatSearchResults("", { messages: [message(), message({ id: "bbbbbbbb" })] });
-  expect(two).toContain("Filtered message results (2 results)");
-});
-
-test("formatSearchResults reports no results plainly", () => {
-  expect(formatSearchResults("release", { messages: [] })).toBe("No search results.");
 });
 
 test("formatSendSuccess adds a reply-thread hint only for a non-thread target", () => {

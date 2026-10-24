@@ -49,20 +49,17 @@ function taskSuffix(message: AgentMessageRecord): string {
   return ` [task #${message.task.number} status=${message.task.status}${owner}]`;
 }
 
-/** One Tasks-manual pointer for a check/read/resolve window that contains tracked work. */
 export const TASK_WORKFLOW_HINT = "Tracked Tasks: coforge manual get tasks";
 
 export function formatTaskWorkflowHint(messages: readonly AgentMessageRecord[]): string {
   return messages.some((message) => message.task) ? TASK_WORKFLOW_HINT : "";
 }
 
-/** The message line shared by `message check`, `message resolve`, and held Task context. */
 export function formatMessageLine(message: AgentMessageRecord): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
   return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(channelSummaryBody(message))}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
 }
 
-/** What an Agent notified of a channel message from outside that channel may do about it. */
 export const NON_MEMBER_MENTION_NOTICE =
   "[CoForge notice: You were notified as a non-member, so you cannot reply in that channel. If no reply is needed, no action is required. Otherwise, DM the person who mentioned you or join the channel to participate.]";
 
@@ -114,11 +111,6 @@ const MENTION_PATTERN = new RegExp(`(^|${REFERENCE_BOUNDARY})@([A-Za-z0-9][\\w-]
 const CHANNEL_PATTERN = new RegExp(`(^|${REFERENCE_BOUNDARY})#([A-Za-z][\\w-]*)`, "g");
 const TASK_REFERENCE_PATTERN = /\btask #(\d+)/gi;
 
-/**
- * Rewrites reference-looking literals in free text so quoted content cannot pass as a real
- * reference, and escapes literal occurrences of the structural tags used to frame search
- * results/previews.
- */
 export function neutralizeReferenceLiterals(text: string): string {
   let result = text.replace(STRUCTURAL_TAG_PATTERN, (tag) =>
     tag.replace(/</g, "&lt;").replace(/>/g, "&gt;"),
@@ -140,7 +132,6 @@ function indexOfCaseInsensitive(haystack: string, needle: string): number {
   return haystack.toLowerCase().indexOf(needle.toLowerCase());
 }
 
-/** The first whitespace-separated term of a search query; a quoted phrase counts as one term. */
 function firstQueryTerm(query: string): string {
   const trimmed = query.trim();
   const match = /^"([^"]*)"|^(\S+)/.exec(trimmed);
@@ -152,7 +143,6 @@ const PREVIEW_LEADING_CONTEXT = 80;
 const PREVIEW_TRAILING_CONTEXT = 120;
 const PREVIEW_NO_MATCH_LENGTH = 200;
 
-/** Builds one search-result preview: a matched window of `body`, or the first 200 characters. */
 export function renderSearchPreview(body: string, query: string): string {
   const trimmedQuery = query.trim();
   let matchStart = -1;
@@ -202,20 +192,55 @@ export function renderSearchPreview(body: string, query: string): string {
 
 type SearchResponse = {
   messages?: AgentMessageRecord[];
+  hasMore?: boolean;
+};
+
+type SearchFormatOptions = {
+  target?: string;
+  sender?: string;
+  sort?: "relevance" | "recent";
+  before?: string;
+  after?: string;
+  limit?: number;
+  offset?: number;
 };
 
 const SEARCH_CONTEXT_TIP =
   'If a result may be relevant but its preview is not enough, read its surrounding context with coforge message read --target "<target>" --around <shortId>.';
 
-export function formatSearchResults(query: string, response: SearchResponse): string {
+function searchPageCommand(query: string, options: SearchFormatOptions, offset: number): string {
+  const args = [`coforge message search --query ${JSON.stringify(query)}`];
+  if (options.target !== undefined) args.push(`--target ${JSON.stringify(options.target)}`);
+  if (options.sender !== undefined) args.push(`--sender ${JSON.stringify(options.sender)}`);
+  if (options.sort !== undefined) args.push(`--sort ${options.sort}`);
+  if (options.before !== undefined) args.push(`--before ${JSON.stringify(options.before)}`);
+  if (options.after !== undefined) args.push(`--after ${JSON.stringify(options.after)}`);
+  if (options.limit !== undefined) args.push(`--limit ${options.limit}`);
+  args.push(`--offset ${offset}`);
+  return args.join(" ");
+}
+
+export function formatSearchResults(
+  query: string,
+  response: SearchResponse,
+  options: SearchFormatOptions = {},
+): string {
   const messages = response.messages ?? [];
   if (messages.length === 0) return "No search results.";
 
   const count = messages.length;
   const noun = count === 1 ? "result" : "results";
+  const truncated =
+    response.hasMore === true
+      ? "true"
+      : response.hasMore === false
+        ? "false"
+        : options.limit !== undefined && count === options.limit
+          ? "unknown"
+          : "false";
   const header = query
-    ? `Search results for: "${query}" (${count} ${noun})`
-    : `Filtered message results (${count} ${noun})`;
+    ? `Search results for: "${query}" (${count} ${noun} · truncated=${truncated})`
+    : `Filtered message results (${count} ${noun} · truncated=${truncated})`;
 
   const blocks = messages.map((message) =>
     [
@@ -231,17 +256,17 @@ export function formatSearchResults(query: string, response: SearchResponse): st
     ].join("\n"),
   );
 
-  return `${header}\n\n${blocks.join("\n\n")}\n\n${SEARCH_CONTEXT_TIP}`;
+  const nextPage =
+    (truncated === "true" || truncated === "unknown") && options.limit !== undefined
+      ? `Next page: ${searchPageCommand(query, options, (options.offset ?? 0) + count)}`
+      : "";
+  return `${header}\n${nextPage ? `${nextPage}\n` : ""}\n${blocks.join("\n\n")}\n\n${SEARCH_CONTEXT_TIP}`;
 }
 
 type SendResponse = {
   messageId?: string;
 };
 
-/**
- * `recentUnread` is only ever non-empty when the send bypassed a freshness hold via `--anyway`;
- * every other successful send passes an empty array or `undefined`.
- */
 export function formatSendSuccess(
   target: string,
   response: SendResponse,
@@ -270,10 +295,6 @@ export function formatSendSuccess(
   return lines.join("\n");
 }
 
-/**
- * A send whose response was lost but whose commit the daemon confirmed by its idempotency key.
- * Only the message id is known; nothing was sent a second time.
- */
 export function formatSendCommitted(target: string, messageId: string): string {
   return [
     `Message commit confirmed for ${target}. Message ID: ${messageId}`,
@@ -288,7 +309,6 @@ type AttachmentUploadResponse = {
   sizeBytes: number;
 };
 
-/** The `coforge attachment upload` success text. */
 export function formatAttachmentUploadSuccess(response: AttachmentUploadResponse): string {
   const sizeKB = (response.sizeBytes / 1024).toFixed(1);
   return (
@@ -298,7 +318,6 @@ export function formatAttachmentUploadSuccess(response: AttachmentUploadResponse
   );
 }
 
-/** The `coforge attachment view` success line: where the file was written. */
 export function formatAttachmentDownloadSuccess(output: string): string {
   return `Downloaded to: ${output}`;
 }
@@ -312,14 +331,12 @@ type HeldSendResponse = {
   continueAnywaySuggested?: boolean;
 };
 
-/** The held-context preview cut, counted in code points. */
 const HELD_PREVIEW_CHARS = 160;
 
 function formatUtcHourMinute(createdAt: string): string {
   return formatUtcTimestamp(createdAt).slice(11, 16);
 }
 
-/** One held-context preview line: `  │ @sender HH:MM  content…⟨n more chars⟩`. */
 function heldPreviewLine(message: AgentMessageRecord): string {
   const collapsed = message.body.replace(/\s+/g, " ").trim();
   const points = Array.from(collapsed);
@@ -332,11 +349,6 @@ function heldPreviewLine(message: AgentMessageRecord): string {
   return `  │ ${head}  ${shown}${marker}`;
 }
 
-/**
- * The held-send notice: the opening count line, the bounded held-context window with its
- * omitted-earlier-messages note, the "choose one path" recovery block, and the `--anyway` escape
- * only when the server suggests it.
- */
 export function formatHeldSend(target: string, response: HeldSendResponse): string {
   const heldMessages = response.heldMessages ?? [];
   const newMessageCount = response.newMessageCount ?? heldMessages.length;
@@ -385,7 +397,6 @@ export function formatHeldSend(target: string, response: HeldSendResponse): stri
   ].join("\n");
 }
 
-/** One mention of a sent message that did not reach its target, as the server reports it. */
 export type PendingMentionAction = {
   resolutionId: string;
   messageId: string;
@@ -397,12 +408,10 @@ export type PendingMentionAction = {
 
 const PENDING_MENTION_ACTION_ID = UUID_LIKE_PATTERN;
 
-/** An `@handle` exactly as it was written in the message. */
 export function authoredMentionToken(handle: string): string {
   return handle.startsWith("@") ? handle : `@${handle}`;
 }
 
-/** The `coforge mention` verbs a pending mention still allows; none when its id is malformed. */
 export function mentionRecoveryVerbs(action: PendingMentionAction): string[] {
   if (!PENDING_MENTION_ACTION_ID.test(action.resolutionId)) return [];
   return [...new Set(action.availableActions)].filter(
@@ -410,15 +419,12 @@ export function mentionRecoveryVerbs(action: PendingMentionAction): string[] {
   );
 }
 
-/** The one recovery for a sent message's undelivered mention: notify its target by resolution id.
- * None when the id is malformed. */
 function notifyRecoveryCommand(action: PendingMentionAction): string | null {
   return PENDING_MENTION_ACTION_ID.test(action.resolutionId)
     ? `coforge mention notify ${action.resolutionId}`
     : null;
 }
 
-/** A sent message's mention that did not reach its target, as the sender's partial result. */
 export function senderPendingMention(action: PendingMentionAction) {
   return {
     resolutionId: action.resolutionId,
@@ -432,7 +438,6 @@ export function senderPendingMention(action: PendingMentionAction) {
   };
 }
 
-/** A sent message's `@handle` that named nobody the sender can see. */
 export function senderUnresolvedMention(handle: string) {
   return {
     targetHandle: authoredMentionToken(handle),
@@ -444,11 +449,6 @@ export function senderUnresolvedMention(handle: string) {
   };
 }
 
-/**
- * The partial result of a send whose message was queued but some of whose @mentions reached no
- * one: one row per mention of someone outside the conversation, then one per `@handle` that named
- * nobody.
- */
 export function formatUndeliveredMentions(
   actions: readonly PendingMentionAction[],
   unresolvedHandles: readonly string[],
