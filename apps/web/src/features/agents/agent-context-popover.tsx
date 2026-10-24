@@ -1,7 +1,6 @@
 import { RefreshCw01 as RefreshCw, ChevronDown } from "@untitledui/icons";
 import { useHydrated } from "@tanstack/react-router";
 import { Disclosure, DisclosurePanel } from "react-aria-components";
-import { type RefObject } from "react";
 
 import { type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { Button } from "#src/components/base/buttons/button";
@@ -56,113 +55,130 @@ function isFreeSpace(name: string) {
   return /free\s+space/i.test(name);
 }
 
+/** The composition read behind a Claude Code Agent's context: what `useAgentContextReport`
+ * returns, passed in as plain props so the section stays a pure body. */
+export type AgentContextReportState = {
+  data?: AgentContextPopoverData;
+  scanning: boolean;
+  scanFailed?: boolean;
+  onRefresh: () => void;
+};
+
 /**
- * The context popover's pure body: everything `useAgentContextReport` fetches, rendered without
- * touching a query client itself, so a test can render it directly with a plain `data` fixture
- * (same split as `RuntimeUsagePopoverContent`, whose bands it follows): the title and Refresh, one
- * usage row for the context window with the composition under it, and when it was read. A
- * failed or missing composition is one short line under the row, never a toast.
+ * The context section of the Runtime usage card (`RuntimeUsage`'s `footer`), a pure body so a test
+ * can render it with plain fixtures: one usage row for the context window and when it was read.
+ * With a `report` (Claude Code only) a collapsed disclosure holds the composition, its stale and
+ * failure lines, and Refresh. A failed or missing composition is one short line, never a toast.
  */
-export function AgentContextPopoverContent({
+export function AgentContextSection({
   usage,
+  report: reportState,
+  computerOnline,
+  timeZone = null,
+}: {
+  usage: { usedTokens: number; windowTokens: number; observedAtMs: number };
+  report?: AgentContextReportState;
+  computerOnline?: boolean;
+  timeZone?: string | null;
+}) {
+  // RelativeTime is blank until hydration; the "Updated" line waits with it, like the runtime
+  // usage card's read time.
+  const hydrated = useHydrated();
+  const numberFormat = new Intl.NumberFormat(getLocale());
+  const model = reportState?.data?.result?.report?.model;
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <UsageWindow
+          label={m.agent_context_title()}
+          window={{
+            usedPercent: contextUsedPercent(usage.usedTokens, usage.windowTokens),
+          }}
+          note={[
+            m.agent_context_tokens_of({
+              tokens: numberFormat.format(usage.usedTokens),
+              window: numberFormat.format(usage.windowTokens),
+            }),
+            model,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          timeZone={timeZone}
+          resetExpected={false}
+        />
+        {hydrated && (
+          <p className="mt-1 text-xs text-tertiary">
+            <TimeMessage
+              message={(time) => m.agent_context_updated({ time })}
+              value={new Date(usage.observedAtMs)}
+              timeZone={timeZone}
+            />
+          </p>
+        )}
+      </div>
+      {reportState && <AgentContextComposition {...reportState} computerOnline={computerOnline} />}
+    </div>
+  );
+}
+
+function AgentContextComposition({
   data,
   scanning,
   scanFailed = false,
   computerOnline,
-  timeZone = null,
   onRefresh,
-  refreshButtonWrapRef,
-}: {
-  /** The reading the Context item shows, so the row says what the item said, before a
-   * composition is read and when it cannot be. */
-  usage?: { usedTokens: number; windowTokens: number; observedAtMs: number };
-  data?: AgentContextPopoverData;
-  scanning: boolean;
-  scanFailed?: boolean;
-  computerOnline?: boolean;
-  timeZone?: string | null;
-  onRefresh: () => void;
-  refreshButtonWrapRef?: RefObject<HTMLSpanElement | null>;
-}) {
+}: AgentContextReportState & { computerOnline?: boolean }) {
   const report = data?.result?.report;
   const reading = !data || (data.state === "missing" && (scanning || data.pendingScanId));
   const status = reading
     ? m.agent_context_reading()
     : statusText(data, scanning, computerOnline, scanFailed);
-  // The row repeats the reading the Context item that opened it shows, so the two never disagree;
-  // the composition's figures stand in only when the popover has no such reading.
-  const figures = usage ?? report;
-  const readAt = usage ? new Date(usage.observedAtMs) : data?.result?.collectedAt;
-  // RelativeTime is blank until hydration; the "Updated" line waits with it, like the runtime
-  // usage popover's read time.
-  const hydrated = useHydrated();
-  const numberFormat = new Intl.NumberFormat(getLocale());
 
   return (
-    <div className="text-sm divide-y divide-secondary">
-      <div className="flex items-center gap-3 px-4 py-3">
-        <h2 className="min-w-0 flex-1 truncate font-semibold text-primary">
-          {m.agent_context_title()}
-        </h2>
-        <span ref={refreshButtonWrapRef} className="shrink-0">
-          {/* React Aria's isPending keeps focus through a refresh, so the peek survives it;
-              isDisabled only for a Computer known offline. No Tooltip: PreviewTrigger shares the
-              one-open-tooltip-at-a-time state, and a tooltip inside the peek closes the peek. */}
-          <Button
-            type="button"
-            size="xs"
-            color="tertiary"
-            aria-label={m.agent_context_refresh()}
-            isLoading={scanning}
-            isDisabled={computerOnline === false}
-            iconLeading={RefreshCw}
-            className="shrink-0"
-            onPress={onRefresh}
-          />
-        </span>
-      </div>
-
-      {(figures || status || data?.state === "stale") && (
-        <section className="space-y-3 px-4 py-3">
-          {data?.state === "stale" && (
-            <p className="text-xs text-warning-primary">
-              {scanning ? m.agent_context_stale_refreshing() : m.agent_context_stale()}
-            </p>
-          )}
-          {figures && (
-            <UsageWindow
-              label={m.agent_context_window()}
-              window={{
-                usedPercent: contextUsedPercent(figures.usedTokens, figures.windowTokens),
-              }}
-              note={[
-                m.agent_context_tokens_of({
-                  tokens: numberFormat.format(figures.usedTokens),
-                  window: numberFormat.format(figures.windowTokens),
-                }),
-                report?.model,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              timeZone={timeZone}
-              resetExpected={false}
+    <Disclosure className="rounded-lg border border-secondary">
+      <Button
+        slot="trigger"
+        type="button"
+        color="tertiary"
+        size="sm"
+        className="w-full justify-between"
+        iconTrailing={ChevronDown}
+      >
+        {m.agent_context_categories()}
+      </Button>
+      {/* The panel stays in the DOM while collapsed (`hidden="until-found"` keeps its box), so
+          its padding and rule live on an inner wrapper. */}
+      <DisclosurePanel>
+        <div className="space-y-3 border-t border-secondary p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+              {data?.state === "stale" && (
+                <p className="text-xs text-warning-primary">
+                  {scanning ? m.agent_context_stale_refreshing() : m.agent_context_stale()}
+                </p>
+              )}
+              {status && <p className="text-xs text-tertiary">{status}</p>}
+            </div>
+            {/* React Aria's isPending keeps focus through a refresh, so the peek survives it;
+                isDisabled only for a Computer known offline. No Tooltip: PreviewTrigger shares the
+                one-open-tooltip-at-a-time state, and a tooltip inside the peek closes the peek. */}
+            <Button
+              type="button"
+              size="xs"
+              color="tertiary"
+              aria-label={m.agent_context_refresh()}
+              isLoading={scanning}
+              isDisabled={computerOnline === false}
+              iconLeading={RefreshCw}
+              className="shrink-0"
+              onPress={onRefresh}
             />
-          )}
-          {status && <p className="text-xs text-tertiary">{status}</p>}
+          </div>
           {report && !reading && <AgentContextReportBody report={report} />}
-        </section>
-      )}
-
-      {hydrated && readAt && (
-        <p className="px-4 py-2 text-xs text-tertiary">
-          <TimeMessage
-            message={(time) => m.agent_context_updated({ time })}
-            value={readAt}
-            timeZone={timeZone}
-          />
-        </p>
-      )}
-    </div>
+        </div>
+      </DisclosurePanel>
+    </Disclosure>
   );
 }
 
@@ -175,8 +191,7 @@ function AgentContextReportBody({ report }: { report: PopoverReport }) {
     <div>
       <StackedCategoryBar report={report} />
       <div className="mt-3">
-        <p className={SECTION_LABEL_CLASS}>{m.agent_context_categories()}</p>
-        <table className="mt-1.5 w-full text-sm">
+        <table className="w-full text-sm">
           <tbody>
             {report.categories.map((category) => (
               <tr key={category.name} className="border-b border-secondary last:border-b-0">
@@ -236,8 +251,6 @@ function AgentContextReportBody({ report }: { report: PopoverReport }) {
   );
 }
 
-const SECTION_LABEL_CLASS = "text-xs font-medium text-tertiary";
-
 function StackedCategoryBar({ report }: { report: PopoverReport }) {
   const categories = report.categories;
   const total = categories.reduce((sum, category) => sum + category.tokens, 0) || 1;
@@ -282,26 +295,28 @@ function ItemList({
         >
           {label} · {items.length}
         </Button>
-        <DisclosurePanel className="border-t border-secondary p-2">
-          <ul className="divide-y divide-secondary">
-            {items.map((item) => (
-              <li
-                key={item.key}
-                className="flex min-w-0 items-baseline justify-between gap-3 py-1.5"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-mono text-xs text-primary">
-                    {item.title}
+        <DisclosurePanel>
+          <div className="border-t border-secondary p-2">
+            <ul className="divide-y divide-secondary">
+              {items.map((item) => (
+                <li
+                  key={item.key}
+                  className="flex min-w-0 items-baseline justify-between gap-3 py-1.5"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-mono text-xs text-primary">
+                      {item.title}
+                    </span>
+                    <span className="block truncate text-xs text-tertiary">{item.subtitle}</span>
                   </span>
-                  <span className="block truncate text-xs text-tertiary">{item.subtitle}</span>
-                </span>
-                <span className="shrink-0 text-xs tabular-nums text-tertiary">
-                  {numberFormat.format(item.tokens)}
-                  {item.approximate ? "~" : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <span className="shrink-0 text-xs tabular-nums text-tertiary">
+                    {numberFormat.format(item.tokens)}
+                    {item.approximate ? "~" : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </DisclosurePanel>
       </Disclosure>
     </div>
@@ -319,7 +334,7 @@ function CATEGORY_TONE_AT(index: number): string {
 }
 
 function statusText(
-  data: Parameters<typeof AgentContextPopoverContent>[0]["data"],
+  data: AgentContextPopoverData | undefined,
   scanning: boolean,
   computerOnline: boolean | undefined,
   scanFailed: boolean,

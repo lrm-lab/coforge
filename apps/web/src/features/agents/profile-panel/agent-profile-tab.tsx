@@ -28,8 +28,9 @@ import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-co
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/agent-skills";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
+import { AgentContextSection } from "#src/features/agents/agent-context-popover";
+import { useAgentContextReport } from "#src/features/agents/agent-context-report";
 import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
-import { ContextUsageItem, RUNTIME_PILL_PART_CLASS } from "./agent-context-usage-item";
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
 import { AppBotProfile } from "./app-bot-profile";
@@ -37,6 +38,11 @@ import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
+
+/** The Runtime pill's trigger: a button with no chrome of its own, so the pill reads as one, and a
+ * focus ring of its own for the keyboard. */
+const RUNTIME_PILL_TRIGGER_CLASS =
+  "inline-flex items-center gap-1.5 rounded-sm outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
 
 /** Gray badge for the runtime fact. */
 function FactBadge({
@@ -132,6 +138,19 @@ function AgentProfileTabBody({
   const canEditRuntime = canManage && Boolean(onStartRuntimeEdit);
   const runtimeLabel = runtimeProviderLabel(runtime);
   const runtimeIcon = <RuntimeProviderMark provider={runtime} className="size-3.5" />;
+  const context = profile.deletedAt ? null : contextUsage;
+  const usageComputer =
+    profile.computer &&
+    (context || (profile.runtimeUsageVisible && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime]))
+      ? profile.computer
+      : undefined;
+  const supportsContextReport = runtime === RUNTIME_PROVIDER.CLAUDE_CODE;
+  // Read here, not in the card: the card mounts on every open, and the hook's
+  // one-automatic-scan guard and in-flight scan must outlive it.
+  const contextReport = useAgentContextReport(profile.id, {
+    enabled: Boolean(context && usageComputer) && supportsContextReport,
+    computerOnline: usageComputer?.online,
+  });
   const creatorName = humanLabel(profile.owner);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const profileAvatar = (
@@ -284,23 +303,21 @@ function AgentProfileTabBody({
         </div>
         <div className="mt-3 flex flex-col gap-3">
           <FactRow label={m.agent_runtime_field()}>
-            {/* One pill: the runtime (its usage peek) and, once reported, its context (the
-              context peek). Each part stays its own button inside it. */}
+            {/* The pill names the runtime only; its card holds the usage (owner only) and the
+              Agent's context. A runtime with neither has no peek: RuntimeUsage would hand back
+              the bare trigger content, not a button. */}
             <FactBadge>
-              {/* A runtime without a usage reader has no peek: RuntimeUsage would hand back the
-                bare trigger content, not a button. */}
-              {profile.runtimeUsageVisible &&
-              profile.computer &&
-              RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime] ? (
+              {usageComputer ? (
                 <RuntimeUsage
-                  computerId={profile.computer.id}
+                  computerId={usageComputer.id}
                   runtime={{
                     provider: runtime,
                     displayName: runtimeLabel,
                     version: profile.runtimeVersion,
                   }}
-                  computerOnline={profile.computer.online}
+                  computerOnline={usageComputer.online}
                   timeZone={timeZone}
+                  showUsage={profile.runtimeUsageVisible}
                   trigger={(health) => (
                     <>
                       {runtimeIcon}
@@ -309,30 +326,33 @@ function AgentProfileTabBody({
                       <UsageHealthDot health={health} />
                     </>
                   )}
-                  triggerClassName={RUNTIME_PILL_PART_CLASS}
+                  triggerClassName={RUNTIME_PILL_TRIGGER_CLASS}
+                  footerLabel={context ? m.agent_context_title() : undefined}
+                  footer={
+                    context ? (
+                      <AgentContextSection
+                        usage={context}
+                        report={
+                          supportsContextReport
+                            ? {
+                                data: contextReport.data,
+                                scanning: contextReport.scanning,
+                                scanFailed: contextReport.scanFailed,
+                                onRefresh: contextReport.refresh,
+                              }
+                            : undefined
+                        }
+                        computerOnline={usageComputer.online}
+                        timeZone={timeZone}
+                      />
+                    ) : undefined
+                  }
                 />
               ) : (
                 <span className="inline-flex items-center gap-1.5">
                   {runtimeIcon}
                   {runtimeLabel}
                 </span>
-              )}
-              {contextUsage && !profile.deletedAt && (
-                <>
-                  {/* A hairline, not a "·": beside the health dot a dot separator reads as a
-                      second status dot. */}
-                  <span
-                    aria-hidden="true"
-                    className="mx-0.5 h-3 w-px shrink-0 bg-border-secondary"
-                  />
-                  <ContextUsageItem
-                    agentId={profile.id}
-                    contextUsage={contextUsage}
-                    timeZone={timeZone}
-                    supportsContextReport={runtime === RUNTIME_PROVIDER.CLAUDE_CODE}
-                    computerOnline={profile.computer?.online}
-                  />
-                </>
               )}
             </FactBadge>
           </FactRow>

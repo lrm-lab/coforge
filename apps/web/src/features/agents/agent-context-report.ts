@@ -12,7 +12,7 @@ export type AgentContextReadResult = Awaited<ReturnType<typeof getAgentContextRe
 /**
  * One Agent's context-composition cache: read on mount, kept warm by at most one
  * automatic scan when that cached read comes back stale or missing, and a manual `refresh` for
- * everything else. `AgentContextPopoverContent` is the only consumer; it owns rendering every
+ * everything else. The Agent profile's Profile tab is the only consumer; `AgentContextSection` renders every
  * non-available state (`unsupported`, `no_session`, `unparsed`, `timeout`, `error`) inline.
  */
 export function useAgentContextReport(

@@ -17,7 +17,11 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useRuntimeUsage } from "./use-runtime-usage";
-import { byDuration, usageWindowLabel } from "./runtime-usage-windows";
+import {
+  officialBucketDetail,
+  officialBucketLabel,
+  usageWindowLabel,
+} from "./runtime-usage-windows";
 import { USAGE_RISK_FILL_CLASS, usageRisk } from "./usage-risk";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
@@ -93,6 +97,8 @@ export function RuntimeUsage({
   trigger,
   triggerClassName,
   footer,
+  footerLabel,
+  showUsage = true,
 }: {
   computerId: string;
   runtime: Runtime;
@@ -104,8 +110,13 @@ export function RuntimeUsage({
   /** Controls for this runtime under its usage (the Computer page's Public switch). With a
    * footer, a runtime that reports no usage still opens a popover, holding only the footer. */
   footer?: ReactNode;
+  /** Names what the footer holds in the trigger's accessible name. */
+  footerLabel?: string;
+  /** False when the viewer may not see this runtime's account usage: the usage is neither read nor
+   * drawn, and only the runtime band and the footer remain. */
+  showUsage?: boolean;
 }) {
-  const supportsUsage = RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
+  const supportsUsage = showUsage && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
     enabled: supportsUsage,
     computerOnline,
@@ -143,10 +154,11 @@ export function RuntimeUsage({
           : health === "attention"
             ? m.computer_usage_health_attention()
             : undefined,
+        footerLabel,
       ]
         .filter(Boolean)
         .join(" · ")
-    : runtime.displayName;
+    : [runtime.displayName, footerLabel].filter(Boolean).join(" · ");
 
   return (
     <HoverPopover
@@ -208,49 +220,6 @@ function usageFailureDescription(result: UsageResultRecord | undefined) {
       ? m.computer_usage_not_connected()
       : m.computer_usage_status_unsupported();
   return undefined;
-}
-
-/** Window keys we store when the provider has no display name. They are not official copy. */
-const RAW_WINDOW_LABELS: Record<string, () => string> = {
-  onDemand: () => m.computer_usage_pay_as_you_go(),
-  prepaidBalance: () => m.computer_usage_prepaid_balance(),
-  individualLimit: () => m.computer_usage_spend_limit(),
-  bonus: () => m.computer_usage_bonus(),
-  freeTrial: () => m.computer_usage_free_trial(),
-  currentPeriod: () => m.computer_usage_current_period(),
-};
-
-/** The row label for one official bucket. A provider name wins, except on a bucket the provider
- * counts as a share left (`remainingFraction`): its name says so ("Weekly Limit Remaining") while
- * the row shows the share used. A stored window key is localized, then a real window length, then
- * a week or month named by the official type. */
-function officialBucketLabel(bucket: {
-  name?: string;
-  window?: string;
-  remainingFraction?: number;
-  windowDurationMinutes?: number;
-}): string {
-  const remainingType = bucket.remainingFraction !== undefined;
-  if (bucket.name && !remainingType && !RAW_WINDOW_LABELS[bucket.name]) return bucket.name;
-  const key = remainingType ? bucket.window : (bucket.window ?? bucket.name);
-  const known = key ? RAW_WINDOW_LABELS[key] : undefined;
-  if (known) return known();
-  if (bucket.windowDurationMinutes)
-    return byDuration({ windowDurationMinutes: bucket.windowDurationMinutes });
-  if (key && /week/iu.test(key)) return m.computer_usage_weekly();
-  if (key && /month/iu.test(key)) return m.computer_usage_monthly();
-  return key ?? m.computer_usage_available();
-}
-
-/** A figure that is not a percent, such as a wrapped balance. Omitted when the row already
- * has a meter, so a bucket note does not replace the official percent. */
-function officialBucketDetail(bucket: {
-  description?: string;
-  remainingFraction?: number;
-  usedPercent?: number;
-}): string | undefined {
-  if (bucket.remainingFraction !== undefined || bucket.usedPercent !== undefined) return undefined;
-  return bucket.description;
 }
 
 /**

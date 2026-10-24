@@ -7,7 +7,6 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AgentProfileTab } from "#src/features/agents/profile-panel/agent-profile-tab";
 import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
-import { formatDateForDisplay } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
 
 type AgentProfile = NonNullable<Awaited<ReturnType<typeof getAgentProfile>>>;
@@ -62,7 +61,7 @@ function render(node: ReactNode) {
   );
 }
 
-/** The markup's text with its tags removed: the pill splits "Context 12% used" across spans. */
+/** The markup's text with its tags removed. */
 function visibleText(markup: string) {
   return markup.replace(/<[^>]+>/g, "");
 }
@@ -228,49 +227,81 @@ test("a runtime without usage support keeps the plain badge even for its owner",
   expect(markup).not.toContain('aria-label="Pi · Usage"');
 });
 
-test("hides the context-usage badge entirely when there is no reading", () => {
+const CLAUDE_CODE_CONFIG = {
+  runtime: RUNTIME_PROVIDER.CLAUDE_CODE,
+  provider: { kind: "default" },
+  model: "claude-sonnet-5",
+  modelProvider: "",
+  reasoning: "high",
+} as const;
+
+function renderWithContext(
+  profile: AgentProfile,
+  contextUsage?: { usedTokens: number; windowTokens: number; observedAtMs: number } | null,
+) {
+  return render(
+    <AgentProfileTab
+      profile={profile}
+      timeZone="UTC"
+      canManage={false}
+      controls={controlsFixture(true)}
+      onSaveDisplayName={noop}
+      onSaveDescription={noop}
+      runtimeCredentialDialog={null}
+      contextUsage={contextUsage}
+    />,
+  );
+}
+
+const reading = (usedTokens: number, windowTokens = 200_000) => ({
+  usedTokens,
+  windowTokens,
+  observedAtMs: Date.parse("2026-09-18T12:00:00.000Z"),
+});
+
+test("with no context reading the runtime stays a plain, non-interactive label", () => {
   for (const contextUsage of [undefined, null]) {
-    const markup = render(
-      <AgentProfileTab
-        profile={profileFixture()}
-        timeZone="UTC"
-        canManage={false}
-        controls={controlsFixture(true)}
-        onSaveDisplayName={noop}
-        onSaveDescription={noop}
-        runtimeCredentialDialog={null}
-        contextUsage={contextUsage}
-      />,
-    );
+    const markup = renderWithContext(profileFixture(), contextUsage);
     expect(markup).not.toContain("Context");
+    expect(markup).not.toContain(`aria-label="Pi`);
   }
 });
 
-test("shows the rounded, clamped percentage next to the Runtime badge when a reading is present", () => {
-  for (const [usedTokens, windowTokens, expected] of [
-    [27_908, 200_000, "Context 14% used"],
-    [0, 200_000, "Context 0% used"],
-    // Never guessed above 100% even if a stale window makes usedTokens exceed it.
-    [250_000, 200_000, "Context 100% used"],
-  ] as const) {
-    const markup = render(
-      <AgentProfileTab
-        profile={profileFixture()}
-        timeZone="UTC"
-        canManage={false}
-        controls={controlsFixture(true)}
-        onSaveDisplayName={noop}
-        onSaveDescription={noop}
-        runtimeCredentialDialog={null}
-        contextUsage={{
-          usedTokens,
-          windowTokens,
-          observedAtMs: Date.parse("2026-09-18T12:00:00.000Z"),
-        }}
-      />,
-    );
-    expect(visibleText(markup)).toContain(expected);
+test("the pill never carries context text; the runtime opens a card for it instead", () => {
+  const markup = renderWithContext(profileFixture(), reading(27_908));
+  expect(visibleText(markup)).not.toContain("Context");
+  expect(visibleText(markup)).not.toContain("14% used");
+  // A viewer without account usage still gets a trigger, named for the card's context.
+  expect(markup).toContain(`aria-label="Codex · ${m.agent_context_title()}"`);
+});
+
+test("the context row is not drawn in the pill for any reading, clamped or not", () => {
+  for (const usedTokens of [27_908, 0, 250_000]) {
+    const markup = renderWithContext(profileFixture(), reading(usedTokens));
+    expect(visibleText(markup)).not.toMatch(/Context \d+% used/);
   }
+});
+
+test("an owner with usage visible gets the usage card, health dot slot and context footer", () => {
+  const markup = renderWithContext(
+    profileFixture({ runtimeUsageVisible: true, runtimeConfig: CLAUDE_CODE_CONFIG } as never),
+    reading(24_900),
+  );
+  expect(markup).toContain(`aria-label="Claude Code · ${m.computer_usage_title()}`);
+  expect(visibleText(markup)).not.toContain("Context");
+});
+
+test("a deleted Agent or one without a Computer never opens a context card", () => {
+  const deleted = renderWithContext(
+    profileFixture({ deletedAt: new Date("2026-09-01T00:00:00Z") } as never),
+    reading(24_900),
+  );
+  expect(deleted).not.toContain(`aria-label="Codex`);
+  const detached = renderWithContext(
+    profileFixture({ computerId: null, computer: undefined }),
+    reading(24_900),
+  );
+  expect(detached).not.toContain(`aria-label="Codex`);
 });
 
 test("a manager with a Computer sees the Runtime config pencil", () => {
@@ -334,65 +365,6 @@ test("the Runtime config pencil never renders when the container gives no onStar
     />,
   );
   expect(markup).not.toContain(m.agent_profile_edit_runtime_config());
-});
-
-test("a non-Claude-Code Agent's context badge stays a tooltip trigger, not a popover", () => {
-  const markup = render(
-    <AgentProfileTab
-      profile={profileFixture()}
-      timeZone="UTC"
-      canManage={false}
-      controls={controlsFixture(true)}
-      onSaveDisplayName={noop}
-      onSaveDescription={noop}
-      runtimeCredentialDialog={null}
-      contextUsage={{
-        usedTokens: 24_900,
-        windowTokens: 200_000,
-        observedAtMs: Date.parse("2026-09-18T12:00:00.000Z"),
-      }}
-    />,
-  );
-  expect(visibleText(markup)).toContain("Context 12% used");
-  // No popover trigger/label for a runtime without a composition to read.
-  expect(markup).not.toContain('aria-label="Context 12% used');
-});
-
-test("a Claude Code Agent's context badge becomes the breakdown popover trigger", () => {
-  const markup = render(
-    <AgentProfileTab
-      profile={profileFixture({
-        runtimeConfig: {
-          runtime: RUNTIME_PROVIDER.CLAUDE_CODE,
-          provider: { kind: "default" },
-          model: "claude-sonnet-5",
-          modelProvider: "",
-          reasoning: "high",
-        },
-      })}
-      timeZone="UTC"
-      canManage={false}
-      controls={controlsFixture(true)}
-      onSaveDisplayName={noop}
-      onSaveDescription={noop}
-      runtimeCredentialDialog={null}
-      contextUsage={{
-        usedTokens: 24_900,
-        windowTokens: 200_000,
-        observedAtMs: Date.parse("2026-09-18T12:00:00.000Z"),
-      }}
-    />,
-  );
-  expect(visibleText(markup)).toContain("Context 12% used");
-  // The popover trigger's accessible name is its visible text, then the tooltip's line
-  // (used / window · time).
-  expect(markup).toContain(
-    `aria-label="Context 12% used · ${m.agent_context_usage_tooltip({
-      used: "24,900",
-      window: "200,000",
-      time: formatDateForDisplay(new Date("2026-09-18T12:00:00.000Z"), "UTC", "en"),
-    })}"`,
-  );
 });
 
 test("a viewer who cannot change visibility sees plain Visibility text, no edit pencil", () => {
