@@ -39,7 +39,10 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
-import { postingTargetRefusalResponse } from "#src/server/agents/agent-target-status.server";
+import {
+  ambiguousTargetResponse,
+  postingTargetRefusalResponse,
+} from "#src/server/agents/agent-target-status.server";
 import { applyIncomingWeeklyReportBodyEdit } from "#src/server/records/weekly-report-body-restore.server";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import {
@@ -120,8 +123,12 @@ export async function handleAgentMessagesGet(
       ...(result.consumptionScope ? { consumptionScope: result.consumptionScope } : {}),
     };
     return Response.json(response);
-  } catch {
-    return Response.json({ error: "invalid message query" }, { status: 400 });
+  } catch (error) {
+    const target = new URL(request.url).searchParams.get("target") ?? "";
+    return (
+      ambiguousTargetResponse(error, target) ??
+      Response.json({ error: "invalid message query" }, { status: 400 })
+    );
   }
 }
 

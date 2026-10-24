@@ -179,7 +179,7 @@ export function agentRecentContextSql(scope: AgentAttentionScope, take: number) 
  * the message's own author (an Agent, else a human) as separate columns rather than one merged
  * name, so the caller can tell which kind it is and attach its description; a raw SQL
  * statement cannot call the shared `agentMessageSender` projection directly. `otherUsername` is
- * the *recipient* — the conversation's other member, which a DM target needs and a message's
+ * the *recipient* — the conversation's other member (`agentPeer` when that is an Agent), which a DM target needs and a message's
  * sender cannot supply. It is read whether or not that member has left, the way
  * `conversationTarget` names a DM: someone who left the Workspace still names the DM's history.
  *
@@ -218,7 +218,9 @@ export function unreadAgentMessagesFragment(
         LEFT JOIN "users" ou ON ou."id" = om."userId"
         LEFT JOIN "agents" oa ON oa."id" = om."agentId"
         WHERE om."conversationId" = c."id" AND om."id" <> am."id"
-        ORDER BY ou."username" NULLS LAST LIMIT 1) AS "otherUsername"
+        ORDER BY ou."username" NULLS LAST LIMIT 1) AS "otherUsername",
+      -- The other member is an Agent: a conversation between two Agents.
+      COALESCE(c."directKey" ~ '^agent:[0-9a-f-]+[|]agent:[0-9a-f-]+$', FALSE) AS "agentPeer"
     FROM (
       SELECT cm."id", cm."sequence", cm."body", cm."conversationId", cm."threadRootId",
         cm."senderMemberId"

@@ -12,7 +12,8 @@ erDiagram
 
 ## `conversation` (DirectConversation only)
 
-One row represents a direct conversation: User↔Agent, or between two Workspace
+One row represents a direct conversation: User↔Agent, Agent↔Agent (keyed
+`agent:<a>|agent:<b>`, both as members, no person), or between two Workspace
 members (or one member with themself, keyed `user:<a>|user:<a>` with one member
 row). `directKey` is unique per workspace and derived from the two stable
 subject UUIDs in lexical order.
@@ -29,8 +30,8 @@ Group conversations have a null `direct_key`.
 
 A subject is either a User or an Agent through real nullable foreign keys, with a
 database XOR check. A direct conversation gets one member row per distinct
-participant: two (a User and an Agent, or two Users), or one for a member's
-conversation with themself. Workspace membership, and for an Agent its
+participant: two (a User and an Agent, two Agents, or two Users), or one for a
+member's conversation with themself. Workspace membership, and for an Agent its
 ownership rules, are checked before creation.
 
 `joinedAt` is when the subject first joined; it is set once by the column default and a member who
@@ -53,7 +54,9 @@ requires them.
 Application invariants:
 
 - a direct conversation's members are exactly the participants its `directKey`
-  names: one User and one Agent, two Users, or one User with themself;
+  names: one User and one Agent, two Agents, two Users, or one User with themself;
+  a person is never a member of a conversation between two Agents, so no person's
+  list, unread count or search shows it;
 - only conversation members may send new messages;
 - member subjects must belong to the same workspace as the conversation;
 - group conversations are not implemented in this MVP.

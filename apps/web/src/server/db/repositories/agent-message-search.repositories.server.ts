@@ -9,6 +9,7 @@ import {
   toAgentMessage,
 } from "./direct-conversation-agent-message.server";
 import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
+import { agentPeerNames } from "./agent-peer-direct.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import {
   decodeAgentMessageSearchCursor,
@@ -132,12 +133,18 @@ export async function searchAgentMessagePage(
     agentId,
     page.filter((row) => row.conversation.channelName !== null).map((row) => row.conversationId),
   );
+  const peerTargetOf = await agentPeerNames(
+    db,
+    workspaceId,
+    agentId,
+    page.map((message) => message.conversation),
+  );
   const last = page.at(-1);
   return {
     messages: page.map((message) =>
       toAgentMessage(
         message,
-        messageDeliveryTarget(message),
+        messageDeliveryTarget(message, peerTargetOf),
         agentId,
         coordination.get(message.conversationId),
       ),

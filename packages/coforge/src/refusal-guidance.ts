@@ -39,6 +39,14 @@ export function refusalNextAction(
         "`coforge user info <name>`) and a #channel one this Agent belongs to. Correct the " +
         "target, then run the command again."
       );
+    case "AMBIGUOUS_TARGET": {
+      const name = person.split("~")[0];
+      return (
+        `${nothingDone ?? "Nothing was done"}: ${name} names both a person and an Agent in this ` +
+        `Workspace. Run the command again with ${name}~human for the person or ${name}~agent ` +
+        "for the Agent."
+      );
+    }
     case "AGENT_DM_RESTRICTED":
       return (
         `${nothingDone ?? "Nothing was done"}: this direct message belongs to a private Agent ` +

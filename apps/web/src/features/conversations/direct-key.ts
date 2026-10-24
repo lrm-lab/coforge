@@ -34,3 +34,25 @@ export function peopleDirectKeyPair(directKey: string): [string, string] {
   const [first, second] = directKey.split("|").map((part) => part.slice("user:".length));
   return [first!, second ?? first!];
 }
+
+/** The key of two Agents' direct conversation (`agent:` parts in lexical order, as for any key). */
+export function agentPeerDirectKey(agentId: string, otherAgentId: string) {
+  return [agentId, otherAgentId]
+    .sort()
+    .map((id) => `agent:${id}`)
+    .join("|");
+}
+
+/** Whether a direct conversation is between two Agents (no person is a member). */
+export function isAgentPeerDirectKey(directKey: string) {
+  const parts = directKey.split("|");
+  return parts.length === 2 && parts.every((part) => part.startsWith("agent:"));
+}
+
+/** The Agent on the other side of an Agent-to-Agent key from `agentId`'s seat; `undefined` for any
+ * other key or an Agent that is not part of it. */
+export function agentPeerOf(directKey: string | null, agentId: string) {
+  if (!directKey || !isAgentPeerDirectKey(directKey)) return undefined;
+  const ids = directKey.split("|").map((part) => part.slice("agent:".length));
+  return ids.includes(agentId) ? ids.find((id) => id !== agentId) : undefined;
+}

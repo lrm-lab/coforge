@@ -20,7 +20,6 @@ import {
   type TrackedMentionState,
 } from "./mention-delivery.repositories.server";
 import {
-  MESSAGE_ANCHOR,
   anchorSideHasMessages,
   assertMessageAnchor,
   isSequenceAnchor,
@@ -28,9 +27,25 @@ import {
   sequenceAnchor,
 } from "./direct-conversation-anchor.server";
 import { advanceThreadRead } from "./thread-read-position.server";
+import { humanUsernameTarget } from "./agent-peer-target.server";
+import {
+  findUserAgentConversation,
+  getOrCreateUserAgentConversation,
+  openUserAgentConversation,
+} from "./user-agent-direct.repositories.server";
+import {
+  agentPeerNames,
+  agentPeerSuffix,
+  dmParentTarget,
+  getOrCreateAgentPeerConversation,
+  findAgentPeerConversation,
+  openDirectPeerConversation,
+  liveAgentPeer,
+  peerSeatTarget,
+} from "./agent-peer-direct.repositories.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { isAppBot } from "#src/features/agents/agent-system-kind";
-import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
+import { isAgentPeerDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import {
   HELD_CONTEXT_LIMIT,
   type MessageSenderKind,
@@ -69,7 +84,6 @@ import {
   storeMessageBody,
 } from "#src/server/conversations/message-references.server";
 import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
-import { restoreDirectConversationMembers } from "#src/server/conversations/direct-conversation-members.server";
 import {
   pendingMentionActionsForMessage,
   recordPendingMentionActions,
@@ -93,7 +107,6 @@ import { readWindowThreads } from "#src/server/conversations/thread-summaries.se
 import { windowPageFlags } from "#src/lib/conversation-window";
 import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
 import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
-import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import {
   agentAttentionCountSql,
   agentAttentionIdsSql,
@@ -109,7 +122,6 @@ import {
   agentHistoryConsumptionScope,
   type ResolvedAgentTarget,
 } from "./resolved-agent-target.server";
-import { buildUserAgentConversationCreateInput } from "./user-agent-conversation-input.server";
 import {
   searchAgentMessagePage,
   type AgentMessageSearchOptions,
@@ -227,6 +239,14 @@ export type HistoryWindow = { beforeSequence?: number; afterSequence?: number; l
 
 export type DirectConversationRepository = {
   userIdForUsername?(target: string): Promise<string>;
+  openAgentDirect?(
+    workspaceId: string,
+    agentId: string,
+    parentTarget: string,
+  ): Promise<{
+    conversation: { id: string };
+    peer: { kind: "user"; userId: string } | { kind: "agent"; agentId: string };
+  }>;
   getAgentChannel?(workspaceId: string, agentId: string, target: string): Promise<{ id: string }>;
   resolveAgentTarget?(
     workspaceId: string,
@@ -430,10 +450,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   async userIdForUsername(target: string) {
-    const [parentTarget, root, extra] = target.split(":");
-    if (extra !== undefined || (root !== undefined && !MESSAGE_ANCHOR.test(root)))
-      throw new Error("invalid message target");
-    return userIdOfUsernameTarget(this.db, parentTarget!);
+    return userIdOfUsernameTarget(this.db, humanUsernameTarget(dmParentTarget(target)));
   }
 
   private async resolveMessage(conversationId: string, anchor: string, rootOnly = false) {
@@ -558,8 +575,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     agentId: string,
     target: string,
   ): Promise<ResolvedAgentTarget> {
-    return this.#resolveAgentTarget(workspaceId, agentId, target, (userId) =>
-      this.agentDirectConversation(workspaceId, userId, agentId),
+    return this.#resolveAgentTarget(
+      workspaceId,
+      agentId,
+      target,
+      (userId) => this.agentDirectConversation(workspaceId, userId, agentId),
+      (peerId) => getOrCreateAgentPeerConversation(this.db, workspaceId, agentId, peerId),
     );
   }
 
@@ -569,8 +590,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
    * `DM_PEER_NOT_IN_WORKSPACE` before anything is written.
    */
   resolveAgentSendTarget(workspaceId: string, agentId: string, target: string) {
-    return this.#resolveAgentPostTarget(workspaceId, agentId, target, (userId) =>
-      this.getOrCreateUserAgent(workspaceId, userId, agentId),
+    return this.#resolveAgentPostTarget(
+      workspaceId,
+      agentId,
+      target,
+      (userId) => this.getOrCreateUserAgent(workspaceId, userId, agentId),
+      (peerId) => getOrCreateAgentPeerConversation(this.db, workspaceId, agentId, peerId),
     );
   }
 
@@ -597,6 +622,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         peerUserId = userId;
         return direct;
       },
+      async (peerId) => {
+        const direct = await findAgentPeerConversation(this.db, workspaceId, agentId, peerId);
+        if (!direct) throw new AppError("NOT_FOUND");
+        return direct;
+      },
       true,
     );
     return { ...resolved, peerUserId };
@@ -607,6 +637,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     agentId: string,
     target: string,
     directConversation: (userId: string) => Promise<{ id: string }>,
+    peerConversation: (peerAgentId: string) => Promise<{ id: string }>,
     readOnly = false,
   ): Promise<ResolvedAgentTarget> {
     await appEventConversation(this.db, workspaceId, agentId, target.split(":")[0]!, {
@@ -626,7 +657,13 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         isChannel: scope.isChannel,
       };
     }
-    return this.#resolveAgentTarget(workspaceId, agentId, target, directConversation);
+    return this.#resolveAgentTarget(
+      workspaceId,
+      agentId,
+      target,
+      directConversation,
+      peerConversation,
+    );
   }
 
   async #resolveAgentTarget(
@@ -634,13 +671,21 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     agentId: string,
     target: string,
     directConversation: (userId: string) => Promise<{ id: string }>,
+    peerConversation: (peerAgentId: string) => Promise<{ id: string }>,
   ): Promise<ResolvedAgentTarget> {
     const parentTarget = target.split(":")[0]!;
     const isChannel = parentTarget.startsWith("#");
     const conversation = isChannel
       ? await this.getAgentChannel(workspaceId, agentId, parentTarget)
       : ((await appEventConversation(this.db, workspaceId, agentId, parentTarget)) ??
-        (await directConversation(await this.userIdForUsername(target))));
+        (
+          await openDirectPeerConversation(
+            this.db,
+            { workspaceId, agentId },
+            dmParentTarget(target),
+            { user: directConversation, agent: peerConversation },
+          )
+        ).conversation);
     const threadRootId = await this.targetRoot(conversation.id, target);
     return {
       conversationId: conversation.id,
@@ -682,9 +727,10 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       agentId,
       row.conversation.channelName !== null ? [row.conversationId] : [],
     );
+    const peerTargetOf = await agentPeerNames(this.db, workspaceId, agentId, [row.conversation]);
     return toAgentMessage(
       row,
-      messageDeliveryTarget(row),
+      messageDeliveryTarget(row, peerTargetOf),
       agentId,
       coordination.get(row.conversationId),
     );
@@ -727,75 +773,27 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     );
   }
 
-  async getOrCreateUserAgent(workspaceId: string, userId: string, agentId: string) {
-    // Retain deleted-Agent DM history. DirectConversations.authorize checks read/write access;
-    // DirectConversations.open refuses to create a deleted Agent's DM.
-    const agent = await this.db.agent.findFirst({
-      where: { id: agentId, workspaceId, workspace: { members: { some: { userId } } } },
-      select: { id: true, ownerId: true, visibility: true },
+  /** The conversation a direct send names, started if need be, and who it is with. */
+  openAgentDirect(workspaceId: string, agentId: string, parentTarget: string) {
+    return openDirectPeerConversation(this.db, { workspaceId, agentId }, parentTarget, {
+      user: (userId) => this.getOrCreateUserAgent(workspaceId, userId, agentId),
+      agent: (peerId) => getOrCreateAgentPeerConversation(this.db, workspaceId, agentId, peerId),
     });
-    if (!agent) {
-      const member = await this.db.workspaceMembership.findUnique({
-        where: { workspaceId_userId: { workspaceId, userId } },
-        select: { userId: true },
-      });
-      if (!member) {
-        // Someone this Agent already has a DM with, who left: say so. Anyone else outside the
-        // Workspace reads exactly like a username that does not exist, so an Agent cannot probe
-        // who is registered elsewhere.
-        if (await this.findUserAgentConversation(workspaceId, userId, agentId))
-          throw new AppError("DM_PEER_NOT_IN_WORKSPACE");
-        throw new Error("target user not found");
-      }
-      throw new Error("conversation scope is not authorized");
-    }
-    const where = {
-      workspaceId_directKey: { workspaceId, directKey: agentDirectKey(userId, agentId) },
-    };
-    const existing = await this.db.conversation.findUnique({ where, select: { id: true } });
-    if (existing) return existing;
-    // A brand-new DM with a private Agent may only ever be started by its own creator:
-    // an existing DM someone else already had stays readable/read-only (handled above by
-    // returning it unconditionally), but nobody else may open a first one.
-    if (!canDirectMessageAgent(userId, agent)) throw new AppError("AGENT_DM_RESTRICTED");
-    try {
-      return await this.db.conversation.create({
-        data: buildUserAgentConversationCreateInput(workspaceId, userId, agentId),
-        select: { id: true },
-      });
-    } catch (error) {
-      // A concurrent first open won the insert; reuse its conversation.
-      if (isUniqueViolation(error))
-        return this.db.conversation.findUniqueOrThrow({ where, select: { id: true } });
-      throw error;
-    }
   }
 
-  /** The person's DM with an Agent as they open it: `getOrCreateUserAgent`, with their member row
-   * restored if it is missing, and whether this open started it (`created`, for `dm.created.v1`;
-   * two first opens at once may both say so, which costs a list re-read, not a wrong list). */
-  async openUserAgent(workspaceId: string, userId: string, agentId: string) {
-    const created = !(await this.findUserAgentConversation(workspaceId, userId, agentId));
-    const conversation = {
-      ...(await this.getOrCreateUserAgent(workspaceId, userId, agentId)),
-      created,
-    };
-    await restoreDirectConversationMembers(this.db, {
-      conversationId: conversation.id,
-      workspaceId,
-      userIds: [userId],
-    });
-    return conversation;
+  /** The person's DM with this Agent, started if need be. */
+  getOrCreateUserAgent(workspaceId: string, userId: string, agentId: string) {
+    return getOrCreateUserAgentConversation(this.db, workspaceId, userId, agentId);
   }
 
-  /** Read-only counterpart to `getOrCreateUserAgent`: looks the DM up, never creates it. Used by
-   * `channel members @user`, which must not have the side effect of starting a DM just by
-   * inspecting who could message in it. */
+  /** The person's DM as they open it, and whether this open started it. */
+  openUserAgent(workspaceId: string, userId: string, agentId: string) {
+    return openUserAgentConversation(this.db, workspaceId, userId, agentId);
+  }
+
+  /** `getOrCreateUserAgent` without the create. */
   async findUserAgentConversation(workspaceId: string, userId: string, agentId: string) {
-    return this.db.conversation.findUnique({
-      where: { workspaceId_directKey: { workspaceId, directKey: agentDirectKey(userId, agentId) } },
-      select: { id: true },
-    });
+    return findUserAgentConversation(this.db, workspaceId, userId, agentId);
   }
 
   /** The ids a browser send needs, without reading any messages. */
@@ -1290,7 +1288,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         deliveryId: true,
         messageId: true,
         conversationId: true,
-        conversation: { select: { channelName: true, members: CONVERSATION_TARGET_MEMBERS } },
+        conversation: {
+          select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
+        },
         sequence: true,
         message: {
           select: {
@@ -1325,12 +1325,18 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         .filter((delivery) => delivery.conversation.channelName !== null)
         .map((delivery) => delivery.conversationId),
     );
+    const peerTargetOf = await agentPeerNames(
+      this.db,
+      workspaceId,
+      agentId,
+      deliveries.map((delivery) => delivery.conversation),
+    );
     return deliveries.map((delivery) => {
       // agentMessageSender handles both human and Agent authors and validates the handle;
       // reading sender.user alone produces a bare @ for Agent messages.
       const sender = agentMessageSender(delivery.message.sender);
       const target = deliveryTarget(
-        conversationTarget(delivery.conversation),
+        conversationTarget(delivery.conversation, peerTargetOf),
         delivery.message.threadRootId,
       );
       return {
@@ -1536,7 +1542,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       )
       SELECT "id", "sequence", "body", "conversationId", "threadRootId", "senderMemberId",
         "deliveryId", "senderAgentName", "senderAgentDescription", "senderUsername",
-        "senderUserDescription", "channelName", "otherUsername", "unreadCount", "globalRank",
+        "senderUserDescription", "channelName", "otherUsername", "agentPeer", "unreadCount", "globalRank",
         "nonMemberMention"
       FROM ranked
       WHERE "globalRank" <= ${AGENT_RECOVERY_MESSAGE_LIMIT} OR "targetRank" = 1
@@ -1579,11 +1585,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       agentId,
       rows.filter((row) => row.channelName !== null).map((row) => row.conversationId),
     );
+    const peerSuffix = await agentPeerSuffix(this.db, workspaceId, rows);
     for (const row of rows) {
       if (!row.channelName && !row.otherUsername)
         throw new Error("Agent conversation has no other member to target");
       const target = deliveryTarget(
-        row.channelName ? `#${row.channelName}` : `@${row.otherUsername}`,
+        row.channelName ? `#${row.channelName}` : `@${row.otherUsername}${peerSuffix(row)}`,
         row.threadRootId,
       );
       unreadSummary[target] ??= row.unreadCount;
@@ -1678,6 +1685,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
       });
       const rowById = new Map(messageRows.map((row) => [row.id, row]));
+      const peerTargetOf = await agentPeerNames(
+        tx,
+        workspaceId,
+        agentId,
+        messageRows.map((row) => row.conversation),
+      );
       const coordination = await readChannelCoordination(
         tx,
         workspaceId,
@@ -1692,7 +1705,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         return {
           ...toAgentMessage(
             message,
-            messageDeliveryTarget(message),
+            messageDeliveryTarget(message, peerTargetOf),
             agentId,
             coordination.get(row.conversationId),
           ),
@@ -2036,9 +2049,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   ) {
     const conversation = await this.db.conversation.findUnique({
       where: { id: conversationId },
-      select: { workspaceId: true, channelName: true, archivedAt: true },
+      select: { workspaceId: true, channelName: true, archivedAt: true, directKey: true },
     });
     if (!conversation) throw new Error("conversation scope is not authorized");
+    const agentPeer =
+      !conversation.channelName && isAgentPeerDirectKey(conversation.directKey ?? "");
     if (conversation.channelName && conversation.archivedAt) throw new AppError("CONFLICT");
     // A DM's two members; in a channel, not the whole roster (#general holds the whole
     // Workspace) but the sending Agent's own row and the members its `--mention` bindings name.
@@ -2087,7 +2102,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         }
       }
     }
-    if (!sender || (!conversation.channelName && !user))
+    // Between two Agents the other one is the recipient, and must still be live.
+    const peer = agentPeer && (await liveAgentPeer(this.db, conversation, agentId));
+    if (!sender || (!conversation.channelName && !(agentPeer ? peer : user)))
       throw new AgentSendRejectedError(403, "agent is not a conversation member");
     // A private Agent's own outbound DM is just as read-only as the human side of it
     // ("neither side can send"). Channels are unaffected — a private Agent is never a channel
@@ -2219,7 +2236,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             ...mentionedMemberIds,
           ],
         });
-      // A DM wakes no Agent: its only Agent is the sender.
+      // A person's DM wakes no Agent (its only Agent is the sender); a DM between two Agents wakes
+      // the other one, whatever its state: the delivery waits for it as for a channel member.
       const recipients = conversation.channelName
         ? await channelAgentRecipients(tx, {
             conversationId,
@@ -2227,7 +2245,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             mentions: stored.mentions,
             senderAgentId: agentId,
           })
-        : [];
+        : peer
+          ? [peer.id]
+          : [];
       if (hint && !recipients.includes(hint.targetAgentId))
         throw new AgentSendRejectedError(403, "Memory Hint target delivery is missing");
       const created = await tx.message.create({
@@ -2318,7 +2338,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       })),
       target: conversation.channelName
         ? deliveryTarget(`#${conversation.channelName}`, root?.id)
-        : "",
+        : peer
+          ? deliveryTarget(await peerSeatTarget(this.db, conversation, members, peer.id), root?.id)
+          : "",
       // Agent-facing shape: metadata only; the object key never leaves the backend (never
       // selected above, unlike the browser-facing `browserMessageFields`).
       attachments: result.attachments,

@@ -56,6 +56,22 @@ function dmPeerNotInWorkspaceResponse(error: unknown, target: string) {
 }
 
 /**
+ * The answer to a bare `@name` that is both a Workspace member and an Agent: the sender picks with
+ * `@name~human` or `@name~agent`, so nothing is sent to the wrong one. Undefined for any other
+ * error.
+ */
+export function ambiguousTargetResponse(error: unknown, target: string) {
+  if (!isAppError(error) || error.code !== "AMBIGUOUS_TARGET") return undefined;
+  const name = target.split(":")[0]!.split("~")[0];
+  return errorResponse(
+    error.code,
+    `${name} names both a person and an Agent in this Workspace; use ${name}~human or ${name}~agent`,
+    409,
+    false,
+  );
+}
+
+/**
  * The conversation an attachment upload belongs to, or the refusal to send instead. The
  * attachment belongs to the conversation, not a message, so any `:thread` suffix is dropped
  * rather than resolved, and uploading never depends on a thread anchor already existing. Shared
@@ -81,6 +97,7 @@ export async function resolveAttachmentConversation(
   } catch (error) {
     return (
       dmPeerNotInWorkspaceResponse(error, parentTarget) ??
+      ambiguousTargetResponse(error, parentTarget) ??
       targetNotAccessibleResponse(targetResolutionStatus(error))
     );
   }
@@ -92,5 +109,9 @@ export async function resolveAttachmentConversation(
  * Workspace, which read alike (`target is not accessible`). Undefined for any other error.
  */
 export function postingTargetRefusalResponse(error: unknown, target: string) {
-  return dmPeerNotInWorkspaceResponse(error, target) ?? unknownTargetUserResponse(error);
+  return (
+    dmPeerNotInWorkspaceResponse(error, target) ??
+    ambiguousTargetResponse(error, target) ??
+    unknownTargetUserResponse(error)
+  );
 }

@@ -38,6 +38,13 @@ These rules apply to `src/server/conversations/`.
   messages an Agent still owes attention to is stated once, in
   `server/db/repositories/agent-attention.repositories.server.ts`; its reads
   use that module and do not restate the rule.
+- `server/db/repositories/agent-peer-direct.repositories.server.ts` owns Agent-to-Agent direct conversations:
+  what `@name`, `@name~agent` and `@name~human` name (`AMBIGUOUS_TARGET` when a Workspace member and a
+  usable Agent share a bare name), the conversation two Agents share, and every Agent-facing DM target
+  from the reader's seat (`agentPeerNames`, `agentPeerSuffix`; `~agent` only on a name a member also
+  holds). Visibility (`canSeeAgent`) gates starting one; being in it lets an Agent keep answering. A
+  person is never a member, so no person-facing DM query sees it. The person-and-Agent DM is
+  `user-agent-direct.repositories.server.ts`.
 - `unresolved-mentions.server.ts` owns which `@handle`s of a sent message named
   nobody the sender can see (no Workspace human, no visible Agent). It reads the
   stored body, so a replay reads the same `@handle`s.

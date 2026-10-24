@@ -17,6 +17,8 @@ export type AgentRecoveryRow = {
   channelName: string | null;
   /** The conversation's other active member: the address a DM reply targets. */
   otherUsername: string | null;
+  /** That other member is an Agent, so the address may need `~agent` (`agentPeerSuffix`). */
+  agentPeer: boolean;
   unreadCount: number;
   globalRank: number;
   /** The Agent is not in the channel: it was notified of this one message by the sender. */

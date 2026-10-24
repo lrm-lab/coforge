@@ -9,6 +9,7 @@ import type {
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { deliveryMentionsAgent } from "./mentions.server";
+import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
 
@@ -105,20 +106,23 @@ export class SendDirectMessage {
     )
       throw new Error("invalid agent direct message");
     const isChannel = isChannelMessageTarget(input.target);
-    const dmUserId = isChannel
+    // A direct target names a person (their DM with this Agent) or another Agent (their shared DM).
+    const direct = isChannel
       ? undefined
-      : await (async () => {
-          const userId = await this.conversations.userIdForUsername?.(input.target);
-          if (!userId) throw new Error("target user not found");
-          return userId;
-        })();
+      : await this.conversations.openAgentDirect?.(
+          input.workspaceId,
+          input.agentId,
+          dmParentTarget(input.target),
+        );
+    if (!isChannel && !direct) throw new Error("target user not found");
+    const dmUserId = direct?.peer.kind === "user" ? direct.peer.userId : undefined;
     const conversation = isChannel
       ? await this.conversations.getAgentChannel?.(
           input.workspaceId,
           input.agentId,
           input.target.split(":")[0]!,
         )
-      : await this.conversations.getOrCreateUserAgent(input.workspaceId, dmUserId!, input.agentId);
+      : direct?.conversation;
     if (!conversation) throw new Error("channel access is unavailable");
     const message = await this.idempotency.execute(
       {
@@ -142,15 +146,18 @@ export class SendDirectMessage {
     );
     const publications = (async () => {
       // A channel message fans out to the Workspace; a DM goes only to its human viewer, naming
-      // the sending Agent's badge so the browser needs no conversation alias.
-      await this.publishBrowserEvent(
-        message,
-        conversation.id,
-        isChannel
-          ? { workspaceId: input.workspaceId }
-          : { userId: dmUserId!, agentId: input.agentId },
-      );
-      await this.notifications?.notifyMessage(message.id);
+      // the sending Agent's badge so the browser needs no conversation alias. A DM between two
+      // Agents has no viewer and nobody to notify: only the delivery below.
+      if (isChannel || dmUserId) {
+        await this.publishBrowserEvent(
+          message,
+          conversation.id,
+          isChannel
+            ? { workspaceId: input.workspaceId }
+            : { userId: dmUserId!, agentId: input.agentId },
+        );
+        await this.notifications?.notifyMessage(message.id);
+      }
       await this.publishAgentMentionDeliveries(input.idempotencyKey, conversation.id, message);
     })();
     // What the message did not reach, read from the stored message so a replay reports the same.

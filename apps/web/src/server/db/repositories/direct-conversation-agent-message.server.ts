@@ -11,7 +11,9 @@ import {
   MESSAGE_MENTIONS_SELECT,
   type MessageMentionRef,
 } from "#src/server/conversations/mentions.server";
+import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { channelTarget } from "#src/server/conversations/agent-delivery.server";
+import type { TargetConversation } from "./agent-peer-direct.repositories.server";
 
 const TASK_METADATA_SELECT = {
   select: {
@@ -51,21 +53,31 @@ export function deliveryTarget(parent: string, rootId?: string | null) {
   return `${parent}:${rootId}`;
 }
 
-/** `#channel` for a public channel, otherwise `@username` of the conversation's user member. */
-export function conversationTarget(conversation: {
-  channelName: string | null;
-  members: { user: { username: string } | null }[];
-}) {
-  return conversation.channelName
-    ? channelTarget(conversation.channelName)
-    : `@${conversation.members[0]?.user?.username}`;
+/**
+ * `#channel` for a public channel, `@username` of the conversation's person, or, in a conversation
+ * between two Agents, the other Agent from the reader's seat (`peerTargetOf`, `agentPeerNames`).
+ */
+export function conversationTarget(
+  conversation: TargetConversation,
+  peerTargetOf?: (conversation: TargetConversation) => string | undefined,
+) {
+  if (conversation.channelName) return channelTarget(conversation.channelName);
+  const username = conversation.members.find((member) => member.user)?.user?.username;
+  if (username || !isAgentPeerDirectKey(conversation.directKey ?? "")) return `@${username}`;
+  const peer = peerTargetOf?.(conversation);
+  if (peer === undefined) throw new Error("direct conversation has no addressable peer");
+  return peer;
 }
 
-/** The one member `conversationTarget` names a direct conversation by: its user member. */
+/** The members `conversationTarget` names a direct conversation by: its person, or, between two
+ * Agents, both Agents. */
 export const CONVERSATION_TARGET_MEMBERS = {
-  where: { userId: { not: null } },
-  select: { user: { select: { username: true } } },
-  take: 1,
+  where: { OR: [{ userId: { not: null } }, { agentId: { not: null } }] },
+  select: {
+    user: { select: { username: true } },
+    agent: { select: { id: true, name: true } },
+  },
+  take: 2,
 } satisfies Prisma.Conversation$membersArgs;
 
 /** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
@@ -75,11 +87,14 @@ export const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
 } satisfies Prisma.MessageInclude;
 
 /** Where a Message is delivered: its conversation's target, with its thread root if it has one. */
-export function messageDeliveryTarget(message: {
-  threadRootId: string | null;
-  conversation: Parameters<typeof conversationTarget>[0];
-}) {
-  return deliveryTarget(conversationTarget(message.conversation), message.threadRootId);
+export function messageDeliveryTarget(
+  message: { threadRootId: string | null; conversation: TargetConversation },
+  peerTargetOf?: Parameters<typeof conversationTarget>[1],
+) {
+  return deliveryTarget(
+    conversationTarget(message.conversation, peerTargetOf),
+    message.threadRootId,
+  );
 }
 
 export function toAgentMessage(

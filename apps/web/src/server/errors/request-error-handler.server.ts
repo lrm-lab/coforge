@@ -39,6 +39,7 @@ export function handleRequestError(error: unknown): HandledRequestError {
       // The server could not reach this browser's push service: the caller should
       // retry another way, not treat it as a permanent failure.
       PUSH_SERVICE_UNREACHABLE: 503,
+      AMBIGUOUS_TARGET: 409,
     }[error.code];
     return { code, message: error.message };
   }

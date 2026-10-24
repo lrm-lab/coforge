@@ -99,6 +99,19 @@ const refusals: [string, unknown, { status: number; body: unknown }][] = [
       },
     },
   ],
+  [
+    "a name a member and an Agent share",
+    new AppError("AMBIGUOUS_TARGET"),
+    {
+      status: 409,
+      body: {
+        error:
+          "@ada names both a person and an Agent in this Workspace; use @ada~human or @ada~agent",
+        code: "AMBIGUOUS_TARGET",
+        retryable: false,
+      },
+    },
+  ],
 ];
 
 for (const route of routes) {

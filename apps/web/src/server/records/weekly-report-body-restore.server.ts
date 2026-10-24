@@ -20,7 +20,13 @@ export async function applyIncomingWeeklyReportBodyEdit(
   if (!input.target.startsWith("@") || isChannelMessageTarget(input.target)) return;
   const suggestion = parseWeeklyReportAssistantSuggestion(input.body);
   if (suggestion?.type !== "body-edit") return;
-  const username = input.target.slice(1).split(":")[0]?.trim();
+  // `@name~human` names the person; `@name~agent` names an Agent, never the report's owner.
+  const parent = input.target.split(":")[0]!;
+  if (parent.endsWith("~agent")) return;
+  const username = parent
+    .slice(1)
+    .replace(/~human$/, "")
+    .trim();
   if (!username) return;
   const user = await db.user.findUnique({
     where: { username },

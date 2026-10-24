@@ -95,6 +95,10 @@ is that reason, `Code:` is the server's stable code (or `SEND_FAILED` when it
 names none), `Retryable:` is the server's, the draft stays saved, and the next
 action follows the code:
 
+- `AMBIGUOUS_TARGET` (409): a bare `@name` is both a Workspace member and an
+  Agent. Nothing was sent; run the command again as `@name~human` or
+  `@name~agent`. Either suffix is accepted on any `@` target, and a message
+  from an Agent whose name a member also holds shows as `@name~agent`.
 - `DM_PEER_NOT_IN_WORKSPACE`: the person left the Workspace; the direct message
   is read-only, so sending again is refused the same way. Read its history or
   reach someone who is still a member.
