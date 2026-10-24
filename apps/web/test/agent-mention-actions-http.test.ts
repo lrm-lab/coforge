@@ -116,7 +116,12 @@ test("when no row allows an action the page is empty and every row is counted", 
     await handleAgentMentionPendingGet(pendingRequest(), principal, {
       pendingMentionActions: async () => [pendingRow(1, []), pendingRow(2, [])],
     })
-  ).json()) as { hasMore: boolean; noLongerActionable: number; pendingMentionActions: unknown[] };
+  ).json()) as {
+    ok: boolean;
+    hasMore: boolean;
+    noLongerActionable: number;
+    pendingMentionActions: unknown[];
+  };
   expect(page).toEqual({
     ok: true,
     hasMore: false,
