@@ -254,49 +254,49 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
       // Every caller awaits inside a try, so a missing runtime surfaces as a rejected call.
       const agentProxy = startAgentProxy({
         runtime: {
-          agentMessage: async (...input) => requireRuntime().agentMessage(...input),
-          agentAttachment: async (...input) => agentRequests().agentAttachment(...input),
-          agentAttachmentUpload: async (...input) =>
-            agentRequests().agentAttachmentUpload(...input),
-          agentAttachmentUploadSessionCreate: async (...input) =>
-            agentRequests().agentAttachmentUploadSessionCreate(...input),
-          agentAttachmentUploadSessionComplete: async (...input) =>
-            agentRequests().agentAttachmentUploadSessionComplete(...input),
-          agentAttachmentUploadSessionCancel: async (...input) =>
-            agentRequests().agentAttachmentUploadSessionCancel(...input),
-          agentAttachmentUploadSessionGet: async (...input) =>
-            agentRequests().agentAttachmentUploadSessionGet(...input),
-          inbox: async (...input) => requireRuntime().inbox(...input),
-          reminder: async (...input) => requireRuntime().reminder(...input),
-          agentTask: async (...input) => requireRuntime().agentTask(...input),
-          agentMemoryDisposition: async (...input) =>
-            agentRequests().agentMemoryDisposition(...input),
-          agentOpenviking: async (...input) => agentRequests().agentOpenviking(...input),
+          agentMessage: async (...args) => requireRuntime().agentMessage(...args),
+          agentAttachment: async (...args) => agentRequests().agentAttachment(...args),
+          agentAttachmentUpload: async (...args) => agentRequests().agentAttachmentUpload(...args),
+          agentAttachmentUploadSessionCreate: async (...args) =>
+            agentRequests().agentAttachmentUploadSessionCreate(...args),
+          agentAttachmentUploadSessionComplete: async (...args) =>
+            agentRequests().agentAttachmentUploadSessionComplete(...args),
+          agentAttachmentUploadSessionCancel: async (...args) =>
+            agentRequests().agentAttachmentUploadSessionCancel(...args),
+          agentAttachmentUploadSessionGet: async (...args) =>
+            agentRequests().agentAttachmentUploadSessionGet(...args),
+          inbox: async (...args) => requireRuntime().inbox(...args),
+          reminder: async (...args) => requireRuntime().reminder(...args),
+          agentTask: async (...args) => requireRuntime().agentTask(...args),
+          agentMemoryDisposition: async (...args) =>
+            agentRequests().agentMemoryDisposition(...args),
+          agentOpenviking: async (...args) => agentRequests().agentOpenviking(...args),
           memoryFence: (agentId) => requireRuntime().memoryFence(agentId),
-          agentChannel: async (...input) => agentRequests().agentChannel(...input),
-          agentActionPrepare: async (...input) => agentRequests().agentActionPrepare(...input),
-          agentWeeklyReport: async (...input) => agentRequests().agentWeeklyReport(...input),
-          agentWeeklyReportCollect: async (...input) =>
-            agentRequests().agentWeeklyReportCollect(...input),
-          agentWeeklyReportKeyPoints: async (...input) =>
-            agentRequests().agentWeeklyReportKeyPoints(...input),
-          agentWeeklyReportMemory: async (...input) =>
-            agentRequests().agentWeeklyReportMemory(...input),
-          workspaceInfo: async (...input) => agentRequests().workspaceInfo(...input),
-          githubCredential: async (...input) => agentRequests().githubCredential(...input),
-          githubCommitTrailers: async (...input) => agentRequests().githubCommitTrailers(...input),
-          manualGet: async (...input) => agentRequests().manualGet(...input),
-          manualSearch: async (...input) => agentRequests().manualSearch(...input),
-          version: async (...input) => requireRuntime().version(...input),
-          userInfo: async (...input) => agentRequests().userInfo(...input),
-          profileShow: async (...input) => agentRequests().profileShow(...input),
-          profileUpdate: async (...input) => agentRequests().profileUpdate(...input),
-          appConfigGet: async (...input) => agentRequests().appConfigGet(...input),
-          appConfigUpdate: async (...input) => agentRequests().appConfigUpdate(...input),
-          agentApp: async (...input) => agentRequests().agentApp(...input),
-          mentionPending: async (...input) => agentRequests().mentionPending(...input),
-          mentionExecute: async (...input) => agentRequests().mentionExecute(...input),
-          mentionDelivery: async (...input) => agentRequests().mentionDelivery(...input),
+          agentChannel: async (...args) => agentRequests().agentChannel(...args),
+          agentActionPrepare: async (...args) => agentRequests().agentActionPrepare(...args),
+          agentWeeklyReport: async (...args) => agentRequests().agentWeeklyReport(...args),
+          agentWeeklyReportCollect: async (...args) =>
+            agentRequests().agentWeeklyReportCollect(...args),
+          agentWeeklyReportKeyPoints: async (...args) =>
+            agentRequests().agentWeeklyReportKeyPoints(...args),
+          agentWeeklyReportMemory: async (...args) =>
+            agentRequests().agentWeeklyReportMemory(...args),
+          workspaceInfo: async (...args) => agentRequests().workspaceInfo(...args),
+          githubCredential: async (...args) => agentRequests().githubCredential(...args),
+          githubCommitTrailers: async (...args) => agentRequests().githubCommitTrailers(...args),
+          manualGet: async (...args) => agentRequests().manualGet(...args),
+          manualSearch: async (...args) => agentRequests().manualSearch(...args),
+          version: async (...args) => requireRuntime().version(...args),
+          userInfo: async (...args) => agentRequests().userInfo(...args),
+          profileShow: async (...args) => agentRequests().profileShow(...args),
+          profileUpdate: async (...args) => agentRequests().profileUpdate(...args),
+          appConfigGet: async (...args) => agentRequests().appConfigGet(...args),
+          appConfigUpdate: async (...args) => agentRequests().appConfigUpdate(...args),
+          agentApp: async (...args) => agentRequests().agentApp(...args),
+          threadList: async (...args) => agentRequests().threadList(...args),
+          mentionPending: async (...args) => agentRequests().mentionPending(...args),
+          mentionExecute: async (...args) => agentRequests().mentionExecute(...args),
+          mentionDelivery: async (...args) => agentRequests().mentionDelivery(...args),
           issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),
           // Every proxy route must reach the runtime here: an unwired handler is a 404 for the
           // Agent's CLI, so a new `AgentProxyRuntime` member fails to compile until it is added.

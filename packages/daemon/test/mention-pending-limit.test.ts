@@ -65,3 +65,43 @@ test("the HTTP transport sends the limit to the server, and none when the CLI se
   await client.requestMentionPending!({ ...keys, request: {} });
   expect(urls).toEqual([`${keys.url}?limit=7`, keys.url]);
 });
+
+test("the proxy forwards thread list to the runtime and the HTTP transport GETs the threads route", async () => {
+  const requests: unknown[] = [];
+  const response = { ok: true as const, threads: [] };
+  const proxy = startAgentProxy({
+    runtime: {
+      agentMessage: async () => ({}),
+      issueAgentContext: (agentId: string) => agentId,
+      threadList: async (context, request) => {
+        requests.push({ context, request });
+        return response;
+      },
+    },
+  });
+  proxies.push(proxy);
+  const token = proxy.issue("agent-a", `sk_agent_${"a".repeat(43)}`);
+  const answered = await fetch(
+    proxy.url.replace(agentApiRoutes.proxy.messages.path, agentApiRoutes.proxy.threadList.path),
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  expect(answered.status).toBe(200);
+  expect(await answered.json()).toEqual(response);
+  expect(requests).toEqual([{ context: "agent-a", request: {} }]);
+
+  const calls: Array<{ url: string; method?: string }> = [];
+  const client = createAgentMessageHttpClient(async (input, init) => {
+    calls.push({ url: String(input), method: init?.method });
+    return Response.json(response);
+  });
+  const url = "https://server.example/api/agent/v1/threads";
+  expect(
+    await client.requestThreadList!({
+      url,
+      agentApiKey: `sk_agent_${"a".repeat(43)}`,
+      daemonApiKey: "daemon-token",
+      request: {},
+    }),
+  ).toEqual(response);
+  expect(calls).toEqual([{ url, method: "GET" }]);
+});

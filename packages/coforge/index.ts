@@ -50,6 +50,7 @@ import {
   type AgentMentionExecuteRequest,
   type AgentMentionExecuteResponse,
   type AgentMentionPendingResponse,
+  type AgentThreadListResponse,
   type AgentMentionDeliveryResponse,
   type GitHubCredentialResponse,
 } from "@lrm/coforge-sdk/agent";
@@ -129,8 +130,9 @@ import {
   type MentionPendingInvocation,
 } from "#src/mention-pending";
 import { formatInboxCheck } from "#src/inbox-format";
-import { setChannelMuted, unfollowThread } from "#src/attention-format";
+import { runAttention } from "#src/attention-format";
 import {
+  isAttentionInvocation,
   parseAttentionArgs,
   type ChannelInvocation,
   type InboxInvocation,
@@ -302,6 +304,7 @@ export type MessageTransport = {
     request: ReminderTransportRequest,
   ): Promise<AgentReminderOperationResponse | LocalReminderReceiptResponse>;
   setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
+  threadList?(): Promise<AgentThreadListResponse>;
   channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;
   task?(command: TaskCommand): Promise<TaskResult>;
   workspaceInfo?(): Promise<WorkspaceInfoResult>;
@@ -596,7 +599,7 @@ export function parseArgs(
     }
   }
   throw new Error(
-    "Usage: coforge channel mute|unmute [<target>] | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread unfollow --target '#channel:message-id' [--reason <text>] | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] [--cursor <cursor>] | coforge message read --target @user [--unread] | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--limit <n>] [--offset <n>] [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--limit <n>] [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json] | coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json] | coforge app list [--all] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
+    "Usage: coforge channel mute|unmute [<target>] | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread list | coforge thread unfollow --target '#channel:message-id' [--reason <text>] | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] [--cursor <cursor>] | coforge message read --target @user [--unread] | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--limit <n>] [--offset <n>] [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--limit <n>] [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json] | coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json] | coforge app list [--all] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
   );
 }
 
@@ -1178,8 +1181,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     const shortId = result.messageId.slice(0, 13);
     return `Action card posted to ${invocation.target} as message ${result.messageId} (short ${shortId}). The human can click the action verb to commit.`;
   }
-  if (invocation.command === "mute" || invocation.command === "unmute")
-    return setChannelMuted(transport.setChannelMuted?.bind(transport), invocation);
+  if (isAttentionInvocation(invocation)) return runAttention(transport, invocation);
   if (invocation.command === "channel-manage") {
     if (!transport.channel) throw new Error("Channel management transport is unavailable");
     const { channel } = invocation;
@@ -1213,8 +1215,6 @@ export async function run(args: readonly string[], transport: MessageTransport):
       }
     }
   }
-  if (invocation.command === "thread-unfollow")
-    return unfollowThread(transport.setThreadFollowed?.bind(transport), invocation);
   if (invocation.command === "inbox-check") {
     if (!transport.inboxCheck) throw new Error("App Inbox transport is unavailable");
     return formatInboxCheck(await transport.inboxCheck(), invocation.json === true);

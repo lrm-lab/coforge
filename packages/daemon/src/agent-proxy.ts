@@ -43,13 +43,13 @@ import {
   type AgentAppConfigGetRequest,
   type AgentAppConfigResponse,
   type AgentAppConfigUpdateRequest,
-  decodeAgentAppConfigPatch,
   decodeAgentAppRegistrationRequest,
   decodeAgentAppTokenBody,
   type AgentAppRequest,
   type AgentMentionExecuteRequest,
   type AgentMentionExecuteResponse,
   type AgentMentionPendingRequest,
+  type AgentThreadListResponse,
   type AgentMentionPendingResponse,
   type AgentMentionDeliveryRequest,
   type AgentMentionDeliveryResponse,
@@ -63,6 +63,8 @@ import {
   parseGithubCredentialRequest,
   parseMentionExecuteFields,
   parseProfileUpdateFields,
+  decodePathParam,
+  parseAppConfigUpdate,
   parseInboxRequest,
   parseMentionPendingLimit,
   parseSearchPosition,
@@ -188,6 +190,11 @@ export type AgentProxyRuntime = {
   ): Promise<AgentAppConfigResponse>;
   /** `coforge app list|token`: forwarded as it is, the cloud's response answered as it came. */
   agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
+  threadList?(
+    context: string,
+    request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<AgentThreadListResponse>;
   mentionPending?(
     context: string,
     request: AgentMentionPendingRequest,
@@ -410,33 +417,10 @@ async function readJsonBody(
   }
 }
 
-/** Decodes a required path param; an undecodable or empty one is a `400`. */
-function decodePathParam(param: string): string | Response {
-  try {
-    return decodeURIComponent(param) || badRequest();
-  } catch {
-    return badRequest();
-  }
-}
-
 /** A family that names the payload's `operation`, e.g. `agent-api/channel-info`. */
 function operationFamily(prefix: string, fallback: string) {
   return (fields: JsonObject) =>
     `${prefix}${typeof fields.operation === "string" ? fields.operation : fallback}`;
-}
-
-/** The SDK's patch shape plus the key the CLI names its request with; whether each key and value
- * belongs to the App is the cloud's answer. */
-function parseAppConfigUpdate(
-  param: string,
-  fields: JsonObject,
-): AgentAppConfigUpdateRequest | Response {
-  const appId = decodePathParam(param);
-  if (appId instanceof Response) return appId;
-  const change = decodeAgentAppConfigPatch(fields);
-  const { idempotencyKey } = fields;
-  if (!change || typeof idempotencyKey !== "string" || !idempotencyKey) return badRequest();
-  return { appId, ...change, idempotencyKey };
 }
 
 function parseMessageRequest(
@@ -681,6 +665,14 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     handler: "agentApp",
     parse: ({ fields }) => decodeAgentAppRegistrationRequest(fields) ?? badRequest(),
     respond: forwardResponse,
+  }),
+  defineRoute({
+    family: "agent-api/thread-list",
+    method: LOCAL_PROXY_ROUTES.threadList.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.threadList.path),
+    body: "none",
+    handler: "threadList",
+    parse: () => ({}),
   }),
   defineRoute({
     family: "agent-api/mention-pending",

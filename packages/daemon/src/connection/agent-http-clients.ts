@@ -1,13 +1,11 @@
+import type { AgentMessageTransportResponse } from "./agent-message-adapters";
 import type {
-  AgentHistoryConsumptionScope,
   AgentHistoryResponse,
   AgentSearchResponse,
-  AgentSendCommittedResponse,
   AgentSendDecisionResponse,
   AgentSendReconciliationResponse,
   AgentResolveResponse,
   AgentReactionResponse,
-  AgentMessage,
   AgentEventsResponse,
   AgentChannelAttentionResponse,
   AgentThreadAttentionResponse,
@@ -38,6 +36,7 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentMentionDeliveryErrorCode,
   AgentMentionDeliveryRequest,
@@ -54,7 +53,6 @@ import type {
   WeeklyReportResponse,
   ChannelCommand,
   AgentMessageRequest,
-  LocalSearchPaging,
   WorkspaceInfoRequest,
   WorkspaceInfoResponse,
   AgentReminderOperationRequest,
@@ -142,6 +140,9 @@ export interface AgentMessageHttpClient {
   requestMentionPending?(
     input: AgentHttpInput<AgentMentionPendingRequest>,
   ): Promise<AgentMentionPendingResponse>;
+  requestThreadList?(
+    input: AgentHttpInput<Record<string, never>>,
+  ): Promise<AgentThreadListResponse>;
   requestMentionExecute?(
     input: AgentHttpInput<AgentMentionExecuteRequest>,
   ): Promise<AgentMentionExecuteResponse>;
@@ -163,47 +164,7 @@ export type AgentSendReconciliationRequest = Pick<
   "idempotencyKey" | "agentId" | "workspaceId" | "target"
 >;
 
-export type AgentMessageTransportResponse = LocalSearchPaging & {
-  idempotencyKey: string;
-  accepted: boolean;
-  attentionCount: number;
-  messageId?: string;
-  messages: AgentMessage[];
-  /** `send` only: the send contract (state/decision/reason/counts); `committed` is a send whose
-   * lost answer reconciliation confirmed. */
-  state?: AgentSendDecisionResponse["state"] | AgentSendCommittedResponse["state"];
-  decision?: AgentSendDecisionResponse["decision"];
-  reason?: string;
-  producerFactId?: string;
-  availableActions?: string[];
-  continueAnywaySuggested?: boolean;
-  newMessageCount?: number;
-  shownMessageCount?: number;
-  omittedMessageCount?: number;
-  hasOlder?: boolean;
-  hasNewer?: boolean;
-  olderCursor?: string;
-  newerCursor?: string;
-  /** `read` only: the server's contiguous model-seen boundary (`model_seen_up_to_seq`); `null`
-   * when the page does not join what the Agent had read. */
-  modelSeenUpToSeq?: number | null;
-  unreadCursorBefore?: number;
-  readPositionAfter?: number;
-  moreUnread?: boolean;
-  /** `read` only: the conversation the read consumed (`consumption_scope`). */
-  consumptionScope?: AgentHistoryConsumptionScope;
-  freshnessContextMode?: "inline" | "withheld";
-  withheldMessageCount?: number;
-  /** `send` only: `seenUpToSeq` — on a held response, the frontier the notice presented; on a
-   * sent one, the boundary the server advanced over messages the Agent had already seen. Either
-   * is what the daemon records as consumed. */
-  seenUpToSeq?: number;
-  /** `send` only: pending messages a bypassed hold chose not to review; empty otherwise. */
-  recentUnread?: AgentMessage[];
-  /** `send` only: the mentions a sent message did not deliver, as the server reported them. */
-  pendingMentionActions?: AgentSendDecisionResponse["pendingMentionActions"];
-  unresolvedMentionHandles?: string[];
-};
+export type { AgentMessageTransportResponse };
 
 export interface AgentTaskHttpClient {
   execute(input: AgentHttpInput<TaskRequest>): Promise<TaskResponse>;
@@ -443,6 +404,12 @@ export const createAgentMessageHttpClient = (
       httpClient,
       { ...keys, what: "agent mention pending", query: { limit: request.limit?.toString() } },
       mentionActionError,
+    ),
+  requestThreadList: ({ request: _request, ...keys }) =>
+    getAgentEnvelopeJson<AgentThreadListResponse>(
+      httpClient,
+      { ...keys, what: "agent thread list", query: {} },
+      (_errorCode, message) => new Error(message),
     ),
   requestMentionExecute: ({ request, ...keys }) =>
     postAgentEnvelopeJson<AgentMentionExecuteResponse>(

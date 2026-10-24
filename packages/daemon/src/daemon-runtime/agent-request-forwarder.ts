@@ -14,6 +14,7 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentProfileShowRequest,
   AgentProfileShowResponse,
@@ -53,6 +54,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentApp"
     | "agentMemoryDisposition"
     | "agentOpenviking"
+    | "threadList"
     | "mentionPending"
     | "mentionExecute"
     | "mentionDelivery"
@@ -251,6 +253,18 @@ export class AgentRequestForwarder {
   ): Promise<unknown> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("agentOpenviking", NOT_CONNECTED)(command, agentApiKey);
+  }
+
+  async threadList(
+    context: string,
+    _request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<AgentThreadListResponse> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall(
+      "threadList",
+      "Agent thread endpoint is not configured",
+    )(agentApiKey);
   }
 
   async mentionPending(

@@ -3,7 +3,9 @@ import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/intern
 
 export type InboxInvocation = { command: "inbox-check"; json?: boolean };
 export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
-export type ThreadInvocation = { command: "thread-unfollow"; target: string; reason?: string };
+export type ThreadInvocation =
+  | { command: "thread-unfollow"; target: string; reason?: string }
+  | { command: "thread-list" };
 
 const CHANNEL_TARGET = /^#[a-z0-9][a-z0-9_-]{0,31}$/;
 const THREAD_TARGET = new RegExp(
@@ -74,9 +76,22 @@ export function parseAttentionArgs(
   if (args[0] === "channel" && (args[1] === "mute" || args[1] === "unmute"))
     return { command: args[1], target: parseMuteTarget(args.slice(2), args[1]) };
   if (args[0] === "thread" && args[1] === "unfollow") return parseUnfollowArgs(args.slice(2));
+  if (args[0] === "thread" && args[1] === "list") {
+    if (args.length > 2) throw new Error("Usage: coforge thread list");
+    return { command: "thread-list" };
+  }
   if (args[0] === "inbox" && args[1] === "check") {
     if (args.length === 2) return { command: "inbox-check" };
     if (args.length === 3 && args[2] === "--json") return { command: "inbox-check", json: true };
   }
   return undefined;
+}
+
+/** A command that changes or lists what reaches the Agent, run by `runAttention`. */
+export type AttentionInvocation = ChannelInvocation | ThreadInvocation;
+
+export function isAttentionInvocation(invocation: {
+  command: string;
+}): invocation is AttentionInvocation {
+  return ["mute", "unmute", "thread-unfollow", "thread-list"].includes(invocation.command);
 }

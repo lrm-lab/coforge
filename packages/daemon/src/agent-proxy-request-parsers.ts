@@ -11,6 +11,8 @@ import {
   isAgentMentionActionKind,
   type AgentMentionExecuteRequest,
   type AgentMentionPendingRequest,
+  type AgentAppConfigUpdateRequest,
+  decodeAgentAppConfigPatch,
   type AgentProfileUpdateRequest,
   type GitHubCommitTrailersRequest,
   type GitHubCredentialRequest,
@@ -83,6 +85,29 @@ export function parseSearchPosition(payload: JsonObject) {
 }
 
 /** `mention pending`'s optional `limit`: an integer from 1 to the server's maximum page. */
+/** Decodes a required path param; an undecodable or empty one is a `400`. */
+export function decodePathParam(param: string): string | Response {
+  try {
+    return decodeURIComponent(param) || badRequest();
+  } catch {
+    return badRequest();
+  }
+}
+
+/** The SDK's patch shape plus the key the CLI names its request with; whether each key and value
+ * belongs to the App is the cloud's answer. */
+export function parseAppConfigUpdate(
+  param: string,
+  fields: JsonObject,
+): AgentAppConfigUpdateRequest | Response {
+  const appId = decodePathParam(param);
+  if (appId instanceof Response) return appId;
+  const change = decodeAgentAppConfigPatch(fields);
+  const { idempotencyKey } = fields;
+  if (!change || typeof idempotencyKey !== "string" || !idempotencyKey) return badRequest();
+  return { appId, ...change, idempotencyKey };
+}
+
 export function parseMentionPendingLimit(
   raw: string | null,
 ): AgentMentionPendingRequest | Response {

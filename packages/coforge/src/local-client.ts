@@ -42,8 +42,8 @@ import {
   decodeGitHubCommitTrailersResponse,
   decodeAgentMentionExecuteResponse,
   decodeAgentMentionPendingResponse,
-  decodeAgentMentionDeliveryErrorResponse,
-  decodeAgentMentionDeliveryResponse,
+  decodeAgentThreadListResponse,
+  type AgentThreadListResponse,
   type ActionCardAction,
   type AgentMentionDeliveryResponse,
   type AgentMentionExecuteRequest,
@@ -72,7 +72,7 @@ import {
   preIssuanceError,
   requireProxySetup,
 } from "./proxy-request";
-import { mentionActionRequest } from "./mention-request";
+import { mentionActionRequest, mentionDeliveryRequest } from "./mention-request";
 
 /** The local daemon proxy's JSON error contract (`AgentProxyFailureBody` in the SDK). A few proxy
  * refusals decided before a request is parsed (`unauthorized`, `not found`, `bad request`, …) are
@@ -281,62 +281,6 @@ async function versionRequest(
     throw proxyHttpFailure("version", response.status, errorBody, undefined);
   }
   return decodeAgentVersionResponse(await response.json().catch(() => undefined));
-}
-
-/** A mention delivery failure that is not the server's own answer; `MENTION_DELIVERY_FAILED` is
- * already the code of a send whose @mentions reached no one. */
-const MENTION_DELIVERY_LOOKUP_FAILED = "MENTION_DELIVERY_LOOKUP_FAILED";
-
-/**
- * Mention delivery through the local Proxy. The server's own answers keep their code
- * (`MESSAGE_NOT_FOUND`, `AMBIGUOUS_MESSAGE_ID`); a 5xx is `SERVER_5XX`, and any other refusal is
- * `MENTION_DELIVERY_LOOKUP_FAILED` with the Proxy's text. The lookup is a read, so a network
- * failure or a 5xx is retryable.
- */
-async function mentionDeliveryRequest(
-  proxyEndpoint: (path: string) => URL,
-  context: string,
-  proxyUrl: string,
-  messageId: string,
-): Promise<AgentMentionDeliveryResponse> {
-  requireProxySetup("mention-delivery", context, proxyUrl);
-  const route = agentApiRoutes.local.mentionDeliveries;
-  let response: Response;
-  try {
-    response = await fetch(proxyEndpoint(route.path(messageId)), {
-      method: route.method,
-      headers: { authorization: `Bearer ${context}` },
-      signal: AbortSignal.timeout(OPERATION_DEADLINE_MS),
-    });
-  } catch {
-    throw new CliError({
-      code: MENTION_DELIVERY_LOOKUP_FAILED,
-      message: "agent proxy request failed (network or timeout)",
-      retryable: true,
-    });
-  }
-  if (response.ok) return decodeAgentMentionDeliveryResponse(await response.json());
-  const text = await response.text().catch(() => "");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    // A bare-text Proxy error (e.g. "bad request"): its text is the message.
-  }
-  const envelope = decodeAgentMentionDeliveryErrorResponse(parsed);
-  const proxyError = (parsed as { error?: unknown } | undefined)?.error;
-  const serverFailure = response.status >= 500;
-  throw new CliError({
-    code: envelope
-      ? envelope.errorCode.toUpperCase()
-      : serverFailure
-        ? "SERVER_5XX"
-        : MENTION_DELIVERY_LOOKUP_FAILED,
-    message:
-      (envelope?.error ?? (typeof proxyError === "string" ? proxyError : text)) ||
-      `HTTP ${response.status}`,
-    retryable: !envelope && serverFailure,
-  });
 }
 
 export function connectLocal(
@@ -605,6 +549,16 @@ export function connectLocal(
         decodeAgentAppConfigResponse,
         decodeAgentAppConfigErrorResponse,
         "app-config",
+      ),
+    threadList: (): Promise<AgentThreadListResponse> =>
+      envelopeRequest(
+        proxyEndpoint,
+        context,
+        proxyUrl,
+        agentApiRoutes.local.threadList,
+        decodeAgentThreadListResponse,
+        () => undefined,
+        "thread-list",
       ),
     mentionPending: (limit?: number): Promise<AgentMentionPendingResponse> =>
       mentionActionRequest(

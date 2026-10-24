@@ -76,6 +76,7 @@ import { Route as ApiAgentV1OpenvikingRouteImport } from './routes/api/agent/v1/
 import { Route as ApiAgentV1ProfileRouteImport } from './routes/api/agent/v1/profile'
 import { Route as ApiAgentV1RemindersRouteImport } from './routes/api/agent/v1/reminders'
 import { Route as ApiAgentV1TasksRouteImport } from './routes/api/agent/v1/tasks'
+import { Route as ApiAgentV1ThreadsRouteImport } from './routes/api/agent/v1/threads'
 import { Route as ApiAgentV1WeeklyReportCollectRouteImport } from './routes/api/agent/v1/weekly-report-collect'
 import { Route as ApiAgentV1WeeklyReportKeyPointsRouteImport } from './routes/api/agent/v1/weekly-report-key-points'
 import { Route as ApiAgentV1WeeklyReportMemoryRouteImport } from './routes/api/agent/v1/weekly-report-memory'
@@ -504,6 +505,11 @@ const ApiAgentV1RemindersRoute = ApiAgentV1RemindersRouteImport.update({
 const ApiAgentV1TasksRoute = ApiAgentV1TasksRouteImport.update({
   id: '/api/agent/v1/tasks',
   path: '/api/agent/v1/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1ThreadsRoute = ApiAgentV1ThreadsRouteImport.update({
+  id: '/api/agent/v1/threads',
+  path: '/api/agent/v1/threads',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAgentV1WeeklyReportCollectRoute =
@@ -1050,6 +1056,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
   '/api/agent/v1/reminders': typeof ApiAgentV1RemindersRoute
   '/api/agent/v1/tasks': typeof ApiAgentV1TasksRoute
+  '/api/agent/v1/threads': typeof ApiAgentV1ThreadsRoute
   '/api/agent/v1/weekly-report-collect': typeof ApiAgentV1WeeklyReportCollectRoute
   '/api/agent/v1/weekly-report-key-points': typeof ApiAgentV1WeeklyReportKeyPointsRoute
   '/api/agent/v1/weekly-report-memory': typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -1197,6 +1204,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
   '/api/agent/v1/reminders': typeof ApiAgentV1RemindersRoute
   '/api/agent/v1/tasks': typeof ApiAgentV1TasksRoute
+  '/api/agent/v1/threads': typeof ApiAgentV1ThreadsRoute
   '/api/agent/v1/weekly-report-collect': typeof ApiAgentV1WeeklyReportCollectRoute
   '/api/agent/v1/weekly-report-key-points': typeof ApiAgentV1WeeklyReportKeyPointsRoute
   '/api/agent/v1/weekly-report-memory': typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -1347,6 +1355,7 @@ export interface FileRoutesById {
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
   '/api/agent/v1/reminders': typeof ApiAgentV1RemindersRoute
   '/api/agent/v1/tasks': typeof ApiAgentV1TasksRoute
+  '/api/agent/v1/threads': typeof ApiAgentV1ThreadsRoute
   '/api/agent/v1/weekly-report-collect': typeof ApiAgentV1WeeklyReportCollectRoute
   '/api/agent/v1/weekly-report-key-points': typeof ApiAgentV1WeeklyReportKeyPointsRoute
   '/api/agent/v1/weekly-report-memory': typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -1497,6 +1506,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/profile'
     | '/api/agent/v1/reminders'
     | '/api/agent/v1/tasks'
+    | '/api/agent/v1/threads'
     | '/api/agent/v1/weekly-report-collect'
     | '/api/agent/v1/weekly-report-key-points'
     | '/api/agent/v1/weekly-report-memory'
@@ -1644,6 +1654,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/profile'
     | '/api/agent/v1/reminders'
     | '/api/agent/v1/tasks'
+    | '/api/agent/v1/threads'
     | '/api/agent/v1/weekly-report-collect'
     | '/api/agent/v1/weekly-report-key-points'
     | '/api/agent/v1/weekly-report-memory'
@@ -1793,6 +1804,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/profile'
     | '/api/agent/v1/reminders'
     | '/api/agent/v1/tasks'
+    | '/api/agent/v1/threads'
     | '/api/agent/v1/weekly-report-collect'
     | '/api/agent/v1/weekly-report-key-points'
     | '/api/agent/v1/weekly-report-memory'
@@ -1931,6 +1943,7 @@ export interface RootRouteChildren {
   ApiAgentV1ProfileRoute: typeof ApiAgentV1ProfileRoute
   ApiAgentV1RemindersRoute: typeof ApiAgentV1RemindersRoute
   ApiAgentV1TasksRoute: typeof ApiAgentV1TasksRoute
+  ApiAgentV1ThreadsRoute: typeof ApiAgentV1ThreadsRoute
   ApiAgentV1WeeklyReportCollectRoute: typeof ApiAgentV1WeeklyReportCollectRoute
   ApiAgentV1WeeklyReportKeyPointsRoute: typeof ApiAgentV1WeeklyReportKeyPointsRoute
   ApiAgentV1WeeklyReportMemoryRoute: typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -2458,6 +2471,13 @@ declare module '@tanstack/react-router' {
       path: '/api/agent/v1/tasks'
       fullPath: '/api/agent/v1/tasks'
       preLoaderRoute: typeof ApiAgentV1TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/threads': {
+      id: '/api/agent/v1/threads'
+      path: '/api/agent/v1/threads'
+      fullPath: '/api/agent/v1/threads'
+      preLoaderRoute: typeof ApiAgentV1ThreadsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent/v1/weekly-report-collect': {
@@ -3269,6 +3289,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1ProfileRoute: ApiAgentV1ProfileRoute,
   ApiAgentV1RemindersRoute: ApiAgentV1RemindersRoute,
   ApiAgentV1TasksRoute: ApiAgentV1TasksRoute,
+  ApiAgentV1ThreadsRoute: ApiAgentV1ThreadsRoute,
   ApiAgentV1WeeklyReportCollectRoute: ApiAgentV1WeeklyReportCollectRoute,
   ApiAgentV1WeeklyReportKeyPointsRoute: ApiAgentV1WeeklyReportKeyPointsRoute,
   ApiAgentV1WeeklyReportMemoryRoute: ApiAgentV1WeeklyReportMemoryRoute,
@@ -3356,13 +3377,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

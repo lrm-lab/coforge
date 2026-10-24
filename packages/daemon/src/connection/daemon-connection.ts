@@ -32,6 +32,7 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
   AgentMentionDeliveryResponse,
@@ -317,6 +318,7 @@ export interface DaemonConnectionClient {
     request: AgentAppConfigUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse>;
+  threadList?(agentApiKey: string): Promise<AgentThreadListResponse>;
   mentionPending?(
     request: AgentMentionPendingRequest,
     agentApiKey: string,
@@ -1318,11 +1320,11 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   async githubCredential(request: GitHubCredentialRequest, agentApiKey: string) {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("GitHub credential endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestGitHubCredential)
-      throw new Error("GitHub credential HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestGitHubCredential({
+    this.#requireAgentClient(
+      "GitHub credential",
+      this.agentMessageHttpClient.requestGitHubCredential,
+    );
+    return this.agentMessageHttpClient.requestGitHubCredential!({
       url: this.#serverEndpoint("GitHub credential", agentApiRoutes.cloud.githubCredentials.path),
       ...this.#agentKeys(agentApiKey),
       request,
@@ -1330,11 +1332,11 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   async githubCommitTrailers(request: GitHubCommitTrailersRequest, agentApiKey: string) {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("GitHub commit trailers endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestGitHubCommitTrailers)
-      throw new Error("GitHub commit trailers HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestGitHubCommitTrailers({
+    this.#requireAgentClient(
+      "GitHub commit trailers",
+      this.agentMessageHttpClient.requestGitHubCommitTrailers,
+    );
+    return this.agentMessageHttpClient.requestGitHubCommitTrailers!({
       url: this.#serverEndpoint(
         "GitHub commit trailers",
         agentApiRoutes.cloud.githubCommitTrailers.path,
@@ -1348,11 +1350,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentManualGetRequest,
     agentApiKey: string,
   ): Promise<AgentManualGetResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent Manual endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestManualGet)
-      throw new Error("Agent Manual HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestManualGet({
+    this.#requireAgentClient("Agent Manual", this.agentMessageHttpClient.requestManualGet);
+    return this.agentMessageHttpClient.requestManualGet!({
       url: this.#serverEndpoint("Agent manual get", agentApiRoutes.cloud.manual.get.path),
       ...this.#agentKeys(agentApiKey),
       request,
@@ -1363,11 +1362,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentManualSearchRequest,
     agentApiKey: string,
   ): Promise<AgentManualSearchResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent Manual endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestManualSearch)
-      throw new Error("Agent Manual HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestManualSearch({
+    this.#requireAgentClient("Agent Manual", this.agentMessageHttpClient.requestManualSearch);
+    return this.agentMessageHttpClient.requestManualSearch!({
       url: this.#serverEndpoint("Agent manual search", agentApiRoutes.cloud.manual.search.path),
       ...this.#agentKeys(agentApiKey),
       request,
@@ -1378,11 +1374,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentUserInfoRequest,
     agentApiKey: string,
   ): Promise<AgentUserInfoResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent user info endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestUserInfo)
-      throw new Error("Agent user info HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestUserInfo({
+    this.#requireAgentClient("Agent user info", this.agentMessageHttpClient.requestUserInfo);
+    return this.agentMessageHttpClient.requestUserInfo!({
       url: this.#serverEndpoint("Agent user info", agentApiRoutes.cloud.users.path(request.name)),
       ...this.#agentKeys(agentApiKey),
       request,
@@ -1393,11 +1386,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentProfileShowRequest,
     agentApiKey: string,
   ): Promise<AgentProfileShowResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent profile endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestProfileShow)
-      throw new Error("Agent profile HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestProfileShow({
+    this.#requireAgentClient("Agent profile", this.agentMessageHttpClient.requestProfileShow);
+    return this.agentMessageHttpClient.requestProfileShow!({
       url: this.#serverEndpoint("Agent profile show", agentApiRoutes.cloud.profile.get.path),
       ...this.#agentKeys(agentApiKey),
       request,
@@ -1408,11 +1398,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentProfileUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentProfileUpdateResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent profile endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestProfileUpdate)
-      throw new Error("Agent profile HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestProfileUpdate({
+    this.#requireAgentClient("Agent profile", this.agentMessageHttpClient.requestProfileUpdate);
+    return this.agentMessageHttpClient.requestProfileUpdate!({
       url: this.#serverEndpoint("Agent profile update", agentApiRoutes.cloud.profile.update.path),
       ...this.#agentKeys(agentApiKey),
       request,
@@ -1423,11 +1410,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentAppConfigGetRequest,
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent app config endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestAppConfigGet)
-      throw new Error("Agent app config HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestAppConfigGet({
+    this.#requireAgentClient("Agent app config", this.agentMessageHttpClient.requestAppConfigGet);
+    return this.agentMessageHttpClient.requestAppConfigGet!({
       url: this.#serverEndpoint(
         "Agent app config get",
         agentApiRoutes.cloud.appConfig.get.path(request.appId),
@@ -1441,11 +1425,11 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentAppConfigUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent app config endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestAppConfigUpdate)
-      throw new Error("Agent app config HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestAppConfigUpdate({
+    this.#requireAgentClient(
+      "Agent app config",
+      this.agentMessageHttpClient.requestAppConfigUpdate,
+    );
+    return this.agentMessageHttpClient.requestAppConfigUpdate!({
       url: this.#serverEndpoint(
         "Agent app config update",
         agentApiRoutes.cloud.appConfig.update.path(request.appId),
@@ -1455,17 +1439,30 @@ export class DaemonConnection implements DaemonConnectionClient {
     });
   }
 
-  #requireMentionClient(kind: "actions" | "delivery", client: unknown): void {
+  /** A forwarded Agent request needs a connected daemon and the HTTP client for its route. */
+  #requireAgentClient(label: string, client: unknown): void {
     if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error(`Agent mention ${kind} endpoint is not configured`);
-    if (!client) throw new Error(`Agent mention ${kind} HTTP client is unavailable`);
+      throw new Error(`${label} endpoint is not configured`);
+    if (!client) throw new Error(`${label} HTTP client is unavailable`);
+  }
+
+  async threadList(agentApiKey: string): Promise<AgentThreadListResponse> {
+    this.#requireAgentClient("Agent thread list", this.agentMessageHttpClient.requestThreadList);
+    return this.agentMessageHttpClient.requestThreadList!({
+      url: this.#serverEndpoint("Agent thread list", agentApiRoutes.cloud.threadList.path),
+      ...this.#agentKeys(agentApiKey),
+      request: {},
+    });
   }
 
   async mentionPending(
     request: AgentMentionPendingRequest,
     agentApiKey: string,
   ): Promise<AgentMentionPendingResponse> {
-    this.#requireMentionClient("actions", this.agentMessageHttpClient.requestMentionPending);
+    this.#requireAgentClient(
+      "Agent mention actions",
+      this.agentMessageHttpClient.requestMentionPending,
+    );
     return this.agentMessageHttpClient.requestMentionPending!({
       url: this.#serverEndpoint(
         "Agent mention pending",
@@ -1480,7 +1477,10 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentMentionExecuteRequest,
     agentApiKey: string,
   ): Promise<AgentMentionExecuteResponse> {
-    this.#requireMentionClient("actions", this.agentMessageHttpClient.requestMentionExecute);
+    this.#requireAgentClient(
+      "Agent mention actions",
+      this.agentMessageHttpClient.requestMentionExecute,
+    );
     return this.agentMessageHttpClient.requestMentionExecute!({
       url: this.#serverEndpoint(
         "Agent mention action",
@@ -1495,7 +1495,10 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentMentionDeliveryRequest,
     agentApiKey: string,
   ): Promise<AgentMentionDeliveryResponse> {
-    this.#requireMentionClient("delivery", this.agentMessageHttpClient.requestMentionDelivery);
+    this.#requireAgentClient(
+      "Agent mention delivery",
+      this.agentMessageHttpClient.requestMentionDelivery,
+    );
     return this.agentMessageHttpClient.requestMentionDelivery!({
       url: this.#serverEndpoint(
         "Agent mention delivery",
