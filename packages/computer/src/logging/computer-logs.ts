@@ -12,16 +12,26 @@ export type ComputerLogsOptions = {
 export async function followComputerLogs(input: ComputerLogsOptions): Promise<void> {
   const path = computerLogPath(input.dataDirectory);
   const sleep = input.sleep ?? Bun.sleep;
-  const signal = input.signal ?? createInterruptSignal();
   let offset = 0;
+  let foundLogFile = false;
 
   for (const suffix of [".5", ".4", ".3", ".2", ".1", ""] as const) {
     const content = await readIfPresent(`${path}${suffix}`);
-    if (content) writeLines(content, input.write);
+    if (content !== null) {
+      foundLogFile = true;
+      if (content) writeLines(content, input.write);
+    }
     // Follow from the snapshot we printed, so a concurrent append is not skipped.
     if (suffix === "") offset = content?.length ?? 0;
   }
 
+  if (!foundLogFile) {
+    throw new Error(
+      `No Computer log exists at ${path}. Start the service first (\`coforge-computer start\`).`,
+    );
+  }
+
+  const signal = input.signal ?? createInterruptSignal();
   while (!signal.aborted) {
     const content = await readIfPresent(path);
     if (content === null) {

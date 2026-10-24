@@ -6,6 +6,20 @@ import { tmpdir } from "node:os";
 import { computerLogPath } from "#src/logging/computer-logger";
 import { followComputerLogs } from "#src/logging/computer-logs";
 
+test("Computer logs fails with an actionable error when no log file exists", async () => {
+  const directory = join(tmpdir(), `coforge-computer-logs-${crypto.randomUUID()}`);
+  try {
+    await expect(
+      followComputerLogs({
+        dataDirectory: directory,
+        write: () => {},
+      }),
+    ).rejects.toThrow("No Computer log exists");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("Computer logs includes records appended while printing the initial active file", async () => {
   const directory = join(tmpdir(), `coforge-computer-logs-${crypto.randomUUID()}`);
   const path = computerLogPath(directory);
