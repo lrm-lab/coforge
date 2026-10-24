@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import type { CodeAgentProvider } from "#src/code-agent/contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { createPerTurnSession } from "#src/code-agent/per-turn/session";
 import { createCursorTurnProtocol } from "./turn-protocol";
 

@@ -15,7 +15,7 @@ import {
 import { DaemonRuntime } from "@lrm/coforge-daemon";
 import { InMemoryDaemonCredentialStore } from "@lrm/coforge-daemon";
 import { emptyCodeAgentDiscovery } from "@lrm/coforge-daemon/test/fixtures/code-agent-discovery";
-import { AgentSessionRecoveryError } from "@lrm/coforge-daemon/src/code-agent/contract";
+import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import {
   decodeAgentStartIntent,
   decodeAgentStopIntent,

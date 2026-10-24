@@ -7,9 +7,9 @@ import {
   truncateCodePointsWithEllipsis,
   type AgentActivityDetailKind,
 } from "@lrm/coforge-sdk/internal";
-import { createAgentActivity, redactTrajectoryText } from "#src/code-agent/agent-activity";
+import { createAgentActivity, redactTrajectoryText } from "@lrm/coforge-anvil";
 import { collapseWhitespace } from "./agent-instructions";
-import type { AgentRuntimeEvent } from "./contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 // `TOOL_ALIASES` (shared with the web tool row labels — see
 // `packages/coforge-sdk/src/internal/tool-display.ts`) resolves a provider's tool name

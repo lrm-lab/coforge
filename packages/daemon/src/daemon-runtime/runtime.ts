@@ -5,7 +5,7 @@ import {
   type AgentRuntimeEvent,
   type CodeAgentProvider,
   type UsageSnapshot,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import { mkdirSync } from "node:fs";
 import { readOperatingSystem } from "#src/platform/operating-system";
@@ -36,7 +36,7 @@ import {
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
-import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
+import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
 import {
   AgentProcessManager,
@@ -207,7 +207,7 @@ import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-stor
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { controlCodeField } from "./control-error-code";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
-import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode, diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);

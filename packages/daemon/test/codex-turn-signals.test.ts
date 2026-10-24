@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { scenarioProvider, waitForEvent } from "./codex-scenarios";
 
 let directory: string;

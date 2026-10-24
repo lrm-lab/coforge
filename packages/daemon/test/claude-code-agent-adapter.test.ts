@@ -12,7 +12,7 @@ import {
   AGENT_RUNTIME_EVENT_TYPE,
   type AgentRuntimeEvent,
   type AgentSession,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 import {
   backgroundBash,
@@ -117,7 +117,7 @@ test("Claude ends the tasks of a session it replaces with a fresh one", async ()
   try {
     await session.sendMessage("finish");
     await completed.promise;
-    // The old process's task never reports again, so the daemon must stop counting it.
+    // The old process's task never reports again, so the daemon must stop counting
     expect(
       events.flatMap((event) =>
         event.type === "subagent-progress" ? [[event.phase, event.taskId, event.taskStatus]] : [],

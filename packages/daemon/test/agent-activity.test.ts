@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createAgentActivity } from "#src/code-agent/agent-activity";
+import { createAgentActivity } from "@lrm/coforge-anvil";
 
 test("creates one provider-neutral activity shape for commands and diagnostics", () => {
   expect(

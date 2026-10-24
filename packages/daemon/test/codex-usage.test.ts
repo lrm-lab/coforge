@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { UsageUnavailableError, UsageUnsupportedError } from "#src/code-agent/contract";
+import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil";
 import { readCodexUsage } from "#src/code-agent/codex/usage";
 
 const fixture = new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname;

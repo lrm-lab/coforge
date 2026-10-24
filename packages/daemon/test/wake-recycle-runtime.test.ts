@@ -1,5 +1,5 @@
 import { expect, setSystemTime, test } from "bun:test";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { AgentStartIntent } from "@lrm/coforge-sdk/internal";
 import {
   COLD,

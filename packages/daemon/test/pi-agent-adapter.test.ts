@@ -9,13 +9,13 @@ import {
   RuntimeModelNotFoundError,
   type AgentRuntimeEvent,
   type AgentSession,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 
 /**
- * An embedded Pi session runs in-process and **the product does not bound it**: `@coforge/agent`
+ * An embedded Pi session runs in-process and **the product does not bound it**: `@coforge/age
  * exports exactly one timeout, `PI_MODEL_REFRESH_TIMEOUT_MS` (5s), and that bounds the model
  * refresh, not a session's turn. A healthy embedded-session test here takes 1.2-4.7s on an idle
  * host (measured), so it sits right on top of `bun:test`'s 5s default: on a busy host (this machine

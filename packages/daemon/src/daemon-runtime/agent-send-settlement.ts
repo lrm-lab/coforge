@@ -8,7 +8,7 @@ import {
 } from "#src/connection/agent-http-clients";
 import { AgentExplainedRefusalError } from "#src/connection/agent-explained-refusal-error";
 import { AgentTransportError } from "#src/connection/agent-transport-error";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { AgentSendVerdictError, type AgentSendVerdict } from "./agent-send-verdict";
 
 const logger = getLogger(["coforge", "daemon", "agent-message"]);

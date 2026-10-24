@@ -8,7 +8,7 @@ import type {
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import { LAUNCH_FAILURE_MAX_ATTEMPTS } from "#src/agent-runtime/launch-failure-backoff";
-import { RuntimeModelNotFoundError } from "#src/code-agent/contract";
+import { RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
 import { captureDaemonLogs } from "./log-capture";
 
 /** A scheduler that only records what `AgentControl` asked for, so a test drives every retry

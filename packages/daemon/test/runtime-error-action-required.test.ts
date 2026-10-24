@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentActivity, AgentStatus } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";

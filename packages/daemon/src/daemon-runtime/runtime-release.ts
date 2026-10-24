@@ -1,7 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import { AGENT_ACTIVITY_DETAIL_KIND, thrownMessage } from "@lrm/coforge-sdk/internal";
-import type { AgentSession } from "#src/code-agent/contract";
+import type { AgentSession } from "@lrm/coforge-anvil";
 import type { AgentRestartConfig, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
 import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";

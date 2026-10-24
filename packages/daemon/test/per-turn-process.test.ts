@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { TurnProcess, type TurnInput } from "#src/code-agent/per-turn/turn-process";
-import type {
-  OwnedChildProcess,
-  OwnedProcessTree,
-  ProcessTreeSpawner,
-} from "#src/platform/process-tree";
+import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 
 /** Records what the turn does to the child's stdin, in order, so a test can assert how the input
  * reaches it. */

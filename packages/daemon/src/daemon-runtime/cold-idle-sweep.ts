@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import { thrownMessage, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import type { CodeAgentProvider, SessionResumeFacts } from "#src/code-agent/contract";
+import type { CodeAgentProvider, SessionResumeFacts } from "@lrm/coforge-anvil";
 import {
   resolveWakeRecycleSweepMs,
   selectColdIdleStops,

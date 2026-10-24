@@ -3,7 +3,7 @@ import {
   type UsageOfficialBucket,
   type UsageSnapshot,
   type UsageWindow,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { claudeCliEnvironment, runClaudeCli as run } from "./process";

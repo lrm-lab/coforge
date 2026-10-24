@@ -10,7 +10,7 @@ import {
   ModelProviderSettingError,
   RuntimeModelNotFoundError,
   type CodeAgentProvider,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { evalMemoryOfferOnly } from "#src/code-agent/agent-instructions";
 import { AGENT_ACTIVITY_DETAIL_KIND, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";

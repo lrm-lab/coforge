@@ -18,7 +18,7 @@ import {
   logOpenCodeVersionUnsupported,
 } from "#src/code-agent/opencode/version";
 import { getLogger } from "@logtape/logtape";
-import type { CodeAgentProbe } from "./contract";
+import type { CodeAgentProbe } from "@lrm/coforge-anvil";
 import {
   externalCodeAgents,
   resolveExternalCodeAgentExecutable,
@@ -27,7 +27,7 @@ import {
 } from "./runtime-executable";
 import { VERSION_PROBE_TIMEOUT_MS } from "./version-gate";
 import { withDeadline } from "./deadline";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { CATALOG_DISCOVERY_TIMEOUT_MS, within } from "./catalog-discovery";
 import { initializeCodex } from "./codex/catalog";
 import {

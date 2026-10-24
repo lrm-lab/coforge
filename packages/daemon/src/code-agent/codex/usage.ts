@@ -3,8 +3,8 @@ import type {
   UsageOfficialGroup,
   UsageSnapshot,
   UsageWindow,
-} from "#src/code-agent/contract";
-import { UsageUnavailableError, UsageUnsupportedError } from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
+import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { asRecord } from "#src/code-agent/json-record";
 import { maskEmail } from "#src/code-agent/mask-email";

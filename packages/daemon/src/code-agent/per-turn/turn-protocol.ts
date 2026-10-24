@@ -1,5 +1,5 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { TurnInput, TurnRecord, TurnResult } from "./turn-process";
 
 /** What the session asks a provider to launch: one turn's input, and the session id known so far

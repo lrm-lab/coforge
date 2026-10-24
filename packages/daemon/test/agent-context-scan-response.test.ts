@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AgentContextReportTimeoutError } from "#src/code-agent/contract";
+import { AgentContextReportTimeoutError } from "@lrm/coforge-anvil";
 import {
   agentContextReportOutcome,
   agentContextScanFailure,

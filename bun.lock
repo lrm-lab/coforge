@@ -43,6 +43,7 @@
         "@fontsource-variable/noto-sans-sc": "^5.3.0",
         "@grpc/grpc-js": "1.14.6",
         "@lobehub/icons-static-svg": "^1.95.0",
+        "@lrm/coforge-anvil": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "@openfeature/core": "1.12.0",
         "@openfeature/flagd-core": "5.0.0",
@@ -275,6 +276,23 @@
         "typescript": "7.0.2",
       },
     },
+    "packages/anvil": {
+      "name": "@lrm/coforge-anvil",
+      "version": "0.1.0",
+      "dependencies": {
+        "@coforge/agent": "workspace:*",
+        "@lrm/coforge-sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.0",
+        "oxfmt": "0.65.0",
+        "oxlint": "1.80.0",
+        "typescript": "7.0.2",
+      },
+      "peerDependencies": {
+        "typescript": "^7",
+      },
+    },
     "packages/coforge": {
       "name": "@lrm/coforge",
       "version": "0.1.0",
@@ -337,6 +355,7 @@
         "@logtape/file": "2.3.2",
         "@logtape/logtape": "2.3.2",
         "@logtape/redaction": "2.3.2",
+        "@lrm/coforge-anvil": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "centrifuge": "5.2.1",
         "streamx": "2.28.1",
@@ -733,6 +752,8 @@
     "@logtape/redaction": ["@logtape/redaction@2.3.2", "", { "peerDependencies": { "@logtape/logtape": "^2.3.2" } }, "sha512-tLiLxtMm99oKP6g19+yBUmk54HawuVKh4xlW9lAPhyayjisnJ9gwjihxjqd6lo0Bf090/gQvI9eJ3MWSS8w+aw=="],
 
     "@lrm/coforge": ["@lrm/coforge@workspace:packages/coforge"],
+
+    "@lrm/coforge-anvil": ["@lrm/coforge-anvil@workspace:packages/anvil"],
 
     "@lrm/coforge-daemon": ["@lrm/coforge-daemon@workspace:packages/daemon"],
 

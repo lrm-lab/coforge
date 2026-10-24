@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import type { AgentSession } from "@coforge/agent";
 import { CursorProvider } from "#src/code-agent/cursor/provider";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { withDeadline } from "#src/code-agent/deadline";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 
@@ -27,7 +27,7 @@ async function readLaunches(
     .map((line) => JSON.parse(line));
 }
 
-/** Resolves once `session` has emitted its Nth `completed` event. Registered before the input
+/** Resolves once `session` has emitted its Nth `completed` event. Registered before the in
  * that triggers it so no event can be missed to a race. */
 function nthCompleted(
   session: { subscribe(listener: (event: AgentRuntimeEvent) => void): () => void },

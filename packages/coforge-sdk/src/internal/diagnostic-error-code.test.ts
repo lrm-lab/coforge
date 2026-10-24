@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { diagnosticErrorCode, diagnosticErrorName } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode, diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 
 class ProviderFailure extends Error {
   override name = "ProviderFailure";

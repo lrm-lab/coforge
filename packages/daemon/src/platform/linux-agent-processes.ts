@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import type { Logger } from "@logtape/logtape";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 /**
  * Reap this Workspace's detached Agent processes left behind by a previous daemon instance.

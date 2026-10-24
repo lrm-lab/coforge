@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
 import { isShellToolName } from "#src/code-agent/send-command-target";

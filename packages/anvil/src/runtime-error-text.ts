@@ -1,4 +1,4 @@
-import { redactCredentials } from "#src/platform/credential-redaction";
+import { redactCredentials } from "@lrm/coforge-sdk/internal";
 import { truncateCodePoints } from "@lrm/coforge-sdk/internal";
 
 /** The visible error-text cap shared by provider failures and daemon warning/activity formatting. */

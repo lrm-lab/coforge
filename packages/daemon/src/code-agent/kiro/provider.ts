@@ -7,7 +7,7 @@ import type {
   AgentRuntimeEvent,
   AgentSessionIdentity,
 } from "@coforge/agent";
-import type { CodeAgentProvider } from "#src/code-agent/contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import type {
   SessionNotification,
   SessionConfigOption,
@@ -15,8 +15,8 @@ import type {
 } from "@agentclientprotocol/sdk";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
-import { AgentSessionRecoveryError } from "#src/code-agent/contract";
-import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
+import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
+import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { bounded, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";
 import { kiroUpdateEvents } from "./update-events";

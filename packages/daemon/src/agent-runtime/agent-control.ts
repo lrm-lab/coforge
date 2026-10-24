@@ -7,8 +7,8 @@ import type {
   AgentWorkspaceResetRequest,
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
-import { AgentSessionRecoveryError } from "#src/code-agent/contract";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { launchFailureLogFields } from "./launch-failure";
 import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";

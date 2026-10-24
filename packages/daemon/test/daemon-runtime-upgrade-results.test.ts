@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
-import type { AgentSession } from "#src/code-agent/contract";
+import type { AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import {

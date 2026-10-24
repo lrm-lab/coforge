@@ -8,7 +8,7 @@ import {
   describeRecycledSession,
   resolveWakeRecycleConfig,
 } from "#src/agent-runtime/wake-session-recycle";
-import type { CodeAgentProvider } from "#src/code-agent/contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { runtimeDisplayName } from "./session-invalidate-activity";
 import { supportsSessionResume } from "./cold-idle-sweep";
 import {

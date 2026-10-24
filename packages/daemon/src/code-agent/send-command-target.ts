@@ -1,6 +1,6 @@
 import { TOOL_ALIASES } from "@lrm/coforge-sdk/internal";
 import { isReplyIntentTarget } from "@lrm/coforge-sdk/internal/reply-intent";
-import type { AgentRuntimeEvent } from "./contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { flagValue, resolveCoforgeInvocation } from "./tool-activity";
 
 /** Whether a provider's tool name is its shell tool, the one a command runs through. */

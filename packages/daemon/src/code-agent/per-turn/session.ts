@@ -1,5 +1,5 @@
 import type { AgentSession, AgentSessionIdentity, AgentSessionOptions } from "@coforge/agent";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { exitFailureMessage } from "#src/code-agent/exit-failure-message";
 import { InterruptTracker } from "#src/code-agent/interrupt-tracker";

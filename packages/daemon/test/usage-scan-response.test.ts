@@ -3,7 +3,7 @@ import {
   UsageUnavailableError,
   UsageUnsupportedError,
   type UsageSnapshot,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import {
   stampedUsage,
   usageScanFailure,

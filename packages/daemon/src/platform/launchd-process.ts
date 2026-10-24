@@ -11,7 +11,7 @@ import {
   stopLaunchdJobs,
 } from "./launchd-job";
 import { ProcessChannel } from "./process-channel";
-import type { OwnedProcessTree, ProcessTreeSpawner } from "./process-tree";
+import type { OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 import { RuntimeExecutableNotFoundError } from "./runtime-executable-not-found";
 
 /** Agent relay sockets stay outside the state tree: a socket path must fit macOS's 104 bytes. */

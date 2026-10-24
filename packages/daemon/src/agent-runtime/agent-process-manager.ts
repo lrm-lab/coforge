@@ -4,8 +4,8 @@ import {
   type ConversationSessionStore,
 } from "./memory-conversation-sessions";
 import type { AgentRuntimeConfig, AgentSession, AgentSessionOptions } from "@coforge/agent";
-import type { CodeAgentProviderFactory } from "#src/code-agent/contract";
-import { AgentProcessCleanupError } from "#src/code-agent/contract";
+import type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
+import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import { withDeadline } from "#src/code-agent/deadline";
 import {
   buildCoforgeAgentInstructions,
@@ -59,7 +59,7 @@ export type AgentProcessStartOptions = Pick<
   serverLaunch?: ServerLaunchIdentity;
 };
 
-export type { CodeAgentProviderFactory } from "#src/code-agent/contract";
+export type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
 /** Owns Agent availability and runtime processes for one supervised Workspace. */
 export class AgentProcessManager {
   readonly #createProvider: CodeAgentProviderFactory;

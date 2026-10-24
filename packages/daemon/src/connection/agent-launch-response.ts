@@ -1,6 +1,6 @@
 import { agentEnvironmentViolation } from "@lrm/coforge-sdk/internal";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
-import type { AgentRuntimeProviderConfig } from "#src/code-agent/contract";
+import type { AgentRuntimeProviderConfig } from "@lrm/coforge-anvil";
 
 /** Readers of the fields an Agent launch response carries: each refuses what is not exactly the
  * field's shape. */

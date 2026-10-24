@@ -1,11 +1,7 @@
 import { getLogger, type Logger } from "@logtape/logtape";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import {
-  ProcessTreeOwner,
-  type OwnedChildProcess,
-  type OwnedProcessTree,
-  type ProcessTreeSpawner,
-} from "#src/platform/process-tree";
+import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
+import { ProcessTreeOwner } from "#src/platform/process-tree";
 import { LineBuffer } from "#src/code-agent/line-buffer";
 import { cleanupOwnedTree } from "#src/code-agent/process-tree-cleanup";
 import { readStderrTail } from "#src/code-agent/stderr-tail";

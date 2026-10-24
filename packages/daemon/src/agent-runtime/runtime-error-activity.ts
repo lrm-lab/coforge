@@ -10,7 +10,7 @@ import {
   type ClassifiedRuntimeErrorAction,
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
-import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
+import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery";
 
 /**

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 
 const OPENCODE_FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;

@@ -24,7 +24,7 @@ import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
 } from "#src/persistence/agent-consumed-seq-store";
-import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 

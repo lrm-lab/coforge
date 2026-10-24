@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
-import type { CodeAgentProbe } from "./contract";
+import type { CodeAgentProbe } from "@lrm/coforge-anvil";
 
 export type ExternalCodeAgentProbe = CodeAgentProbe & {
   /** Provider-specific installer locations are outside PATH; production checks them on disk while

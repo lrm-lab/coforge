@@ -2,7 +2,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal";
 import { LaunchdJob, type LaunchdJobPlatform } from "./launchd-job";
-import { escapeXmlText } from "./xml-escape";
+import { escapeXmlText } from "@lrm/coforge-sdk/internal";
 import {
   removeFileQuietly,
   runSchtasks,

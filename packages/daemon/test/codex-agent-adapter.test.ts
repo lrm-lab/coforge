@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CodexProvider } from "#src/code-agent/codex/provider";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
@@ -112,7 +112,7 @@ test("Codex loads skills before running app-server behind the code-agent seam", 
     await session.sendMessage("finish");
     await waitForEvent(events, "completed");
     expect(events.filter((event) => event.type !== "session")).toEqual([
-      // turn/started opens a thinking run at once.
+      // turn/started opens a thinking run at on
       { type: "thinking-delta", text: "" },
       { type: "text-delta", text: "Codex response" },
       {

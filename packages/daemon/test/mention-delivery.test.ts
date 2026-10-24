@@ -9,7 +9,7 @@ import type {
   AgentRuntimeEvent,
   AgentSession,
   AgentSessionOptions,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { RUNNER_HOLD_REASONS } from "@lrm/coforge-sdk/internal";
@@ -18,7 +18,7 @@ import { MentionDeliveryTracker } from "#src/daemon-runtime/mention-delivery-tra
 import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
-// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
+// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());
 const workspaceRoot = join(tempRoot, `coforge-mention-delivery-${crypto.randomUUID()}`);
 const connection: WorkspaceConfig = {

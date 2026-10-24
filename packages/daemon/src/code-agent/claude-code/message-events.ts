@@ -1,5 +1,5 @@
 import type { ActivitySubagent } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { asRecord, eventTime, nonEmptyString, textContent } from "#src/code-agent/json-record";
 
 /**

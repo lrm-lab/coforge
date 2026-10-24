@@ -5,7 +5,7 @@ import type {
   AgentSessionOptions,
   UsageSnapshot,
 } from "@coforge/agent";
-import type { CodeAgentProvider } from "#src/code-agent/contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { CodexItemEvents } from "./item-events";
 import { rejectServerRequests } from "./server-requests";
 import { openCodexThread } from "./thread-open";

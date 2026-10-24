@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
-import type { AgentRuntimeConfig, AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeConfig, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import {
   RUNNER_HOLD_REASONS,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { ClaudeRateLimitState } from "#src/code-agent/claude-code/rate-limit";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { claudeEventFeed, claudeFixtureProvider } from "./fixtures/claude-feed";
 
 const NOW_MS = Date.parse("2026-10-20T12:00:00.000Z");

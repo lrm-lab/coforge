@@ -10,7 +10,7 @@ import {
   type MentionDeliveryTransitionOutcome,
 } from "@lrm/coforge-sdk/internal";
 import type { DeliveryHoldReason } from "./agent-delivery-queue";
-import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "mention-delivery"]);
 

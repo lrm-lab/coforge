@@ -4,9 +4,9 @@ import {
   thrownMessage,
   truncateCodePoints,
 } from "@lrm/coforge-sdk/internal";
-import { RuntimeModelNotFoundError } from "#src/code-agent/contract";
+import { RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
 import { fingerprintRuntimeError } from "./runtime-error-activity";
-import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
+import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { RUNTIME_ERROR_CLASS } from "./runtime-error-classification";
 
 /**

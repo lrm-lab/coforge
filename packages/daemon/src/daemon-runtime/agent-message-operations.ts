@@ -11,7 +11,7 @@ import {
 import type { AgentMessageTransportResponse } from "#src/connection/agent-http-clients";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
 import { AGENT_MESSAGE_DRAFT_TTL_MS } from "#src/persistence/agent-message-draft-store";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import {
   locallyHeldSend,

@@ -39,7 +39,7 @@ import {
   type AgentRuntimeEvent,
   type CodeAgentProvider,
   type AgentSession,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
@@ -93,7 +93,7 @@ function sessionSpy() {
   } satisfies AgentSession;
 }
 
-// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
+// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());
 /** This process's own root for the Agents' CLI temporary state (see `cli-temp-state.preload.ts`).
  * Without it the stores fall back to the machine-wide `tmpdir()` root, which this file clears

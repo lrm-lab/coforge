@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { AgentSession } from "@coforge/agent";
 import { OpenCodeProvider } from "#src/code-agent/opencode/provider";
 import { isOpenCodeVersionUnsupported } from "#src/code-agent/opencode/version";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import {
   RUNTIME_ERROR_CLASS,
   classifyRuntimeErrorText,
@@ -30,7 +30,7 @@ async function readLaunches(
     .map((line) => JSON.parse(line));
 }
 
-/** Resolves once `session` has emitted its Nth `completed` event. Registered before the input that
+/** Resolves once `session` has emitted its Nth `completed` event. Registered before the input t
  * triggers it so no event can be missed to a race. */
 function nthCompleted(
   session: { subscribe(listener: (event: AgentRuntimeEvent) => void): () => void },

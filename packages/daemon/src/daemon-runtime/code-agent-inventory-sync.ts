@@ -13,7 +13,7 @@ import {
 } from "#src/code-agent/runtime-inventory";
 import { hostCodeAgentProbe } from "#src/code-agent/runtime-probe";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 // Deliberately the runtime's category: these records predate this module and keep their routing.
 const logger = getLogger(["coforge", "daemon", "runtime"]);

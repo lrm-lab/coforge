@@ -6,7 +6,7 @@ import {
   type ActivitySubagent,
   type AgentActivityDetailKind,
 } from "@lrm/coforge-sdk/internal";
-import { createAgentActivity, redactTrajectoryText } from "#src/code-agent/agent-activity";
+import { createAgentActivity, redactTrajectoryText } from "@lrm/coforge-anvil";
 import { PHASE_BOUNDARY_EVENT_TYPES } from "./runtime-phases";
 
 /**

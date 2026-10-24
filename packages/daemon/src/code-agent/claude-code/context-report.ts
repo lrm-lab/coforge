@@ -1,5 +1,5 @@
 import { RUNTIME_PROVIDER, type AgentContextReport } from "@lrm/coforge-sdk/internal";
-import { AgentContextReportTimeoutError } from "#src/code-agent/contract";
+import { AgentContextReportTimeoutError } from "@lrm/coforge-anvil";
 import { claudeCliEnvironment, runClaudeCli } from "./process";
 
 /**

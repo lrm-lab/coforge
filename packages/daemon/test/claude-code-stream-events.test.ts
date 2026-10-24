@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { claudeStreamEvents, ClaudeStreamEvents } from "#src/code-agent/claude-code/stream-events";
 
 const timestamp = "2026-10-11T10:00:00.000Z";

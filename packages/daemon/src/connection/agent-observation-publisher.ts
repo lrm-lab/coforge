@@ -2,7 +2,7 @@ import type { CentrifugeWorkspaceClient } from "./daemon-connection";
 import type { AgentContextUsage, AgentServiceTier } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { encodeAgentContextUsage, encodeAgentServiceTier } from "@lrm/coforge-sdk/internal";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "connection"]);
 

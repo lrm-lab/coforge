@@ -12,11 +12,11 @@ import type {
   AgentControlScope,
   AgentStartIntent,
 } from "@lrm/coforge-sdk/internal";
-import { AgentSessionRecoveryError, AgentProcessCleanupError } from "#src/code-agent/contract";
+import { AgentSessionRecoveryError, AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import type { LaunchRetryScheduler } from "#src/agent-runtime/agent-control";
 import { captureDaemonLogs } from "./log-capture";
 
-/** Every test in this file that can fail a launch asserts on the operation's own outcome, so it
+/** Every test in this file that can fail a launch asserts on the operation's own outcome, so
  * arms no automatic retry; the retry behaviour has its own coverage in
  * agent-control-launch-retry.test.ts. */
 const inertRetryScheduler: LaunchRetryScheduler = {

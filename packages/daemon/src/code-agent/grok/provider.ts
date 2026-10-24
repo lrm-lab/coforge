@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
-import type { CodeAgentProvider } from "#src/code-agent/contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { ACP_TIMEOUT_MS, createGrokSession } from "./session";
 import { assertGrokVersionSupported } from "./version";
 import { readGrokUsage } from "./usage";

@@ -16,7 +16,7 @@ import type {
   AgentSessionOptions,
   CodeAgentProvider,
   SessionResumeFacts,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";

@@ -1,0 +1,32 @@
+{
+  "name": "@lrm/coforge-anvil",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "typecheck": "bun check",
+    "check": "oxfmt --check index.ts src test && oxlint src test index.ts && tsc --noEmit",
+    "test": "bun test",
+    "format": "oxfmt index.ts src test",
+    "build": "bun run typecheck"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "typescript": "7.0.2"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "version": "0.1.0",
+  "imports": {
+    "#src/*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@coforge/agent": "workspace:*",
+    "@lrm/coforge-sdk": "workspace:*"
+  },
+  "exports": {
+    ".": "./index.ts"
+  }
+}

@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { buildInitialMemoryMd } from "#src/agent-runtime/agent-memory-seed";
 import type { AgentSession, AgentRuntimeConfig, AgentSessionOptions } from "@coforge/agent";
-import type { CodeAgentProvider } from "#src/code-agent/contract";
-import { AgentProcessCleanupError } from "#src/code-agent/contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
+import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 
 function sessionSpy() {
   const exitListeners = new Set<() => void>();
@@ -123,7 +123,7 @@ describe("AgentProcessManager", () => {
       runtime: config,
       gitHooks: { kind: "config-hook" },
     });
-    // The commit trailer hook is probed once per launch, against the Agent's own PATH.
+    // The commit trailer hook is probed once per launch, against the Agent's own
     expect(probedPaths).toHaveLength(1);
     expect(probedPaths[0]).toBeTruthy();
     if (!startedOptions) throw new Error("provider was not started");

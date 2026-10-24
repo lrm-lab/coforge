@@ -9,7 +9,7 @@ import type {
   AgentRuntimeEvent,
   AgentSession,
   CodeAgentProvider,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
@@ -20,7 +20,7 @@ import { backgroundBash, claudeEventFeed, claudeFixtureProvider } from "./fixtur
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { activityHarness } from "./fixtures/activity-runtime";
 
-// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
+// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());
 const workspaceRoot = join(tempRoot, `coforge-activity-heartbeat-${crypto.randomUUID()}`);
 const connection: WorkspaceConfig = {

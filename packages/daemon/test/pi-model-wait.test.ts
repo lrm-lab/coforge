@@ -2,7 +2,7 @@ import { expect, jest, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 import { PiProvider } from "#src/code-agent/pi/provider";
 import { activityHarness } from "./fixtures/activity-runtime";
 import { AgentStartup } from "#src/agent-runtime/agent-startup";

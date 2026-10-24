@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readKiroUsage } from "#src/code-agent/kiro/usage";
-import { UsageUnavailableError } from "#src/code-agent/contract";
+import { UsageUnavailableError } from "@lrm/coforge-anvil";
 
 const directories: string[] = [];
 afterEach(async () => {

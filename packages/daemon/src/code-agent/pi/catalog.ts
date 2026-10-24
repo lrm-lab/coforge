@@ -13,7 +13,7 @@ import {
 } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { asRecord } from "#src/code-agent/json-record";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
   CATALOG_DISCOVERY_TIMEOUT_MS,
   catalogErrorMessage,

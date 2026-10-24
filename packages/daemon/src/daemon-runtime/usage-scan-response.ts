@@ -2,7 +2,7 @@ import {
   UsageUnavailableError,
   UsageUnsupportedError,
   type UsageSnapshot,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { type UsageScanResponse, utf8Encoder } from "@lrm/coforge-sdk/internal";
 
 /** A usage scan answer: accepted exactly when it carries a snapshot. */

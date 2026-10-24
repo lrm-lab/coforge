@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
-import type { AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 
 export const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 

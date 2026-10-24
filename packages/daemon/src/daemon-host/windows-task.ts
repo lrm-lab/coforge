@@ -4,7 +4,7 @@ import { COORDINATOR_SERVICE } from "./service-identity";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
-import { escapeXmlText } from "#src/platform/xml-escape";
+import { escapeXmlText } from "@lrm/coforge-sdk/internal";
 import {
   removeFileQuietly,
   runSchtasks,

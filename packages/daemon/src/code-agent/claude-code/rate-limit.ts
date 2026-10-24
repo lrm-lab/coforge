@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent, UsageSnapshot } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent, UsageSnapshot } from "@lrm/coforge-anvil";
 import { asRecord } from "#src/code-agent/json-record";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 

@@ -1,5 +1,5 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import type { SessionResumeFacts } from "#src/code-agent/contract";
+import type { SessionResumeFacts } from "@lrm/coforge-anvil";
 
 /**
  * Idle recycle of a long, cold native session, as the reference client does at wake

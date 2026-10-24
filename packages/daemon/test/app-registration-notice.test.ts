@@ -12,7 +12,7 @@ import {
 import { AgentAppInbox } from "#src/agent-app-inbox/agent-app-inbox";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import { APP_CLIENT_SECRET_TTL_MS } from "#src/agent-app-inbox/registry";
-import type { AgentRuntimeConfig } from "#src/code-agent/contract";
+import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import {
   DaemonConnection,
   type CentrifugeWorkspaceClient,

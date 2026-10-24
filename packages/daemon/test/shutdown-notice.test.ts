@@ -17,7 +17,7 @@ import {
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { SHUTDOWN_HOLD_REASON_WINDOW_MS } from "#src/daemon-runtime/shutdown-reason";
-import type { AgentRuntimeConfig, AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeConfig, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 

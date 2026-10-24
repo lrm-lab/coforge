@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 /** Claude Code's task lifecycle `system` subtypes, by the phase each reports. */
 export const TASK_LIFECYCLE_PHASE = new Map<

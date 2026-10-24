@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
 import { RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS } from "#src/agent-runtime/runtime-error-recovery";
-import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";

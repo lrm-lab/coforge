@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import {
   asRecord,
   eventTime,

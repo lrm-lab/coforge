@@ -6,7 +6,7 @@ import type {
   AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
-import { AgentSessionRecoveryError } from "#src/code-agent/contract";
+import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import { memoryConversationInstructions } from "#src/code-agent/agent-instructions";
 
 export interface ConversationSessionStore {

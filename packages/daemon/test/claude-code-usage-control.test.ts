@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readClaudeCodeUsage } from "#src/code-agent/claude-code/usage";
-import { UsageUnavailableError, UsageUnsupportedError } from "#src/code-agent/contract";
+import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil";
 
 const fixture = new URL("./fixtures/claude-usage-control.ts", import.meta.url).pathname;
 const scratch: string[] = [];

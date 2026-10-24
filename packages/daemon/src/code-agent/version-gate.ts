@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import { RuntimeVersionUnsupportedError } from "./contract";
+import { RuntimeVersionUnsupportedError } from "@lrm/coforge-anvil";
 import { withDeadline } from "./deadline";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);

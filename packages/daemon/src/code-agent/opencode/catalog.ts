@@ -4,7 +4,7 @@ import {
   type CodeAgentModelMetadata,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { runCatalogCommand } from "#src/code-agent/catalog-command";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "opencode"]);

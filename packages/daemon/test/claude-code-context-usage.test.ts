@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AGENT_RUNTIME_EVENT_TYPE, type AgentRuntimeEvent } from "#src/code-agent/contract";
+import { AGENT_RUNTIME_EVENT_TYPE, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import {
   claudeFixtureProvider,
   TEST_AGENT_INSTRUCTIONS,

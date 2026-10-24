@@ -1,9 +1,5 @@
-import {
-  ProcessTreeOwner,
-  type OwnedChildProcess,
-  type OwnedProcessTree,
-  type ProcessTreeSpawner,
-} from "#src/platform/process-tree";
+import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
+import { ProcessTreeOwner } from "#src/platform/process-tree";
 import { LineBuffer } from "./line-buffer";
 import { cleanupOwnedTree } from "./process-tree-cleanup";
 import { getLogger } from "@logtape/logtape";

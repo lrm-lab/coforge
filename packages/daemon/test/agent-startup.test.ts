@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
-import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "@lrm/coforge-anvil";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
-import { AgentSessionRecoveryError } from "#src/code-agent/contract";
+import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import {
   AGENT_STARTUP_TIMEOUT_MS,
   AgentStartup,

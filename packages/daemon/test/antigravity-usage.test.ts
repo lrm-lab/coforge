@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import { readAntigravityUsage } from "#src/code-agent/antigravity/usage";
-import { UsageUnavailableError, UsageUnsupportedError } from "#src/code-agent/contract";
+import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil";
 import { ANTIGRAVITY_USAGE_BUDGET_MS as USAGE_BUDGET_MS } from "./catalog-discovery-budget";
 
 const FIXTURE = new URL("./fixtures/antigravity-models-fixture.ts", import.meta.url).pathname;

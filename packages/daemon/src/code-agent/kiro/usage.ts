@@ -1,12 +1,8 @@
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join, isAbsolute } from "node:path";
-import type {
-  UsageOfficialBucket,
-  UsageOfficialGroup,
-  UsageSnapshot,
-} from "#src/code-agent/contract";
-import { UsageUnavailableError } from "#src/code-agent/contract";
+import type { UsageOfficialBucket, UsageOfficialGroup, UsageSnapshot } from "@lrm/coforge-anvil";
+import { UsageUnavailableError } from "@lrm/coforge-anvil";
 import { record } from "./connection";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 

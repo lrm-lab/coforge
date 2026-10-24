@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { readGrokUsage } from "#src/code-agent/grok/usage";
-import { UsageUnavailableError, UsageUnsupportedError } from "#src/code-agent/contract";
+import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil";
 
 const fixture = [process.execPath, join(import.meta.dir, "fixtures/grok-usage-fixture.ts")];
 const billing = (config: Record<string, unknown>) => ({ subscription_tier: "pro", config });

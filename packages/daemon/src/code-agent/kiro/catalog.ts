@@ -1,7 +1,7 @@
 import { RUNTIME_PROVIDER, type CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { agentEnvironment } from "#src/code-agent/environment";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { bounded, KiroConnection, record } from "./connection";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "kiro"]);

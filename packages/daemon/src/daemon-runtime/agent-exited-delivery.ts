@@ -1,7 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { AgentRestartConfig } from "#src/agent-runtime/agent-process-manager";
-import { diagnosticErrorName } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 

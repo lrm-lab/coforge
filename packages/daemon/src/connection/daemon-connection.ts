@@ -162,10 +162,10 @@ import {
   refusalText,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeProviderConfig } from "#src/code-agent/contract";
+import type { AgentRuntimeProviderConfig } from "@lrm/coforge-anvil";
 import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
 import { parseAgentLaunchIdentity } from "./agent-launch-identity";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,

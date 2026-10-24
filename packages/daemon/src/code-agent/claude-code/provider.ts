@@ -3,7 +3,7 @@ import {
   type UsageSnapshot,
   type AgentRuntimeEvent,
   type CodeAgentProvider,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { InterruptTracker } from "#src/code-agent/interrupt-tracker";
 import type { AgentSession, AgentSessionIdentity, AgentSessionOptions } from "@coforge/agent";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
@@ -125,7 +125,7 @@ class ClaudeCodeAgentSession implements AgentSession {
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   #state: "idle" | "running" | "interrupting" | "disposed" = "idle";
   #nativeTurnQueued = false;
-  /** Whether a top-level `result` has been seen. Set once and never reset: the fresh relaunch
+  /** Whether a top-level `result` has been seen. Set once and never reset: the fresh relau
    * (`#startFresh`) runs only before any progress, and a result is progress. */
   #resultObserved = false;
   #initialized = false;

@@ -119,6 +119,7 @@ test("documentation skips application checks, while shared and unknown inputs fa
   ).toEqual([]);
   const all = [
     "agent",
+    "anvil",
     "cdn-certs",
     "ci",
     "coforge",
@@ -263,6 +264,7 @@ test("deployment validates the exact Web track only when the image or deployment
 test("manual local publication always validates its complete track, regardless of changed files, without the separately released installer crate", () => {
   expect(selectChecks([], "local")).toEqual([
     "agent",
+    "anvil",
     "ci",
     "coforge",
     "coforge-sdk",
@@ -294,15 +296,29 @@ test("manual installer publication validates the installer crate and only the in
 
 test("workflow selection accepts NUL-delimited filenames and emits job and matrix outputs", async () => {
   const child = Bun.spawn([process.execPath, "scripts/ci/selection.ts", "changes"], {
-    stdin: new Blob(["apps/web/src/a\npage.tsx\0packages/coforge/src/cli.ts\0"]),
+    stdin: new Blob([
+      "apps/web/src/a\npage.tsx\0packages/coforge/src/cli.ts\0packages/anvil/src/index.ts\0",
+    ]),
     stdout: "pipe",
     stderr: "pipe",
   });
   const output = await new Response(child.stdout).text();
   expect(await child.exited).toBe(0);
-  expect(output).toContain('libraries=["coforge","coforge-sdk"]\n');
+  expect(output).toContain('libraries=["anvil","coforge","coforge-sdk"]\n');
   expect(output).toContain("contracts=[]\n");
   expect(output).toContain(
     'jobs=["changes","libraries","computer","daemon","macos-lifecycle","web","windows-release"]\n',
   );
+});
+
+test("Anvil source changes validate every product consumer", () => {
+  expect(selectChecks(["packages/anvil/src/contract.ts"], "changes")).toEqual([
+    "anvil",
+    "coforge-sdk",
+    "computer",
+    "daemon",
+    "macos-lifecycle",
+    "web",
+    "windows-release",
+  ]);
 });

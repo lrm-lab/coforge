@@ -6,13 +6,13 @@ import { join } from "node:path";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
 import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
 
 const FIXTURE = new URL("./fixtures/antigravity-fixture.ts", import.meta.url).pathname;
 const INSTRUCTIONS = "Standing Antigravity instructions.";
-/** Each test runs the session's version probe, then turns of the fake agy that may end through the
+/** Each test runs the session's version probe, then turns of the fake agy that may end through
  * process cleanup ladder. */
 const SESSION_BUDGET_MS = VERSION_PROBE_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
 

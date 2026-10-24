@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { controlledClaude } from "./fixtures/claude-feed";
 
 // Claude Code started with `--include-partial-messages` streams a tool call's arguments as

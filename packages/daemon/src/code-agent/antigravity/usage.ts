@@ -7,7 +7,7 @@ import {
   type UsageOfficialGroup,
   type UsageSnapshot,
   type UsageWindow,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { asRecord } from "#src/code-agent/json-record";
 import { withoutSshSessionVariables } from "./ssh-environment";
 

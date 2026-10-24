@@ -1,7 +1,7 @@
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { CodexProvider } from "#src/code-agent/codex/provider";
-import type { CodeAgentProvider } from "./contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { CursorProvider } from "#src/code-agent/cursor/provider";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
 import { KiroProvider } from "#src/code-agent/kiro/provider";

@@ -1,4 +1,4 @@
-import { redactCredentials } from "#src/platform/credential-redaction";
+import { redactCredentials } from "@lrm/coforge-sdk/internal";
 import {
   AgentTransportError,
   type AgentTransportFailureClass,

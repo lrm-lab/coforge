@@ -12,7 +12,7 @@ import {
 } from "#src/daemon-runtime/runtime";
 import { upgradeOperationsInConfig } from "#src/daemon-runtime/upgrade-result-reporter";
 import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
 import {
@@ -76,7 +76,7 @@ export type {
   AgentRuntimeEvent,
   CodeAgentProvider,
   CodeAgentProviderFactory,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 export { createCodeAgentProvider } from "#src/code-agent/registry";
 export { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 export { CodexProvider } from "#src/code-agent/codex/provider";
@@ -140,9 +140,9 @@ export { DaemonConfigStore } from "#src/persistence/daemon-config";
 export { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 export { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 export { AgentStateMachine } from "#src/agent-runtime/agent-state-machine";
-export { createAgentActivity } from "#src/code-agent/agent-activity";
+export { createAgentActivity } from "@lrm/coforge-anvil";
 export type { AgentRuntime, AgentStatus } from "#src/agent-runtime/agent-process-manager";
-export type { AgentActivity, AgentActivityLevel } from "#src/code-agent/agent-activity";
+export type { AgentActivity, AgentActivityLevel } from "@lrm/coforge-anvil";
 export type {
   AgentStateEvent,
   AgentStateTransition,

@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentSession } from "#src/code-agent/contract";
+import type { AgentSession } from "@lrm/coforge-anvil";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";

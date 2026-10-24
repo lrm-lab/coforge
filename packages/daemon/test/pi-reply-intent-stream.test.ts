@@ -2,7 +2,7 @@ import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentRuntimeEvent, AgentSession } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 import { PiProvider } from "#src/code-agent/pi/provider";
 
 // An embedded Pi session runs in-process; see pi-agent-adapter.test.ts for why its tests carry a

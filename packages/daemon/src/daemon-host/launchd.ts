@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "#src/platform/native-command";
 import { writePrivateFile } from "#src/platform/private-file";
-import { escapeXmlText } from "#src/platform/xml-escape";
+import { escapeXmlText } from "@lrm/coforge-sdk/internal";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
   DaemonLauncher,

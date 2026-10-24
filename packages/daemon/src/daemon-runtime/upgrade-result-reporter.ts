@@ -6,7 +6,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { launchFailureCooldownMs } from "#src/agent-runtime/launch-failure-backoff";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { scheduleUnrefTimer, type UnrefTimerSchedule } from "./unref-timer";
 
 const logger = getLogger(["coforge", "daemon", "runtime", "upgrade-result"]);

@@ -1,5 +1,5 @@
-import type { OwnedChildProcess, OwnedProcessTree } from "#src/platform/process-tree";
-import { AgentProcessCleanupError } from "./contract";
+import type { OwnedChildProcess, OwnedProcessTree } from "@lrm/coforge-anvil";
+import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 
 /** How long each rung of the cleanup ladder waits for the tree to exit. */
 export const PROCESS_TREE_EXIT_GRACE_MS = 5_000;

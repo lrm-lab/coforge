@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import type { CodeAgentProvider, SessionResumeFacts } from "#src/code-agent/contract";
+import type { CodeAgentProvider, SessionResumeFacts } from "@lrm/coforge-anvil";
 import {
   ColdIdleSweep,
   idleBlocker,

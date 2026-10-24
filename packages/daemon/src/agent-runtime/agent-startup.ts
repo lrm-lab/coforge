@@ -1,4 +1,4 @@
-import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "#src/code-agent/contract";
+import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 /** The first turn when no real Message or explicit resume prompt is available. Standing
  * instructions already live in the provider's native system/developer prompt. `memoryInContext`:

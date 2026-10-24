@@ -9,7 +9,7 @@ import type {
   AgentRuntimeEvent,
   AgentSession,
   AgentSessionOptions,
-} from "#src/code-agent/contract";
+} from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import {

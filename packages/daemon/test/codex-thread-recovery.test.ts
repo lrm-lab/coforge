@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { CodexProvider } from "#src/code-agent/codex/provider";
-import { AgentSessionRecoveryError } from "#src/code-agent/contract";
+import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import { scenarioProvider } from "./codex-scenarios";
 
 let directory: string;

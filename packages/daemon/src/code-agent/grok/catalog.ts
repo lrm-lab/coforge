@@ -4,7 +4,7 @@ import {
   type CodeAgentModelMetadata,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { withDeadline } from "#src/code-agent/deadline";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";

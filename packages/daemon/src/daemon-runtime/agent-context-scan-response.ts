@@ -1,4 +1,4 @@
-import { AgentContextReportTimeoutError } from "#src/code-agent/contract";
+import { AgentContextReportTimeoutError } from "@lrm/coforge-anvil";
 import {
   AGENT_CONTEXT_SCAN_STATUS,
   type AgentContextReport,

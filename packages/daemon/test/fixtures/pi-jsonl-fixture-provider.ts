@@ -4,7 +4,7 @@ import type {
   AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
-import type { CodeAgentProvider } from "#src/code-agent/contract";
+import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { prepareAgentSessionDirectory, resolveAgentSessionFile } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { join } from "node:path";

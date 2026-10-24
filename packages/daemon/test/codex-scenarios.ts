@@ -1,5 +1,5 @@
 import { CodexProvider } from "#src/code-agent/codex/provider";
-import type { AgentRuntimeEvent } from "#src/code-agent/contract";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 /** A provider on the scenarios fake app-server; `args` are its argv flags (`scenario=`, `log=`). */
 export function scenarioProvider(...args: string[]): CodexProvider {

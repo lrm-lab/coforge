@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import type { AgentActivity, RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeConfig } from "#src/code-agent/contract";
+import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import {
   buildRuntimeActionRequiredActivity,
   buildRuntimeBillingExhaustedActivity,
@@ -12,7 +12,7 @@ import {
   RUNTIME_ERROR_CLASS,
   type RuntimeErrorClassification,
 } from "#src/agent-runtime/runtime-error-classification";
-import { diagnosticErrorCode } from "#src/platform/diagnostic-error-code";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-publisher";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
