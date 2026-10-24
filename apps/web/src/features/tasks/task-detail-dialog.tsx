@@ -285,7 +285,7 @@ function TaskSection({
 
   return (
     // A phone keeps this fixed block short so the thread under it gets the screen: a two-line
-    // title, Status and Owner side by side without their labels, and the creator left to the
+    // title, Status and Owner side by side with their labels inline, and the creator left to the
     // History's "Created task" entry.
     <section className="flex flex-col gap-3 border-b border-secondary px-4 py-3 sm:gap-5 sm:px-6 sm:py-5">
       <h3 className="line-clamp-2 text-md font-semibold break-words text-primary sm:line-clamp-3 sm:text-lg">
@@ -348,8 +348,8 @@ function TaskSection({
   );
 }
 
-/** One field of the popup: its label above (read out only, on a phone), its value (or the control
- * that edits it) below. */
+/** One field of the popup: its label above its value (or the control that edits it), or to its
+ * left on a phone. */
 function TaskField({
   label,
   children,
@@ -360,8 +360,13 @@ function TaskField({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
-      <dt className="text-sm text-tertiary max-sm:sr-only">{label}</dt>
+    <div
+      className={cn(
+        "flex min-w-0 items-center gap-2 sm:flex-col sm:items-stretch sm:gap-1",
+        className,
+      )}
+    >
+      <dt className="shrink-0 text-xs text-tertiary sm:text-sm">{label}</dt>
       <dd className="flex min-h-8 min-w-0 items-center">{children}</dd>
     </div>
   );
