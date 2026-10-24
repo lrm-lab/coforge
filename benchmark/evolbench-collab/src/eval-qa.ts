@@ -33,7 +33,7 @@ export const MEMORY_PARALLEL_NOTE = [
   "Task Agent: Memory Agent is retrieving prior experience in this channel right now. Read the task and the",
   "reference files and plan first, but do NOT write any deliverable file until you have read Memory Agent's message:",
   "run `coforge message check --target '<this channel>'`; if nothing has arrived, `sleep 20` and check again, at most",
-  "8 times, then continue without it. When a Memory Hint arrives, call memory_disposition (adopt, reject or defer,",
+  '8 times, then continue without it. If Memory\'s message is cut off ("…(+N chars, read: …)"), run the `coforge message read` command it prints to get the full text. When a Memory Hint arrives, call memory_disposition (adopt, reject or defer,',
   "with a reason) before applying it, and apply the advice you adopted to the deliverable.",
 ].join(" ");
 
