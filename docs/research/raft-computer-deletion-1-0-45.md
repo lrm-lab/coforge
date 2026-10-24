@@ -1,5 +1,7 @@
 # Raft Computer 删除/解绑 Computer：1.0.45 对 CoForge 的参考
 
+> 本稿记录 1.0.45 证据和当时的 CoForge 实现快照。当前 Raft 版本及 CoForge 对照请先读 [1.0.52 对齐研究](raft-computer-1-0-52-alignment.md)；下面的“CoForge 当前实现”不是今天的状态。
+
 ## 证据范围
 
 - 本稿以官方 Raft Computer 1.0.45 darwin-arm64 产物为客户端依据。原始 bundle：`/private/tmp/raft-1.0.45.nHZbi2/raft-computer-1.0.45.cjs`，SHA-256 `5d1325c7bdbadb165caa418ae6ed71bad49883b401ca755b7ff3665430a3a32`；提取源码树：`/private/tmp/raft-computer-research-1.0.45/extracted`。

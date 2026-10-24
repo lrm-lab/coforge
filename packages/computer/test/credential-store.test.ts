@@ -78,3 +78,24 @@ test("credential store returns null when the current server has no login", async
 
   await expect(store.load("https://coforge.example")).resolves.toBeNull();
 });
+
+test("credential store removes one server credential without touching another server", async () => {
+  const directory = await scratchDirectory("coforge-credential-");
+  const store = new FileCredentialStore(directory);
+  await store.save("https://coforge.example", {
+    accessToken: "coforge-secret",
+    tokenType: "Bearer",
+  });
+  await store.save("https://staging.example", {
+    accessToken: "staging-secret",
+    tokenType: "Bearer",
+  });
+
+  await store.remove("https://coforge.example");
+
+  await expect(store.load("https://coforge.example")).resolves.toBeNull();
+  await expect(store.load("https://staging.example")).resolves.toEqual({
+    accessToken: "staging-secret",
+    tokenType: "Bearer",
+  });
+});

@@ -16,6 +16,10 @@ metadata. It prints the verification URL and user code, polls according to RFC
 without printing it, and saves the current server profile. Login does not query
 Workspaces, bind a Workspace, or start a Workspace Daemon.
 
+`coforge-computer logout` removes only this machine's local login credential for the compiled
+server. It keeps existing Workspace registrations and their Daemon state; running `setup` again
+can authenticate and use those bindings without creating a new local Computer identity.
+
 Official builds are bound to one environment: production uses `https://coforge.cn`, and staging
 uses `https://staging.coforge.cn`. Login and setup do not expose a `--server` override. If an
 existing profile names another environment, Computer fails before authentication, registration,

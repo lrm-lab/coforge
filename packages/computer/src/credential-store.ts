@@ -1,13 +1,13 @@
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 
-import type { Credential, CredentialStore } from "./login";
+import type { Credential, CredentialRemover, CredentialStore } from "./login";
 import { loginError } from "./errors";
 import { resolveComputerCredentialsDirectory } from "./paths";
 
 /** File-backed credentials rooted by COFORGE_COMPUTER_* environment variables. */
-export class FileCredentialStore implements CredentialStore {
+export class FileCredentialStore implements CredentialStore, CredentialRemover {
   constructor(
     private readonly directory = resolveComputerCredentialsDirectory({
       platform: process.platform,
@@ -30,6 +30,14 @@ export class FileCredentialStore implements CredentialStore {
       await chmod(temporaryPath, 0o600);
       await rename(temporaryPath, path);
       await chmod(path, 0o600);
+    } catch {
+      throw loginError("AUTH_CREDENTIAL_STORE_UNAVAILABLE", "The credential file is unavailable.");
+    }
+  }
+
+  async remove(serverUrl: string): Promise<void> {
+    try {
+      await rm(this.pathFor(serverUrl), { force: true });
     } catch {
       throw loginError("AUTH_CREDENTIAL_STORE_UNAVAILABLE", "The credential file is unavailable.");
     }

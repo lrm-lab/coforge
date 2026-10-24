@@ -21,6 +21,40 @@ export async function isWorkspaceMemberComputer(
   return Boolean(connection);
 }
 
+/** Removes an owner's local Computer from one Workspace while preserving its identity elsewhere. */
+export async function removeComputerFromWorkspace(
+  db: Pick<PrismaClient, "computer" | "$transaction">,
+  scope: { userId: string; workspaceId: string; computerId: string },
+  now: Date = new Date(),
+): Promise<void> {
+  const computer = await db.computer.findFirst({
+    where: {
+      id: scope.computerId,
+      ownerId: scope.userId,
+      workspaces: { some: { workspaceId: scope.workspaceId } },
+    },
+    select: { id: true, kind: true },
+  });
+  if (!computer) throw new Error("Computer is not available");
+  if (computer.kind !== "local") throw new Error("Only local Computers can be removed");
+
+  await db.$transaction(async (tx) => {
+    await DaemonCredentialRevocations.recordForComputer(
+      tx,
+      { workspaceId: scope.workspaceId, computerId: computer.id },
+      now,
+    );
+    await tx.daemonApiKey.updateMany({
+      where: { workspaceId: scope.workspaceId, computerId: computer.id, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    const result = await tx.workspaceComputer.deleteMany({
+      where: { workspaceId: scope.workspaceId, computerId: computer.id },
+    });
+    if (result.count !== 1) throw new Error("Computer is not available");
+  });
+}
+
 /**
  * Takes a person's Computers out of a Workspace they no longer belong to, inside the transaction
  * that ends their membership: records `computer_unlinked` for the live daemon keys they own there,

@@ -264,5 +264,9 @@
   "computer_upgrade_step_restart_supervisor_retry": "If it stays stuck, restart the Computer supervisor, then retry",
   "computer_upgrade_step_restart_supervisor": "Restart the Computer supervisor",
   "computer_upgrade_step_wait_running": "An upgrade is already running; wait for it to finish",
-  "computer_upgrade_step_manual_recovery": "This needs hands-on recovery on that machine before another upgrade will run"
+  "computer_upgrade_step_manual_recovery": "This needs hands-on recovery on that machine before another upgrade will run",
+  "computer_remove_action": "Remove",
+  "computer_remove_description": "Unlink this Computer from this Workspace while keeping its local identity and other Workspace bindings.",
+  "computer_remove_dialog_title": "Remove {name} from this Workspace?",
+  "computer_remove_error": "The Computer could not be removed from this Workspace."
 }

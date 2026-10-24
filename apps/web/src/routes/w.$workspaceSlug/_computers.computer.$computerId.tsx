@@ -26,6 +26,7 @@ import {
   updateComputerDisplayName,
   upgradeComputer,
 } from "#src/features/computers/computers.functions";
+import { removeComputer } from "#src/features/computers/computer-remove.functions";
 import { latestComputerVersionQuery } from "#src/features/computers/latest-version.query";
 import { storeQueryNow } from "#src/features/cache-persistence/browser-query-cache";
 import {
@@ -80,7 +81,8 @@ function ComputerDetailPage() {
   const requestUpgrade = useServerFn(upgradeComputer);
   const scanWorkspaces = useServerFn(scanAgentWorkspaces);
   const deleteWorkspace = useServerFn(deleteAgentWorkspace);
-  const removeComputer = useServerFn(deleteComputer);
+  const unlinkComputer = useServerFn(removeComputer);
+  const deleteComputerFn = useServerFn(deleteComputer);
   const formatDisk = useServerFn(formatCloudComputer);
   const create = useServerFn(createAgent);
   const executeControl = useServerFn(executeAgentControl);
@@ -125,7 +127,18 @@ function ComputerDetailPage() {
         onDeleteComputer={
           computer.ownedByCurrentUser && computer.cloudSlot !== "default"
             ? async () => {
-                await removeComputer({ data: { computerId } });
+                await deleteComputerFn({ data: { computerId } });
+                await router.navigate({
+                  to: "/w/$workspaceSlug/computers",
+                  params: { workspaceSlug },
+                });
+              }
+            : undefined
+        }
+        onRemoveComputer={
+          computer.ownedByCurrentUser && computer.kind === "local"
+            ? async () => {
+                await unlinkComputer({ data: { computerId } });
                 await router.navigate({
                   to: "/w/$workspaceSlug/computers",
                   params: { workspaceSlug },

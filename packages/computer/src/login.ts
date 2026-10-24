@@ -40,6 +40,10 @@ export interface CredentialStore {
   save(serverUrl: string, credential: Credential): Promise<void>;
 }
 
+export interface CredentialRemover {
+  remove(serverUrl: string): Promise<void>;
+}
+
 export type ComputerLoginOptions = {
   client: DeviceAuthorizationClient;
   store: CredentialStore;

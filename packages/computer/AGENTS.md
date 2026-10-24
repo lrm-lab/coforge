@@ -41,6 +41,7 @@ relative to `src/`.
 | `registration/`                      | Computer registration idempotency                                                                   |
 | `cloud-rpc-transport.ts`             | User-authenticated HTTPS RPC for `workspace:get` and `computer:register`                            |
 | `login.ts`, `oauth-device-client.ts` | Device-code authorization                                                                           |
+| `logout.ts`                          | Local credential logout while retaining Workspace registrations                                     |
 | `credential-store.ts`                | File-backed User credentials                                                                        |
 | `machine-id.ts`, `platform.ts`       | Machine identity and platform metadata                                                              |
 | `paths.ts`                           | Platform-native state and credential paths                                                          |
@@ -194,6 +195,5 @@ client, or command-specific copy of an existing domain operation.
 - Run `mise run test:computer`, `mise run check:computer`, and
   `mise run build:computer` before review. `test/installer-scripts.test.ts` runs
   `install.ps1` under PowerShell 7. `mise run test` and `mise run test:computer`
-  install the version `mise.toml` pins (task tools, on first use);
-  `mise run test:file` needs your own `pwsh` on PATH. Those tests fail without it and are
-  never skipped.
+  install the version `mise.toml` pins (task tools, on first use); `mise run test:file` needs
+  `pwsh` on PATH. Those tests fail without it and are never skipped.

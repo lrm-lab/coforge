@@ -58,6 +58,11 @@ import { createStatusPorts } from "#src/status/create-status-ports";
 import { createStatusCommand, type StatusCommand } from "#src/status/status-command";
 import { createDoctorCommand, type DoctorCommand } from "#src/doctor/doctor-command";
 import { registerDiagnosticCommands } from "#src/cli/diagnostic-commands";
+import {
+  createLogoutCommand,
+  registerLogoutCommand,
+  type LogoutCommand,
+} from "#src/cli/logout-command";
 import { prepareContainerBinding } from "#src/host/container-binding";
 import { runHostProcess } from "#src/host/run-host";
 import { runInstallationSource } from "#src/release/installation-source";
@@ -117,6 +122,7 @@ export type { DoctorCommand };
 
 interface CliDependencies {
   login: LoginCommand;
+  logout?: LogoutCommand;
   setup: SetupCommand;
   updater?: UpdateCommand;
   daemon?: DaemonCommand;
@@ -159,6 +165,9 @@ export async function runCli(
       json = options.json ?? false;
       return dependencies.login.run(COFORGE_SERVER_URL, { json });
     });
+  registerLogoutCommand(program, dependencies.logout, (value) => {
+    json = value;
+  });
   program
     .command("setup")
     .alias("attach")
@@ -565,13 +574,7 @@ export type RestartSupervisorLocal = {
   ): Promise<{ accepted: boolean; busyAgents: readonly HeldBusyAgent[] }>;
 };
 
-/**
- * Restarts the Coordinator process itself through the platform host - `coforge-computer restart
- * --supervisor` - rather than a Workspace runtime the ordinary `restart` command targets. Engages
- * the same runner hold a Coordinator-initiated restart uses today so a live tool call
- * is not cut, unless the Coordinator cannot be reached at all: that unreachable case is exactly
- * why this command exists, so it restarts anyway rather than refusing.
- */
+/** Restarts the Coordinator process through the platform host. */
 export async function restartSupervisor(
   host: RestartSupervisorHost,
   local: RestartSupervisorLocal,
@@ -787,6 +790,7 @@ export async function runComputer(): Promise<void> {
       Bun.argv.slice(2),
       {
         login: createLoginCommand(io, config),
+        logout: createLogoutCommand(io),
         setup: createSetupCommand(io, config),
         updater: createUpdateCommand(io),
         daemon: createCommand(

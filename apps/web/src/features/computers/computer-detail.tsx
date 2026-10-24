@@ -76,6 +76,7 @@ import type {
 } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ComputerRemoveAction } from "./computer-remove-action";
 
 export const RESTART_POLL_INTERVAL_MS = 2_000;
 export const RESTART_MAX_POLLS = 31;
@@ -137,6 +138,7 @@ export function ComputerDetail({
   agentWorkspaceScan = null,
   onScanAgentWorkspaces,
   onDeleteAgentWorkspace,
+  onRemoveComputer,
   onDeleteComputer,
   onFormatCloudComputer,
   onCreateAgent,
@@ -157,6 +159,7 @@ export function ComputerDetail({
   /** Scans the Computer and records the result as `agentWorkspaceScan`. */
   onScanAgentWorkspaces?: () => Promise<void>;
   onDeleteAgentWorkspace?: (agentId: string) => Promise<{ status: string }>;
+  onRemoveComputer?: () => Promise<void>;
   onDeleteComputer?: () => Promise<void>;
   /** Queues a disk format. The argument is the name the owner typed. */
   onFormatCloudComputer?: (confirmName: string) => Promise<void>;
@@ -174,8 +177,6 @@ export function ComputerDetail({
   const [displayNameDraft, setDisplayNameDraft] = useState(computer.displayName);
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [displayNameError, setDisplayNameError] = useState(false);
-  // Only the scan in progress lives here; its result is `agentWorkspaceScan`, which outlives a
-  // reload. A failed scan leaves the last result on screen beside the error.
   const [workspaceScanStatus, setWorkspaceScanStatus] = useState<"idle" | "scanning" | "error">(
     "idle",
   );
@@ -231,8 +232,6 @@ export function ComputerDetail({
     "idle" | "pending" | "accepted" | "completed" | "error"
   >("idle");
   const [upgradeRequest, setUpgradeRequest] = useState<ComputerUpgradeRequest>({ state: "idle" });
-  // The Computer's latest upgrade as the server holds it, so a reload keeps one running or failed.
-  // It is polled by `ComputerUpgradeWatcher`; this panel only reads its live status.
   const storedUpgrade = computer.upgrade ?? undefined;
   const followedUpgradeId =
     upgradeRequest.state === "accepted"
@@ -699,6 +698,7 @@ export function ComputerDetail({
               </Button>
             </div>
           )}
+          {onRemoveComputer && <ComputerRemoveAction name={label} onConfirm={onRemoveComputer} />}
         </div>
       </div>
       {onFormatCloudComputer && (

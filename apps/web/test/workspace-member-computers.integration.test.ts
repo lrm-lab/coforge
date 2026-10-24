@@ -10,6 +10,7 @@ import type { ConversationRealtime } from "#src/server/conversations/conversatio
 import { generalChannelForCreator } from "#src/server/conversations/general-channel.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
+import { removeComputerFromWorkspace } from "#src/server/computers/computer-membership.server";
 import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.server";
 import { PrismaWorkspaceMemberDirectoryStore } from "#src/server/workspaces/member-directory-store.server";
 import { WorkspaceMemberDirectory } from "#src/server/workspaces/member-directory.server";
@@ -134,7 +135,7 @@ async function setup() {
 type Setup = Awaited<ReturnType<typeof setup>>;
 
 /** Bob's Computer is out of the Workspace for good, and everything else stands. */
-async function expectBobComputerOutOfWorkspace(scope: Setup) {
+async function expectBobComputerOutOfWorkspace(scope: Setup, expectReconnect = true) {
   const { db, workspace, other, bobComputer, ownerComputer, keys, repository } = scope;
   const bobKey = await db.daemonApiKey.findUniqueOrThrow({
     where: { apiKeyHash: keys.bobHere.hash },
@@ -149,7 +150,9 @@ async function expectBobComputerOutOfWorkspace(scope: Setup) {
       select: { computerId: true },
     }),
   ).toEqual([{ computerId: ownerComputer.id }]);
-  expect(scope.reconnects).toEqual([{ workspaceId: workspace.id, computerIds: [bobComputer.id] }]);
+  expect(scope.reconnects).toEqual(
+    expectReconnect ? [{ workspaceId: workspace.id, computerIds: [bobComputer.id] }] : [],
+  );
   expect(await scope.connect(keys.bobHere.apiKey)).toEqual({
     status: 200,
     body: { disconnect: { code: 4502, reason: "computer_unlinked" } },
@@ -200,6 +203,30 @@ test.skipIf(!connectionString)(
         targetUserId: scope.bob.id,
       });
       await expectBobComputerOutOfWorkspace(scope);
+    } finally {
+      await scope.teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "removing a Computer from one Workspace preserves its Computer record and other Workspace binding",
+  async () => {
+    const scope = await setup();
+    try {
+      await removeComputerFromWorkspace(scope.db, {
+        userId: scope.bob.id,
+        workspaceId: scope.workspace.id,
+        computerId: scope.bobComputer.id,
+      });
+
+      await expectBobComputerOutOfWorkspace(scope, false);
+      expect(
+        await scope.db.computer.findUnique({
+          where: { id: scope.bobComputer.id },
+          select: { id: true },
+        }),
+      ).toEqual({ id: scope.bobComputer.id });
     } finally {
       await scope.teardown();
     }

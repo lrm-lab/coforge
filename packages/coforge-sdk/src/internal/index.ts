@@ -346,10 +346,11 @@ export * from "./upgrade-error-code";
  * depend on - so a web copy string naming a command that does not exist, or a renamed CLI
  * command that copy never updated for, is one drift this constant lets a test catch instead of
  * the two packages silently disagreeing. `packages/computer/test/cli.test.ts` asserts the CLI's
- * registered command names equal this list.
+ * CLI names.
  */
 export const COMPUTER_CLI_COMMANDS = [
   "login",
+  "logout",
   "setup",
   "install",
   "upgrade",
