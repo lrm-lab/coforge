@@ -102,6 +102,12 @@ export type RuntimeAuthStatus = Readonly<{
   unavailableReason?: "not_installed" | "version_unsupported" | "unsupported_installation";
 }>;
 
+/** Why a runtime cannot be signed in or out from here at all, as opposed to a try that failed. */
+export type RuntimeAuthUnsupportedReason =
+  | "not_installed"
+  | "version_unsupported"
+  | "unsupported_installation";
+
 export type RuntimeAuthFailure =
   | "timed_out"
   | "rejected"
@@ -111,7 +117,7 @@ export type RuntimeAuthFailure =
 
 /** Provider-neutral login progress. Values are sanitized before an adapter emits them. */
 export type RuntimeAuthLoginEvent =
-  | Readonly<{ kind: "auth_url"; verificationUrl: string }>
+  | Readonly<{ kind: "auth_url"; verificationUrl: string; instructions?: string }>
   | Readonly<{
       kind: "device_code";
       verificationUrl?: string;
@@ -128,20 +134,19 @@ export type RuntimeAuthLoginResult =
       reason: RuntimeAuthFailure;
       detail?: string;
     }>
-  | Readonly<{ status: "cancelled" }>;
+  | Readonly<{ status: "cancelled" }>
+  | Readonly<{ status: "unsupported"; reason: RuntimeAuthUnsupportedReason; detail?: string }>
+  /** Another login for this runtime is already running. */
+  | Readonly<{ status: "busy" }>;
 
 export type RuntimeAuthLogoutResult =
   | Readonly<{ status: "logged_out"; authStatus: RuntimeAuthStatus }>
   | Readonly<{
       status: "failed";
-      reason:
-        | "still_logged_in"
-        | "version_unsupported"
-        | "timed_out"
-        | "rejected"
-        | "process_failed";
+      reason: "still_logged_in" | "timed_out" | "rejected" | "process_failed";
       detail?: string;
-    }>;
+    }>
+  | Readonly<{ status: "unsupported"; reason: RuntimeAuthUnsupportedReason; detail?: string }>;
 
 export type RuntimeAuthLoginInteraction = Readonly<{
   onEvent(event: RuntimeAuthLoginEvent): void;

@@ -176,11 +176,11 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       signal?: AbortSignal;
     },
   ): Promise<RuntimeAuthLoginResult> {
-    if (this.#active) return { status: "failed", reason: "rejected" };
+    if (this.#active) return { status: "busy" };
     if (!versionAtLeast(this.#version, CODEX_LOGIN_MINIMUM_VERSION))
       return {
-        status: "failed",
-        reason: "process_failed",
+        status: "unsupported",
+        reason: "version_unsupported",
         detail: `Codex ${CODEX_LOGIN_MINIMUM_VERSION} or newer is required`,
       };
     const id = crypto.randomUUID();
@@ -353,7 +353,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
   }): Promise<RuntimeAuthLogoutResult> {
     if (!versionAtLeast(this.#version, CODEX_LOGOUT_MINIMUM_VERSION))
       return {
-        status: "failed",
+        status: "unsupported",
         reason: "version_unsupported",
         detail: `Codex ${CODEX_LOGOUT_MINIMUM_VERSION} or newer is required`,
       };

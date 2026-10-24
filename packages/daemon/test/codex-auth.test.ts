@@ -72,7 +72,7 @@ test("enforces the minimum Codex version", async () => {
   });
   await expect(
     adapter.startLogin({ workingDirectory: "/tmp" }, { onEvent() {}, prompt: async () => "" }),
-  ).resolves.toMatchObject({ status: "failed", reason: "process_failed" });
+  ).resolves.toMatchObject({ status: "unsupported", reason: "version_unsupported" });
 });
 
 test("reports an empty account as not logged in", async () => {
@@ -112,7 +112,7 @@ test("rejects a duplicate while a login is active", async () => {
   );
   await expect(
     adapter.startLogin({ workingDirectory: "/tmp" }, { onEvent() {}, prompt: async () => "" }),
-  ).resolves.toMatchObject({ status: "failed", reason: "rejected" });
+  ).resolves.toEqual({ status: "busy" });
   await expect(first).resolves.toMatchObject({ status: "failed", reason: "timed_out" });
 });
 
@@ -281,7 +281,7 @@ test("uses separate login and logout version floors", async () => {
   });
   await expect(
     adapter.startLogin({ workingDirectory: "/tmp" }, { onEvent() {}, prompt: async () => "" }),
-  ).resolves.toMatchObject({ status: "failed", reason: "process_failed" });
+  ).resolves.toMatchObject({ status: "unsupported", reason: "version_unsupported" });
   await expect(adapter.logout({ workingDirectory: "/tmp" })).resolves.toMatchObject({
     status: "logged_out",
   });
