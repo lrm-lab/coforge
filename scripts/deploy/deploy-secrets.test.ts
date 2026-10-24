@@ -195,21 +195,24 @@ describe("Login with CoForge signing keyset", () => {
   test.each([
     ["production", "https://coforge.cn/oidc"],
     ["staging", "https://staging.coforge.cn/oidc"],
-  ] as const)("%s web receives its own issuer and the keyset as an environment-sourced secret", async (environment, issuer) => {
-    const compose = await readCompose(environment);
-    const web = compose.services.web;
-    expect(web?.environment).toMatchObject({
-      COFORGE_OIDC_ISSUER: issuer,
-      COFORGE_OIDC_SIGNING_JWKS_FILE: "/run/secrets/coforge_oidc_signing_jwks",
-    });
-    expect(web?.secrets).toContainEqual({
-      source: "coforge_oidc_signing_jwks",
-      uid: "1000",
-      gid: "1000",
-      mode: 400,
-    });
-    expect(compose.secrets.coforge_oidc_signing_jwks).toEqual({
-      environment: "COFORGE_OIDC_SIGNING_JWKS",
-    });
-  });
+  ] as const)(
+    "%s web receives its own issuer and the keyset as an environment-sourced secret",
+    async (environment, issuer) => {
+      const compose = await readCompose(environment);
+      const web = compose.services.web;
+      expect(web?.environment).toMatchObject({
+        COFORGE_OIDC_ISSUER: issuer,
+        COFORGE_OIDC_SIGNING_JWKS_FILE: "/run/secrets/coforge_oidc_signing_jwks",
+      });
+      expect(web?.secrets).toContainEqual({
+        source: "coforge_oidc_signing_jwks",
+        uid: "1000",
+        gid: "1000",
+        mode: 400,
+      });
+      expect(compose.secrets.coforge_oidc_signing_jwks).toEqual({
+        environment: "COFORGE_OIDC_SIGNING_JWKS",
+      });
+    },
+  );
 });
