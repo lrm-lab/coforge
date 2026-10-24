@@ -240,7 +240,7 @@ test("user info: an unknown name 404s as user_not_found", async () => {
   expect(outcome.body).toEqual({
     ok: false,
     errorCode: "user_not_found",
-    error: 'No human or Agent named "ghost" in this Workspace.',
+    error: "User not found or not visible: @ghost",
   });
 });
 

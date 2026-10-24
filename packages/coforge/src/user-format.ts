@@ -1,17 +1,21 @@
 import type { AgentProfileView, AgentUserInfoResponse } from "@lrm/coforge-sdk/agent";
 
-/** `coforge user info <name>`: narrow visible facts for a human or Agent, its visible channel
- * memberships and, for an Agent, its live status/availability. */
-export function formatUserInfo(response: AgentUserInfoResponse): string {
+/** `coforge user info <name>`: narrow visible facts for a human or Agent and the visible channels
+ * it shares with the caller, paged by `--limit`/`--offset`. The channels are the ones both belong
+ * to, so each is one the target has joined and none is archived. */
+export function formatUserInfo(
+  response: AgentUserInfoResponse,
+  page: { name: string; limit?: number; offset?: number } = { name: "<name>" },
+): string {
   const { user, memberships } = response;
   const lines = ["## User", ""];
-  lines.push(`Username: @${user.name}`);
+  lines.push(`User: @${user.name}`);
   lines.push(`Kind: ${user.kind}`);
-  lines.push(`Display name: ${user.displayName}`);
-  if (user.role) lines.push(`Role: ${user.role}`);
+  if (user.kind === "agent" && user.status) lines.push(`Status: ${user.status}`);
+  if (user.role && user.role !== "member") lines.push(`Role: ${user.role}`);
   if (user.description) lines.push(`Description: ${user.description}`);
+  lines.push(`Display name: ${user.displayName}`);
   if (user.kind === "agent") {
-    if (user.status) lines.push(`Status: ${user.status}`);
     if (user.computerName) lines.push(`Computer: ${user.computerName}`);
     if (user.runtime) lines.push(`Provider: ${user.runtime}`);
     if (user.model) lines.push(`Model: ${user.model}`);
@@ -20,9 +24,26 @@ export function formatUserInfo(response: AgentUserInfoResponse): string {
   if (user.isSelf) lines.push("Self: yes");
   lines.push("");
   lines.push("### Visible Channel Memberships");
-  if (memberships.length === 0) lines.push("(none)");
-  else for (const membership of memberships) lines.push(`- ${membership.channel}`);
-  return lines.join("\n");
+  const limit = page.limit ?? 50;
+  const offset = page.offset ?? 0;
+  const shown = memberships.slice(offset, offset + limit);
+  if (shown.length === 0) lines.push("(none found in inspected visible channels)");
+  else
+    for (const membership of shown) {
+      const status = [
+        "public",
+        "joined",
+        ...(membership.role ? [`channel role=${membership.role}`] : []),
+      ];
+      lines.push(`${membership.channel} [${[...status, "not archived"].join(", ")}]`);
+    }
+  const total = memberships.length;
+  const start = total === 0 ? 0 : Math.min(offset + 1, total);
+  const end = Math.min(offset + limit, total);
+  const footer = [`\nShowing ${start}-${end} of ${total}.`];
+  if (end < total)
+    footer.push(`More: coforge user info @${page.name} --offset ${end} --limit ${limit}`);
+  return `${lines.join("\n")}${footer.join("\n")}\n`;
 }
 
 /** `coforge profile show [<target>]` and `coforge profile update`: both return the same

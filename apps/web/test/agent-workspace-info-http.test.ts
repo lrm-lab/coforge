@@ -61,6 +61,7 @@ const OTHER_AGENT = {
   name: "helper",
   displayName: "Helper",
   description: "",
+  role: "member",
   computerId: "computer-1",
   stoppedAt: null,
 };
@@ -81,6 +82,7 @@ function baseDb(selfAgent: unknown, rosterOverride?: unknown[]) {
               name: "scout",
               displayName: "Scout",
               description: "Reviews pull requests.",
+              role: "admin",
               computerId: "computer-1",
               stoppedAt: null,
             },
@@ -95,6 +97,8 @@ function baseDb(selfAgent: unknown, rosterOverride?: unknown[]) {
       findFirst: async () => ({ ownerId: "user-scout-owner", role: "member" }),
     },
     project: { findMany: async () => [] },
+    conversation: { findMany: async () => [] },
+    workspaceComputer: { findMany: async () => [] },
   };
 }
 
@@ -178,7 +182,7 @@ test("workspace info never includes another Agent's runtime data", async () => {
       status: "online",
       activity: null,
       activityDetail: null,
-      role: "self",
+      role: "admin",
     },
     {
       name: "helper",
@@ -187,7 +191,7 @@ test("workspace info never includes another Agent's runtime data", async () => {
       status: "unknown",
       activity: null,
       activityDetail: null,
-      role: null,
+      role: "member",
     },
   ]);
   expect(JSON.stringify(body.agents)).not.toContain("runtime");
@@ -238,4 +242,78 @@ test("workspace info roster query hides a private Agent the caller cannot see", 
       OR: [{ visibility: "public" }, { ownerId: "user-scout-owner" }],
     },
   });
+});
+
+test("workspace info lists the channels and Computers with the calling Agent's role", async () => {
+  const db = {
+    ...baseDb(null),
+    conversation: {
+      findMany: async () => [
+        {
+          id: "channel-1",
+          channelName: "general",
+          description: "Everyone.",
+          archivedAt: null,
+          members: [{ channelRole: "member", channelMuted: true }],
+        },
+        {
+          id: "channel-2",
+          channelName: "old",
+          description: "",
+          archivedAt: new Date("2026-01-01T00:00:00Z"),
+          members: [],
+        },
+      ],
+    },
+    $queryRaw: async () => [
+      { conversationId: "channel-1", lastPostAt: new Date("2026-09-07T10:00:00Z") },
+    ],
+    workspaceComputer: {
+      findMany: async () => [
+        {
+          computer: {
+            id: "computer-1",
+            name: "mac-1",
+            displayName: "Mac 1",
+            platform: "darwin",
+            osVersion: null,
+            computerVersion: "1.2.3",
+          },
+        },
+      ],
+    },
+  };
+  const response = (await get({
+    context: { principal: PRINCIPAL, db },
+  } as unknown as Parameters<typeof get>[0])) as Response;
+  const body = await response.json();
+  expect(body.serverRole).toBe("member");
+  expect(body.channels).toEqual([
+    {
+      name: "#general",
+      description: "Everyone.",
+      joined: true,
+      muted: true,
+      archived: false,
+      channelRole: "member",
+      lastPostAt: "2026-09-07T10:00:00.000Z",
+    },
+    {
+      name: "#old",
+      description: "",
+      joined: false,
+      muted: false,
+      archived: true,
+      lastPostAt: null,
+    },
+  ]);
+  expect(body.computers).toHaveLength(1);
+  expect(body.computers[0]).toMatchObject({
+    name: "mac-1",
+    displayName: "Mac 1",
+    platform: "darwin",
+    computerVersion: "1.2.3",
+  });
+  expect(body.computers[0]).not.toHaveProperty("osVersion");
+  expect(["online", "offline", "unknown"]).toContain(body.computers[0].status);
 });

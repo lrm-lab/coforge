@@ -269,7 +269,7 @@ export async function resolveAgentUserInfo(
       body: {
         ok: false,
         errorCode: "user_not_found",
-        error: `No human or Agent named "${name}" in this Workspace.`,
+        error: `User not found or not visible: @${name}`,
       },
     };
   const memberships = await sharedChannelMemberships(db, principal.workspaceId, principal.agentId, {

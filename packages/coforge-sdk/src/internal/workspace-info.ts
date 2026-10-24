@@ -4,7 +4,7 @@ export type WorkspaceInfoRequest = { idempotencyKey: string };
 export type WorkspaceInfoResponse = {
   idempotencyKey: string;
   workspace: Workspace;
-  humans: { id: string; name: string; displayName: string; role: string }[];
+  humans: { id: string; name: string; displayName: string; role: string; description?: string }[];
   agents: {
     id: string;
     name: string;
@@ -17,7 +17,14 @@ export type WorkspaceInfoResponse = {
     model: string;
     computerName: string;
     daemonVersion: string;
+    description?: string;
   }[];
+  /** The calling Agent's own Workspace role (`owner`, `admin` or `member`); absent when unknown. */
+  serverRole?: string;
+  /** The Workspace's channels by name; absent from a server that does not send them. */
+  channels?: WorkspaceInfoChannel[];
+  /** The Computers connected to the Workspace; absent from a server that does not send them. */
+  computers?: WorkspaceInfoComputer[];
   projects: {
     id: string;
     name: string;
@@ -52,4 +59,29 @@ export type WorkspaceInfoResponse = {
     // (only the local Computer knows the Agent workspace path).
     agentWorkspacePath?: string;
   };
+};
+
+export type WorkspaceInfoChannel = {
+  /** `#name`. */
+  name: string;
+  description: string;
+  joined: boolean;
+  muted: boolean;
+  archived: boolean;
+  /** The calling Agent's stored role in the channel; only while it is a member. */
+  channelRole?: string;
+  /** Why the calling Agent may administer the channel: its Workspace role or its channel role. */
+  channelAdminBasis?: "server_role" | "channel_role";
+  /** ISO time of the newest message; `null` for a channel nobody has posted in. */
+  lastPostAt: string | null;
+};
+
+export type WorkspaceInfoComputer = {
+  name: string;
+  displayName: string;
+  /** `online` or `offline`, from the Computer's connection status. */
+  status: string;
+  platform?: string;
+  osVersion?: string;
+  computerVersion?: string;
 };

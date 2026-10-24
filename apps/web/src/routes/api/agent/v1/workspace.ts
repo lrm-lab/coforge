@@ -6,6 +6,11 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { buildAgentRuntimeContext } from "#src/server/agents/agent-runtime-context.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { resolveActorServerRole } from "#src/server/conversations/channel-authority.server";
+import {
+  listAgentWorkspaceChannels,
+  listWorkspaceComputers,
+} from "#src/server/agents/agent-workspace-roster.server";
 import {
   agentVisibilityViewerForActor,
   visibleAgentWhere,
@@ -21,7 +26,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
           const viewer = await agentVisibilityViewerForActor(db, principal.workspaceId, {
             agentId: principal.agentId,
           });
-          const [workspace, humans, agents, projects, self] = await Promise.all([
+          const [workspace, humans, agents, projects, self, serverRole] = await Promise.all([
             db.workspace.findUnique({
               where: { id: principal.workspaceId },
               select: { id: true, name: true, slug: true },
@@ -31,7 +36,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
               select: {
                 userId: true,
                 role: true,
-                user: { select: { username: true, displayName: true } },
+                user: { select: { username: true, displayName: true, description: true } },
               },
               orderBy: { user: { username: "asc" } },
             }),
@@ -46,6 +51,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
                 name: true,
                 displayName: true,
                 description: true,
+                role: true,
                 computerId: true,
                 stoppedAt: true,
               },
@@ -82,10 +88,15 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
                 },
               },
             }),
+            resolveActorServerRole(db, principal.workspaceId, { agentId: principal.agentId }),
           ]);
           if (!workspace) return Response.json({ error: "workspace not found" }, { status: 404 });
           // Same online/offline source the Agents list and `coforge user info` read; one read for
           // the whole list rather than one per Agent, and never a failure of the whole response.
+          const [channels, computers] = await Promise.all([
+            listAgentWorkspaceChannels(db, principal.workspaceId, principal.agentId, serverRole),
+            listWorkspaceComputers(db, principal.workspaceId),
+          ]);
           const resolvedAgentStatuses = await resolveAgentStatuses(principal.workspaceId, agents);
           const agentStatuses = agents.map((agent, index) => ({
             agent,
@@ -96,6 +107,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
             humans: humans.map((human) => ({
               name: human.user.username,
               displayName: humanLabel(human.user),
+              description: human.user.description,
               role: human.role,
             })),
             agents: agentStatuses.map(({ agent, status, availability }) => ({
@@ -105,9 +117,12 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
               status,
               activity: null,
               activityDetail: availability ?? null,
-              role: agent.id === principal.agentId ? "self" : null,
+              role: agent.role,
             })),
             projects,
+            ...(serverRole ? { serverRole } : {}),
+            channels,
+            computers,
             ...buildSelfRuntimeContext(self, workspace),
           });
         } catch {

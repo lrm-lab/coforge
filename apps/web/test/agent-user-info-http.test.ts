@@ -53,6 +53,6 @@ test("GET /api/agent/v1/users/:name 404s with the Manual-style error envelope fo
   expect(body).toEqual({
     ok: false,
     errorCode: "user_not_found",
-    error: 'No human or Agent named "ghost" in this Workspace.',
+    error: "User not found or not visible: @ghost",
   });
 });
