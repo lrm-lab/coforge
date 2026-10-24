@@ -208,6 +208,8 @@ test("an Agent never inherits the Workspace Daemon's own launch scope", () => {
     COFORGE_SUPERVISOR_SOCKET: "/Users/someone/.coforge/daemon/supervisor.sock",
     COFORGE_SUPERVISOR_STATE_PATH: "/Users/someone/.coforge/daemon/upgrade-request-ids.json",
     COFORGE_DAEMON_CONNECTION_ENDPOINT: "wss://coforge.example/connection/websocket",
+    COFORGE_DAEMON_SERVER_URL: "https://coforge.example",
+    COFORGE_DAEMON_VERSION: "0.1.0-dev.1",
   };
   const environment = agentEnvironment(
     undefined,
