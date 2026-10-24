@@ -29,13 +29,14 @@ export type ProcessTable = Readonly<{
 
 const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
 
-const hostProcessTable: ProcessTable = {
+export const hostProcessTable: ProcessTable = {
   async list() {
     if (process.platform === "win32") return [];
     const child = Bun.spawn({
       cmd: ["ps", "-axo", "pid=,ppid=,pgid=,lstart="],
-      // `lstart` is local time; pin the zone so it is read back the way it is printed.
-      env: { ...process.env, TZ: "UTC" },
+      // `lstart` is local time with locale-dependent month and weekday names; pin both so it is
+      // read back the way it is printed on any system language.
+      env: { ...process.env, TZ: "UTC", LC_ALL: "C" },
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
@@ -241,7 +242,8 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
             continue;
           }
           try {
-            globalThis.process.kill(entry.pid, "SIGKILL");
+            // A descendant that leads its own process group takes the group it started with it.
+            globalThis.process.kill(entry.pgid === entry.pid ? -entry.pid : entry.pid, "SIGKILL");
             killed.push(entry.pid);
           } catch (error) {
             if (!this.#processGone(error)) throw error;

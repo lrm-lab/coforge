@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 
 import type { OwnedProcessTreeKillReport } from "@lrm/coforge-anvil";
 import { cleanupOwnedTree } from "#src/code-agent/process-tree-cleanup";
-import { ProcessTreeOwner } from "#src/platform/process-tree";
+import { hostProcessTable, ProcessTreeOwner } from "#src/platform/process-tree";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
 
 // Inside a CoForge Workspace on macOS these route spawn through launchd; the host must not decide.
@@ -334,6 +334,48 @@ test.skipIf(process.platform === "win32")(
         globalThis.process.kill(stubborn, "SIGKILL");
       } catch {}
     }
+  },
+  20_000,
+);
+
+test.skipIf(process.platform === "win32")(
+  "the host process table parses start times whatever the system language",
+  async () => {
+    const before = process.env.LC_ALL;
+    process.env.LC_ALL = "zh_CN.UTF-8";
+    try {
+      const own = (await hostProcessTable.list()).find((entry) => entry.pid === process.pid);
+      expect(own).toBeDefined();
+      expect(own!.startedAtMs).toBeLessThanOrEqual(Date.now());
+      expect(own!.startedAtMs).toBeGreaterThan(Date.now() - 365 * 24 * 3_600_000);
+    } finally {
+      if (before === undefined) delete process.env.LC_ALL;
+      else process.env.LC_ALL = before;
+    }
+  },
+);
+
+test.skipIf(process.platform === "win32")(
+  "a restart with no turn fence falls back to killing the whole tree, earlier children included",
+  async () => {
+    const tree = new ProcessTreeOwner().spawn(
+      ["sh", "-c", "sleep 60 & echo $!; while :; do sleep 1; done"],
+      tmpdir(),
+      { PATH: "/usr/bin:/bin" },
+    );
+    const reader = (tree.child.stdout as ReadableStream<Uint8Array>).getReader();
+    const earlier = Number(new TextDecoder().decode((await reader.read()).value).trim());
+    const reports: OwnedProcessTreeKillReport[] = [];
+    await cleanupOwnedTree(tree, tree.child, { onKillReport: (report) => reports.push(report) });
+    // No kill report: the whole-tree ladder ran, so nothing was filtered by the turn.
+    expect(reports).toEqual([]);
+    let alive = true;
+    try {
+      globalThis.process.kill(earlier, 0);
+    } catch {
+      alive = false;
+    }
+    expect(alive).toBe(false);
   },
   20_000,
 );

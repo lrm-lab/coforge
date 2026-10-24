@@ -1856,7 +1856,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   #deliver<Value extends { agentId?: string }>(
     slot: ListenerSlot<(value: Value) => void>,
     value: Value,
-    hold?: "start" | "stop" | "probe" | "notice" | "turn_interrupt",
+    hold?: "start" | "stop" | "probe" | "notice",
   ): void {
     const held = this.#readyPublications;
     // The common case: nothing is held, so nothing is allocated either.
@@ -2021,7 +2021,7 @@ export class DaemonConnection implements DaemonConnectionClient {
         kind: "agent_turn_interrupt",
         decode: () => {
           const intent = this.#ownedIntent(decodeAgentTurnInterruptIntent(data), workspaceId);
-          this.#deliver(this.#agentTurnInterrupt, intent, "turn_interrupt");
+          if (!this.#readyPublications) this.#deliver(this.#agentTurnInterrupt, intent);
         },
       },
       {

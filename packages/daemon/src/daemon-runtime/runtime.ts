@@ -1015,7 +1015,7 @@ export class DaemonRuntime {
         else void handle(value);
       };
     const latest =
-      (kind: "start" | "stop" | "probe" | "turn_interrupt"): Hold<{ agentId: string }> =>
+      (kind: "start" | "stop" | "probe"): Hold<{ agentId: string }> =>
       (value, run) =>
         heldControl.latestFor(value.agentId, kind, run);
     const control: Hold<unknown> = (_value, run) => heldControl.add(run);
@@ -1179,14 +1179,16 @@ export class DaemonRuntime {
       );
       this.#subscribe(
         this.#transport.onAgentTurnInterrupt?.(
-          receive(latest("turn_interrupt"), (intent: AgentTurnInterruptIntent) =>
-            this.handleAgentTurnInterrupt(intent).catch((error) =>
-              logger.warning("Agent turn interrupt failed", {
-                event: "agent_turn_interrupt:failed",
-                agent_id: intent.agentId,
-                error: thrownMessage(error),
-              }),
-            ),
+          receive(
+            () => {},
+            (intent: AgentTurnInterruptIntent) =>
+              this.handleAgentTurnInterrupt(intent).catch((error) =>
+                logger.warning("Turn interrupt failed", {
+                  event: "agent_turn_interrupt:failed",
+                  agent_id: intent.agentId,
+                  error: thrownMessage(error),
+                }),
+              ),
           ),
         ),
       );

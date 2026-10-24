@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   AGENT_TURN_INTERRUPT_RESULT_METHOD,
+  DAEMON_RUNTIME_READY_METHOD,
   decodeAgentTurnInterruptResult,
   encodeAgentTurnInterruptIntent,
   type AgentTurnInterruptIntent,
@@ -73,4 +74,42 @@ test("sends and receives turn interrupt protocol messages", async () => {
   );
   expect(calls).toContain(AGENT_TURN_INTERRUPT_RESULT_METHOD);
   expect(received).toEqual(["agent-1"]);
+});
+
+test("while ready waits, a turn interrupt is dropped rather than replayed after the handshake", async () => {
+  const fake = fakeClient();
+  const settle = Promise.withResolvers<void>();
+  fake.client.rpc = async (method) => {
+    if (method === DAEMON_RUNTIME_READY_METHOD) await settle.promise;
+    return new Uint8Array();
+  };
+  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
+  const dispatched: string[] = [];
+  transport.onAgentTurnInterrupt((intent) => dispatched.push(intent.requestId));
+  await transport.start("secret", config);
+  const ready = transport.ready(() => ({
+    protocolMajor: 1,
+    requestId: "ready-1",
+    ...config,
+    workerInstanceId: "runtime-1",
+    startedAt: 123,
+    runningAgentIds: [],
+  }));
+
+  fake.publish(
+    `daemon:${config.workspaceId}:${config.computerId}`,
+    encodeAgentTurnInterruptIntent({
+      protocolMajor: 1,
+      requestId: "interrupt-1",
+      ...config,
+      agentId: "agent-1",
+      provider: "pi",
+      epoch: 1,
+      launchId: "launch-1",
+    }),
+  );
+  settle.resolve();
+  await ready;
+
+  expect(dispatched).toEqual([]);
 });

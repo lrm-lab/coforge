@@ -4,6 +4,9 @@ import type {
   OwnedProcessTreeKillReport,
 } from "@lrm/coforge-anvil";
 import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
+import { getLogger } from "@logtape/logtape";
+
+const logger = getLogger(["coforge", "daemon", "process-tree-cleanup"]);
 
 export type ProcessTreeCleanupOptions = Readonly<{
   cutoffAtMs?: number;
@@ -28,6 +31,13 @@ export async function cleanupOwnedTree(
   options?: ProcessTreeCleanupOptions,
 ): Promise<void> {
   const turnScoped = options?.cutoffAtMs !== undefined && tree.terminateForTurn;
+  // A restart that names no turn fence (none was known) keeps the whole-tree ladder: processes
+  // started before the turn are killed too.
+  if (options && !turnScoped)
+    logger.warning("Turn-scoped cleanup unavailable; killing the whole process tree", {
+      event: "process_tree_cleanup:whole_tree",
+      reason: options.cutoffAtMs === undefined ? "no_turn_fence" : "no_turn_scoped_owner",
+    });
   try {
     if (turnScoped) await tree.terminateForTurn!(false, options!.cutoffAtMs!);
     else await tree.terminate(false);
