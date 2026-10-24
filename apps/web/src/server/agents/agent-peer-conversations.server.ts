@@ -2,7 +2,14 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { AGENT_PEER_DIRECT_KEY_WHERE } from "#src/features/conversations/direct-key";
 import { agentDmIsLimited } from "#src/server/conversations/agent-dm-limits.server";
-import { messagePreviewLine } from "#src/server/conversations/message-preview-line.server";
+import {
+  messagePreviewLine,
+  type PreviewMentionRef,
+} from "#src/server/conversations/message-preview-line.server";
+import {
+  BROWSER_MESSAGE_MENTIONS_SELECT,
+  browserMessageMention,
+} from "#src/server/conversations/mentions.server";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import {
@@ -34,7 +41,10 @@ export type AgentPeerCard = {
  * way they read them, and only as a preview.
  */
 export async function listAgentPeerCards(
-  db: Pick<PrismaClient, "agent" | "conversation" | "workspaceMembership" | "$queryRaw">,
+  db: Pick<
+    PrismaClient,
+    "agent" | "conversation" | "messageMention" | "workspaceMembership" | "$queryRaw"
+  >,
   input: { workspaceId: string; agentId: string; userId: string; now?: Date },
 ): Promise<AgentPeerCard[]> {
   const { workspaceId, agentId } = input;
@@ -84,31 +94,49 @@ export async function listAgentPeerCards(
   if (visible.length === 0) return [];
 
   const conversationIds = visible.map(({ conversationId }) => conversationId);
-  // The newest spoken and the newest system message of each conversation, one row each.
+  // The newest spoken and the newest system message of each conversation: two index seeks on
+  // (conversationId, sequence) per conversation, never a sort of its messages.
   const latest = await db.$queryRaw<
     {
       conversationId: string;
-      system: boolean;
-      body: string;
-      createdAt: Date;
+      messageId: string | null;
+      body: string | null;
+      createdAt: Date | null;
       senderAgentId: string | null;
+      systemBody: string | null;
+      systemAt: Date | null;
     }[]
   >`
-    SELECT DISTINCT ON (m."conversationId", (m."senderMemberId" IS NULL))
-      m."conversationId", (m."senderMemberId" IS NULL) AS "system", CASE WHEN m."senderMemberId" IS NULL THEN m.body ELSE LEFT(m.body, 600) END AS body, m."createdAt",
-      cm."agentId" AS "senderAgentId"
-    FROM messages m
-    LEFT JOIN conversation_members cm ON cm.id = m."senderMemberId"
-    WHERE m."conversationId" IN (${Prisma.join(conversationIds)})
-    ORDER BY m."conversationId", (m."senderMemberId" IS NULL), m.sequence DESC`;
-  const spokenBy = new Map(latest.filter((m) => !m.system).map((m) => [m.conversationId, m]));
-  const heldBy = new Map(latest.filter((m) => m.system).map((m) => [m.conversationId, m]));
+    SELECT c.id AS "conversationId", sp.id AS "messageId", sp.body, sp."createdAt",
+      sp."senderAgentId", sy.body AS "systemBody", sy."createdAt" AS "systemAt"
+    FROM unnest(ARRAY[${Prisma.join(conversationIds)}]::uuid[]) AS c(id)
+    LEFT JOIN LATERAL (
+      SELECT m.id, LEFT(m.body, 600) AS body, m."createdAt", cm."agentId" AS "senderAgentId"
+      FROM messages m JOIN conversation_members cm ON cm.id = m."senderMemberId"
+      WHERE m."conversationId" = c.id
+      ORDER BY m.sequence DESC LIMIT 1
+    ) sp ON true
+    LEFT JOIN LATERAL (
+      SELECT m.body, m."createdAt" FROM messages m
+      WHERE m."conversationId" = c.id AND m."senderMemberId" IS NULL
+      ORDER BY m.sequence DESC LIMIT 1
+    ) sy ON true`;
+  const mentionRows = await db.messageMention.findMany({
+    where: { messageId: { in: latest.flatMap((row) => (row.messageId ? [row.messageId] : [])) } },
+    select: { messageId: true, ...BROWSER_MESSAGE_MENTIONS_SELECT.select },
+  });
+  const mentionsByMessage = new Map<string, PreviewMentionRef[]>();
+  for (const row of mentionRows)
+    mentionsByMessage.set(row.messageId, [
+      ...(mentionsByMessage.get(row.messageId) ?? []),
+      browserMessageMention(row),
+    ]);
+  const latestBy = new Map(latest.map((row) => [row.conversationId, row]));
 
   return visible
     .flatMap(({ conversationId, peer }) => {
-      const message = spokenBy.get(conversationId);
-      if (!message) return [];
-      const held = heldBy.get(conversationId);
+      const row = latestBy.get(conversationId);
+      if (!row?.messageId || row.body === null || !row.createdAt) return [];
       return [
         {
           peer: {
@@ -117,10 +145,15 @@ export async function listAgentPeerCards(
             displayName: peer.displayName,
             avatar: agentAvatarUrl(peer.id, peer.avatarMascot),
           },
-          preview: messagePreviewLine(message.body, []),
-          lastMessageAt: message.createdAt,
-          lastFromPeer: message.senderAgentId === peer.id,
-          limited: agentDmIsLimited(held, now),
+          preview: messagePreviewLine(row.body, mentionsByMessage.get(row.messageId) ?? []),
+          lastMessageAt: row.createdAt,
+          lastFromPeer: row.senderAgentId === peer.id,
+          limited: agentDmIsLimited(
+            row.systemBody !== null && row.systemAt
+              ? { body: row.systemBody, createdAt: row.systemAt }
+              : undefined,
+            now,
+          ),
         },
       ];
     })

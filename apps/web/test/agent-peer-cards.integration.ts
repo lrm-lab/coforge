@@ -106,6 +106,7 @@ test("a card previews the last spoken message, says who spoke, and cuts the body
   expect(card!.peer).toMatchObject({ agentId: agents.bob!.id, name: agents.bob!.name });
   expect(Array.from(card!.preview)).toHaveLength(120);
   expect(Object.keys(card!)).not.toContain("body");
+  expect(card!.preview).not.toContain("<@");
   // The same conversation from the other seat: the last word is not the peer's.
   expect((await cards("bob"))[0]).toMatchObject({ lastFromPeer: false });
 });
@@ -162,4 +163,39 @@ test("a rate notice keeps limited true for the hour, a chain notice for ten minu
   expect(agentDmIsLimited(latest(AGENT_DM_LIMIT_NOTICE.AGENT_DM_CHAIN_LIMIT, 30), now)).toBe(false);
   expect(agentDmIsLimited(latest("something else", 1), now)).toBe(false);
   expect(agentDmIsLimited(undefined, now)).toBe(false);
+});
+
+test("a mention in the previewed message reads as the Agent's handle, not as a token", async () => {
+  const conversation = await db.conversation.findFirstOrThrow({
+    where: { workspaceId, directKey: agentPeerDirectKey(agents.ada!.id, agents.bob!.id) },
+    include: { members: true },
+  });
+  const sender = conversation.members.find((member) => member.agentId === agents.bob!.id)!;
+  const target = conversation.members.find((member) => member.agentId === agents.ada!.id)!;
+  const last = await db.message.findFirstOrThrow({
+    where: { conversationId: conversation.id },
+    orderBy: { sequence: "desc" },
+  });
+  const message = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: conversation.id,
+      sequence: last.sequence + 1,
+      senderMemberId: sender.id,
+      body: `thanks <@agent:${agents.ada!.id}>`,
+    },
+  });
+  await db.messageMention.create({
+    data: {
+      messageId: message.id,
+      memberId: target.id,
+      conversationId: conversation.id,
+      workspaceId,
+      kind: "agent",
+      actorId: agents.ada!.id,
+      handle: agents.ada!.name,
+    },
+  });
+  const card = (await cards("ada")).find((c) => c.peer.agentId === agents.bob!.id)!;
+  expect(card.preview).toBe(`thanks @${agents.ada!.name}`);
 });
