@@ -111,8 +111,35 @@ if (Bun.argv[2] === "__pi-chat") {
   // environment for its identity.
   const { parseRemoteUpgradeOperation } = await import("#src/release/upgrade-operation");
   const operation = parseRemoteUpgradeOperation(Bun.argv.slice(2));
+  const { configureComputerLogger } = await import("#src/logging/computer-logger");
+  const { resolveComputerConfigDirectory } = await import("#src/paths");
+  const { COFORGE_COMPUTER_VERSION } = await import("./version");
+  const logging = await configureComputerLogger({
+    dataDirectory: resolveComputerConfigDirectory({
+      platform: process.platform,
+      homeDirectory: (await import("node:os")).homedir(),
+      environment: Bun.env,
+    }),
+    version: COFORGE_COMPUTER_VERSION,
+  }).catch(() => undefined);
   const { runRemoteUpgrade } = await import("#src/release/remote-upgrade");
-  await runRemoteUpgrade(operation);
+  try {
+    await runRemoteUpgrade(
+      operation,
+      logging
+        ? {
+            writeLog: (line) =>
+              logging.logger.info("Remote Computer upgrade launch", {
+                event: "computer:remote_upgrade",
+                request_id: operation.requestId,
+                line,
+              }),
+          }
+        : undefined,
+    );
+  } finally {
+    if (logging) await logging.close().catch(() => {});
+  }
 } else {
   const { runComputer } = await import("./cli");
   await runComputer();

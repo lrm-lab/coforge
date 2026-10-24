@@ -55,7 +55,9 @@ Normal installed operation uses the platform's user service manager and never
 falls back to an unmanaged child process.
 
 Use `coforge-computer logs` to print existing Computer log files and follow
-new log records in real time. Press `Ctrl-C` to exit.
+new log records in real time. Server-triggered upgrades record their request ID,
+installer output, and terminal result there with diagnostic secrets redacted.
+Press `Ctrl-C` to exit.
 
 `coforge-computer install` and `upgrade` select `latest` or one exact version;
 `coforge-installer` runs the transaction. Moving to an older version needs

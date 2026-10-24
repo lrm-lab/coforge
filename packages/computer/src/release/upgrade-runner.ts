@@ -18,11 +18,11 @@ export type InstallerSpawn = {
   path: string;
   args: string[];
   stdin: "ignore";
-  stdout: "inherit" | "ignore";
+  stdout: "inherit" | "ignore" | "pipe";
   stderr: "inherit" | "pipe";
 };
 
-export type InstallerRun = { exitCode: number; stderr: string };
+export type InstallerRun = { exitCode: number; stdout: string; stderr: string };
 
 export type UpgradeRunnerOptions = {
   /** The install root: `<install root>/upgrade-results` holds the receipts. */
@@ -32,7 +32,7 @@ export type UpgradeRunnerOptions = {
   feedUrl: string;
   obtainInstaller: (options: InstallerLaunchOptions) => Promise<VerifiedInstaller>;
   spawnInstaller: (spawn: InstallerSpawn) => Promise<InstallerRun>;
-  /** Where a CLI operation echoes what the installer wrote to stderr. */
+  /** Where a CLI operation echoes installer stderr, or a remote operation collects its output. */
   writeStderr: (text: string) => void;
 };
 
@@ -67,11 +67,12 @@ export async function defaultSpawnInstaller(spawn: InstallerSpawn): Promise<Inst
     stderr: spawn.stderr,
     windowsHide: true,
   });
-  const [stderr, exitCode] = await Promise.all([
+  const [stdout, stderr, exitCode] = await Promise.all([
+    spawn.stdout === "pipe" ? new Response(child.stdout).text() : Promise.resolve(""),
     spawn.stderr === "pipe" ? new Response(child.stderr).text() : Promise.resolve(""),
     child.exited,
   ]);
-  return { exitCode, stderr };
+  return { exitCode, stdout, stderr };
 }
 
 /**
@@ -118,7 +119,7 @@ export async function runUpgradeOperation(
         ...(allowDowngrade ? ["--allow-downgrade"] : []),
       ],
       stdin: "ignore",
-      stdout: origin === "remote" ? "ignore" : "inherit",
+      stdout: origin === "remote" ? "pipe" : "inherit",
       stderr: "pipe",
     });
   } catch (error) {
@@ -129,6 +130,10 @@ export async function runUpgradeOperation(
     );
   }
   if (origin === "cli" && run.stderr) options.writeStderr(run.stderr);
+  if (origin === "remote") {
+    if (run.stdout) options.writeStderr(run.stdout);
+    if (run.stderr) options.writeStderr(run.stderr);
+  }
   return conclude(
     await settle(options, requestId, {
       error: lastLine(run.stderr) ?? `coforge-installer exited ${run.exitCode} without a receipt`,

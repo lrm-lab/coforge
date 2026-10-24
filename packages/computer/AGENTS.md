@@ -53,7 +53,7 @@ relative to `src/`.
 | `logging/`                           | Computer LogTape configuration and the `logs` follower                                        |
 | `updater.ts`                         | Reads the installed version; zod contract schemas and launcher text shared with the installer |
 | `release/upgrade-runner.ts`          | Runs the installer for one upgrade or `recover`, and returns its receipt                      |
-| `release/remote-upgrade.ts`          | Runs one server-triggered upgrade, then removes its finished OS job (no terminal output)      |
+| `release/remote-upgrade.ts`          | Runs one server-triggered upgrade, records redacted launch output, then removes its finished OS job |
 | `release/upgrade-receipt.ts`         | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)   |
 | `release/upgrade-operation.ts`       | One upgrade operation record, built from CLI or `__remote-upgrade` arguments                  |
 | `release/installer-contract.ts`      | Shapes shared only with `coforge-installer` (release manifest, lifecycle)                     |

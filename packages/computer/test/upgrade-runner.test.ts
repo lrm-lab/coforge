@@ -266,7 +266,7 @@ test("a remote operation does not inherit stdout, while a CLI operation does", a
     runnerOptions(directory, installer, { spawnInstaller: recording }),
   );
 
-  expect(spawned.map((spawn) => spawn.stdout)).toEqual(["ignore", "inherit"]);
+  expect(spawned.map((spawn) => spawn.stdout)).toEqual(["pipe", "inherit"]);
   expect(spawned.every((spawn) => spawn.stdin === "ignore")).toBe(true);
 });
 
