@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { personAvatarUrl } from "#src/lib/person-picture";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
@@ -237,7 +238,7 @@ test("members are at most six, active, in join order then member id, mixing peop
   const row = rowOf(await channels.list(workspaceId, ada.id), conversation.id);
   expect(row.members).toEqual([
     { kind: "user", id: ada.id, name: ada.username, avatarUrl: personAvatarUrl(ada.id, null) },
-    { kind: "agent", id: helper.id, name: "Helper", avatarUrl: null },
+    { kind: "agent", id: helper.id, name: "Helper", avatarUrl: agentAvatarUrl(helper.id) },
     ...tied.map((member) => ({
       kind: "user" as const,
       id: member.userId!,
