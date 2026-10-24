@@ -34,7 +34,7 @@ function pendingPageNote(
   const head = `shown ${shown}, ${asked} — truncated=`;
   if (hasMore === true)
     return (limit ?? MENTION_PENDING_DEFAULT_LIMIT) >= MENTION_PENDING_MAX_LIMIT
-      ? `${head}true · more pending actions exist AND this is the server's maximum page (${MENTION_PENDING_MAX_LIMIT}); this route has no offset or cursor, so the rest cannot be reached from here — resolve what you can and re-run; rows with no available actions are not actionable here and will remain until they expire`
+      ? `${head}true · more pending actions exist AND this is the server's maximum page (${MENTION_PENDING_MAX_LIMIT}); this route has no offset or cursor, so the rest cannot be reached from here — resolve what you can and re-run`
       : `${head}true · more pending actions exist; raise --limit (server caps at ${MENTION_PENDING_MAX_LIMIT}) or resolve these first and re-run`;
   if (hasMore === false) return `${head}false · this is the complete list`;
   return `${head}unknown · server did not report hasMore, so completeness is NOT asserted`;
@@ -42,12 +42,16 @@ function pendingPageNote(
 
 export function formatPendingMentionActions(
   actions: readonly AgentMentionPendingAction[],
-  page: { hasMore?: boolean; limit?: number } = {},
+  page: { hasMore?: boolean; limit?: number; noLongerActionable?: number } = {},
 ): string {
   const note = pendingPageNote(page.hasMore, page.limit, actions.length);
+  const expiring = page.noLongerActionable
+    ? `${page.noLongerActionable} pending ${page.noLongerActionable === 1 ? "mention" : "mentions"} can no longer be acted on; ${page.noLongerActionable === 1 ? "it expires on its own" : "they expire on their own"}.`
+    : "";
   const lines = ["Pending mention actions", `(${note})`, ""];
   if (!actions.length) {
     lines.splice(1, 2, "", `No pending mention actions. (${note})`);
+    if (expiring) lines.push("", expiring);
     return lines.join("\n");
   }
   for (const action of actions) {
@@ -63,6 +67,7 @@ export function formatPendingMentionActions(
     if (verbs.includes("notify"))
       lines.push("  note: notify exits nonzero unless the target queue accepts the delivery.");
   }
+  if (expiring) lines.push("", expiring);
   return lines.join("\n");
 }
 

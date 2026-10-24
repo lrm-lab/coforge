@@ -43,10 +43,14 @@ Each row carries `status=not_queued` and one of two reasons:
 
 ## `mention pending`
 
-`coforge mention pending [--json]` lists the sender's pending mention
-actions: for each, the target and its kind, the message, the reason, the
-expiry, and one recovery command per action it still allows (`notify`,
-`add`).
+`coforge mention pending [--limit <n>] [--json]` lists the sender's pending
+mention actions that can still be acted on, oldest first: for each, the target
+and its kind, the message, the reason, the expiry, and one recovery command per
+action it still allows (`notify`, `add`). A page is `--limit` rows (default 50,
+at most 100); `truncated=true` means more actionable rows exist. A pending
+mention that allows no action (the target joined, the channel was archived)
+takes no place in the page; a last line counts them, and `--json` carries the
+count as `noLongerActionable`. They expire on their own.
 
 ## `mention notify` and `mention add`
 

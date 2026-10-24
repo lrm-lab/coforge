@@ -9,7 +9,10 @@ const OTHER_ID = "44444444-4444-4444-8444-444444444444";
 const pendingRequest = (query = "") =>
   new Request(`https://server.example/api/agent/v1/mention-actions/pending${query}`);
 
-const pendingRow = (index: number) => ({
+const pendingRow = (
+  index: number,
+  availableActions: Array<"notify" | "add"> = ["notify", "add"],
+) => ({
   resolutionId: `22222222-2222-4222-8222-${String(index).padStart(12, "0")}`,
   messageId: "11111111-1111-4111-8111-111111111111",
   targetType: "user" as const,
@@ -18,7 +21,7 @@ const pendingRow = (index: number) => ({
   targetLabel: "Bob",
   targetAvatarUrl: null,
   channelName: "triage",
-  availableActions: [],
+  availableActions,
   expiresAt: new Date("2026-10-01T00:00:00Z"),
 });
 
@@ -31,8 +34,8 @@ const executeRequest = (body: unknown) =>
 test("lists the calling Agent's pending mentions with the channel, reason, and ISO expiry", async () => {
   const calls: unknown[] = [];
   const response = await handleAgentMentionPendingGet(pendingRequest(), principal, {
-    pendingMentionActions: async (workspaceId, agentId, limit) => {
-      calls.push({ workspaceId, agentId, limit });
+    pendingMentionActions: async (workspaceId, agentId) => {
+      calls.push({ workspaceId, agentId });
       return [
         {
           resolutionId: RESOLUTION_ID,
@@ -43,7 +46,7 @@ test("lists the calling Agent's pending mentions with the channel, reason, and I
           targetLabel: "Bob",
           targetAvatarUrl: null,
           channelName: "triage",
-          availableActions: [],
+          availableActions: ["notify", "add"],
           expiresAt: new Date("2026-10-01T00:00:00Z"),
         },
       ];
@@ -53,6 +56,7 @@ test("lists the calling Agent's pending mentions with the channel, reason, and I
   expect(await response.json()).toEqual({
     ok: true,
     hasMore: false,
+    noLongerActionable: 0,
     pendingMentionActions: [
       {
         resolutionId: RESOLUTION_ID,
@@ -61,24 +65,17 @@ test("lists the calling Agent's pending mentions with the channel, reason, and I
         targetHandle: "bob",
         targetAvatarUrl: null,
         reason: "not_member",
-        availableActions: [],
+        availableActions: ["notify", "add"],
         expiresAt: "2026-10-01T00:00:00.000Z",
         channelName: "triage",
       },
     ],
   });
-  expect(calls).toEqual([{ workspaceId: "workspace-1", agentId: "agent-1", limit: 51 }]);
+  expect(calls).toEqual([{ workspaceId: "workspace-1", agentId: "agent-1" }]);
 });
 
-test("a page is the limit asked for and hasMore says whether a row was left over", async () => {
-  const rows = [1, 2, 3].map(pendingRow);
-  const limits: number[] = [];
-  const deps = {
-    pendingMentionActions: async (_workspaceId: string, _agentId: string, limit: number) => {
-      limits.push(limit);
-      return rows.slice(0, limit);
-    },
-  };
+test("a page is the limit asked for and hasMore says whether an actionable row was left over", async () => {
+  const deps = { pendingMentionActions: async () => [1, 2, 3].map((index) => pendingRow(index)) };
   const page = (await (
     await handleAgentMentionPendingGet(pendingRequest("?limit=2"), principal, deps)
   ).json()) as { hasMore: boolean; pendingMentionActions: unknown[] };
@@ -89,7 +86,43 @@ test("a page is the limit asked for and hasMore says whether a row was left over
   ).json()) as { hasMore: boolean; pendingMentionActions: unknown[] };
   expect(whole.pendingMentionActions).toHaveLength(3);
   expect(whole.hasMore).toBe(false);
-  expect(limits).toEqual([3, 4]);
+});
+
+test("a row that allows no action takes no place in the page and is only counted", async () => {
+  // Three that are done, then two that can still be acted on.
+  const rows = [
+    pendingRow(1, []),
+    pendingRow(2, []),
+    pendingRow(3, []),
+    pendingRow(4),
+    pendingRow(5),
+  ];
+  const page = (await (
+    await handleAgentMentionPendingGet(pendingRequest("?limit=1"), principal, {
+      pendingMentionActions: async () => rows,
+    })
+  ).json()) as {
+    hasMore: boolean;
+    noLongerActionable: number;
+    pendingMentionActions: Array<{ targetHandle: string }>;
+  };
+  expect(page.pendingMentionActions.map((row) => row.targetHandle)).toEqual(["bob4"]);
+  expect(page.hasMore).toBe(true);
+  expect(page.noLongerActionable).toBe(3);
+});
+
+test("when no row allows an action the page is empty and every row is counted", async () => {
+  const page = (await (
+    await handleAgentMentionPendingGet(pendingRequest(), principal, {
+      pendingMentionActions: async () => [pendingRow(1, []), pendingRow(2, [])],
+    })
+  ).json()) as { hasMore: boolean; noLongerActionable: number; pendingMentionActions: unknown[] };
+  expect(page).toEqual({
+    ok: true,
+    hasMore: false,
+    noLongerActionable: 2,
+    pendingMentionActions: [],
+  });
 });
 
 test("a limit that is not a whole number from 1 to 100 is refused", async () => {

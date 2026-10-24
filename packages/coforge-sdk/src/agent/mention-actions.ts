@@ -20,11 +20,14 @@ export const MENTION_PENDING_MAX_LIMIT = 100;
 export type AgentMentionPendingRequest = { limit?: number };
 
 /** Response for `GET /api/agent/v1/mention-actions/pending[?limit=<n>]`: the oldest pending
- * actions first; `hasMore` says whether more exist beyond this page (the route has no cursor). */
+ * actions that still allow an action first; `hasMore` says whether more of them exist beyond this
+ * page (the route has no cursor). `noLongerActionable` counts the pending mentions that allow
+ * none, which take no place in the page and expire on their own. */
 export type AgentMentionPendingResponse = {
   ok: true;
   pendingMentionActions: AgentMentionPendingAction[];
   hasMore?: boolean;
+  noLongerActionable?: number;
 };
 
 /** The actions a sender can request for its pending mentions: `notify` reaches the target
@@ -124,6 +127,9 @@ export function decodeAgentMentionPendingResponse(value: unknown): AgentMentionP
     ok: true,
     pendingMentionActions: value.pendingMentionActions,
     ...(typeof value.hasMore === "boolean" ? { hasMore: value.hasMore } : {}),
+    ...(Number.isInteger(value.noLongerActionable) && (value.noLongerActionable as number) >= 0
+      ? { noLongerActionable: value.noLongerActionable as number }
+      : {}),
   };
 }
 

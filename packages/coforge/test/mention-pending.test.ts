@@ -113,12 +113,34 @@ test("nothing pending still says how complete that answer is, and --json carries
     ok: true,
     pendingMentionActions: [],
     truncated: false,
+    noLongerActionable: null,
     limit: 7,
   });
   expect(await run(["mention", "pending", "--json"], transport())).toEqual({
     ok: true,
     pendingMentionActions: [],
     truncated: null,
+    noLongerActionable: null,
     limit: null,
+  });
+});
+
+test("pending mentions that can no longer be acted on are counted after the page, in text and --json", async () => {
+  const counted = transport({
+    pendingMentionActions: [ROW],
+    hasMore: false,
+    noLongerActionable: 3,
+  });
+  const output = (await run(["mention", "pending"], counted)) as string;
+  expect(
+    output.endsWith("\n\n3 pending mentions can no longer be acted on; they expire on their own."),
+  ).toBe(true);
+  expect(
+    await run(["mention", "pending"], transport({ hasMore: false, noLongerActionable: 1 })),
+  ).toBe(
+    "Pending mention actions\n\nNo pending mention actions. (shown 0, server default 50 — truncated=false · this is the complete list)\n\n1 pending mention can no longer be acted on; it expires on its own.",
+  );
+  expect(await run(["mention", "pending", "--json"], counted)).toMatchObject({
+    noLongerActionable: 3,
   });
 });

@@ -47,6 +47,24 @@ test("decodes the pending mention actions list", () => {
   });
 });
 
+test("keeps the count of pending mentions that can no longer be acted on, and drops a bad one", () => {
+  expect(
+    decodeAgentMentionPendingResponse({
+      ok: true,
+      pendingMentionActions: [],
+      noLongerActionable: 4,
+    }),
+  ).toEqual({ ok: true, pendingMentionActions: [], noLongerActionable: 4 });
+  for (const bad of [-1, 1.5, "3"])
+    expect(
+      decodeAgentMentionPendingResponse({
+        ok: true,
+        pendingMentionActions: [],
+        noLongerActionable: bad,
+      }),
+    ).toEqual({ ok: true, pendingMentionActions: [] });
+});
+
 test("rejects a pending list whose rows lack the channel or the actions", () => {
   const [row] = PENDING.pendingMentionActions;
   expect(() =>

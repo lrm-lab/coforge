@@ -13,9 +13,10 @@ import {
 
 /** `GET /api/agent/v1/mention-actions/pending[?limit=<n>]` — `coforge mention pending`: the
  * calling Agent's mentions that reached no one because the target was outside the channel at send
- * time, oldest first. A page is `limit` rows (default 50, at most 100) and `hasMore` says whether
- * older-than-page-end ones remain; there is no cursor, so rows beyond the maximum page stay out of
- * reach until some of these are resolved or expire. */
+ * time, oldest first. A page is `limit` rows (default 50, at most 100) of those that still allow
+ * an action, and `hasMore` says whether more of them remain. A row that allows none (the target
+ * joined, the channel was archived) cannot be acted on and does not take a place in the page: they
+ * are only counted, as `noLongerActionable`, so the Agent still knows those mentions went unseen. */
 export async function handleAgentMentionPendingGet(
   request: Request,
   principal: { workspaceId: string; agentId: string },
@@ -23,7 +24,6 @@ export async function handleAgentMentionPendingGet(
     pendingMentionActions(
       workspaceId: string,
       agentId: string,
-      limit: number,
     ): Promise<PendingMentionActionView[]>;
   },
 ): Promise<Response> {
@@ -34,17 +34,13 @@ export async function handleAgentMentionPendingGet(
       { error: `limit must be an integer from 1 to ${MENTION_PENDING_MAX_LIMIT}` },
       { status: 400 },
     );
-  // One row past the page tells whether another page exists.
-  const rows = await deps.pendingMentionActions(
-    principal.workspaceId,
-    principal.agentId,
-    limit + 1,
-  );
-  const actions = rows.slice(0, limit);
+  const rows = await deps.pendingMentionActions(principal.workspaceId, principal.agentId);
+  const actionable = rows.filter((row) => row.availableActions.length > 0);
   const body: AgentMentionPendingResponse = {
     ok: true,
-    hasMore: rows.length > limit,
-    pendingMentionActions: actions.map((action) => ({
+    hasMore: actionable.length > limit,
+    noLongerActionable: rows.length - actionable.length,
+    pendingMentionActions: actionable.slice(0, limit).map((action) => ({
       resolutionId: action.resolutionId,
       messageId: action.messageId,
       targetType: action.targetType,
@@ -65,14 +61,12 @@ export const Route = createFileRoute("/api/agent/v1/mention-actions_/pending")({
     handlers: {
       GET: ({ request, context: { principal, db } }) =>
         handleAgentMentionPendingGet(request, principal, {
-          pendingMentionActions: async (workspaceId, agentId, limit) => {
+          pendingMentionActions: async (workspaceId, agentId) => {
             const user = await workspaceAssistantUser(db, workspaceId, agentId);
             return pendingMentionActionsForActor(
               db,
               workspaceId,
               user ? { userId: user.userId } : { agentId },
-              new Date(),
-              limit,
             );
           },
         }),

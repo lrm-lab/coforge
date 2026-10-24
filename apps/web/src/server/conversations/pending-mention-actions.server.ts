@@ -506,7 +506,6 @@ export async function pendingMentionActionsForActor(
   workspaceId: string,
   sender: MentionActor,
   now: Date = new Date(),
-  limit?: number,
 ): Promise<PendingMentionActionView[]> {
   const rows = await db.pendingMentionAction.findMany({
     where: {
@@ -524,7 +523,6 @@ export async function pendingMentionActionsForActor(
       },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    take: limit,
   });
   const membership = await targetMembership(db, rows);
   const orderInBody = (row: (typeof rows)[number]) =>

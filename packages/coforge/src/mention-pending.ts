@@ -51,8 +51,9 @@ export function parseMentionPendingArgs(args: readonly string[]): MentionPending
   };
 }
 
-/** `mention pending`: the page as text, or as `{ ok, pendingMentionActions, truncated, limit }`
- * where `truncated` is `null` when the server did not say whether more exist. */
+/** `mention pending`: the page as text, or as `{ ok, pendingMentionActions, truncated,
+ * noLongerActionable, limit }` where `truncated` and `noLongerActionable` are `null` when the server
+ * did not say. */
 export async function runMentionPending(
   pending: ((limit?: number) => Promise<AgentMentionPendingResponse>) | undefined,
   { json, limit }: MentionPendingInvocation,
@@ -66,10 +67,12 @@ export async function runMentionPending(
       ok: true,
       pendingMentionActions: result.pendingMentionActions,
       truncated: result.hasMore ?? null,
+      noLongerActionable: result.noLongerActionable ?? null,
       limit: limit ?? null,
     };
   return formatPendingMentionActions(result.pendingMentionActions, {
     hasMore: result.hasMore,
     limit,
+    noLongerActionable: result.noLongerActionable,
   });
 }
