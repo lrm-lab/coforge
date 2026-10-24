@@ -1,6 +1,8 @@
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexRuntimeAuthAdapter } from "#src/code-agent/codex/auth";
+import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
 import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { CursorProvider } from "#src/code-agent/cursor/provider";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
@@ -24,6 +26,19 @@ function providerExecutable(
   options: CodeAgentProviderRegistryOptions,
 ): string | undefined {
   return resolveHostCodeAgentExecutable(provider, options.environment, options.platform);
+}
+
+export function createRuntimeAuthAdapter(provider: RuntimeAuthProvider): RuntimeAuthAdapter {
+  switch (provider) {
+    case RUNTIME_PROVIDER.CODEX:
+      return new CodexRuntimeAuthAdapter();
+    case RUNTIME_PROVIDER.CLAUDE_CODE:
+      throw new Error("Claude Code runtime auth adapter is not registered");
+    default: {
+      const unreachable: never = provider;
+      throw new Error(`Unhandled runtime auth provider: ${unreachable}`);
+    }
+  }
 }
 
 export function createCodeAgentProvider(
