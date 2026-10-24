@@ -382,7 +382,7 @@ test.skipIf(!connectionString)(
       const thread = await history.loadThread(workspace.id, bob.id, people, root.id);
       expect(thread.replies.map((message) => message.id)).toEqual([reply.id]);
       // The same shape a direct conversation's window and updates give a message.
-      expect("senderMemberId" in thread.replies[0]!).toBe(false);
+      expect(thread.replies[0]!.senderMemberId).toBe(reply.senderMemberId);
       // A member outside the DM, and someone outside the Workspace, read nothing.
       await expect(history.loadThread(workspace.id, cy.id, people, root.id)).rejects.toThrow(
         "ACCESS_DENIED",
