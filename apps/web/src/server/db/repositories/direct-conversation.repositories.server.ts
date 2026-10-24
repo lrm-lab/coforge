@@ -20,9 +20,13 @@ import {
 } from "./mention-delivery.repositories.server";
 import {
   MESSAGE_ANCHOR,
+  anchorSideHasMessages,
   assertMessageAnchor,
+  isSequenceAnchor,
   onlyAnchorMatch,
+  sequenceAnchor,
 } from "./direct-conversation-anchor.server";
+import { advanceThreadRead } from "./thread-read-position.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { isAppBot } from "#src/features/agents/agent-system-kind";
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
@@ -711,22 +715,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     return { messageId: row.id };
   }
 
-  private async advanceThreadRead(
-    client: Prisma.TransactionClient | PrismaClient,
-    memberId: string,
-    conversationId: string,
-    workspaceId: string,
-    rootMessageId: string,
-    sequence: number,
-  ) {
-    // PostgreSQL's atomic upsert preserves monotonic positions across backend replicas.
-    await client.$executeRaw`INSERT INTO "thread_reads"
-      ("memberId", "conversationId", "workspaceId", "rootMessageId", "readThroughSequence")
-      VALUES (${memberId}::uuid, ${conversationId}::uuid, ${workspaceId}::uuid, ${rootMessageId}::uuid, ${sequence})
-      ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
-        GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence")`;
-  }
-
   /**
    * The Agent's DM with a person to read: the one they already have, which stays as history after
    * they left the Workspace, or else one started while they are a member.
@@ -1087,7 +1075,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         conversationId_userId: { conversationId, userId },
       },
     });
-    await this.advanceThreadRead(
+    await advanceThreadRead(
       this.db,
       member.id,
       conversationId,
@@ -1404,7 +1392,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         where: { conversationId_agentId: { conversationId, agentId } },
         select: { id: true, agentReadThroughSequence: true },
       }),
-      anchorId ? this.resolveMessage(conversationId, anchorId) : undefined,
+      anchorId
+        ? isSequenceAnchor(anchorId)
+          ? sequenceAnchor(anchorId, threadRootId)
+          : this.resolveMessage(conversationId, anchorId)
+        : undefined,
     ]);
     if (!agentMember) throw new Error("Agent is not a conversation member");
     if (anchor && anchor.threadRootId !== threadRootId)
@@ -1464,7 +1456,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     const messages = map(
       page.unread ? pageRows.filter((row) => row.sender?.agentId !== agentId) : pageRows,
     );
-    const hasOlder = page.after ? Boolean(anchor) : page.before ? hasMore : false;
+    const hasOlder = page.after
+      ? await anchorSideHasMessages(this.db, scope, anchor, "older")
+      : page.before
+        ? hasMore
+        : false;
     // Decided against the read-through as it was before this read moves it.
     const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
       anchor: page.before ? "before" : page.after ? "after" : undefined,
@@ -1480,7 +1476,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     const agentReadThroughSequence =
       modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
     if (agentReadThroughSequence && threadRootId) {
-      await this.advanceThreadRead(
+      await advanceThreadRead(
         this.db,
         agentMember.id,
         conversationId,
@@ -1501,7 +1497,11 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     return {
       messages,
       hasOlder,
-      hasNewer: page.before ? Boolean(anchor) : page.after || !isHistoryRead ? hasMore : false,
+      hasNewer: page.before
+        ? await anchorSideHasMessages(this.db, scope, anchor, "newer")
+        : page.after || !isHistoryRead
+          ? hasMore
+          : false,
       modelSeenUpToSeq,
       consumptionScope,
       ...(page.unread
@@ -1737,7 +1737,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         if (group.threadRootId) {
           const memberId = memberIdByConversation.get(group.conversationId);
           if (!memberId) throw new Error("Agent is not a conversation member");
-          await this.advanceThreadRead(
+          await advanceThreadRead(
             tx,
             memberId,
             group.conversationId,
@@ -1903,7 +1903,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         where: { conversationId_agentId: { conversationId, agentId } },
         select: { id: true },
       });
-      await this.advanceThreadRead(
+      await advanceThreadRead(
         this.db,
         member.id,
         conversationId,

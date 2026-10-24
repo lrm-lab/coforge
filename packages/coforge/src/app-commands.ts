@@ -230,7 +230,7 @@ export async function runAppCommand(
   }
   const who = "a Workspace owner or admin, or your creator,";
   const where = answer.actionCardMessageId
-    ? `Ask ${who} to approve the card posted as message ${answer.actionCardMessageId} (short ${answer.actionCardMessageId.slice(0, 8)})${invocation.target ? ` in ${invocation.target}` : ""}, then run this command again.`
+    ? `Ask ${who} to approve the card posted as message ${answer.actionCardMessageId} (short ${answer.actionCardMessageId.slice(0, 13)})${invocation.target ? ` in ${invocation.target}` : ""}, then run this command again.`
     : `Run this command again with --target <#channel or @person> to post an approval card there, or ask ${who} to approve it in your Apps settings; then run it again.`;
   io.stderr(
     `coforge: Using ${invocation.appKey} needs a person's approval (request ${answer.requestId}); nothing was run. ${where}\n`,

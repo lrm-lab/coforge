@@ -45,3 +45,40 @@ test("message read --unread asks the transport for unread and prints the unread 
   expect(calls).toEqual([["@ada", { command: "read", target: "@ada", unread: true }]]);
   expect(output).toEndWith("No unread messages in @ada. You have read through seq 4.");
 });
+
+test("the re-read command an unread read prints parses and asks the transport for the same position", async () => {
+  const reads: unknown[] = [];
+  const transport = {
+    read: async (target: string, options: unknown) => {
+      reads.push([target, options]);
+      return reads.length === 1
+        ? {
+            messages: [
+              {
+                id: "aaaaaaaa-0000-4000-8000-000000000007",
+                sequence: 7,
+                senderKind: "human",
+                senderHandle: "ada",
+                senderDescription: "",
+                target: "@ada",
+                body: "hi",
+                createdAt: "2026-09-07T10:00:00Z",
+                attachments: [],
+              },
+            ],
+            unreadCursorBefore: 4,
+            readPositionAfter: 7,
+          }
+        : { messages: [] };
+    },
+  } as unknown as MessageTransport;
+  const unread = String(await run(["message", "read", "--target", "@ada", "--unread"], transport));
+  const hint = unread.split("\n").find((line) => line.includes("To re-read these:"));
+  const command = hint?.split("To re-read these: ")[1];
+  expect(command).toBeDefined();
+  // Run the printed command word for word, as an Agent would.
+  const argv = [...command!.matchAll(/"([^"]*)"|(\S+)/g)].map((match) => match[1] ?? match[2]!);
+  expect(argv[0]).toBe("coforge");
+  await run(argv.slice(1), transport);
+  expect(reads[1]).toEqual(["@ada", { command: "read", target: "@ada", after: "4" }]);
+});

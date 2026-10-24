@@ -59,3 +59,12 @@ test("a read that is not unread does not carry the flag", async () => {
   });
   expect((received as unknown[])[3]).not.toHaveProperty("unread");
 });
+
+test("a sequence number reaches the repository untouched as the read anchor", async () => {
+  let received: unknown;
+  await get("?target=%40ada&after=4", async (...args) => {
+    received = args;
+    return { messages: [], hasOlder: false, hasNewer: false, modelSeenUpToSeq: null };
+  });
+  expect((received as unknown[])[3]).toMatchObject({ after: "4" });
+});
