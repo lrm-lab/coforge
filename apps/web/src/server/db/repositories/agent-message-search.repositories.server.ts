@@ -52,7 +52,7 @@ export async function searchAgentMessagePage(
 ): Promise<AgentMessageSearchPage> {
   const limit = clampPageLimit(options.limit ?? 20, 100);
   const offset = Math.max(options.offset ?? 0, 0);
-  if (options.cursor && (!options.query || options.sort !== "recent" || offset > 0))
+  if (options.cursor !== undefined && (!options.query || options.sort !== "recent" || offset > 0))
     throw new Error("a search cursor continues a recent search with a query and no offset");
   const scope = options.target ? await resolveTarget(options.target) : undefined;
   const before = options.before ? new Date(options.before) : undefined;
@@ -68,7 +68,8 @@ export async function searchAgentMessagePage(
       )[0]?.query
     : undefined;
   if (options.query && !searchQuery) return { messages: [], hasMore: false, incomplete: false };
-  const keyset = options.cursor ? decodeAgentMessageSearchCursor(options.cursor) : undefined;
+  const keyset =
+    options.cursor !== undefined ? decodeAgentMessageSearchCursor(options.cursor) : undefined;
   const orderBy = (
     searchQuery && options.sort !== "recent"
       ? [

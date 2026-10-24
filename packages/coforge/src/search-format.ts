@@ -159,7 +159,7 @@ function searchTruncation(response: SearchResponse, paging: { hint: string } | u
         : "";
     return `incomplete=true · ${reached}older messages were not searched, so these are NOT all the matches`;
   }
-  if (response.hasMore === true) return `truncated=true · more results exist${paging!.hint}`;
+  if (response.hasMore === true) return `truncated=true · more results exist${paging?.hint ?? ""}`;
   if (response.hasMore === false) return "truncated=false";
   return "truncated=unknown · server did not report hasMore";
 }

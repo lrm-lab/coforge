@@ -147,3 +147,9 @@ test("formatSearchResults reports an incomplete search with no matches", () => {
     "Search incomplete: no matches in the messages searched so far. Older messages were not searched, so this does NOT mean no message matches. (incomplete=true)",
   );
 });
+
+test("formatSearchResults reports an empty page that still says more follows", () => {
+  expect(formatSearchResults("release", { messages: [], hasMore: true })).toBe(
+    "No search results. (truncated=true · more results exist)",
+  );
+});
