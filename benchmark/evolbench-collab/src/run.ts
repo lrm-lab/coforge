@@ -57,7 +57,11 @@ const knowledgePath = Bun.env.COFORGE_EVAL_KNOWLEDGE_READY;
 const frozenKnowledge = knowledgePath
   ? validateKnowledgeReady(await Bun.file(knowledgePath).json())
   : null;
-if (manifest.some((episode) => episode.domain === "information_retrieval") && !frozenKnowledge) {
+if (
+  manifest.some((episode) => episode.domain === "information_retrieval") &&
+  !frozenKnowledge &&
+  !env.taskDocTools
+) {
   throw new Error(
     "IR requires COFORGE_EVAL_KNOWLEDGE_READY; direct BM25/GMS evaluation is disabled",
   );
@@ -348,7 +352,9 @@ async function executeEpisode(
     ...episode,
     prompt: episode.prompt.replaceAll("{workspace_dir}", provisioned.agentWorkspaceDir),
   };
-  const reminder = reminderForEpisode(episode.benchmark || benchmark, episode.domain);
+  const reminder = reminderForEpisode(episode.benchmark || benchmark, episode.domain, {
+    taskDocTools: env.taskDocTools,
+  });
   const result = await runEpisode({
     workspace: provisioned.workspace,
     env,
@@ -364,6 +370,7 @@ async function executeEpisode(
     registerWorkspaceDir: env.verifyRegisterWorkspace ? provisioned.agentWorkspaceDir : undefined,
     episodeId: episode.episodeId,
     arm,
+    finalOutput: result.finalOutput,
   });
   const { verification: sidecarVerification, verdict: sidecarVerdict } = sidecar;
   const row = attemptRow({

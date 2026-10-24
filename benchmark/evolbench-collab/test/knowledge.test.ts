@@ -30,9 +30,13 @@ test("a frozen IR test refuses incomplete or mismatched prepared knowledge", () 
     completed: true,
   };
   expect(validateKnowledgeReady(ready).accountId).toBe("prepared-ir");
-  expect(() => validateKnowledgeReady({ ...ready, completed: false })).toThrow();
+  expect(() =>
+    validateKnowledgeReady({ ...ready, completed: false }),
+  ).toThrow();
   expect(() => validateKnowledgeReady({ ...ready, documents: 0 })).toThrow();
-  expect(() => validateKnowledgeReady({ ...ready, ledgerSha256: "" })).toThrow();
+  expect(() =>
+    validateKnowledgeReady({ ...ready, ledgerSha256: "" }),
+  ).toThrow();
 });
 
 test("cold preparation contains evidence documents and no train experience", () => {
@@ -51,6 +55,9 @@ test("cold preparation contains evidence documents and no train experience", () 
   expect(validateKnowledgeReady(ready).experiences).toBe(0);
   expect(() => validateKnowledgeReady({ ...ready, experiences: 1 })).toThrow();
   expect(() =>
-    validateKnowledgeReady({ ...ready, processingMode: "semantic_and_vectors" }),
+    validateKnowledgeReady({
+      ...ready,
+      processingMode: "semantic_and_vectors",
+    }),
   ).toThrow();
 });

@@ -8,7 +8,8 @@ test("lists every runtime session an Agent workspace holds, oldest first", async
   const cwd = await mkdtemp(join(tmpdir(), "session-ids-"));
   const dir = join(cwd, ".builtin-sessions");
   await mkdir(dir);
-  const header = (id: string) => `${JSON.stringify({ type: "session", id, cwd })}\n{"type":"x"}\n`;
+  const header = (id: string) =>
+    `${JSON.stringify({ type: "session", id, cwd })}\n{"type":"x"}\n`;
   await writeFile(join(dir, "2026-10-22T13-35-27-051Z_b.jsonl"), header("b"));
   await writeFile(join(dir, "2026-10-22T13-35-22-759Z_a.jsonl"), header("a"));
   await writeFile(join(dir, "notes.txt"), "not a session");
@@ -16,5 +17,7 @@ test("lists every runtime session an Agent workspace holds, oldest first", async
 });
 
 test("an Agent workspace without sessions lists none", async () => {
-  expect(await listSessionIds(await mkdtemp(join(tmpdir(), "session-ids-")))).toEqual([]);
+  expect(
+    await listSessionIds(await mkdtemp(join(tmpdir(), "session-ids-"))),
+  ).toEqual([]);
 });

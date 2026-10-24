@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { episodesForArm, groupFamilies, loadManifest, parseManifestLine } from "../src/manifest";
+import {
+  episodesForArm,
+  groupFamilies,
+  loadManifest,
+  parseManifestLine,
+} from "../src/manifest";
 
 const EVO_LINE = JSON.stringify({
   benchmark: "evoagentbench",
@@ -62,34 +67,55 @@ describe("parseManifestLine", () => {
 
   test("empty lines are skipped; promptless lines are rejected", () => {
     expect(parseManifestLine("", 0)).toBeNull();
-    expect(() => parseManifestLine(JSON.stringify({ benchmark: "x" }), 2)).toThrow(
-      "no turns[0].prompt",
-    );
+    expect(() =>
+      parseManifestLine(JSON.stringify({ benchmark: "x" }), 2),
+    ).toThrow("no turns[0].prompt");
   });
 });
 
 describe("groupFamilies + episodesForArm", () => {
   test("warm keeps everything in order; cold keeps only the test split", () => {
     const lines = [
-      { ...JSON.parse(PAST_LINE), episode_id: "learn_a", order: 1, split: "train" },
-      { ...JSON.parse(PAST_LINE), episode_id: "learn_b", order: 2, split: "train" },
-      { ...JSON.parse(PAST_LINE), episode_id: "eval_near", order: 3, split: "test" },
+      {
+        ...JSON.parse(PAST_LINE),
+        episode_id: "learn_a",
+        order: 1,
+        split: "train",
+      },
+      {
+        ...JSON.parse(PAST_LINE),
+        episode_id: "learn_b",
+        order: 2,
+        split: "train",
+      },
+      {
+        ...JSON.parse(PAST_LINE),
+        episode_id: "eval_near",
+        order: 3,
+        split: "test",
+      },
       { ...JSON.parse(STREAM_LINE), episode_id: "code-1", order: 40 },
     ];
-    const episodes = lines.map((line, index) => parseManifestLine(JSON.stringify(line), index)!);
+    const episodes = lines.map((line, index) =>
+      parseManifestLine(JSON.stringify(line), index)!,
+    );
     const families = groupFamilies(episodes);
     expect(families.map((family) => family.familyId).sort()).toEqual([
       "SM01_preference_adoption",
       "stream",
     ]);
-    const past = families.find((family) => family.familyId === "SM01_preference_adoption")!;
+    const past = families.find(
+      (family) => family.familyId === "SM01_preference_adoption",
+    )!;
     expect(past.episodes.map((episode) => episode.episodeId)).toEqual([
       "learn_a",
       "learn_b",
       "eval_near",
     ]);
     expect(episodesForArm(past, "warm")).toHaveLength(3);
-    expect(episodesForArm(past, "cold").map((episode) => episode.episodeId)).toEqual(["eval_near"]);
+    expect(
+      episodesForArm(past, "cold").map((episode) => episode.episodeId),
+    ).toEqual(["eval_near"]);
   });
 });
 

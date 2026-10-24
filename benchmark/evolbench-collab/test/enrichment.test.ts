@@ -1,9 +1,16 @@
 import { expect, test } from "bun:test";
-import { deriveTurnEnrichment, evaluatorResultFromVerdict } from "../src/enrichment";
+import {
+  deriveTurnEnrichment,
+  evaluatorResultFromVerdict,
+} from "../src/enrichment";
 
 const m1 = "0197aaaa-bbbb-7ccc-8ddd-000000000001";
 const m2 = "0197aaaa-cccc-7ccc-8ddd-000000000002";
-const decision = (agentId: string, messageId: string, outcome: "notified" | "held") => ({
+const decision = (
+  agentId: string,
+  messageId: string,
+  outcome: "notified" | "held",
+) => ({
   at: "t",
   agentId,
   messageId,
@@ -29,7 +36,13 @@ test("derives tool exchanges for the sender and delivery facts for the others", 
             {
               messageId: m2,
               toolExchanges: [
-                { toolCallId: "c", toolName: "bash", input: {}, output: "x", isError: false },
+                {
+                  toolCallId: "c",
+                  toolName: "bash",
+                  input: {},
+                  output: "x",
+                  isError: false,
+                },
               ],
               receivedShortIds: [m1.slice(0, 13)],
             },
@@ -38,7 +51,12 @@ test("derives tool exchanges for the sender and delivery facts for the others", 
         },
         decisions: [decision("a-task", m1, "notified")],
       },
-      { id: "a-mem", name: "memory", trace: null, decisions: [decision("a-mem", m2, "held")] },
+      {
+        id: "a-mem",
+        name: "memory",
+        trace: null,
+        decisions: [decision("a-mem", m2, "held")],
+      },
     ],
   });
   expect(result.get(m2)?.toolExchanges?.[0]?.toolCallId).toBe("c");
@@ -75,6 +93,10 @@ test("only a graded verdict with a reward becomes evaluator evidence", () => {
     }),
   ).toEqual([]);
   expect(
-    evaluatorResultFromVerdict({ episodeId: "e1", verdict: { graded: true }, passReward: 0.6 }),
+    evaluatorResultFromVerdict({
+      episodeId: "e1",
+      verdict: { graded: true },
+      passReward: 0.6,
+    }),
   ).toEqual([]);
 });

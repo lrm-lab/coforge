@@ -16,6 +16,8 @@ export async function verifyWithSidecar(input: {
   registerWorkspaceDir: string | undefined;
   episodeId: string;
   arm: string;
+  /** The Task Agent's final answer, for scorers that grade text (information_retrieval) rather than files. */
+  finalOutput?: string | null;
 }): Promise<SidecarOutcome> {
   if (!input.sidecarUrl) return { verification: undefined, verdict: undefined };
   try {
@@ -33,7 +35,10 @@ export async function verifyWithSidecar(input: {
     const response = await fetch(new URL("/verify", input.sidecarUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ episode_id: input.episodeId }),
+      body: JSON.stringify({
+        episode_id: input.episodeId,
+        ...(input.finalOutput == null ? {} : { final_output: input.finalOutput }),
+      }),
       // The judge may take minutes; fetch's default timeout would drop the verdict.
       signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
     });

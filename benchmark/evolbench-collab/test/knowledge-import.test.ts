@@ -2,8 +2,14 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createEvalRuntime, userIdentity } from "../../public-channel-memory/src/ov";
-import { importKnowledgeResource, prepareKnowledge } from "../src/knowledge-import";
+import {
+  createEvalRuntime,
+  userIdentity,
+} from "../../public-channel-memory/src/ov";
+import {
+  importKnowledgeResource,
+  prepareKnowledge,
+} from "../src/knowledge-import";
 
 const identity = userIdentity("prepared", "owner", "test-key", "admin");
 
@@ -14,7 +20,9 @@ test("BM25 preparation uploads projected raw documents and resumes without embed
   const server = Bun.serve({
     port: 0,
     async fetch(request) {
-      expect(new URL(request.url).pathname).toBe("/api/v1/search/index_lexical");
+      expect(new URL(request.url).pathname).toBe(
+        "/api/v1/search/index_lexical",
+      );
       if (request.method === "GET")
         return Response.json({
           status: "ok",
@@ -30,7 +38,9 @@ test("BM25 preparation uploads projected raw documents and resumes without embed
           retrieval_mode: "bm25",
           resources: body.resources.map((row) => ({
             uri: row.uri,
-            content_hash: "sha256:" + new Bun.CryptoHasher("sha256").update(row.text).digest("hex"),
+            content_hash:
+              "sha256:" +
+              new Bun.CryptoHasher("sha256").update(row.text).digest("hex"),
           })),
         },
       });
@@ -42,7 +52,12 @@ test("BM25 preparation uploads projected raw documents and resumes without embed
       readyPath = join(dir, "ready.json");
     await Bun.write(
       corpusPath,
-      JSON.stringify({ docid: "d1", text: "Evidence", answer: "hidden-answer", gold: true }) + "\n",
+      JSON.stringify({
+        docid: "d1",
+        text: "Evidence",
+        answer: "hidden-answer",
+        gold: true,
+      }) + "\n",
     );
     await Bun.write(ledgerPath, "[]");
     const input = {
@@ -58,11 +73,17 @@ test("BM25 preparation uploads projected raw documents and resumes without embed
     expect((await prepareKnowledge(input)).arm).toBe("cold");
     await prepareKnowledge(input);
     extraCounts = { native_block: 1 };
-    await expect(prepareKnowledge(input)).rejects.toThrow("untracked resource kinds");
+    await expect(prepareKnowledge(input)).rejects.toThrow(
+      "untracked resource kinds",
+    );
     expect(await Bun.file(readyPath).exists()).toBe(false);
     extraCounts = {};
     expect(posted).toEqual([
-      { uri: "viking://resources/evo-ir/documents/d1.md", text: "Evidence", kind: "document" },
+      {
+        uri: "viking://resources/evo-ir/documents/d1.md",
+        text: "Evidence",
+        kind: "document",
+      },
     ]);
     await expect(
       prepareKnowledge({ ...input, accountCreatedAt: "2026-10-16T00:00:00Z" }),
@@ -83,9 +104,16 @@ test("raw import refuses a backend without BM25 provenance or a matching content
     },
   });
   try {
-    const resource = { uri: "viking://resources/evo-ir/documents/d1.md", text: "Evidence" };
+    const resource = {
+      uri: "viking://resources/evo-ir/documents/d1.md",
+      text: "Evidence",
+    };
     const invoke = () =>
-      importKnowledgeResource(createEvalRuntime(server.url.toString()), identity, resource);
+      importKnowledgeResource(
+        createEvalRuntime(server.url.toString()),
+        identity,
+        resource,
+      );
     await expect(invoke()).rejects.toThrow("requires verified BM25");
     result = {
       retrieval_mode: "bm25",
@@ -112,19 +140,26 @@ test("large raw document batches respect the existing transport byte cap", async
           retrieval_mode: "bm25",
           resources: resources.map((row) => ({
             uri: row.uri,
-            content_hash: "sha256:" + new Bun.CryptoHasher("sha256").update(row.text).digest("hex"),
+            content_hash:
+              "sha256:" +
+              new Bun.CryptoHasher("sha256").update(row.text).digest("hex"),
           })),
         },
       });
     },
   });
   try {
-    const { importKnowledgeResources } = await import("../src/knowledge-import");
+    const { importKnowledgeResources } =
+      await import("../src/knowledge-import");
     const rows = ["a", "b"].map((id) => ({
       uri: `viking://resources/docs/${id}.md`,
       text: "x".repeat(4_300_000),
     }));
-    await importKnowledgeResources(createEvalRuntime(server.url.toString()), identity, rows);
+    await importKnowledgeResources(
+      createEvalRuntime(server.url.toString()),
+      identity,
+      rows,
+    );
     expect(posted).toEqual(rows.map((row) => [row.uri]));
   } finally {
     server.stop(true);

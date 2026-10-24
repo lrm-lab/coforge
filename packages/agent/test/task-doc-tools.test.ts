@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createTaskDocTools, taskAgentTools } from "../src/task-doc-tools";
 
-const requests: { method: string; path: string; headers: Headers; body: unknown }[] = [];
+const requests: {
+  method: string;
+  path: string;
+  headers: Headers;
+  body: unknown;
+}[] = [];
 let server: ReturnType<typeof Bun.serve>;
 
 beforeAll(() => {
@@ -35,7 +40,8 @@ beforeAll(() => {
             ],
           },
         });
-      if (url.pathname === "/api/v1/content/read") return Response.json({ result: "full text" });
+      if (url.pathname === "/api/v1/content/read")
+        return Response.json({ result: "full text" });
       return new Response("nope", { status: 404 });
     },
   });
@@ -51,19 +57,32 @@ const env = () => ({
 });
 
 async function run(tool: unknown, params: unknown) {
-  const result = await (tool as { execute: (id: string, p: unknown) => Promise<{ content: { text: string }[] }> }).execute("t", params);
+  const result = await (
+    tool as {
+      execute: (
+        id: string,
+        p: unknown,
+      ) => Promise<{ content: { text: string }[] }>;
+    }
+  ).execute("t", params);
   return JSON.parse(result.content[0]!.text);
 }
 
 test("document tools are absent unless the eval flag is set", () => {
   expect(createTaskDocTools({})).toEqual([]);
-  expect(() => createTaskDocTools({ COFORGE_EVAL_TASK_DOC_TOOLS: "1" })).toThrow(/require/);
+  expect(() =>
+    createTaskDocTools({ COFORGE_EVAL_TASK_DOC_TOOLS: "1" }),
+  ).toThrow(/require/);
 });
 
 test("ov_find queries the corpus instance in BM25 mode with the corpus account and shortens long excerpts", async () => {
   const [find] = createTaskDocTools(env());
   requests.length = 0;
-  const out = await run(find, { operationId: "find-1", query: "actor antagonist rural village", limit: 5 });
+  const out = await run(find, {
+    operationId: "find-1",
+    query: "actor antagonist rural village",
+    limit: 5,
+  });
   expect(requests[0]!.path).toBe("/api/v1/search/find");
   expect(requests[0]!.body).toMatchObject({ retrieval_mode: "bm25", limit: 5 });
   expect(requests[0]!.headers.get("x-openviking-account")).toBe("corpus");
@@ -80,22 +99,30 @@ test("the per-episode find budget turns an overflow into a publish-now instructi
   const over = await run(find, { operationId: "find-2", query: "second" });
   expect(over.error).toContain("document_budget_exhausted");
   expect(over.error).toContain("coforge message send");
-  const doc = await run(read, { operationId: "read-1", uri: "viking://resources/evo-ir/documents/doc-1.md" });
+  const doc = await run(read, {
+    operationId: "read-1",
+    uri: "viking://resources/evo-ir/documents/doc-1.md",
+  });
   expect(doc.content).toBe("full text");
   expect(doc.citation.citationId).toBe("ov:evo-ir/documents/doc-1.md");
 });
 
 test("taskAgentTools always carries the Memory Hint receipt and adds documents only when enabled", () => {
   const proxy = { post: async () => ({}) };
-  const names = (tools: unknown[]) => tools.map((tool) => (tool as { name: string }).name);
+  const names = (tools: unknown[]) =>
+    tools.map((tool) => (tool as { name: string }).name);
   const before = { ...Bun.env };
   delete Bun.env.COFORGE_EVAL_TASK_DOC_TOOLS;
   try {
     expect(names(taskAgentTools(proxy, {}))).toEqual(["memory_disposition"]);
-    expect(names(taskAgentTools(proxy, env()))).toEqual(["memory_disposition", "ov_find", "ov_read"]);
-    expect(names(taskAgentTools(proxy, env(), { memoryControlSession: true }))).toEqual([
+    expect(names(taskAgentTools(proxy, env()))).toEqual([
       "memory_disposition",
+      "ov_find",
+      "ov_read",
     ]);
+    expect(
+      names(taskAgentTools(proxy, env(), { memoryControlSession: true })),
+    ).toEqual(["memory_disposition"]);
   } finally {
     Object.assign(Bun.env, before);
   }

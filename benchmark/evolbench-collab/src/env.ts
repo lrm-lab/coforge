@@ -44,6 +44,9 @@ export type EvalEnv = {
   memoryObserver: boolean;
   memoryParallel: boolean;
   deliveryRules: boolean;
+  /** The Task Agent searches the document corpus itself (ov_find/ov_read against a separate corpus OpenViking
+   * instance); the Memory Agent only offers experience. Set with COFORGE_EVAL_OV_BASE_URL/_ACCOUNT_ID/_ACCOUNT_KEY. */
+  taskDocTools: boolean;
   /** Shard filter for order-independent episode streams: "N:k" keeps episodes
    * whose zero-based manifest index satisfies index % N === k. */
   episodeMod: string | null;
@@ -118,6 +121,7 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     memoryObserver: (env.COFORGE_EVAL_MEMORY_OBSERVER ?? "0") === "1",
     memoryParallel: (env.COFORGE_EVAL_MEMORY_PARALLEL ?? "0") === "1",
     deliveryRules: (env.COFORGE_EVAL_DELIVERY_RULES ?? "0") === "1",
+    taskDocTools: (env.COFORGE_EVAL_TASK_DOC_TOOLS ?? "0") === "1",
     recordTrajectoryAos: (env.COFORGE_EVAL_TRAJECTORY_AOS ?? "0") === "1",
     episodeMod: env.COFORGE_EVAL_EPISODE_MOD?.trim() || null,
     abortQuietMs: Number(env.COFORGE_EVAL_ABORT_QUIET_MS ?? "600000"),

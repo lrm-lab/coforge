@@ -1,4 +1,5 @@
 import type { MemoryDispositionRecord } from "@lrm/coforge-sdk/agent";
+import { IR_DOCS_NOTE, MEMORY_PARALLEL_NOTE_IR } from "./ir-notes";
 import { RedisClient } from "bun";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { PublicChannels } from "../../../apps/web/src/server/conversations/public-channels.server";
@@ -63,7 +64,11 @@ export function episodePrompt(
   reminder: string,
   envNote?: string | null,
   memoryObserver = false,
-  options: { parallel?: boolean; deliveryRules?: boolean } = {},
+  options: {
+    parallel?: boolean;
+    deliveryRules?: boolean;
+    taskDocTools?: boolean;
+  } = {},
 ): string {
   const note = envNote
     ? `\n\n${envNote
@@ -72,20 +77,29 @@ export function episodePrompt(
     : "";
   const prompt =
     episode.domain === "information_retrieval"
-      ? episode.prompt.split("## How to call search in this environment")[0]!.trimEnd()
+      ? episode.prompt
+          .split("## How to call search in this environment")[0]!
+          .trimEnd()
       : episode.prompt;
   const parallel = options.parallel === true;
+  const ir = episode.domain === "information_retrieval";
+  const docsNote = ir && options.taskDocTools ? `\n\n${IR_DOCS_NOTE}` : "";
   const observerNote = parallel
-    ? `\n\n${MEMORY_PARALLEL_NOTE}`
+    ? `\n\n${ir ? MEMORY_PARALLEL_NOTE_IR : MEMORY_PARALLEL_NOTE}`
     : memoryObserver
       ? `\n\n${MEMORY_OBSERVER_NOTE}`
       : "";
   const rules = options.deliveryRules ? `\n\n${DELIVERY_RULES_NOTE}` : "";
-  const task = `${prompt}${note}\n\n${reminder}`.replace(/@memory\b/g, "Memory Agent");
-  const body = `${task}${rules}${observerNote}`;
+  const task = `${prompt}${note}\n\n${reminder}`.replace(
+    /@memory\b/g,
+    "Memory Agent",
+  );
+  const body = `${task}${docsNote}${rules}${observerNote}`;
   // An explicit @memory question can only be answered by a cited Offer, which an empty
   // corpus cannot give; observer mode leaves Memory to publish an ordinary channel message.
-  return memoryObserver && !parallel ? `@task ${body}` : `@task @memory ${body}`;
+  return memoryObserver && !parallel
+    ? `@task ${body}`
+    : `@task @memory ${body}`;
 }
 
 export async function postEpisodePrompt(input: {
@@ -97,11 +111,19 @@ export async function postEpisodePrompt(input: {
   memoryObserver?: boolean;
   memoryParallel?: boolean;
   deliveryRules?: boolean;
+  taskDocTools?: boolean;
 }): Promise<{ triggerId: string; createdAt: Date }> {
-  const body = episodePrompt(input.episode, input.reminder, input.envNote, input.memoryObserver, {
-    parallel: input.memoryParallel,
-    deliveryRules: input.deliveryRules,
-  });
+  const body = episodePrompt(
+    input.episode,
+    input.reminder,
+    input.envNote,
+    input.memoryObserver,
+    {
+      parallel: input.memoryParallel,
+      deliveryRules: input.deliveryRules,
+      taskDocTools: input.taskDocTools,
+    },
+  );
   if (input.redisUrl) {
     const redis = new RedisClient(input.redisUrl);
     try {
@@ -117,7 +139,8 @@ export async function postEpisodePrompt(input: {
         body,
       });
       const triggerId = (sent as { id?: string }).id;
-      if (!triggerId) throw new Error("channel send did not return a message id");
+      if (!triggerId)
+        throw new Error("channel send did not return a message id");
       return { triggerId, createdAt: sent.createdAt };
     } finally {
       redis.close();
@@ -174,7 +197,10 @@ export function episodeTerminationReason(
   hasOffer: boolean,
   runtime?: { taskFailed: boolean; memoryFailed: boolean },
 ): EpisodeTerminationReason {
-  if (exit !== "final_settled" && (runtime?.taskFailed || (!hasOffer && runtime?.memoryFailed)))
+  if (
+    exit !== "final_settled" &&
+    (runtime?.taskFailed || (!hasOffer && runtime?.memoryFailed))
+  )
     return "runtime_failed";
   return exit;
 }
@@ -195,7 +221,11 @@ export function createEpisodeRuntimeDiagnostics() {
       failed.task = failed.memory = false;
       running.task = running.memory = options.awaitInitialTurns ?? false;
     },
-    observe(role: "task" | "memory", event: AgentRuntimeEvent, observedAt = Date.now()) {
+    observe(
+      role: "task" | "memory",
+      event: AgentRuntimeEvent,
+      observedAt = Date.now(),
+    ) {
       if (event.type === "error") {
         runtimeErrorCount += 1;
         lastRuntimeErrorAt = observedAt;
@@ -257,6 +287,7 @@ export async function runEpisode(input: {
     memoryObserver: input.env.memoryObserver,
     memoryParallel: input.env.memoryParallel,
     deliveryRules: input.env.deliveryRules,
+    taskDocTools: input.env.taskDocTools,
   });
   const deadline = Date.now() + input.episodeTimeoutMs;
   const abortQuietMs = input.env.abortQuietMs;
@@ -274,18 +305,26 @@ export async function runEpisode(input: {
     memoryHintIds: [] as string[],
     memoryReplyMessageIds: [] as string[],
   };
-  const finish = (exit: Exclude<EpisodeTerminationReason, "runtime_failed">): EpisodeResult => {
+  const finish = (
+    exit: Exclude<EpisodeTerminationReason, "runtime_failed">,
+  ): EpisodeResult => {
     const runtime = input.runtimeDiagnostics?.snapshot();
     return {
       ...snapshot,
       timedOut: exit !== "final_settled",
       elapsedMs: Date.now() - startedAt,
-      terminationReason: episodeTerminationReason(exit, snapshot.offerMessageId !== null, runtime),
+      terminationReason: episodeTerminationReason(
+        exit,
+        snapshot.offerMessageId !== null,
+        runtime,
+      ),
       runtimeErrorCount: runtime?.runtimeErrorCount ?? 0,
       ...(runtime?.lastRuntimeErrorAt === undefined
         ? {}
         : { lastRuntimeErrorAt: runtime.lastRuntimeErrorAt }),
-      ...(runtime?.lastProgressAt === undefined ? {} : { lastProgressAt: runtime.lastProgressAt }),
+      ...(runtime?.lastProgressAt === undefined
+        ? {}
+        : { lastProgressAt: runtime.lastProgressAt }),
     };
   };
   while (Date.now() < deadline) {
@@ -339,7 +378,8 @@ export async function runEpisode(input: {
         !finalIrAnswer &&
         message.mentions.some(
           (mention) =>
-            mention.kind === "agent" && mention.actorId === input.workspace.memoryAgentId,
+            mention.kind === "agent" &&
+            mention.actorId === input.workspace.memoryAgentId,
         )
       );
     });
@@ -355,11 +395,15 @@ export async function runEpisode(input: {
       finalOutput: answers.at(-1)?.body ?? null,
       offerMessageId: offers[0]?.messageId ?? null,
       citationCount: new Set(
-        offers.flatMap((offer) => offer.citations.map((citation) => citation.citationId)),
+        offers.flatMap((offer) =>
+          offer.citations.map((citation) => citation.citationId),
+        ),
       ).size,
       taskMessageCount: taskMessages.length,
       memoryLeakMessageIds: [],
-      memoryReplyMessageIds: memoryMessages.map((row) => row.id).filter((id) => !offerIds.has(id)),
+      memoryReplyMessageIds: memoryMessages
+        .map((row) => row.id)
+        .filter((id) => !offerIds.has(id)),
       timedOut: false,
       memoryRequestCount: requests.length,
       memoryRequestMessageIds: [...requestIds],
@@ -379,13 +423,20 @@ export async function runEpisode(input: {
     };
     const lastTaskAt = taskMessages.at(-1)?.createdAt?.getTime() ?? 0;
     const lastAnswer = answers.at(-1);
-    const answerIndex = taskMessages.findIndex((message) => message.id === lastAnswer?.id);
+    const answerIndex = taskMessages.findIndex(
+      (message) => message.id === lastAnswer?.id,
+    );
     const answerHasNoLaterRequest =
       answerIndex >= 0 &&
-      !taskMessages.slice(answerIndex + 1).some((message) => requestIds.has(message.id));
+      !taskMessages
+        .slice(answerIndex + 1)
+        .some((message) => requestIds.has(message.id));
     const runtime = input.runtimeDiagnostics?.snapshot();
     const lastMemoryAt = memoryMessages.at(-1)?.createdAt.getTime() ?? 0;
-    const lastHintAt = Math.max(0, ...hints.map((hint) => hint.deliveredAt?.getTime() ?? 0));
+    const lastHintAt = Math.max(
+      0,
+      ...hints.map((hint) => hint.deliveredAt?.getTime() ?? 0),
+    );
     const lastInteractionAt = Math.max(
       lastTaskAt,
       lastMemoryAt,
@@ -408,7 +459,13 @@ export async function runEpisode(input: {
     // An @memory request is work in progress, not a candidate final answer.
     const progressAt = input.runtimeDiagnostics?.snapshot().lastProgressAt ?? 0;
     if (
-      Date.now() - Math.max(posted.createdAt.getTime(), lastTaskAt, lastMemoryAt, progressAt) >=
+      Date.now() -
+        Math.max(
+          posted.createdAt.getTime(),
+          lastTaskAt,
+          lastMemoryAt,
+          progressAt,
+        ) >=
       abortQuietMs
     ) {
       return finish("quiet_no_offer");
