@@ -251,12 +251,11 @@ export class AgentProcessManager {
     const runtime = this.#runtimes.get(agentId);
     if (!runtime) return "not_running";
     if (runtime.session.hasLiveTurn === false) return "not_running";
+    let unsubscribe = () => {};
     try {
       const turnEnded = new Promise<void>((resolve) => {
-        const unsubscribe = runtime.session.subscribe((event) => {
-          if (event.type !== "completed") return;
-          unsubscribe();
-          resolve();
+        unsubscribe = runtime.session.subscribe((event) => {
+          if (event.type === "completed") resolve();
         });
       });
       await withDeadline(
@@ -273,6 +272,8 @@ export class AgentProcessManager {
         // fallback result so the request does not leak an exception to the Web caller.
       }
       return "restarted";
+    } finally {
+      unsubscribe();
     }
   }
 

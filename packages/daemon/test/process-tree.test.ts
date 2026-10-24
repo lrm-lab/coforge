@@ -304,3 +304,36 @@ test.skipIf(process.platform === "win32")(
   },
   20_000,
 );
+
+test.skipIf(process.platform === "win32")(
+  "a turn interrupt does not report the tree exited while this turn's children ignore SIGTERM",
+  async () => {
+    const tree = new ProcessTreeOwner().spawn(
+      [
+        "sh",
+        "-c",
+        // The main process exits on SIGTERM; its child, started this turn, ignores it.
+        "trap 'exit 0' TERM; (trap '' TERM; exec sleep 60) & echo $!; while :; do sleep 1; done",
+      ],
+      tmpdir(),
+      { PATH: "/usr/bin:/bin" },
+    );
+    const reader = (tree.child.stdout as ReadableStream<Uint8Array>).getReader();
+    const { value } = await reader.read();
+    const stubborn = Number(new TextDecoder().decode(value).trim());
+    const reports: OwnedProcessTreeKillReport[] = [];
+    try {
+      await cleanupOwnedTree(tree, tree.child, {
+        cutoffAtMs: Date.now() - 2_000,
+        onKillReport: (report) => reports.push(report),
+      });
+      expect(reports[0]!.killed).toContain(stubborn);
+      expect(await tree.waitForExit(1_000)).toBe(true);
+    } finally {
+      try {
+        globalThis.process.kill(stubborn, "SIGKILL");
+      } catch {}
+    }
+  },
+  20_000,
+);

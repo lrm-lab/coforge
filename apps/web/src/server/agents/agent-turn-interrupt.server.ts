@@ -88,6 +88,8 @@ export class AgentTurnInterrupt {
     if (!(await this.capability.supports(input.workspaceId, prepared.computerId)))
       return "needs_upgrade";
 
+    // A retried or squatted request id must not replace the waiter already holding it.
+    if (this.#waiters.has(prepared.intent.requestId)) return "failed";
     const result = this.#wait(prepared.intent);
     try {
       await this.api.publish(

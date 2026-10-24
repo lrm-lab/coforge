@@ -176,6 +176,21 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
     const child = ownedChildProcess(spawned, spawned.exited);
     let turnScoped = false;
     let turnSnapshot: OwnedProcessIdentity[] | undefined;
+    // `ps` start times have one-second resolution, so the fence is compared at that resolution.
+    let turnFenceMs = 0;
+    const fenced = (entry: OwnedProcessIdentity) => entry.startedAtMs >= turnFenceMs;
+    const turnSurvivors = async () => {
+      if (!turnSnapshot?.length) return [];
+      const live = new Map(
+        (await (this.options.processTable ?? hostProcessTable).list()).map((entry) => [
+          entry.pid,
+          entry,
+        ]),
+      );
+      return turnSnapshot.filter(
+        (entry) => fenced(entry) && live.get(entry.pid)?.startedAtMs === entry.startedAtMs,
+      );
+    };
     return {
       child,
       terminate: async (force) => {
@@ -188,11 +203,13 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
         }
       },
       terminateForTurn: async (force, cutoffAtMs) => {
+        const processTable = this.options.processTable ?? hostProcessTable;
         turnScoped = true;
+        turnFenceMs = Math.floor(cutoffAtMs / 1_000) * 1_000;
         const pid = child.pid;
         if (pid === undefined) return emptyKillReport();
         if (!turnSnapshot) {
-          const table = await (this.options.processTable ?? hostProcessTable).list();
+          const table = await processTable.list();
           const main = table.find((entry) => entry.pid === pid);
           // A detached Agent process must still be parented by this daemon. If launchd or another
           // supervisor owns it, the platform-specific owner is responsible for its kill scope.
@@ -203,14 +220,18 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
           child.kill("SIGTERM");
           return emptyKillReport();
         }
-        // `ps` start times have one-second resolution, so the fence is compared at that resolution.
-        const fenceMs = Math.floor(cutoffAtMs / 1_000) * 1_000;
-        const current = await (this.options.processTable ?? hostProcessTable).list();
+        const current = await processTable.list();
         const byPid = new Map(current.map((entry) => [entry.pid, entry]));
+        // Children the turn spawned since the snapshot, while the main process still has them.
+        const liveMain = byPid.get(pid);
+        const known = new Set(turnSnapshot.map((entry) => entry.pid));
+        if (liveMain)
+          for (const entry of descendantsOf(liveMain, current))
+            if (!known.has(entry.pid)) turnSnapshot.push(entry);
         const killed: number[] = [];
         const leftAlone: number[] = [];
         for (const entry of turnSnapshot) {
-          if (entry.startedAtMs < fenceMs) {
+          if (!fenced(entry)) {
             leftAlone.push(entry.pid);
             continue;
           }
@@ -241,9 +262,15 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
         const pid = child.pid;
         if (pid === undefined) return true;
         const deadline = Date.now() + timeoutMs;
-        while (turnScoped ? await this.#processExists(pid) : await this.#treeExists(pid)) {
+        // A turn-scoped exit also waits for this turn's own descendants, which outlive the main
+        // process when it dies on SIGTERM but they ignore it.
+        const alive = async () =>
+          turnScoped
+            ? (await this.#processExists(pid)) || (await turnSurvivors()).length > 0
+            : await this.#treeExists(pid);
+        while (await alive()) {
           if (Date.now() >= deadline) return false;
-          await Bun.sleep(20);
+          await Bun.sleep(turnScoped ? 100 : 20);
         }
         return true;
       },
