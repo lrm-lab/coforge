@@ -114,6 +114,16 @@ test("single-file installation provides management and Agent CLI without a Daemo
     async fetch(request) {
       const path = new URL(request.url).pathname;
       requests.push(path);
+      // `inbox check` lists unread conversations with a body-less GET; everything else posts.
+      if (request.method === "GET" && path === "/api/agent/v1/inbox/conversations")
+        return Response.json({
+          ok: true,
+          view: "unread",
+          items: [],
+          totals: { conversations: 0, dms: 0, mentions: 0 },
+          hasMore: false,
+          nextBefore: null,
+        });
       if (path.startsWith("/api/agent/v1/")) {
         const body = await request.json();
         agentRequests.push({ path, body });
@@ -183,7 +193,8 @@ test("single-file installation provides management and Agent CLI without a Daemo
     // Text is the default; the machine JSON this pins is behind `--json`.
     expect(await invoke(["inbox", "check", "--json"])).toEqual({
       code: 0,
-      stdout: '{"operation":"check","messages":[]}\n',
+      stdout:
+        '{"view":"unread","list":{"ok":true,"view":"unread","items":[],"totals":{"conversations":0,"dms":0,"mentions":0},"hasMore":false,"nextBefore":null},"pendingRows":[],"appItems":[]}\n',
       stderr: "",
     });
     const sent = await invoke(["message", "send", "--target", "@user"], "release-only hello");
