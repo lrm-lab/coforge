@@ -1,5 +1,9 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
-import type { RuntimeErrorClass } from "./runtime-error-classification";
+import {
+  RUNTIME_ERROR_CLASS,
+  type RuntimeErrorClass,
+  type RuntimeErrorClassification,
+} from "./runtime-error-classification";
 import { PHASE_EDGES } from "./runtime-phases";
 
 /**
@@ -197,4 +201,32 @@ export function runtimeErrorRecoverySignal(
       return "progress";
   }
   return PHASE_EDGES.get(event.type)?.[1] === "finish" ? "phase_finished" : undefined;
+}
+
+export const RUNTIME_ERROR_CLASS_FENCE_THRESHOLD = 5;
+export type RuntimeErrorClassFenceState = Readonly<{ attempts: number; fenced: boolean }>;
+
+/** One launch's explicit HTTP 404 streak; a new launch owns a fresh instance. */
+export class RuntimeErrorClassFence {
+  #attempts = 0;
+
+  note(classification: RuntimeErrorClassification): RuntimeErrorClassFenceState | undefined {
+    if (
+      classification.takesAgentOffline ||
+      classification.requiredAction !== "none" ||
+      classification.errorClass !== RUNTIME_ERROR_CLASS.NOT_FOUND ||
+      classification.httpStatus !== 404
+    ) {
+      this.reset();
+      return undefined;
+    }
+    const attempts = ++this.#attempts;
+    const fenced = attempts >= RUNTIME_ERROR_CLASS_FENCE_THRESHOLD;
+    if (fenced) this.reset();
+    return { attempts, fenced };
+  }
+
+  reset(): void {
+    this.#attempts = 0;
+  }
 }

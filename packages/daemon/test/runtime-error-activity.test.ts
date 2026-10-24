@@ -3,6 +3,7 @@ import {
   buildRuntimeErrorActivity,
   buildRuntimeCrashedActivity,
   buildRuntimeErrorFingerprintFenceActivity,
+  buildRuntimeErrorClassFenceActivity,
   buildRuntimeReconnectingActivity,
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
@@ -212,4 +213,17 @@ describe("a provider's usage limit", () => {
       fingerprint: fingerprintRuntimeError(`Crashed (${message})`),
     });
   });
+});
+
+test("class fence uses reference wording and redacts the visible error", () => {
+  const event = { type: "error", message: "HTTP 404: Bearer topsecret-token-value" } as const;
+  const activity = buildRuntimeErrorClassFenceActivity(
+    buildRuntimeErrorActivity(event),
+    { attempts: 5, fenced: true },
+    event,
+  );
+  expect(activity.detail).toContain('5 consecutive "not found" (HTTP 404)');
+  expect(activity.detail).not.toContain("topsecret-token-value");
+  expect(activity.detail).toContain("Check the configured model and endpoint, then restart.");
+  expect(activity.runtimeError?.errorReason).toBe("runtime_error_fenced");
 });

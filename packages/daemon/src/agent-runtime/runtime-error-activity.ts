@@ -11,7 +11,10 @@ import {
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
-import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery";
+import type {
+  RuntimeErrorClassFenceState,
+  RuntimeErrorFingerprintFenceState,
+} from "./runtime-error-recovery";
 
 /**
  * The single place a provider's error, crash or reconnect report becomes an Activity: a
@@ -301,4 +304,33 @@ export function buildRuntimeReconnectingActivity(event: RuntimeReconnectingEvent
     observedAtMs: Date.now(),
     entries: [{ kind: "text", text: detail }],
   };
+}
+
+/** Class fence shares terminal residency with the fingerprint fence. */
+export function buildRuntimeErrorClassFenceActivity(
+  built: ReturnType<typeof buildRuntimeErrorActivity>,
+  fence: RuntimeErrorClassFenceState,
+  lastError: RuntimeErrorEvent,
+): ReturnType<typeof buildRuntimeErrorActivity> {
+  const detail = `Runtime stopped after ${fence.attempts} consecutive "not found" (HTTP 404) runtime errors with no progress in between. Last error: ${scrubRuntimeErrorText(lastError.message)} Check the configured model and endpoint, then restart.`;
+  return {
+    ...built,
+    detail,
+    entries: [{ kind: "text", text: `Error: ${detail}` }],
+    runtimeError: built.runtimeError && {
+      ...built.runtimeError,
+      errorReason: "runtime_error_fenced",
+    },
+  };
+}
+
+/** Both fences share terminal residency; fingerprint outcomes have precedence at the caller. */
+export function buildRuntimeErrorFenceActivity(
+  built: ReturnType<typeof buildRuntimeErrorActivity>,
+  fence: RuntimeErrorFingerprintFenceState | RuntimeErrorClassFenceState,
+  lastError: RuntimeErrorEvent,
+): ReturnType<typeof buildRuntimeErrorActivity> {
+  return "fingerprint" in fence
+    ? buildRuntimeErrorFingerprintFenceActivity(built, fence, lastError)
+    : buildRuntimeErrorClassFenceActivity(built, fence, lastError);
 }

@@ -1,3 +1,8 @@
+import {
+  buildRuntimeErrorActivity,
+  fingerprintRuntimeError,
+  type RuntimeErrorEvent,
+} from "#src/agent-runtime/runtime-error-activity";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import {
   RUNTIME_ERROR_CLASS,
@@ -8,6 +13,8 @@ import {
   RUNTIME_ERROR_RECOVERY_EFFECTS,
   RuntimeErrorDeliveryBackoff,
   RuntimeErrorFingerprintFence,
+  RuntimeErrorClassFence,
+  type RuntimeErrorClassFenceState,
   type RuntimeErrorFingerprintFenceState,
   type RuntimeErrorRecoverySignal,
 } from "#src/agent-runtime/runtime-error-recovery";
@@ -85,11 +92,47 @@ export class RuntimeErrorDeliveryHold {
     return undefined;
   }
 
+  /** Class state belongs to the launch. Raft calls this runtime_error_class_fence.tripped. */
+  noteRuntimeFailure(
+    agentId: string,
+    launch: { runtimeErrorClassFence?: RuntimeErrorClassFence },
+    event: RuntimeErrorEvent,
+    classification: RuntimeErrorClassification,
+  ): {
+    built: ReturnType<typeof buildRuntimeErrorActivity>;
+    fence?: (RuntimeErrorFingerprintFenceState | RuntimeErrorClassFenceState) & { event: string };
+  } {
+    const built = buildRuntimeErrorActivity(event, classification);
+    const classFence = (launch.runtimeErrorClassFence ??= new RuntimeErrorClassFence()).note(
+      classification,
+    );
+    const fingerprintFence = this.noteFailure(
+      agentId,
+      classification,
+      built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
+    );
+    if (fingerprintFence)
+      return {
+        built,
+        fence: { ...fingerprintFence, event: "agent_runtime:fingerprint_fence_tripped" },
+      };
+    if (!classFence?.fenced) return { built };
+    this.#holdFenced(agentId);
+    return { built, fence: { ...classFence, event: "agent_runtime:class_fence_tripped" } };
+  }
+
   /** Applies the signal's `RUNTIME_ERROR_RECOVERY_EFFECTS`. With no backoff nothing is released,
    * so deliveries queued for another reason (a launch's batch) stay where they are. */
-  noteRecoverySignal(agentId: string, signal: RuntimeErrorRecoverySignal): void {
+  noteRecoverySignal(
+    agentId: string,
+    signal: RuntimeErrorRecoverySignal,
+    classFence?: RuntimeErrorClassFence,
+  ): void {
     const effects = RUNTIME_ERROR_RECOVERY_EFFECTS[signal];
-    if (effects.resetsFence) this.#fence.reset(agentId);
+    if (effects.resetsFence) {
+      this.#fence.reset(agentId);
+      classFence?.reset();
+    }
     if (this.#backoff.attempts(agentId) === 0) return;
     const rateLimited = this.#backoff.latestClass(agentId) === RUNTIME_ERROR_CLASS.RATE_LIMIT;
     if (rateLimited ? effects.endsRateLimitBackoff : effects.endsBackoff) this.#endBackoff(agentId);

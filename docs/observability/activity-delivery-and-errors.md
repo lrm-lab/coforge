@@ -122,9 +122,16 @@ fence，同样走下线路径：可见 `detail` 为
 `Runtime stopped after <N> repeated runtime errors with the same fingerprint (<fp>). Last error: <msg> Restart after the runtime/tooling issue is fixed.`，
 `runtimeError.errorReason` 为 `runtime_error_fenced`，`errorClass` 沿用底层错误的分类。
 
+同一个 launch 内，连续 5 次明确 HTTP 404 且分类为 `NotFoundError` 的错误也会熔断，
+不要求指纹相同；裸 `not found` 不计数。其他错误打断计数，输出/工具输出/阶段完成
+沿用 fingerprint fence 的进展判断清零；普通 progress 和回合结束本身不清零。
+指纹 fence 同时触发时优先。文案为
+`Runtime stopped after <N> consecutive "not found" (HTTP 404) runtime errors with no progress in between. Last error: <redacted msg>. Check the configured model and endpoint, then restart.`。
+class streak 随 launch 隔离，触发后清零，沿用 `runtime_error_fenced` 下线与投递恢复。
+
 下线的错误有：`requiredAction` 非空的（`user_reauth` 重新登录、`user_model_access`
 换模型/升级套餐）、`BillingError`（provider 余额耗尽，无 `requiredAction`）和同一指纹
-连续 3 次错误触发的熔断（`runtime_error_fenced`，无 `requiredAction`）。下线即终态驻留：
+连续 3 次或连续 5 次 HTTP 404 触发的熔断（`runtime_error_fenced`，无 `requiredAction`）。下线即终态驻留：
 进程结束后不保留 restart config，Daemon 也不自行重启。后续投递由
 Daemon 接管：排入 `AgentDeliveryQueue` 等待下一次 launch 并立即 ACK，同时重发
 `inactive` 与该错误 Activity（更高的 clientSeq）；已消费的投递仍只 ACK、不再排队。

@@ -192,6 +192,7 @@ test("an exhausted quota with a reported reset time is not retried before it", (
 
 test("an HTTP 402 status is an exhausted billing balance: terminal, offline, no named action", () => {
   expect(classifyRuntimeErrorText("HTTP 402: request failed")).toEqual({
+    httpStatus: 402,
     errorClass: RUNTIME_ERROR_CLASS.BILLING,
     errorReason: "billing_exhausted",
     retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
@@ -232,4 +233,14 @@ test("billing wording under another status still wins over the status block", ()
 test("without a provider limit, a failure is classified from its text alone", () => {
   for (const message of ["request timed out", "You've hit your session limit", "429"])
     expect(classifyRuntimeError({ message })).toEqual(classifyRuntimeErrorText(message));
+});
+
+test("structured status wins over contradictory error text and invalid status falls back", () => {
+  expect(
+    classifyRuntimeError({ message: "HTTP 500: request failed", httpStatus: 404 }),
+  ).toMatchObject({ errorClass: RUNTIME_ERROR_CLASS.NOT_FOUND, httpStatus: 404 });
+  expect(classifyRuntimeError({ message: "HTTP 404: missing", httpStatus: NaN })).toMatchObject({
+    errorClass: RUNTIME_ERROR_CLASS.NOT_FOUND,
+    httpStatus: 404,
+  });
 });

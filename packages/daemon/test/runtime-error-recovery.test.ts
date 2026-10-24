@@ -1,13 +1,20 @@
+import { claudeAssistantEvents } from "#src/code-agent/claude-code/message-events";
 import { expect, test } from "bun:test";
-import { RUNTIME_ERROR_CLASS } from "#src/agent-runtime/runtime-error-classification";
+import {
+  RUNTIME_ERROR_CLASS,
+  classifyRuntimeError,
+  classifyRuntimeErrorText,
+} from "#src/agent-runtime/runtime-error-classification";
 import {
   RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS,
   RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS,
   RUNTIME_ERROR_DELIVERY_BACKOFF_JITTER_RATIO,
   RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD,
+  RUNTIME_ERROR_RECOVERY_EFFECTS,
   runtimeErrorDeliveryBackoffDelayMs,
   RuntimeErrorDeliveryBackoff,
   RuntimeErrorFingerprintFence,
+  RuntimeErrorClassFence,
   runtimeErrorRecoverySignal,
 } from "#src/agent-runtime/runtime-error-recovery";
 
@@ -140,4 +147,56 @@ test("model output from the main session is output; tool output and a subagent's
     "side_output",
   );
   expect(runtimeErrorRecoverySignal({ type: "progress" })).toBe("progress");
+});
+
+test("launch class fence counts only explicit NotFound HTTP 404 errors", () => {
+  const fence = new RuntimeErrorClassFence();
+  for (let i = 1; i <= 5; i++) {
+    const result = fence.note(classifyRuntimeErrorText(`HTTP 404: resource missing request-${i}`));
+    expect(result).toEqual({ attempts: i, fenced: i === 5 });
+  }
+  expect(fence.note(classifyRuntimeErrorText("HTTP 404: resource missing"))).toEqual({
+    attempts: 1,
+    fenced: false,
+  });
+});
+
+test("ineligible errors and real progress reset the class fence, bare not found never counts", () => {
+  const fence = new RuntimeErrorClassFence();
+  fence.note(classifyRuntimeErrorText("HTTP 404: missing"));
+  expect(fence.note(classifyRuntimeErrorText("not found"))).toBeUndefined();
+  expect(fence.note(classifyRuntimeErrorText("HTTP 404: missing"))?.attempts).toBe(1);
+  fence.reset();
+  expect(fence.note(classifyRuntimeErrorText("HTTP 404: missing"))?.attempts).toBe(1);
+  expect(
+    new RuntimeErrorClassFence().note(classifyRuntimeErrorText("HTTP 404: missing"))?.attempts,
+  ).toBe(1);
+});
+
+test.each(["output", "side_output", "progress", "phase_finished"] as const)(
+  "class fence resets with the fingerprint progress predicate: %s",
+  (signal) => {
+    const fence = new RuntimeErrorClassFence();
+    const error = classifyRuntimeErrorText("HTTP 404: missing");
+    fence.note(error);
+    if (RUNTIME_ERROR_RECOVERY_EFFECTS[signal].resetsFence) fence.reset();
+    expect(fence.note(error)?.attempts).toBe(signal === "progress" ? 2 : 1);
+  },
+);
+
+test("captured native Codex and Claude 404 errors both count with their available status facts", async () => {
+  const capture = await Bun.file(
+    new URL("./fixtures/runtime-404-capture.json", import.meta.url),
+  ).json();
+  const codex = new RuntimeErrorClassFence();
+  expect(codex.note(classifyRuntimeErrorText(capture.codex.record.error.message))?.attempts).toBe(
+    1,
+  );
+  const claude = new RuntimeErrorClassFence();
+  expect(capture.claude.record.api_error_status).toBe(404);
+  const error = claudeAssistantEvents(capture.claude.record).events.find(
+    (event) => event.type === "error",
+  );
+  expect(error).toBeDefined();
+  expect(claude.note(classifyRuntimeError(error!))?.attempts).toBe(1);
 });

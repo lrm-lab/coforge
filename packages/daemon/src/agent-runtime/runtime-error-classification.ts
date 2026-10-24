@@ -1,3 +1,4 @@
+import { isHttpErrorStatus } from "@lrm/coforge-anvil";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { RUNTIME_ERROR_ACTION, type RuntimeErrorAction } from "@lrm/coforge-sdk/internal";
 
@@ -75,6 +76,7 @@ export type RuntimeErrorRetryDecision =
 
 export type RuntimeErrorClassification = Readonly<{
   errorClass: RuntimeErrorClass;
+  httpStatus?: number;
   errorReason: string;
   retryDecision: RuntimeErrorRetryDecision;
   /** An ISO time no retry can succeed before: an exhausted quota's reported reset. */
@@ -339,10 +341,13 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
  * exhausted quota is not retried before its reported reset; any other failure is classified from
  * its text. */
 export function classifyRuntimeError(
-  event: Pick<Extract<AgentRuntimeEvent, { type: "error" }>, "message" | "providerLimit">,
+  event: Pick<
+    Extract<AgentRuntimeEvent, { type: "error" }>,
+    "message" | "providerLimit" | "httpStatus"
+  >,
 ): RuntimeErrorClassification {
   const limit = event.providerLimit;
-  if (!limit) return classifyRuntimeErrorText(event.message);
+  if (!limit) return classifyRuntimeErrorText(event.message, event.httpStatus);
   const quota = limit.kind === "quota_exhausted";
   return {
     errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
@@ -368,13 +373,19 @@ function classifyRuntimeErrorAction(
 
 /** Classifies a runtime failure from its own text alone (no provider hint involved — see the
  * module comment for why callers that care about a provider's own hint apply it separately). */
-export function classifyRuntimeErrorText(message: string): RuntimeErrorClassification {
-  const httpStatus = extractHttpStatus(message);
+export function classifyRuntimeErrorText(
+  message: string,
+  providerHttpStatus?: number,
+): RuntimeErrorClassification {
+  const httpStatus = isHttpErrorStatus(providerHttpStatus)
+    ? providerHttpStatus
+    : extractHttpStatus(message);
   for (const rule of CLASSIFICATION_RULES) {
     if (rule.matches(message, httpStatus)) {
       const requiredAction = classifyRuntimeErrorAction(rule.errorClass, message);
       return {
         errorClass: rule.errorClass,
+        ...(httpStatus !== null ? { httpStatus } : {}),
         errorReason: rule.errorReason,
         retryDecision: rule.retryDecision,
         requiredAction,

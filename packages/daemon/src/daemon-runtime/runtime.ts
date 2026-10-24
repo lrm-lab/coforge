@@ -23,7 +23,10 @@ import {
   type PhaseActivity,
   type RuntimePhase,
 } from "#src/agent-runtime/runtime-phases";
-import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
+import {
+  type RuntimeErrorClassFence,
+  runtimeErrorRecoverySignal,
+} from "#src/agent-runtime/runtime-error-recovery";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import {
   endsStalledTurn,
@@ -41,10 +44,9 @@ import {
 } from "#src/agent-runtime/subagent-progress-activity";
 import {
   buildRuntimeErrorActivity,
-  buildRuntimeErrorFingerprintFenceActivity,
+  buildRuntimeErrorFenceActivity,
   buildRuntimeCrashedActivity,
   buildRuntimeReconnectingActivity,
-  fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
@@ -253,6 +255,7 @@ type ActivityLaunch = PublishedActivityLaunch & {
   // — `AgentSession.onExit` itself carries no exit code or signal, so this is the only fact the
   // core has for it (see agent-runtime/runtime-error-activity.ts).
   crashDetail?: RuntimeErrorEvent;
+  runtimeErrorClassFence?: RuntimeErrorClassFence;
   /** Set when a runtime error took this launch's Agent offline (`#takeAgentOffline`): the exit
    * handler republishes this Activity — never a bare `runtime_crashed` — a launch that then
    * fails reports it instead of a generic launch failure, and a delivery to the offline Agent is
@@ -2149,7 +2152,12 @@ export class DaemonRuntime {
         // Raw: text and thinking count before the trajectory coalesces them, and before this
         // event marks the Agent busy (a hold released while busy flushes only at the turn end).
         const recoverySignal = isCurrent ? runtimeErrorRecoverySignal(event) : undefined;
-        if (recoverySignal) this.#runtimeErrorHold.noteRecoverySignal(agentId, recoverySignal);
+        if (recoverySignal)
+          this.#runtimeErrorHold.noteRecoverySignal(
+            agentId,
+            recoverySignal,
+            launch.runtimeErrorClassFence,
+          );
         if (isCurrent) launch.startup?.observe(event);
         const turnActivity =
           event.type === "activity"
@@ -2609,12 +2617,12 @@ export class DaemonRuntime {
         );
         return;
       }
-      const built = buildRuntimeErrorActivity(event, classification);
       // Retry policy reads that classification, never free-form provider hints.
-      const fence = this.#runtimeErrorHold.noteFailure(
+      const { built, fence } = this.#runtimeErrorHold.noteRuntimeFailure(
         agentId,
+        launch,
+        event,
         classification,
-        built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
       );
       // A tripped fingerprint fence is terminal residency like an action-required failure
       // (reference `applyRuntimeErrorFingerprintFence`): end the process and report inactive.
@@ -2623,9 +2631,9 @@ export class DaemonRuntime {
           agentId,
           launch,
           config.provider,
-          buildRuntimeErrorFingerprintFenceActivity(built, fence, event),
+          buildRuntimeErrorFenceActivity(built, fence, event),
           {
-            event: "agent_runtime:fingerprint_fence_tripped",
+            event: fence.event,
             errorClass: classification.errorClass,
             errorReason: "runtime_error_fenced",
             requiredAction: "none",
