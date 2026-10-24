@@ -46,6 +46,25 @@ type ExperienceFindFields = Pick<
   "kind" | "deliverable" | "issueKind" | "occupation"
 >;
 
+/**
+ * The soft filters are optional hints. Models invent values ("calculation_error", "wav"), and a rejected call costs a
+ * whole round, so the Memory tool layer drops a value outside the vocabulary and searches without that filter.
+ */
+export function dropInvalidExperienceFilters<T extends Record<string, unknown>>(args: T): T {
+  const next: Record<string, unknown> = { ...args };
+  const vocab: Record<string, readonly string[]> = {
+    kind: EXPERIENCE_CARD_KINDS,
+    deliverable: EXPERIENCE_DELIVERABLE_KINDS,
+    issueKind: EXPERIENCE_ISSUE_KINDS,
+  };
+  for (const [field, choices] of Object.entries(vocab)) {
+    const value = next[field];
+    if (value !== undefined && !(typeof value === "string" && choices.includes(value)))
+      delete next[field];
+  }
+  return next as T;
+}
+
 function optionalChoice<T extends string>(
   value: unknown,
   choices: readonly T[],

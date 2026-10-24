@@ -15,6 +15,7 @@ import {
   OPENVIKING_TOOL_PROFILE,
   decodeOpenVikingAgentCommand,
   decodeOpenVikingAgentResponse,
+  dropInvalidExperienceFilters,
   isOpenVikingAgentError,
   isOpenVikingOperationId,
 } from "./openviking-memory";
@@ -541,4 +542,23 @@ test("context budget matches native bounds", () => {
         tokenBudget,
       }),
     ).toThrow("tokenBudget");
+});
+
+test("experience_find drops a filter value outside the vocabulary instead of failing the call", () => {
+  expect(
+    dropInvalidExperienceFilters({
+      query: "q",
+      deliverable: "wav",
+      issueKind: "calculation_error",
+      kind: "fork",
+      occupation: "Accountants",
+    }),
+  ).toEqual({ query: "q", kind: "fork", occupation: "Accountants" });
+  expect(
+    dropInvalidExperienceFilters({ query: "q", deliverable: "pdf", issueKind: "format" }),
+  ).toEqual({
+    query: "q",
+    deliverable: "pdf",
+    issueKind: "format",
+  });
 });
