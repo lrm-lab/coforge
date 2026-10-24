@@ -32,6 +32,8 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentInboxListResponse,
+  AgentInboxRequest,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
@@ -202,6 +204,7 @@ import {
   adaptAgentSearchResponse,
   adaptAgentSendResponse,
 } from "./agent-message-adapters";
+import type { AgentHttpInput } from "./agent-http-wire";
 import {
   defaultAgentMessageHttpClient,
   defaultAgentWeeklyReportHttpClient,
@@ -319,6 +322,7 @@ export interface DaemonConnectionClient {
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse>;
   threadList?(agentApiKey: string): Promise<AgentThreadListResponse>;
+  inboxList?(request: AgentInboxRequest, agentApiKey: string): Promise<AgentInboxListResponse>;
   mentionPending?(
     request: AgentMentionPendingRequest,
     agentApiKey: string,
@@ -1320,123 +1324,111 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   async githubCredential(request: GitHubCredentialRequest, agentApiKey: string) {
-    this.#requireAgentClient(
+    const client = this.agentMessageHttpClient.requestGitHubCredential;
+    return this.#agentGet(
       "GitHub credential",
-      this.agentMessageHttpClient.requestGitHubCredential,
-    );
-    return this.agentMessageHttpClient.requestGitHubCredential!({
-      url: this.#serverEndpoint("GitHub credential", agentApiRoutes.cloud.githubCredentials.path),
-      ...this.#agentKeys(agentApiKey),
+      "GitHub credential",
+      client,
+      agentApiRoutes.cloud.githubCredentials.path,
       request,
-    });
+      agentApiKey,
+    );
   }
 
   async githubCommitTrailers(request: GitHubCommitTrailersRequest, agentApiKey: string) {
-    this.#requireAgentClient(
+    const client = this.agentMessageHttpClient.requestGitHubCommitTrailers;
+    return this.#agentGet(
       "GitHub commit trailers",
-      this.agentMessageHttpClient.requestGitHubCommitTrailers,
+      "GitHub commit trailers",
+      client,
+      agentApiRoutes.cloud.githubCommitTrailers.path,
+      request,
+      agentApiKey,
     );
-    return this.agentMessageHttpClient.requestGitHubCommitTrailers!({
-      url: this.#serverEndpoint(
-        "GitHub commit trailers",
-        agentApiRoutes.cloud.githubCommitTrailers.path,
-      ),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
   }
 
-  async manualGet(
-    request: AgentManualGetRequest,
-    agentApiKey: string,
-  ): Promise<AgentManualGetResponse> {
-    this.#requireAgentClient("Agent Manual", this.agentMessageHttpClient.requestManualGet);
-    return this.agentMessageHttpClient.requestManualGet!({
-      url: this.#serverEndpoint("Agent manual get", agentApiRoutes.cloud.manual.get.path),
-      ...this.#agentKeys(agentApiKey),
+  async manualGet(request: AgentManualGetRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestManualGet;
+    return this.#agentGet(
+      "Agent Manual",
+      "Agent manual get",
+      client,
+      agentApiRoutes.cloud.manual.get.path,
       request,
-    });
+      agentApiKey,
+    );
   }
 
-  async manualSearch(
-    request: AgentManualSearchRequest,
-    agentApiKey: string,
-  ): Promise<AgentManualSearchResponse> {
-    this.#requireAgentClient("Agent Manual", this.agentMessageHttpClient.requestManualSearch);
-    return this.agentMessageHttpClient.requestManualSearch!({
-      url: this.#serverEndpoint("Agent manual search", agentApiRoutes.cloud.manual.search.path),
-      ...this.#agentKeys(agentApiKey),
+  async manualSearch(request: AgentManualSearchRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestManualSearch;
+    return this.#agentGet(
+      "Agent Manual",
+      "Agent manual search",
+      client,
+      agentApiRoutes.cloud.manual.search.path,
       request,
-    });
+      agentApiKey,
+    );
   }
 
-  async userInfo(
-    request: AgentUserInfoRequest,
-    agentApiKey: string,
-  ): Promise<AgentUserInfoResponse> {
-    this.#requireAgentClient("Agent user info", this.agentMessageHttpClient.requestUserInfo);
-    return this.agentMessageHttpClient.requestUserInfo!({
-      url: this.#serverEndpoint("Agent user info", agentApiRoutes.cloud.users.path(request.name)),
-      ...this.#agentKeys(agentApiKey),
+  async userInfo(request: AgentUserInfoRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestUserInfo;
+    return this.#agentGet(
+      "Agent user info",
+      "Agent user info",
+      client,
+      agentApiRoutes.cloud.users.path(request.name),
       request,
-    });
+      agentApiKey,
+    );
   }
 
-  async profileShow(
-    request: AgentProfileShowRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileShowResponse> {
-    this.#requireAgentClient("Agent profile", this.agentMessageHttpClient.requestProfileShow);
-    return this.agentMessageHttpClient.requestProfileShow!({
-      url: this.#serverEndpoint("Agent profile show", agentApiRoutes.cloud.profile.get.path),
-      ...this.#agentKeys(agentApiKey),
+  async profileShow(request: AgentProfileShowRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestProfileShow;
+    return this.#agentGet(
+      "Agent profile",
+      "Agent profile show",
+      client,
+      agentApiRoutes.cloud.profile.get.path,
       request,
-    });
+      agentApiKey,
+    );
   }
 
-  async profileUpdate(
-    request: AgentProfileUpdateRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileUpdateResponse> {
-    this.#requireAgentClient("Agent profile", this.agentMessageHttpClient.requestProfileUpdate);
-    return this.agentMessageHttpClient.requestProfileUpdate!({
-      url: this.#serverEndpoint("Agent profile update", agentApiRoutes.cloud.profile.update.path),
-      ...this.#agentKeys(agentApiKey),
+  async profileUpdate(request: AgentProfileUpdateRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestProfileUpdate;
+    return this.#agentGet(
+      "Agent profile",
+      "Agent profile update",
+      client,
+      agentApiRoutes.cloud.profile.update.path,
       request,
-    });
+      agentApiKey,
+    );
   }
 
-  async appConfigGet(
-    request: AgentAppConfigGetRequest,
-    agentApiKey: string,
-  ): Promise<AgentAppConfigResponse> {
-    this.#requireAgentClient("Agent app config", this.agentMessageHttpClient.requestAppConfigGet);
-    return this.agentMessageHttpClient.requestAppConfigGet!({
-      url: this.#serverEndpoint(
-        "Agent app config get",
-        agentApiRoutes.cloud.appConfig.get.path(request.appId),
-      ),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
-  }
-
-  async appConfigUpdate(
-    request: AgentAppConfigUpdateRequest,
-    agentApiKey: string,
-  ): Promise<AgentAppConfigResponse> {
-    this.#requireAgentClient(
+  async appConfigGet(request: AgentAppConfigGetRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestAppConfigGet;
+    return this.#agentGet(
       "Agent app config",
-      this.agentMessageHttpClient.requestAppConfigUpdate,
-    );
-    return this.agentMessageHttpClient.requestAppConfigUpdate!({
-      url: this.#serverEndpoint(
-        "Agent app config update",
-        agentApiRoutes.cloud.appConfig.update.path(request.appId),
-      ),
-      ...this.#agentKeys(agentApiKey),
+      "Agent app config get",
+      client,
+      agentApiRoutes.cloud.appConfig.get.path(request.appId),
       request,
-    });
+      agentApiKey,
+    );
+  }
+
+  async appConfigUpdate(request: AgentAppConfigUpdateRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestAppConfigUpdate;
+    return this.#agentGet(
+      "Agent app config",
+      "Agent app config update",
+      client,
+      agentApiRoutes.cloud.appConfig.update.path(request.appId),
+      request,
+      agentApiKey,
+    );
   }
 
   /** A forwarded Agent request needs a connected daemon and the HTTP client for its route. */
@@ -1446,67 +1438,81 @@ export class DaemonConnection implements DaemonConnectionClient {
     if (!client) throw new Error(`${label} HTTP client is unavailable`);
   }
 
-  async threadList(agentApiKey: string): Promise<AgentThreadListResponse> {
-    this.#requireAgentClient("Agent thread list", this.agentMessageHttpClient.requestThreadList);
-    return this.agentMessageHttpClient.requestThreadList!({
-      url: this.#serverEndpoint("Agent thread list", agentApiRoutes.cloud.threadList.path),
-      ...this.#agentKeys(agentApiKey),
-      request: {},
-    });
-  }
-
-  async mentionPending(
-    request: AgentMentionPendingRequest,
+  /** One GET through a route's HTTP client with the Agent's keys. */
+  #agentGet<I, O>(
+    label: string,
+    endpoint: string,
+    client: ((input: AgentHttpInput<I>) => Promise<O>) | undefined,
+    path: string,
+    request: I,
     agentApiKey: string,
-  ): Promise<AgentMentionPendingResponse> {
-    this.#requireAgentClient(
-      "Agent mention actions",
-      this.agentMessageHttpClient.requestMentionPending,
-    );
-    return this.agentMessageHttpClient.requestMentionPending!({
-      url: this.#serverEndpoint(
-        "Agent mention pending",
-        agentApiRoutes.cloud.mentionActions.pending.path,
-      ),
+  ): Promise<O> {
+    this.#requireAgentClient(label, client);
+    return client!({
+      url: this.#serverEndpoint(endpoint, path),
       ...this.#agentKeys(agentApiKey),
       request,
     });
   }
 
-  async mentionExecute(
-    request: AgentMentionExecuteRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionExecuteResponse> {
-    this.#requireAgentClient(
-      "Agent mention actions",
-      this.agentMessageHttpClient.requestMentionExecute,
-    );
-    return this.agentMessageHttpClient.requestMentionExecute!({
-      url: this.#serverEndpoint(
-        "Agent mention action",
-        agentApiRoutes.cloud.mentionActions.execute.path,
-      ),
-      ...this.#agentKeys(agentApiKey),
+  inboxList(request: AgentInboxRequest, agentApiKey: string): Promise<AgentInboxListResponse> {
+    const client = this.agentMessageHttpClient.requestInboxList;
+    return this.#agentGet(
+      "Agent inbox list",
+      "Agent inbox list",
+      client,
+      agentApiRoutes.cloud.inboxList.path,
       request,
-    });
+      agentApiKey,
+    );
   }
 
-  async mentionDelivery(
-    request: AgentMentionDeliveryRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionDeliveryResponse> {
-    this.#requireAgentClient(
+  threadList(agentApiKey: string): Promise<AgentThreadListResponse> {
+    const client = this.agentMessageHttpClient.requestThreadList;
+    return this.#agentGet(
+      "Agent thread list",
+      "Agent thread list",
+      client,
+      agentApiRoutes.cloud.threadList.path,
+      {},
+      agentApiKey,
+    );
+  }
+
+  mentionPending(request: AgentMentionPendingRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestMentionPending;
+    return this.#agentGet(
+      "Agent mention actions",
+      "Agent mention pending",
+      client,
+      agentApiRoutes.cloud.mentionActions.pending.path,
+      request,
+      agentApiKey,
+    );
+  }
+
+  async mentionExecute(request: AgentMentionExecuteRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestMentionExecute;
+    return this.#agentGet(
+      "Agent mention actions",
+      "Agent mention action",
+      client,
+      agentApiRoutes.cloud.mentionActions.execute.path,
+      request,
+      agentApiKey,
+    );
+  }
+
+  async mentionDelivery(request: AgentMentionDeliveryRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestMentionDelivery;
+    return this.#agentGet(
       "Agent mention delivery",
-      this.agentMessageHttpClient.requestMentionDelivery,
-    );
-    return this.agentMessageHttpClient.requestMentionDelivery!({
-      url: this.#serverEndpoint(
-        "Agent mention delivery",
-        agentApiRoutes.cloud.mentionDeliveries.path(request.messageId),
-      ),
-      ...this.#agentKeys(agentApiKey),
+      "Agent mention delivery",
+      client,
+      agentApiRoutes.cloud.mentionDeliveries.path(request.messageId),
       request,
-    });
+      agentApiKey,
+    );
   }
 
   async agentReminder(request: AgentReminderOperationRequest, agentApiKey: string) {

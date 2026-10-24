@@ -10,7 +10,9 @@ import {
   MENTION_PENDING_MAX_LIMIT,
   isAgentMentionActionKind,
   type AgentMentionExecuteRequest,
+  type AgentInboxRequest,
   type AgentMentionPendingRequest,
+  isAgentInboxView,
   type AgentAppConfigUpdateRequest,
   decodeAgentAppConfigPatch,
   type AgentProfileUpdateRequest,
@@ -84,7 +86,6 @@ export function parseSearchPosition(payload: JsonObject) {
   };
 }
 
-/** `mention pending`'s optional `limit`: an integer from 1 to the server's maximum page. */
 /** Decodes a required path param; an undecodable or empty one is a `400`. */
 export function decodePathParam(param: string): string | Response {
   try {
@@ -108,6 +109,18 @@ export function parseAppConfigUpdate(
   return { appId, ...change, idempotencyKey };
 }
 
+/** `inbox check`'s unread list: an optional `view` and `before_seq`, each valid or a `400`. */
+export function parseInboxListQuery(params: URLSearchParams): AgentInboxRequest | Response {
+  const view = params.get("view") ?? undefined;
+  const before = params.get("before_seq");
+  const beforeSeq = before === null ? undefined : Number(before);
+  if (view !== undefined && !isAgentInboxView(view)) return badRequest();
+  if (beforeSeq !== undefined && (!Number.isSafeInteger(beforeSeq) || beforeSeq < 1))
+    return badRequest();
+  return { view, beforeSeq };
+}
+
+/** `mention pending`'s optional `limit`: an integer from 1 to the server's maximum page. */
 export function parseMentionPendingLimit(
   raw: string | null,
 ): AgentMentionPendingRequest | Response {

@@ -43,6 +43,7 @@ import {
   decodeAgentMentionExecuteResponse,
   decodeAgentMentionPendingResponse,
   decodeAgentThreadListResponse,
+  type AgentInboxRequest,
   type AgentThreadListResponse,
   type ActionCardAction,
   type AgentMentionDeliveryResponse,
@@ -72,6 +73,7 @@ import {
   preIssuanceError,
   requireProxySetup,
 } from "./proxy-request";
+import { inboxCheckRequest, inboxListRequest } from "./inbox-request";
 import { mentionActionRequest, mentionDeliveryRequest } from "./mention-request";
 
 /** The local daemon proxy's JSON error contract (`AgentProxyFailureBody` in the SDK). A few proxy
@@ -377,7 +379,9 @@ export function connectLocal(
   };
   return {
     reminder: (request: ReminderTransportRequest) => callReminder(request),
-    inboxCheck: () => callInbox(),
+    inboxCheck: () => inboxCheckRequest(proxyEndpoint, context, proxyUrl),
+    inboxList: (request: AgentInboxRequest) =>
+      inboxListRequest(proxyEndpoint, context, proxyUrl, request),
     setChannelMuted: (target: string, muted: boolean) => call(muted ? "mute" : "unmute", target),
     setThreadFollowed: (target: string, followed: boolean) => {
       if (followed) throw new Error("Explicit thread follow is unavailable");
@@ -944,20 +948,6 @@ export function connectLocal(
       return { outcome: "failed", definite: !mayExist, status: response.status };
     }
     return { outcome: "failed", definite: false };
-  }
-
-  async function callInbox() {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
-      throw new Error("coforge agent context is invalid");
-    if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-    const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.inbox.path), {
-      method: agentApiRoutes.local.inbox.method,
-      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-      body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), operation: "check" }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error(`agent inbox request failed (${response.status})`);
-    return response.json();
   }
 
   async function callReminder(

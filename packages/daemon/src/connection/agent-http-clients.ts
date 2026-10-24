@@ -28,7 +28,6 @@ import type {
   AgentProfileUpdateRequest,
   AgentProfileUpdateResponse,
   AgentProfileErrorCode,
-  AgentMentionActionErrorCode,
   AgentAppConfigErrorCode,
   AgentAppConfigGetRequest,
   AgentAppConfigResponse,
@@ -36,9 +35,10 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentInboxListResponse,
+  AgentInboxRequest,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
-  AgentMentionDeliveryErrorCode,
   AgentMentionDeliveryRequest,
   AgentMentionDeliveryResponse,
 } from "@lrm/coforge-sdk/agent";
@@ -61,11 +61,10 @@ import type {
 import { AGENT_SEND_REQUEST_TIMEOUT_MS } from "@lrm/coforge-sdk/internal";
 import { AgentTransportError } from "./agent-transport-error";
 import { AgentManualRequestError } from "./agent-manual-request-error";
-import { AgentMentionActionRequestError } from "./agent-mention-action-request-error";
 import { AgentUserInfoRequestError } from "./agent-user-info-request-error";
 import { AgentProfileRequestError } from "./agent-profile-request-error";
 import { AgentAppConfigRequestError } from "./agent-app-config-request-error";
-import { AgentMentionDeliveryRequestError } from "./agent-mention-delivery-request-error";
+import { createAgentAttentionHttpClient } from "./agent-attention-http-clients";
 import { AgentWeeklyReportRequestError } from "./agent-weekly-report-request-error";
 import { AgentUpstreamRefusalError } from "./agent-upstream-refusal-error";
 import {
@@ -140,6 +139,7 @@ export interface AgentMessageHttpClient {
   requestMentionPending?(
     input: AgentHttpInput<AgentMentionPendingRequest>,
   ): Promise<AgentMentionPendingResponse>;
+  requestInboxList?(input: AgentHttpInput<AgentInboxRequest>): Promise<AgentInboxListResponse>;
   requestThreadList?(
     input: AgentHttpInput<Record<string, never>>,
   ): Promise<AgentThreadListResponse>;
@@ -209,14 +209,6 @@ function manualRequestError(errorCode: string, message: string, status: number):
 
 function profileRequestError(errorCode: string, message: string, status: number): Error {
   return new AgentProfileRequestError(errorCode as AgentProfileErrorCode, message, status);
-}
-
-function mentionActionError(errorCode: string, message: string, status: number): Error {
-  return new AgentMentionActionRequestError(
-    errorCode as AgentMentionActionErrorCode,
-    message,
-    status,
-  );
 }
 
 const appConfigError = (errorCode: string, message: string, status: number) =>
@@ -399,35 +391,7 @@ export const createAgentMessageHttpClient = (
       { ...keys, what: "agent app config update", method: "PATCH", body: change },
       appConfigError,
     ),
-  requestMentionPending: ({ request, ...keys }) =>
-    getAgentEnvelopeJson<AgentMentionPendingResponse>(
-      httpClient,
-      { ...keys, what: "agent mention pending", query: { limit: request.limit?.toString() } },
-      mentionActionError,
-    ),
-  requestThreadList: ({ request: _request, ...keys }) =>
-    getAgentEnvelopeJson<AgentThreadListResponse>(
-      httpClient,
-      { ...keys, what: "agent thread list", query: {} },
-      (_errorCode, message) => new Error(message),
-    ),
-  requestMentionExecute: ({ request, ...keys }) =>
-    postAgentEnvelopeJson<AgentMentionExecuteResponse>(
-      httpClient,
-      { ...keys, what: "agent mention action", body: request },
-      mentionActionError,
-    ),
-  requestMentionDelivery: ({ request: _request, ...keys }) =>
-    getAgentEnvelopeJson<AgentMentionDeliveryResponse>(
-      httpClient,
-      { ...keys, what: "agent mention delivery", query: {} },
-      (errorCode, message, status) =>
-        new AgentMentionDeliveryRequestError(
-          errorCode as AgentMentionDeliveryErrorCode,
-          message,
-          status,
-        ),
-    ),
+  ...createAgentAttentionHttpClient(httpClient),
   // Through the shared wire helpers, so a refusal reaches the proxy as the cloud's own status, reason
   // and code, and a network failure as a typed transport failure, never a bare message. A lookup is
   // a read, so a 5xx that names its code (`TEMPORARILY_UNAVAILABLE`) is the cloud's answer, relayed

@@ -1,39 +1,79 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run } from "../index";
 
-test("inbox check accepts text and JSON output modes", () => {
+const list = (over = {}) => ({
+  ok: true as const,
+  view: "unread" as const,
+  items: [],
+  totals: { conversations: 0, dms: 0, mentions: 0 },
+  hasMore: false,
+  nextBeforeSeq: null,
+  ...over,
+});
+
+const base = {
+  check: async () => ({ messages: [] }),
+  read: async () => undefined,
+  send: async () => undefined,
+  view: async () => ({ bytes: new Uint8Array() }),
+};
+
+test("inbox check parses view, before and json", () => {
   expect(parseArgs(["inbox", "check"])).toEqual({ command: "inbox-check" });
   expect(parseArgs(["inbox", "check", "--json"])).toEqual({ command: "inbox-check", json: true });
+  expect(parseArgs(["inbox", "check", "--view", "mentions", "--before", "42"])).toEqual({
+    command: "inbox-check",
+    view: "mentions",
+    before: 42,
+  });
   expect(() => parseArgs(["inbox", "ack", "--item", "reminder:id:1"])).toThrow("Usage:");
+  expect(() => parseArgs(["inbox", "check", "--bogus"])).toThrow("Usage:");
+  expect(() => parseArgs(["inbox", "check", "--view", "all"])).toThrow(
+    "--view must be one of unread, mentions; got all",
+  );
+  expect(() => parseArgs(["inbox", "check", "--before", "0"])).toThrow(
+    "--before must be a positive integer seq (copy it from the More: line); got 0",
+  );
 });
 
-test("dispatches Inbox check without message operations", async () => {
-  const calls: string[] = [];
-  const transport = {
-    check: async () => {
-      throw new Error("message check called");
+test("inbox check reads the server list and the daemon together", async () => {
+  const requests: unknown[] = [];
+  const output = await run(["inbox", "check", "--view", "mentions", "--before", "9"], {
+    ...base,
+    inboxList: async (request) => {
+      requests.push(request);
+      return list({ view: "mentions" });
     },
-    read: async () => {
-      throw new Error("message read called");
-    },
-    send: async () => {
-      throw new Error("message send called");
-    },
-    view: async () => {
-      throw new Error("attachment called");
-    },
-    inboxCheck: async () => calls.push("check"),
-  };
-  await run(["inbox", "check"], transport);
-  expect(calls).toEqual(["check"]);
+    inboxCheck: async () => ({ entries: [] }),
+  });
+  expect(requests).toEqual([{ view: "mentions", beforeSeq: 9 }]);
+  expect(output).toContain("Inbox: nothing unread.");
 });
 
-test("inbox JSON mode hides message ordering fields", async () => {
+test("a daemon failure is reported beside the list; a list failure fails", async () => {
+  const output = await run(["inbox", "check"], {
+    ...base,
+    inboxList: async () => list(),
+    inboxCheck: async () => {
+      throw new Error("down");
+    },
+  });
+  expect(output).toContain("Daemon pending buffer unavailable (down)");
+  await expect(
+    run(["inbox", "check"], {
+      ...base,
+      inboxList: async () => {
+        throw new Error("server");
+      },
+      inboxCheck: async () => ({ entries: [] }),
+    }),
+  ).rejects.toThrow("server");
+});
+
+test("inbox JSON has the new shape and hides message ordering fields", async () => {
   const output = await run(["inbox", "check", "--json"], {
-    check: async () => ({ messages: [] }),
-    read: async () => undefined,
-    send: async () => undefined,
-    view: async () => ({ bytes: new Uint8Array() }),
+    ...base,
+    inboxList: async () => list(),
     inboxCheck: async () => ({
       entries: [
         {
@@ -42,14 +82,14 @@ test("inbox JSON mode hides message ordering fields", async () => {
             target: "@ada",
             pendingCount: 2,
             firstPendingSequence: 7,
-            latestSequence: 8,
             flags: ["dm"],
           },
         },
       ],
     }),
   });
+  const parsed = JSON.parse(output as string);
+  expect(parsed.view).toBe("unread");
+  expect(parsed.pendingRows).toEqual([{ target: "@ada", pendingCount: 2, flags: ["dm"] }]);
   expect(output).not.toContain("firstPendingSequence");
-  expect(output).not.toContain("latestSequence");
-  expect(output).toContain('"pendingCount":2');
 });

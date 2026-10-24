@@ -49,6 +49,8 @@ import {
   type AgentMentionExecuteRequest,
   type AgentMentionExecuteResponse,
   type AgentMentionPendingRequest,
+  type AgentInboxListResponse,
+  type AgentInboxRequest,
   type AgentThreadListResponse,
   type AgentMentionPendingResponse,
   type AgentMentionDeliveryRequest,
@@ -65,11 +67,12 @@ import {
   parseProfileUpdateFields,
   decodePathParam,
   parseAppConfigUpdate,
+  parseInboxListQuery,
   parseInboxRequest,
   parseMentionPendingLimit,
   parseSearchPosition,
 } from "./agent-proxy-request-parsers";
-import { classifyAgentProxyFailure, AGENT_PROXY_CORRELATION_HEADER } from "./agent-proxy-failure";
+import { forwardResponse, proxyFailureResponse } from "./agent-proxy-response";
 import * as domain from "./agent-proxy-domain-failures";
 import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
 import {
@@ -190,6 +193,11 @@ export type AgentProxyRuntime = {
   ): Promise<AgentAppConfigResponse>;
   /** `coforge app list|token`: forwarded as it is, the cloud's response answered as it came. */
   agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
+  inboxList?(
+    context: string,
+    request: AgentInboxRequest,
+    agentApiKey: string,
+  ): Promise<AgentInboxListResponse>;
   threadList?(
     context: string,
     request: Record<string, never>,
@@ -285,47 +293,6 @@ const MAX_BODY_BYTES = 64 * 1024;
  * same number as that character cap — see `internal/weekly-report-limits.ts`. */
 const WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES = 512 * 1024;
 const logger = getLogger(["coforge", "daemon", "agent-proxy"]);
-
-/** Attachment responses retain their encoded bytes and representation metadata. Connection
- * fields belong to the upstream hop; Bun frames the response for the local connection. */
-function forwardResponse(response: Response): Response {
-  const headers = new Headers(response.headers);
-  const connectionFields = (headers.get("connection") ?? "").split(",");
-  for (const field of [
-    ...connectionFields,
-    "connection",
-    "keep-alive",
-    "proxy-connection",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-  ]) {
-    if (field.trim()) headers.delete(field.trim());
-  }
-  return new Response(response.body, { status: response.status, headers });
-}
-
-/**
- * Classifies a thrown error into the local daemon proxy's JSON error contract (never a bare,
- * unlabeled 502), logs it once at WARN, and carries the same correlation id on a response header.
- */
-function proxyFailureResponse(
-  error: unknown,
-  context: { method: string; path: string; routeFamily: string; agentId: string; redact?: boolean },
-): Response {
-  const classified = classifyAgentProxyFailure(error, context);
-  logger.warn("Agent proxy request failed", {
-    event: "agent.proxy.failure",
-    ...classified.logFields,
-  });
-  return Response.json(classified.body, {
-    status: classified.status,
-    headers: { [AGENT_PROXY_CORRELATION_HEADER]: classified.body.proxy.correlation_id },
-  });
-}
 
 /** What a Local Proxy token stands for: the Agent, its runtime context and its Agent API key. */
 type TokenBinding = {
@@ -665,6 +632,14 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     handler: "agentApp",
     parse: ({ fields }) => decodeAgentAppRegistrationRequest(fields) ?? badRequest(),
     respond: forwardResponse,
+  }),
+  defineRoute({
+    family: "agent-api/inbox-list",
+    method: LOCAL_PROXY_ROUTES.inboxList.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.inboxList.path),
+    body: "none",
+    handler: "inboxList",
+    parse: ({ url }) => parseInboxListQuery(url.searchParams),
   }),
   defineRoute({
     family: "agent-api/thread-list",

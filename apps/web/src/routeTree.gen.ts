@@ -116,6 +116,7 @@ import { Route as ApiAgentV1AttachmentsIndexRouteImport } from './routes/api/age
 import { Route as ApiAgentV1AttachmentsAttachmentIdRouteImport } from './routes/api/agent/v1/attachments/$attachmentId'
 import { Route as ApiAgentV1AttachmentsCapabilitiesRouteImport } from './routes/api/agent/v1/attachments/capabilities'
 import { Route as ApiAgentV1ChannelsChannelRouteImport } from './routes/api/agent/v1/channels_.$channel'
+import { Route as ApiAgentV1InboxConversationsRouteImport } from './routes/api/agent/v1/inbox.conversations'
 import { Route as ApiAgentV1ManualSearchRouteImport } from './routes/api/agent/v1/manual_.search'
 import { Route as ApiAgentV1MentionActionsExecuteRouteImport } from './routes/api/agent/v1/mention-actions_.execute'
 import { Route as ApiAgentV1MentionActionsPendingRouteImport } from './routes/api/agent/v1/mention-actions_.pending'
@@ -739,6 +740,12 @@ const ApiAgentV1ChannelsChannelRoute =
     path: '/api/agent/v1/channels/$channel',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1InboxConversationsRoute =
+  ApiAgentV1InboxConversationsRouteImport.update({
+    id: '/api/agent/v1/inbox/conversations',
+    path: '/api/agent/v1/inbox/conversations',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1ManualSearchRoute = ApiAgentV1ManualSearchRouteImport.update({
   id: '/api/agent/v1/manual_/search',
   path: '/api/agent/v1/manual/search',
@@ -1093,6 +1100,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRoute
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
+  '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
   '/api/agent/v1/manual/search': typeof ApiAgentV1ManualSearchRoute
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
@@ -1240,6 +1248,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRoute
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
+  '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
   '/api/agent/v1/manual/search': typeof ApiAgentV1ManualSearchRoute
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
@@ -1392,6 +1401,7 @@ export interface FileRoutesById {
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRoute
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels_/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
+  '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
   '/api/agent/v1/manual_/search': typeof ApiAgentV1ManualSearchRoute
   '/api/agent/v1/mention-actions_/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions_/pending': typeof ApiAgentV1MentionActionsPendingRoute
@@ -1543,6 +1553,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
     | '/api/agent/v1/channels/$channel'
+    | '/api/agent/v1/inbox/conversations'
     | '/api/agent/v1/manual/search'
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
@@ -1690,6 +1701,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
     | '/api/agent/v1/channels/$channel'
+    | '/api/agent/v1/inbox/conversations'
     | '/api/agent/v1/manual/search'
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
@@ -1841,6 +1853,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
     | '/api/agent/v1/channels_/$channel'
+    | '/api/agent/v1/inbox/conversations'
     | '/api/agent/v1/manual_/search'
     | '/api/agent/v1/mention-actions_/execute'
     | '/api/agent/v1/mention-actions_/pending'
@@ -1969,6 +1982,7 @@ export interface RootRouteChildren {
   ApiAgentV1AttachmentsAttachmentIdRoute: typeof ApiAgentV1AttachmentsAttachmentIdRoute
   ApiAgentV1AttachmentsCapabilitiesRoute: typeof ApiAgentV1AttachmentsCapabilitiesRoute
   ApiAgentV1ChannelsChannelRoute: typeof ApiAgentV1ChannelsChannelRouteWithChildren
+  ApiAgentV1InboxConversationsRoute: typeof ApiAgentV1InboxConversationsRoute
   ApiAgentV1ManualSearchRoute: typeof ApiAgentV1ManualSearchRoute
   ApiAgentV1MentionActionsExecuteRoute: typeof ApiAgentV1MentionActionsExecuteRoute
   ApiAgentV1MentionActionsPendingRoute: typeof ApiAgentV1MentionActionsPendingRoute
@@ -2753,6 +2767,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1ChannelsChannelRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/inbox/conversations': {
+      id: '/api/agent/v1/inbox/conversations'
+      path: '/api/agent/v1/inbox/conversations'
+      fullPath: '/api/agent/v1/inbox/conversations'
+      preLoaderRoute: typeof ApiAgentV1InboxConversationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/manual_/search': {
       id: '/api/agent/v1/manual_/search'
       path: '/api/agent/v1/manual/search'
@@ -3326,6 +3347,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1AttachmentsCapabilitiesRoute:
     ApiAgentV1AttachmentsCapabilitiesRoute,
   ApiAgentV1ChannelsChannelRoute: ApiAgentV1ChannelsChannelRouteWithChildren,
+  ApiAgentV1InboxConversationsRoute: ApiAgentV1InboxConversationsRoute,
   ApiAgentV1ManualSearchRoute: ApiAgentV1ManualSearchRoute,
   ApiAgentV1MentionActionsExecuteRoute: ApiAgentV1MentionActionsExecuteRoute,
   ApiAgentV1MentionActionsPendingRoute: ApiAgentV1MentionActionsPendingRoute,
@@ -3377,3 +3399,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

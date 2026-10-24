@@ -1,13 +1,22 @@
+import { isAgentInboxView, AGENT_INBOX_VIEWS, type AgentInboxView } from "@lrm/coforge-sdk/agent";
 import { CliError } from "#src/cli-error";
-import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
+import {
+  isChannelTarget,
+  MESSAGE_ANCHOR_SOURCE,
+  UUID_LIKE_SOURCE,
+} from "@lrm/coforge-sdk/internal";
 
-export type InboxInvocation = { command: "inbox-check"; json?: boolean };
+export type InboxInvocation = {
+  command: "inbox-check";
+  json?: boolean;
+  view?: AgentInboxView;
+  before?: number;
+};
 export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
 export type ThreadInvocation =
   | { command: "thread-unfollow"; target: string; reason?: string }
   | { command: "thread-list" };
 
-const CHANNEL_TARGET = /^#[a-z0-9][a-z0-9_-]{0,31}$/;
 const THREAD_TARGET = new RegExp(
   `^#[a-z0-9][a-z0-9_-]{0,31}:(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`,
   "i",
@@ -35,7 +44,7 @@ function parseMuteTarget(args: readonly string[], command: string): string {
       retryable: false,
     });
   const target = flagged || positional || "";
-  if (!CHANNEL_TARGET.test(target))
+  if (!isChannelTarget(target))
     throw new CliError({
       code: "INVALID_TARGET",
       message:
@@ -68,6 +77,43 @@ function parseUnfollowArgs(args: readonly string[]): ThreadInvocation {
   return { command: "thread-unfollow", target, ...(reason ? { reason } : {}) };
 }
 
+const INBOX_USAGE = "Usage: coforge inbox check [--view unread|mentions] [--before <seq>] [--json]";
+
+/** `inbox check [--view unread|mentions] [--before <seq>] [--json]`. */
+function parseInboxCheckArgs(args: readonly string[]): InboxInvocation {
+  let view: string | undefined;
+  let before: string | undefined;
+  let json = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--json") json = true;
+    else if (arg === "--view" && view === undefined && args[index + 1] !== undefined)
+      view = args[++index]!.trim();
+    else if (arg === "--before" && before === undefined && args[index + 1] !== undefined)
+      before = args[++index]!.trim();
+    else throw new Error(INBOX_USAGE);
+  }
+  const refuse = (message: string) =>
+    new CliError({
+      code: "INVALID_ARG",
+      message,
+      retryable: false,
+      outputMode: json ? "json" : "text",
+    });
+  if (view !== undefined && !isAgentInboxView(view))
+    throw refuse(`--view must be one of ${AGENT_INBOX_VIEWS.join(", ")}; got ${view}`);
+  if (before !== undefined && !/^[1-9][0-9]*$/.test(before))
+    throw refuse(
+      `--before must be a positive integer seq (copy it from the More: line); got ${before}`,
+    );
+  return {
+    command: "inbox-check",
+    ...(json ? { json: true } : {}),
+    ...(view ? { view } : {}),
+    ...(before === undefined ? {} : { before: Number(before) }),
+  };
+}
+
 /** `channel mute|unmute`, `thread unfollow` and `inbox check`: the commands that change or list
  * what reaches an Agent. Anything else, or a malformed form of these, is `undefined`. */
 export function parseAttentionArgs(
@@ -80,10 +126,7 @@ export function parseAttentionArgs(
     if (args.length > 2) throw new Error("Usage: coforge thread list");
     return { command: "thread-list" };
   }
-  if (args[0] === "inbox" && args[1] === "check") {
-    if (args.length === 2) return { command: "inbox-check" };
-    if (args.length === 3 && args[2] === "--json") return { command: "inbox-check", json: true };
-  }
+  if (args[0] === "inbox" && args[1] === "check") return parseInboxCheckArgs(args.slice(2));
   return undefined;
 }
 

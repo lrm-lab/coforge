@@ -93,7 +93,7 @@ function minuteStamp(at: Date): string {
   return `${at.toISOString().slice(0, 16).replace("T", " ")}Z`;
 }
 
-function agoLabel(at: Date, now: number): string {
+export function agoLabel(at: Date, now: number): string {
   const minutes = Math.floor((now - at.getTime()) / 60_000);
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes}m ago`;

@@ -14,7 +14,11 @@ const USERS_ROUTE = {
   path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
 } as const;
 
-/** `coforge thread list`. Same route under `proxy`, `local` and `cloud`. */
+/** `coforge thread list` and the unread list of `coforge inbox check`. Same routes under `proxy`, `local` and `cloud`. */
+const INBOX_LIST_ROUTE = {
+  method: "GET",
+  path: "/api/agent/v1/inbox/conversations",
+} as const;
 const THREAD_LIST_ROUTE = { method: "GET", path: "/api/agent/v1/threads" } as const;
 
 /** `coforge mention pending|execute`. Same routes under `proxy`, `local` and `cloud`. */
@@ -149,6 +153,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
     threadList: THREAD_LIST_ROUTE,
+    inboxList: INBOX_LIST_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -188,6 +193,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
     threadList: THREAD_LIST_ROUTE,
+    inboxList: INBOX_LIST_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -302,6 +308,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     profile: PROFILE_ROUTES,
     threadList: THREAD_LIST_ROUTE,
+    inboxList: INBOX_LIST_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_CLOUD_ROUTES,

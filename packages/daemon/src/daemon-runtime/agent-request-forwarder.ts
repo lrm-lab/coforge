@@ -14,6 +14,8 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentInboxListResponse,
+  AgentInboxRequest,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentProfileShowRequest,
@@ -55,6 +57,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentMemoryDisposition"
     | "agentOpenviking"
     | "threadList"
+    | "inboxList"
     | "mentionPending"
     | "mentionExecute"
     | "mentionDelivery"
@@ -253,6 +256,18 @@ export class AgentRequestForwarder {
   ): Promise<unknown> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("agentOpenviking", NOT_CONNECTED)(command, agentApiKey);
+  }
+
+  async inboxList(
+    context: string,
+    request: AgentInboxRequest,
+    agentApiKey: string,
+  ): Promise<AgentInboxListResponse> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("inboxList", "Agent inbox endpoint is not configured")(
+      request,
+      agentApiKey,
+    );
   }
 
   async threadList(
