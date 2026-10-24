@@ -160,6 +160,9 @@ function searchTruncation(response: SearchResponse, paging: { hint: string } | u
     return `incomplete=true · ${reached}older messages were not searched, so these are NOT all the matches`;
   }
   if (response.hasMore === true) return `truncated=true · more results exist${paging?.hint ?? ""}`;
+  // Unlike Raft, a full page with `hasMore: false` is not "unknown": our server learns `hasMore`
+  // by reading one row past the limit, so `false` is exact. `unknown` is only a server that
+  // does not report it.
   if (response.hasMore === false) return "truncated=false";
   return "truncated=unknown · server did not report hasMore";
 }
