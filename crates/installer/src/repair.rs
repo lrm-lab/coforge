@@ -213,22 +213,35 @@ pub fn repair(
 }
 
 fn links_need_repair(ports: &Ports<'_>, version: &str) -> bool {
+    let windows = ports.store.target().starts_with("windows-");
     let active = ports.install_root.join("active");
-    let expected = std::path::Path::new("versions").join(version);
-    if fs::read_link(&active).ok().as_deref() != Some(expected.as_path()) {
+    let points_at_version = if windows {
+        // A junction reads back as its absolute target, never the relative `versions/<v>` a Unix
+        // symlink stores, so compare where both resolve to instead.
+        match (
+            fs::canonicalize(&active),
+            fs::canonicalize(ports.store.version_directory(version)),
+        ) {
+            (Ok(active), Ok(version)) => active == version,
+            _ => false,
+        }
+    } else {
+        let expected = std::path::Path::new("versions").join(version);
+        fs::read_link(&active).ok().as_deref() == Some(expected.as_path())
+    };
+    if !points_at_version {
         return true;
     }
-    let shim = ports
-        .binary_directory
-        .join(if ports.store.target().starts_with("windows-") {
-            "coforge-computer.cmd"
-        } else {
-            "coforge-computer"
-        });
-    if ports.store.target().starts_with("windows-") {
-        !shim.is_file()
+    if windows {
+        !ports
+            .binary_directory
+            .join("coforge-computer.cmd")
+            .is_file()
     } else {
-        fs::read_link(shim).ok().as_deref() != Some(active.join("coforge-computer").as_path())
+        fs::read_link(ports.binary_directory.join("coforge-computer"))
+            .ok()
+            .as_deref()
+            != Some(active.join("coforge-computer").as_path())
     }
 }
 
@@ -432,6 +445,34 @@ mod tests {
         assert_eq!(exit_code(&outcome), 0);
         assert!(fixture.root().join("active").exists());
         assert!(service.calls().is_empty());
+    }
+
+    #[test]
+    fn a_healthy_active_installation_is_held_without_reactivating() {
+        let fixture = Fixture::new("repair-healthy");
+        fixture.install_old();
+        let clock = VirtualClock::new();
+        let table = FakeTable::new(&clock);
+        let service = FakeService::new(ServiceState::NotInstalled);
+        let lifecycle = FakeLifecycle::default();
+        let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+
+        let mut stages = Vec::new();
+        let outcome = repair(&ports, REQUEST, None, false, &mut |line| {
+            stages.push(line.to_owned())
+        });
+
+        assert_eq!(exit_code(&outcome), 2);
+        match outcome {
+            Outcome::Receipt(receipt) => {
+                assert_eq!(receipt.error_code(), Some("REPAIR_NOT_NEEDED"));
+            }
+            Outcome::NoReceipt { .. } => panic!("repair did not record the held result"),
+        }
+        assert!(
+            stages.is_empty(),
+            "a healthy install was re-activated: {stages:?}"
+        );
     }
 
     #[test]
