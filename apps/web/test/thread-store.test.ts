@@ -19,6 +19,7 @@ const summary = (fields: Partial<ThreadSummary> = {}): ThreadSummary => ({
 });
 
 const threads = (fields: Partial<ThreadState> = {}): ThreadState => ({
+  conversationId: "conversation-1",
   summaries: {},
   formatBody: (body) => body,
   ...fields,

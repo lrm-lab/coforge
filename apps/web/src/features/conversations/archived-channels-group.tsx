@@ -6,12 +6,8 @@ import { Archive, Hash01 } from "@untitledui/icons";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
-import {
-  SaveErrorMessage,
-  saveErrorFrom,
-  SettingsGroup,
-  type SaveError,
-} from "#src/components/settings-content";
+import { SettingsGroup } from "#src/components/settings-layout";
+import { SaveErrorMessage, saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";

@@ -13,6 +13,7 @@ import type { ThreadSummary } from "./thread-summary-model";
  * re-renders that root's summary and no other row.
  */
 export type ThreadState = {
+  conversationId: string;
   summaries: Readonly<Record<string, ThreadSummary>>;
   formatBody: (body: string, mentions?: readonly MentionRef[]) => string;
 };
@@ -47,6 +48,12 @@ export function useThreadSummary(rootId: string) {
 export function useThreadUnread(rootId: string) {
   const { threads } = useStoreContext();
   return useSelector(threads, (state) => state.summaries[rootId]?.unread ?? 0);
+}
+
+/** The conversation the threads are of. */
+export function useThreadConversationId() {
+  const { threads } = useStoreContext();
+  return useSelector(threads, (state) => state.conversationId);
 }
 
 /** How a reply's body reads in a one-line preview. */

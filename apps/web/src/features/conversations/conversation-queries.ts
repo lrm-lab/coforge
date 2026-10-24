@@ -191,6 +191,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   loadInitialPage,
   loadUpdates,
   onRealtime,
+  onArrived,
 }: {
   query: ReturnType<typeof conversationPages<M, T>>["query"];
   /** The newest page on its own: how "back to latest" recovers a tail the window evicted. */
@@ -198,6 +199,8 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   loadUpdates: (cursor: ConversationUpdatesCursor) => Promise<M[]>;
   /** Extra work per realtime event, run alongside reconciliation. */
   onRealtime?: () => Promise<unknown>;
+  /** The messages `mergeUpdates` folds in, as they arrive. */
+  onArrived?: (conversationId: string, messages: readonly M[]) => void;
 }) {
   const queryClient = useQueryClient();
   /** The pane updates this synchronously from its real scroll position. Query meta lets a focus or
@@ -249,6 +252,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
    * window, unless pinned to an older one; replies into their threads. Roots go first, so a reply
    * that arrives with its own root finds the root loaded. */
   const mergeUpdates = (updates: M[]) => {
+    onArrived?.(conversationId, updates);
     const roots = updates.filter((message) => !message.threadRootId);
     if (roots.length)
       setPages((pages) => {

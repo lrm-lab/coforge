@@ -177,6 +177,8 @@
   "preferences_message_full_width": "消息全宽显示",
   "preferences_show_agent_model": "显示 Agent 模型",
   "preferences_show_agent_model_description": "在聊天里 Agent 名字旁显示它使用的模型。",
+  "preferences_live_agent_activity": "实时 Agent 动态",
+  "preferences_live_agent_activity_description": "在聊天列表顶栏显示正在工作的 Agent，并在聊天里显示哪些 Agent 正在输入或回复。",
   "preferences_hide_empty_sidebar_sections": "隐藏空的侧栏分区",
   "preferences_hide_empty_sidebar_sections_description": "“已置顶”和自建分组为空时隐藏，拖动会话时重新出现。“频道”和“私聊”保留，方便发起会话。",
   "preferences_conversations": "会话",

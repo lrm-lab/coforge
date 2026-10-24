@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
+import { useEndReplyIntentsOnArrival } from "#src/features/agents/agent-post-clearing";
 import { useConversationTasks } from "#src/features/tasks/use-conversation-tasks";
 import {
   joinPublicChannel,
@@ -53,7 +54,9 @@ export function useChannelConversation(channelId: string) {
   const markRead = useServerFn(markPublicChannelThreadRead);
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
   const loadOwnMessages = useServerFn(loadOwnConversationMessages);
+  const endReplyIntents = useEndReplyIntentsOnArrival();
   const page = useConversationQuery({
+    onArrived: endReplyIntents,
     ...publicChannelQuery(channelId),
     loadUpdates: publicChannelUpdates(channelId),
     // No Task refresh here: a Task change arrives as its own `task.changed.v1` event, which
@@ -141,7 +144,9 @@ export function useDirectConversation(conversationId: string) {
   const toggleReaction = useServerFn(toggleDirectMessageReactionVersioned);
   const markRead = useServerFn(markDirectThreadRead);
   const loadOwnMessages = useServerFn(loadOwnConversationMessages);
+  const endReplyIntents = useEndReplyIntentsOnArrival();
   const page = useConversationQuery({
+    onArrived: endReplyIntents,
     ...directConversationQuery(conversationId),
     loadUpdates: directConversationUpdates(conversationId),
     // No Task refresh here either — see the channel branch above.

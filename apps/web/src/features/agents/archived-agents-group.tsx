@@ -2,7 +2,7 @@ import { Link, useHydrated } from "@tanstack/react-router";
 import { Archive } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
-import { SettingsGroup } from "#src/components/settings-content";
+import { SettingsGroup } from "#src/components/settings-layout";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { m } from "#src/paraglide/messages";

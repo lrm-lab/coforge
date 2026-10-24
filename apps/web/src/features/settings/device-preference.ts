@@ -52,17 +52,20 @@ export function createDevicePreference<T>({
     for (const listener of listeners) listener();
   }
 
+  // One `storage` listener for every subscriber, there while anyone is: a preference can be read by
+  // every row of a long list.
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== key) return;
+    apply?.(parse(event.newValue));
+    for (const listener of listeners) listener();
+  };
+
   function subscribe(listener: () => void) {
+    if (listeners.size === 0) window.addEventListener("storage", onStorage);
     listeners.add(listener);
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== key) return;
-      apply?.(parse(event.newValue));
-      listener();
-    };
-    window.addEventListener("storage", onStorage);
     return () => {
       listeners.delete(listener);
-      window.removeEventListener("storage", onStorage);
+      if (listeners.size === 0) window.removeEventListener("storage", onStorage);
     };
   }
 
@@ -72,5 +75,5 @@ export function createDevicePreference<T>({
     return [value, set] as const;
   }
 
-  return { read, write, useValue };
+  return { read, write, subscribe, useValue };
 }

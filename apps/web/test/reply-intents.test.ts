@@ -2,16 +2,19 @@ import { describe, expect, test } from "bun:test";
 import {
   encodeAgentReplyIntent,
   REPLY_INTENT_DEADLINE_MS,
+  REPLY_INTENT_REFRESH_MS,
   REPLY_INTENT_PHASE,
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 
 import { decodeActivityFrame } from "#src/features/agents/agent-activity";
 import {
+  agentPostsAmong,
   applyUserChannelPublication,
   createReplyIntentStore,
   replyIntentInScope,
   replyingAgentIds,
+  REPLY_INTENT_NEW_POST_MS,
   REPLY_INTENT_TOMBSTONE_MS,
 } from "#src/features/agents/reply-intents";
 
@@ -29,8 +32,19 @@ function subject() {
       };
     },
   });
+  let posts = 0;
   return {
     intents,
+    /** A message of the Agent's arriving now in a place, `ageMs` after it was written. */
+    posted(agentId: string, threadRootId: string | null = null, ageMs = 0, messageId?: string) {
+      intents.agentPosted({
+        messageId: messageId ?? `message-${(posts += 1)}`,
+        agentId,
+        conversationId: "conversation-1",
+        threadRootId,
+        createdAt: new Date(now - ageMs),
+      });
+    },
     entries: () => intents.store.state,
     hasTimer: () => timer !== undefined,
     advance(ms: number) {
@@ -136,24 +150,57 @@ describe("reply intent store", () => {
   });
 
   test("a message from the Agent in the place clears one entry there, the oldest, and the call stays ended", () => {
-    const { intents, entries } = subject();
+    const { intents, entries, posted } = subject();
     intents.apply(start("atlas", "c1"));
     intents.apply(start("atlas", "c2", "conversation-1", "root-1"));
     intents.apply(start("atlas", "c3", "conversation-2"));
     intents.apply(start("atlas", "c5"));
     intents.apply(start("ben", "c4"));
-    intents.clearAgent("atlas", "conversation-1", null);
+    posted("atlas");
     expect(entries().map((entry) => entry.callId)).toEqual(["c2", "c3", "c5", "c4"]);
     // The ended call cannot be brought back by a late repeat of its start.
     intents.apply(start("atlas", "c1"));
     expect(entries().map((entry) => entry.callId)).toEqual(["c2", "c3", "c5", "c4"]);
     // The next message from the Agent there ends the next entry, not every one.
-    intents.clearAgent("atlas", "conversation-1", null);
+    posted("atlas");
     expect(entries().map((entry) => entry.callId)).toEqual(["c2", "c3", "c4"]);
-    intents.clearAgent("atlas", "conversation-1", null);
-    expect(entries().map((entry) => entry.callId)).toEqual(["c2", "c3", "c4"]);
-    intents.clearAgent("atlas", "conversation-1", "root-1");
+    // A reply in a thread ends the Agent's entry in that thread, wherever its root is shown.
+    posted("atlas", "root-1");
     expect(entries().map((entry) => entry.callId)).toEqual(["c3", "c4"]);
+  });
+
+  test("the same message arriving twice, or an old one read again, ends nothing more", () => {
+    const { intents, entries, posted } = subject();
+    intents.apply(start("atlas", "c1"));
+    intents.apply(start("atlas", "c2"));
+    posted("atlas", null, 0, "message-a");
+    posted("atlas", null, 0, "message-a");
+    expect(entries().map((entry) => entry.callId)).toEqual(["c2"]);
+    posted("atlas", null, REPLY_INTENT_NEW_POST_MS + 1);
+    expect(entries().map((entry) => entry.callId)).toEqual(["c2"]);
+  });
+
+  test("a reply that beats its start ends that start when it comes, and its repeats", () => {
+    const { intents, entries, posted, advance } = subject();
+    posted("atlas", "root-1");
+    // The late start of the call that sent it, in the same place: never shown.
+    intents.apply(start("atlas", "c1", "conversation-1", "root-1"));
+    expect(entries()).toEqual([]);
+    advance(REPLY_INTENT_REFRESH_MS - 1);
+    intents.apply(start("atlas", "c1", "conversation-1", "root-1"));
+    expect(entries()).toEqual([]);
+    // Another place, or another Agent, is not that call.
+    intents.apply(start("atlas", "c2"));
+    intents.apply(start("ben", "c3", "conversation-1", "root-1"));
+    expect(entries().map((entry) => entry.callId)).toEqual(["c2", "c3"]);
+  });
+
+  test("a reply's claim on a late start lapses after one refresh period", () => {
+    const { intents, entries, posted, advance } = subject();
+    posted("atlas", "root-1");
+    advance(REPLY_INTENT_REFRESH_MS + 1);
+    intents.apply(start("atlas", "c1", "conversation-1", "root-1"));
+    expect(entries().map((entry) => entry.callId)).toEqual(["c1"]);
   });
 
   test("the timer is armed for a new call or a tombstone, not for a repeat", () => {
@@ -200,6 +247,35 @@ describe("reply intent store", () => {
     expect(entries()).toEqual([]);
     advance(REPLY_INTENT_TOMBSTONE_MS * 2);
     expect(hasTimer()).toBe(false);
+  });
+});
+
+describe("the Agents' messages among those arriving", () => {
+  test("are each Agent message with its place; a person's or a notice is none", () => {
+    const createdAt = "2026-10-24T12:00:00.000Z";
+    expect(
+      agentPostsAmong("conversation-1", [
+        { id: "m1", senderKind: "agent", senderAgentId: "atlas", createdAt },
+        { id: "m2", senderKind: "agent", senderAgentId: "ben", threadRootId: "root-1", createdAt },
+        { id: "m3", senderKind: "user", createdAt },
+        { id: "m4", senderKind: "system", createdAt },
+      ]),
+    ).toEqual([
+      {
+        messageId: "m1",
+        agentId: "atlas",
+        conversationId: "conversation-1",
+        threadRootId: null,
+        createdAt,
+      },
+      {
+        messageId: "m2",
+        agentId: "ben",
+        conversationId: "conversation-1",
+        threadRootId: "root-1",
+        createdAt,
+      },
+    ]);
   });
 });
 

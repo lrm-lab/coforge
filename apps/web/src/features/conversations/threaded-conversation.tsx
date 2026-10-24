@@ -251,8 +251,12 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       : undefined;
   // What the stream's thread summaries read, each by its own root (`thread-summary.tsx`).
   const threadState = useMemo(
-    () => ({ summaries: conversation.threads ?? NO_THREADS, formatBody: formatPreviewBody }),
-    [conversation.threads, formatPreviewBody],
+    () => ({
+      conversationId: conversation.conversationId,
+      summaries: conversation.threads ?? NO_THREADS,
+      formatBody: formatPreviewBody,
+    }),
+    [conversation.conversationId, conversation.threads, formatPreviewBody],
   );
   const threads = useConversationThreadStore(threadState);
   // Records each open thread's root while it is loaded (see `threadRoots`).

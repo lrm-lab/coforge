@@ -3,6 +3,7 @@ import {
   REPLY_INTENT_DEADLINE_MS,
   REPLY_INTENT_MAX_LIVE_PER_AGENT,
   REPLY_INTENT_PHASE,
+  REPLY_INTENT_REFRESH_MS,
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { WORKSPACE_PROTOCOL_MAJOR } from "@lrm/coforge-sdk/internal";
@@ -11,6 +12,49 @@ import { decodeActivityFrame } from "./agent-activity";
 
 /** How long the browser remembers an ended call so a late repeat of its start cannot revive it. */
 export const REPLY_INTENT_TOMBSTONE_MS = 60_000;
+
+/** How recent an Agent's message must be to count as having just arrived. */
+export const REPLY_INTENT_NEW_POST_MS = 60_000;
+
+/** An Agent's message as it arrives in the browser, as far as ending what it announced needs. */
+export type AgentPost = {
+  messageId: string;
+  agentId: string;
+  conversationId: string;
+  /** Null for a top-level message. */
+  threadRootId: string | null;
+  createdAt: Date | string;
+};
+
+/** A message of a conversation as it arrives, as far as telling an Agent's apart needs. */
+export type ArrivedMessage = {
+  id: string;
+  senderKind: string;
+  senderAgentId?: string;
+  /** The thread the message replies in; none for a top-level message. */
+  threadRootId?: string;
+  createdAt: Date | string;
+};
+
+/** The Agents' messages among those arriving in a conversation. */
+export function agentPostsAmong(
+  conversationId: string,
+  messages: readonly ArrivedMessage[],
+): AgentPost[] {
+  return messages.flatMap((message) =>
+    message.senderKind === "agent" && message.senderAgentId
+      ? [
+          {
+            messageId: message.id,
+            agentId: message.senderAgentId,
+            conversationId,
+            threadRootId: message.threadRootId ?? null,
+            createdAt: message.createdAt,
+          },
+        ]
+      : [],
+  );
+}
 
 /** One call of one Agent that is about to post, where the server resolved its target. */
 export type ReplyIntentEntry = {
@@ -59,12 +103,18 @@ const scheduleTimeout: Schedule = (callback, delayMs) => {
 };
 
 const callKey = (agentId: string, callId: string) => `${agentId}\u0000${callId}`;
+const placeKey = (agentId: string, conversationId: string, threadRootId: string | null) =>
+  `${agentId}\u0000${conversationId}\u0000${threadRootId ?? ""}`;
 
 /**
  * Who is about to post, as the browser holds it. A start adds an entry keyed by Agent and call that
  * lapses `REPLY_INTENT_DEADLINE_MS` later unless the daemon repeats it; an end, or a message from
- * that Agent in that place (one entry per message, the oldest first), removes it and remembers the
- * call as ended for a minute so a late repeat cannot bring it back. One timer, set for the next
+ * that Agent in that place arriving (`agentPosted`: one entry per message, the oldest first),
+ * removes it and remembers the call as ended for a minute so a late repeat cannot bring it back. A
+ * message that arrives before any start there claims the next new start of that Agent in that place
+ * within one refresh period: that is the late start of the call that sent it. (Raft has no such
+ * claim and shows that late start until it lapses; the cost here is that a second message the same
+ * Agent starts there within those 8 seconds shows no line.) One timer, set for the next
  * deadline when a call is new or one ends, prunes both. Everything is volatile and best effort: a
  * lost frame only shortens or lengthens the line by its deadline.
  *
@@ -76,11 +126,19 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
   const store = createStore<readonly ReplyIntentEntry[]>([]);
   const deadlines = new Map<string, number>();
   const ended = new Map<string, number>();
+  /** Messages already seen, and the places where a message beat its start, until they expire. */
+  const seenPosts = new Map<string, number>();
+  const earlyPosts = new Map<string, number>();
   let stopTimer: (() => void) | undefined;
   let timerAt: number | undefined;
 
   const arm = () => {
-    const next = Math.min(...deadlines.values(), ...ended.values());
+    const next = Math.min(
+      ...deadlines.values(),
+      ...ended.values(),
+      ...seenPosts.values(),
+      ...earlyPosts.values(),
+    );
     if (next === Infinity) {
       stopTimer?.();
       stopTimer = timerAt = undefined;
@@ -110,7 +168,8 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
   function prune() {
     stopTimer = timerAt = undefined;
     const at = now();
-    for (const [key, expiry] of ended) if (expiry <= at) ended.delete(key);
+    for (const remembered of [ended, seenPosts, earlyPosts])
+      for (const [key, expiry] of remembered) if (expiry <= at) remembered.delete(key);
     end((entry) => (deadlines.get(callKey(entry.agentId, entry.callId)) ?? 0) <= at, {
       tombstone: false,
     });
@@ -133,6 +192,14 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
       }
       if (ended.has(key) || !intent.conversationId) return;
       const isNew = !deadlines.has(key);
+      const place = placeKey(agentId, intent.conversationId, intent.threadRootId ?? null);
+      if (isNew && earlyPosts.has(place)) {
+        // The message this call sent is already here: its start is late, and so is any repeat.
+        earlyPosts.delete(place);
+        ended.set(key, now() + REPLY_INTENT_TOMBSTONE_MS);
+        arm();
+        return;
+      }
       if (isNew) {
         const live = store.state.filter((entry) => entry.agentId === agentId).length;
         if (live >= REPLY_INTENT_MAX_LIVE_PER_AGENT) return;
@@ -148,8 +215,15 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
       if (isNew) arm();
     },
 
-    /** The Agent has posted in this place, so the oldest thing it announced there has come true. */
-    clearAgent(agentId: string, conversationId: string, threadRootId: string | null) {
+    /**
+     * An Agent's message arrived, so the oldest thing it announced in that place has come true.
+     * The same message seen again, or an old one read in again, ends nothing.
+     */
+    agentPosted({ messageId, agentId, conversationId, threadRootId, createdAt }: AgentPost) {
+      const at = now();
+      if (seenPosts.has(messageId) || at - new Date(createdAt).getTime() > REPLY_INTENT_NEW_POST_MS)
+        return;
+      seenPosts.set(messageId, at + REPLY_INTENT_NEW_POST_MS);
       const oldest = store.state.find(
         (entry) =>
           entry.agentId === agentId &&
@@ -157,6 +231,13 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
           entry.threadRootId === threadRootId,
       );
       if (oldest) end((entry) => entry === oldest, { tombstone: true });
+      else {
+        earlyPosts.set(
+          placeKey(agentId, conversationId, threadRootId),
+          at + REPLY_INTENT_REFRESH_MS,
+        );
+        arm();
+      }
     },
 
     /** Forgets everything: the realtime connection may have missed any of it, or the Workspace
@@ -166,6 +247,8 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
       stopTimer = timerAt = undefined;
       deadlines.clear();
       ended.clear();
+      seenPosts.clear();
+      earlyPosts.clear();
       if (store.state.length > 0) store.setState(() => []);
     },
   };

@@ -8,13 +8,8 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
-import {
-  SaveErrorMessage,
-  saveErrorFrom,
-  SettingsCard,
-  SettingsGroup,
-  type SaveError,
-} from "#src/components/settings-content";
+import { SettingsCard, SettingsGroup } from "#src/components/settings-layout";
+import { SaveErrorMessage, saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { isAppError, type AppError, type AppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { leaveWorkspace } from "./members.functions";

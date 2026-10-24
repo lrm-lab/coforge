@@ -115,6 +115,9 @@ export function useOwnMessagesIndex({
   };
 }
 
+/** The viewer's own messages in a conversation, as the jump group's menu reads them. */
+export type OwnMessagesIndex = ReturnType<typeof useOwnMessagesIndex>;
+
 export function OwnMessagesMenu({
   messages,
   loading,

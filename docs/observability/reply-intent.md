@@ -1,6 +1,6 @@
 # 即将发言信号（reply intent）
 
-Agent 即将在某个会话里发言时，输入框上方显示“某某正在输入…”（界面文案是“正在输入”，代码里叫 reply intent / replying）。这个信号是 best-effort 观察：Daemon 不等待、不重试、不落盘，丢一帧只会让提示晚出现或到期自行消失。设计参考了参考产品的行为，实现和命名是 CoForge 自己的。
+Agent 即将在某个会话里发言时，输入框上方显示“某某正在输入…”，发在线程里时频道消息流的根消息下还显示“某某正在回复”（界面文案是“正在输入”，代码里叫 reply intent / replying）。这个信号是 best-effort 观察：Daemon 不等待、不重试、不落盘，丢一帧只会让提示晚出现或到期自行消失。设计参考了参考产品的行为，实现和命名是 CoForge 自己的。
 
 信号的去向取决于目标：
 
@@ -63,4 +63,4 @@ Agent 即将在某个会话里发言时，输入框上方显示“某某正在�
 
 `features/agents/reply-intents.ts` 的 store 以 `(agent, call)` 为键：`start` 设 20 秒截止（重发刷新），`end` 或该 Agent 在同一位置的消息到达则移除，并记住已结束的调用 1 分钟，防止迟到的 `start` 复活。Activity 通道的帧由 `useWorkspaceActivityRealtime` 喂入，私信的帧由 `useUserChannelReplyIntents`（`reply-intents-realtime.ts`）从本人的 `chat:user:<id>` 订阅（与其他功能共用同一个订阅）喂入；重新订阅、切换 Workspace 时清空。
 
-Agent 消息到达时的清除（`agent-post-clearing.ts`）：只看与该位置同一线程根的消息；消息列表为空不算“看过”，不设基线；每条新的 Agent 消息只清除该 Agent 在该位置最早的一个条目。主窗格只显示顶层（`thread_root_id` 为空）的条目，线程窗格按根显示。
+Agent 消息到达时的清除：会话的消息进入缓存的地方（`useConversationQuery` 的 `mergeUpdates`，realtime 和之后的补读都经过这里）对每条 Agent 消息调用 store 的 `agentPosted`（`agent-post-clearing.ts`），不管这个位置有没有界面在显示。每条新消息只清除该 Agent 在该位置最早的一个条目，并记住已结束的调用；同一条消息再到一次、或者 1 分钟前的旧消息被补读进来，都不再清除。消息比 start 先到时，它占住该 Agent 在该位置一个刷新周期（8 秒）内的下一个新 start：那是发出这条消息的调用迟到的 start，不显示，之后的重发也不显示。主窗格只显示顶层（`thread_root_id` 为空）的条目，线程窗格按根显示，消息流里每条根消息下显示它线程的条目。设置里的“实时 Agent 动态”关掉后，这些提示和聊天列表顶栏的忙碌 Agent 都不显示。

@@ -1,5 +1,6 @@
 import { ChevronRight, MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
+import { ThreadReplyingLine } from "#src/features/agents/replying-agents-line";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -8,7 +9,12 @@ import { UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { replyCountLabel, withUnreadCount } from "./conversation-labels";
-import { useThreadBodyFormat, useThreadSummary, useThreadUnread } from "./thread-store";
+import {
+  useThreadBodyFormat,
+  useThreadConversationId,
+  useThreadSummary,
+  useThreadUnread,
+} from "./thread-store";
 
 /**
  * The parts of a root's row that show its thread. Each reads its own root's slice of the
@@ -121,5 +127,16 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
         ))}
       </span>
     </Button>
+  );
+}
+
+/** Under a root in the stream: its thread's preview, then which Agents are about to reply there. */
+export function RootThread({ rootId, onOpen }: ThreadPartProps) {
+  const conversationId = useThreadConversationId();
+  return (
+    <>
+      <ThreadPreview rootId={rootId} onOpen={onOpen} />
+      <ThreadReplyingLine conversationId={conversationId} rootId={rootId} />
+    </>
   );
 }

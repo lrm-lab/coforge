@@ -53,7 +53,7 @@ import type { ChipMention } from "./message-markdown";
 import { formatSelectionQuote, selectionAffordancePlacement } from "./message-quote";
 import { MessageReactionPicker, QUICK_REACTION_EMOJIS } from "./message-reaction-picker";
 import type { ReactionSummary } from "./message-reactions";
-import { ThreadPreview, ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
+import { RootThread, ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
 import {
   copyFragmentMarkdown,
   copyFragmentStyled,
@@ -1025,7 +1025,7 @@ export const MessageRow = memo(function MessageRow({
             </div>
           )}
           {showsTask && <MessageTask messageId={message.id} />}
-          {onOpenThread && <ThreadPreview rootId={message.id} onOpen={onOpenThread} />}
+          {onOpenThread && <RootThread rootId={message.id} onOpen={onOpenThread} />}
         </div>
         {(onOpenThread || onToggleReaction || onToggleSave || copyable) && (
           /* Hidden until revealed: hover/focus in the wide desktop shell (`lg` and up, with

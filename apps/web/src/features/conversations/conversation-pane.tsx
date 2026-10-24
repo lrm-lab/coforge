@@ -2,13 +2,10 @@ import { WorkspaceAssistantWelcome } from "./workspace-assistant-welcome";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { ProgressBar } from "react-aria-components";
-import { ArrowDown } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
 import { useStateWithRef } from "#src/hooks/use-state-with-ref";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
-import { UnreadDot } from "#src/components/ui/unread-marker";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import {
   Empty,
@@ -48,7 +45,8 @@ import { OutboxMessageRow } from "./outbox-message-row";
 import { SystemMessageGroup } from "./system-message-group";
 import { groupSystemMessages } from "./system-message-groups";
 import { useMessageOutbox, useOutboxEntries } from "./use-message-outbox";
-import { OwnMessagesMenu, useOwnMessagesIndex } from "./own-messages-menu";
+import { MessageNavigationGroup } from "./message-navigation-group";
+import { useOwnMessagesIndex } from "./own-messages-menu";
 import { isViewerMessage } from "./own-message";
 import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
@@ -296,7 +294,6 @@ export function ConversationPane({
     onLoad: onLoadOwnMessages,
     fallback: loadedOwnMessages,
   });
-  const ownMessages = ownIndex.messages;
   // The viewer's messages the server has not confirmed yet (or failed to take), shown greyed at the
   // foot of the stream until the real message replaces them (see `composer-outbox.ts`).
   const outboxDraftKey = composerDraftKey(conversation.conversationId, root?.id);
@@ -1047,68 +1044,33 @@ export function ConversationPane({
               )}
           </div>
         </div>
-        {(ownMessages.length > 0 || !followingLatest) && (
-          // Anchored to the composer's top-right corner: the overlay repeats the composer's column
-          // and side margins, so the group sits right above the composer's edge at any width
-          // rather than at the far pane edge beside the scrollbar.
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10">
-            <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-              <div className="flex justify-end px-4 md:px-6">
-                <div
-                  role="group"
-                  aria-label={m.conversation_message_navigation()}
-                  className={cn(
-                    "pointer-events-auto inline-flex items-center gap-0.5 rounded-full border border-secondary bg-primary p-0.5 shadow-xs transition-opacity",
-                    followingLatest &&
-                      !ownIndex.open &&
-                      "pointer-events-none opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
-                  )}
-                >
-                  {ownMessages.length > 0 && (
-                    <OwnMessagesMenu
-                      messages={ownMessages}
-                      loading={ownIndex.loading}
-                      open={ownIndex.open}
-                      onOpenChange={ownIndex.setOpen}
-                      menuRef={ownIndex.menuRef}
-                      onLoadOlder={ownIndex.loadOlder}
-                      onSelect={(messageId) => void showMessage(messageId)}
-                      formatBody={formatIndexBody}
-                    />
-                  )}
-                  {ownMessages.length > 0 && !followingLatest && (
-                    <span aria-hidden="true" className="h-4 w-px bg-secondary" />
-                  )}
-                  {!followingLatest && (
-                    <span className="relative">
-                      <ButtonUtility
-                        icon={ArrowDown}
-                        size="xs"
-                        color="tertiary"
-                        onClick={() => void showLatestMessages()}
-                        aria-label={
-                          newMessageCount === 1
-                            ? m.conversation_one_new_message()
-                            : newMessageCount > 1
-                              ? m.conversation_new_messages({ count: newMessageCount })
-                              : m.conversation_back_to_bottom()
-                        }
-                        className="rounded-full"
-                      />
-                      {newMessageCount > 0 && (
-                        <UnreadDot className="absolute -top-1 -right-1 size-2.5 border border-primary" />
-                      )}
-                    </span>
-                  )}
-                </div>
-              </div>
+        {/* Along the composer's top edge, over the history's bottom padding: who is typing on the
+            left, and the jump group anchored to the composer's top-right corner. The overlay
+            repeats the composer's column and side margins, so both sit right above the composer
+            at any width rather than at the far pane edge beside the scrollbar, and the line
+            truncates before the group instead of running under it. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+          <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
+            <div className="flex items-end gap-2 px-4 md:px-6">
+              <ReplyingAgentsLine
+                conversationId={conversation.conversationId}
+                threadRootId={root?.id ?? null}
+                className="min-w-0 flex-1 bg-primary"
+              />
+              <MessageNavigationGroup
+                index={ownIndex}
+                followingLatest={followingLatest}
+                newMessageCount={newMessageCount}
+                onShowMessage={(messageId) => void showMessage(messageId)}
+                onShowLatest={() => void showLatestMessages()}
+                formatBody={formatIndexBody}
+              />
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-        {canCompose && <ReplyingAgentsLine conversation={conversation} root={root} />}
         {readOnlyNotice ?? (
           <MessageComposer
             conversationId={conversation.conversationId}

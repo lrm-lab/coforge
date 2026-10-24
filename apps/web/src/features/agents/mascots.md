@@ -3,8 +3,9 @@
 Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
 
 - A mascot animates where the surface shows the Agent's live state; lists and history stay static.
-  It moves only where `AgentMascotView` draws it, and only on these surfaces: the replying line
-  above a composer (main pane and thread pane), the chat list header's busy Agents (below), the
+  It moves only where `AgentMascotView` draws it, and only on these surfaces: the replying lines
+  (above a composer in the main pane and thread pane, and under a root in the stream), the chat
+  list header's busy Agents (below), the
   Direct-message list rows (`DirectAgentAvatar` in
   `features/conversations/`, through `AgentMascotAvatar`; the row's pointer state reaches it as
   `hovered` through `useRowHovered`, so a hover repaints only the mascot), the Agent's
@@ -67,20 +68,28 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   when the cast changes. Each is the Agent's avatar as in a message stream: it peeks at the Agent
   card and opens the profile on a press (any visible Agent's profile opens, not only the viewer's
   own). Reduced motion leaves still faces and the count, with no rotation and no loop.
-- `replying-agents-line.tsx` is the line above a composer, in the main pane and in a thread pane,
-  saying which Agents are about to post in that place. The UI wording is "typing" ("Atlas, Ben and 2
-  others are typing…", `agent_replying_*`); in code it is a reply intent or "replying". The source
-  is the Agent's "about to post" signal, not its activity: `reply-intents.ts` holds the entries
-  (see [reply intents](../../../../../docs/observability/reply-intent.md)), the line shows those for
-  the open conversation's top level or the open thread's root, and `replying-agents-summary.ts`
-  (pure) picks the Agents the roster knows and words the names with `Intl.ListFormat`. Up to three
-  24px mascot stickers (`AgentMascotView` in an `AvatarSticker`) overlap, each acting out
-  `working`; the sentence names everyone and carries no activity label. It holds its own row above
-  the composer, so the last message is never covered, and renders nothing (and reads no roster)
-  while nobody is replying. An Agent's own message arriving in that place ends one of its entries
-  (`agent-post-clearing.ts`). The line eases in (`replying-agents-line.css`) unless motion is
-  reduced; the sentence is plain text, not a live region, and no other state (reading, working)
-  appears in it.
+- `replying-agents-line.tsx` is the line along a composer's top edge, in the main pane and in a
+  thread pane, saying which Agents are about to post in that place. The UI wording is "typing"
+  ("Atlas, Ben and 2 others are typing…", `agent_replying_*`); in code it is a reply intent or
+  "replying". The source is the Agent's "about to post" signal, not its activity: `reply-intents.ts`
+  holds the entries (see [reply intents](../../../../../docs/observability/reply-intent.md)), the
+  line shows those for the open conversation's top level or the open thread's root, and
+  `replying-agents-summary.ts` (pure) picks the Agents the roster knows and words the names with
+  `Intl.ListFormat`. Up to three 24px mascot stickers (`AgentMascotView` in an `AvatarSticker`)
+  overlap, each acting out `working`; the sentence names everyone and carries no activity label.
+  Everyone who can read the place sees it, whether or not they can write there. It overlays the
+  history's bottom padding (`pb-6`, its own height) and shares that row with the jump group, so the
+  newest message is never covered while the pane follows it (scrolled up, it covers that strip) and the sentence truncates before the group; it renders nothing
+  (and reads no roster) while nobody is replying. An Agent's own message arriving in that place
+  ends one of its entries ([reply intents](../../../../../docs/observability/reply-intent.md)). The line eases in
+  (`replying-agents-line.css`) unless motion is reduced; the sentence is a polite `role="status"`
+  for screen readers, and no other state (reading, working) appears in it.
+- `ThreadReplyingLine` is the same line under a root's thread preview in the conversation's stream
+  (never in a thread pane, which has its own), worded "is replying" (`agent_thread_replying_*`),
+  for the Agents about to post in that root's thread; the Agent's reply arriving ends it, whether or
+  not that reply is shown.
+- Settings → Live agent activity (`features/settings/live-agent-activity.ts`, per device, on by
+  default) hides the chat list header's busy Agents and both replying lines.
 - A moving mascot's eyes follow the cursor. `mascot-look.ts` (pure) maps the pointer's offset from
   the canvas centre to `lookX` / `lookY` in [-1, 1] (full deflection at 350 px, flattening toward
   it), and `mascot-look-tracker.ts` is the one passive document `pointermove` listener every
