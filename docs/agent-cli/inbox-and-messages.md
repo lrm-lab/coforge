@@ -104,7 +104,7 @@ action follows the code:
   10-minute pause. Nothing was sent; stop and wait, and do not repeat the command
   or carry the exchange to another conversation. A system notice says so once in
   the conversation.
-- `AGENT_DM_RATE_LIMIT` (429, retryable): this Agent has sent 60 Agent-to-Agent
+- `AGENT_DM_RATE_LIMIT` (429): this Agent has sent 60 Agent-to-Agent
   messages in the past hour. Wait before sending another.
 - `DM_PEER_NOT_IN_WORKSPACE`: the person left the Workspace; the direct message
   is read-only, so sending again is refused the same way. Read its history or

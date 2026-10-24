@@ -1,5 +1,5 @@
 import type { AgentMessageResponse } from "@lrm/coforge-sdk/internal";
-import { formatMessageLine, formatTaskWorkflowHint } from "./message-format";
+import { formatAgentDmHint, formatMessageLine, formatTaskWorkflowHint } from "./message-format";
 
 /** What `message check` got back: the drained messages, and what the daemon knows beyond them.
  * `summaries` are the conversations with unread attention before the drain, and
@@ -25,6 +25,8 @@ export function formatMessageCheck(result: MessageCheckResult): string {
     lines.push(result.messages.map(formatMessageLine).join("\n"), "");
     const hint = formatTaskWorkflowHint(result.messages);
     if (hint) lines.push(hint);
+    const dmHint = formatAgentDmHint(result.messages);
+    if (dmHint) lines.push(dmHint);
   }
   lines.push(
     result.hasMore

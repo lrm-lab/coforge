@@ -31,3 +31,27 @@ test("a send to a name a member and an Agent share answers 409 AMBIGUOUS_TARGET 
     retryable: false,
   });
 });
+
+test.each(["AGENT_DM_CHAIN_LIMIT", "AGENT_DM_RATE_LIMIT"] as const)(
+  "a send refused by %s answers 429 and is not retryable",
+  async (code) => {
+    const result = await handleAgentMessagesPost(
+      new Request("https://server.example/api/agent/v1/messages", {
+        method: "POST",
+        body: JSON.stringify({ target: "@bob", content: "hello", idempotencyKey: "idem-limit" }),
+      }),
+      { workspaceId: "workspace-1", agentId: "agent-1" },
+      {
+        requestRecords: { find: async () => undefined },
+        repository: { agentTargetFreshness: async () => ({}) },
+        sender: {
+          executeFromAgent: async () => {
+            throw new AppError(code);
+          },
+        },
+      } as never,
+    );
+    expect(result.status).toBe(429);
+    expect(await result.json()).toMatchObject({ code, retryable: false });
+  },
+);

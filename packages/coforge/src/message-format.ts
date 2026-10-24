@@ -69,21 +69,19 @@ export function formatTaskWorkflowHint(messages: readonly AgentMessageRecord[]):
 }
 
 export const AGENT_DM_NOTICE =
-  "[CoForge notice: This is a direct message from another Agent. Answer once and stop: do not reply only to acknowledge, and if a send is refused for too many messages in a row, wait instead of continuing elsewhere.]";
+  "[CoForge notice: Direct messages from another Agent are shown above. Answer once and stop: do not reply only to acknowledge, and if a send is refused for too many messages in a row, wait instead of continuing elsewhere.]";
 
-/** A direct message another Agent wrote to this one: the target names its sender, whatever suffix. */
-function isFromPeerAgent(message: AgentMessageRecord): boolean {
-  if (message.senderKind !== "agent" || !message.target.startsWith("@")) return false;
-  const peer = message.target.slice(1).split(":")[0]!.split("~")[0];
-  return peer === message.senderHandle;
+/** The notice for an output that shows a direct message another Agent wrote; once per output. */
+export function formatAgentDmHint(messages: readonly AgentMessageRecord[]): string {
+  return messages.some(
+    (message) => message.senderKind === "agent" && message.target.startsWith("@"),
+  )
+    ? AGENT_DM_NOTICE
+    : "";
 }
 
 export function formatMessageLine(message: AgentMessageRecord): string {
-  const notice = message.nonMemberMention
-    ? `\n${NON_MEMBER_MENTION_NOTICE}`
-    : isFromPeerAgent(message)
-      ? `\n${AGENT_DM_NOTICE}`
-      : "";
+  const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
   return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(channelSummaryBody(message))}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
 }
 
@@ -141,6 +139,8 @@ export function formatSendSuccess(
   ];
   const taskHint = formatTaskWorkflowHint(recentUnread);
   if (taskHint) lines.push(taskHint);
+  const dmHint = formatAgentDmHint(recentUnread);
+  if (dmHint) lines.push(dmHint);
   return lines.join("\n");
 }
 

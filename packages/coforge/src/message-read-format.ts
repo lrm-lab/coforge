@@ -1,6 +1,7 @@
 import { fenceMessageBody } from "./message-body-format";
 import {
   attachmentSuffix,
+  formatAgentDmHint,
   formatTaskWorkflowHint,
   formatUtcTimestamp,
   isThreadTarget,
@@ -143,6 +144,8 @@ export function formatReadWindow(
 
   lines.push("");
   lines.push(`End of window: ${messages.length}/${messages.length} shown.`);
+  const dmHint = formatAgentDmHint(messages);
+  if (dmHint) lines.push(dmHint);
   if (options.unread) lines.push(...unreadFooter(target, response, true));
   return lines.join("\n");
 }
