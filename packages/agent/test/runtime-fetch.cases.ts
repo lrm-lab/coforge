@@ -124,32 +124,39 @@ async function writeCertificates(directory: string) {
   const openssl = Bun.which("openssl");
   if (!openssl) throw new Error("openssl is required");
   await mkdir(directory, { recursive: true });
+  const run = (args: string[]) => {
+    const result = Bun.spawnSync([openssl, ...args], { cwd: directory });
+    if (result.exitCode !== 0) throw new Error(`openssl failed: ${result.stderr.toString()}`);
+  };
+  // Only `ecparam`, `req -new` and `x509 -req` are used: macOS ships LibreSSL as /usr/bin/openssl,
+  // which has neither `req -addext` nor `req -CA`, and these are common to it and OpenSSL 3.
   const issue = (name: string, extensions: string[], issuer?: string) => {
-    const signing = issuer ? ["-CA", `${issuer}.pem`, "-CAkey", `${issuer}.key`] : [];
-    const args = [
-      "req",
-      "-x509",
-      ...signing,
-      "-newkey",
-      "ec",
-      "-pkeyopt",
-      "ec_paramgen_curve:prime256v1",
-    ];
-    args.push(
-      "-nodes",
+    run(["ecparam", "-genkey", "-name", "prime256v1", "-noout", "-out", `${name}.key`]);
+    run(["req", "-new", "-key", `${name}.key`, "-subj", `/CN=${name}`, "-out", `${name}.csr`]);
+    // The daemon's and the Agent's chains share subject names, so a verifier tells their issuers
+    // apart only by key identifier; `req -x509` adds these itself, `x509 -req` does not.
+    const identifiers = ["subjectKeyIdentifier=hash", "authorityKeyIdentifier=keyid"];
+    writeFileSync(
+      join(directory, `${name}.ext`),
+      `${[...extensions, ...identifiers].join("\n")}\n`,
+    );
+    const signer = issuer
+      ? ["-CA", `${issuer}.pem`, "-CAkey", `${issuer}.key`, "-CAcreateserial"]
+      : ["-signkey", `${name}.key`];
+    run([
+      "x509",
+      "-req",
+      "-in",
+      `${name}.csr`,
+      ...signer,
+      "-sha256",
       "-days",
       "1",
-      "-subj",
-      `/CN=${name}`,
-      "-keyout",
-      `${name}.key`,
+      "-extfile",
+      `${name}.ext`,
       "-out",
       `${name}.pem`,
-    );
-    const result = Bun.spawnSync([openssl, ...args, ...extensions.flatMap((e) => ["-addext", e])], {
-      cwd: directory,
-    });
-    if (result.exitCode !== 0) throw new Error(`openssl failed: ${result.stderr.toString()}`);
+    ]);
   };
   const authority = ["basicConstraints=critical,CA:TRUE", "keyUsage=critical,keyCertSign,cRLSign"];
   const server = ["basicConstraints=critical,CA:FALSE", "subjectAltName=DNS:localhost"];
