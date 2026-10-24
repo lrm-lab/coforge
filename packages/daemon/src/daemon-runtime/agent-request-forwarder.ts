@@ -13,6 +13,7 @@ import type {
   AgentMentionDeliveryResponse,
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
+  AgentMentionPendingRequest,
   AgentMentionPendingResponse,
   AgentProfileShowRequest,
   AgentProfileShowResponse,
@@ -254,14 +255,14 @@ export class AgentRequestForwarder {
 
   async mentionPending(
     context: string,
-    _request: Record<string, never>,
+    request: AgentMentionPendingRequest,
     agentApiKey: string,
   ): Promise<AgentMentionPendingResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall(
       "mentionPending",
       "Agent mention actions endpoint is not configured",
-    )(agentApiKey);
+    )(request, agentApiKey);
   }
 
   async mentionExecute(

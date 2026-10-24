@@ -31,6 +31,7 @@ import type {
   AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
+  AgentMentionPendingRequest,
   AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
   AgentMentionDeliveryResponse,
@@ -195,10 +196,12 @@ import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import { adaptAgentHistoryResponse } from "./agent-history-response";
 import {
+  adaptAgentReactionResponse,
+  adaptAgentResolveResponse,
   adaptAgentSearchResponse,
   adaptAgentSendResponse,
-  adaptAgentResolveResponse,
-  adaptAgentReactionResponse,
+} from "./agent-message-adapters";
+import {
   defaultAgentMessageHttpClient,
   defaultAgentWeeklyReportHttpClient,
   defaultAgentWeeklyReportCollectHttpClient,
@@ -314,7 +317,10 @@ export interface DaemonConnectionClient {
     request: AgentAppConfigUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse>;
-  mentionPending?(agentApiKey: string): Promise<AgentMentionPendingResponse>;
+  mentionPending?(
+    request: AgentMentionPendingRequest,
+    agentApiKey: string,
+  ): Promise<AgentMentionPendingResponse>;
   mentionExecute?(
     request: AgentMentionExecuteRequest,
     agentApiKey: string,
@@ -1449,18 +1455,24 @@ export class DaemonConnection implements DaemonConnectionClient {
     });
   }
 
-  async mentionPending(agentApiKey: string): Promise<AgentMentionPendingResponse> {
+  #requireMentionClient(kind: "actions" | "delivery", client: unknown): void {
     if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent mention actions endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestMentionPending)
-      throw new Error("Agent mention actions HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestMentionPending({
+      throw new Error(`Agent mention ${kind} endpoint is not configured`);
+    if (!client) throw new Error(`Agent mention ${kind} HTTP client is unavailable`);
+  }
+
+  async mentionPending(
+    request: AgentMentionPendingRequest,
+    agentApiKey: string,
+  ): Promise<AgentMentionPendingResponse> {
+    this.#requireMentionClient("actions", this.agentMessageHttpClient.requestMentionPending);
+    return this.agentMessageHttpClient.requestMentionPending!({
       url: this.#serverEndpoint(
         "Agent mention pending",
         agentApiRoutes.cloud.mentionActions.pending.path,
       ),
       ...this.#agentKeys(agentApiKey),
-      request: {},
+      request,
     });
   }
 
@@ -1468,11 +1480,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentMentionExecuteRequest,
     agentApiKey: string,
   ): Promise<AgentMentionExecuteResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent mention actions endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestMentionExecute)
-      throw new Error("Agent mention actions HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestMentionExecute({
+    this.#requireMentionClient("actions", this.agentMessageHttpClient.requestMentionExecute);
+    return this.agentMessageHttpClient.requestMentionExecute!({
       url: this.#serverEndpoint(
         "Agent mention action",
         agentApiRoutes.cloud.mentionActions.execute.path,
@@ -1486,11 +1495,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     request: AgentMentionDeliveryRequest,
     agentApiKey: string,
   ): Promise<AgentMentionDeliveryResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("Agent mention delivery endpoint is not configured");
-    if (!this.agentMessageHttpClient.requestMentionDelivery)
-      throw new Error("Agent mention delivery HTTP client is unavailable");
-    return this.agentMessageHttpClient.requestMentionDelivery({
+    this.#requireMentionClient("delivery", this.agentMessageHttpClient.requestMentionDelivery);
+    return this.agentMessageHttpClient.requestMentionDelivery!({
       url: this.#serverEndpoint(
         "Agent mention delivery",
         agentApiRoutes.cloud.mentionDeliveries.path(request.messageId),

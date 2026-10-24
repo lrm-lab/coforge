@@ -1,8 +1,8 @@
 import { getLogger } from "@logtape/logtape";
 import type { AgentSendReconciliationResponse } from "@lrm/coforge-sdk/agent";
 import type { AgentMessageRequest } from "@lrm/coforge-sdk/internal";
+import { adaptAgentSendCommittedResponse } from "#src/connection/agent-message-adapters";
 import {
-  adaptAgentSendCommittedResponse,
   type AgentMessageTransportResponse,
   type AgentSendReconciliationRequest,
 } from "#src/connection/agent-http-clients";

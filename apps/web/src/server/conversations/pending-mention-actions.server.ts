@@ -476,7 +476,7 @@ export async function notifyMentionTargets(
   return { results, deliveries, notifiedUserIds: [...notifiedUserIds] };
 }
 
-/** Puts claimed mention actions back to pending, for a caller that could not carry them out. */
+/** Puts claimed actions back to pending when the caller could not carry them out. */
 export async function releaseMentionActions(
   db: Pick<PrismaClient, "pendingMentionAction">,
   claimed: readonly ClaimedMentionAction[],
@@ -506,6 +506,7 @@ export async function pendingMentionActionsForActor(
   workspaceId: string,
   sender: MentionActor,
   now: Date = new Date(),
+  limit?: number,
 ): Promise<PendingMentionActionView[]> {
   const rows = await db.pendingMentionAction.findMany({
     where: {
@@ -522,7 +523,8 @@ export async function pendingMentionActionsForActor(
         select: { body: true, conversation: { select: { channelName: true, archivedAt: true } } },
       },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: limit,
   });
   const membership = await targetMembership(db, rows);
   const orderInBody = (row: (typeof rows)[number]) =>
@@ -552,8 +554,8 @@ export async function pendingMentionActionsForActor(
 
 /**
  * An Agent's request to add the targets of its pending mentions. Adding a member is a human's
- * decision, so every one of the Agent's own mentions is refused with that reason; an id that is not the Agent's is
- * `not_found`, exactly like one that does not exist. Results in request order, one per distinct id.
+ * decision, so each of the Agent's own mentions is refused with that reason; an id that is not the
+ * Agent's is `not_found`. Results in request order, one per distinct id.
  */
 export async function refuseAgentMentionAdds(
   db: Pick<PrismaClient, "pendingMentionAction">,

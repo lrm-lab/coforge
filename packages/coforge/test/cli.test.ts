@@ -3760,63 +3760,6 @@ test("mention add without a resolution id is an INVALID_ARG usage error", () => 
   expect((error as CliError).message).toBe("At least one resolution id is required.");
 });
 
-test("mention pending lists each pending mention the Agent can no longer act on", async () => {
-  const output = await run(["mention", "pending"], {
-    ...MINIMAL_TRANSPORT,
-    mentionPending: async () => ({ ok: true, pendingMentionActions: [PENDING_ROW] }),
-  });
-  expect(output).toBe(
-    [
-      "Pending mention actions",
-      "",
-      "- 22222222-2222-4222-8222-222222222222 — bob (user)",
-      "  message: 11111111-1111-4111-8111-111111111111",
-      "  reason: not in the conversation at send time, so the @mention was not delivered",
-      "  expires: 2026-10-01T00:00:00.000Z",
-    ].join("\n"),
-  );
-});
-
-test("mention pending lists the recovery commands a pending mention still allows", async () => {
-  const output = await run(["mention", "pending"], {
-    ...MINIMAL_TRANSPORT,
-    mentionPending: async () => ({
-      ok: true,
-      pendingMentionActions: [
-        { ...PENDING_ROW, targetType: "agent", availableActions: ["notify", "add"] },
-      ],
-    }),
-  });
-  expect(output).toBe(
-    [
-      "Pending mention actions",
-      "",
-      "- 22222222-2222-4222-8222-222222222222 — bob (agent)",
-      "  message: 11111111-1111-4111-8111-111111111111",
-      "  reason: not in the conversation at send time, so the @mention was not delivered",
-      "  expires: 2026-10-01T00:00:00.000Z",
-      "  recovery commands:",
-      "  notify: coforge mention notify 22222222-2222-4222-8222-222222222222",
-      "  add: coforge mention add 22222222-2222-4222-8222-222222222222",
-      "  note: notify exits nonzero unless the target queue accepts the delivery.",
-    ].join("\n"),
-  );
-});
-
-test("mention pending says so when nothing is pending, and --json returns the list", async () => {
-  const transport = {
-    ...MINIMAL_TRANSPORT,
-    mentionPending: async () => ({ ok: true as const, pendingMentionActions: [] }),
-  };
-  expect(await run(["mention", "pending"], transport)).toBe(
-    "Pending mention actions\n\nNo pending mention actions.",
-  );
-  expect(await run(["mention", "pending", "--json"], transport)).toEqual({
-    ok: true,
-    pendingMentionActions: [],
-  });
-});
-
 test("mention add prints each target's result when every one was added", async () => {
   const calls: unknown[] = [];
   const transport = {

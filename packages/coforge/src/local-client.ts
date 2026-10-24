@@ -40,7 +40,6 @@ import {
   decodeAgentUserInfoResponse,
   decodeGitHubCredentialResponse,
   decodeGitHubCommitTrailersResponse,
-  decodeAgentMentionActionErrorResponse,
   decodeAgentMentionExecuteResponse,
   decodeAgentMentionPendingResponse,
   decodeAgentMentionDeliveryErrorResponse,
@@ -73,6 +72,7 @@ import {
   preIssuanceError,
   requireProxySetup,
 } from "./proxy-request";
+import { mentionActionRequest } from "./mention-request";
 
 /** The local daemon proxy's JSON error contract (`AgentProxyFailureBody` in the SDK). A few proxy
  * refusals decided before a request is parsed (`unauthorized`, `not found`, `bad request`, …) are
@@ -281,59 +281,6 @@ async function versionRequest(
     throw proxyHttpFailure("version", response.status, errorBody, undefined);
   }
   return decodeAgentVersionResponse(await response.json().catch(() => undefined));
-}
-
-/**
- * One mention action route through the local Proxy. A 5xx is `SERVER_5XX`; any other refusal is
- * `<OPERATION>_FAILED` carrying the server's own error text (the `{ ok: false, errorCode, error }`
- * envelope, the Proxy's JSON error, or its bare text).
- */
-async function mentionActionRequest<T>(
-  proxyEndpoint: (path: string) => URL,
-  context: string,
-  proxyUrl: string,
-  operation: "mention-pending" | "mention-action",
-  route: { method: string; path: string },
-  body: AgentMentionExecuteRequest | undefined,
-  decode: (value: unknown) => T,
-): Promise<T> {
-  requireProxySetup(operation, context, proxyUrl);
-  let response: Response;
-  try {
-    response = await fetch(proxyEndpoint(route.path), {
-      method: route.method,
-      headers: {
-        authorization: `Bearer ${context}`,
-        ...(body ? { "content-type": "application/json" } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    throw new CliError({
-      code: operationFailedCode(operation),
-      message: "agent proxy request failed (network or timeout)",
-      retryable: false,
-    });
-  }
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    let message = text;
-    try {
-      const parsed: unknown = JSON.parse(text);
-      const envelope = decodeAgentMentionActionErrorResponse(parsed);
-      const proxyError = (parsed as { error?: unknown } | null)?.error;
-      message = envelope?.error ?? (typeof proxyError === "string" ? proxyError : text);
-    } catch {
-      // A bare-text Proxy error (e.g. "bad request"): its text is the message.
-    }
-    throw new CliError({
-      code: response.status >= 500 ? "SERVER_5XX" : operationFailedCode(operation),
-      message: message || `HTTP ${response.status}`,
-      retryable: false,
-    });
-  }
-  return decode(await response.json().catch(() => undefined));
 }
 
 /** A mention delivery failure that is not the server's own answer; `MENTION_DELIVERY_FAILED` is
@@ -659,13 +606,16 @@ export function connectLocal(
         decodeAgentAppConfigErrorResponse,
         "app-config",
       ),
-    mentionPending: (): Promise<AgentMentionPendingResponse> =>
+    mentionPending: (limit?: number): Promise<AgentMentionPendingResponse> =>
       mentionActionRequest(
         proxyEndpoint,
         context,
         proxyUrl,
         "mention-pending",
-        agentApiRoutes.local.mentionActions.pending,
+        {
+          ...agentApiRoutes.local.mentionActions.pending,
+          ...(limit === undefined ? {} : { search: `?limit=${limit}` }),
+        },
         undefined,
         decodeAgentMentionPendingResponse,
       ),

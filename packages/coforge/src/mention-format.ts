@@ -1,8 +1,10 @@
-import type {
-  AgentMentionActionKind,
-  AgentMentionActionResult,
-  AgentMentionDelivery,
-  AgentMentionPendingAction,
+import {
+  MENTION_PENDING_DEFAULT_LIMIT,
+  MENTION_PENDING_MAX_LIMIT,
+  type AgentMentionActionKind,
+  type AgentMentionActionResult,
+  type AgentMentionDelivery,
+  type AgentMentionPendingAction,
 } from "@lrm/coforge-sdk/agent";
 import { withOutputMode, type CliError, type CliErrorOutputMode } from "#src/cli-error";
 import { NON_MEMBER_MENTION_NOTICE, mentionRecoveryVerbs } from "#src/message-format";
@@ -20,10 +22,32 @@ const RECIPIENT_GUIDANCE = `Recipient guidance: ${NON_MEMBER_MENTION_NOTICE}`;
  * `coforge mention pending`: each of the sender's mentions that reached no one, when it can no
  * longer be acted on, and the `coforge mention` commands it still allows.
  */
-export function formatPendingMentionActions(actions: readonly AgentMentionPendingAction[]): string {
-  const lines = ["Pending mention actions", ""];
+/** How complete a page of pending actions is, and what to do when it is not. `hasMore` is
+ * `undefined` only when the server did not report it. */
+function pendingPageNote(
+  hasMore: boolean | undefined,
+  limit: number | undefined,
+  shown: number,
+): string {
+  const asked =
+    limit === undefined ? `server default ${MENTION_PENDING_DEFAULT_LIMIT}` : `--limit ${limit}`;
+  const head = `shown ${shown}, ${asked} — truncated=`;
+  if (hasMore === true)
+    return (limit ?? MENTION_PENDING_DEFAULT_LIMIT) >= MENTION_PENDING_MAX_LIMIT
+      ? `${head}true · more pending actions exist AND this is the server's maximum page (${MENTION_PENDING_MAX_LIMIT}); this route has no offset or cursor, so the rest cannot be reached from here — resolve what you can and re-run; rows with no available actions are not actionable here and will remain until they expire`
+      : `${head}true · more pending actions exist; raise --limit (server caps at ${MENTION_PENDING_MAX_LIMIT}) or resolve these first and re-run`;
+  if (hasMore === false) return `${head}false · this is the complete list`;
+  return `${head}unknown · server did not report hasMore, so completeness is NOT asserted`;
+}
+
+export function formatPendingMentionActions(
+  actions: readonly AgentMentionPendingAction[],
+  page: { hasMore?: boolean; limit?: number } = {},
+): string {
+  const note = pendingPageNote(page.hasMore, page.limit, actions.length);
+  const lines = ["Pending mention actions", `(${note})`, ""];
   if (!actions.length) {
-    lines.push("No pending mention actions.");
+    lines.splice(1, 2, "", `No pending mention actions. (${note})`);
     return lines.join("\n");
   }
   for (const action of actions) {

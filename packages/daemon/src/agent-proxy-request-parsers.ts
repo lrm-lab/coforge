@@ -2,12 +2,15 @@ import {
   isChannelOperation,
   UUID_LIKE_PATTERN,
   type ChannelCommand,
+  type LocalInboxRequest,
 } from "@lrm/coforge-sdk/internal";
 import {
   actionCardActionSchema,
   AGENT_MENTION_ACTION_MAX_IDS,
+  MENTION_PENDING_MAX_LIMIT,
   isAgentMentionActionKind,
   type AgentMentionExecuteRequest,
+  type AgentMentionPendingRequest,
   type AgentProfileUpdateRequest,
   type GitHubCommitTrailersRequest,
   type GitHubCredentialRequest,
@@ -77,6 +80,26 @@ export function parseSearchPosition(payload: JsonObject) {
     offset: typeof offset === "number" ? offset : undefined,
     cursor: typeof cursor === "string" ? cursor : undefined,
   };
+}
+
+/** `mention pending`'s optional `limit`: an integer from 1 to the server's maximum page. */
+export function parseMentionPendingLimit(
+  raw: string | null,
+): AgentMentionPendingRequest | Response {
+  if (raw === null) return {};
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MENTION_PENDING_MAX_LIMIT)
+    return badRequest();
+  return { limit };
+}
+
+export function parseInboxRequest(
+  payload: JsonObject,
+  context: string,
+): LocalInboxRequest | Response {
+  if (typeof payload.idempotencyKey !== "string" || payload.operation !== "check")
+    return badRequest();
+  return { idempotencyKey: payload.idempotencyKey, context, operation: "check" };
 }
 
 export function parseMentionExecuteFields(

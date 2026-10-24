@@ -6,6 +6,22 @@ const principal = { workspaceId: "workspace-1", agentId: "agent-1" };
 const RESOLUTION_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_ID = "44444444-4444-4444-8444-444444444444";
 
+const pendingRequest = (query = "") =>
+  new Request(`https://server.example/api/agent/v1/mention-actions/pending${query}`);
+
+const pendingRow = (index: number) => ({
+  resolutionId: `22222222-2222-4222-8222-${String(index).padStart(12, "0")}`,
+  messageId: "11111111-1111-4111-8111-111111111111",
+  targetType: "user" as const,
+  targetId: "33333333-3333-4333-8333-333333333333",
+  targetHandle: `bob${index}`,
+  targetLabel: "Bob",
+  targetAvatarUrl: null,
+  channelName: "triage",
+  availableActions: [],
+  expiresAt: new Date("2026-10-01T00:00:00Z"),
+});
+
 const executeRequest = (body: unknown) =>
   new Request("https://server.example/api/agent/v1/mention-actions/execute", {
     method: "POST",
@@ -14,9 +30,9 @@ const executeRequest = (body: unknown) =>
 
 test("lists the calling Agent's pending mentions with the channel, reason, and ISO expiry", async () => {
   const calls: unknown[] = [];
-  const response = await handleAgentMentionPendingGet(principal, {
-    pendingMentionActions: async (workspaceId, agentId) => {
-      calls.push({ workspaceId, agentId });
+  const response = await handleAgentMentionPendingGet(pendingRequest(), principal, {
+    pendingMentionActions: async (workspaceId, agentId, limit) => {
+      calls.push({ workspaceId, agentId, limit });
       return [
         {
           resolutionId: RESOLUTION_ID,
@@ -36,6 +52,7 @@ test("lists the calling Agent's pending mentions with the channel, reason, and I
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
     ok: true,
+    hasMore: false,
     pendingMentionActions: [
       {
         resolutionId: RESOLUTION_ID,
@@ -50,7 +67,45 @@ test("lists the calling Agent's pending mentions with the channel, reason, and I
       },
     ],
   });
-  expect(calls).toEqual([{ workspaceId: "workspace-1", agentId: "agent-1" }]);
+  expect(calls).toEqual([{ workspaceId: "workspace-1", agentId: "agent-1", limit: 51 }]);
+});
+
+test("a page is the limit asked for and hasMore says whether a row was left over", async () => {
+  const rows = [1, 2, 3].map(pendingRow);
+  const limits: number[] = [];
+  const deps = {
+    pendingMentionActions: async (_workspaceId: string, _agentId: string, limit: number) => {
+      limits.push(limit);
+      return rows.slice(0, limit);
+    },
+  };
+  const page = (await (
+    await handleAgentMentionPendingGet(pendingRequest("?limit=2"), principal, deps)
+  ).json()) as { hasMore: boolean; pendingMentionActions: unknown[] };
+  expect(page.pendingMentionActions).toHaveLength(2);
+  expect(page.hasMore).toBe(true);
+  const whole = (await (
+    await handleAgentMentionPendingGet(pendingRequest("?limit=3"), principal, deps)
+  ).json()) as { hasMore: boolean; pendingMentionActions: unknown[] };
+  expect(whole.pendingMentionActions).toHaveLength(3);
+  expect(whole.hasMore).toBe(false);
+  expect(limits).toEqual([3, 4]);
+});
+
+test("a limit that is not a whole number from 1 to 100 is refused", async () => {
+  const deps = {
+    pendingMentionActions: async () => {
+      throw new Error("must not be called");
+    },
+  };
+  for (const limit of ["0", "101", "x", "1.5", ""]) {
+    const response = await handleAgentMentionPendingGet(
+      pendingRequest(`?limit=${limit}`),
+      principal,
+      deps,
+    );
+    expect(response.status).toBe(400);
+  }
 });
 
 test("answers an Agent's add request with one refusal per requested id", async () => {

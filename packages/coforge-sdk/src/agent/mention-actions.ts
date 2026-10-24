@@ -12,10 +12,19 @@ import type { AgentPendingMentionAction } from "#src/internal/local-daemon";
 /** One of the sender's still-pending mentions, with the channel it was sent in (by name). */
 export type AgentMentionPendingAction = AgentPendingMentionAction & { channelName: string };
 
-/** Response for `GET /api/agent/v1/mention-actions/pending`. */
+/** Rows `GET /api/agent/v1/mention-actions/pending` returns without a `limit`, and the most it
+ * will return however large a `limit` is asked for. */
+export const MENTION_PENDING_DEFAULT_LIMIT = 50;
+export const MENTION_PENDING_MAX_LIMIT = 100;
+
+export type AgentMentionPendingRequest = { limit?: number };
+
+/** Response for `GET /api/agent/v1/mention-actions/pending[?limit=<n>]`: the oldest pending
+ * actions first; `hasMore` says whether more exist beyond this page (the route has no cursor). */
 export type AgentMentionPendingResponse = {
   ok: true;
   pendingMentionActions: AgentMentionPendingAction[];
+  hasMore?: boolean;
 };
 
 /** The actions a sender can request for its pending mentions: `notify` reaches the target
@@ -111,7 +120,11 @@ export function decodeAgentMentionPendingResponse(value: unknown): AgentMentionP
     !value.pendingMentionActions.every(isPendingAction)
   )
     throw new Error("invalid Agent mention pending response");
-  return { ok: true, pendingMentionActions: value.pendingMentionActions };
+  return {
+    ok: true,
+    pendingMentionActions: value.pendingMentionActions,
+    ...(typeof value.hasMore === "boolean" ? { hasMore: value.hasMore } : {}),
+  };
 }
 
 export function decodeAgentMentionExecuteResponse(value: unknown): AgentMentionExecuteResponse {

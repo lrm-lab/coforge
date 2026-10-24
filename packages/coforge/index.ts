@@ -67,7 +67,6 @@ import { parseAppConfigArgs, runAppConfig, type AppConfigInvocation } from "#src
 import {
   formatMentionActionResults,
   formatMentionDeliveries,
-  formatPendingMentionActions,
   incompleteMentionActions,
   mentionDeliveryFailure,
   MENTION_DELIVERY_MESSAGE_ID_HINT,
@@ -124,6 +123,11 @@ import {
   withOutputMode,
 } from "#src/cli-error";
 import { inferAttachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
+import {
+  parseMentionPendingArgs,
+  runMentionPending,
+  type MentionPendingInvocation,
+} from "#src/mention-pending";
 import { formatInboxCheck } from "#src/inbox-format";
 import { setChannelMuted, unfollowThread } from "#src/attention-format";
 import {
@@ -259,7 +263,7 @@ export type ProfileShowInvocation = {
   json?: boolean;
 };
 export type MentionInvocation =
-  | { command: "mention-pending"; json?: boolean }
+  | MentionPendingInvocation
   | { command: "mention-delivery"; messageId: string; json?: boolean }
   | {
       command: "mention-action";
@@ -324,7 +328,7 @@ export type MessageTransport = {
   /** A change to it, refused unless the config is still at `change.expectedRevision`. */
   appConfigUpdate?(appId: string, change: AgentAppConfigPatch): Promise<AgentAppConfigResponse>;
   /** The calling Agent's mentions that reached no one (`coforge mention pending`). */
-  mentionPending?(): Promise<AgentMentionPendingResponse>;
+  mentionPending?(limit?: number): Promise<AgentMentionPendingResponse>;
   /** Acts on pending mentions by resolution id (`coforge mention notify|add`). */
   mentionExecute?(request: AgentMentionExecuteRequest): Promise<AgentMentionExecuteResponse>;
   /** What became of each @mention in a message the calling Agent sent (`coforge mention
@@ -592,7 +596,7 @@ export function parseArgs(
     }
   }
   throw new Error(
-    "Usage: coforge channel mute|unmute [<target>] | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread unfollow --target '#channel:message-id' [--reason <text>] | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] [--cursor <cursor>] | coforge message read --target @user [--unread] | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--limit <n>] [--offset <n>] [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json] | coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json] | coforge app list [--all] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
+    "Usage: coforge channel mute|unmute [<target>] | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread unfollow --target '#channel:message-id' [--reason <text>] | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] [--cursor <cursor>] | coforge message read --target @user [--unread] | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--limit <n>] [--offset <n>] [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--limit <n>] [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json] | coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json] | coforge app list [--all] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
   );
 }
 
@@ -890,18 +894,15 @@ function parseProfileShowArgs(args: readonly string[]): ProfileShowInvocation {
 }
 
 const MENTION_USAGE =
-  "Usage: coforge mention pending [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json]";
+  "Usage: coforge mention pending [--limit <n>] [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json]";
 
 function parseMentionArgs(args: readonly string[]): MentionInvocation {
   const [sub, ...rest] = args;
   if (sub === "delivery") return parseMentionDeliveryArgs(rest);
+  if (sub === "pending") return parseMentionPendingArgs(rest);
   const json = rest.includes("--json");
   const positionals = rest.filter((arg) => arg !== "--json");
   if (positionals.some((arg) => arg.startsWith("--"))) throw new Error(MENTION_USAGE);
-  if (sub === "pending") {
-    if (positionals.length) throw new Error(MENTION_USAGE);
-    return { command: "mention-pending", ...(json ? { json: true } : {}) };
-  }
   if (sub === "notify" || sub === "add") {
     const resolutionIds = [...new Set(positionals.map((id) => id.trim()).filter(Boolean))];
     if (!resolutionIds.length)
@@ -1023,16 +1024,8 @@ export async function run(args: readonly string[], transport: MessageTransport):
     return invocation.json ? result : formatProfile(result);
   }
   if (invocation.command === "app-config") return runAppConfig(invocation, transport);
-  if (invocation.command === "mention-pending") {
-    if (!transport.mentionPending) throw new Error("Mention transport is unavailable");
-    const outputMode = invocation.json ? "json" : "text";
-    const result = await transport.mentionPending().catch((error: unknown) => {
-      throw error instanceof CliError ? withOutputMode(error, outputMode) : error;
-    });
-    return invocation.json
-      ? { ok: true, pendingMentionActions: result.pendingMentionActions }
-      : formatPendingMentionActions(result.pendingMentionActions);
-  }
+  if (invocation.command === "mention-pending")
+    return runMentionPending(transport.mentionPending?.bind(transport), invocation);
   if (invocation.command === "mention-delivery") {
     if (!transport.mentionDelivery) throw new Error("Mention transport is unavailable");
     const outputMode = invocation.json ? "json" : "text";

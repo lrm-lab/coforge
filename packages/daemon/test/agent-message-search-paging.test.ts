@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { startAgentProxy } from "#src/agent-proxy";
 import { createAgentMessageHttpClient } from "#src/connection/agent-http-clients";
-import { adaptAgentSearchResponse } from "#src/connection/agent-http-clients";
+import { adaptAgentSearchResponse } from "#src/connection/agent-message-adapters";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentMessageOperations } from "#src/daemon-runtime/agent-message-operations";
 

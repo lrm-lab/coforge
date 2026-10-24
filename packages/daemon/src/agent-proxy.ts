@@ -49,6 +49,7 @@ import {
   type AgentAppRequest,
   type AgentMentionExecuteRequest,
   type AgentMentionExecuteResponse,
+  type AgentMentionPendingRequest,
   type AgentMentionPendingResponse,
   type AgentMentionDeliveryRequest,
   type AgentMentionDeliveryResponse,
@@ -62,6 +63,8 @@ import {
   parseGithubCredentialRequest,
   parseMentionExecuteFields,
   parseProfileUpdateFields,
+  parseInboxRequest,
+  parseMentionPendingLimit,
   parseSearchPosition,
 } from "./agent-proxy-request-parsers";
 import { classifyAgentProxyFailure, AGENT_PROXY_CORRELATION_HEADER } from "./agent-proxy-failure";
@@ -187,7 +190,7 @@ export type AgentProxyRuntime = {
   agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
   mentionPending?(
     context: string,
-    request: Record<string, never>,
+    request: AgentMentionPendingRequest,
     agentApiKey: string,
   ): Promise<AgentMentionPendingResponse>;
   mentionExecute?(
@@ -434,15 +437,6 @@ function parseAppConfigUpdate(
   const { idempotencyKey } = fields;
   if (!change || typeof idempotencyKey !== "string" || !idempotencyKey) return badRequest();
   return { appId, ...change, idempotencyKey };
-}
-
-function parseInboxRequest(
-  payload: JsonObject,
-  binding: TokenBinding,
-): LocalInboxRequest | Response {
-  if (typeof payload.idempotencyKey !== "string" || payload.operation !== "check")
-    return badRequest();
-  return { idempotencyKey: payload.idempotencyKey, context: binding.context, operation: "check" };
 }
 
 function parseMessageRequest(
@@ -694,7 +688,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     match: exactPath(LOCAL_PROXY_ROUTES.mentionActions.pending.path),
     body: "none",
     handler: "mentionPending",
-    parse: () => ({}),
+    parse: ({ url }) => parseMentionPendingLimit(url.searchParams.get("limit")),
     domainFailure: domain.mentionActionDomainFailure,
   }),
   defineRoute({
@@ -910,7 +904,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     match: exactPath(LOCAL_PROXY_ROUTES.inbox.path),
     body: "json-object",
     handler: "inbox",
-    parse: ({ fields, binding }) => parseInboxRequest(fields, binding),
+    parse: ({ fields, binding }) => parseInboxRequest(fields, binding.context),
   }),
   defineRoute({
     family: operationFamily("agent-api/", "message"),
