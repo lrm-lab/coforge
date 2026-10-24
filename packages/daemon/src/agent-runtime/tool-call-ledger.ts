@@ -6,7 +6,14 @@ import {
 } from "@lrm/coforge-sdk/internal";
 
 type ToolEnd = Extract<AgentRuntimeEvent, { type: "tool-end" }>;
-type ToolCall = { startedAtMs: number; endedAtMs?: number };
+type ToolCall = {
+  name: string;
+  startedAtMs: number;
+  startedAtWallMs: number;
+  endedAtMs?: number;
+};
+
+export const TOOL_CALL_LEDGER_MAX = 256;
 
 /**
  * One launch's tool calls from the provider's raw events: which are still open (stalled recovery
@@ -17,11 +24,20 @@ type ToolCall = { startedAtMs: number; endedAtMs?: number };
 export class ToolCallLedger {
   readonly #calls = new Map<string, ToolCall>();
 
-  constructor(private readonly clock: () => number = () => performance.now()) {}
+  constructor(
+    private readonly clock: () => number = () => performance.now(),
+    private readonly wallClock: () => number = Date.now,
+  ) {}
 
   observe(event: AgentRuntimeEvent): void {
-    if (event.type === "tool-start") this.#calls.set(event.id, { startedAtMs: this.clock() });
-    else if (event.type === "tool-end") {
+    if (event.type === "tool-start") {
+      if (!this.#calls.has(event.id) && this.#calls.size >= TOOL_CALL_LEDGER_MAX) return;
+      this.#calls.set(event.id, {
+        name: event.name,
+        startedAtMs: this.clock(),
+        startedAtWallMs: this.wallClock(),
+      });
+    } else if (event.type === "tool-end") {
       const call = this.#calls.get(event.id);
       if (call && call.endedAtMs === undefined) call.endedAtMs = this.clock();
     } else if (event.type === "completed") this.#calls.clear();
@@ -30,6 +46,31 @@ export class ToolCallLedger {
   get hasOpenToolCall(): boolean {
     for (const call of this.#calls.values()) if (call.endedAtMs === undefined) return true;
     return false;
+  }
+
+  /** The oldest open tool, for a turn interrupt result or stalled Activity. */
+  oldestOpenTool(): { name: string; silentForMs: number } | undefined {
+    const oldest = this.#oldestOpenTool();
+    return oldest
+      ? {
+          name: oldest.name,
+          silentForMs: Math.max(0, Math.round(this.clock() - oldest.startedAtMs)),
+        }
+      : undefined;
+  }
+
+  /** The start of the oldest open call, for the stalled-turn silence clock. */
+  oldestOpenToolStartedAtMs(): number | undefined {
+    return this.#oldestOpenTool()?.startedAtWallMs;
+  }
+
+  #oldestOpenTool(): ToolCall | undefined {
+    let oldest: ToolCall | undefined;
+    for (const call of this.#calls.values()) {
+      if (call.endedAtMs !== undefined) continue;
+      if (!oldest || call.startedAtMs < oldest.startedAtMs) oldest = call;
+    }
+    return oldest;
   }
 
   /** Forgets the ended call and returns its outcome, or `undefined` when its id cannot go on

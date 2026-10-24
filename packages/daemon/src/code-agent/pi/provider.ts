@@ -299,7 +299,7 @@ class AgentSessionImpl implements AgentSession {
     this.#exitListeners.add(_listener);
     return () => this.#exitListeners.delete(_listener);
   }
-  dispose() {
+  dispose(_options?: Readonly<{ cutoffAtMs?: number }>) {
     if (this.#disposal) return this.#disposal;
     this.#disposed = true;
     this.#runtime.session.clearQueue();

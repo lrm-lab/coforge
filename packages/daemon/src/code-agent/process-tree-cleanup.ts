@@ -1,5 +1,14 @@
-import type { OwnedChildProcess, OwnedProcessTree } from "@lrm/coforge-anvil";
+import type {
+  OwnedChildProcess,
+  OwnedProcessTree,
+  OwnedProcessTreeKillReport,
+} from "@lrm/coforge-anvil";
 import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
+
+export type ProcessTreeCleanupOptions = Readonly<{
+  cutoffAtMs?: number;
+  onKillReport?: (report: OwnedProcessTreeKillReport) => void;
+}>;
 
 /** How long each rung of the cleanup ladder waits for the tree to exit. */
 export const PROCESS_TREE_EXIT_GRACE_MS = 5_000;
@@ -16,9 +25,12 @@ export const PROCESS_TREE_EXIT_GRACE_MS = 5_000;
 export async function cleanupOwnedTree(
   tree: OwnedProcessTree,
   child: OwnedChildProcess,
+  options?: ProcessTreeCleanupOptions,
 ): Promise<void> {
+  const turnScoped = options?.cutoffAtMs !== undefined && tree.terminateForTurn;
   try {
-    await tree.terminate(false);
+    if (turnScoped) await tree.terminateForTurn!(false, options!.cutoffAtMs!);
+    else await tree.terminate(false);
   } catch {
     // A bounded tree check below determines whether cleanup was successful.
   }
@@ -30,7 +42,10 @@ export async function cleanupOwnedTree(
   }
   if (!treeExited) {
     try {
-      await tree.terminate(true);
+      if (turnScoped) {
+        const report = await tree.terminateForTurn!(true, options!.cutoffAtMs!);
+        options?.onKillReport?.(report);
+      } else await tree.terminate(true);
     } catch {
       // A bounded tree check below determines whether cleanup was successful.
     }

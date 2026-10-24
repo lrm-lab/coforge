@@ -258,8 +258,7 @@ class ClaudeCodeAgentSession implements AgentSession {
       }
       this.#interrupt.fail(failure ?? new Error("code agent process closed during interrupt"));
       this.#rejectWaitingNotices(new Error("code agent process closed before writing input"));
-      // Fire and forget: the close path has nothing to do with a cleanup failure, and `dispose`
-      // awaits the same removal and reports it.
+      // Fire and forget: `dispose` awaits the same removal and reports its failure.
       void this.#removePrompt().catch(() => {});
       this.#finishClose();
     });
@@ -437,13 +436,13 @@ class ClaudeCodeAgentSession implements AgentSession {
     return () => this.#exitListeners.delete(listener);
   }
 
-  async dispose(): Promise<void> {
+  async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     if (this.#state === "disposed") return;
     this.#state = "disposed";
     this.#rejectWaitingNotices(new Error("code agent process closed before writing input"));
     this.#interrupt.fail(new Error("code agent process closed"));
     try {
-      await this.#process.dispose();
+      await this.#process.dispose(options);
       this.#finishClose();
     } finally {
       await this.#removePrompt();

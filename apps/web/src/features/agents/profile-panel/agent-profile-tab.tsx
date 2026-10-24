@@ -6,6 +6,7 @@ import {
   Play,
   RefreshCcw01 as RotateCcw,
   Stop,
+  StopCircle,
   Archive,
 } from "@untitledui/icons";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
@@ -399,6 +400,20 @@ function AgentProfileTabBody({
             >
               {controls.isOnline ? m.agent_profile_action_stop() : m.agent_profile_action_start()}
             </Button>
+            {controls.isOnline &&
+              (profile.display?.activityKind === "working" ||
+                profile.display?.activityKind === "thinking" ||
+                profile.display?.detailKind === "runtime_stalled") && (
+                <Button
+                  color="secondary"
+                  className="w-full justify-center"
+                  iconLeading={StopCircle}
+                  isDisabled={controls.interruptPending}
+                  onPress={controls.interrupt}
+                >
+                  {m.agent_control_stop()}
+                </Button>
+              )}
             <Button
               color="secondary"
               className="w-full justify-center"

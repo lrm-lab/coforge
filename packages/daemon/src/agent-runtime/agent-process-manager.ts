@@ -36,6 +36,14 @@ export type AgentRestartConfig = Readonly<{
   serverLaunch?: ServerLaunchIdentity;
 }>;
 
+export type AgentTurnInterruptResult = "interrupted" | "restarted" | "not_running";
+
+export type AgentTurnInterruptOptions = Readonly<{
+  interruptTimeoutMs: number;
+  releaseTimeoutMs: number;
+  cutoffAtMs?: number;
+}>;
+
 /** The server-minted scope a launch was authorized under. */
 export type ServerLaunchIdentity = Readonly<{
   requestId: string;
@@ -196,7 +204,11 @@ export class AgentProcessManager {
    * identity and Activity `clientSeq`. The Agent reports stopping until the process has exited.
    * Rejects, leaving the runtime registered, when the process does not exit within `timeoutMs`.
    */
-  async release(agentId: string, timeoutMs: number): Promise<void> {
+  async release(
+    agentId: string,
+    timeoutMs: number,
+    options?: Readonly<{ cutoffAtMs?: number }>,
+  ): Promise<void> {
     const runtime = this.#runtimes.get(agentId);
     if (!runtime) return;
     if (this.#stopping.has(agentId)) throw new Error(`Agent runtime is stopping: ${agentId}`);
@@ -204,7 +216,7 @@ export class AgentProcessManager {
     const releasing = (async () => {
       try {
         await withDeadline(
-          runtime.session.dispose(),
+          runtime.session.dispose(options),
           timeoutMs,
           () => new Error(`Agent runtime did not exit in time: ${agentId}`),
         );
@@ -221,6 +233,46 @@ export class AgentProcessManager {
       await releasing;
     } finally {
       this.#releases.delete(agentId);
+    }
+  }
+
+  /**
+   * Stops only the current turn when the provider's native interrupt settles. If it does not
+   * settle within the bounded window, release the provider process while retaining its restart
+   * configuration so the next message can resume the session. An idle or absent runtime is not a
+   * turn to interrupt.
+   */
+  async interruptTurn(
+    agentId: string,
+    options: AgentTurnInterruptOptions,
+  ): Promise<AgentTurnInterruptResult> {
+    if (this.#stopping.has(agentId) || this.#releases.has(agentId) || this.#stops.has(agentId))
+      return "not_running";
+    const runtime = this.#runtimes.get(agentId);
+    if (!runtime) return "not_running";
+    if (runtime.session.hasLiveTurn === false) return "not_running";
+    try {
+      const turnEnded = new Promise<void>((resolve) => {
+        const unsubscribe = runtime.session.subscribe((event) => {
+          if (event.type !== "completed") return;
+          unsubscribe();
+          resolve();
+        });
+      });
+      await withDeadline(
+        Promise.all([runtime.session.interrupt(), turnEnded]).then(() => undefined),
+        options.interruptTimeoutMs,
+        () => new Error(`Agent turn interrupt timed out: ${agentId}`),
+      );
+      return "interrupted";
+    } catch {
+      try {
+        await this.release(agentId, options.releaseTimeoutMs, { cutoffAtMs: options.cutoffAtMs });
+      } catch {
+        // Cleanup has already attempted its graceful and forced ladder; preserve the bounded
+        // fallback result so the request does not leak an exception to the Web caller.
+      }
+      return "restarted";
     }
   }
 

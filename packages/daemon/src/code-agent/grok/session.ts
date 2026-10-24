@@ -462,7 +462,7 @@ class GrokSession implements AgentSession {
   onExit(listener: () => void) {
     return this.#transport.process.onClose(listener);
   }
-  dispose(): Promise<void> {
+  dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     if (this.#dispose) return this.#dispose;
     this.#disposed = true;
     this.cancelPendingNotices();
@@ -470,7 +470,7 @@ class GrokSession implements AgentSession {
       turn.admitted?.reject(new Error("Grok session stopped"));
     this.#turns.clear();
     for (const changed of this.#turnChanged) changed();
-    this.#dispose = this.#transport.dispose();
+    this.#dispose = this.#transport.dispose(options);
     return this.#dispose;
   }
 }

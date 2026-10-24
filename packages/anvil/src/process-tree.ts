@@ -9,9 +9,29 @@ export interface OwnedChildProcess {
   kill(signal?: "SIGINT" | "SIGKILL" | "SIGTERM"): void;
 }
 
+/** A process identity sampled from the host process table. */
+export type OwnedProcessIdentity = Readonly<{
+  pid: number;
+  ppid: number;
+  pgid?: number;
+  startedAtMs: number;
+}>;
+
+/** Result of the turn-scoped escalation. `leftAlone` is deliberately observable for logging. */
+export type OwnedProcessTreeKillReport = Readonly<{
+  killed: readonly number[];
+  leftAlone: readonly number[];
+}>;
+
 export interface OwnedProcessTree {
   readonly child: OwnedChildProcess;
   terminate(force: boolean): Promise<void>;
+  /**
+   * Stops the owned main process while preserving descendants that predate the interrupted turn.
+   * Implementations that cannot provide a safe process-table view may omit this capability; the
+   * daemon then retains its ordinary whole-tree cleanup ladder for those legacy seams.
+   */
+  terminateForTurn?(force: boolean, cutoffAtMs: number): Promise<OwnedProcessTreeKillReport>;
   waitForExit(timeoutMs: number): Promise<boolean>;
 }
 

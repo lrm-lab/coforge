@@ -149,6 +149,17 @@ test("a completed turn ends every live call", () => {
   expect(liveIntervals()).toBe(0);
 });
 
+test("clearing a tracker ends live calls but allows a later turn to announce again", () => {
+  const { subject, signals, liveIntervals } = tracker();
+  subject.observe(send("c1"));
+  subject.clear();
+  expect(signals.at(-1)).toEqual({ phase: "end", callId: "c1", target: "#general" });
+  expect(liveIntervals()).toBe(0);
+  subject.observe(send("c2"));
+  expect(signals.at(-1)).toEqual({ phase: "start", callId: "c2", target: "#general" });
+  expect(liveIntervals()).toBe(1);
+});
+
 test("disposing ends every live call and later events announce nothing", () => {
   const { subject, signals, liveIntervals } = tracker();
   subject.observe(send("c1"));

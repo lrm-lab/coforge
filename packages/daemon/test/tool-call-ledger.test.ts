@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
+import { TOOL_CALL_LEDGER_MAX, ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 
 /** A ledger on a clock the test sets. */
 function ledger() {
@@ -72,4 +72,26 @@ test("a provider's duration wins; an id that cannot go on the wire reports nothi
   ).toEqual({ callId: "call-1", ok: true, durationMs: 42 });
   expect(calls.finish({ type: "tool-end", id: "", isError: false })).toBeUndefined();
   expect(calls.finish({ type: "tool-end", id: "a".repeat(129), isError: false })).toBeUndefined();
+});
+
+test("reports the oldest open tool by name and elapsed monotonic time", () => {
+  const { calls, at } = ledger();
+  at(100);
+  calls.observe({ type: "tool-start", id: "call-1", name: "read" });
+  at(250);
+  calls.observe({ type: "tool-start", id: "call-2", name: "bash" });
+  at(1_100);
+  expect(calls.oldestOpenTool()).toEqual({ name: "read", silentForMs: 1_000 });
+  calls.observe({ type: "tool-end", id: "call-1", isError: false });
+  expect(calls.oldestOpenTool()).toEqual({ name: "bash", silentForMs: 850 });
+});
+
+test("bounds tracked open tools", () => {
+  const ledger = new ToolCallLedger(
+    () => 1,
+    () => 1,
+  );
+  for (let i = 0; i < TOOL_CALL_LEDGER_MAX + 1; i++)
+    ledger.observe({ type: "tool-start", id: `tool-${i}`, name: "Bash", input: {} });
+  expect(ledger.oldestOpenTool()?.name).toBe("Bash");
 });

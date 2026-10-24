@@ -4,6 +4,7 @@ import {
   Play,
   RefreshCcw01 as RotateCcw,
   Stop,
+  StopCircle,
   XClose as X,
 } from "@untitledui/icons";
 
@@ -106,6 +107,18 @@ export function AgentProfileHeader({
       )}
       {!deleted && (
         <>
+          {controls.isOnline &&
+            (display?.activityKind === "working" ||
+              display?.activityKind === "thinking" ||
+              display?.detailKind === "runtime_stalled") && (
+              <ButtonUtility
+                icon={StopCircle}
+                size="sm"
+                isDisabled={controls.interruptPending}
+                tooltip={m.agent_control_stop()}
+                onClick={controls.interrupt}
+              />
+            )}
           <ButtonUtility
             icon={controls.isOnline ? Stop : Play}
             size="sm"

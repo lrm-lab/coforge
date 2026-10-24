@@ -12,6 +12,7 @@ import { readOperatingSystem } from "#src/platform/operating-system";
 import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
+import type { ReplyIntentTracker } from "./reply-intent-tracker";
 import { PhaseTracker } from "#src/agent-runtime/phase-tracker";
 import {
   inferredCompactionFinish,
@@ -24,6 +25,15 @@ import {
 } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
+import {
+  endsStalledTurn,
+  StalledTurnTracker,
+  stalledTurnNotice,
+  stalledTurnObservation,
+  stalledTurnSilenceMs,
+} from "./stalled-turn-indicator";
+import { interruptAgentTurn } from "./turn-interrupt";
+import { heldTaskResult } from "./held-task-result";
 import {
   OutstandingBackgroundTasks,
   subagentProgressDetail,
@@ -110,6 +120,7 @@ import {
   type AgentStartIntent,
   type AgentSessionReport,
   type AgentStopIntent,
+  type AgentTurnInterruptIntent,
   type SessionIdentity,
   type AgentActivityProbe,
   type AgentInboxPurge,
@@ -205,7 +216,12 @@ import {
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
-import { controlCodeField } from "./control-error-code";
+import {
+  logAgentActivityProbeFailure,
+  logAgentApiKeyRevokeFailed,
+  logAgentOperationFailure,
+  logAgentStartFailure,
+} from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import { diagnosticErrorCode, diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
@@ -226,6 +242,10 @@ type ActivityLaunch = PublishedActivityLaunch & {
   progress?: ProviderProgress;
   /** The launch's open tool calls, and the outcome each one's end reports. */
   toolCalls?: ToolCallLedger;
+  /** The busy turn's silence clock: one visible stalled notice per turn. */
+  stalled?: StalledTurnTracker;
+  /** Reply intents this launch announced; a turn interrupt clears them. */
+  replyIntents?: ReplyIntentTracker;
   backgroundTasks?: OutstandingBackgroundTasks;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
@@ -359,7 +379,7 @@ export class DaemonRuntime {
     hasSession: (agentId) => this.#agentProcessManager.session(agentId) !== undefined,
     redeliver: (message) =>
       void this.handleAgentMessage(message).catch((error) =>
-        this.#logAgentOperationFailure("message_delivery", message, error),
+        logAgentOperationFailure(this.#connection.computerId, "message_delivery", message, error),
       ),
   });
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
@@ -641,8 +661,7 @@ export class DaemonRuntime {
         queued: (agentId) => this.#deliveryQueue.pending(agentId),
         enqueue: (agentId, message) => this.#deliveryQueue.enqueue(agentId, message),
         busy: (agentId) => {
-          if (!this.#deliveryQueue.isBusy(agentId))
-            this.#currentActivityLaunches.get(agentId)?.progress?.noteTurnStarted();
+          if (!this.#deliveryQueue.isBusy(agentId)) this.#noteTurnStarted(agentId);
           this.#deliveryQueue.busy(agentId);
         },
         noticeSettled: (agentId) => {
@@ -996,7 +1015,7 @@ export class DaemonRuntime {
         else void handle(value);
       };
     const latest =
-      (kind: "start" | "stop" | "probe"): Hold<{ agentId: string }> =>
+      (kind: "start" | "stop" | "probe" | "turn_interrupt"): Hold<{ agentId: string }> =>
       (value, run) =>
         heldControl.latestFor(value.agentId, kind, run);
     const control: Hold<unknown> = (_value, run) => heldControl.add(run);
@@ -1008,7 +1027,9 @@ export class DaemonRuntime {
         handle: (request: Request) => Promise<void>,
       ) =>
       (request: Request) =>
-        handle(request).catch((error) => this.#logAgentOperationFailure(operation, request, error));
+        handle(request).catch((error) =>
+          logAgentOperationFailure(this.#connection.computerId, operation, request, error),
+        );
     try {
       this.#upgradeResults.start();
       this.#subscribe(
@@ -1143,7 +1164,7 @@ export class DaemonRuntime {
           receive(latest("start"), (intent: AgentStartIntent) =>
             this.handleAgentStart(intent).then(
               () => {},
-              (error) => this.#logAgentStartFailure(intent, error),
+              (error) => logAgentStartFailure(intent, error),
             ),
           ),
         ),
@@ -1157,10 +1178,23 @@ export class DaemonRuntime {
         ),
       );
       this.#subscribe(
+        this.#transport.onAgentTurnInterrupt?.(
+          receive(latest("turn_interrupt"), (intent: AgentTurnInterruptIntent) =>
+            this.handleAgentTurnInterrupt(intent).catch((error) =>
+              logger.warning("Agent turn interrupt failed", {
+                event: "agent_turn_interrupt:failed",
+                agent_id: intent.agentId,
+                error: thrownMessage(error),
+              }),
+            ),
+          ),
+        ),
+      );
+      this.#subscribe(
         this.#transport.onAgentActivityProbe?.(
           receive(latest("probe"), (probe: AgentActivityProbe) =>
             this.handleAgentActivityProbe(probe).catch((error) =>
-              this.#logAgentActivityProbeFailure(probe, error),
+              logAgentActivityProbeFailure(probe, error),
             ),
           ),
         ),
@@ -1375,62 +1409,6 @@ export class DaemonRuntime {
     } catch {
       return { status: "error" };
     }
-  }
-
-  #logAgentStartFailure(intent: AgentStartIntent, error: unknown): void {
-    logger.error("Agent runtime start failed", {
-      event: "agent_runtime:start_failed",
-      request_id: intent.requestId,
-      workspace_id: intent.workspaceId,
-      computer_id: intent.computerId,
-      agent_id: intent.agentId,
-      provider: intent.provider,
-      error_code: diagnosticErrorCode(error),
-      ...controlCodeField(error),
-      outcome: "failed",
-    });
-  }
-
-  /** Logs a revoke failure without ever logging the key itself. The failure is recorded and
-   * nothing else happens: the server invalidates the key at the Agent's next
-   * launch, and the daemon never retries a revoke. */
-  #logAgentApiKeyRevokeFailed(agentId: string, error: unknown): void {
-    logger.warning("Agent API key revoke failed", {
-      event: "agent_api_key:revoke_failed",
-      agent_id: agentId,
-      error_code: diagnosticErrorCode(error),
-      outcome: "failed",
-    });
-  }
-
-  #logAgentActivityProbeFailure(probe: AgentActivityProbe, error: unknown): void {
-    logger.error("Agent activity probe failed", {
-      event: "agent_activity_probe:failed",
-      request_id: probe.requestId,
-      workspace_id: probe.workspaceId,
-      computer_id: probe.computerId,
-      agent_id: probe.agentId,
-      probe_id: probe.probeId,
-      error_code: diagnosticErrorCode(error),
-      outcome: "failed",
-    });
-  }
-
-  #logAgentOperationFailure(
-    operation: "stop" | "workspace_reset" | "message_delivery",
-    request: AgentStopIntent | AgentWorkspaceResetRequest | AgentMessageDelivery,
-    error: unknown,
-  ): void {
-    logger.warning("Daemon Agent operation failed", {
-      event: `agent_runtime:${operation}_failed`,
-      request_id: request.requestId,
-      workspace_id: request.workspaceId,
-      computer_id: this.#connection.computerId,
-      agent_id: request.agentId,
-      error_code: diagnosticErrorCode(error),
-      ...controlCodeField(error),
-      outcome: "failed",
-    });
   }
 
   startAgent(
@@ -1673,7 +1651,10 @@ export class DaemonRuntime {
           const session = this.#agentProcessManager.session(agentId);
           const launch = this.#currentActivityLaunches.get(agentId);
           // Release the queue at real readiness if this provider awaits the whole turn.
-          if (session && launch) await launch.startup?.run(session.sendMessage(item.text));
+          if (session && launch) {
+            this.#noteTurnStarted(agentId);
+            await launch.startup?.run(session.sendMessage(item.text));
+          }
         } else if (item.kind === "prompt") {
           await this.#runPromptTurn(agentId, item.text, item.introduction);
         } else await this.#recoverAttention(agentId, item.context);
@@ -1842,7 +1823,14 @@ export class DaemonRuntime {
       return;
     }
     if (introduction) this.#introducedAgents.add(agentId);
+    this.#noteTurnStarted(agentId);
     await session.notify(text);
+  }
+  #noteTurnStarted(agentId: string): void {
+    const launch = this.#currentActivityLaunches.get(agentId);
+    if (!launch?.progress) return;
+    launch.progress.noteTurnStarted();
+    launch.stalled?.start(agentId, stalledTurnObservation(launch));
   }
 
   /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
@@ -2163,7 +2151,20 @@ export class DaemonRuntime {
       launch.progress = progress;
       const toolCalls = new ToolCallLedger();
       launch.toolCalls = toolCalls;
+      launch.stalled = new StalledTurnTracker(
+        stalledTurnNotice(launch, {
+          isCurrent: (id) => this.#currentActivityLaunches.get(id) === launch,
+          publish: (id, detail) =>
+            this.#activityPublisher.publish(
+              id,
+              launch,
+              this.#activity(id, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED, "error", detail),
+            ),
+        }),
+        stalledTurnSilenceMs(config.envVars),
+      );
       const replyIntents = this.#replyIntents.tracker(agentId, launch);
+      launch.replyIntents = replyIntents;
       launch.backgroundTasks = new OutstandingBackgroundTasks();
       const unsubscribe = runtime.session.subscribe((event) => {
         progress.observe();
@@ -2200,7 +2201,7 @@ export class DaemonRuntime {
         this.#revokeLocalLaunch(agentId, localContext, proxyToken);
         void this.#revokeAgentApiKey(agentId, agentApiKey).catch((revokeError) => {
           // Local access is already revoked; the key stays pending and is retried later.
-          this.#logAgentApiKeyRevokeFailed(agentId, revokeError);
+          logAgentApiKeyRevokeFailed(agentId, revokeError);
         });
         unsubscribe();
         if (launch.stopping) return;
@@ -2257,7 +2258,7 @@ export class DaemonRuntime {
         try {
           await this.#revokeAgentApiKey(agentId, agentApiKey);
         } catch (revokeError) {
-          this.#logAgentApiKeyRevokeFailed(agentId, revokeError);
+          logAgentApiKeyRevokeFailed(agentId, revokeError);
         }
       }
       if (!this.#stopping && !this.#stoppingAgents.has(agentId)) {
@@ -2454,6 +2455,9 @@ export class DaemonRuntime {
       runtime.session.hasLiveTurn !== false
     )
       this.#deliveryQueue.busy(agentId);
+    if (endsStalledTurn(event, runtime.session.hasLiveTurn)) launch.stalled?.finish(agentId);
+    else if (this.#isWorking(agentId) || runtime.session.hasLiveTurn === true)
+      launch.stalled?.observe(agentId, stalledTurnObservation(launch));
     if (event.type === "session") {
       if (controlled && !event.conversation)
         void this.#agentSessions.update(agentId, launch.launchId, event.identity).catch(() => {});
@@ -2943,6 +2947,30 @@ export class DaemonRuntime {
     if (this.#agentControl.managed(intent.agentId)) throw new Error("Agent requires a fenced Stop");
     await this.stopAgent(intent.agentId);
   }
+  async handleAgentTurnInterrupt(intent: AgentTurnInterruptIntent): Promise<void> {
+    this.#assertOwnIntent(intent);
+    await interruptAgentTurn(
+      {
+        launch: (agentId) => this.#currentActivityLaunches.get(agentId),
+        interrupt: (agentId, options) => this.#agentProcessManager.interruptTurn(agentId, options),
+        publish: (agentId, launch, outcome) =>
+          this.#activityPublisher.publish(
+            agentId,
+            launch,
+            outcome === "restarted"
+              ? this.#activity(
+                  agentId,
+                  AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+                  "info",
+                  "Stopping this turn: restarting the runtime",
+                )
+              : this.#interruptedActivity(agentId),
+          ),
+        report: this.#transport.sendAgentTurnInterruptResult?.bind(this.#transport),
+      },
+      intent,
+    );
+  }
 
   /**
    * Answers a server-side liveness probe with the Agent's real current activity, first match wins:
@@ -3251,7 +3279,7 @@ export class DaemonRuntime {
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     activityLaunch?.startup?.dispose();
     void this.#revokeAgentApiKey(agentId, this.#agentApiKeys.get(agentId)).catch((error) => {
-      this.#logAgentApiKeyRevokeFailed(agentId, error);
+      logAgentApiKeyRevokeFailed(agentId, error);
     });
     await this.#agentProcessManager.stop(agentId);
     this.#messageAttention.clearAgent(agentId);
@@ -3268,6 +3296,7 @@ export class DaemonRuntime {
 
   /** Forgets one ended launch's observation state without affecting another Agent. */
   #disposeLaunchObservations(agentId: string): void {
+    this.#currentActivityLaunches.get(agentId)?.stalled?.dispose(agentId);
     this.#disposePhases(agentId);
     this.#usageReport.forget(agentId);
     this.#fastModeWarned.delete(agentId);
@@ -3387,7 +3416,7 @@ export class DaemonRuntime {
       agentId,
       AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_INTERRUPTED,
       "info",
-      "Agent turn was interrupted.",
+      "Turn stopped",
     );
   }
 
@@ -3443,6 +3472,7 @@ export class DaemonRuntime {
     // Preserve output accepted while the turn was live before publishing its final Idle.
     // Otherwise the pending trajectory timer could publish it after Idle and rearm Busy.
     launch.trajectory?.flush();
+    launch.stalled?.finish(agentId);
     this.#disposePhases(agentId);
     if (this.#isWorking(agentId)) {
       this.#showQuietTurn(agentId, launch, (id, source, activity) =>
@@ -3604,83 +3634,20 @@ export class DaemonRuntime {
     if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
     const freshnessAction = command.operation === "claim" || command.operation === "update";
     if (freshnessAction && command.target) {
-      const held = await this.#heldTaskResult(agentId, command, command.target, agentApiKey);
+      const held = await heldTaskResult(
+        {
+          messageAttention: this.#messageAttention,
+          agentMessage: this.#transport.agentMessage?.bind(this.#transport),
+          workspaceId: this.#connection.workspaceId,
+        },
+        agentId,
+        command,
+        command.target,
+        agentApiKey,
+      );
       if (held) return held;
     }
     return this.#transport.agentTask({ ...command }, agentApiKey);
-  }
-
-  /** Applies the attention preflight to a Task claim/update; returns the held result, if any. */
-  async #heldTaskResult(
-    agentId: string,
-    command: TaskCommand,
-    target: string,
-    agentApiKey: string,
-  ): Promise<TaskResult | undefined> {
-    const attention = this.#messageAttention.check(agentId).find((item) => item.target === target);
-    if (command.freshnessContextMode === "withheld")
-      return attention
-        ? {
-            tasks: [],
-            state: "held",
-            freshnessContextMode: "withheld",
-            withheldMessageCount: attention.pendingCount,
-          }
-        : undefined;
-    // Nothing pending and the Agent has seen this target (to a frontier, or one by one from a
-    // check): there is no context to present.
-    if (
-      !attention &&
-      (this.#messageAttention.modelSeenSequence(agentId, target) !== 0 ||
-        this.#messageAttention.hasExactSeen(agentId, target))
-    )
-      return undefined;
-    const context = await this.#transport.agentMessage?.(
-      {
-        idempotencyKey: crypto.randomUUID(),
-        agentId,
-        workspaceId: this.#connection.workspaceId,
-        operation: "read",
-        target,
-        limit: 3,
-        ...(attention
-          ? {
-              fromSequence: attention.firstPendingSequence,
-              throughSequence: attention.latestSequence,
-            }
-          : {}),
-      },
-      agentApiKey,
-    );
-    const heldMessages = (context?.accepted ? context.messages : [])
-      .filter(
-        (message) =>
-          message.target === target &&
-          !this.#messageAttention.hasSeen(agentId, target, message.sequence),
-      )
-      .slice(-3);
-    if (heldMessages.length > 0) {
-      this.#messageAttention.recordModelSeen(
-        agentId,
-        target,
-        Math.max(...heldMessages.map(({ sequence }) => sequence)),
-      );
-      return {
-        tasks: [],
-        state: "held",
-        freshnessContextMode: "inline",
-        heldMessages,
-        newMessageCount: attention?.pendingCount ?? heldMessages.length,
-      };
-    }
-    if (!attention) return undefined;
-    return {
-      tasks: [],
-      state: "held",
-      freshnessContextMode: "inline",
-      heldMessages: [],
-      newMessageCount: attention.pendingCount,
-    };
   }
 
   #canonicalAgentMessageTarget(
@@ -4038,7 +4005,10 @@ export class DaemonRuntime {
     this.#started = false;
     this.#coldIdleSweep.stop();
     this.#activityPublisher.disable();
-    for (const launch of this.#currentActivityLaunches.values()) launch.startup?.dispose();
+    for (const [agentId, launch] of this.#currentActivityLaunches) {
+      launch.startup?.dispose();
+      launch.stalled?.dispose(agentId);
+    }
     this.#disposeAllPhases();
     this.#runtimeErrorHold.disposeAll();
     this.#upgradeResults.stop();
@@ -4191,7 +4161,7 @@ export class DaemonRuntime {
         : undefined,
       ...[...this.#agentApiKeys].map(([agentId, agentApiKey]) =>
         this.#revokeAgentApiKey(agentId, agentApiKey).catch((error) => {
-          this.#logAgentApiKeyRevokeFailed(agentId, error);
+          logAgentApiKeyRevokeFailed(agentId, error);
         }),
       ),
     ]);

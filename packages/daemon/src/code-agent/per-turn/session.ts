@@ -5,6 +5,7 @@ import { exitFailureMessage } from "#src/code-agent/exit-failure-message";
 import { InterruptTracker } from "#src/code-agent/interrupt-tracker";
 import { errorMessage } from "#src/code-agent/json-record";
 import { TurnProcess, type TurnResult } from "./turn-process";
+import type { ProcessTreeCleanupOptions } from "#src/code-agent/process-tree-cleanup";
 import type { TurnProtocol, TurnReader, TurnRequest, TurnScope } from "./turn-protocol";
 
 type SessionState = "idle" | "running" | "interrupting" | "disposed";
@@ -174,7 +175,7 @@ class PerTurnAgentSession implements AgentSession {
 
   /** A finished turn is not a session exit - the process it owned is simply gone until the next
    * one is spawned. `onExit` fires only here, when the session itself is torn down. */
-  async dispose(): Promise<void> {
+  async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     if (this.#state === "disposed") return;
     this.#state = "disposed";
     const disposeError = new Error("code agent session was disposed");
@@ -183,7 +184,7 @@ class PerTurnAgentSession implements AgentSession {
     this.#interrupt.fail(disposeError);
     const turn = this.#currentTurn;
     this.#currentTurn = undefined;
-    if (turn) await turn.process.dispose();
+    if (turn) await turn.process.dispose(options as ProcessTreeCleanupOptions | undefined);
     this.#closed = true;
     for (const listener of this.#exitListeners) listener();
     this.#exitListeners.clear();

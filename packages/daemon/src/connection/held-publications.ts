@@ -22,10 +22,14 @@ export class HeldPublications<Item> {
 
   constructor(private readonly noticeCap = HELD_NOTICE_CAP) {}
 
-  /** Holds an Agent's latest intent of one kind (its start, its stop, or its activity probe),
+  /** Holds an Agent's latest intent of one kind (its start, its stop, its turn interrupt, or its activity probe),
    * replacing the earlier one; it takes the newer arrival's place. A start and a stop are kept
    * apart, so a restart (stop, then start) survives. */
-  latestFor(agentId: string, kind: "start" | "stop" | "probe", item: Item): void {
+  latestFor(
+    agentId: string,
+    kind: "start" | "stop" | "probe" | "turn_interrupt",
+    item: Item,
+  ): void {
     this.#replace(agentId, kind, item);
   }
 

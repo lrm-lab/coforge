@@ -42,6 +42,8 @@ export const RPC_METHODS = {
   computerUpgradeResult: "computer:v1:lifecycle:upgrade_result",
   agentStart: "agent:v1:start",
   agentStop: "agent:v1:stop",
+  agentTurnInterrupt: "agent:v1:turn_interrupt",
+  agentTurnInterruptResult: "agent:v1:turn_interrupt:result",
   agentActivityProbe: "agent:v1:activity:probe",
   agentInboxPurge: "agent:v1:inbox:purge",
   agentContextScan: "agent:v1:context:scan",

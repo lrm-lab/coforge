@@ -120,9 +120,9 @@ export class KiroConnection {
     return response;
   }
 
-  async dispose() {
+  async dispose(options?: Readonly<{ cutoffAtMs?: number }>) {
     this.#close();
-    await this.process.dispose();
+    await this.process.dispose(options);
   }
 }
 

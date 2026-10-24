@@ -152,24 +152,24 @@ export class MemoryConversationSessions implements AgentSession {
     this.#drain();
   }
 
-  dispose(): Promise<void> {
+  dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     if (this.#disposal) return this.#disposal;
     this.cancelPendingNotices();
     this.#closed = true;
     this.#unsubscribe();
-    this.#disposal = this.#dispose().catch((error) => {
+    this.#disposal = this.#dispose(options).catch((error) => {
       this.#disposal = undefined;
       throw error;
     });
     return this.#disposal;
   }
 
-  async #dispose(): Promise<void> {
+  async #dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     await Promise.allSettled(this.#creating);
     const sessions = [this.dependencies.primary, ...this.#children];
     const results = await Promise.allSettled(
       sessions.map(async (session) => {
-        await session.dispose();
+        await session.dispose(options);
       }),
     );
     await Promise.allSettled(this.#writes);

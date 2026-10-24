@@ -60,8 +60,8 @@ export class GrokConnection {
     this.process.onFailure(() => this.connection.close());
   }
 
-  async dispose() {
+  async dispose(options?: Readonly<{ cutoffAtMs?: number }>) {
     this.connection.close();
-    await this.process.dispose();
+    await this.process.dispose(options);
   }
 }

@@ -70,8 +70,13 @@ export class ReplyIntentTracker {
 
   /** The launch is going away: every live call ends and nothing more is announced. */
   dispose(): void {
-    for (const callId of this.#live.keys()) this.#end(callId);
+    this.clear();
     this.#disposed = true;
+  }
+
+  /** Ends all currently announced calls while keeping the tracker usable for a later turn. */
+  clear(): void {
+    for (const callId of this.#live.keys()) this.#end(callId);
   }
 
   /** The provider reported the call itself; it settles what an early announcement guessed. */

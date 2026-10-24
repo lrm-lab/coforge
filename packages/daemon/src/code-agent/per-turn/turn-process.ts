@@ -3,7 +3,10 @@ import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
 import { LineBuffer } from "#src/code-agent/line-buffer";
-import { cleanupOwnedTree } from "#src/code-agent/process-tree-cleanup";
+import {
+  cleanupOwnedTree,
+  type ProcessTreeCleanupOptions,
+} from "#src/code-agent/process-tree-cleanup";
 import { readStderrTail } from "#src/code-agent/stderr-tail";
 
 export type TurnRecord = Readonly<Record<string, unknown>>;
@@ -85,8 +88,8 @@ export class TurnProcess {
 
   /** Cleans up the process tree with the same ladder every code-agent process uses. Safe to call
    * after the process has already exited on its own. */
-  async dispose(): Promise<void> {
-    this.#cleanupPromise ??= this.#cleanupTree();
+  async dispose(options?: ProcessTreeCleanupOptions): Promise<void> {
+    this.#cleanupPromise ??= this.#cleanupTree(options);
     return this.#cleanupPromise;
   }
 
@@ -142,8 +145,20 @@ export class TurnProcess {
     for (const listener of this.#listeners) listener(value as TurnRecord);
   }
 
-  async #cleanupTree(): Promise<void> {
-    await cleanupOwnedTree(this.#tree, this.#child);
+  async #cleanupTree(options?: ProcessTreeCleanupOptions): Promise<void> {
+    await cleanupOwnedTree(this.#tree, this.#child, {
+      ...options,
+      onKillReport: (report) => {
+        this.#logger.info("Escalated turn cleanup", {
+          event: "code_agent.process.turn_cleanup",
+          pid: this.#child.pid,
+          killed: report.killed,
+          left_alone: report.leftAlone,
+          outcome: "ok",
+        });
+        options?.onKillReport?.(report);
+      },
+    });
     await this.exited;
   }
 }

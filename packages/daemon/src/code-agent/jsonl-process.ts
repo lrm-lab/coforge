@@ -1,7 +1,7 @@
 import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
 import { LineBuffer } from "./line-buffer";
-import { cleanupOwnedTree } from "./process-tree-cleanup";
+import { cleanupOwnedTree, type ProcessTreeCleanupOptions } from "./process-tree-cleanup";
 import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "jsonl"]);
@@ -138,14 +138,14 @@ export class JsonlProcess {
     return response;
   }
 
-  async dispose(): Promise<void> {
+  async dispose(options?: ProcessTreeCleanupOptions): Promise<void> {
     if (this.#state.type === "closed") return;
     if (this.#state.type === "open") {
       this.#state = { type: "disposing" };
       this.#rejectPending("code agent process closed");
     }
     try {
-      await this.#cleanup();
+      await this.#cleanup(options);
       await this.#stderrPromise;
     } catch (error) {
       this.#recordFailure(error instanceof Error ? error.message : "code agent cleanup failed");
@@ -298,13 +298,25 @@ export class JsonlProcess {
     for (const listener of this.#failureListeners) listener(new Error(message));
   }
 
-  #cleanup(): Promise<void> {
-    this.#cleanupPromise ??= this.#cleanupTree();
+  #cleanup(options?: ProcessTreeCleanupOptions): Promise<void> {
+    this.#cleanupPromise ??= this.#cleanupTree(options);
     return this.#cleanupPromise;
   }
 
-  async #cleanupTree(): Promise<void> {
-    await cleanupOwnedTree(this.#tree, this.#child);
+  async #cleanupTree(options?: ProcessTreeCleanupOptions): Promise<void> {
+    await cleanupOwnedTree(this.#tree, this.#child, {
+      ...options,
+      onKillReport: (report) => {
+        logger.info("Escalated code agent turn cleanup", {
+          event: "code_agent.process.turn_cleanup",
+          pid: this.#child.pid,
+          killed: report.killed,
+          left_alone: report.leftAlone,
+          outcome: "ok",
+        });
+        options?.onKillReport?.(report);
+      },
+    });
     await this.#child.exited;
     // Close means tree cleanup AND drained diagnostics, so adapters can decide
     // whether a failed native resume is eligible for a fresh launch.

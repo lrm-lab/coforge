@@ -122,10 +122,10 @@ class KiroSession implements AgentSession {
   #disposed = false;
   #dispose: Promise<void> | undefined;
   #interrupting = false;
-  // The most recent scrubbed error text Kiro has volunteered for the turn in progress (via
-  // `session_info_update`), already reported as its own `error` event the moment it arrived.
-  // The turn's outcome reuses only the FACT that a reason was already shown, never the text
-  // itself a second time, so a failed/cancelled turn never doubles up its one visible reason.
+  // The latest scrubbed error text Kiro volunteered this turn (via `session_info_update`),
+  // already reported as its own `error` event on arrival.
+  // The outcome reuses only the FACT that a reason was shown, never the text a second time, so a
+  // failed/cancelled turn shows its one reason once.
   #turnErrorMessage: string | undefined;
 
   constructor(
@@ -547,11 +547,11 @@ class KiroSession implements AgentSession {
   #emit(event: AgentRuntimeEvent) {
     for (const listener of this.#listeners) listener(event);
   }
-  dispose(): Promise<void> {
+  dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     this.#disposed = true;
     this.#pending?.reject(new Error("Kiro session closed"));
     this.#steeredMessages.clear();
-    this.#dispose ??= this.#transport.dispose().finally(this.cleanupProfile);
+    this.#dispose ??= this.#transport.dispose(options).finally(this.cleanupProfile);
     return this.#dispose;
   }
 }

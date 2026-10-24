@@ -199,3 +199,49 @@ for (const { platform, create } of childAdapterOwners) {
     expect(await tree.waitForExit(2_000)).toBe(true);
   });
 }
+
+test.skipIf(process.platform === "win32")(
+  "turn-scoped termination only kills descendants started at or after the fence and guards PID reuse",
+  async () => {
+    const env = { PATH: "/usr/bin:/bin" };
+    const decoy = () => Bun.spawn({ cmd: ["sleep", "30"], stdin: "ignore", env });
+    const [older, current, reused] = [decoy(), decoy(), decoy()];
+    const fence = 1_000_000;
+    let mainPid = 0;
+    let sampled = 0;
+    const tree = new ProcessTreeOwner(undefined, undefined, {
+      processTable: {
+        list: async () => {
+          const main = {
+            pid: mainPid,
+            ppid: globalThis.process.pid,
+            startedAtMs: fence - 1,
+          };
+          const table = [
+            main,
+            { pid: older.pid, ppid: main.pid, startedAtMs: fence - 1 },
+            { pid: current.pid, ppid: main.pid, startedAtMs: fence + 1 },
+            // First sample is the turn's snapshot; by the force sample the pid belongs to a stranger.
+            { pid: reused.pid, ppid: main.pid, startedAtMs: fence + 2 + sampled * 1_000 },
+          ];
+          sampled++;
+          return table;
+        },
+      },
+    }).spawn(["sleep", "30"], tmpdir(), env);
+    mainPid = tree.child.pid!;
+
+    expect(await tree.terminateForTurn!(false, fence)).toEqual({ killed: [], leftAlone: [] });
+    const report = await tree.terminateForTurn!(true, fence);
+
+    expect(report.killed).toContain(current.pid);
+    expect(report.killed).toContain(tree.child.pid!);
+    expect([...report.leftAlone].sort()).toEqual([older.pid, reused.pid].sort());
+    await current.exited;
+    expect(older.killed).toBe(false);
+    expect(reused.killed).toBe(false);
+    older.kill("SIGKILL");
+    reused.kill("SIGKILL");
+    await Promise.all([older.exited, reused.exited, tree.child.exited]);
+  },
+);

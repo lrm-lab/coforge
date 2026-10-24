@@ -282,6 +282,10 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
       terminate: async (_force) => {
         await stop();
       },
+      terminateForTurn: async (force) => {
+        if (!closed) send({ type: "signal", signal: force ? "SIGKILL" : "SIGTERM" });
+        return { killed: [], leftAlone: [] };
+      },
       waitForExit: async (timeoutMs) => {
         const deadline = Date.now() + timeoutMs;
         while (!closed || (jobPid && (await processGroupExists(jobPid)))) {

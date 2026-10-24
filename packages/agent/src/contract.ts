@@ -292,7 +292,7 @@ export interface AgentSession {
   onExit(listener: () => void): () => void;
   /** Terminal stop: reject undelivered input and begin runtime cleanup without waiting for a
    * natural turn end. Resolve only after cleanup; reject if process exit cannot be confirmed. */
-  dispose(): Promise<void>;
+  dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void>;
 }
 
 /** Workspace Memory identity and explicitly fenced eval Memory share conversation routing. */

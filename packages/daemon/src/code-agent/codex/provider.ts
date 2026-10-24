@@ -281,10 +281,10 @@ class CodexAgentSession implements AgentSession {
     return this.#process.onClose(listener);
   }
 
-  async dispose(): Promise<void> {
+  async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     if (this.#state.type === "disposed") return;
     this.#state = { type: "disposed" };
-    await this.#process.dispose();
+    await this.#process.dispose(options);
   }
 
   #accept(record: Record<string, unknown>): void {

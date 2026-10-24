@@ -14,6 +14,9 @@ import { createAgentIntroduction } from "#src/server/db/repositories/agent-intro
 import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
+import { AgentTurnInterrupt } from "./agent-turn-interrupt.server";
+import { getAgentTurnInterruptCapabilityLease } from "./agent-turn-interrupt-capability.server";
+import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 
 /** The `AgentControl` a signed-in user's Start, Stop, Restart and Reset go through. */
 export function userAgentControl(db: PrismaClient) {
@@ -65,3 +68,15 @@ export function userAgentRuntimeControl(db: PrismaClient, agents: PrismaAgentRep
     ),
   );
 }
+
+export function userAgentTurnInterrupt(db: PrismaClient) {
+  return (turnInterruptSingleton ??= new AgentTurnInterrupt(
+    new PrismaAgentControlStore(db),
+    createCentrifugoServerApi(),
+    getAgentRuntimeLock(),
+    getComputerStatusCache(),
+    getAgentTurnInterruptCapabilityLease(),
+  ));
+}
+
+let turnInterruptSingleton: AgentTurnInterrupt | undefined;

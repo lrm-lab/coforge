@@ -4,3 +4,4 @@ export * from "./weekly-report";
 export * from "./pure-utils";
 export * from "./workspace-slug";
 export * from "./uuid";
+export * from "./agent-turn-interrupt";

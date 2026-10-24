@@ -51,21 +51,25 @@ import {
   type DaemonConnectRejectionReason,
   decodeAgentWorkspaceResetRequest,
   encodeAgentControlResult,
+  encodeAgentTurnInterruptResult,
   encodeAgentSessionReport,
   encodeAgentSessionInvalidate,
   AGENT_CONTROL_RESULT_METHOD,
+  AGENT_TURN_INTERRUPT_RESULT_METHOD,
   AGENT_SESSION_METHOD,
   AGENT_SESSION_INVALIDATE_METHOD,
   AGENT_CONTEXT_USAGE_METHOD,
   AGENT_SERVICE_TIER_METHOD,
   type AgentWorkspaceResetRequest,
   type AgentControlResult,
+  type AgentTurnInterruptResult,
   type AgentSessionReport,
   type AgentSessionInvalidate,
   type AgentContextUsage,
   type AgentServiceTier,
   decodeAgentStartIntent,
   decodeAgentStopIntent,
+  decodeAgentTurnInterruptIntent,
   decodeAgentActivityProbe,
   decodeAgentInboxPurge,
   type AgentSkillsListRequest,
@@ -124,6 +128,7 @@ import {
   type AgentStatus,
   type AgentStartIntent,
   type AgentStopIntent,
+  type AgentTurnInterruptIntent,
   type AgentActivityProbe,
   type AgentInboxPurge,
   type AgentMessageDelivery,
@@ -211,6 +216,18 @@ import {
   type AgentMessageTransportResponse,
   type AgentSendReconciliationRequest,
 } from "./agent-http-clients";
+import {
+  RECONNECT_READY_RETRY_MS,
+  RECONNECT_READY_RETRY_MAX_MS,
+  READY_RETRY_ESCALATE_AFTER,
+  CONNECT_RETRY_ESCALATE_AFTER,
+  RESUME_CONNECT_MS,
+  RESUME_CONNECT_MAX_MS,
+  STABLE_CONNECTION_MS,
+  escalates,
+  readyFailureStage,
+  type ConnectOutage,
+} from "./connection-retry";
 
 export type AgentLaunchConfig = {
   agentApiKey: string;
@@ -224,53 +241,8 @@ export type AgentLaunchConfig = {
 
 const AGENT_STATUS_REFRESH_MS = 30_000;
 export const COMPUTER_STATUS_REFRESH_MS = 30_000;
-const RECONNECT_READY_RETRY_MS = 1_000;
-const RECONNECT_READY_RETRY_MAX_MS = 60_000;
-/** Consecutive ready failures after which this stops being a transient hiccup: the connection is
- * up and the Workspace is not recovered, so no Agent on this machine can be reached. Reached in
- * about half a minute of backoff. */
-const READY_RETRY_ESCALATE_AFTER = 5;
-/** Once escalated, how often to repeat the error rather than logging all of them — at the capped
- * delay this is roughly every ten minutes. */
-const RETRY_ESCALATE_EVERY = 10;
-/** Consecutive failed connect attempts after which the outage stops being a blip: with the
- * client's jittered backoff (500 ms doubling to 20 s) that is about a minute offline. */
-const CONNECT_RETRY_ESCALATE_AFTER = 8;
-/** After a give-up disconnect the daemon connects the client again itself, doubling from this
- * delay up to the cap, the same shape as the reference Computer's reconnect. */
-const RESUME_CONNECT_MS = 1_000;
-const RESUME_CONNECT_MAX_MS = 30_000;
-/** How long a connection must stay up after its ready was accepted before an outage counts as
- * over. A connection dropped sooner (an oversized frame, a 3503 right after ready) continues the
- * same outage, so its backoff keeps growing and its log escalates instead of starting over. */
-const STABLE_CONNECTION_MS = 60_000;
 const REMEMBERED_REQUEST_IDS = 256;
 const logger = getLogger(["coforge", "daemon", "connection"]);
-
-/** A run of failed connect attempts: how many, since when, and how many of them were the
- * daemon's own reconnects after the client gave up (those set the resume delay). */
-type ConnectOutage = { failures: number; sinceMs: number; resumes: number };
-
-/** Whether the `attempt`-th consecutive failure is logged as an error: the first one at
- * `escalateAfter`, then every `RETRY_ESCALATE_EVERY`-th, so a long outage stays visible
- * without an error per attempt. */
-function escalates(attempt: number, escalateAfter: number): boolean {
-  return (
-    attempt >= escalateAfter && (attempt === escalateAfter || attempt % RETRY_ESCALATE_EVERY === 0)
-  );
-}
-
-/** The server's own name for the ready step that failed, when its rejection carries one.
- *
- * Only this exact shape is accepted, and only the stage token is kept: a rejection message is
- * remote text, and the log must not become a place arbitrary server output is echoed. Anything else
- * yields nothing, leaving the error code as the only detail — the behaviour before servers said
- * which stage failed. */
-function readyFailureStage(error: unknown): string | undefined {
-  const message =
-    error && typeof error === "object" && "message" in error ? String(error.message) : "";
-  return /^daemon ready failed at ([a-z_]{1,40})$/.exec(message)?.[1];
-}
 
 export interface DaemonConnectionTiming {
   schedule(callback: () => void, delayMs: number): unknown;
@@ -353,6 +325,7 @@ export interface DaemonConnectionClient {
   ): Promise<AgentMentionDeliveryResponse>;
   onAgentWorkspaceReset?(callback: (request: AgentWorkspaceResetRequest) => void): () => void;
   sendAgentControlResult?(result: AgentControlResult): Promise<void>;
+  sendAgentTurnInterruptResult?(result: AgentTurnInterruptResult): Promise<void>;
   start(token: string, config: DaemonConnectionConfig): Promise<void>;
   /** Resolves once the cloud accepts the first ready, retrying like a reconnect ready until then.
    * Rejects only on `stop` or `signal` aborting. */
@@ -393,6 +366,7 @@ export interface DaemonConnectionClient {
   onConnectionRefused?(callback: (reason: DaemonConnectRejectionReason) => void): () => void;
   onAgentStart?(callback: (intent: AgentStartIntent) => void): () => void;
   onAgentStop?(callback: (intent: AgentStopIntent) => void): () => void;
+  onAgentTurnInterrupt?(callback: (intent: AgentTurnInterruptIntent) => void): () => void;
   onAgentActivityProbe?(callback: (probe: AgentActivityProbe) => void): () => void;
   onAgentInboxPurge?(callback: (purge: AgentInboxPurge) => void): () => void;
   onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
@@ -535,6 +509,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   #serverHttpUrl = "";
   readonly #agentStart = new ListenerSlot<(intent: AgentStartIntent) => void>();
   readonly #agentStop = new ListenerSlot<(intent: AgentStopIntent) => void>();
+  readonly #agentTurnInterrupt = new ListenerSlot<(intent: AgentTurnInterruptIntent) => void>();
   readonly #agentActivityProbe = new ListenerSlot<(probe: AgentActivityProbe) => void>();
   readonly #agentInboxPurge = new ListenerSlot<(purge: AgentInboxPurge) => void>();
   readonly #agentWorkspaceReset = new ListenerSlot<(request: AgentWorkspaceResetRequest) => void>();
@@ -825,7 +800,9 @@ export class DaemonConnection implements DaemonConnectionClient {
   onAgentStop(callback: (intent: AgentStopIntent) => void): () => void {
     return this.#agentStop.set(callback);
   }
-
+  onAgentTurnInterrupt(callback: (intent: AgentTurnInterruptIntent) => void): () => void {
+    return this.#agentTurnInterrupt.set(callback);
+  }
   onAgentActivityProbe(callback: (probe: AgentActivityProbe) => void): () => void {
     return this.#agentActivityProbe.set(callback);
   }
@@ -1879,7 +1856,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   #deliver<Value extends { agentId?: string }>(
     slot: ListenerSlot<(value: Value) => void>,
     value: Value,
-    hold?: "start" | "stop" | "probe" | "notice",
+    hold?: "start" | "stop" | "probe" | "notice" | "turn_interrupt",
   ): void {
     const held = this.#readyPublications;
     // The common case: nothing is held, so nothing is allocated either.
@@ -2041,6 +2018,13 @@ export class DaemonConnection implements DaemonConnectionClient {
         },
       },
       {
+        kind: "agent_turn_interrupt",
+        decode: () => {
+          const intent = this.#ownedIntent(decodeAgentTurnInterruptIntent(data), workspaceId);
+          this.#deliver(this.#agentTurnInterrupt, intent, "turn_interrupt");
+        },
+      },
+      {
         kind: "agent_start",
         decode: () => {
           const intent = this.#ownedIntent(decodeAgentStartIntent(data), workspaceId);
@@ -2088,6 +2072,9 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   async sendAgentControlResult(result: AgentControlResult) {
     await this.#rpc(AGENT_CONTROL_RESULT_METHOD, encodeAgentControlResult(result));
+  }
+  async sendAgentTurnInterruptResult(result: AgentTurnInterruptResult) {
+    await this.#rpc(AGENT_TURN_INTERRUPT_RESULT_METHOD, encodeAgentTurnInterruptResult(result));
   }
 
   /**

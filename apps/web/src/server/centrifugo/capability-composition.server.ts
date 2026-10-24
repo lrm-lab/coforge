@@ -2,6 +2,7 @@ import { getAgentMigrationCapabilityLease } from "#src/server/agent-migrations/a
 import { getAppRegistrationNoticeCapabilityLease } from "#src/server/apps/app-registration-notice-capability.server";
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
 import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
+import { getAgentTurnInterruptCapabilityLease } from "#src/server/agents/agent-turn-interrupt-capability.server";
 import {
   getPiChatCapabilityLease,
   getPiChatControlsLease,
@@ -16,6 +17,7 @@ export function daemonCapabilityLeases() {
     getAgentMigrationCapabilityLease(),
     getAppConfigCapabilityLease(),
     getAppRegistrationNoticeCapabilityLease(),
+    getAgentTurnInterruptCapabilityLease(),
     getPiChatCapabilityLease(),
     getPiChatControlsLease(),
     getPiChatFilesLease(),

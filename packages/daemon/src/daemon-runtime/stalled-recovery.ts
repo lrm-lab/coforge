@@ -15,6 +15,7 @@ export const STALLED_RECOVERY_EXIT_TIMEOUT_MS = 10_000;
  */
 export class ProviderProgress {
   #lastEventAtMs = Date.now();
+  #turnStartedAtMs = this.#lastEventAtMs;
 
   observe(): void {
     this.#lastEventAtMs = Date.now();
@@ -24,6 +25,11 @@ export class ProviderProgress {
    * client: a turn is never judged by the quiet spell before it began. */
   noteTurnStarted(): void {
     this.#lastEventAtMs = Date.now();
+    this.#turnStartedAtMs = this.#lastEventAtMs;
+  }
+
+  get turnStartedAtMs(): number {
+    return this.#turnStartedAtMs;
   }
 
   /** When the provider last reported anything. */

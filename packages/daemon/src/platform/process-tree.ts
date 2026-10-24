@@ -1,6 +1,8 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import type {
   OwnedChildProcess,
+  OwnedProcessIdentity,
+  OwnedProcessTreeKillReport,
   OwnedProcessTree,
   ProcessCommandRunner,
   ProcessTreeSpawner,
@@ -17,7 +19,58 @@ import {
 export type ProcessTreeOwnerOptions = {
   /** Test seam / production factory for Windows Job Objects. */
   createJobObject?: WindowsJobObjectFactory;
+  /** Test seam for the process table used by turn-scoped cleanup. */
+  processTable?: ProcessTable;
 };
+
+export type ProcessTable = Readonly<{
+  list(): Promise<readonly OwnedProcessIdentity[]>;
+}>;
+
+const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
+
+const hostProcessTable: ProcessTable = {
+  async list() {
+    if (process.platform === "win32") return [];
+    const child = Bun.spawn({
+      cmd: ["ps", "-axo", "pid=,ppid=,pgid=,lstart="],
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const output = await new Response(child.stdout).text();
+    await child.exited;
+    return output.split("\n").flatMap(parseProcessTableLine);
+  },
+};
+
+function parseProcessTableLine(line: string): OwnedProcessIdentity[] {
+  const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+  if (!match) return [];
+  const startedAtMs = Date.parse(match[4]!);
+  if (!Number.isFinite(startedAtMs)) return [];
+  return [{ pid: Number(match[1]), ppid: Number(match[2]), pgid: Number(match[3]), startedAtMs }];
+}
+
+function descendantsOf(
+  main: OwnedProcessIdentity,
+  all: readonly OwnedProcessIdentity[],
+): OwnedProcessIdentity[] {
+  const byParent = new Map<number, OwnedProcessIdentity[]>();
+  for (const process of all) {
+    const children = byParent.get(process.ppid) ?? [];
+    children.push(process);
+    byParent.set(process.ppid, children);
+  }
+  const descendants: OwnedProcessIdentity[] = [];
+  const queue = [...(byParent.get(main.pid) ?? [])];
+  while (queue.length) {
+    const process = queue.shift()!;
+    descendants.push(process);
+    queue.push(...(byParent.get(process.pid) ?? []));
+  }
+  return descendants;
+}
 
 const runCommand: ProcessCommandRunner = async (command) => {
   const process = Bun.spawn({
@@ -119,6 +172,8 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
       }),
     );
     const child = ownedChildProcess(spawned, spawned.exited);
+    let turnScoped = false;
+    let turnSnapshot: OwnedProcessIdentity[] | undefined;
     return {
       child,
       terminate: async (force) => {
@@ -130,11 +185,59 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
           if (!this.#groupIsGone(error)) throw error;
         }
       },
+      terminateForTurn: async (force, cutoffAtMs) => {
+        turnScoped = true;
+        const pid = child.pid;
+        if (pid === undefined) return emptyKillReport();
+        if (!turnSnapshot) {
+          const table = await (this.options.processTable ?? hostProcessTable).list();
+          const main = table.find((entry) => entry.pid === pid);
+          // A detached Agent process must still be parented by this daemon. If launchd or another
+          // supervisor owns it, the platform-specific owner is responsible for its kill scope.
+          turnSnapshot =
+            main && main.ppid === globalThis.process.pid ? descendantsOf(main, table) : [];
+        }
+        if (!force) {
+          child.kill("SIGTERM");
+          return emptyKillReport();
+        }
+        const current = await (this.options.processTable ?? hostProcessTable).list();
+        const byPid = new Map(current.map((entry) => [entry.pid, entry]));
+        const killed: number[] = [];
+        const leftAlone: number[] = [];
+        for (const entry of turnSnapshot) {
+          if (entry.startedAtMs < cutoffAtMs) {
+            leftAlone.push(entry.pid);
+            continue;
+          }
+          const live = byPid.get(entry.pid);
+          if (!live || live.startedAtMs !== entry.startedAtMs) {
+            leftAlone.push(entry.pid);
+            continue;
+          }
+          try {
+            globalThis.process.kill(entry.pid, "SIGKILL");
+            killed.push(entry.pid);
+          } catch (error) {
+            if (!this.#processGone(error)) throw error;
+          }
+        }
+        const main = byPid.get(pid);
+        if (main) {
+          try {
+            globalThis.process.kill(pid, "SIGKILL");
+            killed.push(pid);
+          } catch (error) {
+            if (!this.#processGone(error)) throw error;
+          }
+        }
+        return { killed, leftAlone };
+      },
       waitForExit: async (timeoutMs) => {
         const pid = child.pid;
         if (pid === undefined) return true;
         const deadline = Date.now() + timeoutMs;
-        while (await this.#treeExists(pid)) {
+        while (turnScoped ? await this.#processExists(pid) : await this.#treeExists(pid)) {
           if (Date.now() >= deadline) return false;
           await Bun.sleep(20);
         }
@@ -198,6 +301,7 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
     );
 
     let closed = false;
+    let turnScoped = false;
     const closeJob = () => {
       if (closed) return;
       closed = true;
@@ -215,10 +319,15 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
           if (!closed && job.activeProcesses() !== 0) throw error;
         }
       },
+      terminateForTurn: async (force) => {
+        turnScoped = true;
+        if (!closed) spawned.kill(force ? "SIGKILL" : "SIGTERM");
+        return emptyKillReport();
+      },
       waitForExit: async (timeoutMs) => {
         if (closed) return true;
         const deadline = Date.now() + timeoutMs;
-        while (!closed && job.activeProcesses() > 0) {
+        while (!closed && (turnScoped ? spawned.exitCode === null : job.activeProcesses() > 0)) {
           if (Date.now() >= deadline) return false;
           await Bun.sleep(20);
         }
@@ -266,6 +375,20 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
   #groupIsGone(error: unknown): boolean {
     const code = (error as { code?: string }).code;
     return code === "ESRCH" || (this.platform === "darwin" && code === "EPERM");
+  }
+
+  #processGone(error: unknown): boolean {
+    return (error as { code?: string }).code === "ESRCH";
+  }
+
+  async #processExists(pid: number): Promise<boolean> {
+    try {
+      globalThis.process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      if (this.#processGone(error)) return false;
+      throw error;
+    }
   }
 }
 
