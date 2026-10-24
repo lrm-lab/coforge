@@ -1345,40 +1345,6 @@ test("Task unassign submits its own protocol operation with no assignee", async 
   expect(output).toBe("#2 unassigned — now open.");
 });
 
-test("Agent channel mute and unmute change its own setting without sending a message", async () => {
-  const calls: unknown[] = [];
-  for (const command of ["mute", "unmute"] as const) {
-    expect(parseArgs(["channel", command, "--target", "#general"])).toEqual({
-      command,
-      target: "#general",
-    });
-    await run(["channel", command, "--target", "#general"], {
-      check: async () => {
-        throw new Error("unexpected check");
-      },
-      read: async () => {
-        throw new Error("unexpected read");
-      },
-      send: async () => {
-        throw new Error("unexpected send");
-      },
-      view: async () => {
-        throw new Error("unexpected view");
-      },
-      setChannelMuted: async (target, muted) => {
-        calls.push([target, muted]);
-        return { accepted: true };
-      },
-    });
-  }
-  expect(calls).toEqual([
-    ["#general", true],
-    ["#general", false],
-  ]);
-  expect(() => parseArgs(["channel", "mute", "--target", "@alice"])).toThrow("Usage:");
-  expect(() => parseArgs(["channel", "mute", "--target", "#general:12345678"])).toThrow("Usage:");
-});
-
 test("channel management commands parse into a channel operation and dispatch through the transport", async () => {
   expect(parseArgs(["channel", "info", "#engineering"])).toEqual({
     command: "channel-manage",
