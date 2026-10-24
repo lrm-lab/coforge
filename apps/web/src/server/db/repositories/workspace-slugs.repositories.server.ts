@@ -11,6 +11,7 @@ import {
 import { channelMemberEvents } from "#src/server/app-notifications/channel-events.server";
 import { recordWorkspaceConfigUpdated } from "#src/server/app-notifications/workspace-events.server";
 import { generalChannelForCreator } from "#src/server/conversations/general-channel.server";
+import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 
 /**
  * A slug another Workspace has or had. It carries Prisma's unique-violation code, so callers answer
@@ -81,13 +82,17 @@ async function recordGeneralChannelCreated(
 /** Creates a Workspace owned by `userId`, with its `#general` and the Foundation Models Weekly
  * template, unless another Workspace had `slug` before. */
 export function createOwnedWorkspace<S extends Prisma.WorkspaceSelect>(
-  db: PrismaClient,
+  db: DatabaseScope,
   input: { slug: string; name: string; userId: string },
   select: S,
 ) {
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     await lockSlugs(tx, [input.slug]);
     if (await tx.workspaceFormerSlug.findUnique({ where: { slug: input.slug } }))
+      throw new WorkspaceSlugTakenError();
+    // A caller may already own a transaction. Refuse under the slug lock before INSERT, so a
+    // handled collision does not abort that caller's transaction before its fallback slug.
+    if (await tx.workspace.findUnique({ where: { slug: input.slug }, select: { id: true } }))
       throw new WorkspaceSlugTakenError();
     const created = await tx.workspace.create({
       data: ownedWorkspaceCreateData(input),

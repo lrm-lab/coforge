@@ -1,16 +1,36 @@
 import { expect, test } from "bun:test";
 
-import { FirstSignIn, type FirstSignInNames } from "#src/server/auth/first-sign-in.server";
+import { FirstSignIn, type FirstSignInStore } from "#src/server/auth/first-sign-in.server";
 import {
   WorkspaceEnrollment,
   type WorkspaceEnrollmentStore,
 } from "#src/server/workspaces/enrollment.server";
 
-// The first sign-in's name step, at its use-case seam: a person's display name is saved, then their
-// personal Workspace is made, titled with it. Both stores are in memory, so the tests read the
+// The first sign-in's name step, at its use-case seam: a person's display name and personal
+// Workspace commit together. The store is in memory, so the tests read the
 // outcome through the same interface the callback and the page use.
 
 const ada = { id: "11111111-1111-4111-8111-111111111111", username: "ada" };
+
+test("a failed cloud start retains confirmed enrollment and retries with the first name", async () => {
+  let calls = 0;
+  const { firstSignIn, names, created } = setup({
+    startCloudComputer: async (request) => {
+      calls++;
+      if (calls === 1) throw new Error("cloud unavailable");
+      expect(request.displayName).toBe("Ada Lovelace");
+    },
+  });
+  await expect(
+    firstSignIn.complete({ user: ada, displayName: "Ada Lovelace", acceptLanguage: "en" }),
+  ).rejects.toThrow("cloud unavailable");
+  expect(names.get(ada.id)).toBe("Ada Lovelace");
+  expect(created).toHaveLength(1);
+  await firstSignIn.complete({ user: ada, displayName: "Ada King", acceptLanguage: "en" });
+  expect(names.get(ada.id)).toBe("Ada Lovelace");
+  expect(created).toHaveLength(1);
+  expect(calls).toBe(2);
+});
 
 function setup(
   input: {
@@ -51,22 +71,33 @@ function setup(
       return workspaceId;
     },
   };
-  const nameStore: FirstSignInNames = {
+  const enrollment = new WorkspaceEnrollment(enrollmentStore);
+  let turn = Promise.resolve();
+  const store: FirstSignInStore = {
     async lookup(userId) {
       return users.has(userId) ? { displayName: names.get(userId) ?? null } : null;
     },
-    async setDisplayNameOnce(userId, displayName) {
-      if (!names.has(userId)) names.set(userId, displayName);
-      return names.get(userId)!;
+    enroll(input) {
+      const accepted = turn.then(async () => {
+        const displayName = names.get(input.user.id) ?? input.displayName;
+        const { workspaceId } = await enrollment.ensureForUser(
+          { ...input.user, displayName },
+          input.acceptLanguage,
+          input.workspaceSlug,
+        );
+        if (!names.has(input.user.id)) names.set(input.user.id, displayName);
+        return { workspaceId, displayName, ownsWorkspace: true };
+      });
+      turn = accepted.then(
+        () => undefined,
+        () => undefined,
+      );
+      return accepted;
     },
   };
+
   return {
-    firstSignIn: new FirstSignIn(
-      nameStore,
-      new WorkspaceEnrollment(enrollmentStore),
-      input.startCloudComputer,
-      input.bindWeeklyReportAssistant,
-    ),
+    firstSignIn: new FirstSignIn(store, input.startCloudComputer, input.bindWeeklyReportAssistant),
     names,
     created,
   };
@@ -81,7 +112,7 @@ test("completing first sign-in assigns the default cloud computer to the persona
         workspaceId: request.workspaceId,
         displayName: request.displayName,
       });
-      expect(names.has(ada.id)).toBe(false);
+      expect(names.has(ada.id)).toBe(true);
     },
   });
 

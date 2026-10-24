@@ -36,9 +36,16 @@ its username. `User.welcomedAt` records when the person finished first sign-in;
 not from `/oauth/verify`. Sign-in still issues the session, but creates nothing
 until they answer. The same page asks for their personal Workspace's URL
 (slug), starting from the username unless that is only the fallback `user…`;
-submitting makes the Workspace at that URL, titled with the name, then saves the
-name and `welcomedAt`, so a URL found taken leaves them still asked. A session whose user row is gone is sent to sign in
-again instead. The name follows the one rule for a person's name
+submitting locks that User and commits the Workspace, name and `welcomedAt` in
+one transaction, so concurrent tabs share the first accepted name and a URL found
+taken rolls back confirmation. Cloud Computer and assistant provisioning follow
+the commit; failures leave enrollment intact. When the owner opens the Workspace,
+`loadWorkspaceSwitcher` repairs missing Memory Agent and assistant identities and
+retries pending cloud provisioning through platform-assistant onboarding. Existing
+Memory Agent links, including archived identities, remain intact. A retained Memory
+Profile prevents reopening from recreating a deliberately deleted identity. Weekly
+assistant binding retries accept only the owner's live default cloud Computer.
+A session whose user row is gone is sent to sign in again instead. The name follows the one rule for a person's name
 (`apps/web/src/features/profiles/person-name.ts`), which the profile's own name
 shares: normalized and 1 to 80 characters, counted as code points, and refused
 when it holds control, bidirectional or only invisible characters, is the

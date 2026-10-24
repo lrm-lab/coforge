@@ -39,6 +39,7 @@ export const WORKSPACE_CAPABILITY_ROLES = {
   manageAgentAppAccess: WORKSPACE_ADMIN_ROLES,
   changeWorkspaceSlug: OWNER_ONLY,
   deleteWorkspace: OWNER_ONLY,
+  recoverWorkspaceResources: OWNER_ONLY,
 } as const satisfies Record<string, readonly WorkspaceMemberRole[]>;
 
 export type WorkspaceCapability = keyof typeof WORKSPACE_CAPABILITY_ROLES;

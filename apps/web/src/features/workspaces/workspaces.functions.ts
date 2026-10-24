@@ -1,3 +1,4 @@
+import { recoverWorkspaceResourcesOnOpen } from "#src/server/workspaces/resource-recovery.server";
 import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
@@ -62,7 +63,7 @@ export const loadWorkspaceSwitcher = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const { user, workspaceId } = context;
-    await workspaceAssistantOnboarding(context.db).ensure(workspaceId, user.id);
+    await recoverWorkspaceResourcesOnOpen(context.db, { workspaceId, userId: user.id });
     const workspaces = await catalog().listForUser(user.id);
     const current = workspaces.find((workspace) => workspace.id === workspaceId)!;
     if (preferredWorkspaceSlugFromRequest() !== current.slug)

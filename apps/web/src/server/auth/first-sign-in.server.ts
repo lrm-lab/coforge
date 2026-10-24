@@ -1,5 +1,9 @@
 import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import {
+  PrismaFirstSignInNames,
+  withFirstSignInUser,
+} from "#src/server/db/repositories/first-sign-in.repositories.server";
 import { namePrefill } from "#src/features/auth/name-prefill";
 import { checkPersonName, type PersonNameProblem } from "#src/features/profiles/person-name";
 import {
@@ -14,20 +18,30 @@ import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-a
 import {
   PrismaWorkspaceEnrollmentStore,
   WorkspaceEnrollment,
+  provisionWorkspaceEnrollment,
 } from "#src/server/workspaces/enrollment.server";
 import {
   defaultCloudComputerId,
   startDefaultCloudComputer,
 } from "#src/server/workspaces/create-workspace.server";
 
-/** Where a person's display name lives. */
-export type FirstSignInNames = {
-  /** The name the person confirmed at first sign-in (null until they have), or null when there is
-   * no such person: a session can outlive its user. */
+export type FirstSignInInput = {
+  user: { id: string; username: string };
+  displayName: string;
+  workspaceSlug?: string;
+  acceptLanguage: string;
+};
+
+export type ConfirmedEnrollment = {
+  workspaceId: string;
+  displayName: string;
+  ownsWorkspace: boolean;
+};
+
+/** Name confirmation and initial enrollment must commit together, serialized per User. */
+export type FirstSignInStore = {
   lookup(userId: string): Promise<{ displayName: string | null } | null>;
-  /** Stores `displayName` and marks first sign-in done, unless it already is; resolves with the
-   * name stored after. */
-  setDisplayNameOnce(userId: string, displayName: string): Promise<string>;
+  enroll(input: FirstSignInInput): Promise<ConfirmedEnrollment>;
 };
 
 export type NameStep =
@@ -56,7 +70,7 @@ export type CloudComputerStart = (input: {
   userId: string;
   workspaceId: string;
   now: Date;
-  /** The nickname just confirmed. Present only at first sign-in, before it is stored. */
+  /** The confirmed nickname, already committed before cloud provisioning starts. */
   displayName?: string;
 }) => Promise<unknown>;
 
@@ -71,21 +85,24 @@ export type WeeklyReportAssistantBind = (input: {
  * Workspace's URL: what the page needs to know (`readNameStep`) and what submitting it does
  * (`complete`): the Workspace is made at that URL, titled with the name, the default cloud
  * computer is started for it, the weekly-report assistant is bound to that default
- * computer, and the name is saved. Sign-in itself finishes without either; a person without a
- * name is sent here before anything is created for them.
+ * computer. The name and Workspace commit before those resources start. Sign-in itself finishes
+ * without either; a person without a name is sent here before anything is created for them.
  */
 export class FirstSignIn {
   constructor(
-    private readonly names: FirstSignInNames,
-    private readonly enrollment: WorkspaceEnrollment,
+    private readonly store: FirstSignInStore,
     private readonly startCloudComputer?: CloudComputerStart,
     private readonly bindWeeklyReportAssistant?: WeeklyReportAssistantBind,
+    private readonly provisionWorkspace?: (input: {
+      userId: string;
+      workspaceId: string;
+    }) => Promise<void>,
   ) {}
 
   /** Whether to ask at all, and what the fields start with: the provider's own name, when it reads
    * as one, and the username as a URL, when it is more than the fallback. */
   async readNameStep(user: { id: string; name: string; username: string }): Promise<NameStep> {
-    const person = await this.names.lookup(user.id);
+    const person = await this.store.lookup(user.id);
     if (!person) return { status: "account_gone" };
     if (person.displayName !== null) return { status: "named" };
     return {
@@ -96,43 +113,39 @@ export class FirstSignIn {
   }
 
   /**
-   * Makes the personal Workspace at `workspaceSlug` (from the username when absent) and saves the
-   * display name, in that order: a URL that turns out taken leaves the person unnamed, so the page
+   * Commits the personal Workspace at `workspaceSlug` (from the username when absent) and its
+   * display name atomically: a URL that turns out taken leaves the person unnamed, so the page
    * still asks and they can choose another. Idempotent: the first name saved stays (a second tab's,
    * or a repeated submit, cannot replace it or retitle anything), and someone who already has
    * memberships gets them back as they are. `problem` says why a name or URL was not accepted;
    * nothing is saved or created then.
    */
-  async complete(input: {
-    user: { id: string; username: string };
-    displayName: string;
-    workspaceSlug?: string;
-    acceptLanguage: string;
-  }): Promise<FirstSignInResult> {
+  async complete(input: FirstSignInInput): Promise<FirstSignInResult> {
     const checked = checkPersonName(input.displayName);
     if (!checked.ok) return { ok: false, problem: checked.problem };
     const slug = input.workspaceSlug?.trim();
     if (slug !== undefined && (!isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)))
       return { ok: false, problem: "slug_invalid" };
-    // A name stored before (another tab) titles the Workspace; it is the one that stays.
-    const person = await this.names.lookup(input.user.id);
-    const title = person?.displayName ?? checked.name;
-    let workspaceId: string;
+    let enrolled: ConfirmedEnrollment;
     try {
-      ({ workspaceId } = await this.enrollment.ensureForUser(
-        { id: input.user.id, username: input.user.username, displayName: title },
-        input.acceptLanguage,
-        slug,
-      ));
+      enrolled = await this.store.enroll({
+        ...input,
+        displayName: checked.name,
+        workspaceSlug: slug,
+      });
     } catch (error) {
       if (isUniqueViolation(error)) return { ok: false, problem: "slug_taken" };
       throw error;
     }
+    const { workspaceId, displayName } = enrolled;
+    // These retries repair external resources after the accepted name/Workspace has committed.
+    if (enrolled.ownsWorkspace)
+      await this.provisionWorkspace?.({ userId: input.user.id, workspaceId });
     const started = await this.startCloudComputer?.({
       userId: input.user.id,
       workspaceId,
       now: new Date(),
-      displayName: checked.name,
+      displayName,
     });
     const computerId = defaultCloudComputerId(started);
     if (computerId)
@@ -141,42 +154,42 @@ export class FirstSignIn {
         workspaceId,
         computerId,
       });
-    await this.names.setDisplayNameOnce(input.user.id, checked.name);
     return { ok: true, workspaceId };
   }
 }
 
-class PrismaFirstSignInNames implements FirstSignInNames {
+class PrismaFirstSignInStore implements FirstSignInStore {
   constructor(private readonly db: PrismaClient) {}
 
-  async lookup(userId: string) {
-    const row = await this.db.user.findUnique({
-      where: { id: userId },
-      select: { displayName: true, welcomedAt: true },
-    });
-    // Every account has a name; it counts as confirmed once first sign-in is done.
-    return row && { displayName: row.welcomedAt ? row.displayName : null };
+  lookup(userId: string) {
+    return new PrismaFirstSignInNames(this.db).lookup(userId);
   }
 
-  async setDisplayNameOnce(userId: string, displayName: string) {
-    // One statement decides who was first, so two tabs cannot each believe theirs was saved.
-    const { count } = await this.db.user.updateMany({
-      where: { id: userId, welcomedAt: null },
-      data: { displayName, welcomedAt: new Date() },
+  enroll(input: FirstSignInInput) {
+    return withFirstSignInUser(this.db, input.user.id, async (tx) => {
+      const names = new PrismaFirstSignInNames(tx);
+      const person = await names.lookup(input.user.id);
+      const title = person?.displayName ?? input.displayName;
+      const { workspaceId } = await new WorkspaceEnrollment(
+        new PrismaWorkspaceEnrollmentStore(tx),
+      ).ensureForUser(
+        { ...input.user, displayName: title },
+        input.acceptLanguage,
+        input.workspaceSlug,
+      );
+      const displayName = await names.confirm(input.user.id, title);
+      return {
+        workspaceId,
+        displayName,
+        ownsWorkspace: await names.ownsWorkspace(input.user.id, workspaceId),
+      };
     });
-    if (count === 1) return displayName;
-    const row = await this.db.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { displayName: true },
-    });
-    return row.displayName;
   }
 }
 
 function firstSignIn(db: PrismaClient): FirstSignIn {
   return new FirstSignIn(
-    new PrismaFirstSignInNames(db),
-    new WorkspaceEnrollment(new PrismaWorkspaceEnrollmentStore(db)),
+    new PrismaFirstSignInStore(db),
     (request) =>
       startDefaultCloudComputer(
         (input) => productionCloudComputers(db).ensureDefault(input),
@@ -186,6 +199,7 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
       await workspaceAssistantOnboarding(db).ensure(request.workspaceId, request.userId);
       return ensureWeeklyReportAssistant(db, request);
     },
+    ({ workspaceId, userId }) => provisionWorkspaceEnrollment(db, workspaceId, userId),
   );
 }
 

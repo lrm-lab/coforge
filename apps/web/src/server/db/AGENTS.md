@@ -5,6 +5,10 @@ These rules apply to `src/server/db/`.
 - Use parameterized Prisma queries. Use `$queryRaw`/`$executeRaw` only for a
   reviewed PostgreSQL-specific requirement, and keep that SQL in a server-only
   repository or migration.
+- `workspace-resource-recovery.repositories.server.ts` reads membership and default-resource
+  links in one indexed query for Workspace-open recovery. Provisioning and role checks
+  stay in `server/workspaces/resource-recovery.server.ts`.
+- `first-sign-in.repositories.server.ts` owns first-sign-in's User row lock and confirmed name persistence; enrollment commits with it, and resource provisioning follows the commit.
 - Paginate a list with `prisma-extension-pagination` through `paginated(db)`
   (`pagination.server.ts`), not with hand-written `take: limit + 1`:
   `.paginate(query).withCursor({ limit, after })` for a cursor on a single

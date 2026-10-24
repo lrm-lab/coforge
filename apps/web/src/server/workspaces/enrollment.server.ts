@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { isDatabaseClient, type DatabaseScope } from "#src/server/db/transaction.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { AppError } from "#src/lib/app-error";
 import { attachDefaultMemoryAgentToGeneral } from "#src/server/workspace-memory/default-memory-agent.server";
@@ -98,7 +99,7 @@ function workspaceDisplayName(displayName: string, acceptLanguage: string): stri
 }
 
 export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: DatabaseScope) {}
 
   async findMembership(userId: string) {
     const row = await this.db.workspaceMembership.findFirst({
@@ -111,10 +112,22 @@ export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore 
 
   async createForUser(input: { slug: string; name: string; userId: string }) {
     const row = await createOwnedWorkspace(this.db, input, { id: true });
-    await attachDefaultMemoryAgentToGeneral(this.db, row.id, input.userId);
-    await new WorkspaceAssistants(this.db).ensure(row.id, input.userId);
+    // A transaction owner provisions after committing, so external resource failures cannot
+    // roll back an accepted name and Workspace. Ordinary enrollment owns its transaction here.
+    if (isDatabaseClient(this.db))
+      await provisionWorkspaceEnrollment(this.db, row.id, input.userId);
     return row.id;
   }
+}
+
+/** Idempotent post-commit defaults; retrying repairs a previous provisioning failure. */
+export async function provisionWorkspaceEnrollment(
+  db: PrismaClient,
+  workspaceId: string,
+  userId: string,
+) {
+  await attachDefaultMemoryAgentToGeneral(db, workspaceId, userId);
+  await new WorkspaceAssistants(db).ensure(workspaceId, userId);
 }
 
 export async function requireExistingWorkspaceId(

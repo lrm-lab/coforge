@@ -58,6 +58,7 @@ describe("the Workspace capability table", () => {
       expect([capability, holders(capability)]).toEqual([capability, ["owner", "admin"]]);
     expect(holders("changeWorkspaceSlug")).toEqual(["owner"]);
     expect(holders("deleteWorkspace")).toEqual(["owner"]);
+    expect(holders("recoverWorkspaceResources")).toEqual(["owner"]);
   });
 
   test("a missing or unknown role can do nothing", () => {
