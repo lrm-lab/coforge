@@ -180,7 +180,8 @@ test("single-file installation provides management and Agent CLI without a Daemo
         stderr: await new Response(child.stderr).text(),
       };
     };
-    expect(await invoke(["inbox", "check"])).toEqual({
+    // Text is the default; the machine JSON this pins is behind `--json`.
+    expect(await invoke(["inbox", "check", "--json"])).toEqual({
       code: 0,
       stdout: '{"operation":"check","messages":[]}\n',
       stderr: "",
