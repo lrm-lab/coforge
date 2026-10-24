@@ -23,18 +23,15 @@ const MEMORY_OBSERVER_NOTE = [
   "Do not invent evidence.",
 ].join(" ");
 
-/** Memory and Task are woken by the same message (both @-mentioned). Task plans first and writes no
- * deliverable until Memory's message has arrived, so a retrieved hint can still change the draft. */
+/** Memory and Task are woken by the same message (both @-mentioned) and work in parallel. Nothing forces
+ * Task to wait for Memory: a hint that arrives in time is simply handled like any other Memory Hint. */
 export const MEMORY_PARALLEL_NOTE = [
   "Memory Agent and Task Agent start together on this message.",
   "Memory Agent: retrieve now with ov_experience_find, then publish ONE cited Offer to Task with memory_offer",
-  "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). If no card applies,",
-  "publish one short send_channel_message saying so. Do not invent evidence.",
-  "Task Agent: Memory Agent is retrieving prior experience in this channel right now. Read the task and the",
-  "reference files and plan first, but do NOT write any deliverable file until you have read Memory Agent's message:",
-  "run `coforge message check --target '<this channel>'`; if nothing has arrived, `sleep 20` and check again, at most",
-  '8 times, then continue without it. If Memory\'s message is cut off ("…(+N chars, read: …)"), run the `coforge message read` command it prints to get the full text. When a Memory Hint arrives, call memory_disposition (adopt, reject or defer,',
-  "with a reason) before applying it, and apply the advice you adopted to the deliverable.",
+  "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). Do not invent evidence.",
+  "Task Agent: Memory Agent is retrieving prior experience in this channel at the same time; start on the task",
+  "right away. When a Memory Hint arrives, call memory_disposition (adopt, reject or defer, with a reason)",
+  "before applying it.",
 ].join(" ");
 
 /** Delivery rules that mirror what the 8745 scorer can actually see (found by the warm-log analysis). */

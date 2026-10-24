@@ -202,15 +202,16 @@ describe("episodePrompt parallel start", () => {
     grader: { kind: "x" },
     stageFiles: [],
   } as never;
-  test("both agents are mentioned and Task must read Memory before writing", () => {
+  test("both agents are mentioned and Task is not forced to wait for Memory", () => {
     const prompt = episodePrompt(episode, "R", null, true, {
       parallel: true,
       deliveryRules: true,
     });
     expect(prompt.startsWith("@task @memory Write the contract.")).toBe(true);
-    expect(prompt).toContain(
-      "do NOT write any deliverable file until you have read Memory Agent's message",
-    );
+    expect(prompt).not.toContain("do NOT write any deliverable");
+    expect(prompt).not.toContain("sleep 20");
+    expect(prompt).not.toContain("coforge message read");
+    expect(prompt).toContain("start on the task");
     expect(prompt).toContain("memory_disposition");
     expect(prompt).toContain("Delivery rules:");
     expect(prompt).not.toContain("you observe this channel");
