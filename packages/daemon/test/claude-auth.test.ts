@@ -461,3 +461,27 @@ test("a missing executable is unsupported (not installed) for login and logout",
   ).resolves.toEqual(unsupported);
   await expect(adapter.logout({ workingDirectory: "/tmp" })).resolves.toEqual(unsupported);
 });
+
+test("a success line with a non-zero exit is confirmed by auth status", async () => {
+  const login = new FakeAuthProcess();
+  const { adapter } = adapterWith(login); // status reads signed in
+  const result = adapter.startLogin(
+    { workingDirectory: "/tmp", timeoutMs: 2_000 },
+    { onEvent: () => {}, prompt: async () => "code" },
+  );
+  login.say("Login successful.\n");
+  login.finish(1);
+  await expect(result).resolves.toMatchObject({ status: "logged_in" });
+});
+
+test("a success line is not believed when auth status says signed out", async () => {
+  const login = new FakeAuthProcess();
+  const { adapter } = adapterWith(login, JSON.stringify({ loggedIn: false }));
+  const result = adapter.startLogin(
+    { workingDirectory: "/tmp", timeoutMs: 2_000 },
+    { onEvent: () => {}, prompt: async () => "code" },
+  );
+  login.say("Login successful.\n");
+  login.finish(0);
+  await expect(result).resolves.toMatchObject({ status: "failed" });
+});

@@ -38,6 +38,7 @@ const ANSI = new RegExp(`${ESCAPE}\\[[0-9;?]*[ -/]*[@-~]`, "gu");
 const AUTH_URL = /If the browser didn't open, visit:\s*(\S+)[\r\n]/u;
 const CODE_PROMPT = /Paste code here if prompted\s*>/u;
 const INVALID_CODE_LINES = /^Invalid code\b/gmu;
+const LOGIN_SUCCESSFUL = /Login successful\b/u;
 const LOGIN_FAILED = /Login failed:[ \t]*(.*)$/mu;
 const MAX_CODE_ATTEMPTS = 5;
 const AUTH_URL_INSTRUCTIONS =
@@ -211,6 +212,7 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     let untrustedLink = false;
     let interactionFailed: string | undefined;
     let loginFailure: string | undefined;
+    let reportedSuccess = false;
     let exitCode: number | undefined;
     const settled = Promise.withResolvers<"timeout" | "cancelled" | "exited">();
     const timer = setTimeout(() => {
@@ -311,6 +313,7 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
           promptedForCode = true;
           void askForCode("Paste the code shown after you sign in.");
         }
+        reportedSuccess ||= LOGIN_SUCCESSFUL.test(seen);
         loginFailure ??= LOGIN_FAILED.exec(seen)?.[1]?.trim();
       }),
       watch(process.stderr, (seen) => {
@@ -338,7 +341,9 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
           reason: "process_failed",
           detail: "Claude Code printed a sign-in link that is not an Anthropic address",
         };
-      if (exitCode !== 0)
+      // The CLI saying it succeeded, or exiting 0, is only a claim: `auth status` decides. A
+      // success line with a bad exit code still counts once the account reads as signed in.
+      if (exitCode !== 0 && !reportedSuccess)
         return {
           status: "failed",
           reason: codeSent ? "rejected" : "process_failed",
