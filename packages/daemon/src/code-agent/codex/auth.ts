@@ -14,6 +14,8 @@ import { asRecord } from "#src/code-agent/json-record";
 export const CODEX_LOGIN_MINIMUM_VERSION = "0.118.0";
 export const CODEX_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
 export const CODEX_LOGIN_STATUS_TIMEOUT_MS = 20_000;
+export const CODEX_LOGOUT_TIMEOUT_MS = 60_000;
+export const CODEX_LOGOUT_MINIMUM_VERSION = "0.15.0";
 
 type RecordValue = Readonly<Record<string, unknown>>;
 export interface CodexAppServerProcess {
@@ -32,7 +34,54 @@ function environment(): Record<string, string> {
   );
 }
 
-function versionAtLeast(version: string | undefined): boolean {
+export type CodexCliResult = Readonly<{
+  text: string;
+  stderr?: string;
+  exitCode: number;
+  timedOut?: boolean;
+  signal?: string;
+}>;
+export type CodexCliRunner = (
+  command: readonly string[],
+  cwd: string,
+  timeoutMs: number,
+) => Promise<CodexCliResult>;
+
+async function runCodexCli(
+  command: readonly string[],
+  cwd: string,
+  timeoutMs: number,
+): Promise<CodexCliResult> {
+  const child = Bun.spawn({
+    cmd: [...command],
+    cwd,
+    env: environment(),
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  let handle: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]).then(([text, stderr, exitCode]) => ({ text, stderr, exitCode })),
+    new Promise<CodexCliResult>((resolve) => {
+      handle = setTimeout(() => {
+        child.kill();
+        resolve({ text: "", stderr: "", exitCode: -1, timedOut: true });
+      }, timeoutMs);
+    }),
+  ]);
+  if (handle) clearTimeout(handle);
+  return result;
+}
+
+function versionAtLeast(
+  version: string | undefined,
+  minimumVersion = CODEX_LOGIN_MINIMUM_VERSION,
+): boolean {
   if (!version) return true;
   const parse = (value: string) =>
     value
@@ -40,7 +89,7 @@ function versionAtLeast(version: string | undefined): boolean {
       ?.slice(1)
       .map(Number);
   const actual = parse(version);
-  const minimum = parse(CODEX_LOGIN_MINIMUM_VERSION);
+  const minimum = parse(minimumVersion);
   if (!actual || !minimum) return false;
   const [major = 0, minor = 0, patch = 0] = actual;
   const [minimumMajor = 0, minimumMinor = 0, minimumPatch = 0] = minimum;
@@ -63,6 +112,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
   readonly #version: string | undefined;
   readonly #create: CodexAppServerFactory;
   readonly #accountReadTimeoutMs: number;
+  readonly #runCli: CodexCliRunner;
   #active?: { id: string; process: CodexAppServerProcess; cancelled: boolean };
 
   constructor(
@@ -71,11 +121,13 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       version?: string;
       create?: CodexAppServerFactory;
       accountReadTimeoutMs?: number;
+      runCli?: CodexCliRunner;
     } = {},
   ) {
     this.#command = options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"];
     this.#version = options.version;
     this.#accountReadTimeoutMs = options.accountReadTimeoutMs ?? 20_000;
+    this.#runCli = options.runCli ?? runCodexCli;
     this.#create =
       options.create ??
       ((cwd) =>
@@ -97,26 +149,11 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     workingDirectory: string;
     timeoutMs?: number;
   }): Promise<RuntimeAuthStatus> {
-    const command = [this.#command[0]!, "login", "status"];
-    const child = Bun.spawn({
-      cmd: command,
-      cwd: options.workingDirectory,
-      env: environment(),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const output = await Promise.race([
-      Promise.all([new Response(child.stdout).text(), child.exited]).then(([text, exitCode]) => ({
-        text,
-        exitCode,
-      })),
-      new Promise<{ text: string; exitCode: number }>((resolve) =>
-        setTimeout(() => {
-          child.kill();
-          resolve({ text: "", exitCode: -1 });
-        }, options.timeoutMs ?? CODEX_LOGIN_STATUS_TIMEOUT_MS),
-      ),
-    ]);
+    const output = await this.#runCli(
+      [this.#command[0]!, "login", "status"],
+      options.workingDirectory,
+      options.timeoutMs ?? CODEX_LOGIN_STATUS_TIMEOUT_MS,
+    );
     const text = output.text.trim();
     if (output.exitCode === 0) {
       const method = text.match(/Logged in using (ChatGPT|an API key)/iu)?.[1];
@@ -128,11 +165,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     }
     if (output.exitCode === 1 && /^Not logged in/iu.test(text))
       return { provider: RUNTIME_PROVIDER.CODEX, state: "logged_out" };
-    return {
-      provider: RUNTIME_PROVIDER.CODEX,
-      state: "unknown",
-      ...(text ? { unavailableReason: undefined } : {}),
-    };
+    return { provider: RUNTIME_PROVIDER.CODEX, state: "unknown" };
   }
 
   async startLogin(
@@ -144,7 +177,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     },
   ): Promise<RuntimeAuthLoginResult> {
     if (this.#active) return { status: "failed", reason: "rejected" };
-    if (!versionAtLeast(this.#version))
+    if (!versionAtLeast(this.#version, CODEX_LOGIN_MINIMUM_VERSION))
       return {
         status: "failed",
         reason: "process_failed",
@@ -318,11 +351,46 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     workingDirectory: string;
     timeoutMs?: number;
   }): Promise<RuntimeAuthLogoutResult> {
-    void options;
+    if (!versionAtLeast(this.#version, CODEX_LOGOUT_MINIMUM_VERSION))
+      return {
+        status: "failed",
+        reason: "version_unsupported",
+        detail: `Codex ${CODEX_LOGOUT_MINIMUM_VERSION} or newer is required`,
+      };
+    const result = await this.#runCli(
+      [this.#command[0]!, "logout"],
+      options.workingDirectory,
+      options.timeoutMs ?? CODEX_LOGOUT_TIMEOUT_MS,
+    );
+    const authStatus = await this.readStatus(options);
+    if (authStatus.state === "logged_out") return { status: "logged_out", authStatus };
+    if (result.timedOut)
+      return {
+        status: "failed",
+        reason: "timed_out",
+        detail: `codex logout did not finish within ${options.timeoutMs ?? CODEX_LOGOUT_TIMEOUT_MS} ms`,
+      };
+    if (result.exitCode === 1 && result.stderr?.trim())
+      return {
+        status: "failed",
+        reason: "rejected",
+        detail: detail(result.stderr.split(/\r?\n/gu).filter(Boolean).at(-1)),
+      };
+    if (result.exitCode !== 0)
+      return {
+        status: "failed",
+        reason: "process_failed",
+        detail: `${RUNTIME_PROVIDER.CODEX} logout exited with code ${result.exitCode}`,
+      };
+    if (authStatus.state === "logged_in")
+      return {
+        status: "failed",
+        reason: "still_logged_in",
+        detail: `${RUNTIME_PROVIDER.CODEX} logout succeeded, yet ${RUNTIME_PROVIDER.CODEX} login status still reads logged in`,
+      };
     return {
-      status: "failed",
-      reason: "process_failed",
-      detail: "Codex logout is not implemented",
+      status: "logged_out",
+      authStatus: { provider: RUNTIME_PROVIDER.CODEX, state: "logged_out" },
     };
   }
 }

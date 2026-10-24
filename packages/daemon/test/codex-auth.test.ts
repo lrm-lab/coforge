@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { CodexRuntimeAuthAdapter, type CodexAppServerProcess } from "#src/code-agent/codex/auth";
+import {
+  CodexRuntimeAuthAdapter,
+  type CodexAppServerProcess,
+  type CodexCliRunner,
+} from "#src/code-agent/codex/auth";
 
 class FakeProcess implements CodexAppServerProcess {
   readonly records = new Set<(record: Readonly<Record<string, unknown>>) => void>();
@@ -200,4 +204,86 @@ test("keeps a successful login when account/read times out", async () => {
     params: { loginId: "login-1", success: true },
   });
   await expect(login).resolves.toMatchObject({ status: "logged_in" });
+});
+
+test("runs codex logout and confirms the account is logged out", async () => {
+  const commands: string[][] = [];
+  const runCli: CodexCliRunner = async (command) => {
+    commands.push([...command]);
+    return command.includes("logout")
+      ? { exitCode: 0, text: "Logged out" }
+      : { exitCode: 1, text: "Not logged in" };
+  };
+  const result = await new CodexRuntimeAuthAdapter({ runCli }).logout({ workingDirectory: "/tmp" });
+  expect(result).toMatchObject({ status: "logged_out", authStatus: { state: "logged_out" } });
+  expect(commands).toEqual([
+    ["codex", "logout"],
+    ["codex", "login", "status"],
+  ]);
+});
+
+test("reports a failed logout process", async () => {
+  const result = await new CodexRuntimeAuthAdapter({
+    runCli: async () => ({ exitCode: 1, text: "logout failed" }),
+  }).logout({ workingDirectory: "/tmp" });
+  expect(result).toMatchObject({ status: "failed", reason: "process_failed" });
+});
+
+test("confirms logged out even when logout exits unsuccessfully", async () => {
+  const result = await new CodexRuntimeAuthAdapter({
+    runCli: async (command) =>
+      command.includes("status")
+        ? { exitCode: 1, text: "Not logged in" }
+        : { exitCode: 1, text: "", stderr: "already logged out" },
+  }).logout({ workingDirectory: "/tmp" });
+  expect(result).toMatchObject({ status: "logged_out" });
+});
+
+test("treats successful logout with unknown status as logged out", async () => {
+  const result = await new CodexRuntimeAuthAdapter({
+    runCli: async (command) =>
+      command.includes("status") ? { exitCode: 2, text: "unexpected" } : { exitCode: 0, text: "" },
+  }).logout({ workingDirectory: "/tmp" });
+  expect(result).toMatchObject({ status: "logged_out" });
+});
+
+test("classifies logout timeout and rejected command", async () => {
+  const timedOut = await new CodexRuntimeAuthAdapter({
+    runCli: async (command) =>
+      command.includes("status")
+        ? { exitCode: 2, text: "unknown" }
+        : { exitCode: -1, text: "", timedOut: true },
+  }).logout({ workingDirectory: "/tmp" });
+  expect(timedOut).toMatchObject({ status: "failed", reason: "timed_out" });
+  const rejected = await new CodexRuntimeAuthAdapter({
+    runCli: async (command) =>
+      command.includes("status")
+        ? { exitCode: 2, text: "unknown" }
+        : { exitCode: 1, text: "", stderr: "permission denied\n" },
+  }).logout({ workingDirectory: "/tmp" });
+  expect(rejected).toMatchObject({
+    status: "failed",
+    reason: "rejected",
+    detail: "permission denied",
+  });
+});
+
+test("uses separate login and logout version floors", async () => {
+  let logoutRan = false;
+  const adapter = new CodexRuntimeAuthAdapter({
+    version: "0.100.0",
+    runCli: async (command) => {
+      logoutRan ||= command.includes("logout");
+      return command.includes("status")
+        ? { exitCode: 1, text: "Not logged in" }
+        : { exitCode: 0, text: "" };
+    },
+  });
+  await expect(
+    adapter.startLogin({ workingDirectory: "/tmp" }, { onEvent() {}, prompt: async () => "" }),
+  ).resolves.toMatchObject({ status: "failed", reason: "process_failed" });
+  await expect(adapter.logout({ workingDirectory: "/tmp" })).resolves.toMatchObject({
+    status: "logged_out",
+  });
+  expect(logoutRan).toBe(true);
 });
