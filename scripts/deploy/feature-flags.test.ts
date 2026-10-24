@@ -1,0 +1,41 @@
+import { describe, expect, test } from "bun:test";
+import { readCompose } from "./deploy-test-support";
+
+type FlagDefinitions = {
+  flags: Record<
+    string,
+    {
+      state: string;
+      variants: Record<string, boolean>;
+      defaultVariant: string;
+      targeting?: unknown;
+    }
+  >;
+};
+
+const FLAGS_PATH = "/etc/coforge/feature-flags.json";
+
+describe("feature flags in the deployed Compose files", () => {
+  test("staging Web reads its flag definitions from a config inlined in its Compose file", async () => {
+    const compose = await readCompose("staging");
+    const web = compose.services.web;
+    expect(web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBe(FLAGS_PATH);
+    expect(web?.configs).toContainEqual({ source: "coforge_feature_flags", target: FLAGS_PATH });
+    const content = compose.configs?.coforge_feature_flags?.content;
+    expect(typeof content).toBe("string");
+    const definitions = JSON.parse(content as string) as FlagDefinitions;
+    expect(Object.keys(definitions.flags)).toEqual(["app-agent-manifest"]);
+    expect(definitions.flags["app-agent-manifest"]).toEqual({
+      state: "ENABLED",
+      variants: { on: true, off: false },
+      defaultVariant: "off",
+      targeting: { if: [{ in: [{ var: "workspaceSlug" }, ["default"]] }, "on", "off"] },
+    });
+  });
+
+  test("production turns no flag on", async () => {
+    const compose = await readCompose("production");
+    expect(compose.services.web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBeUndefined();
+    expect(compose.configs).toBeUndefined();
+  });
+});

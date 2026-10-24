@@ -25,9 +25,15 @@ export type ComposeSecretGrant =
 export type ComposeFile = {
   services: Record<
     string,
-    { command?: string[]; environment?: Record<string, string>; secrets?: ComposeSecretGrant[] }
+    {
+      command?: string[];
+      environment?: Record<string, string>;
+      secrets?: ComposeSecretGrant[];
+      configs?: { source: string; target: string }[];
+    }
   >;
   secrets: Record<string, { file?: string; environment?: string }>;
+  configs?: Record<string, { content?: string }>;
 };
 
 export const readCompose = async (environment: string) =>
