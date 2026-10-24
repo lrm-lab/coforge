@@ -301,3 +301,8 @@ export class AgentSessionRecoveryError extends Error {
     this.name = "AgentSessionRecoveryError";
   }
 }
+
+/** Valid HTTP failure status supplied by a provider; arbitrary numeric error codes are excluded. */
+export function isHttpErrorStatus(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 400 && value <= 599;
+}

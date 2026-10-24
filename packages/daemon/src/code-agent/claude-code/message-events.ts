@@ -1,5 +1,5 @@
 import type { ActivitySubagent } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { isHttpErrorStatus, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { asRecord, eventTime, nonEmptyString, textContent } from "#src/code-agent/json-record";
 
 /**
@@ -47,6 +47,9 @@ export function claudeAssistantEvents(
         events.push({
           type: "error",
           message: block.text,
+          ...(isHttpErrorStatus(record.api_error_status)
+            ? { httpStatus: record.api_error_status }
+            : {}),
           ...(apiError ? { providerErrorCode: apiError } : {}),
           occurredAt: eventTime(record),
         });

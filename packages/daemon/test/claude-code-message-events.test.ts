@@ -248,3 +248,12 @@ describe("claudeToolResults", () => {
     });
   });
 });
+
+test("captured Claude API errors preserve their structured HTTP status", async () => {
+  const capture = await Bun.file(
+    new URL("./fixtures/runtime-404-capture.json", import.meta.url),
+  ).json();
+  const { events } = claudeAssistantEvents(capture.claude.record);
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ type: "error", httpStatus: 404 });
+});

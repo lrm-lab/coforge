@@ -236,6 +236,8 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       retryable?: boolean;
       providerErrorCode?: string;
       providerErrorClass?: string;
+      /** Explicit provider HTTP response status; never inferred by an adapter. */
+      httpStatus?: number;
       providerErrorReason?: string;
       providerLimit?: {
         kind: "quota_exhausted" | "transient_rate_limit";
