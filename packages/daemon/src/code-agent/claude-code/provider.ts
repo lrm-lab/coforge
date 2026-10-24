@@ -13,7 +13,7 @@ import { readClaudeCodeContextReport } from "./context-report";
 import type { AgentContextReport } from "@lrm/coforge-sdk/internal";
 import { claudeLaunchCommand, claudeLaunchEnvironment } from "./launch-args";
 import { createPromptFile } from "./prompt-file";
-import { claudeStreamEvents } from "./stream-events";
+import { ClaudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
@@ -21,7 +21,7 @@ import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record
 import { claudeContextUsage, claudeServiceTierState } from "./observations";
 import { readClaudeRecycleBriefing } from "./recycle-briefing";
 import { readClaudeSessionResumeFacts } from "./session-transcript";
-import { TASK_LIFECYCLE_PHASE, isTaskStatus, type TaskStatus } from "./task-lifecycle";
+import { TASK_LIFECYCLE_PHASE, isTaskStatus, taskProgressEvent } from "./task-lifecycle";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
@@ -141,6 +141,7 @@ class ClaudeCodeAgentSession implements AgentSession {
    * call each belongs to; subagent types live in `#subagentLineage`. */
   readonly #tasks = new Map<string, string | undefined>();
   readonly #subagentLineage = new ClaudeSubagentLineage();
+  readonly #streamEvents = new ClaudeStreamEvents();
   #inputFailure: Error | undefined;
   #recoveryFailed = false;
   readonly #outstandingTools = new Set<string>();
@@ -271,12 +272,14 @@ class ClaudeCodeAgentSession implements AgentSession {
     this.#sessionId = fresh.sessionId;
     // The old process's tasks never report again: end each one, so the daemon stops counting it.
     for (const [taskId, toolUseId] of this.#tasks)
-      this.#emitTaskProgress(
-        "notification",
-        taskId,
-        toolUseId,
-        this.#subagentLineage.typeOf(toolUseId),
-        "stopped",
+      this.#emit(
+        taskProgressEvent(
+          "notification",
+          taskId,
+          toolUseId,
+          this.#subagentLineage.typeOf(toolUseId),
+          "stopped",
+        ),
       );
     this.#tasks.clear();
     this.#subagentLineage.clear();
@@ -470,26 +473,9 @@ class ClaudeCodeAgentSession implements AgentSession {
     const taskStatus =
       phase === "notification" && isTaskStatus(record.status) ? record.status : undefined;
     if (taskStatus) this.#tasks.delete(taskId);
-    this.#emitTaskProgress(phase, taskId, toolUseId, subagentType, taskStatus, eventTime(record));
-  }
-
-  #emitTaskProgress(
-    phase: Extract<AgentRuntimeEvent, { type: "subagent-progress" }>["phase"],
-    taskId: string,
-    toolUseId: string | undefined,
-    subagentType: string | undefined,
-    taskStatus?: TaskStatus,
-    occurredAt?: string,
-  ): void {
-    this.#emit({
-      type: "subagent-progress",
-      phase,
-      taskId,
-      ...(taskStatus ? { taskStatus } : {}),
-      ...(subagentType ? { subagentType } : {}),
-      ...(toolUseId ? { parentToolUseId: toolUseId } : {}),
-      ...(occurredAt ? { occurredAt } : {}),
-    });
+    this.#emit(
+      taskProgressEvent(phase, taskId, toolUseId, subagentType, taskStatus, eventTime(record)),
+    );
   }
 
   #accept(record: Readonly<Record<string, unknown>>): void {
@@ -561,7 +547,7 @@ class ClaudeCodeAgentSession implements AgentSession {
       return;
     }
     if (record.type === "stream_event") {
-      for (const streamed of claudeStreamEvents(record)) this.#emit(streamed);
+      for (const streamed of this.#streamEvents.read(record)) this.#emit(streamed);
       return;
     }
     if (record.type === "assistant") {

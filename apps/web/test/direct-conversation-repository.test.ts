@@ -2,7 +2,7 @@ import { flattenSqlValues } from "./helpers/prisma-sql";
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
-import { buildUserAgentConversationCreateInput } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { buildUserAgentConversationCreateInput } from "#src/server/db/repositories/user-agent-conversation-input.server";
 import {
   PrismaDirectConversationRepository,
   type AgentRecoveryContext,

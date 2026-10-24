@@ -130,6 +130,9 @@ function summarizeBash(command: unknown): { summary: string | undefined; toolNam
 
 type Args = readonly string[];
 type CoforgeCliTool = { tool: string; summary?: (args: Args) => string | undefined };
+/** A recognized CoForge CLI invocation: its tool, display summary and the arguments after the
+ * subcommand, as the shell passed them (not the sanitized row). */
+export type CoforgeInvocation = { tool: string; summary?: string; args: Args };
 
 const target = (args: Args) => flagValue(args, "--target");
 const taskRef = (args: Args) => {
@@ -194,11 +197,15 @@ const COFORGE_CLI_TOOLS: Readonly<Record<string, CoforgeCliTool>> = {
  * The semantic identity of a CoForge CLI invocation, or `null` when the command has none and
  * belongs in the ordinary command Activity. As in the reference client, a leading
  * `sh`/`bash`/`zsh -c` payload is looked into first; otherwise it is the first `coforge`
- * executable, after leading `NAME=value` assignments, in any `|`/`;`/`&&`/`||` segment.
+ * executable, after leading `NAME=value` assignments, in any `|`/`;`/`&&`/`||` segment. A
+ * `partial` command is still being written: its last token, which may still grow, is not read.
  */
-function resolveCoforgeInvocation(command: string): { tool: string; summary?: string } | null {
+export function resolveCoforgeInvocation(
+  command: string,
+  partial = false,
+): CoforgeInvocation | null {
   let first = true;
-  for (const tokens of shellSegments(command)) {
+  for (const tokens of shellSegments(command, partial)) {
     const index = skipEnvAssignments(tokens);
     if (first) {
       first = false;
@@ -211,12 +218,13 @@ function resolveCoforgeInvocation(command: string): { tool: string; summary?: st
   return null;
 }
 
-function mapCoforgeSubcommand(args: Args): { tool: string; summary?: string } | null {
+function mapCoforgeSubcommand(args: Args): CoforgeInvocation | null {
   for (const words of [3, 2]) {
     const key = args.slice(0, words).join(" ");
     if (!Object.hasOwn(COFORGE_CLI_TOOLS, key)) continue;
     const { tool, summary } = COFORGE_CLI_TOOLS[key]!;
-    return { tool, summary: summary?.(args.slice(words)) };
+    const rest = args.slice(words);
+    return { tool, summary: summary?.(rest), args: rest };
   }
   return null;
 }
@@ -233,7 +241,7 @@ function flagValues(args: Args, flag: string): string[] {
 }
 
 /** The last value of `flag`, as the CLI parser would keep it. */
-function flagValue(args: Args, flag: string): string | undefined {
+export function flagValue(args: Args, flag: string): string | undefined {
   return flagValues(args, flag).at(-1);
 }
 
@@ -273,8 +281,11 @@ function shellPayload(tokens: Args, index: number): string | undefined {
 // Yields a shell command line's non-empty argv-like segments one at a time, honouring
 // single/double quoting and backslash escapes, so a caller stops tokenising once it has its
 // answer. A new segment starts at each unquoted `|`, `;`, `&&` or `||`; tokenising stops at the
-// first unquoted `<<` or newline, so a heredoc body never reaches a token.
-function* shellSegments(command: string): Generator<string[]> {
+// first unquoted `<<` or newline, so a heredoc body never reaches a token. In `partial` mode the
+// command is still being written: a final token that no whitespace, operator, newline or `<<` has
+// closed (an unterminated word, an open quote, a quote just closed) is dropped.
+function* shellSegments(command: string, partial = false): Generator<string[]> {
+  let closed = false;
   let segment: string[] = [];
   let current = "";
   let inToken = false;
@@ -286,7 +297,10 @@ function* shellSegments(command: string): Generator<string[]> {
   let i = 0;
   while (i < command.length) {
     const ch = command[i]!;
-    if (ch === "\n") break;
+    if (ch === "\n") {
+      closed = true;
+      break;
+    }
     if (ch === " " || ch === "\t") {
       push();
       i++;
@@ -294,6 +308,7 @@ function* shellSegments(command: string): Generator<string[]> {
     }
     if (ch === "<" && command[i + 1] === "<") {
       push();
+      closed = true;
       break;
     }
     if ((ch === "|" || ch === "&") && command[i + 1] === ch) {
@@ -345,7 +360,7 @@ function* shellSegments(command: string): Generator<string[]> {
     current += ch;
     i++;
   }
-  push();
+  if (!partial || closed) push();
   if (segment.length > 0) yield segment;
 }
 

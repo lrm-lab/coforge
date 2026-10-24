@@ -19,6 +19,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - Adapters emit only official display events and explicit lineage, never raw reasoning.
   Claude Code text/thinking come once per completed `assistant` block, its stream deltas only as
   `progress`; a block reporting a failed API request (`error` field, `API Error:`) is an `error`.
+- A provider that streams a shell tool call's arguments feeds `ReplyIntentScanner` ([reply intent](../../../../docs/observability/reply-intent.md)), shell tools only; higher layers see only its neutral `reply-intent` events. Send targets are read in `send-command-target.ts`, never in display-only `tool-activity.ts`.
 - A `notice-undelivered` for a turn comes before that turn's `completed`, and echoes the
   `deliveryIds` `notify` was given: the daemon settles tracked mentions on `completed`. Kiro
   waits, bounded, for the turn's steering outcome before reporting the turn ended.

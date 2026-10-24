@@ -1,10 +1,10 @@
-# Mascots and the busy-Agents line
+# Mascots and the replying line
 
 Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
 
 - A mascot moves only where `AgentMascotView` draws it, and only on these surfaces: the
-  busy-Agents line above a main composer, the chat list header's busy Agents (below), the
-  Direct-message list rows (`DirectAgentAvatar` in
+  replying line above a composer (main pane and thread pane), the chat list header's busy Agents (below),
+  the Direct-message list rows (`DirectAgentAvatar` in
   `features/conversations/`, through `AgentMascotAvatar`; the row's pointer state reaches it as
   `hovered` through `useRowHovered`, so a hover repaints only the mascot), the Agent hover card, the
   Agent profile card (not its header, which repeats it) and the mascot picker
@@ -25,7 +25,7 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   leaves the initial on a small round tile. The figure keeps one size and place in every activity: a
   change only reshapes the face, poses an accessory, mutes the colours or shows the thinking
   bubble, which stays inside the box. The moving avatar (`AgentMascotAvatar`), the still one
-  (`AgentDisplayAvatar`, `AgentStackFace`), a channel's lone member and the busy-Agents line all
+  (`AgentDisplayAvatar`, `AgentStackFace`), a channel's lone member and the replying line all
   draw through it. A picture is a sticker when `isStickerPicture` (`features/avatars/sticker-picture.ts`) says so: an Agent's mascot
   (`isMascotPicture`) or a cartoon person (`isPersonPicture`, `src/lib/person-picture.ts`: four WebP
   stickers (256 px, transparent) `public/avatars/person-<n>-<version>.webp`, the profile avatar
@@ -42,15 +42,6 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   there is that round photo with a white edge. Stacked faces carry the stack's page-coloured
   separator ring. The pickers (`AvatarChoice`) draw each figure as a sticker on a tile whose
   selection is a neutral ring and light fill; the person presets stay still, the mascots move.
-- `busy-agents-strip.tsx` is the line above a main composer naming the conversation's Agent
-  members that are working or thinking, wherever they are busy: `busy-agents-summary.ts` (pure)
-  filters and groups them by `agentDisplay` label (`activitySentenceLabel` words it for the
-  sentence) and joins the names with `Intl.ListFormat`, the strip reads `useLiveAgents()`, and the
-  conversation hands it only the member ids through `ConversationProps.aboveComposer` (the main
-  pane only). One 24px mascot sticker (`AgentMascotView` in an `AvatarSticker`) cycles every 4s with a crossfade, the leaving
-  one a still picture (`busy-agents-strip.css`); reduced motion stops the cycle and the fade. The
-  sentence is plain text, not a live region; only the overflow count (`agent_busy_others`) is a
-  message, the labels are not localized.
 - The chat list header (`busy-agents-stage.tsx`, after the "Chat" heading) shows the Workspace's
   Agents that are working or thinking, every one the viewer may see and not only their own
   (`busy-agents.ts`, `use-workspace-busy-agents.ts`: Agents with a Direct message first, then
@@ -70,6 +61,20 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   when the cast changes. Each is the Agent's avatar as in a message stream: it peeks at the Agent
   card and opens the profile on a press (any visible Agent's profile opens, not only the viewer's
   own). Reduced motion leaves still faces and the count, with no rotation and no loop.
+- `replying-agents-line.tsx` is the line above a composer, in the main pane and in a thread pane,
+  saying which Agents are about to post in that place. The UI wording is "typing" ("Atlas, Ben and 2
+  others are typing…", `agent_replying_*`); in code it is a reply intent or "replying". The source
+  is the Agent's "about to post" signal, not its activity: `reply-intents.ts` holds the entries
+  (see [reply intents](../../../../../docs/observability/reply-intent.md)), the line shows those for
+  the open conversation's top level or the open thread's root, and `replying-agents-summary.ts`
+  (pure) picks the Agents the roster knows and words the names with `Intl.ListFormat`. Up to three
+  24px mascot stickers (`AgentMascotView` in an `AvatarSticker`) overlap, each acting out
+  `working`; the sentence names everyone and carries no activity label. It holds its own row above
+  the composer, so the last message is never covered, and renders nothing (and reads no roster)
+  while nobody is replying. An Agent's own message arriving in that place ends one of its entries
+  (`agent-post-clearing.ts`). The line eases in (`replying-agents-line.css`) unless motion is
+  reduced; the sentence is plain text, not a live region, and no other state (reading, working)
+  appears in it.
 - A moving mascot's eyes follow the cursor. `mascot-look.ts` (pure) maps the pointer's offset from
   the canvas centre to `lookX` / `lookY` in [-1, 1] (full deflection at 350 px, flattening toward
   it), and `mascot-look-tracker.ts` is the one passive document `pointermove` listener every

@@ -2,9 +2,13 @@ import type { ActivityTrajectoryEntry } from "@lrm/coforge-sdk/internal";
 import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
-  decodeAgentActivity,
   WORKSPACE_PROTOCOL_MAJOR,
+  type AgentActivity,
 } from "@lrm/coforge-sdk/internal";
+import {
+  decodeAgentActivityFrame,
+  type AgentActivityFrame,
+} from "@lrm/coforge-sdk/internal/reply-intent";
 
 import { AGENT_ACTIVITY_WINDOW } from "./agent-activity-window";
 import { AGENT_VISIBILITY } from "./agent-visibility";
@@ -69,58 +73,74 @@ export function isRunStartMarker(detailKind: string, entries?: ActivityTrajector
 export type AgentActivityObservation = { agentId: string; entry: ActivityEntry };
 
 /**
- * Decodes one Activity publication within a Workspace (and optionally one
- * Agent) scope. Malformed or out-of-scope observations return undefined.
+ * What one Activity-channel publication carries: a reply intent or an observation, parsed once.
+ * Anything that is not such a frame is nothing; realtime data is untrusted input.
  */
+export function decodeActivityFrame(data: unknown): AgentActivityFrame | undefined {
+  if (!(data instanceof Uint8Array)) return undefined;
+  try {
+    return decodeAgentActivityFrame(data);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The observation an Activity within a Workspace (and optionally one Agent) scope carries.
+ * Out-of-scope observations, and ones the timeline does not keep, return undefined.
+ */
+export function activityObservation(
+  event: AgentActivity,
+  scope: { workspaceId: string; agentId?: string },
+): AgentActivityObservation | undefined {
+  if (
+    event.protocolMajor !== WORKSPACE_PROTOCOL_MAJOR ||
+    event.workspaceId !== scope.workspaceId ||
+    !event.agentId ||
+    (scope.agentId !== undefined && event.agentId !== scope.agentId) ||
+    !event.launchId ||
+    !Number.isSafeInteger(event.clientSeq) ||
+    event.clientSeq < 1 ||
+    !Number.isSafeInteger(event.observedAtMs) ||
+    event.observedAtMs < 1 ||
+    // A busy heartbeat only renews the display lease; a content-free
+    // runtime_progress frame carries no rendered content; a run-start marker carries
+    // no rendered content either (see isRunStartMarker); a reply to the
+    // server's own liveness probe is a liveness fact, not new
+    // content. None of these belong in the Activity timeline or the
+    // recent-activity list.
+    event.isHeartbeat === true ||
+    event.detailKind === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS ||
+    isRunStartMarker(event.detailKind, event.entries) ||
+    Boolean(event.probeId)
+  )
+    return undefined;
+  return {
+    agentId: event.agentId,
+    entry: {
+      conversationId: event.conversationId,
+      conversationTarget: event.conversationTarget,
+      launchId: event.launchId,
+      clientSeq: event.clientSeq,
+      activityKind: event.activityKind,
+      detailKind: event.detailKind,
+      level: event.level,
+      detail: event.detail,
+      observedAtMs: event.observedAtMs,
+      entries: event.entries,
+      runtimeError: event.runtimeError,
+      producerFactId: event.producerFactId,
+    },
+  };
+}
+
+/** `activityObservation` of one publication: a decoded observation within the scope, or nothing. */
 export function decodeActivityObservation(
   data: unknown,
   scope: { workspaceId: string; agentId?: string },
 ): AgentActivityObservation | undefined {
-  if (!(data instanceof Uint8Array)) return undefined;
-  try {
-    const event = decodeAgentActivity(data);
-    if (
-      event.protocolMajor !== WORKSPACE_PROTOCOL_MAJOR ||
-      event.workspaceId !== scope.workspaceId ||
-      !event.agentId ||
-      (scope.agentId !== undefined && event.agentId !== scope.agentId) ||
-      !event.launchId ||
-      !Number.isSafeInteger(event.clientSeq) ||
-      event.clientSeq < 1 ||
-      !Number.isSafeInteger(event.observedAtMs) ||
-      event.observedAtMs < 1 ||
-      // A busy heartbeat only renews the display lease; a content-free
-      // runtime_progress frame carries no rendered content; a run-start marker carries
-      // no rendered content either (see isRunStartMarker); a reply to the
-      // server's own liveness probe is a liveness fact, not new
-      // content. None of these belong in the Activity timeline or the
-      // recent-activity list.
-      event.isHeartbeat === true ||
-      event.detailKind === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS ||
-      isRunStartMarker(event.detailKind, event.entries) ||
-      Boolean(event.probeId)
-    )
-      return undefined;
-    return {
-      agentId: event.agentId,
-      entry: {
-        conversationId: event.conversationId,
-        conversationTarget: event.conversationTarget,
-        launchId: event.launchId,
-        clientSeq: event.clientSeq,
-        activityKind: event.activityKind,
-        detailKind: event.detailKind,
-        level: event.level,
-        detail: event.detail,
-        observedAtMs: event.observedAtMs,
-        entries: event.entries,
-        runtimeError: event.runtimeError,
-        producerFactId: event.producerFactId,
-      },
-    };
-  } catch {
-    return undefined;
-  }
+  const frame = decodeActivityFrame(data);
+  return frame && "activity" in frame ? activityObservation(frame.activity, scope) : undefined;
 }
 
 export function mergeAgentActivity(current: ActivityEntry[], incoming: ActivityEntry[]) {

@@ -30,7 +30,6 @@ import {
   type MessageSenderKind,
   type MessageTaskMetadata,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentTargetFreshness } from "#src/server/agents/agent-messages.server";
 import { agentHistoryModelSeenBoundary } from "#src/server/agents/agent-history-boundary.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
@@ -100,6 +99,12 @@ import {
   type AgentAttentionScope,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
+import {
+  agentHistoryConsumptionScope,
+  type ResolvedAgentTarget,
+} from "./resolved-agent-target.server";
+import { buildUserAgentConversationCreateInput } from "./user-agent-conversation-input.server";
+import { AGENT_RECOVERY_MESSAGE_LIMIT, type AgentRecoveryRow } from "./agent-recovery-row.server";
 
 const MESSAGE_NOT_VISIBLE = "message not found or not visible to this Agent";
 
@@ -194,20 +199,6 @@ export type PendingAgentDelivery = AgentRecoveryContext["resumeMessages"][number
  * The port types keep a plain `body: string`, which this is assignable to. */
 type AgentFacing<T extends { body: string }> = Omit<T, "body"> & { body: AgentReadableBody };
 
-const AGENT_RECOVERY_MESSAGE_LIMIT = 100;
-/** The `consumption_scope` of an Agent history read: which conversation it consumed, for
- * a direct conversation or a thread, whose target has more than one spelling. None for a channel's
- * top level. */
-function agentHistoryConsumptionScope(
-  agentId: string,
-  { conversationId, threadRootId, canonicalTarget, isChannel }: ResolvedAgentTarget,
-): AgentHistoryConsumptionScope | undefined {
-  if (threadRootId)
-    return { agentId, conversationId, channelType: "thread", target: canonicalTarget };
-  if (!isChannel) return { agentId, conversationId, channelType: "dm", target: canonicalTarget };
-  return undefined;
-}
-
 /**
  * Next sequence for a conversation; holds the conversation row lock until the transaction ends.
  * Exported so other message-anchored writers (e.g. `ActionCards.prepare`) serialize through the
@@ -222,27 +213,6 @@ export async function allocateSequence(tx: Prisma.TransactionClient, conversatio
   });
   return (last?.sequence ?? 0) + 1;
 }
-
-type AgentRecoveryRow = {
-  id: string;
-  sequence: number;
-  body: string;
-  conversationId: string;
-  threadRootId: string | null;
-  senderMemberId: string | null;
-  deliveryId: string | null;
-  senderAgentName: string | null;
-  senderAgentDescription: string | null;
-  senderUsername: string | null;
-  senderUserDescription: string | null;
-  channelName: string | null;
-  /** The conversation's other active member: the address a DM reply targets. */
-  otherUsername: string | null;
-  unreadCount: number;
-  globalRank: number;
-  /** The Agent is not in the channel: it was notified of this one message by the sender. */
-  nonMemberMention: boolean;
-};
 
 /** What an Agent's message did not reach: see `agentMentionReport`. */
 export type AgentMentionReport = {
@@ -441,36 +411,6 @@ function unauthorizedScope(): never {
   throw new Error("conversation scope is not authorized");
 }
 
-export const buildUserAgentConversationCreateInput = (
-  workspaceId: string,
-  userId: string,
-  agentId: string,
-) =>
-  ({
-    workspace: { connect: { id: workspaceId } },
-    directKey: agentDirectKey(userId, agentId),
-    members: {
-      create: [
-        {
-          workspace: { connect: { id: workspaceId } },
-          user: { connect: { id: userId } },
-        },
-        {
-          workspace: { connect: { id: workspaceId } },
-          agent: { connect: { id: agentId } },
-        },
-      ],
-    },
-  }) satisfies Prisma.ConversationCreateInput;
-
-/** An Agent-facing target (`#channel` or `@user`, optionally `:root`) resolved by `resolveAgentTarget`. */
-type ResolvedAgentTarget = {
-  conversationId: string;
-  threadRootId: string | null;
-  canonicalTarget: string;
-  isChannel: boolean;
-};
-
 export class PrismaDirectConversationRepository implements DirectConversationRepository {
   /** Channel lookups this instance has made, kept only when it serves a single request. */
   readonly #agentChannels?: Map<string, Promise<{ id: string }>>;
@@ -626,16 +566,53 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
    * a direct message to someone who is not a Workspace member is refused with
    * `DM_PEER_NOT_IN_WORKSPACE` before anything is written.
    */
-  async resolveAgentSendTarget(
+  resolveAgentSendTarget(workspaceId: string, agentId: string, target: string) {
+    return this.#resolveAgentPostTarget(workspaceId, agentId, target, (userId) =>
+      this.getOrCreateUserAgent(workspaceId, userId, agentId),
+    );
+  }
+
+  /**
+   * Where a send to `target` would post, for the "about to post" signal: the send path's checks
+   * without its writes. A direct message is only looked up, never started, and `peerUserId` names
+   * the person on its other side. A Workspace assistant's direct message is not resolved: its
+   * lookup opens one.
+   */
+  async resolveAgentReplyTarget(workspaceId: string, agentId: string, target: string) {
+    let peerUserId: string | undefined;
+    const resolved = await this.#resolveAgentPostTarget(
+      workspaceId,
+      agentId,
+      target,
+      async (userId) => {
+        const direct = await this.findUserAgentConversation(workspaceId, userId, agentId);
+        if (!direct) throw new AppError("NOT_FOUND");
+        const member = await this.db.workspaceMembership.findUnique({
+          where: { workspaceId_userId: { workspaceId, userId } },
+          select: { userId: true },
+        });
+        if (!member) throw new AppError("DM_PEER_NOT_IN_WORKSPACE");
+        peerUserId = userId;
+        return direct;
+      },
+      true,
+    );
+    return { ...resolved, peerUserId };
+  }
+
+  async #resolveAgentPostTarget(
     workspaceId: string,
     agentId: string,
     target: string,
+    directConversation: (userId: string) => Promise<{ id: string }>,
+    readOnly = false,
   ): Promise<ResolvedAgentTarget> {
     await appEventConversation(this.db, workspaceId, agentId, target.split(":")[0]!, {
       send: true,
     });
     const delegate = await workspaceAssistantUser(this.db, workspaceId, agentId);
     if (delegate && target.split(":")[0] !== `@${delegate.username}`) {
+      if (readOnly && !target.startsWith("#")) throw new AppError("ACCESS_DENIED");
       const scope = await new WorkspaceAssistantCommands(this.db).target(
         { workspaceId, agentId },
         target,
@@ -647,9 +624,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         isChannel: scope.isChannel,
       };
     }
-    return this.#resolveAgentTarget(workspaceId, agentId, target, (userId) =>
-      this.getOrCreateUserAgent(workspaceId, userId, agentId),
-    );
+    return this.#resolveAgentTarget(workspaceId, agentId, target, directConversation);
   }
 
   async #resolveAgentTarget(

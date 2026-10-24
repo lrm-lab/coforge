@@ -1,0 +1,20 @@
+/*
+ * The replying line above a composer eases in rather than popping; with reduced motion it simply
+ * appears. Offsets are in rem (0.25rem is 4px). The mascots animate themselves.
+ */
+@keyframes replying-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .replying-line {
+    animation: replying-line-in 150ms ease-out both;
+  }
+}

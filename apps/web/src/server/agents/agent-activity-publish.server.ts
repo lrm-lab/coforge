@@ -1,6 +1,7 @@
 import { isRecord } from "@lrm/coforge-sdk/internal";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
-import { decodeAgentActivity, encodeAgentActivity } from "@lrm/coforge-sdk/internal";
+import { encodeAgentActivity } from "@lrm/coforge-sdk/internal";
+import { decodeAgentActivityFrame } from "@lrm/coforge-sdk/internal/reply-intent";
 
 import { getDatabaseClient } from "#src/server/db/client.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -13,23 +14,23 @@ import { getAgentDisplay, type AgentDisplay } from "./agent-display.server";
 import { ensureAgentActivitySweep } from "./agent-activity-sweep.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { agentStatusChannelFor } from "#src/features/agents/agent-status-realtime";
+import { agentActivityChannel, isRunStartMarker } from "#src/features/agents/agent-activity";
+import { normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import {
-  agentActivityChannel,
-  agentActivityChannelFor,
-  isRunStartMarker,
-} from "#src/features/agents/agent-activity";
-import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
+  agentInPublicationScope,
+  publicationDenied as unauthorized,
+  relayActivityFrame,
+} from "./agent-activity-relay.server";
+import {
+  handleReplyIntentPublication,
+  type ReplyIntentPublicationDependencies,
+} from "./reply-intent-publish.server";
+import { cachedReplyTargetResolver } from "./reply-target-cache.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
 
-type AgentActivityPublicationDependencies = {
+type AgentActivityPublicationDependencies = ReplyIntentPublicationDependencies & {
   proxySecret: string | undefined;
-  agentBelongsToWorkspace(workspaceId: string, agentId: string): Promise<boolean>;
-  agentBelongsToComputer(
-    workspaceId: string,
-    agentId: string,
-    computerId: string,
-  ): Promise<boolean>;
-  computerBelongsToWorkspace(workspaceId: string, computerId: string): Promise<boolean>;
   observe(activity: TrustedAgentActivity): Promise<void>;
   currentRuntimeFence?(
     workspaceId: string,
@@ -38,28 +39,7 @@ type AgentActivityPublicationDependencies = {
   ): Promise<{ daemonInstanceId: string; launchId: string } | undefined>;
   display?: Pick<AgentDisplay, "observeActivity">;
   publishJson?(channel: string, data: unknown): Promise<void>;
-  /** The Agent's current visibility, read fresh (no cache) for every publication —
-   * never assumed from a prior request, and never optional: a caller that cannot answer this
-   * question must not silently fall back to the shared channel. A recognized non-`"public"`
-   * value routes the frame to the per-Agent channels; an unrecognized persisted value fails
-   * closed the same way `canSeeAgent`/`visibleAgentWhere` treat it. `undefined` — the lookup
-   * found nothing to route by — is rejected outright; `agentBelongsToWorkspace` already rejects
-   * an Agent that is not in the workspace, so this is the only other path to it. */
-  agentVisibility(workspaceId: string, agentId: string): Promise<string | undefined>;
-  /** Raw binary republish (Centrifugo server API `publish`, not the JSON `publishJson`) used only
-   * to re-route a private Agent's frame to its own per-Agent activity channel — the public path
-   * still lets Centrifugo do the actual shared-channel publish via the returned `result.b64data`. */
-  publish?(channel: string, data: Uint8Array): Promise<void>;
 };
-
-function bytesToBase64(bytes: Uint8Array) {
-  return Buffer.from(bytes).toString("base64");
-}
-
-const unauthorized = () =>
-  Response.json({
-    error: { code: 403, message: "activity publication is not authorized" },
-  });
 
 /** Validate one client-originated Centrifugo publication before it reaches the Activity channel. */
 export async function handleAgentActivityPublication(
@@ -91,13 +71,23 @@ export async function handleAgentActivityPublication(
       return unauthorized();
 
     const payload = Uint8Array.from(atob(body.b64data), (character) => character.charCodeAt(0));
-    const activity = decodeAgentActivity(payload);
+    const decoded = decodeAgentActivityFrame(payload);
+    // An "about to post" signal rides this channel but is no observation (no launch, never stored).
+    if ("replyIntent" in decoded)
+      return await handleReplyIntentPublication(
+        decoded.replyIntent,
+        { workspaceId, computerId },
+        dependencies,
+      );
+    const { activity } = decoded;
     if (
       activity.protocolMajor !== 1 ||
       activity.workspaceId !== workspaceId ||
-      !(await dependencies.computerBelongsToWorkspace(workspaceId, computerId)) ||
-      !(await dependencies.agentBelongsToWorkspace(workspaceId, activity.agentId)) ||
-      !(await dependencies.agentBelongsToComputer(workspaceId, activity.agentId, computerId))
+      !(await agentInPublicationScope(dependencies, {
+        workspaceId,
+        computerId,
+        agentId: activity.agentId,
+      }))
     )
       return unauthorized();
 
@@ -125,7 +115,6 @@ export async function handleAgentActivityPublication(
     // value fails closed to private the same way `canSeeAgent`/`visibleAgentWhere` do.
     const visibility = await dependencies.agentVisibility(workspaceId, activity.agentId);
     if (visibility === undefined) return unauthorized();
-    const isPrivate = visibility !== AGENT_VISIBILITY.PUBLIC;
     const statusChannel = agentStatusChannelFor(workspaceId, activity.agentId, visibility);
     const history = isFillerActivity
       ? Promise.resolve()
@@ -150,32 +139,11 @@ export async function handleAgentActivityPublication(
     })().catch(() => {});
     await Promise.all([history, reduce]);
 
-    if (isPrivate) {
-      // The frame still reaches its own audience — just not the shared broadcast. Best-effort,
-      // like every other Activity delivery in this file: a failed re-publish here does not turn
-      // into a retry or a spool, it only means this one frame is missed live (history already
-      // recorded it above).
-      await dependencies
-        .publish?.(
-          agentActivityChannelFor(workspaceId, activity.agentId, visibility),
-          encodeAgentActivity(cloudActivity),
-        )
-        .catch(() => {});
-      // Centrifugal's publish proxy treats an `error` result as a plain denial that leaves the
-      // connection open (https://centrifugal.dev/docs/server/proxy#publish-proxy) — the least
-      // noisy refusal available, unlike a `disconnect` result, which would drop the Daemon's
-      // entire WSS connection over one re-routed Agent.
-      return Response.json({
-        error: { code: 1000, message: "activity re-routed to a private channel" },
-      });
-    }
-
-    return Response.json({
-      result: {
-        skip_history: true,
-        b64data: bytesToBase64(encodeAgentActivity(cloudActivity)),
-      },
-    });
+    return relayActivityFrame(
+      encodeAgentActivity(cloudActivity),
+      { workspaceId, agentId: activity.agentId, visibility },
+      dependencies,
+    );
   } catch {
     return unauthorized();
   }
@@ -250,6 +218,18 @@ export function publicationAgentLookups(db: PrismaClient): PublicationAgentLooku
   };
 }
 
+/** A reply intent's send targets, read through the send path's own resolution and remembered for a
+ * call's repeats. A target the Agent cannot post to rejects: the publication is denied. */
+const replyTargets = cachedReplyTargetResolver(async ({ workspaceId, agentId, target }) => {
+  const db = getDatabaseClient();
+  if (!db) return undefined;
+  const { conversationId, threadRootId, peerUserId } = await new PrismaDirectConversationRepository(
+    db,
+    { oneRequest: true },
+  ).resolveAgentReplyTarget(workspaceId, agentId, target);
+  return { conversationId, threadRootId, ...(peerUserId ? { peerUserId } : {}) };
+});
+
 export function createAgentActivityPublicationHandler() {
   return async (request: Request) => {
     const db = getDatabaseClient();
@@ -276,7 +256,10 @@ export function createAgentActivityPublicationHandler() {
           }),
         ),
       observe: (observation) => activity.record(observation),
-      publish: centrifugo ? (channel, data) => centrifugo.publish(channel, data) : undefined,
+      resolveReplyTarget: replyTargets,
+      publish: centrifugo
+        ? (channel, data, options) => centrifugo.publish(channel, data, options)
+        : undefined,
       display,
       publishJson: centrifugo
         ? (channel, data) => centrifugo.publishJson(channel, data)

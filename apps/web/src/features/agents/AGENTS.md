@@ -96,8 +96,8 @@ These rules apply to `src/features/agents/`.
   while the member timeline aggregates groups. Timeline rows show no conversation link (like
   every other Agent's); the lineage stays in the data. Unscoped historical rows keep their
   original meaning.
-- Mascots and the busy-Agents line above a main composer (`busy-agents-strip.tsx`) follow
-  [mascots.md](mascots.md).
+- Mascots and the replying line above a composer (`replying-agents-line.tsx`) follow
+  [mascots.md](mascots.md); its store, feeds and clearing: [reply-intent.md](../../../../../docs/observability/reply-intent.md).
 - The Agent card (`agent-hover-card.tsx`) peeks from the avatars and the
   @mention chips (`conversations/mention-chip-hover.tsx`; a person's chip peeks
   `conversations/person-hover-card.tsx`) in a message stream, and from the chat list header's

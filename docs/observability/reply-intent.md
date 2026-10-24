@@ -1,0 +1,66 @@
+# 即将发言信号（reply intent）
+
+Agent 即将在某个会话里发言时，输入框上方显示“某某正在输入…”（界面文案是“正在输入”，代码里叫 reply intent / replying）。这个信号是 best-effort 观察：Daemon 不等待、不重试、不落盘，丢一帧只会让提示晚出现或到期自行消失。设计参考了参考产品的行为，实现和命名是 CoForge 自己的。
+
+信号的去向取决于目标：
+
+- 频道：走现有的 Agent Activity 通道（`agent:activity:<workspace_id>`，私有 Agent 走其专属通道），与 Activity 同一套路由；
+- 私信（目标是人，`@user[:thread]`）：**不进任何 Agent Activity 通道**。共享通道上每个 Workspace 成员都收得到，会泄露这场私信的存在、会话 id 和时间。服务端改为只发布到该私信对方本人的 `chat:user:<user_id>`，并丢弃 Daemon 的原发布。
+
+## 线上格式（additive，`protocol_major` 仍为 1）
+
+`AgentActivity.reply_intent`（字段 24，`ReplyIntent`）：
+
+| 字段 | 语义 |
+| --- | --- |
+| `phase` | `start` 或 `end` |
+| `call_id` | 触发它的工具调用 id；`start` 会重复，`end` 指向它 |
+| `target` | 仅 Daemon→服务端：Agent 传给 `coforge message send --target` 的原始目标（`#channel`、`@user`、`#channel:thread`）；`end` 重复它，服务端据此把 `end` 送到 `start` 去的地方 |
+| `early` | 目标在工具参数流式输出完成前就已知（仅 `start`，Daemon 置位；见下方“提前信号”）。参考产品有同名字段，且便于诊断“提前”命中率，所以保留 |
+| `conversation_id`、`thread_root_id` | 仅服务端→浏览器：服务端解析出的会话与线程根（顶层发言为空） |
+
+带 `reply_intent` 的帧**不是** Activity 观察：不带 `launch_id` 与 `client_seq`，所以不认识它的旧读取方会按无效 Activity 拒绝它。编解码在 `packages/coforge-sdk/src/internal/reply-intent.ts`：`encodeAgentReplyIntent`；`decodeAgentActivityFrame` 把一帧只解析一次，返回 `{ replyIntent }` 或 `{ activity }`（服务端与浏览器都用它）；`isReplyIntentTarget` 是 `target` 的唯一限制（非空、至多 200 个码点）；`call_id` 用 `isActivityCallId`。
+
+## Daemon
+
+`daemon-runtime/reply-intent-tracker.ts` 按 launch 观察 provider 无关的运行时事件，`reply-intent-publisher.ts`（在 `runtime.ts` 里构造）负责发布。`code-agent/send-command-target.ts` 的 `sendMessageTarget` 判断一次工具调用是否是 Agent 自己运行的 `coforge message send`，并从调用本身的参数里取出原始 `--target`（不是展示行里被截断、被折叠空白的那份）；子 Agent 的调用、`--help`/`-h`、没有目标或目标超限的调用都不算。`tool-activity.ts` 只负责展示。
+
+- 提前信号或 `tool-start`（先到者）立即发 `start`，之后每 8 秒（`REPLY_INTENT_REFRESH_MS`）重发；每个 tracker 只有一个定时器，仅在有调用存活时运行；
+- 工具调用结束、本回合 `completed`、launch 退出或已持续 2 分钟（`REPLY_INTENT_MAX_MS`）时发 `end`，`end` 重复该调用的 `target`；
+- 每个 Agent 同时最多 4 个（`REPLY_INTENT_MAX_LIVE_PER_AGENT`）；
+- 以真实的 `tool-start` 为准：提前命中的调用在 `tool-start` 时若没有目标（如 `--help`）则结束，若目标不同（如后面又出现一个 `--target`）则结束并以真实目标重新开始；
+- 模型放弃了提前命中的调用（Claude `message_start`、Pi `turn_start` 时仍未完成参数）：adapter 发 `reply-intent-retracted`，tracker 结束其中还没有 `tool-start` 的调用；
+- 断线时直接丢弃，不缓冲；`start` 需要运行中的 runtime、Agent 当前 launch 且 launch 不在停止中，`end` 只做收尾，永远发出。
+
+### 提前信号
+
+模型要写完整个工具调用（含很长的消息正文）后才会有 `tool-start`，提示只会闪现一秒。所以在 provider 仍在流式输出工具参数时，adapter 就把 shell 工具调用的参数片段（调用 id、JSON 片段）交给 provider 无关的 `code-agent/reply-intent-scanner.ts`：
+
+- adapter 只把 shell 类工具（`isShellToolName`）的调用交给它；最多同时跟踪 16 个调用（淘汰最旧的）；
+- 累计参数文本超过 8 KiB 即放弃该调用（唯一的上限）；增量解析 `command` 的字符串值（`streamed-json-string-field.ts`，处理转义，包括被拆在两个片段之间的 `\uXXXX`），只读顶层字段；
+- 命令文本里还没有 `coforge` 时不解析；之后每出现 shell token 边界（空白、引号、`| ; & < > ( )`）或字符串写完时，用 `sendCommandTarget(command, "partial")` 判断：已闭合的 token 里是否是 Agent 自己的 `coforge message send --target …`（`shellSegments` 的 partial 模式丢弃末尾可能还在增长的 token：`--target @bo`、未闭合或刚闭合的引号）。命令里出现换行或 heredoc 而其前没有 `coforge`，或字符串写完仍没有命中，则放弃该调用；
+- 第一次命中就产出一个 `reply-intent` 事件（`id`、`target`），之后不再扫描该调用。Tracker 以 `early=true` 立即开始。没有提前命中的调用，仍由 `tool-start` 以 `early=false` 开始；
+- 回合开始、`tool_use`/`toolcall` 结束时释放对应状态；回合开始时仍未完成的已命中调用被撤回（`reset()` 返回它们）。
+
+哪些 adapter 有流式参数：
+
+| adapter | 是否流式参数 | 接入 |
+| --- | --- | --- |
+| Claude Code | 是（`--include-partial-messages` 已开启：`stream_event` 的 `content_block_start`（tool_use 的 id 与名称）+ `input_json_delta`，按 block index 对应） | `claude-code/stream-events.ts` 的 `ClaudeStreamEvents` |
+| Pi（含内置 CoForge Agent） | 是（`toolcall_delta`，调用 id 与名称在 `partial.content[contentIndex]`） | `pi/reply-intents.ts` 的 `PiReplyIntents` |
+| Codex、Cursor、OpenCode、Grok、Kiro、Antigravity | 否：adapter 与其夹具里没有参数片段，只在调用开始或完成时给出完整参数 | 只有 `tool-start` 路径 |
+
+## 服务端
+
+发布代理（`agent-activity-publish.server.ts`）把每帧只解码一次；带 `reply_intent` 的交给 `reply-intent-publish.server.ts`。两者共用 `agent-activity-relay.server.ts` 的范围校验（Workspace、Computer、Agent 归属）和中继（公开 Agent 走共享通道，其余 Agent 走专属通道）。
+
+- 目标由 `PrismaDirectConversationRepository.resolveAgentReplyTarget` 解析：发送路径同一套语法（`#channel[:thread]`、`@user[:thread]`）和检查（App 事件会话只读、Workspace assistant 的私信不解析、私信对方须在 Workspace 内），但只读：Agent 与该用户尚无私信时不解析，也不创建私信。解析不出的帧被拒绝（Centrifugo 只丢这一次发布）。结果按 Workspace、Agent、调用、目标缓存约 30 秒（`reply-target-cache.server.ts`，有上限），8 秒一次的重发和 `end` 不再查库；
+- 频道的 `start` 转发为 `conversation_id`/`thread_root_id`，`end` 不需要解析，直接按 Agent 的 Activity 路由；
+- 私信的 `start` 与 `end` 都解析目标，只发布到对方本人的 `chat:user:<user_id>`（`skip_history`，重订阅恢复不重放），再答复发布代理丢弃原发布；永远不进 Activity 通道；
+- 转发的 `start` 只带 `phase`、`call_id`、`early`、`conversation_id`、`thread_root_id`；转发的 `end` 只有 `phase` 与 `call_id`，Daemon 发来的其余字段一律不转发；不入库，不改变 Agent display。
+
+## 浏览器
+
+`features/agents/reply-intents.ts` 的 store 以 `(agent, call)` 为键：`start` 设 20 秒截止（重发刷新），`end` 或该 Agent 在同一位置的消息到达则移除，并记住已结束的调用 1 分钟，防止迟到的 `start` 复活。Activity 通道的帧由 `useWorkspaceActivityRealtime` 喂入，私信的帧由 `useUserChannelReplyIntents`（`reply-intents-realtime.ts`）从本人的 `chat:user:<id>` 订阅（与其他功能共用同一个订阅）喂入；重新订阅、切换 Workspace 时清空。
+
+Agent 消息到达时的清除（`agent-post-clearing.ts`）：只看与该位置同一线程根的消息；消息列表为空不算“看过”，不设基线；每条新的 Agent 消息只清除该 Agent 在该位置最早的一个条目。主窗格只显示顶层（`thread_root_id` 为空）的条目，线程窗格按根显示。

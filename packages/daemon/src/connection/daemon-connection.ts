@@ -1,5 +1,11 @@
 import { Centrifuge, disconnectedCodes, type ErrorContext } from "centrifuge/build/protobuf";
 import type { PiChatRequest, PiChatFrame } from "@lrm/coforge-sdk/internal/pi-chat-wire";
+import {
+  encodeAgentReplyIntent,
+  type AgentReplyIntent,
+} from "@lrm/coforge-sdk/internal/reply-intent";
+import { ListenerSlot } from "./listener-slot";
+import { rpcData } from "./rpc-data";
 import { DaemonQueries } from "./daemon-queries";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type {
@@ -404,6 +410,8 @@ export interface DaemonConnectionClient {
     agentApiKey: string,
   ): Promise<AgentReminderOperationResponse>;
   sendAgentActivity?(activity: AgentActivity): void;
+  /** Best effort: dropped, never buffered, while disconnected. */
+  sendAgentReplyIntent?(frame: AgentReplyIntent): void;
   sendAgentStatus?(status: AgentStatus): void;
   reportAgentSession?(report: AgentSessionReport): Promise<void>;
   /** Fire-and-forget: never blocks or fails a launch. Buffered latest-per-agent while
@@ -517,26 +525,6 @@ export const defaultCentrifugeWorkspaceClientFactory: CentrifugeWorkspaceClientF
 
 /** A migration lease as it arrived: `deadline` is its expiry in this Computer's clock. */
 export type ReceivedAgentMigrationLease = AgentMigrationLease & { deadline: number };
-
-/** One replaceable listener; unsubscribing only clears the listener it registered. */
-class ListenerSlot<Listener extends (value: never) => unknown> {
-  #listener: Listener | undefined;
-
-  set(listener: Listener): () => void {
-    this.#listener = listener;
-    return () => {
-      if (this.#listener === listener) this.#listener = undefined;
-    };
-  }
-
-  get current(): Listener | undefined {
-    return this.#listener;
-  }
-
-  clear(): void {
-    this.#listener = undefined;
-  }
-}
 
 /** The Daemon's single connection for its configured Workspace. */
 export class DaemonConnection implements DaemonConnectionClient {
@@ -921,7 +909,12 @@ export class DaemonConnection implements DaemonConnectionClient {
       this.#pendingActivity.set(activity.agentId, activity);
       return;
     }
-    this.#publishActivity(this.#client, activity);
+    this.#publishActivity(this.#client, activity.workspaceId, encodeAgentActivity(activity));
+  }
+
+  sendAgentReplyIntent(frame: AgentReplyIntent): void {
+    const client = this.#activeClient();
+    if (client) this.#publishActivity(client, frame.workspaceId, encodeAgentReplyIntent(frame));
   }
 
   /** Fire-and-forget; never awaited by a caller and never fails a launch. */
@@ -971,11 +964,14 @@ export class DaemonConnection implements DaemonConnectionClient {
     if (pending && pending.launchId !== launchId) this.#pendingSessionInvalidate.delete(agentId);
   }
 
-  #publishActivity(client: CentrifugeWorkspaceClient, activity: AgentActivity): void {
-    // Activity is an observation. Failure must not block Agent work or be retried.
-    void client
-      .publish?.(`agent:activity:${activity.workspaceId}`, encodeAgentActivity(activity))
-      .catch(() => {});
+  /** Puts an encoded Activity-channel frame (an observation or a reply intent) on the Workspace's
+   * channel. It is an observation: failure must not block Agent work or be retried. */
+  #publishActivity(
+    client: CentrifugeWorkspaceClient,
+    workspaceId: string,
+    frame: Uint8Array,
+  ): void {
+    void client.publish?.(`agent:activity:${workspaceId}`, frame).catch(() => {});
   }
 
   #flushPendingActivity(client: CentrifugeWorkspaceClient): void {
@@ -983,7 +979,8 @@ export class DaemonConnection implements DaemonConnectionClient {
     const pending = [...this.#pendingActivity.values()];
     this.#pendingActivity.clear();
     this.#supersededActivityLaunches.clear();
-    for (const activity of pending) this.#publishActivity(client, activity);
+    for (const activity of pending)
+      this.#publishActivity(client, activity.workspaceId, encodeAgentActivity(activity));
   }
 
   #publishSessionInvalidate(
@@ -2441,12 +2438,4 @@ export class DaemonConnection implements DaemonConnectionClient {
     this.#statusRpcQueue = Promise.resolve();
     client?.disconnect();
   }
-}
-
-function rpcData(reply: unknown): Uint8Array {
-  if (!reply || typeof reply !== "object" || !("data" in reply))
-    throw new Error("missing RPC response payload");
-  const data = (reply as { data?: unknown }).data;
-  if (!(data instanceof Uint8Array)) throw new Error("invalid RPC response payload");
-  return data;
 }

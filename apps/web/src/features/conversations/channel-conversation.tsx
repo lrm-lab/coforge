@@ -32,7 +32,6 @@ import {
 import type { ChannelSuggestion } from "./reference-completion";
 import { m } from "#src/paraglide/messages";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
-import { BusyAgentsStrip } from "#src/features/agents/busy-agents-strip";
 import type { ConversationProps } from "./conversation-types";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -302,17 +301,9 @@ export function ChannelConversation({
     () => plainMentionsByHandle(conversationWithFreshDirectory.mentionables),
     [conversationWithFreshDirectory.mentionables],
   );
-  const agentIds = useMemo(
-    () =>
-      (conversationWithFreshDirectory.mentionables ?? [])
-        .filter((mention) => mention.kind === "agent")
-        .map(({ id }) => id),
-    [conversationWithFreshDirectory.mentionables],
-  );
   return (
     <ThreadedConversation
       conversation={conversationWithFreshDirectory}
-      aboveComposer={<BusyAgentsStrip agentIds={agentIds} />}
       conversationName={`#${conversation.name}`}
       plainMentions={plainMentions}
       onSend={onSend}

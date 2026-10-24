@@ -47,4 +47,5 @@ Daemon、服务端存储和前端展示使用同一契约，每条 activity 固�
 - [Provider 信号的 detailKind](detail-kinds.md): 工具结束、thinking、压缩、review、subagent 等只在 provider 有真实信号时上报的 `detailKind`。
 - [Runtime 生命周期 detailKind 与冷空闲回收](runtime-lifecycle.md): 消息接收、崩溃、打断、卡住重启、session 不可恢复，以及冷空闲回收的 Activity、日志事件和环境变量。
 - [服务端写入的 Computer 生命周期记录](computer-lifecycle.md): 服务端为 Computer 停止、升级、重启、启动写入的 `computer_*` 记录。
+- [即将发言信号](../reply-intent.md): 频道目标走同一 Activity 通道的 `reply_intent` 帧（私信目标只发给对方本人的 `chat:user:<id>`），不是 Activity 观察，不入库。
 - [忙碌心跳与 liveness sweep](heartbeat-and-liveness.md): 忙碌心跳、`runtime_progress`、服务端 liveness sweep 与探测应答。

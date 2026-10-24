@@ -57,7 +57,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `agent-activity-publisher.ts` is the one place Activity gets its launch and sequence metadata,
   the stopping-launch mute, and the busy heartbeat; its last busy Activity is the daemon's mid-turn
   evidence (`busyAgents`, probes), a quiet turn's `Waiting for N background task(s)` included until
-  its last task ends. A probe reply is never busy evidence.
+  its last task ends. A probe reply is never busy evidence. Reply intents ([reply-intent.md](../../../../docs/observability/reply-intent.md)) are no Activity: `reply-intent-publisher.ts` sends them.
 - `runtime.ts` routes thread targets to the existing Agent session and
   canonicalizes short channel/DM thread targets. Threads never create sessions
   or processes.

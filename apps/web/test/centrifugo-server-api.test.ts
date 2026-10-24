@@ -34,6 +34,27 @@ test("publishes binary protocol payloads through the Centrifugo v6 HTTP API", as
   });
 });
 
+test("a publication can skip the channel's history", async () => {
+  let request: Request | undefined;
+  globalThis.fetch = Object.assign(
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      request = new Request(input, init);
+      return Promise.resolve(Response.json({ result: {} }));
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+
+  await createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: "http://centrifugo.test/api",
+    COFORGE_CENTRIFUGO_API_KEY: "test-api-key",
+  }).publish("chat:user:user-1", Uint8Array.of(0, 255, 42), { skipHistory: true });
+
+  expect(await request?.json()).toEqual({
+    method: "publish",
+    params: { channel: "chat:user:user-1", b64data: "AP8q", skip_history: true },
+  });
+});
+
 test("publishes payloads larger than one base64 chunk byte-exactly", async () => {
   let request: Request | undefined;
   globalThis.fetch = Object.assign(

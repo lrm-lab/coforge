@@ -3,5 +3,7 @@
   "agent_activity_model_wait_elapsed": "· 已等待 {seconds} 秒",
   "agent_activity_model_wait_duration": "· 等待了 {seconds} 秒",
   "agent_activity_model_wait_status_pending": "等待状态更新",
-  "agent_busy_others": "其他 {count} 个"
+  "agent_replying_one": "{names} 正在输入…",
+  "agent_replying_many": "{names} 正在输入…",
+  "agent_replying_overflow": "{first}、{second} 等 {total} 个智能体正在输入…"
 }

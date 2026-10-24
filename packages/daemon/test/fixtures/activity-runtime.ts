@@ -1,4 +1,5 @@
 import type { AgentActivity, AgentActivityDetailKind } from "@lrm/coforge-sdk/internal";
+import type { AgentReplyIntent } from "@lrm/coforge-sdk/internal/reply-intent";
 import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "#src/code-agent/contract";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -30,6 +31,7 @@ export async function activityHarness(connection: WorkspaceConfig, provider?: Co
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   const activities: AgentActivity[] = [];
+  const replyIntents: AgentReplyIntent[] = [];
   let listener: Parameters<AgentSession["subscribe"]>[0] = () => undefined;
   const runtime = new DaemonRuntime(
     connection,
@@ -55,6 +57,9 @@ export async function activityHarness(connection: WorkspaceConfig, provider?: Co
         sendAgentActivity(activity) {
           activities.push(activity);
         },
+        sendAgentReplyIntent(frame) {
+          replyIntents.push(frame);
+        },
         async requestAgentLaunchConfig() {
           return { agentApiKey: `sk_agent_${"a".repeat(43)}` };
         },
@@ -73,6 +78,7 @@ export async function activityHarness(connection: WorkspaceConfig, provider?: Co
     runtime,
     session: agent.session,
     activities,
+    replyIntents,
     emit(activity: {
       detailKind: AgentActivityDetailKind;
       level: AgentActivity["level"];

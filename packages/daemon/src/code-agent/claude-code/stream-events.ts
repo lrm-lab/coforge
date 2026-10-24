@@ -1,5 +1,7 @@
 import type { AgentRuntimeEvent } from "#src/code-agent/contract";
-import { asRecord, eventTime } from "#src/code-agent/json-record";
+import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
+import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
+import { isShellToolName } from "#src/code-agent/send-command-target";
 
 /**
  * The runtime events one Claude Code `stream_event` record (`--include-partial-messages`)
@@ -20,4 +22,48 @@ export function claudeStreamEvents(record: Readonly<Record<string, unknown>>): A
     if (blockType === "thinking") return [{ type: "thinking-delta", text: "" }];
   }
   return [{ type: "progress", source: "claude_stream_event", occurredAt: eventTime(record) }];
+}
+
+/**
+ * One session's `stream_event` records: what `claudeStreamEvents` reports, plus the target of the
+ * Agent's own message send as soon as a shell `tool_use` block's argument fragments
+ * (`input_json_delta`) close it. A fragment names its block by `index` alone, so the block's start
+ * (`content_block_start`: the call's id) is remembered until the block stops or the next message
+ * starts; a call announced and still open then was abandoned, which is reported.
+ */
+export class ClaudeStreamEvents {
+  readonly #scanner = new ReplyIntentScanner();
+  /** The shell tool_use blocks of the current message, by block index, to their call ids. */
+  readonly #blocks = new Map<number, string>();
+
+  read(record: Readonly<Record<string, unknown>>): AgentRuntimeEvent[] {
+    const events = claudeStreamEvents(record);
+    // Stream events are main-session only (`claudeStreamEvents`), like the Agent's own sends.
+    const event = events.length > 0 ? asRecord(record.event) : undefined;
+    const index = event?.index;
+    if (event?.type === "message_start") {
+      this.#blocks.clear();
+      for (const id of this.#scanner.reset()) events.push({ type: "reply-intent-retracted", id });
+    } else if (typeof index !== "number") {
+      return events;
+    } else if (event?.type === "content_block_start") {
+      const block = asRecord(event.content_block);
+      const id = nonEmptyString(block?.id);
+      const name = nonEmptyString(block?.name);
+      if (block?.type === "tool_use" && id && name && isShellToolName(name))
+        this.#blocks.set(index, id);
+    } else if (event?.type === "content_block_stop") {
+      const callId = this.#blocks.get(index);
+      if (callId) this.#scanner.complete(callId);
+      this.#blocks.delete(index);
+    } else if (event?.type === "content_block_delta") {
+      const delta = asRecord(event.delta);
+      const callId = this.#blocks.get(index);
+      if (callId && delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
+        const replyIntent = this.#scanner.feed({ callId, fragment: delta.partial_json });
+        if (replyIntent) events.push(replyIntent);
+      }
+    }
+    return events;
+  }
 }

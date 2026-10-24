@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { createReplyIntentStore } from "#src/features/agents/reply-intents";
+import { ReplyIntentStoreProvider } from "#src/features/agents/reply-intents-context";
 import { ConversationPane } from "#src/features/conversations/direct-conversation";
 import { m } from "#src/paraglide/messages";
 
@@ -47,24 +49,27 @@ const replyMessage = {
 };
 
 function renderThreadPane() {
+  // The pane always sits inside WorkspaceAgentsProvider, which provides the reply intents.
   const markup = renderToStaticMarkup(
-    <ConversationPane
-      conversation={{
-        conversationId: "conv-1",
-        senderMemberId: "member-user-1",
-        readThroughSequence: 11,
-        viewerId: "user-dev",
-        messages: [replyMessage],
-      }}
-      root={rootMessage}
-      emptyState={{
-        title: m.conversation_thread_empty_title(),
-        description: m.conversation_thread_empty(),
-        media: null,
-      }}
-      onSend={async () => {}}
-      onToggleReaction={async () => {}}
-    />,
+    <ReplyIntentStoreProvider value={createReplyIntentStore()}>
+      <ConversationPane
+        conversation={{
+          conversationId: "conv-1",
+          senderMemberId: "member-user-1",
+          readThroughSequence: 11,
+          viewerId: "user-dev",
+          messages: [replyMessage],
+        }}
+        root={rootMessage}
+        emptyState={{
+          title: m.conversation_thread_empty_title(),
+          description: m.conversation_thread_empty(),
+          media: null,
+        }}
+        onSend={async () => {}}
+        onToggleReaction={async () => {}}
+      />
+    </ReplyIntentStoreProvider>,
   );
   return markup;
 }

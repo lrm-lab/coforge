@@ -39,6 +39,9 @@ import type { ExtraAgent } from "./extra-agent";
 import { loadExtraAgents } from "./extra-agents.functions";
 import { heldDisplayAgentIds } from "./extra-agents-held";
 import { createDisplayWatchRegistry, DisplayWatcherContext } from "./watched-agent-displays";
+import { createReplyIntentStore } from "./reply-intents";
+import { ReplyIntentStoreProvider } from "./reply-intents-context";
+import { useUserChannelReplyIntents } from "./reply-intents-realtime";
 
 const EMPTY_ACTIVITY: ActivityEntry[] = [];
 
@@ -131,10 +134,13 @@ export function createAgentDirectoryInvalidator(
  */
 export function WorkspaceAgentsProvider({
   workspaceId,
+  viewerId,
   agents,
   children,
 }: {
   workspaceId?: string;
+  /** The signed-in person, whose own channel carries the reply intents of their direct messages. */
+  viewerId?: string;
   agents: LiveAgent[];
   children: ReactNode;
 }) {
@@ -244,11 +250,16 @@ export function WorkspaceAgentsProvider({
         .map((agent) => agent.id),
     [visibleAgents],
   );
+  // One per Workspace: a switch starts from an empty set, and nothing outlives the shell.
+  const replyIntents = useMemo(() => createReplyIntentStore(), [workspaceId]);
+  useEffect(() => () => replyIntents.clear(), [replyIntents]);
   useWorkspaceActivityRealtime(
     workspaceId,
     privateAgentIds,
     workspaceId ? (agentId) => getPrivateActivityToken({ data: { agentId } }) : undefined,
+    replyIntents,
   );
+  useUserChannelReplyIntents(workspaceId, viewerId, replyIntents);
 
   // An Agent no longer visible to this viewer (dropped by `mergeAgentStatusSnapshot`
   // from the fresh `refresh()` list, e.g. after `agent:visibility_changed`) must not leave its
@@ -277,7 +288,9 @@ export function WorkspaceAgentsProvider({
     <LiveAgentStoreContext value={liveAgents}>
       <WorkspaceIdContext value={workspaceId}>
         <RefreshAgentDirectoryContext value={refreshDirectory}>
-          <DisplayWatcherContext value={watched.watch}>{children}</DisplayWatcherContext>
+          <DisplayWatcherContext value={watched.watch}>
+            <ReplyIntentStoreProvider value={replyIntents}>{children}</ReplyIntentStoreProvider>
+          </DisplayWatcherContext>
         </RefreshAgentDirectoryContext>
       </WorkspaceIdContext>
     </LiveAgentStoreContext>

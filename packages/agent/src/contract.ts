@@ -158,6 +158,15 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       occurredAt?: string;
     }
   | { type: "tool-output"; id: string; text: string }
+  // The Agent's own message send, seen while the model is still streaming the tool call's
+  // arguments: `id` is the call's id (the `tool-start` that follows names the same one) and
+  // `target` the send's `--target`, already closed. At most one per call; a provider that only
+  // reports a finished call never emits it, and the daemon core still announces that call from
+  // its `tool-start`.
+  | { type: "reply-intent"; id: string; target: string }
+  // A `reply-intent` call the model abandoned: its message ended (a new message or turn began)
+  // without the call ever starting. A call that did start ends with its `tool-end`.
+  | { type: "reply-intent-retracted"; id: string }
   | {
       type: "tool-end";
       id: string;

@@ -137,7 +137,11 @@ function AppLayout() {
             getConnectionToken={getConnectionToken}
           >
             <WorkspacePresenceProvider workspaceId={currentWorkspace.id}>
-              <WorkspaceAgentsProvider workspaceId={currentWorkspace.id} agents={agents}>
+              <WorkspaceAgentsProvider
+                workspaceId={currentWorkspace.id}
+                viewerId={user.id}
+                agents={agents}
+              >
                 <PanelTabOrderProvider workspaceId={currentWorkspace.id} orders={tabOrders}>
                   {/* Every open page leaves a Workspace its owner deleted. */}
                   <LeaveDeletedWorkspace workspaceId={currentWorkspace.id} />

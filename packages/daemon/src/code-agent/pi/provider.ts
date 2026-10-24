@@ -25,6 +25,7 @@ import {
 } from "@coforge/agent";
 import { join } from "node:path";
 import { errorMessage } from "#src/code-agent/json-record";
+import { PiReplyIntents } from "./reply-intents";
 import { piSessionEvents } from "./session-events";
 
 export class PiProvider implements CodeAgentProvider {
@@ -198,6 +199,7 @@ class AgentSessionImpl implements AgentSession {
       }
       return stream(model, context, options);
     };
+    const replyIntents = new PiReplyIntents();
     runtime.session.subscribe((event) => {
       if (event.type === "agent_start" && (this.#disposed || this.#interrupting)) {
         // A host preflight hook may finish after cancellation began. The SDK
@@ -205,6 +207,7 @@ class AgentSessionImpl implements AgentSession {
         void this.#trackPrompt(runtime.session.abort());
       }
       for (const translated of piSessionEvents(event)) this.#emit(translated);
+      for (const replyIntent of replyIntents.read(event)) this.#emit(replyIntent);
       // A failed attempt may be retried, and cancellation may surface as an error.
       // Only settlement determines the run's terminal result.
       if (event.type === "message_end" && event.message.role === "assistant") {

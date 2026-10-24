@@ -87,3 +87,16 @@ export function inferredCompactionFinish(inference: CompactionInference): PhaseA
     `Context compaction finished (inferred from ${inference})`,
   ];
 }
+
+/** The provider events that show a turn at work: they keep an Agent busy and a stale idle claim
+ * is reconciled before they are reported. */
+export const TURN_ACTIVITY_EVENT_TYPES = new Set<AgentRuntimeEvent["type"]>([
+  "text-delta",
+  "thinking-delta",
+  "tool-start",
+  "tool-output",
+  "tool-end",
+  "progress",
+  "reconnecting",
+  ...PHASE_BOUNDARY_EVENT_TYPES,
+]);

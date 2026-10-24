@@ -12,7 +12,6 @@ import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { DirectSettingsButton } from "./direct-settings-panel";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
-import { BusyAgentsStrip } from "#src/features/agents/busy-agents-strip";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
 import { plainMentionsByHandle } from "./message-markdown";
 import type {
@@ -158,7 +157,6 @@ export function DirectConversation({
   return (
     <DirectThreadedConversation
       {...props}
-      aboveComposer={<BusyAgentsStrip agentIds={deleted ? [] : [conversation.agent.id]} />}
       name={agentName}
       plainMentions={plainMentions}
       header={

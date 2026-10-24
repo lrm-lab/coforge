@@ -26,10 +26,13 @@ import { useSavedMessages } from "./conversation-host";
 import { conversationOpenPosition, unreadBoundary } from "./conversation-open-position";
 import {
   captureScrollAnchor,
+  PIN_TOLERANCE_PX,
   restoreScrollAnchor,
+  ROW_TOP_GAP_PX,
   type ScrollAnchor,
 } from "./conversation-scroll-anchor";
 import { newerPageCommit, positionJumpDecision } from "./conversation-thread-search";
+import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
 import { latestTopLevelSequence } from "./conversation-unread";
 import { streamState, type StreamRead } from "./stream-state";
 import { MessageComposer } from "./message-composer";
@@ -50,18 +53,7 @@ import { isViewerMessage } from "./own-message";
 import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
-
-/** How close to the bottom the pane must be for a content-resize to re-pin it (see the pinning
- * ResizeObserver). Tight on purpose: the reading position itself uses a wider tolerance. */
-const PIN_TOLERANCE_PX = 4;
-/** How long a landed position jump keeps its highlight. The hash deep link leans on `:target`,
- * which lasts until the hash moves; the saved jump has no hash to lean on, so it needs a bound.
- * 2.5s hold + the row's 500ms transition out = the ~3s window the ruling settled on (2026-09-23:
- * "2.5–3s 合适的窗口，符合我们的 design" — bg-tertiary wash + brand ring, fading to normal). */
-const JUMP_HIGHLIGHT_MS = 2500;
-
-/** The gap left above a row the pane scrolls to (`applyOpenPosition`). */
-const ROW_TOP_GAP_PX = 12;
+import { ReplyingAgentsLine } from "#src/features/agents/replying-agents-line";
 
 export function ConversationPane({
   conversation,
@@ -97,7 +89,6 @@ export function ConversationPane({
   jumpMessage,
   onJumpMessageConsumed,
   mentionCompletion = true,
-  aboveComposer,
 }: Omit<ConversationProps, "conversation" | "agentStatus"> & {
   conversation: Omit<DirectConversationView, "agent">;
   header?: React.ReactNode;
@@ -1117,7 +1108,7 @@ export function ConversationPane({
       </div>
 
       <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-        {canCompose && !root && aboveComposer}
+        {canCompose && <ReplyingAgentsLine conversation={conversation} root={root} />}
         {readOnlyNotice ?? (
           <MessageComposer
             conversationId={conversation.conversationId}

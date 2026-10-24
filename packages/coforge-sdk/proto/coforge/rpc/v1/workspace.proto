@@ -414,6 +414,24 @@ message AgentActivity {
   // The action only a person can take before the Agent can work again ("user_reauth",
   // "user_model_access"); empty when the failure needs none. Absent from older daemons.
   string runtime_error_action = 23;
+  // An "about to post" signal instead of an observation: set only on a frame that carries no
+  // launch_id or client_seq, so a reader that predates it rejects the frame as invalid Activity.
+  // Additive: protocol_major stays 1. Docs: docs/observability/reply-intent.md.
+  ReplyIntent reply_intent = 24;
+}
+
+// An Agent is about to post (`phase` "start") or no longer is ("end") for one tool call, `call_id`.
+// The daemon sends the Agent's raw send `target`; the server resolves it and relays the frame
+// with `conversation_id` and `thread_root_id` set and `target` cleared.
+message ReplyIntent {
+  string phase = 1;
+  string call_id = 2;
+  string target = 3;
+  // The daemon knew the target before the call's arguments finished streaming.
+  bool early = 4;
+  string conversation_id = 5;
+  // Empty for a top-level post.
+  string thread_root_id = 6;
 }
 
 // The outcome of one tool call, keyed by the `call_id` of its `tool_name` entry. What each

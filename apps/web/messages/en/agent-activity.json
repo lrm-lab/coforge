@@ -3,5 +3,7 @@
   "agent_activity_model_wait_elapsed": "· {seconds}s elapsed",
   "agent_activity_model_wait_duration": "· Waited {seconds}s",
   "agent_activity_model_wait_status_pending": "Awaiting status update",
-  "agent_busy_others": "{count} others"
+  "agent_replying_one": "{names} is typing…",
+  "agent_replying_many": "{names} are typing…",
+  "agent_replying_overflow": "{first}, {second} and {rest} others are typing…"
 }

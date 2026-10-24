@@ -20,6 +20,7 @@ import { join } from "node:path";
 const REPO_ROOT = join(import.meta.dir, "..");
 const MESSAGE_ROW = join(REPO_ROOT, "src/features/conversations/message-row.tsx");
 const CONVERSATION_PANE = join(REPO_ROOT, "src/features/conversations/conversation-pane.tsx");
+const JUMP_HIGHLIGHT = join(REPO_ROOT, "src/features/conversations/message-jump-highlight.ts");
 
 test("the landed row wears exactly the classes the :target treatment uses", async () => {
   const source = await readFile(MESSAGE_ROW, "utf8");
@@ -45,6 +46,6 @@ test("both landing paths flash the row, and the duration is named", async () => 
   // a highlight, which is exactly the half-fixed state a reviewer would miss by eye.
   expect(source.match(/flashMessageRow\(messageId\)/g) ?? []).toHaveLength(2);
   // A magic duration in the timer would drift from the comment and the test above.
-  expect(source).toMatch(/const JUMP_HIGHLIGHT_MS = \d+;/);
+  expect(await readFile(JUMP_HIGHLIGHT, "utf8")).toMatch(/const JUMP_HIGHLIGHT_MS = \d+;/);
   expect(source).toContain("}, JUMP_HIGHLIGHT_MS);");
 });

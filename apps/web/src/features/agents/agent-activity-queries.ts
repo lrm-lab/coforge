@@ -6,7 +6,8 @@ import { getAgentActivitySubscriptionToken } from "./agents.functions";
 import {
   agentActivityChannel,
   agentActivityChannelForAgent,
-  decodeActivityObservation,
+  activityObservation,
+  decodeActivityFrame,
   mergeAgentActivity,
   RECENT_ACTIVITY_LIMIT,
   type ActivityEntry,
@@ -15,6 +16,7 @@ import {
   useRealtimeSubscription,
   useRealtimeSubscriptions,
 } from "#src/features/realtime/browser-realtime";
+import { replyIntentInScope, type ReplyIntentStore } from "./reply-intents";
 import type { QueryClient } from "@tanstack/react-query";
 
 export const agentActivityKeys = {
@@ -84,9 +86,19 @@ function applyActivityPublication(
   queryClient: QueryClient,
   workspaceId: string,
   data: unknown,
+  replyIntents: ReplyIntentStore,
   scope?: { agentId: string },
 ) {
-  const observation = decodeActivityObservation(data, { workspaceId, ...scope });
+  const frame = decodeActivityFrame(data);
+  if (!frame) return;
+  // An "about to post" signal shares the channel but is no observation: it feeds the line above
+  // the composer and nothing else.
+  if ("replyIntent" in frame) {
+    const replyIntent = replyIntentInScope(frame.replyIntent, { workspaceId, ...scope });
+    if (replyIntent) replyIntents.apply(replyIntent);
+    return;
+  }
+  const observation = activityObservation(frame.activity, { workspaceId, ...scope });
   if (!observation) return;
   const { agentId, entry } = observation;
   const key = agentActivityKeys.workspace(workspaceId);
@@ -113,12 +125,14 @@ function applyActivityPublication(
  *
  * `privateAgentIds` are the viewer's own visible private Agents: their Activity no
  * longer arrives on the shared channel at all, so each gets its own per-Agent subscription on
- * the same shared client.
+ * the same shared client. `replyIntents` takes the "about to post" signals from both; a
+ * (re)subscribe empties it, since the gap may have swallowed their ends.
  */
 export function useWorkspaceActivityRealtime(
-  workspaceId?: string,
-  privateAgentIds: readonly string[] = [],
-  getPrivateAgentActivityToken?: (agentId: string) => Promise<string>,
+  workspaceId: string | undefined,
+  privateAgentIds: readonly string[],
+  getPrivateAgentActivityToken: ((agentId: string) => Promise<string>) | undefined,
+  replyIntents: ReplyIntentStore,
 ) {
   const queryClient = useQueryClient();
   const getConnectionToken = useServerFn(getAgentActivitySubscriptionToken);
@@ -126,10 +140,13 @@ export function useWorkspaceActivityRealtime(
   useRealtimeSubscription({
     channel: workspaceId ? agentActivityChannel(workspaceId) : undefined,
     getToken: getConnectionToken,
-    onSubscribed: () => void queryClient.invalidateQueries({ queryKey: agentActivityKeys.all }),
+    onSubscribed: () => {
+      replyIntents.clear();
+      void queryClient.invalidateQueries({ queryKey: agentActivityKeys.all });
+    },
     onPublication: (publication) => {
       if (!workspaceId) return;
-      applyActivityPublication(queryClient, workspaceId, publication.data);
+      applyActivityPublication(queryClient, workspaceId, publication.data, replyIntents);
     },
   });
 
@@ -150,6 +167,7 @@ export function useWorkspaceActivityRealtime(
         queryClient,
         workspaceId,
         publication.data,
+        replyIntents,
         agentId ? { agentId } : undefined,
       );
     },

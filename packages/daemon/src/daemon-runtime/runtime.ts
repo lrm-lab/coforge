@@ -15,7 +15,7 @@ import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { PhaseTracker } from "#src/agent-runtime/phase-tracker";
 import {
   inferredCompactionFinish,
-  PHASE_BOUNDARY_EVENT_TYPES,
+  TURN_ACTIVITY_EVENT_TYPES,
   PHASE_EDGES,
   RUNTIME_PHASES,
   type CompactionInference,
@@ -135,8 +135,6 @@ import {
   type AgentContextScanRequest,
   type AgentContextScanResponse,
   AGENT_CONTEXT_SCAN_STATUS,
-  MESSAGE_ANCHOR_SOURCE,
-  UUID_LIKE_SOURCE,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
@@ -163,6 +161,8 @@ import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
+import { canonicalThreadTarget } from "./thread-target";
+import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import {
   AgentActivityPublisher,
   type ActivityDraft,
@@ -215,12 +215,6 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 /** Per-provider reading deadline supplied by a runtime usage scan. */
 export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
 
-const FULL_THREAD_TARGET = new RegExp(
-  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${UUID_LIKE_SOURCE})$`,
-);
-const SHORT_THREAD_TARGET = new RegExp(
-  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${MESSAGE_ANCHOR_SOURCE})$`,
-);
 const NOT_RUNNING = "daemon runtime is not running";
 const CLEANUP_UNCONFIRMED =
   "Agent process cleanup could not be confirmed. Replacement launch is blocked.";
@@ -245,17 +239,6 @@ type ActivityLaunch = PublishedActivityLaunch & {
    * kept (queued and ACKed) with this Activity restated. */
   offlineError?: ReturnType<typeof buildRuntimeErrorActivity>;
 };
-
-const TURN_ACTIVITY_EVENT_TYPES = new Set<AgentRuntimeEvent["type"]>([
-  "text-delta",
-  "thinking-delta",
-  "tool-start",
-  "tool-output",
-  "tool-end",
-  "progress",
-  "reconnecting",
-  ...PHASE_BOUNDARY_EVENT_TYPES,
-]);
 
 type SessionMode = "create" | "resume";
 
@@ -503,6 +486,12 @@ export class DaemonRuntime {
   readonly #fastModeWarned = new Set<string>();
   readonly #agentProxy?: AgentProxy;
   readonly #activityPublisher: AgentActivityPublisher<ActivityLaunch>;
+  readonly #replyIntents = new ReplyIntentPublisher<ActivityLaunch>({
+    currentLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
+    transport: () => this.#transport,
+    workspaceId: () => this.#connection.workspaceId,
+    active: () => this.#started,
+  });
   /** Runner-hold reason while this runtime is refusing new turns; undefined when not held.
    * Deliberately in-memory only, so a restarted daemon is never born held. */
   #runnerHold: RunnerHold | undefined;
@@ -2175,10 +2164,12 @@ export class DaemonRuntime {
       launch.progress = progress;
       const toolCalls = new ToolCallLedger();
       launch.toolCalls = toolCalls;
+      const replyIntents = this.#replyIntents.tracker(agentId, launch);
       launch.backgroundTasks = new OutstandingBackgroundTasks();
       const unsubscribe = runtime.session.subscribe((event) => {
         progress.observe();
         toolCalls.observe(event);
+        replyIntents.observe(event);
         const isCurrent = current();
         // Raw: text and thinking count before the trajectory coalesces them, and before this
         // event marks the Agent busy (a hold released while busy flushes only at the turn end).
@@ -2196,6 +2187,7 @@ export class DaemonRuntime {
         this.#desktops.end(agentId);
         launch.startup?.dispose();
         trajectory.dispose();
+        replyIntents.dispose();
         if (this.#currentActivityLaunches.get(agentId) !== launch) return;
         // No leaked watchdog timer, and a later launch for this Agent starts clean.
         this.#disposeLaunchObservations(agentId);
@@ -3692,36 +3684,25 @@ export class DaemonRuntime {
     };
   }
 
-  async #canonicalAgentMessageTarget(
+  #canonicalAgentMessageTarget(
     agentId: string,
     target: string,
     agentApiKey: string,
   ): Promise<string> {
-    if (FULL_THREAD_TARGET.test(target) || !target.includes(":")) return target;
-    const match = SHORT_THREAD_TARGET.exec(target);
-    if (!match) return target;
-    const parent = match[1]!;
-    const result = await this.#transport.agentMessage!(
-      {
-        idempotencyKey: crypto.randomUUID(),
-        agentId,
-        workspaceId: this.#connection.workspaceId,
-        operation: "read",
-        target: parent,
-        around: match[2],
-        limit: 1,
-      },
-      agentApiKey,
+    return canonicalThreadTarget(target, (parent, anchor) =>
+      this.#transport.agentMessage!(
+        {
+          idempotencyKey: crypto.randomUUID(),
+          agentId,
+          workspaceId: this.#connection.workspaceId,
+          operation: "read",
+          target: parent,
+          around: anchor,
+          limit: 1,
+        },
+        agentApiKey,
+      ),
     );
-    const root = result.messages[0];
-    if (
-      !result.accepted ||
-      result.messages.length !== 1 ||
-      root?.target !== parent ||
-      !FULL_THREAD_TARGET.test(`${parent}:${root.id}`)
-    )
-      throw new Error("thread target could not be resolved to one parent message");
-    return `${parent}:${root.id}`;
   }
 
   async mintAppItem(agentId: string, input: MintAppItem) {

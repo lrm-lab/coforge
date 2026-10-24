@@ -18,3 +18,23 @@ export type TaskStatus = NonNullable<
 export function isTaskStatus(value: unknown): value is TaskStatus {
   return value === "completed" || value === "failed" || value === "stopped";
 }
+
+/** The `subagent-progress` event for one task lifecycle report. */
+export function taskProgressEvent(
+  phase: Extract<AgentRuntimeEvent, { type: "subagent-progress" }>["phase"],
+  taskId: string,
+  toolUseId: string | undefined,
+  subagentType: string | undefined,
+  taskStatus?: TaskStatus,
+  occurredAt?: string,
+): AgentRuntimeEvent {
+  return {
+    type: "subagent-progress",
+    phase,
+    taskId,
+    ...(taskStatus ? { taskStatus } : {}),
+    ...(subagentType ? { subagentType } : {}),
+    ...(toolUseId ? { parentToolUseId: toolUseId } : {}),
+    ...(occurredAt ? { occurredAt } : {}),
+  };
+}

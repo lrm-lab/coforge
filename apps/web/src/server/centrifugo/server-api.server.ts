@@ -10,7 +10,9 @@ import { getUsageCache, type UsageCache } from "./usage-cache.server";
 import { getAgentContextCache, type AgentContextCache } from "./agent-context-cache.server";
 
 export type CentrifugoServerApi = {
-  publish(channel: string, data: Uint8Array): Promise<void>;
+  /** `skipHistory` keeps a transient frame out of the channel's history, so a resubscribe's
+   * recovery does not replay it. */
+  publish(channel: string, data: Uint8Array, options?: { skipHistory?: boolean }): Promise<void>;
   publishJson(channel: string, data: unknown, idempotencyKey?: string): Promise<void>;
   /** One Centrifugo `broadcast` call to many channels at once, instead of N sequential `publish`
    * calls (https://centrifugal.dev/docs/server/server_api#broadcast). A no-op when `channels` is
@@ -88,7 +90,7 @@ export function createCentrifugoServerApi(
     return result.result;
   }
   return {
-    async publish(channel, data) {
+    async publish(channel, data, options) {
       // `btoa` wants a binary string; building it chunk-wise (32 KiB of bytes per
       // `String.fromCharCode` call) keeps the spread under the engine's argument limit and avoids
       // the per-byte string append the former loop paid on every publish.
@@ -96,7 +98,11 @@ export function createCentrifugoServerApi(
       let binary = "";
       for (let index = 0; index < data.length; index += CHUNK)
         binary += String.fromCharCode(...data.subarray(index, index + CHUNK));
-      await call("publish", { channel, b64data: btoa(binary) });
+      await call("publish", {
+        channel,
+        b64data: btoa(binary),
+        ...(options?.skipHistory ? { skip_history: true } : {}),
+      });
     },
     async publishJson(channel, data, idempotencyKey) {
       await call("publish", {
