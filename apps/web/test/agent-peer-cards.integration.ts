@@ -6,6 +6,7 @@ import { listAgentPeerCards } from "#src/server/agents/agent-peer-conversations.
 import {
   AGENT_DM_LIMIT_NOTICE,
   AGENT_DM_LIMITS,
+  agentDmIsLimited,
 } from "#src/server/conversations/agent-dm-limits.server";
 
 // What a member sees of the conversations between Agents: previews, never bodies, and nothing
@@ -150,4 +151,15 @@ test("an Agent that does not exist answers as one that cannot be seen", async ()
   await expect(
     listAgentPeerCards(db, { workspaceId, agentId: crypto.randomUUID(), userId: viewerId }),
   ).rejects.toMatchObject({ code: "AGENT_NOT_VISIBLE" });
+});
+
+test("a rate notice keeps limited true for the hour, a chain notice for ten minutes", async () => {
+  const now = new Date();
+  const at = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * 60_000);
+  const latest = (body: string, minutesAgo: number) => ({ body, createdAt: at(minutesAgo) });
+  expect(agentDmIsLimited(latest(AGENT_DM_LIMIT_NOTICE.AGENT_DM_RATE_LIMIT, 30), now)).toBe(true);
+  expect(agentDmIsLimited(latest(AGENT_DM_LIMIT_NOTICE.AGENT_DM_RATE_LIMIT, 61), now)).toBe(false);
+  expect(agentDmIsLimited(latest(AGENT_DM_LIMIT_NOTICE.AGENT_DM_CHAIN_LIMIT, 30), now)).toBe(false);
+  expect(agentDmIsLimited(latest("something else", 1), now)).toBe(false);
+  expect(agentDmIsLimited(undefined, now)).toBe(false);
 });

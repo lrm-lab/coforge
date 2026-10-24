@@ -27,7 +27,9 @@ export type AgentPeerCard = {
 
 /**
  * The Agent-to-Agent conversations of `agentId` as the requesting member may see them: nothing at
- * all unless they may see that Agent, and no conversation whose peer they may not see (it is left
+ * all unless they may see that Agent (`canSeeAgent`, the rule of the Agent's detail panel this card
+ * sits in: the stricter `canDirectMessageAgent` would leave the panel's section empty for an admin
+ * who can open the panel; the card is a preview only), and no conversation whose peer they may not see (it is left
  * out, not shown as private). People are not members of these conversations, so this is the only
  * way they read them, and only as a preview.
  */
@@ -48,6 +50,7 @@ export async function listAgentPeerCards(
   if (!subject) throw new AppError("AGENT_NOT_VISIBLE");
   assertAgentVisible(viewer, subject);
 
+  // Not cut in SQL: the peers' visibility is judged per viewer in memory, so the 20 are taken after.
   const conversations = await db.conversation.findMany({
     where: {
       workspaceId,
