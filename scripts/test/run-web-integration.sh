@@ -67,7 +67,13 @@ if [ -z "${MEMORY_THREAD_TEST_SCHEMA_SQL:-}" ]; then
   fixture_directory=$(mktemp -d "${TMPDIR:-/tmp}/memory-thread-schema.XXXXXX")
   trap 'rm -rf -- "$fixture_directory"' EXIT
   export MEMORY_THREAD_TEST_SCHEMA_SQL="$fixture_directory/schema.sql"
-  node node_modules/prisma/build/index.js migrate diff --from-empty --to-schema prisma/schema.prisma --script --output "$MEMORY_THREAD_TEST_SCHEMA_SQL"
+  node node_modules/prisma/build/index.js migrate diff --from-empty --to-schema prisma --script --output "$MEMORY_THREAD_TEST_SCHEMA_SQL"
+fi
+# The schema's models span prisma/models/. Reading only schema.prisma succeeds but emits an empty
+# migration; refuse an empty or implausibly short fixture before suites create their test schemas.
+if [ ! -s "$MEMORY_THREAD_TEST_SCHEMA_SQL" ] || [ "$(wc -c < "$MEMORY_THREAD_TEST_SCHEMA_SQL")" -lt 1024 ]; then
+  printf 'Incomplete integration schema fixture: %s\n' "$MEMORY_THREAD_TEST_SCHEMA_SQL" >&2
+  exit 1
 fi
 files=()
 for file in "$root"/apps/web/test/*.integration*.ts; do
