@@ -373,7 +373,14 @@ mod tests {
     fn repairs_missing_active_links_from_the_verified_active_version() {
         let fixture = Fixture::new("repair-links");
         fixture.install_old();
-        fs::remove_file(fixture.root().join("active")).unwrap();
+        // `active` is a symlink on Unix and a directory junction on Windows, which only
+        // `remove_dir` removes.
+        let active = fixture.root().join("active");
+        if cfg!(windows) {
+            fs::remove_dir(&active).unwrap();
+        } else {
+            fs::remove_file(&active).unwrap();
+        }
         let clock = VirtualClock::new();
         let table = FakeTable::new(&clock);
         let service = FakeService::new(ServiceState::NotInstalled);
@@ -392,7 +399,12 @@ mod tests {
         }
         assert_eq!(service.calls(), Vec::<&'static str>::new());
         assert_eq!(
-            fs::read_link(fixture.root().join("active")).unwrap(),
+            fs::canonicalize(&active).unwrap(),
+            fs::canonicalize(fixture.root().join("versions").join(OLD)).unwrap()
+        );
+        #[cfg(not(windows))]
+        assert_eq!(
+            fs::read_link(&active).unwrap(),
             std::path::Path::new("versions/0.1.0")
         );
         assert_eq!(
@@ -408,14 +420,7 @@ mod tests {
     fn reinstalls_a_corrupt_active_version_without_stopping_service() {
         let fixture = Fixture::new("repair-corrupt");
         fixture.install_old();
-        fs::remove_file(
-            fixture
-                .root()
-                .join("versions")
-                .join(OLD)
-                .join("coforge-computer"),
-        )
-        .unwrap();
+        fs::remove_file(fixture.computer(OLD)).unwrap();
         let clock = VirtualClock::new();
         let table = FakeTable::new(&clock);
         let service = FakeService::new(ServiceState::NotInstalled);

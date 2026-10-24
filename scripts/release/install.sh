@@ -429,8 +429,8 @@ if [ ! -x "$installed_binary" ]; then
   exit 1
 fi
 if [ "$bin_directory" = "$HOME/.local/bin" ]; then
-  posix_path_line='export PATH="$HOME/.local/bin:$PATH"'
-  fish_path_line='fish_add_path "$HOME/.local/bin"'
+  posix_path_line="export PATH=\"\$HOME/.local/bin:\$PATH\""
+  fish_path_line="fish_add_path \"\$HOME/.local/bin\""
 else
   posix_path_line="export PATH=\"$bin_directory:\$PATH\""
   fish_path_line="fish_add_path \"$bin_directory\""

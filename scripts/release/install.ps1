@@ -326,6 +326,7 @@ try {
     $installerStatus = $LASTEXITCODE
   }
   $homeDirectory = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+  $binDirectory = Join-Path $homeDirectory ".coforge\computer\bin"
   $installedBinary = if ($env:RAFT_COMPUTER_BINARY) { $env:RAFT_COMPUTER_BINARY } elseif ($env:RAFT_COMPUTER_INSTALL_DIR) { Join-Path $env:RAFT_COMPUTER_INSTALL_DIR "coforge-computer.exe" } else { Join-Path $binDirectory "coforge-computer.cmd" }
   $binDirectory = Split-Path -Parent $installedBinary
   if ($installerStatus -ne 0) {
