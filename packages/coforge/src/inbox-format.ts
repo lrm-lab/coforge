@@ -45,7 +45,7 @@ function formatAgo(iso: string | null, nowMs: number): string | null {
 const mentionsYou = (flags: readonly string[]) => flags.includes("non_member_mention");
 
 function openCommand(target: string, afterSeq: number | undefined): string {
-  return `coforge message read --target ${JSON.stringify(target)}${afterSeq ? ` --after ${afterSeq}` : ""}`;
+  return `coforge message read --target ${JSON.stringify(target)}${afterSeq === undefined ? "" : ` --after ${afterSeq}`}`;
 }
 
 function conversationRow(

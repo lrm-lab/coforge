@@ -54,7 +54,8 @@ test("renders unread rows with mentions, age and the read command", () => {
   );
   expect(output).toContain("@ada · 2 unread · latest @ada 2m ago");
   expect(output).toContain("#general · 1 unread · mentions you 2x · latest @scout 1h ago");
-  expect(output).toContain('  open: coforge message read --target "@ada"\n');
+  // A read position of 0 is still printed: without it the read opens the latest page, not the unread.
+  expect(output).toContain('  open: coforge message read --target "@ada" --after 0\n');
   expect(output).toContain('open: coforge message read --target "#general" --after 4');
   expect(output).toContain(
     'Next: open the first conversation above: coforge message read --target "@ada"',
@@ -102,6 +103,7 @@ test("lists undelivered-only conversations first and annotates listed ones", () 
           latestSenderHandle: "bot",
           firstPendingSequence: 9,
         },
+        { target: "#new", pendingCount: 1, flags: [], firstPendingSequence: 1 },
       ],
     }),
     NOW,
@@ -109,6 +111,7 @@ test("lists undelivered-only conversations first and annotates listed ones", () 
   expect(output.indexOf("#ops")).toBeLessThan(output.indexOf("#general"));
   expect(output).toContain("#ops · 1 new, not yet delivered · mentions you · latest @bot");
   expect(output).toContain('--target "#ops" --after 8');
+  expect(output).toContain('--target "#new" --after 0');
   expect(output).toContain("#general · 1 unread · 3 new, not yet delivered");
 });
 
