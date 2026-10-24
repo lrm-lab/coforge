@@ -11,6 +11,7 @@ import {
   toAgentMessage,
   type DirectConversationMessageRow,
   readPositionReport,
+  readLatestWindow,
   readWindowAround,
 } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
@@ -23,7 +24,7 @@ import {
   onlyAnchorMatch,
   sequenceAnchor,
 } from "./direct-conversation-anchor.server";
-import { advanceThreadRead } from "./thread-read-position.server";
+import { advanceAgentRead, advanceThreadRead, readThroughOf } from "./thread-read-position.server";
 import {
   assertAgentDmWithinLimits,
   noteAgentDmLimit,
@@ -1399,17 +1400,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     if (!agentMember) throw new Error("Agent is not a conversation member");
     if (anchor && anchor.threadRootId !== threadRootId)
       throw new AgentMessageValidationError("message anchor is outside this target");
-    const threadRead = threadRootId
-      ? await this.db.threadRead.findUnique({
-          where: {
-            memberId_rootMessageId: { memberId: agentMember.id, rootMessageId: threadRootId },
-          },
-          select: { readThroughSequence: true },
-        })
-      : null;
-    const readThrough = threadRootId
-      ? (threadRead?.readThroughSequence ?? 0)
-      : agentMember.agentReadThroughSequence;
+    const readThrough = await readThroughOf(
+      this.db,
+      agentMember.id,
+      agentMember.agentReadThroughSequence,
+      threadRootId,
+    );
     const include = AGENT_MESSAGE_INCLUDE;
     const coordination = isChannel
       ? (await readChannelCoordination(this.db, workspaceId, agentId, [conversationId])).get(
@@ -1418,17 +1414,27 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       : undefined;
     const map = (rows: DirectConversationMessageRow[]) =>
       rows.map((row) => toAgentMessage(row, canonicalTarget, agentId, coordination));
-    if (page.around && anchor) {
-      const window = await readWindowAround(this.db, scope, anchor.sequence, limit);
+    const isHistoryRead = Boolean(page.before || page.after || page.around);
+    // Only `unread` reads from the read position and moves it; a read with no anchor and no
+    // sequence range shows the newest page and leaves the position alone.
+    const window =
+      page.around && anchor
+        ? await readWindowAround(this.db, scope, anchor.sequence, limit)
+        : !page.unread &&
+            !isHistoryRead &&
+            page.fromSequence === undefined &&
+            page.throughSequence === undefined
+          ? await readLatestWindow(this.db, scope, limit)
+          : undefined;
+    if (window)
       return {
         messages: map(window.rows),
         hasOlder: window.hasOlder,
         hasNewer: window.hasNewer,
         modelSeenUpToSeq: null,
         consumptionScope,
+        ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
       };
-    }
-    const isHistoryRead = Boolean(page.before || page.after || page.around);
     const effectiveFromSequence = isHistoryRead
       ? page.fromSequence
       : (page.fromSequence ?? readThrough + 1);
@@ -1473,25 +1479,15 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     // moves the read-through there.
     const agentReadThroughSequence =
       modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
-    if (agentReadThroughSequence && threadRootId) {
-      await advanceThreadRead(
-        this.db,
-        agentMember.id,
+    if (agentReadThroughSequence)
+      await advanceAgentRead(this.db, {
+        memberId: agentMember.id,
         conversationId,
         workspaceId,
+        agentId,
         threadRootId,
-        agentReadThroughSequence,
-      );
-    } else if (agentReadThroughSequence) {
-      await this.db.conversationMember.updateMany({
-        where: {
-          conversationId,
-          agentId,
-          agentReadThroughSequence: { lt: agentReadThroughSequence },
-        },
-        data: { agentReadThroughSequence },
+        sequence: agentReadThroughSequence,
       });
-    }
     return {
       messages,
       hasOlder,

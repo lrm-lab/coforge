@@ -347,8 +347,9 @@ describe.skipIf(!runnable)("a bot's messages", () => {
       b.principal,
       new PrismaDirectConversationRepository(db!),
     );
-    // The bot reads its own history under its handle, the app's key.
+    // The bot reads its own history under its handle, the app's key, before and after the new grant.
     expect((await history.json()).messages).toMatchObject([
+      { senderKind: "agent", senderHandle: b.f.key, body: "before" },
       { senderKind: "agent", senderHandle: b.f.key, body: "after" },
     ]);
   });

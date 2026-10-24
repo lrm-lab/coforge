@@ -16,3 +16,43 @@ export async function advanceThreadRead(
     ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
       GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence")`;
 }
+
+/** Where a member's read position stands: the thread's when `threadRootId` names one, else the
+ * conversation's (`conversationReadThrough`). */
+export async function readThroughOf(
+  db: Pick<PrismaClient, "threadRead">,
+  memberId: string,
+  conversationReadThrough: number,
+  threadRootId: string | null,
+) {
+  if (!threadRootId) return conversationReadThrough;
+  const threadRead = await db.threadRead.findUnique({
+    where: { memberId_rootMessageId: { memberId, rootMessageId: threadRootId } },
+    select: { readThroughSequence: true },
+  });
+  return threadRead?.readThroughSequence ?? 0;
+}
+
+/** Moves an Agent's read position forward to `sequence`, in the thread `threadRootId` names or else
+ * in the conversation, never back. */
+export async function advanceAgentRead(
+  db: PrismaClient,
+  read: {
+    memberId: string;
+    conversationId: string;
+    workspaceId: string;
+    agentId: string;
+    threadRootId: string | null;
+    sequence: number;
+  },
+) {
+  const { memberId, conversationId, workspaceId, agentId, threadRootId, sequence } = read;
+  if (threadRootId) {
+    await advanceThreadRead(db, memberId, conversationId, workspaceId, threadRootId, sequence);
+    return;
+  }
+  await db.conversationMember.updateMany({
+    where: { conversationId, agentId, agentReadThroughSequence: { lt: sequence } },
+    data: { agentReadThroughSequence: sequence },
+  });
+}

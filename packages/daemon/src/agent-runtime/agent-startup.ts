@@ -22,7 +22,7 @@ export function agentStartupInput(resuming: boolean, memoryInContext = false): s
 export function agentStartupCatchupInput(rows: readonly string[], fenced = false): string {
   const command = fenced
     ? "message_read with the exact target"
-    : "\`coforge message read --target <target>\`";
+    : "\`coforge message read --target <target> --unread\`";
   const check = fenced ? "message_check" : "\`coforge message check\`";
   const reading = fenced
     ? "with no before/after/around anchor, continuing while hasNewer is true"

@@ -48,14 +48,16 @@ test("thread send and unread ranges stay separate from the main conversation", a
       root.id,
     );
     await repo.sendMessage(opened.conversationId, opened.senderMemberId, user.id, "main unread");
-    const thread = await repo.readMessages(workspace.id, agent.id, shortTarget);
+    const thread = await repo.readMessages(workspace.id, agent.id, shortTarget, { unread: true });
     expect(thread.map((m) => [m.body, m.senderHandle, m.target])).toEqual([
       ["thread only", username, target],
     ]);
     expect(
-      (await repo.readMessages(workspace.id, agent.id, `@${username}`)).map((m) => m.body),
+      (await repo.readMessages(workspace.id, agent.id, `@${username}`, { unread: true })).map(
+        (m) => m.body,
+      ),
     ).toEqual<string[]>(["root", "main unread"]);
-    expect(await repo.readMessages(workspace.id, agent.id, target)).toEqual([]);
+    expect(await repo.readMessages(workspace.id, agent.id, target, { unread: true })).toEqual([]);
     expect(
       (
         await repo.readMessages(workspace.id, agent.id, `@${username}`, {
@@ -412,8 +414,8 @@ test("an Agent history page reports the boundary it joins and the conversation i
     await send("two");
     const third = await send("three");
 
-    // An unpaged read starts right after the read-through, so it joins at its newest message.
-    const unread = await repo.readMessagesPage(workspace.id, agent.id, dm);
+    // An unread read starts right after the read-through, so it joins at its newest message.
+    const unread = await repo.readMessagesPage(workspace.id, agent.id, dm, { unread: true });
     expect(unread.modelSeenUpToSeq).toBe(third.sequence);
     expect(unread.consumptionScope).toEqual({
       agentId: agent.id,
@@ -445,6 +447,9 @@ test("an Agent history page reports the boundary it joins and the conversation i
       workspace.id,
       agent.id,
       `${dm}:${first.id.slice(0, 13)}`,
+      {
+        unread: true,
+      },
     );
     expect(thread.modelSeenUpToSeq).toBe(reply.sequence);
     expect(thread.consumptionScope).toEqual({

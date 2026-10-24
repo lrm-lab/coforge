@@ -18,6 +18,7 @@ import {
 } from "./agent-inbox-freshness";
 import {
   heldFreshnessActivity,
+  heldFreshnessDecision,
   heldFreshnessMessageCount,
   type HeldFreshnessActivity,
 } from "./agent-inbox-freshness-activity";
@@ -37,14 +38,6 @@ const logger = getLogger(["coforge", "daemon", "agent-message"]);
 
 /** Bounds how many events pages one `check` drains before reporting `hasMore: true` and yielding. */
 const MAX_EVENT_DRAIN_ROUNDS = 50;
-
-/** An activity is narrated for exactly the two hold decisions; a send that reached the provider
- * (`forward`/`bypass`) has none. */
-function heldFreshnessDecision(
-  decision: string | undefined,
-): "local_hold" | "syncing_hold" | undefined {
-  return decision === "local_hold" || decision === "syncing_hold" ? decision : undefined;
-}
 
 export type AgentMessageOperationsPorts = Readonly<{
   connection: Readonly<{ workspaceId: string; computerId: string }>;
@@ -543,25 +536,17 @@ export class AgentMessageOperations {
     target: string | undefined,
     agentApiKey: string,
   ): Promise<AgentMessageResponse> {
-    // An unpaged read looks at what is unread now; when it finds nothing, the attention the daemon
-    // held for the target up to this point is stale.
+    // Only an `unread` read looks at what is unread now and, when it finds nothing, settles the
+    // attention the daemon held for the target up to this point; any other read without an anchor
+    // shows the newest page. A Memory Agent's `message_read` has no `unread` argument, and its
+    // increment read of a channel is the unread read.
     const unpaged = operation === "read" && !request.before && !request.after && !request.around;
-    if (
-      unpaged &&
-      target?.startsWith("#") &&
-      !target.includes(":") &&
-      this.#ports.isMemoryAgent?.(agentId)
-    ) {
-      refuseUnreadMemoryParentRead(
-        target,
-        this.#ports.attention
-          .check(agentId)
-          .filter((item) => item.target.startsWith(`${target}:`))
-          .map((item) => item.target),
-      );
-    }
+    const isMemory = this.#ports.isMemoryAgent?.(agentId);
+    const read = unpaged && isMemory && !request.unread ? { ...request, unread: true } : request;
+    if (unpaged && target?.startsWith("#") && !target.includes(":") && isMemory)
+      refuseUnreadMemoryParentRead(target, this.#ports.attention.check(agentId));
     const attentionUpperBound =
-      unpaged && target
+      unpaged && read.unread && target
         ? this.#ports.attention.check(agentId).find((item) => item.target === target)
             ?.latestSequence
         : undefined;
@@ -577,7 +562,7 @@ export class AgentMessageOperations {
         after: request.after,
         around: request.around,
         limit: request.limit,
-        unread: request.unread,
+        unread: read.unread,
         ...searchFields(request),
         messageId: request.messageId,
         emoji: request.emoji,
@@ -587,7 +572,7 @@ export class AgentMessageOperations {
     const { messages: unfolded, folded } =
       operation === "read" && target && result.accepted
         ? settleHistoryRead(this.#ports.attention, agentId, target, {
-            request,
+            request: read,
             result,
             unpaged,
             attentionUpperBound,

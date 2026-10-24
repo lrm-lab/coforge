@@ -148,8 +148,11 @@ draft unchanged with `message send --send-draft --target "<target>"`.
 the top-level target directly, skipping the guard on that one call.
 
 `coforge message read --target "@user"` reads history with a default limit of
-50 (maximum 100). Continue with opaque message-id cursors via `--before`,
-`--after`, or `--around`; these options are mutually exclusive. Sequence
+50 (maximum 100). Without `--before`, `--after`, `--around` or `--unread` it
+shows the newest page of the target and does not move the read position; only
+`--unread` reads from the read position and moves it. Continue with opaque
+message-id cursors via `--before`, `--after`, or `--around`; these options are
+mutually exclusive. Sequence
 numbers are server-internal and are never supplied by an Agent.
 
 `coforge message resolve <message-id>` looks up one message by its full UUID

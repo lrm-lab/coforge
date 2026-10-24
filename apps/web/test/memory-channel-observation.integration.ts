@@ -97,7 +97,8 @@ test("Memory observes undirected and Task-directed updates and reads the full in
       )[0]!.count;
     expect(await unreadCount()).toBe(2);
     const repository = new PrismaDirectConversationRepository(db);
-    const read = () => repository.readMessagesPage(workspace.id, memory.id, "#team", { limit: 1 });
+    const read = () =>
+      repository.readMessagesPage(workspace.id, memory.id, "#team", { limit: 1, unread: true });
     const page1 = await read();
     expect(page1.messages.map((m) => m.id)).toEqual([first.id]);
     expect(page1.hasNewer).toBe(true);

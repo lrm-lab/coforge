@@ -8,7 +8,8 @@ import { foldShownMessages } from "./unread-fold";
 type HistoryRead = Readonly<{
   request: LocalAgentMessageRequest;
   result: AgentMessageTransportResponse;
-  /** No `--before`, `--after` or `--around`: the read looked at what is unread now. */
+  /** No `--before`, `--after` or `--around`: with `unread` the read looked at what is unread now,
+   * and without it at the newest page. */
   unpaged: boolean;
   attentionUpperBound: number | undefined;
 }>;
@@ -29,7 +30,8 @@ function consumedTarget(
  * the server resolved the read to (its consumption scope; a channel's top level has none and is
  * already canonical). An anchored `--around` read, and a page the server does not call
  * contiguous (`modelSeenUpToSeq` null, such as a `--before` page), record the exact sequences
- * they showed and nothing else. A read with a boundary moves the frontier there, records what
+ * they showed and nothing else; so does the newest page of a read without an anchor, which
+ * reviews the target as well but leaves the frontier where it was. A read with a boundary moves the frontier there, records what
  * it showed above it as exact, and reviews the target; so does a read that returned nothing. A
  * consumption scope for this Agent settles what the read returned in every spelling of its
  * conversation.
@@ -57,7 +59,8 @@ function recordHistoryRead(
     // The thread-mismatch guard's read context: a read that joined what the Agent had read, or
     // found nothing, reviews `target` and remembers the newest message it showed.
     review:
-      !request.around && (through > 0 || result.messages.length === 0)
+      !request.around &&
+      (through > 0 || result.messages.length === 0 || (unpaged && !request.unread))
         ? { sequence: visibleSequence }
         : undefined,
     scope,
@@ -66,6 +69,7 @@ function recordHistoryRead(
   // not shown what the pending attention is about.
   if (
     unpaged &&
+    request.unread &&
     result.messages.length === 0 &&
     !result.moreUnread &&
     attentionUpperBound !== undefined

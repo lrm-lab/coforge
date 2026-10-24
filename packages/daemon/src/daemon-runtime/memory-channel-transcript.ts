@@ -28,8 +28,13 @@ export function fenceChannelTranscriptForMemory(
   );
 }
 
-/** Parent-channel reads must not skip unread Task thread updates. */
-export function refuseUnreadMemoryParentRead(target: string, threads: readonly string[]): void {
+/** Parent-channel reads must not skip unread Task thread updates: `pending` is the Agent's
+ * attention, of which the threads rooted under `target` count. */
+export function refuseUnreadMemoryParentRead(
+  target: string,
+  pending: readonly { target: string }[],
+): void {
+  const threads = pending.map((item) => item.target).filter((t) => t.startsWith(`${target}:`));
   if (threads.length === 0) return;
   throw new AgentPreflightError(
     `Unread Task thread updates remain under ${target}: ${threads.join(", ")}. ` +

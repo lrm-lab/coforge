@@ -77,3 +77,11 @@ export function heldFreshnessMessageCount(input: {
     ? (input.shownMessageCount ?? input.newMessageCount ?? 0)
     : (input.newMessageCount ?? input.shownMessageCount ?? 0);
 }
+
+/** An activity is narrated for exactly the two hold decisions; a send that reached the provider
+ * (`forward`/`bypass`) has none. */
+export function heldFreshnessDecision(
+  decision: string | undefined,
+): "local_hold" | "syncing_hold" | undefined {
+  return decision === "local_hold" || decision === "syncing_hold" ? decision : undefined;
+}

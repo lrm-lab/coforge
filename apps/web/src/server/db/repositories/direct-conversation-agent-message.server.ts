@@ -210,6 +210,22 @@ export async function readWindowAround(
   };
 }
 
+/** The newest `limit` messages of `scope`, oldest first, and whether older ones remain (none are
+ * newer). */
+export async function readLatestWindow(
+  db: Pick<PrismaClient, "message">,
+  scope: Prisma.MessageWhereInput,
+  limit: number,
+) {
+  const rows = await db.message.findMany({
+    where: scope,
+    orderBy: { sequence: "desc" },
+    take: limit + 1,
+    include: AGENT_MESSAGE_INCLUDE,
+  });
+  return { rows: rows.slice(0, limit).reverse(), hasOlder: rows.length > limit, hasNewer: false };
+}
+
 /**
  * Where the Agent's read position stood before a read and where it moved to, for the reads that
  * move it from the position: an unread read reports both and whether more remain, and a plain
@@ -218,13 +234,13 @@ export async function readWindowAround(
 export function readPositionReport(
   unread: boolean | undefined,
   isHistoryRead: boolean,
-  read: { readThrough: number; modelSeenUpToSeq: number | null; hasMore: boolean },
+  read: { readThrough: number; modelSeenUpToSeq?: number | null; hasMore?: boolean },
 ) {
   if (unread)
     return {
       unreadCursorBefore: read.readThrough,
       readPositionAfter: read.modelSeenUpToSeq ?? read.readThrough,
-      moreUnread: read.hasMore,
+      moreUnread: Boolean(read.hasMore),
     };
   return isHistoryRead ? {} : { unreadCursorBefore: read.readThrough };
 }

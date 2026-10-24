@@ -17,8 +17,9 @@ is one, so `--after 0` reads a conversation from its start and `message read --u
 `--after <seq>` that re-reads what it just showed. A Message id is never printed as a bare eight
 characters, so a printed id is never mistaken for a sequence number.
 
-Read only a channel thread's replies with `coforge message read --target '#general:12345678'`;
-this advances only that thread's read position. To inspect its root Message and nearby
+Read only a channel thread's replies with `coforge message read --target '#general:12345678'`,
+which shows the newest replies; add `--unread` to read from, and advance, only that thread's read
+position. To inspect its root Message and nearby
 parent-channel context, separately run `coforge message read --target '#general' --around 1a2b3c4d`;
 that range read does not advance any read position. The root is not automatically included in a
 thread read, notice, or check.
