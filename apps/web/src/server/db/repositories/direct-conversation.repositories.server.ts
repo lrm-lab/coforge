@@ -34,8 +34,9 @@ import {
   openUserAgentConversation,
 } from "./user-agent-direct.repositories.server";
 import {
-  agentPeerNames,
-  agentPeerSuffix,
+  humanRef,
+  recoveryRefs,
+  directTargets,
   dmParentTarget,
   getOrCreateAgentPeerConversation,
   findAgentPeerConversation,
@@ -727,10 +728,10 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       agentId,
       row.conversation.channelName !== null ? [row.conversationId] : [],
     );
-    const peerTargetOf = await agentPeerNames(this.db, workspaceId, agentId, [row.conversation]);
+    const targetOf = await directTargets(this.db, workspaceId, agentId, [row.conversation]);
     return toAgentMessage(
       row,
-      messageDeliveryTarget(row, peerTargetOf),
+      messageDeliveryTarget(row, targetOf),
       agentId,
       coordination.get(row.conversationId),
     );
@@ -791,7 +792,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     return openUserAgentConversation(this.db, workspaceId, userId, agentId);
   }
 
-  /** `getOrCreateUserAgent` without the create. */
   async findUserAgentConversation(workspaceId: string, userId: string, agentId: string) {
     return findUserAgentConversation(this.db, workspaceId, userId, agentId);
   }
@@ -1224,6 +1224,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       return { ...created, attachments };
     });
     const senderIdentity = agentMessageSender({ agentId: null, agent: null, user: sender.user });
+    const senderRef = await humanRef(
+      this.db,
+      conversation.workspaceId,
+      agents[0].agentId,
+      senderIdentity.handle,
+    );
     return {
       ...message,
       deliveryId: message.deliveries[0]!.deliveryId,
@@ -1235,7 +1241,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       latestSenderKind: senderIdentity.kind,
       latestSenderHandle: senderIdentity.handle,
       latestSenderDescription: senderIdentity.description,
-      deliveryTarget: deliveryTarget(`@${senderIdentity.handle}`, root?.id),
+      deliveryTarget: deliveryTarget(senderRef, root?.id),
       attachments: message.attachments.map((attachment) => attachmentView(attachment)),
     };
   }
@@ -1325,7 +1331,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         .filter((delivery) => delivery.conversation.channelName !== null)
         .map((delivery) => delivery.conversationId),
     );
-    const peerTargetOf = await agentPeerNames(
+    const targetOf = await directTargets(
       this.db,
       workspaceId,
       agentId,
@@ -1336,7 +1342,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       // reading sender.user alone produces a bare @ for Agent messages.
       const sender = agentMessageSender(delivery.message.sender);
       const target = deliveryTarget(
-        conversationTarget(delivery.conversation, peerTargetOf),
+        conversationTarget(delivery.conversation, targetOf),
         delivery.message.threadRootId,
       );
       return {
@@ -1585,12 +1591,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       agentId,
       rows.filter((row) => row.channelName !== null).map((row) => row.conversationId),
     );
-    const peerSuffix = await agentPeerSuffix(this.db, workspaceId, rows);
+    const directRefOf = await recoveryRefs(this.db, workspaceId, agentId, rows);
     for (const row of rows) {
       if (!row.channelName && !row.otherUsername)
         throw new Error("Agent conversation has no other member to target");
       const target = deliveryTarget(
-        row.channelName ? `#${row.channelName}` : `@${row.otherUsername}${peerSuffix(row)}`,
+        row.channelName ? `#${row.channelName}` : directRefOf(row),
         row.threadRootId,
       );
       unreadSummary[target] ??= row.unreadCount;
@@ -1685,7 +1691,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
       });
       const rowById = new Map(messageRows.map((row) => [row.id, row]));
-      const peerTargetOf = await agentPeerNames(
+      const targetOf = await directTargets(
         tx,
         workspaceId,
         agentId,
@@ -1705,7 +1711,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         return {
           ...toAgentMessage(
             message,
-            messageDeliveryTarget(message, peerTargetOf),
+            messageDeliveryTarget(message, targetOf),
             agentId,
             coordination.get(row.conversationId),
           ),
@@ -2102,7 +2108,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         }
       }
     }
-    // Between two Agents the other one is the recipient, and must still be live.
+    // Between two Agents the other is the recipient, while live.
     const peer = agentPeer && (await liveAgentPeer(this.db, conversation, agentId));
     if (!sender || (!conversation.channelName && !(agentPeer ? peer : user)))
       throw new AgentSendRejectedError(403, "agent is not a conversation member");
@@ -2237,7 +2243,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           ],
         });
       // A person's DM wakes no Agent (its only Agent is the sender); a DM between two Agents wakes
-      // the other one, whatever its state: the delivery waits for it as for a channel member.
+      // the other, whatever its state.
       const recipients = conversation.channelName
         ? await channelAgentRecipients(tx, {
             conversationId,

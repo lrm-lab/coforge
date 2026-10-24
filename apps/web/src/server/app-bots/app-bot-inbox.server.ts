@@ -3,6 +3,7 @@ import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import { unreadAgentMessagesFragment } from "#src/server/db/repositories/agent-attention.repositories.server";
 import {
   AGENT_MESSAGE_WITH_TARGET_INCLUDE,
@@ -105,6 +106,12 @@ export class AppBotInbox {
       include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
     });
     const byId = new Map(found.map((message) => [message.id, message]));
+    const targetOf = await directTargets(
+      this.db,
+      workspaceId,
+      agentId,
+      found.map((message) => message.conversation),
+    );
     const coordination = await readChannelCoordination(
       this.db,
       workspaceId,
@@ -125,7 +132,7 @@ export class AppBotInbox {
       return {
         ...toAgentMessage(
           message,
-          messageDeliveryTarget(message),
+          messageDeliveryTarget(message, targetOf),
           agentId,
           coordination.get(row.conversationId),
         ),

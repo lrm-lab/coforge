@@ -6,6 +6,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { threadReferenceText } from "@lrm/coforge-sdk/internal";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { directRefs } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 
 type UnreadRow = {
   conversationId: string;
@@ -13,6 +14,8 @@ type UnreadRow = {
   threadRootId: string | null;
   channelName: string | null;
   peer: string | null;
+  /** Whether `peer` is a person or an Agent; null with `peer`. */
+  peerKind: "human" | "agent" | null;
   muted: boolean;
   readSeq: number;
   unread: number;
@@ -50,7 +53,7 @@ async function unreadConversations(
 ): Promise<UnreadRow[]> {
   return db.$queryRaw<UnreadRow[]>`
     SELECT mine."conversationId", NULL::uuid AS "threadRootId", mine."channelName",
-           peer.handle AS peer, mine.muted, mine."readSeq", u.unread, u.mentions, u."latestSeq",
+           peer.handle AS peer, peer.kind AS "peerKind", mine.muted, mine."readSeq", u.unread, u.mentions, u."latestSeq",
            u."latestAt"
     FROM (${activeMemberships(workspaceId, agentId)}) mine
     CROSS JOIN LATERAL (
@@ -66,7 +69,8 @@ async function unreadConversations(
         AND x."senderMemberId" IS DISTINCT FROM mine."memberId"
     ) u
     LEFT JOIN LATERAL (
-      SELECT COALESCE(usr.username, agt.name) AS handle
+      SELECT COALESCE(usr.username, agt.name) AS handle,
+             CASE WHEN usr.id IS NOT NULL THEN 'human' ELSE 'agent' END AS kind
       FROM "conversation_members" o
       LEFT JOIN "users" usr ON usr.id = o."userId"
       LEFT JOIN "agents" agt ON agt.id = o."agentId" AND agt."workspaceId" = o."workspaceId"
@@ -91,7 +95,7 @@ async function unreadThreads(
 ): Promise<UnreadRow[]> {
   return db.$queryRaw<UnreadRow[]>`
     SELECT mine."conversationId", tf."rootMessageId" AS "threadRootId", mine."channelName",
-           NULL::text AS peer, mine.muted, COALESCE(tr."readThroughSequence", 0)::int AS "readSeq",
+           NULL::text AS peer, NULL::text AS "peerKind", mine.muted, COALESCE(tr."readThroughSequence", 0)::int AS "readSeq",
            u.unread, u.mentions, u."latestSeq", u."latestAt"
     FROM (${activeMemberships(workspaceId, agentId)}) mine
     JOIN "thread_follows" tf ON tf."memberId" = mine."memberId"
@@ -123,7 +127,7 @@ async function unreadThreads(
  *   equal times is extended to the end of the run, so nothing is skipped or repeated.
  */
 export async function listAgentInbox(
-  db: Pick<PrismaClient, "$queryRaw">,
+  db: Pick<PrismaClient, "$queryRaw" | "user" | "agent">,
   workspaceId: string,
   agentId: string,
   { view = "unread", before }: { view?: AgentInboxView; before?: number } = {},
@@ -154,12 +158,22 @@ export async function listAgentInbox(
     end += 1;
   const page = inView.slice(0, end);
   const senders = await latestSenders(db, page);
+  const refOf = await directRefs(
+    db,
+    workspaceId,
+    agentId,
+    page.flatMap((row) =>
+      row.peer && row.peerKind && !row.channelName ? [{ name: row.peer, kind: row.peerKind }] : [],
+    ),
+  );
   const items = page.map((row): AgentInboxItem => ({
     kind: row.threadRootId ? "thread" : row.channelName === null ? "dm" : "channel",
     target: row.threadRootId
       ? threadReferenceText(row.channelName!, row.threadRootId)
       : row.channelName === null
-        ? `@${row.peer ?? "unknown"}`
+        ? row.peer && row.peerKind
+          ? refOf({ name: row.peer, kind: row.peerKind })
+          : "@unknown"
         : `#${row.channelName}`,
     unread: row.unread,
     mentions: row.mentions,

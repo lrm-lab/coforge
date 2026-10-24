@@ -11,6 +11,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
   test("reads all scoped unacknowledged deliveries oldest-first", async () => {
     const queries: object[] = [];
     const db = {
+      agent: { findMany: async () => [] },
       conversationMember: { findMany: async () => [] },
       $queryRaw: async () => [],
       agentMessageDelivery: {
@@ -118,6 +119,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
 
   test("rejects a pending delivery without a valid public username target", async () => {
     const db = {
+      agent: { findMany: async () => [] },
       conversationMember: { findMany: async () => [] },
       $queryRaw: async () => [],
       agentMessageDelivery: {

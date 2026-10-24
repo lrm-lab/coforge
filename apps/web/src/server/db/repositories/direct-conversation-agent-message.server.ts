@@ -11,9 +11,8 @@ import {
   MESSAGE_MENTIONS_SELECT,
   type MessageMentionRef,
 } from "#src/server/conversations/mentions.server";
-import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { channelTarget } from "#src/server/conversations/agent-delivery.server";
-import type { TargetConversation } from "./agent-peer-direct.repositories.server";
+import type { DirectTargetOf, TargetConversation } from "./agent-peer-direct.repositories.server";
 
 const TASK_METADATA_SELECT = {
   select: {
@@ -54,19 +53,13 @@ export function deliveryTarget(parent: string, rootId?: string | null) {
 }
 
 /**
- * `#channel` for a public channel, `@username` of the conversation's person, or, in a conversation
- * between two Agents, the other Agent from the reader's seat (`peerTargetOf`, `agentPeerNames`).
+ * `#channel` for a public channel, otherwise the other side of the direct conversation as the
+ * reader sees it (`targetOf`, from `directTargets`; required, so a caller cannot forget it). A
+ * conversation with neither a person nor an Agent peer is an App's events.
  */
-export function conversationTarget(
-  conversation: TargetConversation,
-  peerTargetOf?: (conversation: TargetConversation) => string | undefined,
-) {
+export function conversationTarget(conversation: TargetConversation, targetOf: DirectTargetOf) {
   if (conversation.channelName) return channelTarget(conversation.channelName);
-  const username = conversation.members.find((member) => member.user)?.user?.username;
-  if (username || !isAgentPeerDirectKey(conversation.directKey ?? "")) return `@${username}`;
-  const peer = peerTargetOf?.(conversation);
-  if (peer === undefined) throw new Error("direct conversation has no addressable peer");
-  return peer;
+  return targetOf(conversation) ?? `@${undefined}`;
 }
 
 /** The members `conversationTarget` names a direct conversation by: its person, or, between two
@@ -89,12 +82,9 @@ export const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
 /** Where a Message is delivered: its conversation's target, with its thread root if it has one. */
 export function messageDeliveryTarget(
   message: { threadRootId: string | null; conversation: TargetConversation },
-  peerTargetOf?: Parameters<typeof conversationTarget>[1],
+  targetOf: DirectTargetOf,
 ) {
-  return deliveryTarget(
-    conversationTarget(message.conversation, peerTargetOf),
-    message.threadRootId,
-  );
+  return deliveryTarget(conversationTarget(message.conversation, targetOf), message.threadRootId);
 }
 
 export function toAgentMessage(

@@ -8,6 +8,7 @@ import {
 } from "#src/server/agents/agent-visibility.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { parsePeerTarget } from "./agent-peer-target.server";
+import type { AgentRecoveryRow } from "./agent-recovery-row.server";
 import { MESSAGE_ANCHOR } from "./direct-conversation-anchor.server";
 
 /**
@@ -127,6 +128,31 @@ export async function getOrCreateAgentPeerConversation(
   }
 }
 
+/** The other side of a direct conversation, from a reader's seat. */
+export type DirectSeat = { name: string; kind: "human" | "agent" };
+
+/**
+ * `@name` for each seat, with the suffix that keeps it executable as shown: `~human` on a person
+ * whose name a live ordinary Agent also holds, `~agent` on an Agent whose name a Workspace member
+ * also holds (a bare name in those cases is `AMBIGUOUS_TARGET`). One read per kind for the whole
+ * batch, never one per row.
+ */
+export async function directRefs(
+  db: Pick<PrismaClient, "user" | "agent">,
+  workspaceId: string,
+  readerAgentId: string,
+  seats: readonly DirectSeat[],
+) {
+  const namesOf = (kind: DirectSeat["kind"]) =>
+    seats.flatMap((seat) => (seat.kind === kind ? [seat.name] : []));
+  const [agentNames, memberNames] = await Promise.all([
+    agentNamesAmong(db, workspaceId, readerAgentId, namesOf("human")),
+    memberUsernamesAmong(db, workspaceId, namesOf("agent")),
+  ]);
+  return ({ name, kind }: DirectSeat) =>
+    `@${name}${kind === "human" ? (agentNames.has(name) ? "~human" : "") : memberNames.has(name) ? "~agent" : ""}`;
+}
+
 /** What `conversationTarget` reads of a conversation to name it from a reader's seat. */
 export type TargetConversation = {
   channelName: string | null;
@@ -134,31 +160,34 @@ export type TargetConversation = {
   members: { user?: { username: string } | null; agent?: { id: string; name: string } | null }[];
 };
 
-/**
- * The target of each conversation from `readerAgentId`'s seat: `@name~agent` for an Agent peer
- * whose name a Workspace member also holds (the suffix is how the Agent tells them apart), and
- * `@name` otherwise. One read of the colliding usernames for the whole batch, never one per row.
- */
-export async function agentPeerNames(
-  db: Pick<PrismaClient, "user">,
+/** The target of a direct conversation from the reader's seat (`directTargets`); `undefined` for a
+ * conversation with no person and no Agent peer, which only an App's events are. */
+export type DirectTargetOf = (conversation: TargetConversation) => string | undefined;
+
+/** `directRefs` for each direct conversation in the batch: its person, or its Agent peer. */
+export async function directTargets(
+  db: Pick<PrismaClient, "user" | "agent">,
   workspaceId: string,
   readerAgentId: string,
   conversations: readonly TargetConversation[],
-): Promise<(conversation: TargetConversation) => string | undefined> {
-  const peerName = (conversation: TargetConversation) => {
+): Promise<DirectTargetOf> {
+  const seatOf = (conversation: TargetConversation): DirectSeat | undefined => {
+    if (conversation.channelName) return undefined;
+    const username = conversation.members.find((member) => member.user)?.user?.username;
+    if (username) return { name: username, kind: "human" };
     const peerId = agentPeerOf(conversation.directKey ?? null, readerAgentId);
-    return peerId
-      ? conversation.members.find((m) => m.agent?.id === peerId)?.agent?.name
-      : undefined;
+    const name = conversation.members.find((member) => member.agent?.id === peerId)?.agent?.name;
+    return name === undefined ? undefined : { name, kind: "agent" };
   };
-  const taken = await memberUsernamesAmong(
+  const refOf = await directRefs(
     db,
     workspaceId,
-    conversations.flatMap((conversation) => peerName(conversation) ?? []),
+    readerAgentId,
+    conversations.flatMap((conversation) => seatOf(conversation) ?? []),
   );
   return (conversation) => {
-    const name = peerName(conversation);
-    return name === undefined ? undefined : `@${name}${agentSuffix(taken, name)}`;
+    const seat = seatOf(conversation);
+    return seat && refOf(seat);
   };
 }
 
@@ -194,7 +223,7 @@ export function dmParentTarget(target: string) {
 /** The target of a conversation between two Agents as `readerAgentId` sees it, from its members as
  * a send loaded them. */
 export async function peerSeatTarget(
-  db: Pick<PrismaClient, "user">,
+  db: Pick<PrismaClient, "user" | "agent">,
   conversation: { workspaceId: string; directKey: string | null },
   members: { agentId: string | null; agent?: { name: string } | null }[],
   readerAgentId: string,
@@ -202,8 +231,10 @@ export async function peerSeatTarget(
   const peerId = agentPeerOf(conversation.directKey, readerAgentId);
   const name = members.find((member) => member.agentId === peerId)?.agent?.name;
   if (name === undefined) throw new Error("direct conversation has no addressable peer");
-  const taken = await memberUsernamesAmong(db, conversation.workspaceId, [name]);
-  return `@${name}${agentSuffix(taken, name)}`;
+  const refOf = await directRefs(db, conversation.workspaceId, readerAgentId, [
+    { name, kind: "agent" },
+  ]);
+  return refOf({ name, kind: "agent" });
 }
 
 /** The other Agent of a conversation between two Agents, from `agentId`'s seat, while it is live;
@@ -221,22 +252,6 @@ export async function liveAgentPeer(
   });
 }
 
-/** `~agent` after an Agent peer's name that a Workspace member also holds, else empty: the one
- * rule for naming an Agent peer, from the batch's rows. One read of the colliding usernames. */
-export async function agentPeerSuffix(
-  db: Pick<PrismaClient, "user">,
-  workspaceId: string,
-  rows: readonly { agentPeer: boolean; otherUsername: string | null }[],
-) {
-  const taken = await memberUsernamesAmong(
-    db,
-    workspaceId,
-    rows.flatMap((row) => (row.agentPeer && row.otherUsername ? [row.otherUsername] : [])),
-  );
-  return (row: { agentPeer: boolean; otherUsername: string | null }) =>
-    row.agentPeer && row.otherUsername ? agentSuffix(taken, row.otherUsername) : "";
-}
-
 /** Which of `names` are the username of a member of the Workspace. */
 async function memberUsernamesAmong(
   db: Pick<PrismaClient, "user">,
@@ -252,6 +267,55 @@ async function memberUsernamesAmong(
   return new Set(users.map((user) => user.username));
 }
 
-/** `~agent` after an Agent peer's name when a Workspace member holds it too, else empty: the one
- * rule for naming an Agent peer. */
-const agentSuffix = (taken: ReadonlySet<string>, name: string) => (taken.has(name) ? "~agent" : "");
+/** Which of `names` are the name of a live ordinary Agent other than the reader. */
+async function agentNamesAmong(
+  db: Pick<PrismaClient, "agent">,
+  workspaceId: string,
+  readerAgentId: string,
+  names: readonly string[],
+) {
+  const unique = [...new Set(names)];
+  if (!unique.length) return new Set<string>();
+  const agents = await db.agent.findMany({
+    where: {
+      workspaceId,
+      name: { in: unique },
+      systemKind: null,
+      id: { not: readerAgentId },
+      ...ACTIVE_AGENT_WHERE,
+    },
+    select: { name: true },
+  });
+  return new Set(agents.map((agent) => agent.name));
+}
+
+/** A person's `@username` as the Agent should address it back: `~human` if an Agent holds it too. */
+export async function humanRef(
+  db: Pick<PrismaClient, "user" | "agent">,
+  workspaceId: string,
+  readerAgentId: string,
+  username: string,
+) {
+  const seat = { name: username, kind: "human" } as const;
+  return (await directRefs(db, workspaceId, readerAgentId, [seat]))(seat);
+}
+
+/** `directRefs` for the direct rows of an Agent recovery batch (`otherUsername`, `agentPeer`). */
+export async function recoveryRefs(
+  db: Pick<PrismaClient, "user" | "agent">,
+  workspaceId: string,
+  readerAgentId: string,
+  rows: readonly Pick<AgentRecoveryRow, "channelName" | "otherUsername" | "agentPeer">[],
+) {
+  const seatOf = (row: (typeof rows)[number]): DirectSeat => ({
+    name: row.otherUsername!,
+    kind: row.agentPeer ? "agent" : "human",
+  });
+  const refOf = await directRefs(
+    db,
+    workspaceId,
+    readerAgentId,
+    rows.flatMap((row) => (row.channelName || !row.otherUsername ? [] : [seatOf(row)])),
+  );
+  return (row: (typeof rows)[number]) => refOf(seatOf(row));
+}

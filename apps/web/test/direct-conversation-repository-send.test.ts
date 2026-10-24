@@ -233,6 +233,7 @@ describe("PrismaDirectConversationRepository sending", () => {
       },
     };
     const db = {
+      agent: { findMany: async () => [] },
       conversation: {
         findUnique: async () => ({
           workspaceId: "workspace-1",

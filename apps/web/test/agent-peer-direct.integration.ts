@@ -197,3 +197,23 @@ test("a peer with no Computer still gets the delivery row, to read when it start
   const rows = await db.agentMessageDelivery.findMany({ where: { messageId: sent.id } });
   expect(rows.map((d) => d.agentId)).toEqual([gamma.id]);
 });
+
+test("a person who shares a name with an Agent is shown to the Agent as ~human, in every place", async () => {
+  // Twin holds Bob's username, so a bare @bob would be ambiguous for any ordinary Agent.
+  const { conversationId, senderMemberId } = await repository.memberForUser(
+    workspaceId,
+    bob.id,
+    alpha.id,
+  );
+  const sent = await repository.sendMessage(conversationId, senderMemberId, bob.id, "hi alpha");
+  expect(sent.deliveryTarget).toBe(`@${usernames[1]}~human`);
+
+  const bobRef = `@${usernames[1]}~human`;
+  const pending = await repository.readPendingAgentDeliveries(workspaceId, alpha.id);
+  expect(pending.filter((d) => d.messageId === sent.id).map((d) => d.target)).toEqual([bobRef]);
+  const recovery = await repository.readAgentRecoveryContext(workspaceId, alpha.id);
+  expect(Object.keys(recovery.unreadSummary)).toContain(bobRef);
+  // Reading advances the position, so it comes after the recovery that counts the unread.
+  const read = await repository.readMessages(workspaceId, alpha.id, bobRef);
+  expect(read.map((m) => m.target)).toEqual([bobRef]);
+});

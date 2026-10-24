@@ -97,8 +97,9 @@ action follows the code:
 
 - `AMBIGUOUS_TARGET` (409): a bare `@name` is both a Workspace member and an
   Agent. Nothing was sent; run the command again as `@name~human` or
-  `@name~agent`. Either suffix is accepted on any `@` target, and a message
-  from an Agent whose name a member also holds shows as `@name~agent`.
+  `@name~agent`. Either suffix is accepted on any `@` target, and a target the
+  server shows is the one to run: a person or an Agent whose name the other kind
+  also holds appears as `@name~human` or `@name~agent`.
 - `DM_PEER_NOT_IN_WORKSPACE`: the person left the Workspace; the direct message
   is read-only, so sending again is refused the same way. Read its history or
   reach someone who is still a member.
