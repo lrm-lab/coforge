@@ -5,6 +5,11 @@ export type ProfileUpdateInvocation = {
   json?: boolean;
 };
 
+// The server's own limits (`AGENT_DISPLAY_NAME_MAX_LENGTH`, `AGENT_PROFILE_DESCRIPTION_MAX_LENGTH`),
+// checked here so a too-long value fails before any request.
+const DISPLAY_NAME_MAX_LENGTH = 80;
+const DESCRIPTION_MAX_LENGTH = 500;
+
 const PROFILE_UPDATE_USAGE =
   'Usage: coforge profile update [--display-name "<text>"] [--description "<text>"] [--json]';
 
@@ -28,7 +33,18 @@ export function parseProfileUpdateArgs(args: readonly string[]): ProfileUpdateIn
     }
     throw new Error(PROFILE_UPDATE_USAGE);
   }
-  if (displayName === undefined && description === undefined) throw new Error(PROFILE_UPDATE_USAGE);
+  if (displayName === undefined && description === undefined)
+    throw new Error(
+      `Provide at least one of --display-name or --description\n${PROFILE_UPDATE_USAGE}`,
+    );
+  if (displayName !== undefined) {
+    const trimmed = displayName.trim();
+    if (trimmed.length === 0) throw new Error("--display-name must not be empty");
+    if (trimmed.length > DISPLAY_NAME_MAX_LENGTH)
+      throw new Error(`--display-name must be at most ${DISPLAY_NAME_MAX_LENGTH} characters`);
+  }
+  if (description !== undefined && description.trim().length > DESCRIPTION_MAX_LENGTH)
+    throw new Error(`--description must be at most ${DESCRIPTION_MAX_LENGTH} characters`);
   return {
     command: "profile-update",
     ...(displayName !== undefined ? { displayName } : {}),

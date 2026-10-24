@@ -56,13 +56,7 @@ import {
 import { COFORGE_CLI_VERSION } from "#src/version";
 import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
 import { formatProfile } from "#src/user-format";
-import {
-  parseWhoamiArgs,
-  buildWhoamiResult,
-  formatWhoami,
-  type WhoamiInvocation,
-  type WhoamiResult,
-} from "#src/whoami";
+import { parseWhoamiArgs, runWhoami, type WhoamiInvocation, type WhoamiResult } from "#src/whoami";
 import { parseProfileUpdateArgs, type ProfileUpdateInvocation } from "#src/profile-update";
 
 export type { WhoamiInvocation, WhoamiResult, ProfileUpdateInvocation };
@@ -129,7 +123,7 @@ import {
   unknownDeliveryNextAction,
   withOutputMode,
 } from "#src/cli-error";
-import { attachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
+import { inferAttachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
 import { formatInboxCheck } from "#src/inbox-format";
 import {
   claimRefusal,
@@ -992,9 +986,10 @@ function parseActionPrepareArgs(args: readonly string[]): ActionPrepareInvocatio
 export async function run(args: readonly string[], transport: MessageTransport): Promise<unknown> {
   const invocation = parseArgs(args);
   if (invocation.command === "whoami") {
-    const result = buildWhoamiResult();
-    if (invocation.json) return JSON.stringify({ ok: true, data: result });
-    return formatWhoami(result);
+    return runWhoami(
+      transport.profileShow && (() => transport.profileShow!()),
+      invocation.json === true,
+    );
   }
   if (invocation.command === "version") {
     if (!transport.version) throw new Error("Version transport is unavailable");
@@ -1260,7 +1255,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
   if (invocation.command === "attachment.upload") {
     if (!transport.upload) throw new Error("Attachment upload transport is unavailable");
     const { path, target } = await validateAttachmentUploadArgs(invocation);
-    const mimeType = attachmentMimeType(path, invocation.mimeType);
+    const mimeType = await inferAttachmentMimeType(path, invocation.mimeType);
     const result = await transport.upload({ path, target, mimeType });
     if (invocation.json) return JSON.stringify(result);
     return formatAttachmentUploadSuccess(result);
