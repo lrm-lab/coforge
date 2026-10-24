@@ -16,7 +16,7 @@ import type {
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { AgentSessionRecoveryError } from "#src/code-agent/contract";
-import { scrubRuntimeErrorText } from "#src/agent-runtime/runtime-error-activity";
+import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
 import { bounded, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";
 import { kiroUpdateEvents } from "./update-events";

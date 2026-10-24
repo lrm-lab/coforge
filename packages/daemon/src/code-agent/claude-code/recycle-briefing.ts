@@ -2,7 +2,7 @@ import { truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import { CHARS_PER_TOKEN, estimateTokens } from "#src/agent-runtime/wake-session-recycle";
+import { CHARS_PER_TOKEN, estimateTokens } from "#src/code-agent/token-estimate";
 import { escapeXmlText } from "#src/platform/xml-escape";
 import {
   actionLine,

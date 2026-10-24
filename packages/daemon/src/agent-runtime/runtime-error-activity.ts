@@ -1,9 +1,7 @@
-import { redactCredentials } from "#src/platform/credential-redaction";
 import type { AgentActivity, AgentRuntimeEvent } from "@coforge/agent";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   RUNTIME_PROVIDER,
-  truncateCodePoints,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -12,6 +10,7 @@ import {
   type ClassifiedRuntimeErrorAction,
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
+import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
 import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery";
 
 /**
@@ -20,33 +19,6 @@ import type { RuntimeErrorFingerprintFenceState } from "./runtime-error-recovery
  * redacted and capped at 512 characters; every runtime failure gets the same structured
  * classification and fingerprint.
  */
-
-/** Matches the cap `daemon-runtime/runtime.ts`'s `safeRuntimeActivityMessage`
- * already applies to every other error-level Activity (spec: "Length limit"). */
-const MAX_VISIBLE_ERROR_CHARS = 512;
-
-/**
- * Redacts secrets that might appear in a raw provider error/crash message before
- * it becomes visible Activity text. CoForge's redaction here is intentionally
- * broader than a plain `Bearer <token>`/API-key regex: it also catches generic
- * `key=value`-shaped credential assignments (`token=...`, `password=...`), not
- * just recognized token prefixes. Reused by every provider's `error`/
- * `reconnecting` event, so there is exactly one redaction implementation for
- * runtime-failure text. The daemon runtime also calls this function directly
- * for warning-level and other error-adjacent Activity text, keeping those
- * rules in the same implementation.
- *
- * The `key=value` pattern keeps its prefix via a real capturing group, matching
- * `redactTrajectoryText` in activity-trajectory.ts (`$1[REDACTED]`) — the
- * previous `runtime.ts` copy of this rule referenced a non-existent capture
- * group (`"$1=[REDACTED]"` with no parentheses around the prefix), which left
- * a literal `$1=` in the output instead of redacting the value; fixed here as
- * part of consolidating every runtime-failure scrubber into this one function.
- */
-export function scrubRuntimeErrorText(message: string): string {
-  const redacted = redactCredentials(message);
-  return truncateCodePoints(redacted, MAX_VISIBLE_ERROR_CHARS);
-}
 
 /**
  * FNV-1a 32-bit hash rendered as 8 hex characters — the one fingerprint

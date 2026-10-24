@@ -16,7 +16,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - `subagent-progress-activity.ts` owns task row wording and `OutstandingBackgroundTasks`: a
   launch's tasks without a terminal notification, by task id, and the wait a quiet turn shows.
 - `activity-trajectory.ts` owns launch-local display-delta coalescing (350 ms),
-  boundary flushing, bounded retention, and assembled-text redaction. Adapters
+  boundary flushing, and bounded retention. Assembled-text redaction is provided by
+  `code-agent/agent-activity.ts`. Adapters
   supply only official display events and explicit lineage, never raw
   reasoning.
 - `tool-call-ledger.ts` is a launch's one record of open tool calls (stalled

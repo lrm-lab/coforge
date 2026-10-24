@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { redactTrajectoryText } from "#src/agent-runtime/activity-trajectory";
-import { scrubRuntimeErrorText } from "#src/agent-runtime/runtime-error-activity";
+import { redactTrajectoryText } from "#src/code-agent/agent-activity";
+import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
 import { classifyAgentProxyFailure } from "#src/agent-proxy-failure";
 
 /** What leaves the machine as Activity text or a log line never holds an app client secret. */

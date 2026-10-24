@@ -7,8 +7,7 @@ import {
   truncateCodePointsWithEllipsis,
   type AgentActivityDetailKind,
 } from "@lrm/coforge-sdk/internal";
-import { redactTrajectoryText } from "#src/agent-runtime/activity-trajectory";
-import { createAgentActivity } from "#src/agent-runtime/agent-activity";
+import { createAgentActivity, redactTrajectoryText } from "#src/code-agent/agent-activity";
 import { collapseWhitespace } from "./agent-instructions";
 import type { AgentRuntimeEvent } from "./contract";
 

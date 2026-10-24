@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENT_MEMORY_FILE } from "./agent-workspace-path";
-import { CHARS_PER_TOKEN, estimateTokens } from "./wake-session-recycle";
+import { CHARS_PER_TOKEN, estimateTokens } from "#src/code-agent/token-estimate";
 
 /** Refuses a symlink at the final component, and never blocks on a swapped-in FIFO. */
 const OPEN_FLAGS =

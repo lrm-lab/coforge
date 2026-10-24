@@ -1,9 +1,7 @@
 import type { UsageSnapshot } from "@coforge/agent";
 import { AGENT_ACTIVITY_DETAIL_KIND, truncateCodePoints } from "@lrm/coforge-sdk/internal";
-import {
-  fingerprintRuntimeError,
-  scrubRuntimeErrorText,
-} from "#src/agent-runtime/runtime-error-activity";
+import { fingerprintRuntimeError } from "#src/agent-runtime/runtime-error-activity";
+import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
 
 /** The visible text one Activity carries: bounded, redacted by level and kind, and never an
  * empty sentence for a kind that legitimately has no text. */

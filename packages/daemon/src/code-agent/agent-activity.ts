@@ -1,3 +1,4 @@
+import { redactCredentials } from "#src/platform/credential-redaction";
 export type { AgentActivity, AgentActivityLevel } from "@coforge/agent";
 import type { AgentActivity, AgentActivityLevel } from "@coforge/agent";
 import type { AgentActivityDetailKind } from "@lrm/coforge-sdk/internal";
@@ -17,3 +18,6 @@ export function createAgentActivity(
     ...(runtimeError ? { runtimeError } : {}),
   };
 }
+
+/** Best-effort redaction of assembled provider text, including split deltas. */
+export const redactTrajectoryText = redactCredentials;

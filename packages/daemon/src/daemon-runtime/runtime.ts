@@ -33,10 +33,10 @@ import {
   buildRuntimeErrorFingerprintFenceActivity,
   buildRuntimeCrashedActivity,
   buildRuntimeReconnectingActivity,
-  scrubRuntimeErrorText,
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
+import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
 import {
   AgentProcessManager,
@@ -226,12 +226,11 @@ type ActivityLaunch = PublishedActivityLaunch & {
   progress?: ProviderProgress;
   /** The launch's open tool calls, and the outcome each one's end reports. */
   toolCalls?: ToolCallLedger;
-  /** Background tasks started and not yet ended; they outlive their turn, never this launch. */
   backgroundTasks?: OutstandingBackgroundTasks;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
-  // — `AgentSession.onExit` itself carries no exit code/signal, so this is the only fact the
-  // core has for that decision (see agent-runtime/runtime-error-activity.ts).
+  // — `AgentSession.onExit` itself carries no exit code or signal, so this is the only fact the
+  // core has for it (see agent-runtime/runtime-error-activity.ts).
   crashDetail?: RuntimeErrorEvent;
   /** Set when a runtime error took this launch's Agent offline (`#takeAgentOffline`): the exit
    * handler republishes this Activity — never a bare `runtime_crashed` — a launch that then

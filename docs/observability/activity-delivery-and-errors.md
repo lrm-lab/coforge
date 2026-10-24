@@ -68,8 +68,7 @@ Pi／内置 Agent 在 SDK 的公开 `agent.streamFunction` 调用处上报 `mode
 （`message`、可选的 `retryable`/`providerErrorCode`/`providerErrorClass`/
 `providerErrorReason`/`providerLimit`/`occurredAt`）和 `reconnecting` 成员（`attempt`/
 `maxAttempts`/`delayMs`/`message`）是四个 provider（Claude Code、Codex、Kiro、Pi）唯一允许上报运行时失败
-和重连的方式，只携带原始事实，不带格式化或分类。`packages/daemon/src/agent-runtime/
-runtime-error-activity.ts` 是把这些事实变成可见 Activity 的唯一位置：provider 报错文案
+和重连的方式，只携带原始事实，不带格式化或分类。`packages/daemon/src/agent-runtime/runtime-error-activity.ts` 负责把这些事实分类并构造可见 Activity；其中错误文本的脱敏和 512 个 Unicode 码点上限由 `packages/daemon/src/code-agent/runtime-error-text.ts` 统一提供：provider 报错文案
 原样显示（需要人处理的错误除外——见下方「需要人处理的运行时错误」，其文案被改写为
 处理提示）；崩溃摘要（`Crashed (...)`）脱敏并截断到 512 个 Unicode 码点；附带的 `Error: …` trajectory
 entry，以及运行中错误的 `runtimeError`（`errorClass`/

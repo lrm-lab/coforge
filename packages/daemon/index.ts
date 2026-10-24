@@ -140,9 +140,9 @@ export { DaemonConfigStore } from "#src/persistence/daemon-config";
 export { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 export { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 export { AgentStateMachine } from "#src/agent-runtime/agent-state-machine";
-export { createAgentActivity } from "#src/agent-runtime/agent-activity";
+export { createAgentActivity } from "#src/code-agent/agent-activity";
 export type { AgentRuntime, AgentStatus } from "#src/agent-runtime/agent-process-manager";
-export type { AgentActivity, AgentActivityLevel } from "#src/agent-runtime/agent-activity";
+export type { AgentActivity, AgentActivityLevel } from "#src/code-agent/agent-activity";
 export type {
   AgentStateEvent,
   AgentStateTransition,

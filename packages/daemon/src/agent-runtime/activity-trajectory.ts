@@ -1,4 +1,3 @@
-import { redactCredentials } from "#src/platform/credential-redaction";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
@@ -7,7 +6,7 @@ import {
   type ActivitySubagent,
   type AgentActivityDetailKind,
 } from "@lrm/coforge-sdk/internal";
-import { createAgentActivity } from "./agent-activity";
+import { createAgentActivity, redactTrajectoryText } from "#src/code-agent/agent-activity";
 import { PHASE_BOUNDARY_EVENT_TYPES } from "./runtime-phases";
 
 /**
@@ -188,6 +187,3 @@ export class ActivityTrajectory {
     this.#disposed = true;
   }
 }
-
-// Best-effort redaction of the assembled buffer, including split deltas (`redactCredentials`).
-export const redactTrajectoryText = redactCredentials;

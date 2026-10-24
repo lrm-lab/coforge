@@ -4,10 +4,10 @@ import {
   buildRuntimeCrashedActivity,
   buildRuntimeErrorFingerprintFenceActivity,
   buildRuntimeReconnectingActivity,
-  scrubRuntimeErrorText,
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
+import { scrubRuntimeErrorText } from "#src/code-agent/runtime-error-text";
 
 test("builds a runtime_error activity from the provider's message as reported, with an Error: entry and structured fields", () => {
   const long = "x".repeat(600);

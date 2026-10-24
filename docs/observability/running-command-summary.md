@@ -83,8 +83,8 @@ stale rejection；当前保证来自 Daemon 的 current-launch gate。
 绝对路径、凭据或 stderr；启动失败的稳定原因见[启动失败原因](activity-delivery-and-errors.md#启动失败原因)。provider 错误/警告
 使用 `activity=error|warning` 和对应的 `level`；provider 只上报原始事实（消息文本，以及
 可选的 provider 原生错误代码/类别提示），从不自行分类；provider 的报错文案按上报原样
-显示，进程崩溃摘要的脱敏和长度上限，以及分类为[稳定类别](activity-delivery-and-errors.md)，都是 Daemon 核心
-（`packages/daemon/src/agent-runtime/runtime-error-activity.ts`）唯一的职责，
+显示，进程崩溃摘要的脱敏和长度上限由 code-agent 的 `runtime-error-text.ts` 统一提供，分类为[稳定类别](activity-delivery-and-errors.md)仍由 Daemon 核心
+（`packages/daemon/src/agent-runtime/runtime-error-activity.ts`）负责，
 见[「错误与重连的单一转换点」](activity-delivery-and-errors.md)。启动阶段如果进程未达到可接收工作状态，不能
 发送 `agent:status(status=active)`，并通过 `agent:activity` 记录启动明细。如果启动失败，
 通过 `agent:activity` 记录启动错误。进程已经 active 后遇到错误、警告或意外退出时，通过
