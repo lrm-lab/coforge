@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { AGENT_PEER_DIRECT_KEY_WHERE } from "#src/features/conversations/direct-key";
 import { lockConversation } from "./conversation-lock.server";
 
 /**
@@ -26,9 +27,15 @@ export const AGENT_DM_LIMIT_REASON = {
 
 const HOUR_MS = 60 * 60_000;
 
-/** The system message a conversation gets when a send is first refused; the card reads it too. */
-export const AGENT_DM_LIMIT_NOTICE =
-  "[CoForge paused] These Agents have exchanged too many messages in a row. They can continue after 10 minutes without a message.";
+/** The system message a conversation gets when a send is first refused, one text per limit. */
+export const AGENT_DM_LIMIT_NOTICE = {
+  AGENT_DM_CHAIN_LIMIT:
+    "[CoForge paused] These Agents have exchanged too many messages in a row. They can continue after 10 minutes without a message.",
+  AGENT_DM_RATE_LIMIT:
+    "[CoForge paused] An Agent here has sent too many direct messages to other Agents in the last hour. It can send again when the hour's total drops below the limit.",
+} as const;
+
+export type AgentDmLimitCode = keyof typeof AGENT_DM_LIMIT_NOTICE;
 
 /**
  * How many of the messages (newest first) belong to the chain ending now: each is less than the
@@ -47,8 +54,9 @@ export function agentDmChainLength(createdAtNewestFirst: readonly Date[], now: D
 
 /**
  * Refuses (`AGENT_DM_CHAIN_LIMIT`, `AGENT_DM_RATE_LIMIT`) a send between two Agents that would pass
- * a limit. Runs inside the send's transaction after the conversation is locked, so two sends at
- * the boundary cannot both pass. System messages are not part of the chain.
+ * a limit. Runs inside the send's transaction after the conversation is locked, so two sends into
+ * one conversation cannot both pass its chain limit; the hourly total is read without a lock across
+ * conversations, so concurrent sends to different peers may overshoot it by their number. System messages are not part of the chain.
  */
 export async function assertAgentDmWithinLimits(
   tx: Prisma.TransactionClient,
@@ -68,17 +76,10 @@ export async function assertAgentDmWithinLimits(
     ) >= AGENT_DM_LIMITS.chainMessages
   )
     throw new AppError("AGENT_DM_CHAIN_LIMIT");
-  const conversations = await tx.conversation.findMany({
-    where: {
-      workspaceId: input.workspaceId,
-      directKey: { startsWith: "agent:", contains: "|agent:" },
-      members: { some: { agentId: input.senderAgentId } },
-    },
-    select: { id: true },
-  });
   const sent = await tx.message.count({
     where: {
-      conversationId: { in: conversations.map((conversation) => conversation.id) },
+      workspaceId: input.workspaceId,
+      conversation: { directKey: AGENT_PEER_DIRECT_KEY_WHERE },
       sender: { agentId: input.senderAgentId },
       createdAt: { gte: new Date(now.getTime() - HOUR_MS) },
     },
@@ -87,30 +88,43 @@ export async function assertAgentDmWithinLimits(
 }
 
 /**
- * Writes `AGENT_DM_LIMIT_NOTICE` into the conversation unless its latest message already is a
- * system message, so a chain is told once and a refused retry adds nothing. The notice wakes no
- * Agent (it has no delivery): it is for the people who look at the conversation's card.
+ * Writes the notice for `code` into the conversation unless the current chain (its first message
+ * on) already has that same notice, so a limit is told once per chain and a refused retry adds
+ * nothing. The notice wakes no Agent (it has no delivery): it is for the people who look at the
+ * conversation's card.
  */
 export async function noteAgentDmLimit(
   db: PrismaClient,
-  conversationId: string,
-  workspaceId: string,
+  input: { conversationId: string; workspaceId: string; code: AgentDmLimitCode; now?: Date },
 ) {
+  const { conversationId, workspaceId, code } = input;
+  const body = AGENT_DM_LIMIT_NOTICE[code];
   await db.$transaction(async (tx) => {
     await lockConversation(tx, conversationId);
+    const recent = await tx.message.findMany({
+      where: { conversationId, senderMemberId: { not: null } },
+      orderBy: { sequence: "desc" },
+      take: AGENT_DM_LIMITS.chainMessages,
+      select: { createdAt: true, sequence: true },
+    });
+    const chain = agentDmChainLength(
+      recent.map((message) => message.createdAt),
+      input.now ?? new Date(),
+    );
+    // Told means after the chain's first message, or, with no chain, after the last message.
+    const since = (chain > 0 ? recent[chain - 1] : recent[0])?.sequence ?? 0;
+    const told = await tx.message.findFirst({
+      where: { conversationId, senderMemberId: null, body, sequence: { gt: since } },
+      select: { id: true },
+    });
+    if (told) return;
     const latest = await tx.message.findFirst({
       where: { conversationId },
       orderBy: { sequence: "desc" },
-      select: { sequence: true, senderMemberId: true },
+      select: { sequence: true },
     });
-    if (latest && latest.senderMemberId === null) return;
     await tx.message.create({
-      data: {
-        workspaceId,
-        conversationId,
-        sequence: (latest?.sequence ?? 0) + 1,
-        body: AGENT_DM_LIMIT_NOTICE,
-      },
+      data: { workspaceId, conversationId, sequence: (latest?.sequence ?? 0) + 1, body },
     });
   });
 }

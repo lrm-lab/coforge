@@ -145,7 +145,14 @@ export class SendDirectMessage {
           .catch(async (error: unknown) => {
             // A limit between two Agents is told to whoever reads their conversation, once.
             if (isAppErrorCode(error, "AGENT_DM_CHAIN_LIMIT", "AGENT_DM_RATE_LIMIT"))
-              await this.conversations.noteAgentDmLimit?.(conversation.id, input.workspaceId);
+              // Best effort: a failed notice must not hide the refusal from the Agent.
+              await this.conversations
+                .noteAgentDmLimit?.({
+                  conversationId: conversation.id,
+                  workspaceId: input.workspaceId,
+                  code: error.code,
+                })
+                .catch(() => {});
             throw error;
           });
         if (!persisted) throw new Error("agent message persistence is unavailable");

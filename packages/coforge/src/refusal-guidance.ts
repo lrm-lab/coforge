@@ -48,11 +48,16 @@ export function refusalNextAction(
       );
     }
     case "AGENT_DM_CHAIN_LIMIT":
+      return (
+        `${nothingDone ?? "Nothing was done"}: these Agents have exchanged too many messages in a ` +
+        "row. Stop here and wait; do not repeat the command, and do not carry the exchange to " +
+        "another conversation. It can continue after 10 minutes without a message."
+      );
     case "AGENT_DM_RATE_LIMIT":
       return (
-        `${nothingDone ?? "Nothing was done"}: a limit on messages between Agents stopped this. ` +
-        "Stop here and wait; do not repeat the command, and do not carry the exchange to " +
-        "another conversation. The conversation can continue after 10 minutes without a message."
+        `${nothingDone ?? "Nothing was done"}: you have sent too many direct messages to other ` +
+        "Agents in the last hour. Wait before sending another, and do not carry the exchange to " +
+        "another conversation."
       );
     case "AGENT_DM_RESTRICTED":
       return (

@@ -43,6 +43,9 @@ export function agentPeerDirectKey(agentId: string, otherAgentId: string) {
     .join("|");
 }
 
+/** A `directKey` filter for every Agent-to-Agent conversation (see `agentPeerDirectKey`). */
+export const AGENT_PEER_DIRECT_KEY_WHERE = { startsWith: "agent:", contains: "|agent:" } as const;
+
 /** Whether a direct conversation is between two Agents (no person is a member). */
 export function isAgentPeerDirectKey(directKey: string) {
   const parts = directKey.split("|");

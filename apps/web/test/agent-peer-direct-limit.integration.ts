@@ -48,7 +48,7 @@ beforeAll(async () => {
       data: { slug, name: "Limits", members: { create: [{ userId: user.id }] } },
     })
   ).id;
-  for (const name of ["left", "right", "third", "fourth"])
+  for (const name of ["left", "right", "third", "fourth", "fifth"])
     agents[name] = await db.agent.create({
       data: {
         workspaceId,
@@ -89,7 +89,7 @@ test("a chain of 20 messages is refused at the 21st, told once, and continues af
   const notice = stored.at(-1)!;
   expect([notice.senderMemberId, notice.body, notice.deliveries]).toEqual([
     null,
-    AGENT_DM_LIMIT_NOTICE,
+    AGENT_DM_LIMIT_NOTICE.AGENT_DM_CHAIN_LIMIT,
     [],
   ]);
 
@@ -133,4 +133,55 @@ test("one Agent's hourly budget across conversations is refused with the rate co
   });
   // Another Agent is not held by it.
   await send("right", "left", "unaffected");
+});
+
+test("a rate notice and a chain notice are each told once in a chain", async () => {
+  // Third already sent its hour's 60 above; 19 recent messages with Fifth make a short chain.
+  const conversation = await db.conversation.create({
+    data: {
+      workspaceId,
+      directKey: agentPeerDirectKey(agents.third!.id, agents.fifth!.id),
+    },
+  });
+  const [member] = await Promise.all(
+    [agents.third!, agents.fifth!].map((agent) =>
+      db.conversationMember.create({
+        data: { conversationId: conversation.id, workspaceId, agentId: agent.id },
+      }),
+    ),
+  );
+  const addMessages = (from: number, to: number) =>
+    db.message.createMany({
+      data: Array.from({ length: to - from + 1 }, (_, i) => ({
+        workspaceId,
+        conversationId: conversation.id,
+        senderMemberId: member!.id,
+        sequence: from + i,
+        body: `chain ${from + i}`,
+      })),
+    });
+  await addMessages(1, 19);
+  const notices = async () =>
+    (
+      await db.message.findMany({
+        where: { conversationId: conversation.id, senderMemberId: null },
+        orderBy: { sequence: "asc" },
+      })
+    ).map((message) => message.body);
+
+  for (let i = 0; i < 2; i += 1)
+    await expect(send("third", "fifth", "over the hour")).rejects.toMatchObject({
+      code: "AGENT_DM_RATE_LIMIT",
+    });
+  expect(await notices()).toEqual([AGENT_DM_LIMIT_NOTICE.AGENT_DM_RATE_LIMIT]);
+
+  await addMessages(21, 21);
+  for (let i = 0; i < 2; i += 1)
+    await expect(send("fifth", "third", "too long")).rejects.toMatchObject({
+      code: "AGENT_DM_CHAIN_LIMIT",
+    });
+  expect(await notices()).toEqual([
+    AGENT_DM_LIMIT_NOTICE.AGENT_DM_RATE_LIMIT,
+    AGENT_DM_LIMIT_NOTICE.AGENT_DM_CHAIN_LIMIT,
+  ]);
 });

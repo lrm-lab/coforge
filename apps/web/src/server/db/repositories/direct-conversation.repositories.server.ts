@@ -15,7 +15,7 @@ import {
 } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
-import { type TrackedMentionState } from "./mention-delivery.repositories.server";
+import type { TrackedMentionState } from "./mention-delivery.repositories.server";
 import {
   anchorSideHasMessages,
   assertMessageAnchor,
@@ -242,7 +242,7 @@ export type HistoryWindow = { beforeSequence?: number; afterSequence?: number; l
 
 export type DirectConversationRepository = {
   userIdForUsername?(target: string): Promise<string>;
-  noteAgentDmLimit?(conversationId: string, workspaceId: string): Promise<void>;
+  noteAgentDmLimit?(input: Parameters<typeof noteAgentDmLimit>[1]): Promise<void>;
   openAgentDirect?(
     workspaceId: string,
     agentId: string,
@@ -778,8 +778,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   /** Tells a conversation between Agents, once, that a limit stopped it. */
-  noteAgentDmLimit(conversationId: string, workspaceId: string) {
-    return noteAgentDmLimit(this.db, conversationId, workspaceId);
+  noteAgentDmLimit(input: Parameters<typeof noteAgentDmLimit>[1]) {
+    return noteAgentDmLimit(this.db, input);
   }
 
   /** The conversation a direct send names, started if need be, and who it is with. */

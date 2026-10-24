@@ -361,7 +361,12 @@ export async function handleAgentMessagesPost(
         false,
       );
     if (isAppErrorCode(error, "AGENT_DM_CHAIN_LIMIT", "AGENT_DM_RATE_LIMIT"))
-      return errorResponse(error.code, AGENT_DM_LIMIT_REASON[error.code], 429, true);
+      return errorResponse(
+        error.code,
+        AGENT_DM_LIMIT_REASON[error.code],
+        429,
+        error.code === "AGENT_DM_RATE_LIMIT",
+      );
     const refused = postingTargetRefusalResponse(error, body.target);
     if (refused) return refused;
     throw error;
