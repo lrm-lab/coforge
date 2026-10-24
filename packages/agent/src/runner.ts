@@ -45,7 +45,7 @@ export { MemoryAgentTurnBudget } from "./memory-agent-turn";
 
 import { installChannelTurnPolicy } from "./channel-turn-policy";
 
-import { createMemoryDispositionTool } from "./memory-disposition-tool";
+import { taskAgentTools } from "./task-doc-tools";
 
 export type MemoryAgentProxy = {
   post(path: string, body: unknown): Promise<unknown>;
@@ -598,7 +598,7 @@ export async function createSession(options: {
         ]
       : []),
     ...memoryTools,
-    ...(!memoryFence ? [createMemoryDispositionTool(defaultMemoryProxy(environment))] : []),
+    ...(!memoryFence ? taskAgentTools(defaultMemoryProxy(environment), environment, options) : []),
   ];
   const created = await createAgentSessionFromServices({
     services,

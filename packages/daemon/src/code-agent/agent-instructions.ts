@@ -11,6 +11,7 @@ import {
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 import { MEMORY_AGENT_RETRIEVAL_GUIDANCE } from "./memory-agent-guidance";
+import { taskDocToolsSection } from "./task-doc-instructions";
 
 /** Set only by the collaboration evaluation's daemon assembly. */
 export const EVAL_MEMORY_OFFER_ONLY = "COFORGE_EVAL_MEMORY_OFFER_ONLY";
@@ -173,6 +174,8 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
     );
   } else {
     sections.push(...Object.values(guide));
+    const documents = taskDocToolsSection();
+    if (documents) sections.push(documents);
     const apps = buildAppsSection(context.identity?.apps ?? []);
     if (apps) sections.push(apps);
     if (context.identity?.systemKind === "workspace-assistant")

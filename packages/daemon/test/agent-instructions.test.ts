@@ -433,3 +433,26 @@ test("the section stays within its byte budget and counts the apps that did not 
   expect(section).toContain(`\n- and ${20 - shown} more: see \`coforge app list\`\n`);
   expect(appsSectionFor({ apps: apps.slice(0, 2) })).not.toContain("more: see");
 });
+
+test("the document-retrieval section is eval-only and tells the Task Agent to search itself", () => {
+  const original = Bun.env.COFORGE_EVAL_TASK_DOC_TOOLS;
+  const cap = Bun.env.COFORGE_EVAL_TASK_FIND_CAP;
+  try {
+    delete Bun.env.COFORGE_EVAL_TASK_DOC_TOOLS;
+    expect(buildCoforgeAgentInstructions({ agentWorkspaceDirectory: directory })).not.toContain(
+      "## Document retrieval (OpenViking)",
+    );
+    Bun.env.COFORGE_EVAL_TASK_DOC_TOOLS = "1";
+    Bun.env.COFORGE_EVAL_TASK_FIND_CAP = "30";
+    const text = buildCoforgeAgentInstructions({ agentWorkspaceDirectory: directory });
+    expect(text).toContain("## Document retrieval (OpenViking)");
+    expect(text).toContain("The Memory Agent never searches documents");
+    expect(text).toContain("about 30 ov_find");
+    expect(text).toContain('ov_find: {"operationId"');
+  } finally {
+    if (original === undefined) delete Bun.env.COFORGE_EVAL_TASK_DOC_TOOLS;
+    else Bun.env.COFORGE_EVAL_TASK_DOC_TOOLS = original;
+    if (cap === undefined) delete Bun.env.COFORGE_EVAL_TASK_FIND_CAP;
+    else Bun.env.COFORGE_EVAL_TASK_FIND_CAP = cap;
+  }
+});
