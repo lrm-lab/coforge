@@ -72,7 +72,11 @@ export type FailedOutcome = Exclude<ManifestOutcome, { kind: "valid" | "absent" 
 export function failureMessage(outcome: FailedOutcome, app: AgentAppView): string {
   switch (outcome.kind) {
     case "not_configured":
-      return `The app ${app.key} names no Agent manifest URL and has no homepage to derive one from.`;
+      // An absent location (not `null`) is the server not handing manifests to Agents here, whatever
+      // the app set (`AgentAppView.agentManifestUrl`).
+      return app.agentManifestUrl === undefined
+        ? `CoForge does not give Agents the Agent manifest of ${app.key} in this Workspace.`
+        : `The app ${app.key} names no Agent manifest URL and has no homepage to derive one from.`;
     case "missing":
       return `The app ${app.key} publishes no Agent manifest (HTTP ${outcome.status}).`;
     case "unavailable":

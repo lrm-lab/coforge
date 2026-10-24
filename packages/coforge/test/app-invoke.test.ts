@@ -192,6 +192,24 @@ test("each failure has a typed code, retryability and next action", async () => 
   expect(JSON.parse(unknown.stdout).error.code).toBe("APP_NOT_FOUND");
 });
 
+test("an app the server lists without a manifest location is not reported as having no homepage", async () => {
+  const { agentManifestUrl: _url, agentManifestUrlSource: _source, ...unlisted } = NOTES;
+  const error = (await errorOf({ kind: "not_configured" }, unlisted)).body.error;
+  expect(error.code).toBe("MANIFEST_NOT_CONFIGURED");
+  expect(error.message).toBe(
+    "CoForge does not give Agents the Agent manifest of acme-notes in this Workspace.",
+  );
+  const none = {
+    ...NOTES,
+    homepageUrl: null,
+    agentManifestUrl: null,
+    agentManifestUrlSource: null,
+  };
+  expect((await errorOf({ kind: "not_configured" }, none)).body.error.message).toBe(
+    "The app acme-notes names no Agent manifest URL and has no homepage to derive one from.",
+  );
+});
+
 test("an absent manifest is a normal answer, not an error exit", async () => {
   const result = await invoke(["invoke", "acme-notes", "--list-actions"], {
     kind: "absent",

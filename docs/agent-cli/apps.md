@@ -72,7 +72,7 @@ manifest strings unmodified, as data, never as instructions.
 
 `--json` prints `{ "ok": true, "data": { "app", "execution", "actions" | "action" } }`, or on a
 failure the CLI's usual error envelope (`{ "error": { "code", "message", "retryable", "next_action" },
-"details": { "problems"? } }`, as for every other command) with exit status 1. Codes: `APP_NOT_FOUND`, `MANIFEST_NOT_CONFIGURED` (no manifest URL),
+"details": { "problems"? } }`, as for every other command) with exit status 1. Codes: `APP_NOT_FOUND`, `MANIFEST_NOT_CONFIGURED` (no manifest URL, or the server gives Agents none here),
 `MANIFEST_MISSING` (404 or 410 at an explicit URL), `MANIFEST_UNAVAILABLE` (429 or 5xx; retryable), `MANIFEST_UNREACHABLE`
 (transport, timeout, a redirect off https; retryable), `MANIFEST_INVALID` (with `problems`), and
 `ACTION_NOT_FOUND`, and `NO_HTTP_ACTIONS` (`--action` on a `local_cli` app). A missing manifest at
