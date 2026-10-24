@@ -112,9 +112,9 @@ test("a #channel reference is stored as a channel token on every send path, and 
       bodyOf(await repo.readMessages(workspace.id, helper.id, "#general", { around: human.id })),
     ).toBe(readable);
     // The token keeps the channel's name, so a body search for the name still finds the message.
-    expect(bodyOf(await repo.searchMessages(workspace.id, helper.id, { query: "product" }))).toBe(
-      readable,
-    );
+    expect(
+      bodyOf((await repo.searchMessages(workspace.id, helper.id, { query: "product" })).messages),
+    ).toBe(readable);
     expect<string>((await repo.resolveAgentMessage(workspace.id, helper.id, human.id)).body).toBe(
       CHANNEL_MEMBER_CONTEXT + readable,
     );
@@ -375,9 +375,9 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
     expect(
       bodyOf(await repo.readMessages(workspace.id, helper.id, "#general", { around: human.id })),
     ).toBe(readable);
-    expect(bodyOf(await repo.searchMessages(workspace.id, helper.id, { query: "product" }))).toBe(
-      readable,
-    );
+    expect(
+      bodyOf((await repo.searchMessages(workspace.id, helper.id, { query: "product" })).messages),
+    ).toBe(readable);
     expect<string>((await repo.resolveAgentMessage(workspace.id, helper.id, human.id)).body).toBe(
       CHANNEL_MEMBER_CONTEXT + readable,
     );

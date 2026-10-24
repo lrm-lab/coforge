@@ -537,9 +537,7 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     });
     expect(published.map((m) => m.messageId)).toEqual([mentioned.id, ordinary.id]);
     expect(
-      await repo.searchMessages(workspace.id, agent.id, {
-        query: "ordinary unmute",
-      }),
+      (await repo.searchMessages(workspace.id, agent.id, { query: "ordinary unmute" })).messages,
     ).toEqual([
       expect.objectContaining({
         id: ordinary.id,

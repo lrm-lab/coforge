@@ -56,7 +56,12 @@ import {
   type AgentMentionDeliveryResponse,
 } from "@lrm/coforge-sdk/agent";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
-import { parseActionPrepareRequest, parseChannelCommand } from "./agent-proxy-request-parsers";
+import {
+  invalidSearchPosition,
+  parseActionPrepareRequest,
+  parseChannelCommand,
+  parseSearchPosition,
+} from "./agent-proxy-request-parsers";
 import { classifyAgentProxyFailure, AGENT_PROXY_CORRELATION_HEADER } from "./agent-proxy-failure";
 import * as domain from "./agent-proxy-domain-failures";
 import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
@@ -514,10 +519,7 @@ function parseMessageRequest(
         !Number.isInteger(payload.limit) ||
         payload.limit < 1 ||
         payload.limit > 100)) ||
-    (payload.offset !== undefined &&
-      (typeof payload.offset !== "number" ||
-        !Number.isInteger(payload.offset) ||
-        payload.offset < 0)) ||
+    invalidSearchPosition(payload) ||
     (payload.query !== undefined &&
       (typeof payload.query !== "string" || payload.query.trim().length === 0)) ||
     (payload.sender !== undefined &&
@@ -566,7 +568,7 @@ function parseMessageRequest(
     query: typeof payload.query === "string" ? payload.query : undefined,
     sender: typeof payload.sender === "string" ? payload.sender : undefined,
     sort: payload.sort === "relevance" || payload.sort === "recent" ? payload.sort : undefined,
-    offset: typeof payload.offset === "number" ? payload.offset : undefined,
+    ...parseSearchPosition(payload),
     freshnessContextMode:
       payload.freshnessContextMode === "inline" || payload.freshnessContextMode === "withheld"
         ? payload.freshnessContextMode

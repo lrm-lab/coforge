@@ -31,6 +31,8 @@ async function scanRoots(): Promise<string[]> {
 
 /** Every file allowed to hard-code a scanned provider value, and why. */
 const ALLOWLIST: Readonly<Record<string, string>> = {
+  "apps/web/src/routes/api/agent/v1/messages_.search.ts":
+    'the search route\'s "cursor" query parameter',
   "packages/coforge-sdk/src/internal/runtime-provider.ts":
     "the RuntimeProvider vocabulary module itself",
   "packages/daemon/src/code-agent/runtime-executable.ts":

@@ -6,7 +6,7 @@ import {
   type AgentMessageRecord,
 } from "@lrm/coforge-sdk/internal";
 
-function messageSender(message: AgentMessageRecord): string {
+export function messageSender(message: AgentMessageRecord): string {
   return renderMessageSender(message.senderKind, message.senderHandle, message.senderDescription);
 }
 
@@ -33,6 +33,19 @@ export function formatUtcTimestamp(createdAt: string): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}Z`;
 }
 
+/** `YYYY-MM-DD HH:MM:SS +08:00`: the time on this machine's clock, with its offset from UTC. */
+export function formatLocalTimeWithOffset(createdAt: string): string {
+  const date = new Date(createdAt);
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes < 0 ? "-" : "+";
+  const absolute = Math.abs(offsetMinutes);
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} ` +
+    `${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
+  );
+}
+
 function attachmentSuffix(message: AgentMessageRecord): string {
   const attachments = message.attachments ?? [];
   if (attachments.length === 0) return "";
@@ -41,7 +54,7 @@ function attachmentSuffix(message: AgentMessageRecord): string {
   return ` [${attachments.length} ${noun}: ${list} — use \`coforge attachment view --id <attachmentId> --output <path>\` to download]`;
 }
 
-function taskSuffix(message: AgentMessageRecord): string {
+export function taskSuffix(message: AgentMessageRecord): string {
   if (!message.task) return "";
   const owner = message.task.owner
     ? ` owner=@${message.task.owner.handle}${message.task.owner.deleted ? " [deleted]" : ""}`
@@ -125,142 +138,6 @@ export function neutralizeReferenceLiterals(text: string): string {
   );
   result = result.replace(TASK_REFERENCE_PATTERN, (_match, number: string) => `task:${number}`);
   return result;
-}
-
-function indexOfCaseInsensitive(haystack: string, needle: string): number {
-  if (!needle) return -1;
-  return haystack.toLowerCase().indexOf(needle.toLowerCase());
-}
-
-function firstQueryTerm(query: string): string {
-  const trimmed = query.trim();
-  const match = /^"([^"]*)"|^(\S+)/.exec(trimmed);
-  if (!match) return "";
-  return (match[1] ?? match[2] ?? "").trim();
-}
-
-const PREVIEW_LEADING_CONTEXT = 80;
-const PREVIEW_TRAILING_CONTEXT = 120;
-const PREVIEW_NO_MATCH_LENGTH = 200;
-
-export function renderSearchPreview(body: string, query: string): string {
-  const trimmedQuery = query.trim();
-  let matchStart = -1;
-  let matchLength = 0;
-
-  if (trimmedQuery) {
-    const index = indexOfCaseInsensitive(body, trimmedQuery);
-    if (index >= 0) {
-      matchStart = index;
-      matchLength = trimmedQuery.length;
-    }
-  }
-  if (matchStart < 0) {
-    const term = firstQueryTerm(query);
-    if (term) {
-      const index = indexOfCaseInsensitive(body, term);
-      if (index >= 0) {
-        matchStart = index;
-        matchLength = term.length;
-      }
-    }
-  }
-
-  const hasMatch = matchStart >= 0;
-  const matchEnd = matchStart + matchLength;
-  const windowStart = hasMatch ? Math.max(0, matchStart - PREVIEW_LEADING_CONTEXT) : 0;
-  const windowEnd = hasMatch
-    ? Math.min(body.length, matchEnd + PREVIEW_TRAILING_CONTEXT)
-    : Math.min(body.length, PREVIEW_NO_MATCH_LENGTH);
-  const cutStart = hasMatch && windowStart > 0;
-  const cutEnd = windowEnd < body.length;
-
-  let pre = hasMatch ? body.slice(windowStart, matchStart) : "";
-  const matched = hasMatch ? body.slice(matchStart, matchEnd) : "";
-  let post = hasMatch ? body.slice(matchEnd, windowEnd) : body.slice(windowStart, windowEnd);
-
-  if (cutStart) pre = pre.trimStart();
-  if (cutEnd) post = post.trimEnd();
-
-  const safePre = neutralizeReferenceLiterals(pre);
-  const safeMatched = neutralizeReferenceLiterals(matched);
-  const safePost = neutralizeReferenceLiterals(post);
-  const core = hasMatch ? `${safePre}<match>${safeMatched}</match>${safePost}` : safePost;
-
-  return `${cutStart ? "<omit />" : ""}${core}${cutEnd ? "<omit />" : ""}`;
-}
-
-type SearchResponse = {
-  messages?: AgentMessageRecord[];
-  hasMore?: boolean;
-};
-
-type SearchFormatOptions = {
-  target?: string;
-  sender?: string;
-  sort?: "relevance" | "recent";
-  before?: string;
-  after?: string;
-  limit?: number;
-  offset?: number;
-};
-
-const SEARCH_CONTEXT_TIP =
-  'If a result may be relevant but its preview is not enough, read its surrounding context with coforge message read --target "<target>" --around <shortId>.';
-
-function searchPageCommand(query: string, options: SearchFormatOptions, offset: number): string {
-  const args = [`coforge message search --query ${JSON.stringify(query)}`];
-  if (options.target !== undefined) args.push(`--target ${JSON.stringify(options.target)}`);
-  if (options.sender !== undefined) args.push(`--sender ${JSON.stringify(options.sender)}`);
-  if (options.sort !== undefined) args.push(`--sort ${options.sort}`);
-  if (options.before !== undefined) args.push(`--before ${JSON.stringify(options.before)}`);
-  if (options.after !== undefined) args.push(`--after ${JSON.stringify(options.after)}`);
-  if (options.limit !== undefined) args.push(`--limit ${options.limit}`);
-  args.push(`--offset ${offset}`);
-  return args.join(" ");
-}
-
-export function formatSearchResults(
-  query: string,
-  response: SearchResponse,
-  options: SearchFormatOptions = {},
-): string {
-  const messages = response.messages ?? [];
-  if (messages.length === 0) return "No search results.";
-
-  const count = messages.length;
-  const noun = count === 1 ? "result" : "results";
-  const truncated =
-    response.hasMore === true
-      ? "true"
-      : response.hasMore === false
-        ? "false"
-        : options.limit !== undefined && count === options.limit
-          ? "unknown"
-          : "false";
-  const header = query
-    ? `Search results for: "${query}" (${count} ${noun} · truncated=${truncated})`
-    : `Filtered message results (${count} ${noun} · truncated=${truncated})`;
-
-  const blocks = messages.map((message) =>
-    [
-      `<result ref="msg:${message.id}">`,
-      `Source: ${message.target}`,
-      `Sender: ${neutralizeReferenceLiterals(messageSender(message))}`,
-      `Time: ${formatUtcTimestamp(message.createdAt)}`,
-      "",
-      "<preview>",
-      fenceMessageBody(renderSearchPreview(message.body, query)),
-      "</preview>",
-      "</result>",
-    ].join("\n"),
-  );
-
-  const nextPage =
-    (truncated === "true" || truncated === "unknown") && options.limit !== undefined
-      ? `Next page: ${searchPageCommand(query, options, (options.offset ?? 0) + count)}`
-      : "";
-  return `${header}\n${nextPage ? `${nextPage}\n` : ""}\n${blocks.join("\n\n")}\n\n${SEARCH_CONTEXT_TIP}`;
 }
 
 type SendResponse = {

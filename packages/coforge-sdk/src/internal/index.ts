@@ -755,10 +755,6 @@ export type AgentMessageRequest = {
   after?: string;
   around?: string;
   limit?: number;
-  query?: string;
-  sender?: string;
-  sort?: "relevance" | "recent";
-  offset?: number;
   freshnessContextMode?: "inline" | "withheld";
   messageId?: string;
   emoji?: string;
@@ -766,7 +762,7 @@ export type AgentMessageRequest = {
   attachmentIds?: string[];
   /** `send` only: structured @mention bindings; see `LocalMentionSelector`. */
   mentions?: import("./local-daemon").LocalMentionSelector[];
-};
+} & import("./local-daemon").LocalMessageSearchFields;
 export interface ComputerRegisterTransport {
   request(
     method: typeof COMPUTER_REGISTER_METHOD,
@@ -842,6 +838,7 @@ export type {
   MessageTaskMetadata,
   LocalMentionSelector,
   LocalAttachment,
+  LocalSearchPaging,
 } from "./local-daemon";
 export type {
   DaemonHandshakeRequest,

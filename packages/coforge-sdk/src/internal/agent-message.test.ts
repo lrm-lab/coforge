@@ -400,6 +400,29 @@ test("round-trips the daemon-local events drain hasMore flag for the CLI", () =>
   expect(decodeAgentMessageResponse(encodeAgentMessageResponse(local))).toEqual(local);
 });
 
+test("round-trips the search paging fields for the CLI and withholds them under reviewer isolation", () => {
+  const local = {
+    idempotencyKey: "request-search",
+    accepted: true,
+    attentionCount: 0,
+    summaries: [],
+    messages: [],
+    messageId: "",
+    hasMore: true,
+    nextCursor: "cursor-1",
+    incomplete: true,
+    searchedMessages: 5000,
+    searchedThrough: "2026-08-01T00:00:00Z",
+  };
+  expect(decodeAgentMessageResponse(encodeAgentMessageResponse(local))).toEqual(local);
+  const withheld = decodeAgentMessageResponse(
+    encodeAgentMessageResponse({ ...local, freshnessContextMode: "withheld" }),
+  );
+  expect(withheld.nextCursor).toBeUndefined();
+  expect(withheld.incomplete).toBeUndefined();
+  expect(withheld.searchedMessages).toBeUndefined();
+});
+
 test("withholds the daemon-local events drain hasMore flag under reviewer isolation", () => {
   const local = {
     idempotencyKey: "request-events",

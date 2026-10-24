@@ -49,7 +49,14 @@ export type AgentMessageRepository = {
     workspaceId: string,
     agentId: string,
     options: Record<string, unknown>,
-  ): Promise<readonly AgentMessageRecord[]>;
+  ): Promise<{
+    messages: readonly AgentMessageRecord[];
+    hasMore: boolean;
+    nextCursor?: string;
+    incomplete: boolean;
+    searchedMessages?: number;
+    searchedThrough?: string;
+  }>;
   readMessagesPage?(
     workspaceId: string,
     agentId: string,
@@ -536,16 +543,6 @@ export async function drainAgentEvents(
       createdAt: message.createdAt.toISOString(),
     })),
   };
-}
-
-export async function searchAgentMessages(
-  repository: AgentMessageRepository,
-  scope: { workspaceId: string; agentId: string },
-  options: Record<string, unknown>,
-) {
-  if (!repository.searchMessages) throw new Error("Agent message search is unavailable");
-  const messages = await repository.searchMessages(scope.workspaceId, scope.agentId, options);
-  return messages.map((message) => ({ ...message, createdAt: message.createdAt.toISOString() }));
 }
 
 export async function muteAgentChannel(

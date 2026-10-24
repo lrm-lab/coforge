@@ -223,7 +223,7 @@ test.skipIf(!connectionString)(
       expect(await errorOf(getAgentChannel(db, workspace.id, agent.id, "#general"))).toBeDefined();
       expect(await errorOf(management.info(workspace.id, agent.id, "#general"))).toBe("status:404");
       expect(await errorOf(management.join(workspace.id, agent.id, "#general"))).toBe("status:404");
-      expect(await agentSearch()).toEqual([]);
+      expect((await agentSearch()).messages).toEqual([]);
       // Its waiting deliveries hold until it is back, and its messages resolve to nothing.
       expect(await pending()).toEqual([]);
       expect(await errorOf(repo.resolveAgentMessage(workspace.id, agent.id, history.id))).toBe(
@@ -257,7 +257,7 @@ test.skipIf(!connectionString)(
       ).toBe(1);
       expect((await reference()).body).toBe(`see <@channel:${general.id}:general>`);
       expect((await management.info(workspace.id, agent.id, "#general")).name).toBe("#general");
-      expect((await agentSearch()).map((row) => row.id)).toEqual([history.id]);
+      expect((await agentSearch()).messages.map((row) => row.id)).toEqual([history.id]);
       expect(await pending()).toEqual([mention.id]);
       expect((await repo.resolveAgentMessage(workspace.id, agent.id, history.id)).id).toBe(
         history.id,

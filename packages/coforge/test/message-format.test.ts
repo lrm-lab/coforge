@@ -7,8 +7,8 @@ import {
   formatSendSuccess,
   formatUtcTimestamp,
   neutralizeReferenceLiterals,
-  renderSearchPreview,
 } from "#src/message-format";
+import { renderSearchPreview } from "#src/search-format";
 
 function message(overrides: Partial<AgentMessageRecord> = {}): AgentMessageRecord {
   return {

@@ -5,10 +5,8 @@ import type { AgentMessageValidationMessage } from "@lrm/coforge-sdk/internal";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { agentIdempotencyKeyFromQuery } from "#src/server/agents/agent-http-routes.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import {
-  searchAgentMessages,
-  type AgentMessageRepository,
-} from "#src/server/agents/agent-messages.server";
+import type { AgentMessageRepository } from "#src/server/agents/agent-messages.server";
+import { searchAgentMessages } from "#src/server/agents/agent-message-search.server";
 
 export type AgentMessagesSearchGetPrincipal = { workspaceId: string; agentId: string };
 
@@ -34,7 +32,7 @@ export async function handleAgentMessagesSearchGet(
   const idempotencyKey = agentIdempotencyKeyFromQuery(request);
   const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
   try {
-    const results = (await searchAgentMessages(repository, scope, {
+    const page = await searchAgentMessages(repository, scope, {
       query: query.get("query") ?? undefined,
       target: query.get("target") ?? undefined,
       sender: query.get("sender") ?? undefined,
@@ -43,10 +41,16 @@ export async function handleAgentMessagesSearchGet(
       after: instant("after"),
       limit: query.has("limit") ? Number(query.get("limit")) : undefined,
       offset: query.has("offset") ? Number(query.get("offset")) : undefined,
-    })) as AgentMessage[];
+      cursor: query.get("cursor") ?? undefined,
+    });
     const response: AgentSearchResponse = {
       idempotencyKey,
-      results,
+      results: page.messages as AgentMessage[],
+      hasMore: page.hasMore,
+      nextCursor: page.nextCursor,
+      incomplete: page.incomplete,
+      searchedMessages: page.searchedMessages,
+      searchedThrough: page.searchedThrough,
     };
     return Response.json(response);
   } catch {

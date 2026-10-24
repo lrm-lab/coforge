@@ -68,8 +68,12 @@ test("models the dedicated search route's own response shape", () => {
   const response: AgentSearchResponse = {
     idempotencyKey: "request-search",
     results: [],
+    hasMore: true,
+    nextCursor: "cursor-1",
+    incomplete: false,
   };
   expect(response.results).toEqual([]);
+  expect(response.nextCursor).toBe("cursor-1");
 });
 
 test("models the send route's state discriminant and held context", () => {

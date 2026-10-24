@@ -78,7 +78,6 @@ import {
   formatHeldSend,
   formatMessageLine,
   formatReadWindow,
-  formatSearchResults,
   formatSendSuccess,
   formatSendCommitted,
   formatTaskWorkflowHint,
@@ -87,6 +86,10 @@ import {
   senderUnresolvedMention,
   type PendingMentionAction,
 } from "#src/message-format";
+import { formatSearchResults } from "#src/search-format";
+import { parseMessageSearchArgs, type MessageSearchOptions } from "#src/message-search-args";
+
+export type { MessageSearchOptions };
 import {
   formatChannelAddMember,
   formatChannelArchive,
@@ -125,16 +128,6 @@ import {
 export { createAgentApiClient } from "@lrm/coforge-sdk/agent";
 
 export type MessageCommand = "check" | "read" | "search" | "send" | "resolve" | "react";
-export type MessageSearchOptions = {
-  query?: string;
-  target?: string;
-  sender?: string;
-  sort?: "relevance" | "recent";
-  before?: string;
-  after?: string;
-  limit?: number;
-  offset?: number;
-};
 export type MessageInvocation =
   | { command: "check"; target?: string }
   | {
@@ -537,51 +530,7 @@ export function parseArgs(
         ...(remove ? { remove: true as const } : {}),
       };
     }
-    if (args[1] === "search") {
-      const options: MessageSearchOptions = {};
-      for (let i = 2; i < args.length; i += 2) {
-        const name = args[i];
-        const value = args[i + 1];
-        if (
-          !name ||
-          ![
-            "--query",
-            "--target",
-            "--channel",
-            "--sender",
-            "--sort",
-            "--before",
-            "--after",
-            "--limit",
-            "--offset",
-          ].includes(name) ||
-          !value
-        )
-          throw new Error("Usage:");
-        if (name === "--limit" || name === "--offset") {
-          const number = Number(value);
-          if (!Number.isInteger(number) || number < (name === "--limit" ? 1 : 0))
-            throw new Error("Usage:");
-          if (name === "--limit") options.limit = number;
-          else options.offset = number;
-        } else if (name === "--sort") {
-          if (value !== "relevance" && value !== "recent") throw new Error("Usage:");
-          options.sort = value;
-        } else if (name === "--query") options.query = value.trim() || undefined;
-        else if (name === "--target" || name === "--channel") {
-          if (options.target && options.target !== value) throw new Error("Usage:");
-          options.target = value;
-        } else if (name === "--sender")
-          options.sender = value.startsWith("@") ? value : `@${value}`;
-        else if (name === "--before") options.before = value;
-        else options.after = value;
-      }
-      if (!options.query && !options.target && !options.sender && !options.before && !options.after)
-        throw new Error("Usage:");
-      if (!options.query && options.sort === "relevance") throw new Error("Usage:");
-      if (options.limit !== undefined && options.limit > 100) throw new Error("Usage:");
-      return { command: "search", ...options };
-    }
+    if (args[1] === "search") return { command: "search", ...parseMessageSearchArgs(args) };
     if (args[1] === "read") {
       const target = args[2] === "--target" ? args[3] : undefined;
       const options: {
@@ -702,7 +651,7 @@ export function parseArgs(
     }
   }
   throw new Error(
-    "Usage: coforge channel mute|unmute --target '#channel' | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread unfollow --target '#channel:message-id' | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] | coforge message read --target @user | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json] | coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json] | coforge app list [--all] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
+    "Usage: coforge channel mute|unmute --target '#channel' | coforge channel info <target> | coforge channel members <target> | coforge channel join --target '#channel' | coforge channel leave --target '#channel' | coforge channel create --name <name> [--description <text>] [--json] | coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json] | coforge channel lifecycle archive|unarchive --target '#channel' [--json] | coforge channel add-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge channel remove-member --target '#channel' (--user @handle | --agent @handle) [--json] | coforge thread unfollow --target '#channel:message-id' | coforge inbox check | coforge message check [--target @user|#channel] | coforge message search --query <text> [--target <target>] [--sender <handle>] [--sort relevance|recent] [--before <iso>] [--after <iso>] [--limit <n>] [--offset <n>] [--cursor <cursor>] | coforge message read --target @user | coforge message send --target @user [--send-draft [--expected-draft-key <key>]] [--anyway] [--reviewer-isolation] [--json] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--target-confirmed] | coforge message resolve <message-id> | coforge message react --message-id <id> --emoji <emoji> [--remove] | coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] | coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] | coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation] | coforge task convert|unclaim|assign|unassign|update|amend|history|delete|receipt ... | coforge attachment view [--id] <id> --output <path> [--json] | coforge attachment upload --path <file> (--target <target>|--channel <target>) [--mime-type <type>] [--json] | coforge weekly-report templates|inbox|members | coforge weekly-report workflow --input <json-file> | coforge weekly-report context --subject-type report|cycle --subject-id <uuid> | coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>] | coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>] | coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>] | coforge action prepare --target <target> | coforge manual get <topic> [--intent <text>] [--reason <text>] | coforge manual search \"<keywords>\" [--intent <text>] [--reason <text>] | coforge whoami [--json] | coforge version [--json] | coforge user info <name> [--json] | coforge profile show [<target>] [--json] | coforge profile update [--display-name <text>] [--description <text>] [--json] | coforge mention pending [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json] | coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json] | coforge app list [--all] [--json] | coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
   );
 }
 
@@ -1585,7 +1534,14 @@ export async function run(args: readonly string[], transport: MessageTransport):
   if (command === "search") {
     if (!transport.search) throw new Error("Message search transport is unavailable");
     const { command: _command, ...options } = invocation;
-    const response = (await transport.search(options)) as { messages: AgentMessageRecord[] };
+    const response = (await transport.search(options)) as {
+      messages: AgentMessageRecord[];
+      hasMore?: boolean;
+      nextCursor?: string;
+      incomplete?: boolean;
+      searchedMessages?: number;
+      searchedThrough?: string;
+    };
     return formatSearchResults(options.query ?? "", response, options);
   }
   if (command === "resolve") {

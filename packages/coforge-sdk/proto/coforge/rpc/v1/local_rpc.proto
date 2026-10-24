@@ -98,6 +98,12 @@ message AgentMessageResponse {
   optional uint32 new_message_count = 25;
   optional uint32 shown_message_count = 26;
   optional uint32 omitted_message_count = 27;
+  // `message search` only: where the next page of a `recent` search starts, and whether the
+  // server stopped before covering everything the query could match.
+  string next_cursor = 28;
+  bool incomplete = 29;
+  optional uint32 searched_messages = 30;
+  string searched_through = 31;
   reserved 7, 9;
   reserved "side_effect_decision", "anyway_allowed";
 }

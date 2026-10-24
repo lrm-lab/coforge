@@ -64,6 +64,7 @@ import {
   NO_MESSAGE_SENT_NEXT_ACTION,
   unknownDeliveryNextAction,
 } from "./cli-error";
+import type { MessageSearchOptions } from "./message-search-args";
 import { refusalNextAction } from "./refusal-guidance";
 import {
   envelopeRequest,
@@ -416,19 +417,12 @@ export function connectLocal(
       | "unreact",
     target?: string,
     body?: string,
-    options?: {
+    options?: MessageSearchOptions & {
       sendDraft?: boolean;
       expectedDraftKey?: string;
       continueAnyway?: boolean;
       freshnessContextMode?: "withheld";
-      before?: string;
-      after?: string;
       around?: string;
-      limit?: number;
-      query?: string;
-      sender?: string;
-      sort?: "relevance" | "recent";
-      offset?: number;
       messageId?: string;
       emoji?: string;
       attachmentIds?: string[];
@@ -502,8 +496,7 @@ export function connectLocal(
       target: string,
       options?: { before?: string; after?: string; around?: string; limit?: number },
     ) => call("read", target, undefined, options),
-    search: (options: import("../index").MessageSearchOptions) =>
-      call("search", options.target, undefined, options),
+    search: (options: MessageSearchOptions) => call("search", options.target, undefined, options),
     send: (
       target: string,
       body?: string,

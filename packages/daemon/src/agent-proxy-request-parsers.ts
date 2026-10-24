@@ -50,3 +50,21 @@ export function parseActionPrepareRequest(
   if (validateActionCardAction(parsedAction.data)) return badRequest();
   return { target: payload.target, action: parsedAction.data };
 }
+
+/** A `message search` position that is not a non-negative integer `offset` or a non-empty
+ * `cursor`. */
+export function invalidSearchPosition(payload: JsonObject): boolean {
+  const { offset, cursor } = payload;
+  return (
+    (offset !== undefined && (!Number.isInteger(offset) || (offset as number) < 0)) ||
+    (cursor !== undefined && (typeof cursor !== "string" || cursor.length === 0))
+  );
+}
+
+export function parseSearchPosition(payload: JsonObject) {
+  const { offset, cursor } = payload;
+  return {
+    offset: typeof offset === "number" ? offset : undefined,
+    cursor: typeof cursor === "string" ? cursor : undefined,
+  };
+}

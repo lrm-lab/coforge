@@ -27,6 +27,7 @@ import type { AgentMessageAttentionIndex } from "./agent-message-attention-index
 import { AGENT_MESSAGE_BODY_REQUIRED_MESSAGE, agentMessageBody } from "./agent-message-body";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { settleAgentSend } from "./agent-send-settlement";
+import { searchPage, searchFields } from "./search-page";
 import {
   fenceChannelTranscriptForMemory,
   refuseUnreadMemoryParentRead,
@@ -592,10 +593,7 @@ export class AgentMessageOperations {
         after: request.after,
         around: request.around,
         limit: request.limit,
-        query: request.query,
-        sender: request.sender,
-        sort: request.sort,
-        offset: request.offset,
+        ...searchFields(request),
         messageId: request.messageId,
         emoji: request.emoji,
       },
@@ -618,6 +616,7 @@ export class AgentMessageOperations {
       hasNewer: result.hasNewer,
       olderCursor: result.olderCursor,
       newerCursor: result.newerCursor,
+      ...searchPage(result),
     };
   }
 

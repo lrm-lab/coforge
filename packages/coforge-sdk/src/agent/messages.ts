@@ -22,7 +22,10 @@ export type AgentMessagesSearchRequest = {
   before?: string;
   /** Only messages sent after this ISO time. */
   after?: string;
+  /** Skips this many results; pages a `relevance` search. */
   offset?: number;
+  /** A previous page's `nextCursor`; continues a `recent` search with a query. */
+  cursor?: string;
   limit?: number;
 };
 
@@ -107,6 +110,16 @@ export type AgentHistoryResponse = {
 export type AgentSearchResponse = {
   idempotencyKey: string;
   results: AgentMessage[];
+  /** Another page follows this one; absent from a server that does not say. */
+  hasMore?: boolean;
+  /** Where the next page starts; only a `recent` search with a query has one. */
+  nextCursor?: string;
+  /** The search stopped at a scan limit or timeout before covering everything it could match. */
+  incomplete?: boolean;
+  /** With `incomplete`: how many messages were read before the search stopped. */
+  searchedMessages?: number;
+  /** With `incomplete`: the oldest time (ISO) the search reached before it stopped. */
+  searchedThrough?: string;
 };
 
 /**

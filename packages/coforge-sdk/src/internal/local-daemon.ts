@@ -14,11 +14,6 @@ import {
   LocalRpcRequestSchema,
   LocalRpcResponseSchema,
   AgentMessageResponseSchema,
-  LocalInboxRequestSchema,
-  InboxResponseSchema,
-  InboxEntrySchema,
-  MessageAttentionSummarySchema,
-  AppInboxItemSchema,
   UsageScanRequestSchema,
   UsageScanResponseSchema,
   DaemonHoldRequestSchema,
@@ -42,136 +37,7 @@ export const LOCAL_RPC_METHODS = {
   AGENT_INBOX: "agent:inbox",
   USAGE_SCAN: "usage:scan",
 } as const;
-export type LocalInboxRequest = {
-  idempotencyKey: string;
-  context: string;
-  operation: "check";
-};
-/** `until_explicit_ack` items persist until acknowledged; `transient` ones live only in the
- * running daemon's memory. */
-export type AppInboxRetention = "until_explicit_ack" | "transient";
-export type AppInboxItem = {
-  itemId: string;
-  appId: string;
-  notificationClass: string;
-  sourceRef: { kind: string; id: string; revision: string };
-  title?: string;
-  summary?: string;
-  retention: AppInboxRetention;
-  action: { kind: "run_command"; commandId: string };
-  createdAt: string;
-};
-export type InboxEntry =
-  | { kind: "message_target"; messageTarget: MessageAttentionSummary }
-  | { kind: "app"; app: AppInboxItem };
-export type InboxResponse = { idempotencyKey: string; accepted: boolean; entries: InboxEntry[] };
-export function encodeLocalInboxRequest(value: LocalInboxRequest): Uint8Array {
-  return toBinary(LocalInboxRequestSchema, create(LocalInboxRequestSchema, toWireRequestId(value)));
-}
-export function decodeLocalInboxRequest(bytes: Uint8Array): LocalInboxRequest {
-  const { requestId, context, operation } = fromBinary(LocalInboxRequestSchema, bytes);
-  if (operation !== "check") throw new Error("invalid App Inbox operation");
-  return fromWireRequestId({ requestId, context, operation: "check" as const });
-}
-export function encodeInboxResponse(value: InboxResponse): Uint8Array {
-  for (const entry of value.entries)
-    if (entry.kind === "message_target" && entry.messageTarget.latestSenderKind !== undefined)
-      assertValidMessageSender(
-        entry.messageTarget.latestSenderKind,
-        entry.messageTarget.latestSenderHandle ?? "",
-        "Inbox message-target",
-      );
-  return toBinary(
-    InboxResponseSchema,
-    create(InboxResponseSchema, {
-      ...toWireRequestId(value),
-      entries: value.entries.map((entry) =>
-        create(
-          InboxEntrySchema,
-          entry.kind === "message_target"
-            ? {
-                value: {
-                  case: "messageTarget",
-                  value: create(MessageAttentionSummarySchema, {
-                    ...entry.messageTarget,
-                    firstPendingSequence: BigInt(entry.messageTarget.firstPendingSequence),
-                    latestSequence: BigInt(entry.messageTarget.latestSequence),
-                  }),
-                },
-              }
-            : {
-                value: {
-                  case: "app",
-                  value: create(AppInboxItemSchema, {
-                    ...entry.app,
-                    sourceKind: entry.app.sourceRef.kind,
-                    sourceId: entry.app.sourceRef.id,
-                    sourceRevision: entry.app.sourceRef.revision,
-                    actionKind: entry.app.action.kind,
-                    actionCommandId: entry.app.action.commandId,
-                  }),
-                },
-              },
-        ),
-      ),
-    }),
-  );
-}
-export function decodeInboxResponse(bytes: Uint8Array): InboxResponse {
-  const value = fromBinary(InboxResponseSchema, bytes);
-  return fromWireRequestId({
-    requestId: value.requestId,
-    accepted: value.accepted,
-    entries: value.entries.map((entry): InboxEntry => {
-      if (entry.value.case === "messageTarget") {
-        const { latestSenderKind, latestSenderHandle } = entry.value.value;
-        if (latestSenderKind !== undefined)
-          assertValidMessageSender(
-            latestSenderKind,
-            latestSenderHandle ?? "",
-            "Inbox message-target",
-          );
-        return {
-          kind: "message_target",
-          messageTarget: {
-            target: entry.value.value.target,
-            pendingCount: entry.value.value.pendingCount,
-            firstPendingSequence: Number(entry.value.value.firstPendingSequence),
-            latestSequence: Number(entry.value.value.latestSequence),
-            ...(latestSenderKind
-              ? {
-                  latestSenderKind: latestSenderKind as MessageAttentionSummary["latestSenderKind"],
-                  latestSenderHandle,
-                }
-              : {}),
-            flags: entry.value.value.flags,
-          },
-        };
-      }
-      if (entry.value.case !== "app") throw new Error("invalid Inbox entry");
-      const app = entry.value.value;
-      if (
-        (app.retention !== "until_explicit_ack" && app.retention !== "transient") ||
-        app.actionKind !== "run_command"
-      )
-        throw new Error("invalid App Inbox entry");
-      return {
-        kind: "app",
-        app: {
-          itemId: app.itemId,
-          appId: app.appId,
-          notificationClass: app.notificationClass,
-          sourceRef: { kind: app.sourceKind, id: app.sourceId, revision: app.sourceRevision },
-          ...(app.title === undefined ? {} : { title: app.title }),
-          ...(app.summary === undefined ? {} : { summary: app.summary }),
-          retention: app.retention,
-          action: { kind: "run_command", commandId: app.actionCommandId },
-          createdAt: app.createdAt,
-        },
-      };
-    }),
-  });
-}
+export * from "./local-inbox";
 export type UsageScanRequest = { protocolMajor: number; requestId: string; provider: string };
 export type UsageScanResponse = {
   protocolMajor: number;
@@ -203,7 +69,17 @@ export const decodeUsageScanResponse = (b: Uint8Array): UsageScanResponse => {
 /** A structured @mention binding: a handle claimed to name a specific actor. */
 export type LocalMentionSelector = { type: "user" | "agent"; id: string; name: string };
 
-export type LocalAgentMessageRequest = {
+/** What a `message search` request asks for beyond the filters every message request shares. */
+export type LocalMessageSearchFields = {
+  query?: string;
+  sender?: string;
+  sort?: "relevance" | "recent";
+  /** Skips this many results; pages a `relevance` search. */
+  offset?: number;
+  /** A previous page's `nextCursor`; continues a `recent` search with a query. */
+  cursor?: string;
+};
+export type LocalAgentMessageRequest = LocalMessageSearchFields & {
   idempotencyKey: string;
   context: string;
   operation:
@@ -236,10 +112,6 @@ export type LocalAgentMessageRequest = {
   after?: string;
   around?: string;
   limit?: number;
-  query?: string;
-  sender?: string;
-  sort?: "relevance" | "recent";
-  offset?: number;
   freshnessContextMode?: "inline" | "withheld";
   messageId?: string;
   emoji?: string;
@@ -349,7 +221,17 @@ export type AgentPendingMentionAction = {
   /** ISO time after which the action can no longer be taken. */
   expiresAt: string;
 };
-export type AgentMessageResponse = {
+/** How far a `message search` page got: whether more follows, where it starts, and whether the
+ * server stopped early (`searchedMessages`/`searchedThrough` say how far it read). `hasMore` is
+ * also set by the `check` events drain. */
+export type LocalSearchPaging = {
+  hasMore?: boolean;
+  nextCursor?: string;
+  incomplete?: boolean;
+  searchedMessages?: number;
+  searchedThrough?: string;
+};
+export type AgentMessageResponse = LocalSearchPaging & {
   idempotencyKey: string;
   accepted: boolean;
   attentionCount: number;
@@ -378,7 +260,6 @@ export type AgentMessageResponse = {
   newerCursor?: string;
   freshnessContextMode?: "inline" | "withheld";
   withheldMessageCount?: number;
-  hasMore?: boolean;
   /** `message send` only: pending messages a bypassed hold chose not to review; empty otherwise. */
   recentUnread?: AgentMessageRecord[];
   /** `message send` only: mentions of people outside the channel, which notified no one. */
@@ -457,6 +338,10 @@ export function encodeAgentMessageResponse(value: AgentMessageResponse): Uint8Ar
           newerCursor: undefined,
           withheldMessageCount: value.withheldMessageCount ?? value.attentionCount,
           hasMore: undefined,
+          nextCursor: undefined,
+          incomplete: undefined,
+          searchedMessages: undefined,
+          searchedThrough: undefined,
           heldMessages: [],
           recentUnread: [],
         }
@@ -485,6 +370,10 @@ export function encodeAgentMessageResponse(value: AgentMessageResponse): Uint8Ar
       hasNewer: safeValue.hasNewer ?? false,
       olderCursor: safeValue.olderCursor,
       newerCursor: safeValue.newerCursor,
+      nextCursor: safeValue.nextCursor,
+      incomplete: safeValue.incomplete ?? false,
+      searchedMessages: safeValue.searchedMessages,
+      searchedThrough: safeValue.searchedThrough,
     }),
   );
 }
@@ -563,6 +452,10 @@ export function decodeAgentMessageResponse(bytes: Uint8Array): AgentMessageRespo
       | undefined,
     withheldMessageCount: v.withheldMessageCount,
     hasMore: v.hasMore || undefined,
+    nextCursor: v.nextCursor || undefined,
+    incomplete: v.incomplete || undefined,
+    searchedMessages: v.searchedMessages,
+    searchedThrough: v.searchedThrough || undefined,
   });
 }
 export const DAEMON_HANDSHAKE_METHOD = LOCAL_RPC_METHODS.HANDSHAKE;

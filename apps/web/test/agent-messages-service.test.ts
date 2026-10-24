@@ -6,7 +6,6 @@ import {
   executeAgentSendMessageWithPolicy,
   reactToAgentMessage,
   resolveAgentMessage,
-  searchAgentMessages,
   unfollowAgentThread,
   type AgentMessageRepository,
   type AgentTargetFreshness,
@@ -98,29 +97,6 @@ test("drain rejects when the repository does not support the events seam", async
   await expect(drainAgentEvents(repository(), { workspaceId: "w", agentId: "a" })).rejects.toThrow(
     "Agent event drain is unavailable",
   );
-});
-
-test("search maps Date values at the application boundary", async () => {
-  const result = await searchAgentMessages(
-    repository({
-      searchMessages: async () => [
-        {
-          id: "message-1",
-          sequence: 1,
-          senderKind: "agent" as const,
-          senderHandle: "agent-1",
-          senderDescription: "",
-          target: "#general",
-          body: "hello",
-          createdAt: new Date("2026-09-15T00:00:00.000Z"),
-          attachments: [],
-        },
-      ],
-    }),
-    { workspaceId: "workspace-1", agentId: "agent-1" },
-    { query: "hello" },
-  );
-  expect(result[0]?.createdAt).toBe("2026-09-15T00:00:00.000Z");
 });
 
 test("read preserves the authenticated scope and page arguments", async () => {

@@ -15,13 +15,19 @@ The CLI renders five plain-text formats:
   `replyTarget` to reuse when replying in a thread; the window closes with
   an "End of window" line.
 - **Search result block** (`message search`): each hit is a
-  `<result ref="msg:<uuid>">` block with `Source`, `Sender`, `Time`, and a
-  `<preview>` that wraps the matched text in `<match>...</match>` and
+  `<result ref="msg:<uuid>">` block with `Source`, `Sender`, `Time` (the local
+  time with its offset, unlike the UTC message lines), a task line when the
+  message is a Task, and a `<preview>` that wraps the matched text in `<match>...</match>` and
   rewrites quoted `@name`/`#chan`/`task #n` references to
   `user:name`/`channel:name`/`task:n` so they are never mistaken for real
   targets; a footer points to
   `coforge message read --target <target> --around <message-id>` for more
-  context.
+  context. The title line says whether the page is everything
+  (`truncated=false|true|unknown`, or `incomplete=true` when the server
+  stopped early and older messages were not searched); a further page is
+  reached with `Next page:` or `Next (search older messages):` commands.
+  A `--sort recent` search with a `--query` pages by an opaque `--cursor`;
+  a relevance search pages by `--offset`.
 - **Send success**: `Message sent to <target>. Message ID: <full uuid>`,
   plus a reply-target hint when `<target>` is not already a thread target.
   When some @mention reached no one, the line reads `Message queued to …`

@@ -53,6 +53,7 @@ import type {
   WeeklyReportResponse,
   ChannelCommand,
   AgentMessageRequest,
+  LocalSearchPaging,
   WorkspaceInfoRequest,
   WorkspaceInfoResponse,
   AgentReminderOperationRequest,
@@ -153,8 +154,7 @@ export interface AgentMessageHttpClient {
  * what `DaemonRuntime` consumes across every Agent message operation. Each per-route HTTP response
  * type (`AgentHistoryResponse`/`AgentSearchResponse`/`AgentSendResponse`/`AgentResolveResponse`/
  * `AgentReactionResponse`/`AgentEventsResponse`/`AgentChannelAttentionResponse`/
- * `AgentThreadAttentionResponse`) is adapted into this shape by `agentMessage`; it is no longer
- * `CloudAgentMessageResponse & {...}` now that the shared envelope is gone.
+ * `AgentThreadAttentionResponse`) is adapted into this shape by `agentMessage`.
  */
 /** What a `reconcileOnly` request names: the send's key and target, in its Agent's scope. */
 export type AgentSendReconciliationRequest = Pick<
@@ -162,7 +162,7 @@ export type AgentSendReconciliationRequest = Pick<
   "idempotencyKey" | "agentId" | "workspaceId" | "target"
 >;
 
-export type AgentMessageTransportResponse = {
+export type AgentMessageTransportResponse = LocalSearchPaging & {
   idempotencyKey: string;
   accepted: boolean;
   attentionCount: number;
@@ -194,7 +194,6 @@ export type AgentMessageTransportResponse = {
    * sent one, the boundary the server advanced over messages the Agent had already seen. Either
    * is what the daemon records as consumed. */
   seenUpToSeq?: number;
-  hasMore?: boolean;
   /** `send` only: pending messages a bypassed hold chose not to review; empty otherwise. */
   recentUnread?: AgentMessage[];
   /** `send` only: the mentions a sent message did not deliver, as the server reported them. */
@@ -246,12 +245,8 @@ function historyConsumptionScope(value: unknown): AgentHistoryConsumptionScope |
 export function adaptAgentSearchResponse(
   response: AgentSearchResponse,
 ): AgentMessageTransportResponse {
-  return {
-    idempotencyKey: response.idempotencyKey,
-    accepted: true,
-    attentionCount: 0,
-    messages: response.results,
-  };
+  const { results, ...rest } = response;
+  return { ...rest, accepted: true, attentionCount: 0, messages: results };
 }
 
 /**
@@ -415,6 +410,7 @@ export const createAgentMessageHttpClient = (
         after: request.after,
         limit: request.limit,
         offset: request.offset,
+        cursor: request.cursor,
       },
       validate: validateAgentMessageArrayShape("results"),
     }),

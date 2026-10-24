@@ -104,6 +104,11 @@ import {
   type ResolvedAgentTarget,
 } from "./resolved-agent-target.server";
 import { buildUserAgentConversationCreateInput } from "./user-agent-conversation-input.server";
+import {
+  searchAgentMessagePage,
+  type AgentMessageSearchOptions,
+  type AgentMessageSearchPage,
+} from "./agent-message-search.repositories.server";
 import { AGENT_RECOVERY_MESSAGE_LIMIT, type AgentRecoveryRow } from "./agent-recovery-row.server";
 
 const MESSAGE_NOT_VISIBLE = "message not found or not visible to this Agent";
@@ -160,17 +165,6 @@ export type DirectConversationPageOptions = {
   limit?: number;
   fromSequence?: number;
   throughSequence?: number;
-};
-
-export type AgentMessageSearchOptions = {
-  query?: string;
-  target?: string;
-  sender?: string;
-  sort?: "relevance" | "recent";
-  before?: string;
-  after?: string;
-  limit?: number;
-  offset?: number;
 };
 
 export type AgentRecoveryContext = {
@@ -310,7 +304,7 @@ export type DirectConversationRepository = {
     workspaceId: string,
     agentId: string,
     options: AgentMessageSearchOptions,
-  ): ReturnType<NonNullable<DirectConversationRepository["readMessages"]>>;
+  ): Promise<AgentMessageSearchPage>;
   resolveAgentMessage?(
     workspaceId: string,
     agentId: string,
@@ -648,84 +642,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     };
   }
 
-  async searchMessages(workspaceId: string, agentId: string, options: AgentMessageSearchOptions) {
-    const limit = clampPageLimit(options.limit ?? 20, 100);
-    const offset = Math.max(options.offset ?? 0, 0);
-    const scope = options.target
-      ? await this.resolveAgentTarget(workspaceId, agentId, options.target)
-      : undefined;
-    const before = options.before ? new Date(options.before) : undefined;
-    const after = options.after ? new Date(options.after) : undefined;
-    if ((before && Number.isNaN(before.getTime())) || (after && Number.isNaN(after.getTime())))
-      throw new Error("search dates must be ISO datetimes");
-    const sender = options.sender?.replace(/^@/, "");
-    const searchQuery = options.query
-      ? (
-          await this.db.$queryRaw<Array<{ query: string }>>(
-            Prisma.sql`SELECT websearch_to_tsquery(${options.query})::text AS query`,
-          )
-        )[0]?.query
-      : undefined;
-    if (options.query && !searchQuery) return [];
-    const orderBy = (
-      searchQuery && options.sort !== "recent"
-        ? [
-            {
-              _relevance: {
-                fields: ["body"],
-                search: searchQuery,
-                sort: "desc",
-              },
-            },
-            { createdAt: "desc" },
-            { id: "desc" },
-          ]
-        : [{ createdAt: "desc" }, { id: "desc" }]
-    ) satisfies Prisma.MessageOrderByWithRelationInput[];
-    const rows = await this.db.message.findMany({
-      where: {
-        workspaceId,
-        conversation: {
-          ...VISIBLE_CONVERSATION_WHERE,
-          members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
-          ...(scope ? { id: scope.conversationId } : {}),
-        },
-        ...(scope && options.target?.includes(":") ? { threadRootId: scope.threadRootId } : {}),
-        ...(searchQuery ? { body: { search: searchQuery } } : {}),
-        ...(sender
-          ? {
-              sender: {
-                OR: [{ user: { username: sender } }, { agent: { name: sender } }],
-              },
-            }
-          : {}),
-        ...(before || after
-          ? {
-              createdAt: {
-                ...(before ? { lt: before } : {}),
-                ...(after ? { gt: after } : {}),
-              },
-            }
-          : {}),
-      },
-      orderBy,
-      skip: offset,
-      take: limit,
-      include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
-    });
-    const coordination = await readChannelCoordination(
-      this.db,
-      workspaceId,
-      agentId,
-      rows.filter((row) => row.conversation.channelName !== null).map((row) => row.conversationId),
-    );
-    return rows.map((message) =>
-      toAgentMessage(
-        message,
-        messageDeliveryTarget(message),
-        agentId,
-        coordination.get(message.conversationId),
-      ),
+  searchMessages(workspaceId: string, agentId: string, options: AgentMessageSearchOptions) {
+    return searchAgentMessagePage(this.db, workspaceId, agentId, options, (target) =>
+      this.resolveAgentTarget(workspaceId, agentId, target),
     );
   }
 

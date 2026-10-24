@@ -15,19 +15,24 @@ test("search returns the canonical response shape and echoes the request id", as
       setAgentThreadFollowed: async () => {},
       searchMessages: async (...args) => {
         received = args;
-        return [
-          {
-            id: "message-2",
-            sequence: 1,
-            senderKind: "human",
-            senderHandle: "ada",
-            senderDescription: "",
-            target: "@ada",
-            body: "hello",
-            createdAt: new Date("2026-09-15T00:00:00.000Z"),
-            attachments: [],
-          },
-        ];
+        return {
+          messages: [
+            {
+              id: "message-2",
+              sequence: 1,
+              senderKind: "human",
+              senderHandle: "ada",
+              senderDescription: "",
+              target: "@ada",
+              body: "hello",
+              createdAt: new Date("2026-09-15T00:00:00.000Z"),
+              attachments: [],
+            },
+          ],
+          hasMore: true,
+          nextCursor: "next-1",
+          incomplete: false,
+        };
       },
     },
   );
@@ -41,6 +46,7 @@ test("search returns the canonical response shape and echoes the request id", as
       sort: "relevance",
       limit: undefined,
       offset: undefined,
+      cursor: undefined,
     },
   ]);
   expect(result.status).toBe(200);
@@ -59,7 +65,27 @@ test("search returns the canonical response shape and echoes the request id", as
         attachments: [],
       },
     ],
+    hasMore: true,
+    nextCursor: "next-1",
+    incomplete: false,
   });
+});
+
+test("search passes a cursor through to continue a recent search", async () => {
+  let received: unknown;
+  await handleAgentMessagesSearchGet(
+    request("?query=hello&sort=recent&cursor=abc"),
+    { workspaceId: "workspace-1", agentId: "agent-1" },
+    {
+      setAgentChannelMuted: async () => {},
+      setAgentThreadFollowed: async () => {},
+      searchMessages: async (...args) => {
+        received = args;
+        return { messages: [], hasMore: false, incomplete: false };
+      },
+    },
+  );
+  expect(received).toMatchObject(["workspace-1", "agent-1", { sort: "recent", cursor: "abc" }]);
 });
 
 test("search allows a filter-only query with no `query` text", async () => {
@@ -72,7 +98,7 @@ test("search allows a filter-only query with no `query` text", async () => {
       setAgentThreadFollowed: async () => {},
       searchMessages: async (...args) => {
         received = args;
-        return [];
+        return { messages: [], hasMore: false, incomplete: false };
       },
     },
   );
@@ -86,6 +112,7 @@ test("search allows a filter-only query with no `query` text", async () => {
       sort: "recent",
       limit: undefined,
       offset: undefined,
+      cursor: undefined,
     },
   ]);
   expect(result.status).toBe(200);
@@ -99,7 +126,7 @@ test("search generates a request id when the daemon omits one", async () => {
     {
       setAgentChannelMuted: async () => {},
       setAgentThreadFollowed: async () => {},
-      searchMessages: async () => [],
+      searchMessages: async () => ({ messages: [], hasMore: false, incomplete: false }),
     },
   );
   const body = await result.json();
@@ -128,7 +155,7 @@ test("search passes its time window through", async () => {
       setAgentThreadFollowed: async () => {},
       searchMessages: async (...args) => {
         received = args;
-        return [];
+        return { messages: [], hasMore: false, incomplete: false };
       },
     },
   );
@@ -150,7 +177,7 @@ test("search rejects a time window that is not a date", async () => {
     {
       setAgentChannelMuted: async () => {},
       setAgentThreadFollowed: async () => {},
-      searchMessages: async () => [],
+      searchMessages: async () => ({ messages: [], hasMore: false, incomplete: false }),
     },
   );
   expect(result.status).toBe(400);
