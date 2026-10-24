@@ -56,6 +56,16 @@ import {
 import { COFORGE_CLI_VERSION } from "#src/version";
 import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
 import { formatProfile } from "#src/user-format";
+import {
+  parseWhoamiArgs,
+  buildWhoamiResult,
+  formatWhoami,
+  type WhoamiInvocation,
+  type WhoamiResult,
+} from "#src/whoami";
+import { parseProfileUpdateArgs, type ProfileUpdateInvocation } from "#src/profile-update";
+
+export type { WhoamiInvocation, WhoamiResult, ProfileUpdateInvocation };
 import { parseUserInfoArgs, runUserInfo, type UserInfoInvocation } from "#src/user-info";
 
 export type { UserInfoInvocation };
@@ -242,7 +252,6 @@ export type ActionPrepareResult = { messageId?: string; metadata?: { kind: strin
 export type ManualInvocation =
   | { command: "manual-get"; topic: string; intent: string; reason: string }
   | { command: "manual-search"; query: string; intent: string; reason: string };
-export type WhoamiInvocation = { command: "whoami"; json?: boolean };
 export type VersionInvocation = { command: "version"; json?: boolean };
 export type ProfileShowInvocation = {
   command: "profile-show";
@@ -258,13 +267,6 @@ export type MentionInvocation =
       resolutionIds: string[];
       json?: boolean;
     };
-export type ProfileUpdateInvocation = {
-  command: "profile-update";
-  displayName?: string;
-  description?: string;
-  json?: boolean;
-};
-
 export type MessageTransport = {
   check(target?: string): Promise<{ messages: AgentMessageRecord[]; hasMore?: boolean }>;
   read(target: string, options?: MessageReadOptions): Promise<unknown>;
@@ -847,17 +849,7 @@ function validateManualIntentReasonArgs(intent: string | undefined, reason: stri
   });
 }
 
-const WHOAMI_USAGE = "Usage: coforge whoami [--json]";
 const VERSION_USAGE = "Usage: coforge version [--json]";
-
-function parseWhoamiArgs(args: readonly string[]): WhoamiInvocation {
-  let json = false;
-  for (const arg of args) {
-    if (arg === "--json") json = true;
-    else throw new Error(WHOAMI_USAGE);
-  }
-  return { command: "whoami", ...(json ? { json: true } : {}) };
-}
 
 function parseVersionArgs(args: readonly string[]): VersionInvocation {
   let json = false;
@@ -914,38 +906,6 @@ function parseProfileShowArgs(args: readonly string[]): ProfileShowInvocation {
   return {
     command: "profile-show",
     ...(trimmed ? { target: stripHandlePrefix(trimmed) } : {}),
-    ...(json ? { json: true } : {}),
-  };
-}
-
-const PROFILE_UPDATE_USAGE =
-  'Usage: coforge profile update [--display-name "<text>"] [--description "<text>"] [--json]';
-
-function parseProfileUpdateArgs(args: readonly string[]): ProfileUpdateInvocation {
-  let displayName: string | undefined;
-  let description: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") {
-      json = true;
-      continue;
-    }
-    if (arg === "--display-name" || arg === "--description") {
-      const value = args[index + 1];
-      if (value === undefined) throw new Error(PROFILE_UPDATE_USAGE);
-      if (arg === "--display-name") displayName = value;
-      else description = value;
-      index += 1;
-      continue;
-    }
-    throw new Error(PROFILE_UPDATE_USAGE);
-  }
-  if (displayName === undefined && description === undefined) throw new Error(PROFILE_UPDATE_USAGE);
-  return {
-    command: "profile-update",
-    ...(displayName !== undefined ? { displayName } : {}),
-    ...(description !== undefined ? { description } : {}),
     ...(json ? { json: true } : {}),
   };
 }
@@ -1458,81 +1418,6 @@ export async function run(args: readonly string[], transport: MessageTransport):
     around: readOptions?.around,
     unread: readOptions?.unread,
   });
-}
-
-export type WhoamiResult = {
-  agentId?: string;
-  agentName?: string;
-  workspaceId?: string;
-  workspaceSlug?: string;
-  workspaceName?: string;
-  computerId?: string;
-  computerName?: string;
-  computerHostname?: string;
-  agentWorkspacePath?: string;
-  proxyUrl?: string;
-  /** CoForge has only daemon-spawned Agents today (no self-hosted Agent client), so this is
-   * always `"daemon-managed"`; the field exists so a future client kind has somewhere to report. */
-  clientMode: "daemon-managed";
-  credential: {
-    source: "agent-context-env" | "none";
-    present: boolean;
-    /** First 4 characters (the fixed `sfp_` prefix) plus an ellipsis; never the token value. */
-    redacted?: string;
-  };
-};
-
-function trimmedEnv(value: string | undefined): string | undefined {
-  return value?.trim() || undefined;
-}
-
-/**
- * `coforge whoami`: deliberately local — it answers "what
- * identity and endpoint would my next command use", read only from the process environment the
- * Daemon already set for this Agent process (`code-agent/environment.ts`). It never makes a
- * request. `COFORGE_DAEMON_SOCKET` is always set to `""` for an Agent launch (`daemon-runtime/
- * runtime.ts`), so it carries no information and is not reported here.
- */
-function buildWhoamiResult(): WhoamiResult {
-  const context = trimmedEnv(Bun.env.COFORGE_AGENT_CONTEXT);
-  return {
-    agentId: trimmedEnv(Bun.env.COFORGE_CURRENT_AGENT_ID),
-    agentName: trimmedEnv(Bun.env.COFORGE_CURRENT_AGENT_NAME),
-    workspaceId: trimmedEnv(Bun.env.COFORGE_CURRENT_WORKSPACE_ID),
-    workspaceSlug: trimmedEnv(Bun.env.COFORGE_CURRENT_WORKSPACE_SLUG),
-    workspaceName: trimmedEnv(Bun.env.COFORGE_CURRENT_WORKSPACE_NAME),
-    computerId: trimmedEnv(Bun.env.COFORGE_CURRENT_COMPUTER_ID),
-    computerName: trimmedEnv(Bun.env.COFORGE_CURRENT_COMPUTER_NAME),
-    computerHostname: trimmedEnv(Bun.env.COFORGE_CURRENT_COMPUTER_HOSTNAME),
-    agentWorkspacePath: trimmedEnv(Bun.env.COFORGE_CURRENT_AGENT_WORKSPACE_PATH),
-    proxyUrl: trimmedEnv(Bun.env.COFORGE_AGENT_PROXY_URL),
-    clientMode: "daemon-managed",
-    credential: {
-      source: context ? "agent-context-env" : "none",
-      present: Boolean(context),
-      ...(context ? { redacted: `${context.slice(0, 4)}…` } : {}),
-    },
-  };
-}
-
-function formatWhoami(result: WhoamiResult): string {
-  const lines = ["## Who am I", ""];
-  if (result.agentId) lines.push(`Agent ID: ${result.agentId}`);
-  if (result.agentName) lines.push(`Agent name: @${result.agentName}`);
-  if (result.workspaceId) lines.push(`Workspace ID: ${result.workspaceId}`);
-  if (result.workspaceSlug) lines.push(`Workspace slug: ${result.workspaceSlug}`);
-  if (result.workspaceName) lines.push(`Workspace name: ${result.workspaceName}`);
-  if (result.computerId) lines.push(`Computer ID: ${result.computerId}`);
-  if (result.computerName) lines.push(`Computer name: ${result.computerName}`);
-  if (result.computerHostname) lines.push(`Computer hostname: ${result.computerHostname}`);
-  if (result.agentWorkspacePath) lines.push(`Agent workspace: ${result.agentWorkspacePath}`);
-  if (result.proxyUrl) lines.push(`Agent proxy: ${result.proxyUrl}`);
-  lines.push(`Client mode: ${result.clientMode}`);
-  lines.push(
-    `Credential: source=${result.credential.source} present=${result.credential.present ? "yes" : "no"}` +
-      (result.credential.redacted ? ` redacted=${result.credential.redacted}` : ""),
-  );
-  return lines.join("\n");
 }
 
 type VersionInfo = { cli: string; daemon?: string; computer?: string };
