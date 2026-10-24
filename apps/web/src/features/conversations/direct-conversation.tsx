@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
+import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
@@ -35,14 +36,27 @@ export function DirectConversationHeader({
 }) {
   // Another member's Agent is an extra, whose idle display the shell reads only when asked.
   useWatchAgentDisplay(conversation.agent.id);
-  const display = useLiveAgent(conversation.agent.id)?.display;
+  const live = useLiveAgent(conversation.agent.id);
+  const display = live?.display;
   const status = agentDisplay(display);
   // A deleted Agent's DM stays readable, with its read-only profile, but takes no new messages.
   const deleted = Boolean(conversation.agent.deletedAt);
   const openProfile = onOpenAgentProfile
     ? () => onOpenAgentProfile(conversation.agent.id)
     : undefined;
-  const avatar = (
+  // The moving mascot wherever the live store knows the Agent's key: the viewer's own Agents and
+  // another member's (`isExtra`, once watched above). The still picture stays for a deleted Agent
+  // (greyed), an Agent whose mascot is not known yet (no live entry, no profile mascot) and an app
+  // bot, which has no mascot.
+  const avatar = live?.mascot ? (
+    <AgentMascotAvatar
+      mascot={live.mascot}
+      name={conversation.agent.displayName}
+      display={display}
+      deleted={deleted}
+      announced
+    />
+  ) : (
     <AgentDisplayAvatar
       agentId={conversation.agent.id}
       name={conversation.agent.displayName}

@@ -9,6 +9,8 @@ import {
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
+import type { AgentMascot } from "#src/features/agents/agent-mascot";
+import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { m } from "#src/paraglide/messages";
@@ -23,6 +25,8 @@ import { useOpenDirectConversation } from "#src/features/conversations/open-dire
  */
 export function AgentProfileHeader({
   agent,
+  mascot,
+  appBot = false,
   display,
   controls,
   canMessage,
@@ -35,6 +39,11 @@ export function AgentProfileHeader({
     displayName: string;
     avatarUrl?: string | null;
   };
+  /** The Agent's mascot key, once the profile has loaded: the avatar then moves. Until then, a
+   * still picture. */
+  mascot?: AgentMascot;
+  /** The profile is an app's bot, which has no mascot: its picture stays still, as on its card. */
+  appBot?: boolean;
   display?: AgentDisplaySnapshot;
   controls: AgentRuntimeControls;
   /** The viewer may message this Agent: any member a public one, only its creator a private one. */
@@ -63,13 +72,24 @@ export function AgentProfileHeader({
           onClick={back.onPress}
         />
       )}
-      <AgentDisplayAvatar
-        agentId={agent.id}
-        name={agent.displayName}
-        src={agent.avatarUrl}
-        display={display}
-        deleted={deleted}
-      />
+      {mascot && !appBot ? (
+        <AgentMascotAvatar
+          mascot={mascot}
+          name={agent.displayName}
+          display={display}
+          deleted={deleted}
+          cornerDot
+          announced
+        />
+      ) : (
+        <AgentDisplayAvatar
+          agentId={agent.id}
+          name={agent.displayName}
+          src={agent.avatarUrl}
+          display={display}
+          deleted={deleted}
+        />
+      )}
       {/* The name alone: the avatar's dot carries the live status
           and the Profile tab the description. */}
       <p className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">

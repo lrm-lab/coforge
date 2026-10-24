@@ -2,17 +2,10 @@ import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, Edit01 as Pencil, UserX01, XClose as X } from "@untitledui/icons";
+import { Edit01 as Pencil } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { isAppErrorCode } from "#src/lib/app-error";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-} from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import {
@@ -64,6 +57,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { AgentProfileHeader } from "./agent-profile-header";
+import { AgentProfileUnavailable } from "./agent-profile-unavailable";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
 import { setupComputerOptions } from "./setup-computers";
 import { AgentProfileTab } from "./agent-profile-tab";
@@ -287,44 +281,7 @@ export function AgentProfilePanel({
     // An Agent that exists but is private to someone else answers a distinct, detail-
     // free state — no "you may not have access, or it was removed" guess, just the one fact.
     const notVisible = isAppErrorCode(query.error, "AGENT_NOT_VISIBLE");
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-secondary px-2">
-          {back ? (
-            <ButtonUtility
-              icon={ArrowLeft}
-              size="sm"
-              color="tertiary"
-              tooltip={back.label}
-              aria-label={back.label}
-              onClick={back.onPress}
-            />
-          ) : (
-            <span />
-          )}
-          <ButtonUtility
-            icon={X}
-            size="sm"
-            color="tertiary"
-            tooltip={m.controls_close()}
-            onClick={onClose}
-          />
-        </header>
-        <Empty className="flex-1 items-center justify-center px-6 text-center">
-          <EmptyHeader className="items-center gap-3">
-            <EmptyMedia>
-              <UserX01 aria-hidden="true" className="size-6 text-tertiary" />
-            </EmptyMedia>
-            <EmptyTitle role="heading" aria-level={2}>
-              {notVisible ? m.agent_not_visible() : m.agent_profile_not_found_title()}
-            </EmptyTitle>
-            {!notVisible && (
-              <EmptyDescription>{m.agent_profile_not_found_description()}</EmptyDescription>
-            )}
-          </EmptyHeader>
-        </Empty>
-      </div>
-    );
+    return <AgentProfileUnavailable notVisible={notVisible} back={back} onClose={onClose} />;
   }
 
   const diagnosticFacts = profile && {
@@ -348,6 +305,8 @@ export function AgentProfilePanel({
           displayName: knownName,
           avatarUrl: profile?.avatarUrl,
         }}
+        mascot={profile?.mascot}
+        appBot={Boolean(profile?.appBot)}
         display={display}
         controls={controls}
         onClose={onClose}

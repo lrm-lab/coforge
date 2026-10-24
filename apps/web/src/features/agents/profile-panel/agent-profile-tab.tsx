@@ -140,6 +140,7 @@ function AgentProfileTabBody({
       name={profile.displayName}
       display={profile.display}
       deleted={Boolean(profile.deletedAt)}
+      still
       size="xl"
     />
   );

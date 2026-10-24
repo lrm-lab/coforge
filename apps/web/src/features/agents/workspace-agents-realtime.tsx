@@ -354,9 +354,10 @@ export function useLiveAgent(agentId: string): LiveAgent | undefined {
   );
 }
 
-/** One Agent's mascot from the viewer's live roster, or nothing for an Agent outside it: an
- * `isExtra` Agent (the store holds its mascot, but only the roster's avatars animate) or an
- * archived one, whose avatar stays a still picture. Repaints only when that key changes. */
+/** One Agent's mascot from the viewer's own live roster, or nothing for an Agent outside it: an
+ * `isExtra` Agent or an archived one. Callers that draw the mascot of an Agent they watch (the
+ * Direct-message header) read `useLiveAgent(id)?.mascot` instead, which includes an extra's. Repaints
+ * only when that key changes. */
 export function useLiveAgentMascot(agentId: string): AgentMascot | undefined {
   return useSelector(
     useContext(LiveAgentStoreContext),

@@ -2,15 +2,21 @@
 
 Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
 
-- A mascot moves only where `AgentMascotView` draws it, and only on these surfaces: the
-  replying line above a composer (main pane and thread pane), the chat list header's busy Agents (below),
-  the Direct-message list rows (`DirectAgentAvatar` in
+- A mascot animates where the surface shows the Agent's live state; lists and history stay static.
+  It moves only where `AgentMascotView` draws it, and only on these surfaces: the replying line
+  above a composer (main pane and thread pane), the chat list header's busy Agents (below), the
+  Direct-message list rows (`DirectAgentAvatar` in
   `features/conversations/`, through `AgentMascotAvatar`; the row's pointer state reaches it as
-  `hovered` through `useRowHovered`, so a hover repaints only the mascot), the Agent hover card, the
-  Agent profile card (not its header, which repeats it) and the mascot picker
-  (`agent-avatar-dialog.tsx`: all seven idle, the one under the pointer reacting, the selected one
-  still moving). The message stream, in channels and Direct messages alike, is static: its avatars
-  are the still sticker (`LiveAgentAvatar`, `IdentityAvatar`). A mascot carries the Agent's mascot
+  `hovered` through `useRowHovered`, so a hover repaints only the mascot), the Agent's
+  Direct-message header (`DirectConversationHeader`), the Agent profile panel header
+  (`AgentProfileHeader`), the Agent hover card and the mascot picker (`agent-avatar-dialog.tsx`: all
+  seven idle, the one under the pointer reacting, the selected one still moving). Everything else
+  is static: the message stream, in channels and Direct messages alike (the still sticker,
+  `LiveAgentAvatar`, `IdentityAvatar`), group avatars, search and members lists, and the profile
+  card in the Profile tab (the header above it moves instead, so a panel shows one moving mascot).
+  A deleted or archived Agent stays still and greyed. In a header the still picture also stays for
+  an Agent whose mascot key is not known yet (no live entry, no profile mascot) and for an app bot,
+  which has no mascot; another member's Agent animates there once its display is watched. A mascot carries the Agent's mascot
   key (`LiveAgent.mascot`, the profile's `mascot`), never a URL to reverse. The Rive canvas mounts
   only while it is near the viewport, motion is allowed and the shared file loads
   (`mascot-rive.tsx`, the only `@rive-app/*` importer); anything else stays the still picture. A

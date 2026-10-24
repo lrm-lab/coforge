@@ -101,8 +101,7 @@ These rules apply to `src/features/agents/`.
 - The Agent card (`agent-hover-card.tsx`) peeks from the avatars and the
   @mention chips (`conversations/mention-chip-hover.tsx`; a person's chip peeks
   `conversations/person-hover-card.tsx`) in a message stream, and from the chat list header's
-  busy Agents ([mascots.md](mascots.md)), only; conversation and profile headers show a plain
-  avatar. Its
+  busy Agents ([mascots.md](mascots.md)), only; conversation and profile headers have no hover card. Its
   Recent activity goes only to the viewers who get the panel's Activity tab
   (`canManageAgent`): the five newest rows, "finished" status rows included,
   oldest at the top, each as clock, round marker and truncated label. The

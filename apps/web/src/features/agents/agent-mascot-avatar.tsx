@@ -12,8 +12,8 @@ import { mascotActivity } from "./mascot-activity";
 
 /**
  * An Agent's avatar where its mascot is the subject and may move: a Direct-message list row, the
- * Agent card, the profile. The mascot is a bare sticker, unclipped, and acts out
- * the Agent's `display` (`mascotActivity`). A deleted Agent's is greyed, still and without a dot.
+ * Agent card, the Direct-message header and the profile panel header. The mascot is a bare
+ * sticker, unclipped, and acts out the Agent's `display` (`mascotActivity`). A deleted Agent's is greyed, still and without a dot.
  */
 export function AgentMascotAvatar({
   mascot,
