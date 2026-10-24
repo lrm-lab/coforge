@@ -34,6 +34,8 @@ const hostProcessTable: ProcessTable = {
     if (process.platform === "win32") return [];
     const child = Bun.spawn({
       cmd: ["ps", "-axo", "pid=,ppid=,pgid=,lstart="],
+      // `lstart` is local time; pin the zone so it is read back the way it is printed.
+      env: { ...process.env, TZ: "UTC" },
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
@@ -47,7 +49,7 @@ const hostProcessTable: ProcessTable = {
 function parseProcessTableLine(line: string): OwnedProcessIdentity[] {
   const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
   if (!match) return [];
-  const startedAtMs = Date.parse(match[4]!);
+  const startedAtMs = Date.parse(`${match[4]!} UTC`);
   if (!Number.isFinite(startedAtMs)) return [];
   return [{ pid: Number(match[1]), ppid: Number(match[2]), pgid: Number(match[3]), startedAtMs }];
 }
@@ -201,12 +203,14 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
           child.kill("SIGTERM");
           return emptyKillReport();
         }
+        // `ps` start times have one-second resolution, so the fence is compared at that resolution.
+        const fenceMs = Math.floor(cutoffAtMs / 1_000) * 1_000;
         const current = await (this.options.processTable ?? hostProcessTable).list();
         const byPid = new Map(current.map((entry) => [entry.pid, entry]));
         const killed: number[] = [];
         const leftAlone: number[] = [];
         for (const entry of turnSnapshot) {
-          if (entry.startedAtMs < cutoffAtMs) {
+          if (entry.startedAtMs < fenceMs) {
             leftAlone.push(entry.pid);
             continue;
           }

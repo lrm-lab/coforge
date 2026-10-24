@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 
+import type { OwnedProcessTreeKillReport } from "@lrm/coforge-anvil";
+import { cleanupOwnedTree } from "#src/code-agent/process-tree-cleanup";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
 
@@ -244,4 +246,61 @@ test.skipIf(process.platform === "win32")(
     reused.kill("SIGKILL");
     await Promise.all([older.exited, reused.exited, tree.child.exited]);
   },
+);
+
+test.skipIf(process.platform === "win32")(
+  "a turn interrupt SIGKILLs a main process that ignores SIGTERM after the grace, sparing earlier children",
+  async () => {
+    const tree = new ProcessTreeOwner().spawn(
+      [
+        "sh",
+        "-c",
+        // An earlier dev server, then (after the fence) this turn's child, then ignore SIGTERM.
+        'trap "" TERM; sleep 60 & echo $!; sleep 2; sleep 60 & echo $!; while :; do sleep 1; done',
+      ],
+      tmpdir(),
+      { PATH: "/usr/bin:/bin" },
+    );
+    const reader = (tree.child.stdout as ReadableStream<Uint8Array>).getReader();
+    const pids: number[] = [];
+    // The turn begins after the earlier child was reported and before the sleep ends.
+    let fenceAtMs: number | undefined;
+    let buffered = "";
+    while (pids.length < 2) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffered += new TextDecoder().decode(value);
+      const lines = buffered.split("\n");
+      buffered = lines.pop() ?? "";
+      pids.push(...lines.map(Number));
+      fenceAtMs ??= Date.now() + 1_500;
+    }
+    const [earlier, turnChild] = pids as [number, number];
+    const reports: OwnedProcessTreeKillReport[] = [];
+    const alive = (pid: number) => {
+      try {
+        globalThis.process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    try {
+      await cleanupOwnedTree(tree, tree.child, {
+        cutoffAtMs: fenceAtMs,
+        onKillReport: (report) => reports.push(report),
+      });
+      expect(await tree.child.exited).not.toBe(0);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]!.killed).toContain(tree.child.pid!);
+      expect(reports[0]!.killed).toContain(turnChild);
+      expect(reports[0]!.leftAlone).toContain(earlier);
+      expect(alive(turnChild)).toBe(false);
+      expect(alive(earlier)).toBe(true);
+    } finally {
+      for (const pid of pids) if (alive(pid)) globalThis.process.kill(pid, "SIGKILL");
+    }
+  },
+  20_000,
 );

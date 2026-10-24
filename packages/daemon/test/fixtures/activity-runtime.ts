@@ -27,7 +27,11 @@ const config = {
 };
 
 /** Boots a runtime whose one Agent session hands the test direct control over runtime events. */
-export async function activityHarness(connection: WorkspaceConfig, provider?: CodeAgentProvider) {
+export async function activityHarness(
+  connection: WorkspaceConfig,
+  provider?: CodeAgentProvider,
+  transport: Record<string, unknown> = {},
+) {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   const activities: AgentActivity[] = [];
@@ -51,6 +55,7 @@ export async function activityHarness(connection: WorkspaceConfig, provider?: Co
     credentials,
     {
       create: () => ({
+        ...transport,
         async start() {},
         async ready() {},
         async stop() {},

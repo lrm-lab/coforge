@@ -21,7 +21,7 @@ import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record
 import { claudeContextUsage, claudeServiceTierState } from "./observations";
 import { readClaudeRecycleBriefing } from "./recycle-briefing";
 import { readClaudeSessionResumeFacts } from "./session-transcript";
-import { TASK_LIFECYCLE_PHASE, isTaskStatus, taskProgressEvent } from "./task-lifecycle";
+import { relayTaskLifecycle, taskProgressEvent } from "./task-lifecycle";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
@@ -258,7 +258,8 @@ class ClaudeCodeAgentSession implements AgentSession {
       }
       this.#interrupt.fail(failure ?? new Error("code agent process closed during interrupt"));
       this.#rejectWaitingNotices(new Error("code agent process closed before writing input"));
-      // Fire and forget: `dispose` awaits the same removal and reports its failure.
+      // Fire and forget: the close path has nothing to do with a cleanup failure, and `dispose`
+      // awaits the same removal and reports it.
       void this.#removePrompt().catch(() => {});
       this.#finishClose();
     });
@@ -449,34 +450,6 @@ class ClaudeCodeAgentSession implements AgentSession {
     }
   }
 
-  /**
-   * Relays every task's `task_started`/`task_progress`/`task_notification` as
-   * `subagent-progress`, whatever its type (a subagent, a background command, a Monitor watch),
-   * as the reference client does. Only `task_started` says whether a task is `ambient` (Claude
-   * Code's own work, which the SDK keeps out of activity indicators), so the tasks it announced
-   * are remembered here until a terminal notification, and subagent types with the tool call's
-   * lineage.
-   */
-  #acceptTaskLifecycle(record: Readonly<Record<string, unknown>>): void {
-    const phase = TASK_LIFECYCLE_PHASE.get(record.subtype);
-    const taskId = typeof record.task_id === "string" ? record.task_id : undefined;
-    if (!phase || !taskId) return;
-    const toolUseId = typeof record.tool_use_id === "string" ? record.tool_use_id : undefined;
-    if (phase === "started") {
-      if (record.ambient === true) return;
-      this.#tasks.set(taskId, toolUseId);
-      this.#subagentLineage.remember(toolUseId, record.subagent_type);
-    } else if (!this.#tasks.has(taskId)) return;
-    const subagentType =
-      nonEmptyString(record.subagent_type) ?? this.#subagentLineage.typeOf(this.#tasks.get(taskId));
-    const taskStatus =
-      phase === "notification" && isTaskStatus(record.status) ? record.status : undefined;
-    if (taskStatus) this.#tasks.delete(taskId);
-    this.#emit(
-      taskProgressEvent(phase, taskId, toolUseId, subagentType, taskStatus, eventTime(record)),
-    );
-  }
-
   #accept(record: Readonly<Record<string, unknown>>): void {
     if (this.#recoveryFailed || this.#state === "disposed") return;
     if (
@@ -510,7 +483,8 @@ class ClaudeCodeAgentSession implements AgentSession {
         this.#emit({ type: "compaction-finished", occurredAt: eventTime(record) });
         this.#flushNotices();
       }
-      this.#acceptTaskLifecycle(record);
+      const relayed = relayTaskLifecycle(record, this.#tasks, this.#subagentLineage);
+      if (relayed) this.#emit(relayed);
     }
     if (record.type === "system" && record.subtype === "init") {
       if (

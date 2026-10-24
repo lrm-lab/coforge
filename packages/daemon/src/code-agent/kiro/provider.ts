@@ -21,20 +21,11 @@ import { bounded, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";
 import { kiroUpdateEvents } from "./update-events";
 import { assertKiroVersionSupported } from "./version";
+import { STOP_REASON_FAILURE_MESSAGES } from "./stop-reasons";
 
 /** How long a turn end waits for the steering outcome Kiro wrote before its prompt response. The
  * frames are already on the wire, so this only bounds a pathological dispatch delay. */
 const STEERING_OUTCOME_WAIT_MS = 1_000;
-
-// A stop reason outside the standard ACP `end_turn`/`cancelled` pair (Kiro's private "error"
-// value included) always ends the turn as a failure; these are the fixed, CoForge-worded
-// fallbacks used only when the turn carried no more specific reason of its own.
-const STOP_REASON_FAILURE_MESSAGES: Readonly<Partial<Record<string, string>>> = {
-  error: "Kiro ended the turn with an error",
-  max_tokens: "Kiro reached its token limit before finishing the turn",
-  max_turn_requests: "Kiro reached its turn request limit before finishing the turn",
-  refusal: "Kiro refused to continue the turn",
-};
 
 export class KiroProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.KIRO;
@@ -122,10 +113,10 @@ class KiroSession implements AgentSession {
   #disposed = false;
   #dispose: Promise<void> | undefined;
   #interrupting = false;
-  // The latest scrubbed error text Kiro volunteered this turn (via `session_info_update`),
-  // already reported as its own `error` event on arrival.
-  // The outcome reuses only the FACT that a reason was shown, never the text a second time, so a
-  // failed/cancelled turn shows its one reason once.
+  // The most recent scrubbed error text Kiro has volunteered for the turn in progress (via
+  // `session_info_update`), already reported as its own `error` event the moment it arrived.
+  // The turn's outcome reuses only the FACT that a reason was already shown, never the text
+  // itself a second time, so a failed/cancelled turn never doubles up its one visible reason.
   #turnErrorMessage: string | undefined;
 
   constructor(
