@@ -2,7 +2,7 @@
 
 ## 证据范围
 
-- 研究日期：2026-10-24。按仓库的 reference Computer 研究流程，从官方 Hands `updates/check` 解析到最新已发布的 darwin-arm64 产物：Raft Computer **1.0.52**，发布时间为 2026-10-23。
+- 研究日期：2026-10-24。按仓库的 reference Computer 研究流程，从官方 Hands `updates/check` 解析到最新已发布的 darwin-arm64 产物：Raft Computer **1.0.52**，发布时间为 2026-10-23。于 2026-10-24 03:33 UTC 再次查询，latest 仍为同一版本和 release id。
 - release id：`d175482e-ec38-4e54-961a-16105ea7b3e2`；binary SHA-256：`d0930a0bcd14b532beae4b6d37d024fcec3019ba0b56b0c8312ae36e0fbd31a5`；gzip SHA-256：`80b4f9da280ec2bfa87a8a0c24afecfa0cfe0fdf2453d77bc43f8fefc258a8da`；嵌入 Node：24.21.0。
 - 原始产物和提取结果位于仓库外的 `/private/tmp/raft-computer-research-1-21-28/`，没有提交二进制或提取源码。SEA 资源包括 `computer.cjs`、`computer-lite.cjs`、`cli.cjs` 和 `kimi.cjs`；资源没有可拆分的路径注释，因此以下客户端证据引用 SEA bundle 中保留的模块路径标签。
 - 复核命令：`bun scripts/reference-computer/extract.ts --out /private/tmp/raft-computer-research-1-21-28`、`raft-computer --help`、`raft-computer channel versions`。不要把 npm 上较旧的 `@botiverse/raft-computer` 或 GitHub Desktop 版本当作本次证据。
