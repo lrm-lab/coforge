@@ -102,24 +102,12 @@ export type RuntimeAuthStatus = Readonly<{
   unavailableReason?: "not_installed" | "version_too_old" | "unsupported_installation";
 }>;
 
-/** A provider's browser/device login challenge, with no token or raw provider output. */
-export type RuntimeAuthChallenge = Readonly<{
-  operationId: string;
-  provider: RuntimeAuthProvider;
-  verificationUrl?: string;
-  userCode?: string;
-  prompt?: string;
-  expiresAtMs: number;
-  acceptsCode: boolean;
-}>;
-
 export type RuntimeAuthFailure =
   | "timed_out"
   | "rejected"
   | "not_logged_in"
   | "interaction_failed"
-  | "process_failed"
-  | "cancelled";
+  | "process_failed";
 
 /** Provider-neutral login progress. Values are sanitized before an adapter emits them. */
 export type RuntimeAuthLoginEvent =
@@ -137,7 +125,7 @@ export type RuntimeAuthLoginResult =
   | Readonly<{ status: "logged_in"; authStatus: RuntimeAuthStatus }>
   | Readonly<{
       status: "failed";
-      reason: Exclude<RuntimeAuthFailure, "cancelled">;
+      reason: RuntimeAuthFailure;
       detail?: string;
     }>
   | Readonly<{ status: "cancelled" }>;
