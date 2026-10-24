@@ -26,8 +26,12 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   lookups).
 - `extra-agents.server.ts` lists the Agents the viewer may see beyond their own roster: the
   Members directory's rule (`visibleAgentWhere` with `ROSTER_AGENT_WHERE`) minus the viewer's
-  own, with one batched display read that leaves the rows without one when it fails. Reuse the
-  rule; do not write a second one, and do not cap or filter by activity here.
+  own. The identity read is unfiltered and uncapped; the batched display read snapshots only the
+  busy Agents (`AgentDisplay.busyScopes`, the fleet-wide lease set filtered to the Workspace) and
+  the browser's `heldAgentIds` (extras it still shows busy or lapsed, so their stale display
+  clears), always intersected with the visible rows, so its cost follows the busy Agents. It
+  leaves the rows without a display when it fails. Reuse the rule; do not write a second one. A
+  per-Workspace busy index is the follow-up if the fleet-wide set grows too large to filter.
 - Build an `AgentVisibilityViewer` from a human's existing
   `resolveActorServerRole` lookup or an already-resolved Agent principal. Never
   issue a second query for it.
@@ -139,6 +143,9 @@ See [sessions.md](./sessions.md).
 - `agent-display.server.ts` is the only reducer from ordered process status
   and authorized Activity to online/working/thinking/error/offline. RPC and
   publication adapters call it and never duplicate its transition rules.
+- `agent-activity-kind.ts` maps an observed `detailKind` to a display kind
+  (`activityKindForObservation`) and names the liveness-only kinds; import it
+  from there, not through the reducer.
 - Expiry uses server receipt time. Working/thinking fall back to online while
   the process lease lives; error remains until recognized activity or reset;
   process lease expiry yields offline. The revision counter persists with a

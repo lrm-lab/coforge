@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import { createStore, useSelector, type Store } from "@tanstack/react-store";
 import { useQuery, useQueryClient, skipToken } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -29,6 +37,8 @@ import { agentModelsQueryKey } from "./agent-models";
 import type { AgentMascot } from "./agent-mascot";
 import type { ExtraAgent } from "./extra-agent";
 import { loadExtraAgents } from "./extra-agents.functions";
+import { heldDisplayAgentIds } from "./extra-agents-held";
+import { createDisplayWatchRegistry, DisplayWatcherContext } from "./watched-agent-displays";
 
 const EMPTY_ACTIVITY: ActivityEntry[] = [];
 
@@ -132,8 +142,29 @@ export function WorkspaceAgentsProvider({
   const getStatusToken = useServerFn(getAgentStatusSubscriptionToken);
   const getPrivateActivityToken = useServerFn(getAgentActivitySubscriptionTokenForAgent);
   const getPrivateStatusToken = useServerFn(getAgentStatusSubscriptionTokenForAgent);
-  const readExtraAgents = useServerFn(loadExtraAgents);
+  const loadExtras = useServerFn(loadExtraAgents);
   const queryClient = useQueryClient();
+  // The Agents the store holds right now, so a read can name the extras it still shows busy and
+  // get their real display back (see `heldDisplayAgentIds`); set after `useAgentStatuses` below.
+  const heldAgents = useRef<readonly LiveAgent[]>([]);
+  // The Agents a mounted view reads the display of: held too, and read as soon as one is watched
+  // that the store has no display for.
+  const watched = useMemo(
+    () =>
+      createDisplayWatchRegistry((agentId) => {
+        const known = heldAgents.current.find((agent) => agent.id === agentId);
+        if (known && (!known.isExtra || known.display)) return;
+        void queryClient.invalidateQueries({ queryKey: extraAgentsQueryKey(workspaceId) });
+      }),
+    [queryClient, workspaceId],
+  );
+  const readExtraAgents = useCallback(
+    () =>
+      loadExtras({
+        data: { heldAgentIds: heldDisplayAgentIds(heldAgents.current, Date.now(), watched.ids()) },
+      }),
+    [loadExtras, watched],
+  );
   const directoryInvalidator = useMemo(
     () =>
       createAgentDirectoryInvalidator(() => {
@@ -201,6 +232,8 @@ export function WorkspaceAgentsProvider({
       : undefined,
   });
 
+  heldAgents.current = visibleAgents;
+
   // Same-render derivation from the fresh `visibleAgents` state `useAgentStatuses` just
   // produced (not a previous-render ref), so the Activity subscription set never lags behind
   // the status one.
@@ -244,7 +277,7 @@ export function WorkspaceAgentsProvider({
     <LiveAgentStoreContext value={liveAgents}>
       <WorkspaceIdContext value={workspaceId}>
         <RefreshAgentDirectoryContext value={refreshDirectory}>
-          {children}
+          <DisplayWatcherContext value={watched.watch}>{children}</DisplayWatcherContext>
         </RefreshAgentDirectoryContext>
       </WorkspaceIdContext>
     </LiveAgentStoreContext>

@@ -12,7 +12,7 @@ local function revision(state, revision_key)
   revision_key = revision_key or KEYS[2]
   local redis_time = redis.call("TIME")
   local server_time_floor = tonumber(redis_time[1]) * 1000000 + tonumber(redis_time[2])
-  local stored_revision = tonumber(redis.call("GET", KEYS[2])) or 0
+  local stored_revision = tonumber(redis.call("GET", revision_key)) or 0
   local state_revision = tonumber(state.revision) or 0
   local next_revision = math.max(server_time_floor, stored_revision + 1, state_revision + 1)
   local encoded_revision = string.format("%.0f", next_revision)

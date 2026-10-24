@@ -135,6 +135,11 @@ export const agentIdSchema = z.uuid();
 /** The per-Agent realtime subscription token endpoints; any Server Function that only
  * needs an authorized Agent id shares this shape rather than repeating the object literal. */
 export const agentIdInputSchema = z.object({ agentId: agentIdSchema });
+/** The extras read's input: the Agents whose display it must answer beyond the busy ones. Bounded
+ * only against abuse; the read itself dedupes and keeps the first `HELD_AGENT_IDS_LIMIT`. */
+export const loadExtraAgentsInputSchema = z.object({
+  heldAgentIds: z.array(agentIdSchema).max(5_000),
+});
 /** Deleting an Agent is name-confirmed, the same guard `ProjectSettings.delete` uses —
  * the server re-checks the typed name against the current row in the delete itself, so a
  * concurrent rename cannot bypass confirmation. */

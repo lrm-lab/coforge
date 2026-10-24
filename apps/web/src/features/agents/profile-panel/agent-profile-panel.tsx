@@ -128,6 +128,12 @@ export function AgentProfilePanel({
   const query = useQuery(agentProfileQuery(agentId));
   const profile = query.data;
   const invalidate = useInvalidateAgentProfile(agentId);
+  // `liveAgent` (the shared realtime roster) is blank for an Agent outside the viewer's own
+  // `listAgents` roster until its first live publication arrives, e.g. an owner/admin's
+  // placeholder for another member's private Agent. `getAgentProfile` (this panel's authorized
+  // fetch) already computes an initial display snapshot for any Agent the viewer can see;
+  // prefer the live one once a publication lands, but seed from that fetch, not nothing.
+  const display = liveAgent?.display ?? profile?.display;
 
   const knownName = profile?.displayName ?? liveAgent?.displayName ?? "";
   // A deleted Agent's profile is read-only: the Profile tab alone, nothing acting on it.
@@ -197,7 +203,7 @@ export function AgentProfilePanel({
     agentId,
     agentName: knownName || agentId,
     canFullReset: profile?.canFullResetAgent ?? false,
-    isOnline: agentDisplay(liveAgent?.display, { stopped: profile?.stopped }).isOnline,
+    isOnline: agentDisplay(display, { stopped: profile?.stopped }).isOnline,
     computerOnline: profile?.computer?.online,
     computerLabel: profile?.computer?.label,
     onExecute: async (request) => {
@@ -321,12 +327,6 @@ export function AgentProfilePanel({
     );
   }
 
-  // `liveAgent` (the shared realtime roster) is blank for an Agent outside the viewer's own
-  // `listAgents` roster until its first live publication arrives, e.g. an owner/admin's
-  // placeholder for another member's private Agent. `getAgentProfile` (this panel's authorized
-  // fetch) already computes an initial display snapshot for any Agent the viewer can see;
-  // prefer the live one once a publication lands, but seed from that fetch, not nothing.
-  const display = liveAgent?.display ?? profile?.display;
   const diagnosticFacts = profile && {
     id: profile.id,
     workspaceId: profile.workspaceId,
@@ -405,18 +405,10 @@ export function AgentProfilePanel({
             canManage={canManage}
             controls={controls}
             // Realtime once a display snapshot has arrived, the initial `getAgentProfile` load
-            // until then — trusting `liveAgent.display`'s own (possibly explicitly null)
+            // until then — trusting the live display's own (possibly explicitly null)
             // `contextUsage` once present, never falling back past it to a stale initial read.
-            contextUsage={
-              liveAgent?.display
-                ? (liveAgent.display.contextUsage ?? null)
-                : (profile.display?.contextUsage ?? null)
-            }
-            fastMode={
-              liveAgent?.display
-                ? (liveAgent.display.fastMode ?? null)
-                : (profile.display?.fastMode ?? null)
-            }
+            contextUsage={display?.contextUsage ?? null}
+            fastMode={display?.fastMode ?? null}
             onSaveDisplayName={async (value) => {
               await update({ data: baseUpdateInput({ displayName: value }) });
               await invalidate();

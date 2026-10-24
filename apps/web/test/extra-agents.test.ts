@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { HELD_AGENT_IDS_LIMIT } from "#src/features/agents/extra-agent";
 import { ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { listExtraAgents } from "#src/server/agents/extra-agents.server";
 import {
@@ -53,7 +54,7 @@ const display = (agentId: string): AgentDisplaySnapshot => ({
 
 type Scope = { workspaceId: string; computerId: string; agentId: string };
 
-function fakes(rows: Row[]) {
+function fakes(rows: Row[], busy: string[] = []) {
   const findManyCalls: Prisma.AgentFindManyArgs[] = [];
   const scopeCalls: Array<readonly Scope[]> = [];
   const db = {
@@ -64,13 +65,19 @@ function fakes(rows: Row[]) {
       },
     },
   } as unknown as Pick<PrismaClient, "agent">;
+  const busyCalls: Array<{ workspaceId: string; now: number }> = [];
   const displays = {
+    // The busy leases of the Workspace, as `AgentDisplay.busyScopes` answers.
+    busyScopes: async (workspaceId: string, now: number) => {
+      busyCalls.push({ workspaceId, now });
+      return busy.map((agentId) => ({ workspaceId, computerId: `computer-${agentId}`, agentId }));
+    },
     snapshotMany: async (scopes: readonly Scope[]) => {
       scopeCalls.push(scopes);
       return scopes.map((scope) => display(scope.agentId));
     },
   };
-  return { db, displays, findManyCalls, scopeCalls };
+  return { db, displays, findManyCalls, scopeCalls, busyCalls };
 }
 
 describe("listExtraAgents", () => {
@@ -126,32 +133,84 @@ describe("listExtraAgents", () => {
     });
   });
 
-  test("reads the display of every Agent with a Computer in one batch, in the rows' order", async () => {
-    const { db, displays, scopeCalls } = fakes([
-      row("a"),
-      row("none", { computerId: null }),
-      row("c"),
-    ]);
-    await listExtraAgents(db, displays, WORKSPACE_ID, member);
+  test("snapshots only the busy Agents, in one batch in the rows' order, from each row's own Computer", async () => {
+    const { db, displays, scopeCalls, busyCalls } = fakes(
+      [row("a"), row("idle"), row("c", { computerId: "computer-moved" })],
+      // "gone" is busy but not among the viewer's visible rows: its lease is ignored.
+      ["c", "a", "gone"],
+    );
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, [], 5_000);
+    expect(busyCalls).toEqual([{ workspaceId: WORKSPACE_ID, now: 5_000 }]);
     expect(scopeCalls).toEqual([
       [
         { workspaceId: WORKSPACE_ID, computerId: "computer-a", agentId: "a" },
-        { workspaceId: WORKSPACE_ID, computerId: "computer-c", agentId: "c" },
+        { workspaceId: WORKSPACE_ID, computerId: "computer-moved", agentId: "c" },
       ],
     ]);
+    expect(agents.map((agent) => "display" in agent)).toEqual([true, false, true]);
   });
 
-  test("makes no display read when no Agent has a Computer", async () => {
-    const { db, displays, scopeCalls } = fakes([row("a", { computerId: null })]);
+  test("makes no display read when nothing is busy or held", async () => {
+    const { db, displays, scopeCalls } = fakes([row("a"), row("b")], []);
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member);
+    expect(scopeCalls).toHaveLength(0);
+    expect(agents.some((agent) => "display" in agent)).toBe(false);
+  });
+
+  test("makes no display read for a busy Agent with no Computer", async () => {
+    const { db, displays, scopeCalls } = fakes([row("a", { computerId: null })], ["a"]);
     await listExtraAgents(db, displays, WORKSPACE_ID, member);
     expect(scopeCalls).toHaveLength(0);
   });
 
+  test("a held Agent that is not busy is snapshotted too, so the browser's stale busy display clears", async () => {
+    const { db, displays, scopeCalls } = fakes([row("a"), row("b"), row("c")], ["a"]);
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, ["b"]);
+    expect(scopeCalls[0]!.map((scope) => scope.agentId)).toEqual(["a", "b"]);
+    expect(agents.map((agent) => "display" in agent)).toEqual([true, true, false]);
+  });
+
+  test("a held id outside the visible rows reads nothing", async () => {
+    const { db, displays, scopeCalls } = fakes([row("a")], []);
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, ["hidden"]);
+    expect(scopeCalls).toHaveLength(0);
+    expect(agents.map((agent) => agent.id)).toEqual(["a"]);
+  });
+
+  test("dedupes the held ids and ignores those past the limit instead of failing the read", async () => {
+    const { db, displays, scopeCalls } = fakes([row("a"), row("late")], []);
+    const held = [
+      "a",
+      "a",
+      ...Array.from({ length: HELD_AGENT_IDS_LIMIT }, (_, i) => `filler-${i}`),
+      "late",
+    ];
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, held);
+    expect(scopeCalls[0]!.map((scope) => scope.agentId)).toEqual(["a"]);
+    expect(agents.map((agent) => "display" in agent)).toEqual([true, false]);
+  });
+
+  test("a failed busy read still answers the held Agents", async () => {
+    const { db, displays, scopeCalls } = fakes([row("a"), row("b")], ["a"]);
+    const failing = {
+      ...displays,
+      busyScopes: async () => {
+        throw new Error("redis down");
+      },
+    };
+    const agents = await listExtraAgents(db, failing, WORKSPACE_ID, member, ["b"]);
+    expect(scopeCalls[0]!.map((scope) => scope.agentId)).toEqual(["b"]);
+    expect(agents.map((agent) => "display" in agent)).toEqual([false, true]);
+  });
+
   test("returns every row with what the Agent store needs, the display only where there is one", async () => {
-    const { db, displays } = fakes([
-      row("work", { avatarMascot: "pink", displayName: "Worker" }),
-      row("bare", { computerId: null, visibility: "private" }),
-    ]);
+    const { db, displays } = fakes(
+      [
+        row("work", { avatarMascot: "pink", displayName: "Worker" }),
+        row("bare", { computerId: null, visibility: "private" }),
+      ],
+      ["work"],
+    );
     const [work, bare] = await listExtraAgents(db, displays, WORKSPACE_ID, member);
     expect(work).toMatchObject({
       id: "work",
@@ -180,8 +239,11 @@ describe("listExtraAgents", () => {
   });
 
   test("a failed display read leaves the rows without a display, not the read failed", async () => {
-    const { db } = fakes([row("a"), row("b")]);
+    const { db } = fakes([row("a"), row("b")], ["a", "b"]);
     const displays = {
+      busyScopes: async (workspaceId: string) => [
+        { workspaceId, computerId: "computer-a", agentId: "a" },
+      ],
       snapshotMany: async () => {
         throw new Error("redis down");
       },

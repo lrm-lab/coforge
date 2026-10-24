@@ -1,7 +1,7 @@
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import { parseActivityEntries, type AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { activityKindForObservation } from "#src/server/agents/agent-display.server";
+import { activityKindForObservation } from "#src/server/agents/agent-activity-kind";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { managedAgentWhere } from "#src/server/agents/agent-visibility.server";
 import { AGENT_ACTIVITY_WINDOW } from "#src/features/agents/agent-activity-window";

@@ -6,15 +6,11 @@ import type {
   AgentServiceTier,
   AgentStatus,
 } from "@lrm/coforge-sdk/internal";
-import {
-  AGENT_ACTIVITY_DETAIL_KIND,
-  parseAgentDisplaySnapshot,
-  type AgentActivityKind,
-  type AgentDisplaySnapshot,
-} from "@lrm/coforge-sdk/internal";
+import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { AGENT_STATUS_LEASE_MS } from "./agent-status.server";
 import { LUA_COMMON, PUT_SERVICE_TIER } from "./agent-display-lua";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
+import { activityKindForObservation, LIVENESS_ONLY_DETAIL_KINDS } from "./agent-activity-kind";
 
 // 90s: 1.5x the daemon's 60s busy heartbeat (ACTIVITY_HEARTBEAT_MS), the same
 // margin AGENT_STATUS_LEASE_MS keeps over AGENT_STATUS_REFRESH_MS. A silent
@@ -27,70 +23,6 @@ const WORKING_LEASE_MS = 90_000;
 // expiresAt. OBSERVE_ACTIVITY/OBSERVE_STATUS keep it in sync so the sweep
 // never has to scan Agent state directly to find stale busy leases.
 const LEASES_KEY = "coforge:agent-display:activity-leases";
-
-// Busy-but-filler detail kinds. Like runtime_progress, these only
-// renew the display lease; they carry no content worth showing or keeping.
-export const LIVENESS_ONLY_DETAIL_KINDS: ReadonlySet<string> = new Set([
-  AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS,
-  AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
-  AGENT_ACTIVITY_DETAIL_KIND.THINKING_END,
-  AGENT_ACTIVITY_DETAIL_KIND.COMPACTION_FINISHED,
-  AGENT_ACTIVITY_DETAIL_KIND.REVIEW_FINISHED,
-]);
-
-// "runtime_starting" and "working" are dropped: nothing in the daemon ever
-// emits either detail kind. The daemon has exactly one spawn moment, already
-// reported as "starting"; "checking_messages" stays for a sibling branch.
-const workingKinds = new Set([
-  "model_request_started",
-  "message_received",
-  "model_response_started",
-  "running_command",
-  "tool_started",
-  "freshness_hold",
-  "runtime_progress",
-  "runtime_reconnecting",
-  // A stored native session was unusable and the daemon is cold-starting a new one.
-  "runtime_unavailable",
-  "starting",
-  "checking_messages",
-  "compacting_context",
-  // Liveness-only fillers: still "working" while visible.
-  "tool_end",
-  "thinking_end",
-  "compaction_finished",
-  "review_finished",
-  // Visible, stored busy detail kinds.
-  "subagent_activity",
-  // The Agent's provider entered a review pass.
-  "reviewing_changes",
-  // Compaction/review started and no finish was observed for a long time.
-  "compaction_stale",
-  "review_stale",
-  // The daemon is restarting a provider it found stalled.
-  "stalled_recovery",
-  // The daemon injected a system/control message into the Agent's session.
-  "system_message",
-]);
-
-export function activityKindForObservation(
-  observation: Pick<AgentActivity, "detailKind" | "level">,
-): Exclude<AgentActivityKind, "offline"> | undefined {
-  if (
-    observation.level === "error" ||
-    observation.detailKind === "runtime_error" ||
-    observation.detailKind === "runtime_crashed" ||
-    // The provider has produced nothing for too long while work is pending;
-    // follows how runtime_error/runtime_crashed map above.
-    observation.detailKind === "runtime_stalled"
-  )
-    return "error";
-  if (observation.detailKind === "thinking_started") return "thinking";
-  if (observation.detailKind === "idle" || observation.detailKind === "runtime_interrupted")
-    return "online";
-  if (workingKinds.has(observation.detailKind)) return "working";
-  return undefined;
-}
 
 const OBSERVE_STATUS = `${LUA_COMMON}
 local state = decode_state(redis.call("GET", KEYS[1]))
@@ -321,6 +253,13 @@ type RedisPort = {
   ): Promise<string[]>;
 };
 
+function leaseScopes(members: readonly string[]): Scope[] {
+  return members.flatMap((member) => {
+    const [workspaceId, computerId, agentId] = member.split(":");
+    return workspaceId && computerId && agentId ? [{ workspaceId, computerId, agentId }] : [];
+  });
+}
+
 /** One `SWEEP_STALE` outcome. `expired` is the only one carrying a fresh snapshot to push. */
 export type ActivitySweepResult =
   | { outcome: "fresh" | "waiting" | "probe" }
@@ -342,6 +281,9 @@ export interface AgentDisplay {
   /** Many snapshots in one round trip (a Workspace's Agent list); same value per scope as
    * `snapshot`, in the scopes' order. */
   snapshotMany(scopes: readonly Scope[]): Promise<AgentDisplaySnapshot[]>;
+  /** The Workspace's Agents that are busy at `now`: the fleet-wide lease set's members whose
+   * lease has not lapsed. Read-only; a lapsed lease the sweep has not dropped yet is not busy. */
+  busyScopes(workspaceId: string, now: number): Promise<Scope[]>;
   /** Up to `limit` scopes whose busy lease score is at or before `now`, oldest first. */
   staleLeases(now: number, limit: number): Promise<Scope[]>;
   /** Advances one Agent's pending liveness probe. */
@@ -435,12 +377,14 @@ export class RedisAgentDisplay implements AgentDisplay {
     return result.map((entry) => this.parseSnapshot(entry));
   }
 
+  async busyScopes(workspaceId: string, now: number): Promise<Scope[]> {
+    // `(now`: a lease expiring at `now` has lapsed (the scripts' `now >= expiresAt`).
+    const members = await this.redis.zrangebyscore(LEASES_KEY, `(${now}`, "+inf");
+    return leaseScopes(members).filter((scope) => scope.workspaceId === workspaceId);
+  }
+
   async staleLeases(now: number, limit: number): Promise<Scope[]> {
-    const members = await this.redis.zrangebyscore(LEASES_KEY, "-inf", now, "LIMIT", 0, limit);
-    return members.flatMap((member) => {
-      const [workspaceId, computerId, agentId] = member.split(":");
-      return workspaceId && computerId && agentId ? [{ workspaceId, computerId, agentId }] : [];
-    });
+    return leaseScopes(await this.redis.zrangebyscore(LEASES_KEY, "-inf", now, "LIMIT", 0, limit));
   }
 
   async sweepStale(

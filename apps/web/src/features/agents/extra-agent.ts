@@ -16,6 +16,11 @@ export type ExtraAgent = {
   avatarUrl: string;
   mascot: AgentMascot;
   visibility: AgentVisibility;
-  /** Absent for an Agent with no Computer, or when the display read failed. */
+  /** Present only for an Agent that is busy now or that the browser held busy or lapsed (the
+   * read's `heldAgentIds`); absent for the others, and when the display read failed. */
   display?: AgentDisplaySnapshot;
 };
+
+/** The most `heldAgentIds` one extras read names; the browser caps its ids and the server ignores
+ * the rest, so a long list never fails the read. */
+export const HELD_AGENT_IDS_LIMIT = 500;

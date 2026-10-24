@@ -8,11 +8,8 @@ import {
   AgentActivityRepository,
   type TrustedAgentActivity,
 } from "#src/server/db/repositories/agent-activity.repositories.server";
-import {
-  activityKindForObservation,
-  getAgentDisplay,
-  type AgentDisplay,
-} from "./agent-display.server";
+import { activityKindForObservation } from "./agent-activity-kind";
+import { getAgentDisplay, type AgentDisplay } from "./agent-display.server";
 import { ensureAgentActivitySweep } from "./agent-activity-sweep.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { agentStatusChannelFor } from "#src/features/agents/agent-status-realtime";

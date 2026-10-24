@@ -138,6 +138,34 @@ describe.skipIf(!redisServer)("AgentActivitySweep", () => {
     expect(await subject.staleLeases(now + 10_000_000, 10)).toEqual([]);
   });
 
+  test("busyScopes lists the Workspace's live busy leases, not other Workspaces' or lapsed ones", async () => {
+    await redis.send("FLUSHDB", []);
+    now = 1_000_000;
+    const subject = display();
+    const other = { ...scope, workspaceId: "workspace-b" };
+    const second = { ...scope, agentId: "agent-b", computerId: "computer-b" };
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(activity(1, "tool_started"), fence);
+    await subject.observeStatus(status(1, "active", other));
+    await subject.observeActivity(activity(1, "tool_started", other), fence);
+    await subject.observeStatus(status(1, "active", second));
+    await subject.observeActivity(
+      activity(1, "tool_started", { ...second, launchId: "launch-b" }),
+      { daemonInstanceId: "daemon-a", launchId: "launch-b" },
+    );
+    const byAgent = (scopes: Array<{ agentId: string }>) => scopes.map((s) => s.agentId).sort();
+    expect(byAgent(await subject.busyScopes("workspace-a", now))).toEqual(["agent-a", "agent-b"]);
+    expect(await subject.busyScopes("workspace-b", now)).toEqual([other]);
+    expect(await subject.busyScopes("workspace-c", now)).toEqual([]);
+
+    // A lease that has lapsed (score at or before now) is not busy, even before the sweep drops it.
+    expect(await subject.busyScopes("workspace-a", now + 90_000)).toEqual([]);
+
+    // Going idle leaves the set.
+    await subject.observeActivity(activity(2, "idle"), fence);
+    expect(await subject.busyScopes("workspace-a", now)).toEqual([second]);
+  });
+
   test("a stale busy lease yields exactly one probe publish until the timeout", async () => {
     await redis.send("FLUSHDB", []);
     now = 2_000_000;
