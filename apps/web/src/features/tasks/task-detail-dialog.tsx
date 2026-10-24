@@ -284,10 +284,15 @@ function TaskSection({
   };
 
   return (
-    <section className="flex flex-col gap-5 border-b border-secondary px-4 pt-5 pb-5 sm:px-6">
-      <h3 className="line-clamp-3 text-lg font-semibold break-words text-primary">{task.title}</h3>
+    // A phone keeps this fixed block short so the thread under it gets the screen: a two-line
+    // title, Status and Owner side by side without their labels, and the creator left to the
+    // History's "Created task" entry.
+    <section className="flex flex-col gap-3 border-b border-secondary px-4 py-3 sm:gap-5 sm:px-6 sm:py-5">
+      <h3 className="line-clamp-2 text-md font-semibold break-words text-primary sm:line-clamp-3 sm:text-lg">
+        {task.title}
+      </h3>
 
-      <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-3">
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 sm:grid sm:grid-cols-3 sm:gap-x-8 sm:gap-y-4">
         <TaskField label={m.tasks_overview_status()}>
           <StatusMenu
             task={task}
@@ -313,7 +318,7 @@ function TaskSection({
             }
           />
         </TaskField>
-        <TaskField label={m.tasks_created_by()}>
+        <TaskField label={m.tasks_created_by()} className="max-sm:hidden">
           <TaskPerson person={creator} />
         </TaskField>
       </dl>
@@ -323,7 +328,7 @@ function TaskSection({
         </p>
       )}
 
-      <div className="border-t border-secondary pt-3">
+      <div className="border-t border-secondary pt-2 sm:pt-3">
         <Button
           color="link-gray"
           size="sm"
@@ -343,11 +348,20 @@ function TaskSection({
   );
 }
 
-/** One field of the popup: its label above, its value (or the control that edits it) below. */
-function TaskField({ label, children }: { label: string; children: ReactNode }) {
+/** One field of the popup: its label above (read out only, on a phone), its value (or the control
+ * that edits it) below. */
+function TaskField({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <dt className="text-sm text-tertiary">{label}</dt>
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
+      <dt className="text-sm text-tertiary max-sm:sr-only">{label}</dt>
       <dd className="flex min-h-8 min-w-0 items-center">{children}</dd>
     </div>
   );
