@@ -126,6 +126,14 @@ import {
 import { inferAttachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
 import { formatInboxCheck } from "#src/inbox-format";
 import {
+  parseAttentionArgs,
+  type ChannelInvocation,
+  type InboxInvocation,
+  type ThreadInvocation,
+} from "#src/attention-args";
+
+export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
+import {
   claimRefusal,
   formatClaimResults,
   formatMyTaskList,
@@ -175,8 +183,6 @@ export type AttachmentUploadInvocation = {
   mimeType?: string;
   json?: boolean;
 };
-export type InboxInvocation = { command: "inbox-check"; json?: boolean };
-export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
 export type ChannelManagementInvocation = {
   command: "channel-manage";
   channel: Omit<ChannelCommand, "idempotencyKey">;
@@ -191,7 +197,6 @@ export type LocalReminderReceiptResponse = {
   reminderId: string;
   revision: number;
 };
-export type ThreadInvocation = { command: "thread-unfollow"; target: string };
 export type TaskInvocation = { command: "task"; task: Omit<TaskCommand, "idempotencyKey"> };
 export type WeeklyReportInvocation =
   | {
@@ -378,31 +383,10 @@ export function parseArgs(
   if (args[0] === "weekly-report-memory") return parseWeeklyReportMemoryArgs(args.slice(1));
   if (args[0] === "weekly-report") return parseWeeklyReportArgs(args.slice(1));
   if (args[0] === "action" && args[1] === "prepare") return parseActionPrepareArgs(args.slice(2));
-  if (
-    args[0] === "channel" &&
-    (args[1] === "mute" || args[1] === "unmute") &&
-    args[2] === "--target" &&
-    args.length === 4 &&
-    /^#[a-z0-9][a-z0-9_-]{0,31}$/.test(args[3] ?? "")
-  )
-    return { command: args[1], target: args[3]! };
+  const attention = parseAttentionArgs(args);
+  if (attention) return attention;
   if (args[0] === "channel" && args[1] !== undefined && args[1] !== "mute" && args[1] !== "unmute")
     return parseChannelManagementArgs(args.slice(1));
-  if (
-    args[0] === "thread" &&
-    args[1] === "unfollow" &&
-    args[2] === "--target" &&
-    args.length === 4 &&
-    new RegExp(
-      `^#[a-z0-9][a-z0-9_-]{0,31}:(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`,
-      "i",
-    ).test(args[3] ?? "")
-  )
-    return { command: "thread-unfollow", target: args[3]! };
-  if (args[0] === "inbox" && args[1] === "check") {
-    if (args.length === 2) return { command: "inbox-check" };
-    if (args.length === 3 && args[2] === "--json") return { command: "inbox-check", json: true };
-  }
   if (args[0] === "attachment" && args[1] === "view") {
     let positionalId: string | undefined;
     let explicitId: string | undefined;
