@@ -1,4 +1,5 @@
 import type { AgentContextReport, RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 export type { AgentContextReport } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
 export type {
@@ -61,6 +62,77 @@ export type SessionResumeFacts = {
   lastActivityAtMs?: number;
   lastContextTokens?: number;
 };
+
+/** Runtime providers whose native authentication can be driven by the Computer. */
+export const RUNTIME_AUTH_PROVIDERS = [
+  RUNTIME_PROVIDER.CLAUDE_CODE,
+  RUNTIME_PROVIDER.CODEX,
+] as const;
+export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
+
+export function isRuntimeAuthProvider(value: unknown): value is RuntimeAuthProvider {
+  return (RUNTIME_AUTH_PROVIDERS as readonly string[]).includes(value as string);
+}
+
+/** Maximum size accepted for a code pasted back from a browser login flow. */
+export const RUNTIME_AUTH_CODE_MAX_LENGTH = 1024;
+
+/**
+ * Normalizes a browser-pasted login code without allowing arbitrary control data into a provider
+ * process. Newlines and other Unicode whitespace are presentation around the code; after removing
+ * it, non-whitespace control characters are rejected and the value stays bounded.
+ */
+export function normalizeRuntimeAuthCode(value: string): string {
+  const normalized = value.replace(/\s/gu, "");
+  if (!normalized) throw new Error("runtime auth code is empty");
+  if ([...normalized].length > RUNTIME_AUTH_CODE_MAX_LENGTH)
+    throw new Error("runtime auth code is too long");
+  if (/[\p{Cc}\p{Cf}]/u.test(normalized))
+    throw new Error("runtime auth code contains control characters");
+  return normalized;
+}
+
+/** Provider-neutral snapshot safe to send to the Web; it never contains credentials. */
+export type RuntimeAuthStatus = Readonly<{
+  provider: RuntimeAuthProvider;
+  state: "logged_in" | "logged_out" | "unknown" | "unavailable";
+  accountLabel?: string;
+  plan?: string;
+  loginMethod?: string;
+  unavailableReason?: "not_installed" | "version_too_old" | "unsupported_installation";
+}>;
+
+/** A provider's browser/device login challenge, with no token or raw provider output. */
+export type RuntimeAuthChallenge = Readonly<{
+  operationId: string;
+  provider: RuntimeAuthProvider;
+  verificationUrl?: string;
+  userCode?: string;
+  prompt?: string;
+  expiresAtMs: number;
+  acceptsCode: boolean;
+}>;
+
+export type RuntimeAuthFailure =
+  | "timed_out"
+  | "rejected"
+  | "not_logged_in"
+  | "interaction_failed"
+  | "process_failed"
+  | "cancelled";
+
+/** The provider-neutral adapter seam; provider output parsing stays below this contract. */
+export interface RuntimeAuthAdapter {
+  readonly provider: RuntimeAuthProvider;
+  readStatus(options: { workingDirectory: string; timeoutMs?: number }): Promise<RuntimeAuthStatus>;
+  startLogin(options: {
+    workingDirectory: string;
+    timeoutMs?: number;
+  }): Promise<RuntimeAuthChallenge>;
+  submitCode(options: { operationId: string; code: string }): Promise<void>;
+  cancel(options: { operationId: string }): Promise<void>;
+  logout(options: { workingDirectory: string; timeoutMs?: number }): Promise<void>;
+}
 export type CodeAgentProviderFactory = (provider: RuntimeProvider) => CodeAgentProvider;
 export interface CodeAgentProbe {
   which(name: string, searchPath?: string): string | undefined;
