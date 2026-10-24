@@ -42,6 +42,8 @@ export type EvalEnv = {
   /** Address Task only and ask Memory to publish an ordinary message, so its tool calls have an
    * anchor message (ADR-0047 D-002) even when no cited Offer is possible. */
   memoryObserver: boolean;
+  memoryParallel: boolean;
+  deliveryRules: boolean;
   /** Shard filter for order-independent episode streams: "N:k" keeps episodes
    * whose zero-based manifest index satisfies index % N === k. */
   episodeMod: string | null;
@@ -114,6 +116,8 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     verifyRegisterWorkspace: (env.COFORGE_EVAL_VERIFY_REGISTER_WORKSPACE ?? "0") === "1",
     outcomePassReward: Number(env.COFORGE_EVAL_OUTCOME_PASS_REWARD ?? "0.6"),
     memoryObserver: (env.COFORGE_EVAL_MEMORY_OBSERVER ?? "0") === "1",
+    memoryParallel: (env.COFORGE_EVAL_MEMORY_PARALLEL ?? "0") === "1",
+    deliveryRules: (env.COFORGE_EVAL_DELIVERY_RULES ?? "0") === "1",
     recordTrajectoryAos: (env.COFORGE_EVAL_TRAJECTORY_AOS ?? "0") === "1",
     episodeMod: env.COFORGE_EVAL_EPISODE_MOD?.trim() || null,
     abortQuietMs: Number(env.COFORGE_EVAL_ABORT_QUIET_MS ?? "600000"),

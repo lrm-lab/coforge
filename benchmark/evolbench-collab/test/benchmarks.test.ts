@@ -36,16 +36,28 @@ test("termination reasons preserve channel budgets and identify terminal blocker
   expect(episodeTerminationReason("quiet_no_offer", false)).toBe("quiet_no_offer");
   expect(episodeTerminationReason("final_settled", true)).toBe("final_settled");
   expect(
-    episodeTerminationReason("deadline", true, { taskFailed: true, memoryFailed: false }),
+    episodeTerminationReason("deadline", true, {
+      taskFailed: true,
+      memoryFailed: false,
+    }),
   ).toBe("runtime_failed");
   expect(
-    episodeTerminationReason("quiet_no_offer", false, { taskFailed: false, memoryFailed: true }),
+    episodeTerminationReason("quiet_no_offer", false, {
+      taskFailed: false,
+      memoryFailed: true,
+    }),
   ).toBe("runtime_failed");
   expect(
-    episodeTerminationReason("deadline", true, { taskFailed: false, memoryFailed: true }),
+    episodeTerminationReason("deadline", true, {
+      taskFailed: false,
+      memoryFailed: true,
+    }),
   ).toBe("deadline");
   expect(
-    episodeTerminationReason("final_settled", true, { taskFailed: true, memoryFailed: true }),
+    episodeTerminationReason("final_settled", true, {
+      taskFailed: true,
+      memoryFailed: true,
+    }),
   ).toBe("final_settled");
 });
 
@@ -183,6 +195,33 @@ describe("episodePrompt", () => {
   });
 });
 
+describe("episodePrompt parallel start", () => {
+  const episode = {
+    domain: "knowledge_work",
+    prompt: "Write the contract.",
+    grader: { kind: "x" },
+    stageFiles: [],
+  } as never;
+  test("both agents are mentioned and Task must read Memory before writing", () => {
+    const prompt = episodePrompt(episode, "R", null, true, {
+      parallel: true,
+      deliveryRules: true,
+    });
+    expect(prompt.startsWith("@task @memory Write the contract.")).toBe(true);
+    expect(prompt).toContain(
+      "do NOT write any deliverable file until you have read Memory Agent's message",
+    );
+    expect(prompt).toContain("memory_disposition");
+    expect(prompt).toContain("Delivery rules:");
+    expect(prompt).not.toContain("you observe this channel");
+  });
+  test("without the flags nothing changes", () => {
+    const prompt = episodePrompt(episode, "R", null, true);
+    expect(prompt.startsWith("@task Write the contract.")).toBe(true);
+    expect(prompt).not.toContain("Delivery rules:");
+  });
+});
+
 describe("classifyMechanism", () => {
   const base: EpisodeResult = {
     finalOutput: "```python\nprint(1)\n```",
@@ -235,7 +274,12 @@ describe("summarizeArm", () => {
     };
     const summary = summarizeArm("warm", [
       row,
-      { ...row, episode_id: "e2", mechanism: "no_offer", recall_state: "empty" },
+      {
+        ...row,
+        episode_id: "e2",
+        mechanism: "no_offer",
+        recall_state: "empty",
+      },
     ]);
     expect(summary.episodes).toBe(2);
     expect(summary.families).toBe(1);

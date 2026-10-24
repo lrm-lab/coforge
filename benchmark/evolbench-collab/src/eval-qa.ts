@@ -23,11 +23,36 @@ const MEMORY_OBSERVER_NOTE = [
   "Do not invent evidence.",
 ].join(" ");
 
+/** Memory and Task are woken by the same message (both @-mentioned). Task plans first and writes no
+ * deliverable until Memory's message has arrived, so a retrieved hint can still change the draft. */
+export const MEMORY_PARALLEL_NOTE = [
+  "Memory Agent and Task Agent start together on this message.",
+  "Memory Agent: retrieve now with ov_experience_find, then publish ONE cited Offer to Task with memory_offer",
+  "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). If no card applies,",
+  "publish one short send_channel_message saying so. Do not invent evidence.",
+  "Task Agent: Memory Agent is retrieving prior experience in this channel right now. Read the task and the",
+  "reference files and plan first, but do NOT write any deliverable file until you have read Memory Agent's message:",
+  "run `coforge message check --target '<this channel>'`; if nothing has arrived, `sleep 20` and check again, at most",
+  "8 times, then continue without it. When a Memory Hint arrives, call memory_disposition (adopt, reject or defer,",
+  "with a reason) before applying it, and apply the advice you adopted to the deliverable.",
+].join(" ");
+
+/** Delivery rules that mirror what the 8745 scorer can actually see (found by the warm-log analysis). */
+export const DELIVERY_RULES_NOTE = [
+  "Delivery rules: save every final deliverable directly in the working directory using only these extensions:",
+  "pdf docx xlsx pptx csv txt md json png jpg (never only mp4, yaml, zip, tsx or ipynb).",
+  "Never save over a provided reference file's name. Keep each file under 2 MB (downscale or compress embedded images).",
+  "If pip says externally-managed-environment, use `python3 -m venv` or `pip install --break-system-packages`.",
+  "Before you finish, open or render each deliverable and check page count, columns, placeholders and numbers;",
+  "never use random or invented data and never leave placeholder images.",
+].join(" ");
+
 export function episodePrompt(
   episode: ManifestEpisode,
   reminder: string,
   envNote?: string | null,
   memoryObserver = false,
+  options: { parallel?: boolean; deliveryRules?: boolean } = {},
 ): string {
   const note = envNote
     ? `\n\n${envNote
@@ -38,14 +63,20 @@ export function episodePrompt(
     episode.domain === "information_retrieval"
       ? episode.prompt.split("## How to call search in this environment")[0]!.trimEnd()
       : episode.prompt;
-  const observerNote = memoryObserver ? `\n\n${MEMORY_OBSERVER_NOTE}` : "";
-  const body = `${prompt}${note}\n\n${reminder}${observerNote}`.replace(
+  const parallel = options.parallel === true;
+  const observerNote = parallel
+    ? `\n\n${MEMORY_PARALLEL_NOTE}`
+    : memoryObserver
+      ? `\n\n${MEMORY_OBSERVER_NOTE}`
+      : "";
+  const rules = options.deliveryRules ? `\n\n${DELIVERY_RULES_NOTE}` : "";
+  const body = `${prompt}${note}\n\n${reminder}${rules}${observerNote}`.replace(
     /@memory\b/g,
     "Memory Agent",
   );
   // An explicit @memory question can only be answered by a cited Offer, which an empty
   // corpus cannot give; observer mode leaves Memory to publish an ordinary channel message.
-  return memoryObserver ? `@task ${body}` : `@task @memory ${body}`;
+  return memoryObserver && !parallel ? `@task ${body}` : `@task @memory ${body}`;
 }
 
 export async function postEpisodePrompt(input: {
@@ -55,8 +86,13 @@ export async function postEpisodePrompt(input: {
   reminder: string;
   envNote?: string | null;
   memoryObserver?: boolean;
+  memoryParallel?: boolean;
+  deliveryRules?: boolean;
 }): Promise<{ triggerId: string; createdAt: Date }> {
-  const body = episodePrompt(input.episode, input.reminder, input.envNote, input.memoryObserver);
+  const body = episodePrompt(input.episode, input.reminder, input.envNote, input.memoryObserver, {
+    parallel: input.memoryParallel,
+    deliveryRules: input.deliveryRules,
+  });
   if (input.redisUrl) {
     const redis = new RedisClient(input.redisUrl);
     try {
@@ -79,7 +115,10 @@ export async function postEpisodePrompt(input: {
     }
   }
   const member = await input.workspace.db.conversationMember.findFirst({
-    where: { conversationId: input.workspace.channelId, userId: input.workspace.evalUserId },
+    where: {
+      conversationId: input.workspace.channelId,
+      userId: input.workspace.evalUserId,
+    },
   });
   if (!member) throw new Error("eval user is not a channel member");
   const latest = await input.workspace.db.message.findFirst({
@@ -207,6 +246,8 @@ export async function runEpisode(input: {
     reminder: input.reminder,
     envNote: input.env.envNote,
     memoryObserver: input.env.memoryObserver,
+    memoryParallel: input.env.memoryParallel,
+    deliveryRules: input.env.deliveryRules,
   });
   const deadline = Date.now() + input.episodeTimeoutMs;
   const abortQuietMs = input.env.abortQuietMs;
