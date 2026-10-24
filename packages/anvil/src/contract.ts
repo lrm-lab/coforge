@@ -99,7 +99,7 @@ export type RuntimeAuthStatus = Readonly<{
   accountLabel?: string;
   plan?: string;
   loginMethod?: string;
-  unavailableReason?: "not_installed" | "version_too_old" | "unsupported_installation";
+  unavailableReason?: "not_installed" | "version_unsupported" | "unsupported_installation";
 }>;
 
 export type RuntimeAuthFailure =
@@ -134,7 +134,7 @@ export type RuntimeAuthLogoutResult =
   | Readonly<{ status: "logged_out"; authStatus: RuntimeAuthStatus }>
   | Readonly<{
       status: "failed";
-      reason: "still_logged_in" | "version_too_old" | "process_failed";
+      reason: "still_logged_in" | "version_unsupported" | "process_failed";
       detail?: string;
     }>;
 
