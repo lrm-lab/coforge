@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { StreamRead } from "./stream-state";
@@ -89,20 +89,20 @@ export function useConversationSync({
     [loadWindowAround],
   );
 
-  const persistedReads = useMemo(
-    () =>
-      taskRootReads
-        ? { ...taskRootReads, ...conversation.threadReadThrough }
-        : conversation.threadReadThrough,
-    [taskRootReads, conversation.threadReadThrough],
-  );
-
   const [readThrough, setReadThrough] = useState<Record<string, number>>({});
   // This thread's read cursor (`threadReadThrough`): the stored one, raised by this visit's reads.
+  // A Task popup root read outside the window brings its own stored cursor; cursors only move
+  // forward, so the later of the two counts.
   const threadCursor = useCallback(
-    (rootMessageId: string) =>
-      threadReadThrough({ persistedReads, localReads: readThrough }, rootMessageId),
-    [readThrough, persistedReads],
+    (rootMessageId: string) => {
+      const cursor = threadReadThrough(
+        { persistedReads: conversation.threadReadThrough, localReads: readThrough },
+        rootMessageId,
+      );
+      const popupCursor = taskRootReads?.[rootMessageId];
+      return popupCursor === undefined ? cursor : Math.max(cursor ?? 0, popupCursor);
+    },
+    [readThrough, conversation.threadReadThrough, taskRootReads],
   );
 
   // Keep the selected thread mounted while the reader moves between threads. The task popup owns
@@ -194,7 +194,9 @@ export function useConversationSync({
  * outside the bounded stream window; it then reads that message alone, beside the stream, and
  * never replaces the window around it: that would move the stream under the popup, and closing
  * the popup would leave the reader somewhere else in the history. A failed read leaves the popup
- * showing the Task without its thread.
+ * showing the Task without its thread. The root read is a snapshot that realtime events do not
+ * update; that is enough because the popup shows the Task section in the root's place and uses the
+ * root only for its id and thread.
  */
 export function useTaskPopupRoot(
   conversation: Pick<ConversationSyncView, "conversationId" | "messages">,
