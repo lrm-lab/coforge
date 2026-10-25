@@ -23,8 +23,14 @@ import { MessageBody } from "./message-body";
 function anchorLabel(anchor: AttachmentCommentAnchor): string {
   const range = anchorRangeLabel(anchor);
   if (anchor.type === "md-section") return m.attachment_comments_anchor_section({ title: range });
-  if (anchor.type === "lines") return m.attachment_comments_anchor_lines({ range });
-  return m.attachment_comments_anchor_rows({ range });
+  const single = anchor.data.start === anchor.data.end;
+  if (anchor.type === "lines")
+    return single
+      ? m.attachment_comments_anchor_line({ range })
+      : m.attachment_comments_anchor_lines({ range });
+  return single
+    ? m.attachment_comments_anchor_row({ range })
+    : m.attachment_comments_anchor_rows({ range });
 }
 
 type Placed = { comment: AttachmentCommentView; order: number | null };

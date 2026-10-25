@@ -157,7 +157,7 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     await page.click(${JSON.stringify(open(csvName))});
     await page.waitForSelector('[role="dialog"] [data-anchor-row="60"]');
     ${selectAndComment('[role="dialog"] [data-anchor-row="45"] [role=cell]:last-child')}
-    await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("Rows 45"));
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("Row 45"));
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(rowBody)});
     await page.click("loc=role:button[name='Post comment']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(rowBody)}, { timeout: 10000 });
@@ -166,7 +166,7 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     await page.waitForSelector(${JSON.stringify(open(csvName))});
     await page.click(${JSON.stringify(open(csvName))});
     await page.waitForSelector('[role="dialog"] [data-anchor-row="60"]');
-    await page.click("loc=role:button[name='Go to Rows 45']");
+    await page.click("loc=role:button[name='Go to Row 45']");
     await page.waitForFunction(() => {
       const row = document.querySelector('[role="dialog"] [data-anchor-row="45"]');
       const pane = row?.closest(".overflow-auto")?.getBoundingClientRect();
