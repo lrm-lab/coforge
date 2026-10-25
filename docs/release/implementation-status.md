@@ -80,6 +80,29 @@ Platform coverage and remaining acceptance gaps are explicit:
   behavior have automated coverage, but the complete install, installer upgrade,
   health-identity, and rollback flow has not yet run on a macOS host. Do not treat
   source-level tests as platform release evidence.
+- **macOS code identity**: the darwin Computer executables (0.1.6, 0.1.7 and
+  0.1.9 checked) carry only Bun's ad-hoc linker signature (`Identifier=a.out`,
+  no Team ID), so their designated requirement is their own `cdhash` and changes
+  with every version. Users report having to grant macOS privacy permissions
+  (TCC) again after each upgrade, which matches TCC recognising an app by that
+  requirement. Direction: sign first with a free self-signed code-signing
+  certificate under a fixed identifier (`cn.coforge.computer`); an Apple
+  Developer ID certificate with notarization is to be proposed later. A local
+  check re-signed 0.1.7 and 0.1.9 with one such certificate: both report the
+  same requirement (`identifier "cn.coforge.computer" and certificate leaf =
+  H"…"`) and still run. Open before it ships: whether TCC keeps its grants
+  across an upgrade on a real Mac; where the signature is applied, since the
+  darwin targets are built on Linux runners; Bun's JIT entitlements
+  ([Bun: code signing on macOS](https://bun.com/docs/bundler/executables));
+  and who holds the private key and how it is rotated, since a new key costs
+  every user one more grant. Signing keys are a security change
+  ([Routine release boundary](routine-release-boundary.md)) and need Frank's
+  approval of the concrete design. A version-stable executable path is
+  deferred: it leaves the `cdhash` requirement unchanged.
+- **Windows code identity**: the Windows executables are unsigned. Windows has
+  no per-version privacy grants, but SmartScreen reputation and path-keyed
+  firewall or Controlled Folder Access rules start over with each version.
+  Authenticode signing and a version-stable executable path are deferred.
 
 Distribution credentials come from GitHub OIDC federation to the Alibaba Cloud
 RAM role `coforge-release-publisher` (`ALIBABA_CLOUD_ROLE_ARN`/
