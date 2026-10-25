@@ -48,3 +48,12 @@ These rules apply to `src/server/computers/`.
 - `computer-workspace-files.server.ts` is the owner scope for that inventory's
   scan and for workspace delete: the owned-Computer lookup, the Agent
   assignment rule, and the Workspace Files query both server functions use.
+- `runtime-auth.server.ts` signs a Code Agent runtime in or out on a Computer through the daemon.
+  Only the Computer's owner and an owner or admin of a Workspace it is connected to may
+  (`runtime-auth-authorization.server.ts`). `runtime-auth-store.server.ts` allows one login per
+  provider per Computer, not per Workspace, and its lock and login record are written together.
+  The pasted code goes to the daemon control channel once and is never stored or logged. Progress
+  reaches only the person who started the login, on `runtimeauth:user:<user_id>`; a page that was
+  closed reads it with `readRuntimeAuthLogin`. A stale or repeated report is accepted and dropped,
+  a report for a login the Computer does not hold is a 403, and a store failure is a 503 so the
+  daemon retries.

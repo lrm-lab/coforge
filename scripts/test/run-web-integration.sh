@@ -62,6 +62,7 @@ export PI_CHAT_TEST_REDIS_URL="$redis"
 export APP_RATE_LIMIT_TEST_REDIS_URL="$redis"
 export APP_PRESENCE_TEST_REDIS_URL="$redis"
 export AGENT_TURN_INTERRUPT_TEST_REDIS_URL="$redis"
+export RUNTIME_AUTH_TEST_REDIS_URL="$redis"
 
 cd "$root/apps/web"
 if [ -z "${MEMORY_THREAD_TEST_SCHEMA_SQL:-}" ]; then

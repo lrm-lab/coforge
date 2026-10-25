@@ -111,7 +111,7 @@ import { createAgentSessions } from "#src/server/db/repositories/agent-session.r
 import { AgentSessionReceiver } from "#src/server/agents/agent-session.server";
 import { createAgentControlResultMethod } from "./agent-control-receiver.server";
 import { computerRuntimeMethods } from "./runtime-auth-report-receiver.server";
-import { agentTurnInterruptMethods } from "./agent-turn-interrupt-receiver.server";
+import { daemonReportMethods } from "./daemon-report-methods.server";
 import { agentReadingMethods } from "./agent-reading-methods";
 import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
 import { Reminders } from "#src/server/reminders/reminders.server";
@@ -360,7 +360,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         [AGENT_WORKSPACE_FILE_READ_RESULT_METHOD]: createAgentWorkspaceFileReadResultMethod(),
         [AGENT_WORKSPACE_DELETE_RESULT_METHOD]: createAgentWorkspaceDeleteResultMethod(),
         [AGENT_CONTROL_RESULT_METHOD]: createAgentControlResultMethod(control),
-        ...agentTurnInterruptMethods(db),
+        ...daemonReportMethods(db),
         [AGENT_START_METHOD]: createAgentStartMethod(
           new PublishAgentRuntimeControl(
             agentAuthorization,
@@ -414,7 +414,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       [AGENT_WORKSPACE_FILE_READ_RESULT_METHOD]: unavailableMethod,
       [AGENT_WORKSPACE_DELETE_RESULT_METHOD]: unavailableMethod,
       [AGENT_CONTROL_RESULT_METHOD]: unavailableMethod,
-      ...agentTurnInterruptMethods(null),
+      ...daemonReportMethods(null),
       [AGENT_SESSION_METHOD]: unavailableMethod,
       [AGENT_SESSION_INVALIDATE_METHOD]: unavailableMethod,
       [AGENT_CONTEXT_USAGE_METHOD]: unavailableMethod,
