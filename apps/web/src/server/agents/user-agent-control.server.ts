@@ -15,6 +15,7 @@ import { createAgentSessions } from "#src/server/db/repositories/agent-session.r
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { AgentTurnInterrupt } from "./agent-turn-interrupt.server";
+import { getAgentTurnInterruptResults } from "./agent-turn-interrupt-results.server";
 import { getAgentTurnInterruptCapabilityLease } from "./agent-turn-interrupt-capability.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 
@@ -76,6 +77,7 @@ export function userAgentTurnInterrupt(db: PrismaClient) {
     getAgentRuntimeLock(),
     getComputerStatusCache(),
     getAgentTurnInterruptCapabilityLease(),
+    getAgentTurnInterruptResults(),
   ));
 }
 

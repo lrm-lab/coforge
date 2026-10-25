@@ -26,7 +26,7 @@ export function createAgentTurnInterruptResultMethod(
       metadata.principal.computerId !== result.computerId
     )
       return { code: 403, message: "Agent turn interrupt result is not authorized" };
-    if (!interrupts.receive(metadata.principal, result))
+    if (!(await interrupts.receive(metadata.principal, result)))
       return { code: 403, message: "Agent turn interrupt result is not authorized" };
     return new Uint8Array();
   };

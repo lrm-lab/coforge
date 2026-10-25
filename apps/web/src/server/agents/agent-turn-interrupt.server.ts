@@ -6,6 +6,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { daemonControlChannel } from "#src/server/centrifugo/server-api.server";
+import type { AgentTurnInterruptResults } from "./agent-turn-interrupt-results.server";
 import type { AgentControlStore } from "./agent-control.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import { assertAgentLive } from "./active-agent.server";
@@ -21,17 +22,12 @@ export type AgentTurnInterruptOutcome =
   | "needs_upgrade"
   | "failed";
 
-type Waiter = {
-  intent: AgentTurnInterruptIntent;
-  resolve: (result: AgentTurnInterruptResult | "timeout") => void;
-  timer: ReturnType<typeof setTimeout>;
-};
-
 const RESULT_TIMEOUT_MS = 20_000;
 
 /** The non-durable request/response seam behind the Agent detail page's Stop current turn action. */
 export class AgentTurnInterrupt {
-  readonly #waiters = new Map<string, Waiter>();
+  /** Request ids this instance is waiting on; the results themselves go through `results`. */
+  readonly #pending = new Set<string>();
 
   constructor(
     private readonly store: Pick<AgentControlStore, "get" | "memberRole">,
@@ -43,6 +39,7 @@ export class AgentTurnInterrupt {
     private readonly capability: {
       supports(workspaceId: string, computerId: string): Promise<boolean>;
     },
+    private readonly results: AgentTurnInterruptResults,
     private readonly timeoutMs = RESULT_TIMEOUT_MS,
   ) {}
 
@@ -88,61 +85,50 @@ export class AgentTurnInterrupt {
     if (!(await this.capability.supports(input.workspaceId, prepared.computerId)))
       return "needs_upgrade";
 
-    // A retried or squatted request id must not replace the waiter already holding it.
-    if (this.#waiters.has(prepared.intent.requestId)) return "failed";
-    const result = this.#wait(prepared.intent);
+    // A retried or squatted request id must not share the wait of the one already holding it.
+    const { intent } = prepared;
+    if (this.#pending.has(intent.requestId)) return "failed";
+    this.#pending.add(intent.requestId);
     try {
       await this.api.publish(
         daemonControlChannel(input.workspaceId, prepared.computerId),
-        encodeAgentTurnInterruptIntent(prepared.intent),
+        encodeAgentTurnInterruptIntent(intent),
       );
     } catch {
-      this.#finish(prepared.intent.requestId);
+      this.#pending.delete(intent.requestId);
       return "offline";
     }
-    const settled = await result;
-    return settled === "timeout" ? "failed" : settled.status;
+    try {
+      // Publishing first is safe: `wait` reads the stored result after it subscribes.
+      const settled = await this.results.wait(
+        { workspaceId: intent.workspaceId, requestId: intent.requestId },
+        this.timeoutMs,
+        (result) =>
+          intent.agentId === result.agentId &&
+          intent.epoch === result.epoch &&
+          intent.launchId === result.launchId,
+      );
+      return settled === "timeout" ? "failed" : settled.status;
+    } finally {
+      this.#pending.delete(intent.requestId);
+    }
   }
 
-  receive(
+  /**
+   * Stores a daemon's result for the instance waiting on it, which may be another one. The entry
+   * point checks the Agent runs on the reporting Computer before anything is written: the first
+   * result stored for a request wins, so a result from a Computer that does not run the Agent must
+   * never get that far.
+   */
+  async receive(
     scope: { workspaceId: string; computerId: string },
     result: AgentTurnInterruptResult,
-  ): boolean {
-    const waiter = this.#waiters.get(result.requestId);
-    if (
-      !waiter ||
-      waiter.intent.workspaceId !== scope.workspaceId ||
-      waiter.intent.computerId !== scope.computerId
-    )
+  ): Promise<boolean> {
+    const agent = await this.store.get(result.agentId);
+    if (!agent || agent.workspaceId !== scope.workspaceId || agent.computerId !== scope.computerId)
       return false;
-    if (
-      waiter.intent.agentId !== result.agentId ||
-      waiter.intent.epoch !== result.epoch ||
-      waiter.intent.launchId !== result.launchId
-    )
-      return false;
-    this.#finish(result.requestId);
-    waiter.resolve(result);
+    await this.results.put({ workspaceId: scope.workspaceId, requestId: result.requestId }, result);
     return true;
-  }
-
-  #wait(intent: AgentTurnInterruptIntent): Promise<AgentTurnInterruptResult | "timeout"> {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        const waiter = this.#waiters.get(intent.requestId);
-        if (!waiter) return;
-        this.#waiters.delete(intent.requestId);
-        waiter.resolve("timeout");
-      }, this.timeoutMs);
-      this.#waiters.set(intent.requestId, { intent, resolve, timer });
-    });
-  }
-
-  #finish(requestId: string): void {
-    const waiter = this.#waiters.get(requestId);
-    if (!waiter) return;
-    clearTimeout(waiter.timer);
-    this.#waiters.delete(requestId);
   }
 }
 
