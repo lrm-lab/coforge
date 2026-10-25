@@ -1,0 +1,63 @@
+import { expect, test } from "bun:test";
+import type { AgentAttachmentCommentsResponse } from "@lrm/coforge-sdk/agent";
+import { AppError } from "#src/lib/app-error";
+import { handleAgentAttachmentCommentsGet } from "#src/routes/api/agent/v1/attachments/$attachmentId.comments";
+
+const ID = "9f0c5a52-1111-4222-8333-444455556666";
+const PAGE: AgentAttachmentCommentsResponse = {
+  ok: true,
+  attachmentId: ID,
+  viewer: { canComment: true },
+  comments: [],
+  hasOlder: false,
+};
+
+const ask = async (attachmentId: string, search: string, read = async () => PAGE) => {
+  const seen: unknown[] = [];
+  const response = await handleAgentAttachmentCommentsGet(
+    new Request(
+      `https://server.example/api/agent/v1/attachments/${attachmentId}/comments${search}`,
+    ),
+    attachmentId,
+    async (options) => {
+      seen.push(options);
+      return read();
+    },
+  );
+  return { response, seen };
+};
+
+test("a valid request reads with the id, the page size and the cursor", async () => {
+  const { response, seen } = await ask(ID, "?limit=7&before=12");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(PAGE);
+  expect(seen).toEqual([{ attachmentId: ID, limit: 7, before: 12 }]);
+});
+
+test("without a limit the page is the largest allowed one", async () => {
+  expect((await ask(ID, "")).seen).toEqual([{ attachmentId: ID, limit: 100, before: undefined }]);
+});
+
+test("a bad id, limit or before is INVALID_INPUT and reads nothing", async () => {
+  for (const [id, search] of [
+    ["nope", ""],
+    [ID, "?limit=0"],
+    [ID, "?limit=101"],
+    [ID, "?limit=x"],
+    [ID, "?before=0"],
+    [ID, "?before=1.5"],
+  ] as const) {
+    const { response, seen } = await ask(id, search);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ ok: false, errorCode: "INVALID_INPUT" });
+    expect(seen).toEqual([]);
+  }
+});
+
+test("an attachment the Agent may not read is NOT_FOUND", async () => {
+  const { response } = await ask(ID, "", async () => {
+    throw new AppError("NOT_FOUND");
+  });
+  expect(response.status).toBe(404);
+  expect(await response.json()).toMatchObject({ ok: false, errorCode: "NOT_FOUND" });
+});

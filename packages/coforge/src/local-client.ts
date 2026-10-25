@@ -56,6 +56,7 @@ import {
   type AgentProfileShowResponse,
   type AgentProfileUpdateRequest,
   type AgentProfileUpdateResponse,
+  type AgentAttachmentCommentsRequest,
   type AgentUserInfoResponse,
 } from "@lrm/coforge-sdk/agent";
 import {
@@ -73,6 +74,8 @@ import {
   preIssuanceError,
   requireProxySetup,
 } from "./proxy-request";
+import { attachmentCommentsRequest } from "./attachment-comments-request";
+import { attachmentViewRequest } from "./attachment-view-request";
 import { inboxCheckRequest, inboxListRequest } from "./inbox-request";
 import { mentionActionRequest, mentionDeliveryRequest } from "./mention-request";
 
@@ -589,43 +592,9 @@ export function connectLocal(
       ),
     mentionDelivery: (messageId: string): Promise<AgentMentionDeliveryResponse> =>
       mentionDeliveryRequest(proxyEndpoint, context, proxyUrl, messageId),
-    view: async (attachmentId: string) => {
-      if (!context) throw new Error("coforge agent context is not configured");
-      if (!/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
-        throw new Error("coforge agent context is invalid");
-      if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-      const endpoint = new URL(proxyUrl);
-      endpoint.pathname = agentApiRoutes.local.attachments.path(attachmentId);
-      endpoint.search = "";
-      const response = await fetch(endpoint, {
-        headers: { authorization: `Bearer ${context}` },
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (!response.ok) {
-        // VIEW_FAILED (SERVER_5XX for >= 500), with a fixed message for a 404 rather than
-        // relaying upstream detail for a missing attachment.
-        const text = await response.text().catch(() => "");
-        let message = text;
-        try {
-          const parsed = JSON.parse(text) as { error?: string };
-          if (parsed && typeof parsed.error === "string") message = parsed.error;
-        } catch {
-          // Not JSON: keep the raw text (e.g. a legacy bare-text proxy error).
-        }
-        throw new CliError({
-          code: response.status >= 500 ? "SERVER_5XX" : "VIEW_FAILED",
-          message:
-            response.status === 404
-              ? "Attachment is unavailable."
-              : message || `HTTP ${response.status}`,
-          retryable: false,
-        });
-      }
-      return {
-        bytes: new Uint8Array(await response.arrayBuffer()),
-        fileName: response.headers.get("content-disposition") ?? undefined,
-      };
-    },
+    view: (attachmentId: string) => attachmentViewRequest(context, proxyUrl, attachmentId),
+    attachmentComments: (request: AgentAttachmentCommentsRequest) =>
+      attachmentCommentsRequest(proxyEndpoint, context, proxyUrl, request),
     upload: (input: { path: string; target: string; mimeType?: string }) =>
       callAttachmentUpload(input),
   };

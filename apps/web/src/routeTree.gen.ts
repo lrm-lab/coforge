@@ -134,6 +134,7 @@ import { Route as ApiAgentV1AppsAppIdTokenRouteImport } from './routes/api/agent
 import { Route as ApiAgentV1AppsOwnedIndexRouteImport } from './routes/api/agent/v1/apps/owned/index'
 import { Route as ApiAgentV1AppsRegistrationsStatusRouteImport } from './routes/api/agent/v1/apps/registrations/status'
 import { Route as ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport } from './routes/api/agent/v1/attachment-upload-sessions/$uploadId.complete'
+import { Route as ApiAgentV1AttachmentsAttachmentIdCommentsRouteImport } from './routes/api/agent/v1/attachments/$attachmentId.comments'
 import { Route as ApiAgentV1ChannelsChannelArchiveRouteImport } from './routes/api/agent/v1/channels_.$channel.archive'
 import { Route as ApiAgentV1ChannelsChannelJoinRouteImport } from './routes/api/agent/v1/channels_.$channel.join'
 import { Route as ApiAgentV1ChannelsChannelLeaveRouteImport } from './routes/api/agent/v1/channels_.$channel.leave'
@@ -844,6 +845,12 @@ const ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute =
     path: '/complete',
     getParentRoute: () => ApiAgentV1AttachmentUploadSessionsUploadIdRoute,
   } as any)
+const ApiAgentV1AttachmentsAttachmentIdCommentsRoute =
+  ApiAgentV1AttachmentsAttachmentIdCommentsRouteImport.update({
+    id: '/comments',
+    path: '/comments',
+    getParentRoute: () => ApiAgentV1AttachmentsAttachmentIdRoute,
+  } as any)
 const ApiAgentV1ChannelsChannelArchiveRoute =
   ApiAgentV1ChannelsChannelArchiveRouteImport.update({
     id: '/archive',
@@ -1097,7 +1104,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
-  '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRoute
+  '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
   '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
@@ -1120,6 +1127,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
   '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
+  '/api/agent/v1/attachments/$attachmentId/comments': typeof ApiAgentV1AttachmentsAttachmentIdCommentsRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
   '/api/agent/v1/channels/$channel/leave': typeof ApiAgentV1ChannelsChannelLeaveRoute
@@ -1245,7 +1253,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
-  '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRoute
+  '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
   '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
@@ -1268,6 +1276,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
   '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
+  '/api/agent/v1/attachments/$attachmentId/comments': typeof ApiAgentV1AttachmentsAttachmentIdCommentsRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
   '/api/agent/v1/channels/$channel/leave': typeof ApiAgentV1ChannelsChannelLeaveRoute
@@ -1398,7 +1407,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
-  '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRoute
+  '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels_/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
   '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
@@ -1421,6 +1430,7 @@ export interface FileRoutesById {
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
   '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
+  '/api/agent/v1/attachments/$attachmentId/comments': typeof ApiAgentV1AttachmentsAttachmentIdCommentsRoute
   '/api/agent/v1/channels_/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
   '/api/agent/v1/channels_/$channel/join': typeof ApiAgentV1ChannelsChannelJoinRoute
   '/api/agent/v1/channels_/$channel/leave': typeof ApiAgentV1ChannelsChannelLeaveRoute
@@ -1573,6 +1583,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/$appId/token'
     | '/api/agent/v1/apps/registrations/status'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
+    | '/api/agent/v1/attachments/$attachmentId/comments'
     | '/api/agent/v1/channels/$channel/archive'
     | '/api/agent/v1/channels/$channel/join'
     | '/api/agent/v1/channels/$channel/leave'
@@ -1721,6 +1732,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/$appId/token'
     | '/api/agent/v1/apps/registrations/status'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
+    | '/api/agent/v1/attachments/$attachmentId/comments'
     | '/api/agent/v1/channels/$channel/archive'
     | '/api/agent/v1/channels/$channel/join'
     | '/api/agent/v1/channels/$channel/leave'
@@ -1873,6 +1885,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/$appId/token'
     | '/api/agent/v1/apps/registrations/status'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
+    | '/api/agent/v1/attachments/$attachmentId/comments'
     | '/api/agent/v1/channels_/$channel/archive'
     | '/api/agent/v1/channels_/$channel/join'
     | '/api/agent/v1/channels_/$channel/leave'
@@ -1979,7 +1992,7 @@ export interface RootRouteChildren {
   ApiWorkspacesWorkspaceIdIconRoute: typeof ApiWorkspacesWorkspaceIdIconRoute
   ApiAgentV1ActionsPrepareRoute: typeof ApiAgentV1ActionsPrepareRoute
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute: typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
-  ApiAgentV1AttachmentsAttachmentIdRoute: typeof ApiAgentV1AttachmentsAttachmentIdRoute
+  ApiAgentV1AttachmentsAttachmentIdRoute: typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   ApiAgentV1AttachmentsCapabilitiesRoute: typeof ApiAgentV1AttachmentsCapabilitiesRoute
   ApiAgentV1ChannelsChannelRoute: typeof ApiAgentV1ChannelsChannelRouteWithChildren
   ApiAgentV1InboxConversationsRoute: typeof ApiAgentV1InboxConversationsRoute
@@ -2893,6 +2906,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport
       parentRoute: typeof ApiAgentV1AttachmentUploadSessionsUploadIdRoute
     }
+    '/api/agent/v1/attachments/$attachmentId/comments': {
+      id: '/api/agent/v1/attachments/$attachmentId/comments'
+      path: '/comments'
+      fullPath: '/api/agent/v1/attachments/$attachmentId/comments'
+      preLoaderRoute: typeof ApiAgentV1AttachmentsAttachmentIdCommentsRouteImport
+      parentRoute: typeof ApiAgentV1AttachmentsAttachmentIdRoute
+    }
     '/api/agent/v1/channels_/$channel/archive': {
       id: '/api/agent/v1/channels_/$channel/archive'
       path: '/archive'
@@ -3222,6 +3242,21 @@ const ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren =
     ApiAgentV1AttachmentUploadSessionsUploadIdRouteChildren,
   )
 
+interface ApiAgentV1AttachmentsAttachmentIdRouteChildren {
+  ApiAgentV1AttachmentsAttachmentIdCommentsRoute: typeof ApiAgentV1AttachmentsAttachmentIdCommentsRoute
+}
+
+const ApiAgentV1AttachmentsAttachmentIdRouteChildren: ApiAgentV1AttachmentsAttachmentIdRouteChildren =
+  {
+    ApiAgentV1AttachmentsAttachmentIdCommentsRoute:
+      ApiAgentV1AttachmentsAttachmentIdCommentsRoute,
+  }
+
+const ApiAgentV1AttachmentsAttachmentIdRouteWithChildren =
+  ApiAgentV1AttachmentsAttachmentIdRoute._addFileChildren(
+    ApiAgentV1AttachmentsAttachmentIdRouteChildren,
+  )
+
 interface ApiAgentV1ChannelsChannelRouteChildren {
   ApiAgentV1ChannelsChannelArchiveRoute: typeof ApiAgentV1ChannelsChannelArchiveRoute
   ApiAgentV1ChannelsChannelJoinRoute: typeof ApiAgentV1ChannelsChannelJoinRoute
@@ -3343,7 +3378,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute:
     ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren,
   ApiAgentV1AttachmentsAttachmentIdRoute:
-    ApiAgentV1AttachmentsAttachmentIdRoute,
+    ApiAgentV1AttachmentsAttachmentIdRouteWithChildren,
   ApiAgentV1AttachmentsCapabilitiesRoute:
     ApiAgentV1AttachmentsCapabilitiesRoute,
   ApiAgentV1ChannelsChannelRoute: ApiAgentV1ChannelsChannelRouteWithChildren,

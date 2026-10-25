@@ -33,6 +33,7 @@ The command reference lives in [`docs/agent-cli/`](../../docs/agent-cli/README.m
 | `src/git-prepare-commit-msg.ts`             | The `prepare-commit-msg` hook's co-author trailers                                             |
 | `src/action-prepare-input.ts`               | `action prepare`'s heredoc or literal body                                                     |
 | `src/attachment-upload.ts`                  | `attachment upload`'s MIME type and target checks                                              |
+| `src/attachment-comments.ts`                | `attachment comments`'s arguments and text renderer                                            |
 | `src/reminder-duration.ts`                  | `reminder` duration literals                                                                   |
 | `src/*-format.ts`, `src/message-summary.ts` | Text renderers for each command family's stdout                                                |
 | `src/version.ts`                            | The CLI's own version                                                                          |

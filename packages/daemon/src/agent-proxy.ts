@@ -6,13 +6,9 @@ import {
   isValidReactionEmoji,
   validateTaskRequest,
   validateWeeklyReportRequest,
-  type ChannelCommand,
   type LocalAgentMessageRequest,
-  type LocalInboxRequest,
   type LocalReminderRequest,
   type TaskCommand,
-  type WorkspaceInfoRequest,
-  type WorkspaceInfoResponse,
   type WeeklyReportCommand,
   ATTACHMENT_MAX_BYTES,
   isRecord,
@@ -23,38 +19,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import {
   agentApiRoutes,
-  type AgentActionPrepareRequest,
-  type AgentActionPrepareResponse,
-  type AgentManualGetRequest,
-  type AgentManualGetResponse,
-  type AgentManualSearchRequest,
-  type AgentManualSearchResponse,
-  type AgentVersionResponse,
-  type GitHubCredentialRequest,
-  type GitHubCredentialResponse,
-  type GitHubCommitTrailersRequest,
-  type GitHubCommitTrailersResponse,
-  type AgentUserInfoRequest,
-  type AgentUserInfoResponse,
-  type AgentProfileShowRequest,
-  type AgentProfileShowResponse,
-  type AgentProfileUpdateRequest,
-  type AgentProfileUpdateResponse,
-  type AgentAppConfigGetRequest,
-  type AgentAppConfigResponse,
-  type AgentAppConfigUpdateRequest,
   decodeAgentAppRegistrationRequest,
   decodeAgentAppTokenBody,
-  type AgentAppRequest,
-  type AgentMentionExecuteRequest,
-  type AgentMentionExecuteResponse,
-  type AgentMentionPendingRequest,
-  type AgentInboxListResponse,
-  type AgentInboxRequest,
-  type AgentThreadListResponse,
-  type AgentMentionPendingResponse,
-  type AgentMentionDeliveryRequest,
-  type AgentMentionDeliveryResponse,
 } from "@lrm/coforge-sdk/agent";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import {
@@ -67,6 +33,7 @@ import {
   parseProfileUpdateFields,
   decodePathParam,
   parseAppConfigUpdate,
+  parseAttachmentCommentsRequest,
   parseInboxListQuery,
   parseInboxRequest,
   parseMentionPendingLimit,
@@ -75,28 +42,11 @@ import {
 import { forwardResponse, proxyFailureResponse } from "./agent-proxy-response";
 import * as domain from "./agent-proxy-domain-failures";
 import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
-import {
-  validateWeeklyReportCollectCommand,
-  type WeeklyReportCollectCommand,
-  type WeeklyReportCollectFailRunningCommand,
-  type WeeklyReportCollectResult,
-} from "#src/connection/weekly-report-collect";
-import {
-  validateWeeklyReportKeyPointsCommand,
-  type WeeklyReportKeyPointsCommand,
-  type WeeklyReportKeyPointsResult,
-} from "#src/connection/weekly-report-key-points";
-import {
-  validateWeeklyReportMemoryCommand,
-  type WeeklyReportMemoryCommand,
-  type WeeklyReportMemoryResult,
-} from "#src/connection/weekly-report-memory";
+import { validateWeeklyReportCollectCommand } from "#src/connection/weekly-report-collect";
+import { validateWeeklyReportKeyPointsCommand } from "#src/connection/weekly-report-key-points";
+import { validateWeeklyReportMemoryCommand } from "#src/connection/weekly-report-memory";
 import { getLogger } from "@logtape/logtape";
-import {
-  admitOpenVikingControl,
-  admitOpenVikingRead,
-  type OpenVikingAgentProxyCommand,
-} from "./openviking-read-proxy";
+import { admitOpenVikingControl, admitOpenVikingRead } from "./openviking-read-proxy";
 
 export type AgentProxy = {
   url: string;
@@ -105,159 +55,7 @@ export type AgentProxy = {
   close(): void;
 };
 
-/** The runtime handlers a local Agent proxy dispatches to; every member but `agentMessage` is
- * optional so a daemon build can light routes up incrementally (a missing handler is a 404). */
-export type AgentProxyRuntime = {
-  agentMessage(
-    context: string,
-    request: LocalAgentMessageRequest,
-    agentApiKey: string,
-  ): Promise<unknown>;
-  agentAttachment?(context: string, attachmentId: string, agentApiKey: string): Promise<Response>;
-  agentAttachmentUpload?(context: string, request: Request, agentApiKey: string): Promise<Response>;
-  agentAttachmentUploadSessionCreate?(
-    context: string,
-    body: unknown,
-    agentApiKey: string,
-  ): Promise<Response>;
-  agentAttachmentUploadSessionComplete?(
-    context: string,
-    uploadId: string,
-    agentApiKey: string,
-  ): Promise<Response>;
-  agentAttachmentUploadSessionCancel?(
-    context: string,
-    uploadId: string,
-    agentApiKey: string,
-  ): Promise<Response>;
-  agentAttachmentUploadSessionGet?(
-    context: string,
-    uploadId: string,
-    agentApiKey: string,
-  ): Promise<Response>;
-  inbox?(context: string, request: LocalInboxRequest): Promise<unknown>;
-  reminder?(context: string, request: LocalReminderRequest, agentApiKey: string): Promise<unknown>;
-  agentTask?(context: string, request: TaskCommand, agentApiKey: string): Promise<unknown>;
-  agentChannel?(context: string, request: ChannelCommand, agentApiKey: string): Promise<unknown>;
-  agentActionPrepare?(
-    context: string,
-    request: AgentActionPrepareRequest,
-    agentApiKey: string,
-  ): Promise<AgentActionPrepareResponse>;
-  workspaceInfo?(
-    context: string,
-    request: WorkspaceInfoRequest,
-    agentApiKey: string,
-  ): Promise<WorkspaceInfoResponse>;
-  manualGet?(
-    context: string,
-    request: AgentManualGetRequest,
-    agentApiKey: string,
-  ): Promise<AgentManualGetResponse>;
-  manualSearch?(
-    context: string,
-    request: AgentManualSearchRequest,
-    agentApiKey: string,
-  ): Promise<AgentManualSearchResponse>;
-  /** `coforge version`'s local-only query: answered entirely by the live Daemon, never
-   * forwarded to Web/backend. */
-  version?(
-    context: string,
-    request: Record<string, never>,
-    agentApiKey: string,
-  ): Promise<AgentVersionResponse>;
-  userInfo?(
-    context: string,
-    request: AgentUserInfoRequest,
-    agentApiKey: string,
-  ): Promise<AgentUserInfoResponse>;
-  profileShow?(
-    context: string,
-    request: AgentProfileShowRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileShowResponse>;
-  profileUpdate?(
-    context: string,
-    request: AgentProfileUpdateRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileUpdateResponse>;
-  appConfigGet?(
-    context: string,
-    request: AgentAppConfigGetRequest,
-    agentApiKey: string,
-  ): Promise<AgentAppConfigResponse>;
-  appConfigUpdate?(
-    context: string,
-    request: AgentAppConfigUpdateRequest,
-    agentApiKey: string,
-  ): Promise<AgentAppConfigResponse>;
-  /** `coforge app list|token`: forwarded as it is, the cloud's response answered as it came. */
-  agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
-  inboxList?(
-    context: string,
-    request: AgentInboxRequest,
-    agentApiKey: string,
-  ): Promise<AgentInboxListResponse>;
-  threadList?(
-    context: string,
-    request: Record<string, never>,
-    agentApiKey: string,
-  ): Promise<AgentThreadListResponse>;
-  mentionPending?(
-    context: string,
-    request: AgentMentionPendingRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionPendingResponse>;
-  mentionExecute?(
-    context: string,
-    request: AgentMentionExecuteRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionExecuteResponse>;
-  mentionDelivery?(
-    context: string,
-    request: AgentMentionDeliveryRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionDeliveryResponse>;
-  githubCredential?(
-    context: string,
-    request: GitHubCredentialRequest,
-    agentApiKey: string,
-  ): Promise<GitHubCredentialResponse>;
-  githubCommitTrailers?(
-    context: string,
-    request: GitHubCommitTrailersRequest,
-    agentApiKey: string,
-  ): Promise<GitHubCommitTrailersResponse>;
-  agentWeeklyReport?(
-    context: string,
-    request: WeeklyReportCommand,
-    agentApiKey: string,
-  ): Promise<unknown>;
-  agentWeeklyReportCollect?(
-    context: string,
-    request: WeeklyReportCollectCommand | WeeklyReportCollectFailRunningCommand,
-    agentApiKey: string,
-  ): Promise<WeeklyReportCollectResult>;
-  agentWeeklyReportKeyPoints?(
-    context: string,
-    request: WeeklyReportKeyPointsCommand,
-    agentApiKey: string,
-  ): Promise<WeeklyReportKeyPointsResult>;
-  agentWeeklyReportMemory?(
-    context: string,
-    request: WeeklyReportMemoryCommand,
-    agentApiKey: string,
-  ): Promise<WeeklyReportMemoryResult>;
-  agentMemoryDisposition?(context: string, request: unknown, agentApiKey: string): Promise<unknown>;
-  agentOpenviking?(
-    context: string,
-    request: OpenVikingAgentProxyCommand,
-    agentApiKey: string,
-  ): Promise<unknown>;
-  /** Workspace-launch fence for the token-bound Agent. Absent or a non-OV fence fail-closes. */
-  memoryFence?(agentId: string): string | undefined;
-  issueAgentContext?: (agentId: string, context?: string) => string;
-};
+import type { AgentProxyRuntime } from "./agent-proxy-runtime";
 
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
 const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
@@ -279,6 +77,7 @@ const LOCAL_PROXY_ROUTES = agentApiRoutes.proxy;
 const LOCAL_USER_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.users.path("");
 // Mention delivery is `<prefix><messageId>/mention-deliveries`; the prefix is what the route's
 // own path puts before an empty id.
+const ATTACHMENT_COMMENTS_SUFFIX = "/comments";
 const MENTION_DELIVERY_SUFFIX = "/mention-deliveries";
 const LOCAL_MENTION_DELIVERY_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.mentionDeliveries
   .path("")
@@ -679,6 +478,16 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
       return MESSAGE_ID_ANCHOR.test(messageId) ? { messageId } : badRequest();
     },
     domainFailure: domain.mentionDeliveryDomainFailure,
+  }),
+  defineRoute({
+    family: "agent-api/attachment-comments",
+    method: LOCAL_PROXY_ROUTES.attachmentComments.method,
+    // Ahead of the attachment's own route, whose prefix match takes any rest of the path as an id.
+    match: pathParam(LOCAL_ATTACHMENT_ROUTE_PREFIX, ATTACHMENT_COMMENTS_SUFFIX),
+    body: "none",
+    handler: "attachmentComments",
+    parse: ({ param, url }) => parseAttachmentCommentsRequest(param, url.searchParams),
+    domainFailure: domain.attachmentCommentsDomainFailure,
   }),
   defineRoute({
     family: "agent-api/attachment",

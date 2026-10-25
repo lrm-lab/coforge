@@ -27,23 +27,24 @@ file…」，已知工具取其标签，未知工具退化为「Using `<name>`�
 唯一有意的差别：参考客户端没有给下表 5 个频道工具写标签，会显示 `Using <name>…` 且无摘要；
 我们给它们补了标签，并上报频道。
 
-| CoForge CLI 子命令 | 语义工具 | `toolInput` 摘要 |
-| --- | --- | --- |
-| `message send` | `send_message` | `--target` |
-| `message check` | `check_messages`（`checking_messages`） | 无 |
-| `message read` | `read_history` | `--target` |
-| `message search` | `search_messages` | `--query` |
-| `channel add-member` / `join` / `leave` | `add_channel_member` / `join_channel` / `leave_channel` | `--target` |
-| `channel update` / `lifecycle archive` / `lifecycle unarchive` / `remove-member` | `update_channel` / `archive_channel` / `unarchive_channel` / `remove_channel_member` | `--target`（参考客户端无标签、无摘要） |
-| `channel members <channel>` | `list_channel_members` | 位置参数里的频道（参考客户端无标签、无摘要） |
-| `task list` / `task create` | `list_tasks` / `create_tasks` | `--target` |
-| `task claim` | `claim_tasks` | `--target #t<n>,#t<m>`（没有 `--number` 时只有 `--target`） |
-| `task unclaim` / `task update` | `unclaim_task` / `update_task_status` | `--target #t<n>`，缺任一项则无 |
-| `attachment upload` | `upload_file` | `--path` |
-| `attachment view` | `view_file` | 无 |
-| `reminder schedule` | `schedule_reminder` | `--title`，超过 40 个 Unicode 码点截断并追加 `…` |
-| `reminder list` | `list_reminders` | 无 |
-| `reminder cancel` | `cancel_reminder` | `#` + `--id` 前 8 个 Unicode 码点 |
+| CoForge CLI 子命令                                                                                                      | 语义工具                                                                                | `toolInput` 摘要                                            |
+| ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `message send`                                                                                                          | `send_message`                                                                          | `--target`                                                  |
+| `message check`                                                                                                         | `check_messages`（`checking_messages`）                                                 | 无                                                          |
+| `message read`                                                                                                          | `read_history`                                                                          | `--target`                                                  |
+| `message search`                                                                                                        | `search_messages`                                                                       | `--query`                                                   |
+| `channel add-member` / `join` / `leave`                                                                                 | `add_channel_member` / `join_channel` / `leave_channel`                                 | `--target`                                                  |
+| `channel update` / `lifecycle archive` / `lifecycle unarchive` / `remove-member`                                        | `update_channel` / `archive_channel` / `unarchive_channel` / `remove_channel_member`    | `--target`（参考客户端无标签、无摘要）                      |
+| `channel members <channel>`                                                                                             | `list_channel_members`                                                                  | 位置参数里的频道（参考客户端无标签、无摘要）                |
+| `task list` / `task create`                                                                                             | `list_tasks` / `create_tasks`                                                           | `--target`                                                  |
+| `task claim`                                                                                                            | `claim_tasks`                                                                           | `--target #t<n>,#t<m>`（没有 `--number` 时只有 `--target`） |
+| `task unclaim` / `task update`                                                                                          | `unclaim_task` / `update_task_status`                                                   | `--target #t<n>`，缺任一项则无                              |
+| `attachment upload`                                                                                                     | `upload_file`                                                                           | `--path`                                                    |
+| `attachment view`                                                                                                       | `view_file`                                                                             | 无                                                          |
+| `attachment comments`                                                                                                   | `list_attachment_comments`                                                              | 无                                                          |
+| `reminder schedule`                                                                                                     | `schedule_reminder`                                                                     | `--title`，超过 40 个 Unicode 码点截断并追加 `…`            |
+| `reminder list`                                                                                                         | `list_reminders`                                                                        | 无                                                          |
+| `reminder cancel`                                                                                                       | `cancel_reminder`                                                                       | `#` + `--id` 前 8 个 Unicode 码点                           |
 | 其他 `coforge` 子命令（如 `inbox check`、`workspace info`、`channel mute`、`task assign`、`reminder snooze`、`whoami`） | 无语义工具：照普通命令上报 `bash`/`running_command`，`toolInput` 为脱敏截断后的命令本身 |
 
 `glob`、`grep`、`web_fetch`、`web_search`、`todo_write` 等 Code Agent 工具同样只从一个预先

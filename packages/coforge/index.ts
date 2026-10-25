@@ -46,6 +46,8 @@ import {
   type AgentProfileUpdateResponse,
   type AgentAppConfigPatch,
   type AgentAppConfigResponse,
+  type AgentAttachmentCommentsRequest,
+  type AgentAttachmentCommentsResponse,
   type AgentUserInfoResponse,
   type AgentMentionActionKind,
   type AgentMentionExecuteRequest,
@@ -62,6 +64,12 @@ import { parseWhoamiArgs, runWhoami, type WhoamiInvocation, type WhoamiResult } 
 import { parseProfileUpdateArgs, type ProfileUpdateInvocation } from "#src/profile-update";
 
 export type { WhoamiInvocation, WhoamiResult, ProfileUpdateInvocation };
+import { parseAttachmentViewArgs, type AttachmentViewInvocation } from "#src/attachment-view-args";
+import {
+  parseAttachmentCommentsArgs,
+  runAttachmentComments,
+  type AttachmentCommentsInvocation,
+} from "#src/attachment-comments";
 import { parseUserInfoArgs, runUserInfo, type UserInfoInvocation } from "#src/user-info";
 
 export type { UserInfoInvocation };
@@ -179,12 +187,7 @@ export type MessageInvocation =
     }
   | { command: "resolve"; messageId: string }
   | { command: "react"; messageId: string; emoji: string; remove?: true };
-export type AttachmentInvocation = {
-  command: "attachment.view";
-  attachmentId: string;
-  output: string;
-  json?: boolean;
-};
+export type AttachmentInvocation = AttachmentViewInvocation;
 export type AttachmentUploadInvocation = {
   command: "attachment.upload";
   path?: string;
@@ -293,6 +296,9 @@ export type MessageTransport = {
     },
   ): Promise<unknown>;
   view(attachmentId: string): Promise<{ bytes: Uint8Array; fileName?: string }>;
+  attachmentComments?(
+    request: AgentAttachmentCommentsRequest,
+  ): Promise<AgentAttachmentCommentsResponse>;
   upload?(input: {
     path: string;
     target: string;
@@ -373,6 +379,7 @@ export function parseArgs(
   | WhoamiInvocation
   | VersionInvocation
   | UserInfoInvocation
+  | AttachmentCommentsInvocation
   | ProfileShowInvocation
   | ProfileUpdateInvocation
   | AppConfigInvocation
@@ -398,54 +405,9 @@ export function parseArgs(
   if (attention) return attention;
   if (args[0] === "channel" && args[1] !== undefined && args[1] !== "mute" && args[1] !== "unmute")
     return parseChannelManagementArgs(args.slice(1));
-  if (args[0] === "attachment" && args[1] === "view") {
-    let positionalId: string | undefined;
-    let explicitId: string | undefined;
-    let output: string | undefined;
-    let json = false;
-    let index = 2;
-    if (
-      args[index] !== undefined &&
-      args[index] !== "--id" &&
-      args[index] !== "--output" &&
-      args[index] !== "--json"
-    ) {
-      positionalId = args[index];
-      index++;
-    }
-    for (; index < args.length; index++) {
-      if (args[index] === "--id" && args[index + 1]) explicitId = args[++index];
-      else if (args[index] === "--output" && args[index + 1]) output = args[++index];
-      else if (args[index] === "--json") json = true;
-      else throw new Error("Usage:");
-    }
-    // Three preconditions that never issue a request: not both id spellings, an id, an `--output`.
-    if (positionalId && explicitId)
-      throw new CliError({
-        code: "INVALID_ARG",
-        message: "pass the attachment id either positionally or with --id, not both",
-        retryable: false,
-      });
-    const attachmentId = positionalId || explicitId;
-    if (!attachmentId)
-      throw new CliError({
-        code: "INVALID_ARG",
-        message: "attachment id is required (pass <attachmentId> or --id)",
-        retryable: false,
-      });
-    if (!output)
-      throw new CliError({
-        code: "INVALID_ARG",
-        message: "--output is required",
-        retryable: false,
-      });
-    return {
-      command: "attachment.view",
-      attachmentId,
-      output,
-      ...(json ? { json: true as const } : {}),
-    };
-  }
+  if (args[0] === "attachment" && args[1] === "view") return parseAttachmentViewArgs(args);
+  if (args[0] === "attachment" && args[1] === "comments")
+    return parseAttachmentCommentsArgs(args.slice(2));
   if (args[0] === "attachment" && args[1] === "upload") {
     let path: string | undefined;
     let target: string | undefined;
@@ -1217,6 +1179,11 @@ export async function run(args: readonly string[], transport: MessageTransport):
     }
   }
   if (invocation.command === "inbox-check") return runInboxCheck(transport, invocation);
+  if (invocation.command === "attachment-comments") {
+    if (!transport.attachmentComments)
+      throw new Error("Attachment comments transport is unavailable");
+    return runAttachmentComments(transport.attachmentComments.bind(transport), invocation);
+  }
   if (invocation.command === "attachment.view") {
     const result = await transport.view(invocation.attachmentId);
     await Bun.write(invocation.output, result.bytes);

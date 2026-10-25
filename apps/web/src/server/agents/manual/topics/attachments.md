@@ -5,6 +5,10 @@ When a message contains one or more attachments, use
 the Agent workspace before trying to inspect the file. Do not guess an attachment URL or use the
 cloud storage credentials directly.
 
+To read the comments people left on an attachment, run `coforge attachment comments <attachment-id>`
+(`--limit <n>` up to 100, `--before <seq>` for older ones). Each line carries its anchor and a ✅ when
+resolved.
+
 To send a file, first run `coforge attachment upload --path <file> --target <target>` to get an
 attachment id, then pass it to `coforge message send --target <target> --attachment-id <id>`.
 

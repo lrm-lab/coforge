@@ -1,3 +1,4 @@
+import type { AgentApiConnectionClient } from "./agent-api-connection-client";
 import { disconnectedCodes } from "centrifuge/build/protobuf";
 import {
   type CentrifugeWorkspaceClient,
@@ -17,32 +18,22 @@ import type {
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
   GitHubCredentialRequest,
-  GitHubCredentialResponse,
   GitHubCommitTrailersRequest,
-  GitHubCommitTrailersResponse,
   AgentManualGetRequest,
-  AgentManualGetResponse,
   AgentManualSearchRequest,
-  AgentManualSearchResponse,
   AgentUserInfoRequest,
-  AgentUserInfoResponse,
   AgentProfileShowRequest,
-  AgentProfileShowResponse,
   AgentProfileUpdateRequest,
-  AgentProfileUpdateResponse,
   AgentAppConfigGetRequest,
   AgentAppRequest,
-  AgentAppConfigResponse,
   AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
-  AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentAttachmentCommentsRequest,
   AgentInboxListResponse,
   AgentInboxRequest,
   AgentThreadListResponse,
-  AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
-  AgentMentionDeliveryResponse,
   AgentSendReconciliationResponse,
 } from "@lrm/coforge-sdk/agent";
 import {
@@ -294,55 +285,7 @@ export interface DaemonConnectionConfig {
 }
 
 /** Provider-neutral client contract for the daemon's Workspace connection. */
-export interface DaemonConnectionClient {
-  workspaceInfo?(
-    request: WorkspaceInfoRequest,
-    agentApiKey: string,
-  ): Promise<WorkspaceInfoResponse>;
-  githubCredential?(
-    request: GitHubCredentialRequest,
-    agentApiKey: string,
-  ): Promise<GitHubCredentialResponse>;
-  githubCommitTrailers?(
-    request: GitHubCommitTrailersRequest,
-    agentApiKey: string,
-  ): Promise<GitHubCommitTrailersResponse>;
-  manualGet?(request: AgentManualGetRequest, agentApiKey: string): Promise<AgentManualGetResponse>;
-  manualSearch?(
-    request: AgentManualSearchRequest,
-    agentApiKey: string,
-  ): Promise<AgentManualSearchResponse>;
-  userInfo?(request: AgentUserInfoRequest, agentApiKey: string): Promise<AgentUserInfoResponse>;
-  profileShow?(
-    request: AgentProfileShowRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileShowResponse>;
-  profileUpdate?(
-    request: AgentProfileUpdateRequest,
-    agentApiKey: string,
-  ): Promise<AgentProfileUpdateResponse>;
-  appConfigGet?(
-    request: AgentAppConfigGetRequest,
-    agentApiKey: string,
-  ): Promise<AgentAppConfigResponse>;
-  appConfigUpdate?(
-    request: AgentAppConfigUpdateRequest,
-    agentApiKey: string,
-  ): Promise<AgentAppConfigResponse>;
-  threadList?(agentApiKey: string): Promise<AgentThreadListResponse>;
-  inboxList?(request: AgentInboxRequest, agentApiKey: string): Promise<AgentInboxListResponse>;
-  mentionPending?(
-    request: AgentMentionPendingRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionPendingResponse>;
-  mentionExecute?(
-    request: AgentMentionExecuteRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionExecuteResponse>;
-  mentionDelivery?(
-    request: AgentMentionDeliveryRequest,
-    agentApiKey: string,
-  ): Promise<AgentMentionDeliveryResponse>;
+export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onAgentWorkspaceReset?(callback: (request: AgentWorkspaceResetRequest) => void): () => void;
   sendAgentControlResult?(result: AgentControlResult): Promise<void>;
   sendAgentTurnInterruptResult?(result: AgentTurnInterruptResult): Promise<void>;
@@ -1475,6 +1418,18 @@ export class DaemonConnection implements DaemonConnectionClient {
       "Agent mention action",
       client,
       agentApiRoutes.cloud.mentionActions.execute.path,
+      request,
+      agentApiKey,
+    );
+  }
+
+  attachmentComments(request: AgentAttachmentCommentsRequest, agentApiKey: string) {
+    const client = this.agentMessageHttpClient.requestAttachmentComments;
+    return this.#agentGet(
+      "Agent attachment comments",
+      "Agent attachment comments",
+      client,
+      agentApiRoutes.cloud.attachmentComments.path(request.attachmentId),
       request,
       agentApiKey,
     );

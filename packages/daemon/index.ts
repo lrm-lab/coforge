@@ -3,7 +3,10 @@ import { join } from "node:path";
 import type { LocalInboxRequest, RunnerHoldReason } from "@lrm/coforge-sdk/internal";
 import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { startDaemonLocalRpcServer } from "#src/local-rpc";
-import { startAgentProxy, type AgentProxyRuntime } from "#src/agent-proxy";
+import { startAgentProxy } from "#src/agent-proxy";
+import type { AgentProxyRuntime } from "#src/agent-proxy-runtime";
+import { attachmentRuntime } from "#src/agent-proxy-attachment-runtime";
+import { mentionRuntime } from "#src/agent-proxy-mention-runtime";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import {
   DaemonRuntime,
@@ -252,16 +255,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
       const agentProxy = startAgentProxy({
         runtime: {
           agentMessage: async (...args) => requireRuntime().agentMessage(...args),
-          agentAttachment: async (...args) => agentApi().agentAttachment(...args),
-          agentAttachmentUpload: async (...args) => agentApi().agentAttachmentUpload(...args),
-          agentAttachmentUploadSessionCreate: async (...args) =>
-            agentApi().agentAttachmentUploadSessionCreate(...args),
-          agentAttachmentUploadSessionComplete: async (...args) =>
-            agentApi().agentAttachmentUploadSessionComplete(...args),
-          agentAttachmentUploadSessionCancel: async (...args) =>
-            agentApi().agentAttachmentUploadSessionCancel(...args),
-          agentAttachmentUploadSessionGet: async (...args) =>
-            agentApi().agentAttachmentUploadSessionGet(...args),
+          ...attachmentRuntime(agentApi),
+          ...mentionRuntime(agentApi),
           inbox: async (...args) => requireRuntime().inbox(...args),
           reminder: async (...args) => requireRuntime().reminder(...args),
           agentTask: async (...args) => requireRuntime().agentTask(...args),
@@ -289,9 +284,6 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           agentApp: async (...args) => agentApi().agentApp(...args),
           threadList: async (...args) => agentApi().threadList(...args),
           inboxList: async (...args) => agentApi().inboxList(...args),
-          mentionPending: async (...args) => agentApi().mentionPending(...args),
-          mentionExecute: async (...args) => agentApi().mentionExecute(...args),
-          mentionDelivery: async (...args) => agentApi().mentionDelivery(...args),
           issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),
           // Every proxy route must reach the runtime here: an unwired handler is a 404 for the
           // Agent's CLI, so a new `AgentProxyRuntime` member fails to compile until it is added.

@@ -14,6 +14,8 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
+  AgentAttachmentCommentsRequest,
+  AgentAttachmentCommentsResponse,
   AgentInboxListResponse,
   AgentInboxRequest,
   AgentThreadListResponse,
@@ -68,6 +70,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentWeeklyReportKeyPoints"
     | "agentWeeklyReportMemory"
     | "agentAttachment"
+    | "attachmentComments"
     | "agentAttachmentUpload"
     | "agentAttachmentUploadSessionCreate"
     | "agentAttachmentUploadSessionComplete"
@@ -408,6 +411,15 @@ export class AgentRequestForwarder {
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("agentAttachment", NOT_CONNECTED)(attachmentId, agentApiKey);
+  }
+
+  async attachmentComments(
+    context: string,
+    request: AgentAttachmentCommentsRequest,
+    agentApiKey: string,
+  ): Promise<AgentAttachmentCommentsResponse> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("attachmentComments", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async agentAttachmentUpload(

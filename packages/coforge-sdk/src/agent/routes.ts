@@ -8,6 +8,14 @@ const MENTION_DELIVERIES_ROUTE = {
     `/api/agent/v1/messages/${encodeURIComponent(messageId)}/mention-deliveries`,
 } as const;
 
+/** `coforge attachment comments`: the root comments on one attachment. Same route under `proxy`,
+ * `local` and `cloud`; the attachment's own route above it reads the file. */
+const ATTACHMENT_COMMENTS_ROUTE = {
+  method: "GET",
+  path: (attachmentId: string) =>
+    `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}/comments`,
+} as const;
+
 /** `coforge user info`: one human or Agent by name. Same route under `proxy`, `local` and `cloud`. */
 const USERS_ROUTE = {
   method: "GET",
@@ -151,6 +159,7 @@ export const agentApiRoutes = {
     users: USERS_ROUTE,
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
+    attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
@@ -191,6 +200,7 @@ export const agentApiRoutes = {
     users: USERS_ROUTE,
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
+    attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
@@ -306,6 +316,7 @@ export const agentApiRoutes = {
     users: USERS_ROUTE,
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
+    attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,

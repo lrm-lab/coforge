@@ -175,6 +175,7 @@ const COFORGE_CLI_TOOLS: Readonly<Record<string, CoforgeCliTool>> = {
   "task update": { tool: "update_task_status", summary: taskRef },
   "attachment upload": { tool: "upload_file", summary: (args) => flagValue(args, "--path") },
   "attachment view": { tool: "view_file" },
+  "attachment comments": { tool: "list_attachment_comments" },
   "reminder schedule": {
     tool: "schedule_reminder",
     summary: (args) => {

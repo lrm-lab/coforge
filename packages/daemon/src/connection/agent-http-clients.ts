@@ -32,15 +32,6 @@ import type {
   AgentAppConfigGetRequest,
   AgentAppConfigResponse,
   AgentAppConfigUpdateRequest,
-  AgentMentionExecuteRequest,
-  AgentMentionExecuteResponse,
-  AgentMentionPendingRequest,
-  AgentInboxListResponse,
-  AgentInboxRequest,
-  AgentThreadListResponse,
-  AgentMentionPendingResponse,
-  AgentMentionDeliveryRequest,
-  AgentMentionDeliveryResponse,
 } from "@lrm/coforge-sdk/agent";
 import {
   decodeGitHubCredentialResponse,
@@ -64,7 +55,10 @@ import { AgentManualRequestError } from "./agent-manual-request-error";
 import { AgentUserInfoRequestError } from "./agent-user-info-request-error";
 import { AgentProfileRequestError } from "./agent-profile-request-error";
 import { AgentAppConfigRequestError } from "./agent-app-config-request-error";
-import { createAgentAttentionHttpClient } from "./agent-attention-http-clients";
+import {
+  createAgentAttentionHttpClient,
+  type AgentAttentionHttpClient,
+} from "./agent-attention-http-clients";
 import { AgentWeeklyReportRequestError } from "./agent-weekly-report-request-error";
 import { AgentUpstreamRefusalError } from "./agent-upstream-refusal-error";
 import {
@@ -88,7 +82,7 @@ import {
 
 /** Agent HTTPS clients: contracts, response adapters, and default implementations.
  * Moved verbatim from `daemon-connection.ts`: no behaviour change, only a home. */
-export interface AgentMessageHttpClient {
+export interface AgentMessageHttpClient extends AgentAttentionHttpClient {
   requestRead?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentHistoryResponse>;
   requestSearch?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentSearchResponse>;
   requestSend?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentSendDecisionResponse>;
@@ -136,19 +130,6 @@ export interface AgentMessageHttpClient {
   requestAppConfigUpdate?(
     input: AgentHttpInput<AgentAppConfigUpdateRequest>,
   ): Promise<AgentAppConfigResponse>;
-  requestMentionPending?(
-    input: AgentHttpInput<AgentMentionPendingRequest>,
-  ): Promise<AgentMentionPendingResponse>;
-  requestInboxList?(input: AgentHttpInput<AgentInboxRequest>): Promise<AgentInboxListResponse>;
-  requestThreadList?(
-    input: AgentHttpInput<Record<string, never>>,
-  ): Promise<AgentThreadListResponse>;
-  requestMentionExecute?(
-    input: AgentHttpInput<AgentMentionExecuteRequest>,
-  ): Promise<AgentMentionExecuteResponse>;
-  requestMentionDelivery?(
-    input: AgentHttpInput<AgentMentionDeliveryRequest>,
-  ): Promise<AgentMentionDeliveryResponse>;
 }
 
 /**

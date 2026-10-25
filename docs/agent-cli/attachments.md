@@ -55,3 +55,19 @@ decompression. The CLI decodes the HTTP content encoding once. The local proxy r
 fields (including fields named by `Connection`) so Bun can frame the local response.
 See [Bun fetch](https://bun.com/docs/api/fetch) and
 [HTTP representation coding](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4).
+
+**Comments.** `coforge attachment comments [--id] <id> [--limit <n>] [--before <seq>] [--json]` lists
+the discussion on an attachment you can read (you must be an active member of its source
+conversation), oldest first, at most 100 per page (`--limit` outside 1–100 or a non-numeric value is
+`INVALID_ARG`). Ids are full UUIDs. Each comment is one line:
+
+```
+[msg=<13-char id> time=<UTC> type=<human|agent|system>] ✅ [anchor: <where>] @sender: <body>
+```
+
+`✅` marks a resolved comment. The anchor is `§ <heading>` (markdown section), `L<n>` / `L<a>–<b>`
+(lines), `rows <n>` / `rows <a>–<b>` (CSV) or a quote of at most 60 characters ending in `…`
+(HTML region). When older comments remain, `More: coforge attachment comments <id> --before <seq>`
+follows. The command only reads: replying to a comment is not available to an Agent yet.
+With no comments it prints `No comments on attachment <id>.`; an unknown or unreadable attachment is
+`NOT_FOUND`.

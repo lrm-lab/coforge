@@ -1,3 +1,4 @@
+import { AgentAttachmentCommentsRequestError } from "#src/connection/agent-attachment-comments-request-error";
 import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
 import { AgentManualRequestError } from "#src/connection/agent-manual-request-error";
 import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
@@ -27,6 +28,7 @@ export const manualDomainFailure = envelopeFailure(AgentManualRequestError);
 export const userInfoDomainFailure = envelopeFailure(AgentUserInfoRequestError);
 export const profileDomainFailure = envelopeFailure(AgentProfileRequestError);
 export const appConfigDomainFailure = envelopeFailure(AgentAppConfigRequestError);
+export const attachmentCommentsDomainFailure = envelopeFailure(AgentAttachmentCommentsRequestError);
 export const mentionActionDomainFailure = envelopeFailure(AgentMentionActionRequestError);
 /** A message the Agent did not send is its 404. */
 export const mentionDeliveryDomainFailure = envelopeFailure(AgentMentionDeliveryRequestError);

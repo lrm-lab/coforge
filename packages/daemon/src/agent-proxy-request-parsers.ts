@@ -11,6 +11,8 @@ import {
   isAgentMentionActionKind,
   type AgentMentionExecuteRequest,
   type AgentInboxRequest,
+  AGENT_ATTACHMENT_COMMENTS_MAX_LIMIT,
+  type AgentAttachmentCommentsRequest,
   type AgentMentionPendingRequest,
   isAgentInboxView,
   type AgentAppConfigUpdateRequest,
@@ -117,6 +119,27 @@ export function parseInboxListQuery(params: URLSearchParams): AgentInboxRequest 
   if (view !== undefined && !isAgentInboxView(view)) return badRequest();
   if (before !== undefined && (!Number.isSafeInteger(before) || before < 1)) return badRequest();
   return { view, before };
+}
+
+/** `attachment comments`: the attachment's full id from the path, and an optional `limit` and
+ * `before`, each valid or a `400`. */
+export function parseAttachmentCommentsRequest(
+  param: string,
+  params: URLSearchParams,
+): AgentAttachmentCommentsRequest | Response {
+  const attachmentId = decodePathParam(param);
+  if (attachmentId instanceof Response) return attachmentId;
+  const number = (name: string) => (params.has(name) ? Number(params.get(name)) : undefined);
+  const limit = number("limit");
+  const before = number("before");
+  if (!UUID_LIKE_PATTERN.test(attachmentId)) return badRequest();
+  if (
+    limit !== undefined &&
+    (!Number.isInteger(limit) || limit < 1 || limit > AGENT_ATTACHMENT_COMMENTS_MAX_LIMIT)
+  )
+    return badRequest();
+  if (before !== undefined && (!Number.isSafeInteger(before) || before < 1)) return badRequest();
+  return { attachmentId, limit, before };
 }
 
 /** `mention pending`'s optional `limit`: an integer from 1 to the server's maximum page. */
