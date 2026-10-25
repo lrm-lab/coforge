@@ -3,6 +3,7 @@ syntax = "proto3";
 package coforge.rpc.v1;
 
 import "coforge/rpc/v1/computer.proto";
+import "coforge/rpc/v1/runtime_auth.proto";
 
 message DaemonRuntimeConfigureRequest {
   uint32 protocol_major = 1;
@@ -205,4 +206,45 @@ message CodeAgentModelMetadata {
   // Fast support is decided by runtime, not per model; an older daemon may still send this field.
   reserved 8;
   reserved "supports_fast_mode";
+}
+
+// Daemon -> server notice, method `daemon:v1:runtime_auth:status_report`: the login status of
+// every runtime with a login flow on this Computer, collected together and sanitized on the
+// Computer (an account label only ever leaves it masked). Sent when the daemon is ready, when the
+// runtime inventory changes, after a login or logout, and when a usage scan asks to sign in again;
+// never on a timer. The server sanitizes again and keeps the newest report per Computer. Additive:
+// protocol_major stays 1, and an older server refuses the method, which the daemon ignores.
+message RuntimeAuthStatusReport {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  int64 collected_at_ms = 5;
+  repeated RuntimeAuthState runtimes = 6;
+}
+
+enum RuntimeAuthStateKind {
+  RUNTIME_AUTH_STATE_KIND_UNSPECIFIED = 0;
+  RUNTIME_AUTH_STATE_KIND_LOGGED_IN = 1;
+  RUNTIME_AUTH_STATE_KIND_LOGGED_OUT = 2;
+  RUNTIME_AUTH_STATE_KIND_UNKNOWN = 3;
+  RUNTIME_AUTH_STATE_KIND_UNAVAILABLE = 4;
+}
+
+enum RuntimeAuthUnavailableReason {
+  RUNTIME_AUTH_UNAVAILABLE_REASON_UNSPECIFIED = 0;
+  RUNTIME_AUTH_UNAVAILABLE_REASON_NOT_INSTALLED = 1;
+  RUNTIME_AUTH_UNAVAILABLE_REASON_VERSION_UNSUPPORTED = 2;
+  RUNTIME_AUTH_UNAVAILABLE_REASON_UNSUPPORTED_INSTALLATION = 3;
+}
+
+// One runtime's login status. The account comes only with LOGGED_IN, and a reason only with
+// UNAVAILABLE; a state the receiver does not know reads as UNKNOWN.
+message RuntimeAuthState {
+  // A runtime provider id, as in RuntimeMetadata (`claude-code`, `codex`).
+  string provider = 1;
+  RuntimeAuthStateKind state = 2;
+  // The signed-in account, as the login report carries it: the label is masked.
+  optional RuntimeAuthAccount account = 3;
+  RuntimeAuthUnavailableReason unavailable_reason = 4;
 }

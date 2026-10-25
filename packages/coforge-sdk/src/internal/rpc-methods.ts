@@ -29,6 +29,7 @@ export const RPC_METHODS = {
   workspaceGet: "workspace:v1:get",
   daemonRuntimeReady: "daemon:v1:runtime:ready",
   daemonRuntimeShutdown: "daemon:v1:runtime:shutdown",
+  daemonRuntimeAuthStatusReport: "daemon:v1:runtime_auth:status_report",
   daemonPiChatExecute: "daemon:v1:pi_chat:execute",
   daemonPiChatFrame: "daemon:v1:pi_chat:frame",
   daemonRuntimeAuthIntent: "daemon:v1:runtime_auth:intent",

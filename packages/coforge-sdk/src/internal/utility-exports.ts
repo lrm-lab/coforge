@@ -6,3 +6,4 @@ export * from "./workspace-slug";
 export * from "./uuid";
 export * from "./agent-turn-interrupt";
 export * from "./runtime-auth";
+export * from "./runtime-auth-report";
