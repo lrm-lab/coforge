@@ -1,6 +1,19 @@
 import { RPC_METHODS } from "./rpc-methods";
 
-export * from "./runtime-auth-fields";
+export {
+  MASK_MARKER,
+  MAX_LABEL,
+  MAX_METHOD_LABEL,
+  RUNTIME_AUTH_LOGIN_FAILURE_REASONS,
+  RUNTIME_AUTH_LOGIN_ID_PATTERN,
+  RUNTIME_AUTH_LOGOUT_FAILURE_REASONS,
+  RUNTIME_AUTH_PROVIDERS,
+  RUNTIME_AUTH_UNSUPPORTED_REASONS,
+  isRuntimeAuthCode,
+  type RuntimeAuthProvider,
+  type RuntimeAuthScope,
+  type RuntimeAuthUnsupportedReason,
+} from "./runtime-auth-fields";
 export * from "./runtime-auth-intent";
 export * from "./runtime-auth-login";
 export * from "./runtime-auth-logout";

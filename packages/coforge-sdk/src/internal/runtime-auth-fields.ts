@@ -115,6 +115,16 @@ export function httpsUrl(value: string): string {
   throw new Error("invalid runtime auth link: only plain https links are relayed");
 }
 
+/** Whether a pasted code, once normalized by the caller, is one the daemon will take. */
+export function isRuntimeAuthCode(value: string): boolean {
+  try {
+    code(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function oneOf<T extends string>(values: readonly T[], value: string, label: string): T {
   if (!(values as readonly string[]).includes(value))
     throw new Error(`invalid runtime auth ${label}`);
