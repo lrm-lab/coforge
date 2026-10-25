@@ -34,7 +34,15 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
 - `run-supervisor.ts` keeps the application handshake identity separate from
   the OS invocation identity used for crash recovery; do not merge them.
 - Recovery adopts an invocation the OS manager already replaced only through
-  the same readiness validation as a fresh start.
+  the same readiness validation as a fresh start. So does the snapshot: a live
+  invocation the Coordinator does not track (launchd relaunched it) is adopted
+  once its handshake holds, so `status` and the upgrade preflight report what
+  the OS runs.
+- `workspace-adoption.ts` owns the record of adopted Workspace daemons. Reading
+  a Workspace's OS identity only observes: a read that finds it gone never
+  drops the adopted child; only `stop` or a failed start does. One failed
+  `launchctl`/`ps` read must not turn a running Workspace into one reported
+  down.
 - An explicit disabled state always wins over automatic restart or recovery.
 - A Workspace the cloud refused for good (`workspace_deleted`, `computer_unlinked`)
   is parked in its health journal. Recovery, `start`, and `restart` never start

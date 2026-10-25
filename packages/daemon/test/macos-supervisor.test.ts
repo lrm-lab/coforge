@@ -139,18 +139,17 @@ test.skipIf(process.platform !== "darwin")(
         Date.now() + 30_000,
         "Workspace B never reported readiness",
       );
-      // Restore A as a live peer, then crash only B. The replacement is owned
-      // by launchd, not an explicit Coordinator restart operation.
+      // Restore A, crash only B: launchd, not the Coordinator, starts B's
+      // replacement, which the snapshot must still report running.
       await client.control("start", "a");
       const peer = (await client.control("snapshot"))[0]!;
       // `start` returns once A's local RPC answers, which is before A rewrites native-ready.json
       // (see the B recovery loop below); until then the file still names the Agent `stop` ended.
       const aReadyPath = join(root, "workspaces", "YQ", "native-ready.json");
-      const peerDeadline = Date.now() + 30_000;
       const peerAgent = await waitForNativeReady(
         aReadyPath,
         (ready) => ready.workspacePid === peer.processId,
-        peerDeadline,
+        Date.now() + 30_000,
         "Workspace A did not report readiness",
       );
       process.kill(b.processId, "SIGKILL");
@@ -164,9 +163,8 @@ test.skipIf(process.platform !== "darwin")(
       let replacement: NativeReady | undefined;
       while (true) {
         const identity = await replacementClient.identity().catch(() => null);
-        // The local RPC socket now opens before the Workspace finishes starting (readiness must
-        // not wait on Code Agent discovery), so a fresh identity does not yet guarantee
-        // native-ready.json has caught up; poll it too.
+        // The local RPC socket opens before native-ready.json catches up (readiness does not
+        // wait on Code Agent discovery), so poll both.
         if (identity && identity.processId !== b.processId) {
           const candidate = await readNativeReady(bReadyPath);
           if (candidate && candidate.workspacePid !== oldB.workspacePid) {
@@ -180,7 +178,9 @@ test.skipIf(process.platform !== "darwin")(
       expect(replacement.workspacePid).not.toBe(oldB.workspacePid);
       expect(replacement.predecessorAlive).toBe(false);
       expect(() => process.kill(oldB.agentPid, 0)).toThrow();
-      expect((await client.control("snapshot"))[0]).toEqual(peer);
+      const [recoveredA, recoveredB] = await client.control("snapshot");
+      expect(recoveredA).toEqual(peer);
+      expect(recoveredB?.processId).toBe(replacement.workspacePid);
       expect(() => process.kill(peerAgent.agentPid, 0)).not.toThrow();
     } finally {
       await client.control("stop").catch(() => {});

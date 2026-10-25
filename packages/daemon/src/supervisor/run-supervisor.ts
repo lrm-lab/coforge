@@ -3,7 +3,6 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   UPGRADE_ERROR_CODE,
-  type ManagedRuntimeIdentity,
   type RunnerHoldReason,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
@@ -33,6 +32,7 @@ import {
 import { askWorkspaceRunnerHold } from "./runner-hold";
 import { workspaceDaemonConfig } from "./workspace-daemon-config";
 import { workspaceRuntimeView } from "./workspace-runtime-view";
+import { WorkspaceAdoptions } from "./workspace-adoption";
 import {
   awaitCloudConnections,
   OPERATOR_COMMAND_BUDGET_MS,
@@ -135,10 +135,6 @@ async function runWithSupervisorLock(
     },
     cloudConnection: (id) => readWorkspaceCloudConnection(stateDirectory, id),
   };
-  const children = new Map<
-    string,
-    { instance: WorkspaceInstance; identity: ManagedRuntimeIdentity; osInstanceId: string }
-  >();
   const childClient = (workspaceId: string) =>
     new LocalDaemonLauncher({
       executablePath: process.execPath,
@@ -156,6 +152,10 @@ async function runWithSupervisorLock(
       process.platform,
     );
   const supervisorLogger = getLogger(["coforge", "daemon", "supervisor"]);
+  const adoptions = new WorkspaceAdoptions({
+    instance: workspaceInstance,
+    handshake: (workspaceId, timeoutMs) => childClient(workspaceId).identity(timeoutMs),
+  });
   /** `askWorkspaceRunnerHold` against one Workspace daemon's local socket. */
   const holdWorkspaceRunners = (
     workspaceId: string,
@@ -245,20 +245,7 @@ async function runWithSupervisorLock(
         const observed = await instance.identity();
         if (!observed?.active || observed.mainPid !== processId)
           throw new Error("Workspace OS identity changed during startup");
-        const identity = {
-          workspaceId: binding.workspaceId,
-          computerId: binding.computerId,
-          enabled: true,
-          processId,
-          instanceId: "",
-          version: "",
-        };
-        children.set(binding.workspaceId, {
-          instance,
-          identity,
-          osInstanceId: observed.invocationId,
-        });
-        const client = childClient(binding.workspaceId);
+        const identity = adoptions.track(binding, instance, observed);
         // Readiness keeps its own bound whoever asked: an operator command answers by its own
         // deadline while this start finishes behind it, so the instance is still adopted.
         const deadline = Date.now() + WORKSPACE_READINESS_MS;
@@ -266,44 +253,41 @@ async function runWithSupervisorLock(
           while (Date.now() < deadline) {
             // A stop or configure took over: it stops this unit itself.
             options.signal?.throwIfAborted();
-            const reported = await client.identity().catch(() => null);
-            if (reported?.processId === processId && reported.version === COFORGE_DAEMON_VERSION) {
-              const current = await instance.identity();
-              if (!current?.active || current.invocationId !== observed.invocationId) {
-                await throwIfParked(startPorts, binding.workspaceId);
-                throw new Error("Workspace OS identity changed during handshake");
-              }
-              identity.instanceId = reported.daemonId;
-              identity.version = reported.version;
+            let reported;
+            try {
+              reported = await adoptions.handshake(binding.workspaceId, instance, observed);
+            } catch (error) {
+              await throwIfParked(startPorts, binding.workspaceId);
+              throw error;
+            }
+            if (reported) {
+              Object.assign(identity, reported);
               return observed.invocationId;
             }
-            if (!reported) await throwIfParked(startPorts, binding.workspaceId);
+            await throwIfParked(startPorts, binding.workspaceId);
             await Bun.sleep(50);
           }
           throw new Error(`Workspace ${binding.workspaceId} failed process readiness`);
         } catch (error) {
           // A failed handshake is not permission to kill an adopted live unit.
-          children.delete(binding.workspaceId);
+          adoptions.forget(binding.workspaceId);
           throw error;
         }
       },
       async stop(binding) {
-        const child = children.get(binding.workspaceId);
+        const child = adoptions.get(binding.workspaceId);
         // Includes recovery after enabled=false was persisted but OS stop was interrupted.
         // systemd sends SIGTERM to the Workspace main, then kills residual cgroup members.
         await (child?.instance ?? workspaceInstance(binding.workspaceId)).stop();
-        children.delete(binding.workspaceId);
+        adoptions.forget(binding.workspaceId);
       },
       async instance(binding) {
-        const before = children.get(binding.workspaceId);
         const observed = await workspaceInstance(binding.workspaceId).identity();
         // Require `active`: a durable Windows record can keep mainPid after death; treating that
-        // as the live instance would skip ensureStarted and leave the Workspace down.
-        if (observed?.active) return observed.invocationId;
-        // A child that exited on its own (a parked Workspace does) is reaped here, unless a start
-        // running beside this read (the view does not wait for it) recorded a new one meanwhile.
-        if (children.get(binding.workspaceId) === before) children.delete(binding.workspaceId);
-        return null;
+        // as the live instance would skip ensureStarted and leave the Workspace down. A read only
+        // observes: an adopted child that reads as gone stays recorded and simply no longer
+        // matches the live instance, so one misread cannot drop a Workspace that is still up.
+        return observed?.active ? observed.invocationId : null;
       },
       // Per-Workspace, so a restart never reaches past its own target: an unscoped restart holds
       // each enabled binding in turn as the loop gets to it, not the whole machine at once. The
@@ -354,13 +338,18 @@ async function runWithSupervisorLock(
       };
     });
   };
-  /** Each binding's live identity, or processId 0 once its OS instance is gone (a child that
-   * exited, e.g. after parking, is reaped here), plus why it is parked, when it is. */
+  /** Each binding's live identity, or processId 0 while its OS instance is gone, plus why it is
+   * parked, when it is. */
   const runtimes = async (bindings: Awaited<ReturnType<typeof supervisor.snapshot>>) =>
     Promise.all(
-      bindings.map((binding) =>
-        workspaceRuntimeView(binding, children.get(binding.workspaceId), startPorts.parkReason),
-      ),
+      bindings.map(async (binding) => {
+        await adoptions.adoptLive(binding);
+        return workspaceRuntimeView(
+          binding,
+          adoptions.get(binding.workspaceId),
+          startPorts.parkReason,
+        );
+      }),
     );
   /** After every lifecycle mutation queued so far: what the Coordinator's own steps act on. */
   const snapshot = async () => runtimes(await supervisor.snapshot());

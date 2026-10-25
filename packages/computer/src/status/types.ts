@@ -57,9 +57,9 @@ export type UnsettledUpgradeOperation = {
 };
 
 /** Where a Workspace's `pid` came from. The Coordinator's `daemon:snapshot` is the primary
- * source, but its cached OS-instance identity can go stale (e.g. the OS job was restarted by
- * `KeepAlive` after the Coordinator last observed it), reporting `processId: 0` for a Workspace
- * that is really running. `os-job` is the fallback: the same `cn.coforge.workspace.<identity>`
+ * source, but it reports `processId: 0` for a live Workspace daemon whose handshake it cannot
+ * verify (another build's daemon mid-upgrade) and is absent while the Coordinator is
+ * unreachable. `os-job` is the fallback: the same `cn.coforge.workspace.<identity>`
  * launchd job whose PID the Agents section already reads from one `launchctl list` call. */
 export type WorkspacePidSource = "daemon-snapshot" | "os-job";
 

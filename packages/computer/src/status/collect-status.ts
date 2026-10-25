@@ -112,11 +112,11 @@ async function collectWorkspaces(
       bindingsLoad.bindings.map(async (binding) => {
         const runtime = runtimeByWorkspace.get(binding.workspaceId);
         const snapshotPid = runtime && runtime.processId > 0 ? runtime.processId : null;
-        // The Coordinator's snapshot can report 0 for a Workspace whose OS job it lost track of
-        // (e.g. launchd's KeepAlive restarted it after the Coordinator last observed it) even
-        // though the Workspace daemon is genuinely running. The OS job's own PID, read from the
-        // same job listing Agents already uses, is a reliable fallback - and the report says which
-        // source it came from rather than silently picking one.
+        // The Coordinator's snapshot reports 0 for a live Workspace daemon whose handshake it
+        // cannot verify (another build's daemon mid-upgrade, a socket not open yet), and is
+        // absent while the Coordinator is unreachable. The OS job's own PID, read from the same
+        // job listing Agents already uses, is the fallback - and the report says which source it
+        // came from rather than silently picking one.
         const osJobPid = osJobPidByWorkspace.get(binding.workspaceId) ?? null;
         const pid = snapshotPid ?? osJobPid;
         const pidSource =
