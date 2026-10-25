@@ -1,5 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { cliVersionGate } from "#src/code-agent/version-gate";
+import { cliVersionGate } from "@lrm/coforge-anvil";
+import { readVersionOutput } from "#src/code-agent/version-probe";
 
 /** Persistent ACP baseline, verified against the official 1.0.62 binary with a local model.
  * Native queue admission, interjection fallback and durable turn completion are required;
@@ -22,5 +23,7 @@ const gate = cliVersionGate({
 
 export const isGrokVersionUnsupported = gate.isUnsupported;
 export const logGrokVersionUnsupported = gate.logUnsupported;
-export const readGrokVersion = gate.readVersion;
-export const assertGrokVersionSupported = gate.assertSupported;
+export const readGrokVersion = (command: readonly string[]) =>
+  gate.readVersion(command, readVersionOutput);
+export const assertGrokVersionSupported = (command: readonly string[]) =>
+  gate.assertSupported(command, readVersionOutput);

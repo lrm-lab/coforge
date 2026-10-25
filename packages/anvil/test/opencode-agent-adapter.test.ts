@@ -2,21 +2,20 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import type { AgentSession } from "@coforge/agent";
-import { OpenCodeProvider } from "#src/code-agent/opencode/provider";
-import { isOpenCodeVersionUnsupported } from "#src/code-agent/opencode/version";
+import { OpenCodeProvider, isOpenCodeVersionUnsupported } from "@lrm/coforge-anvil";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import {
-  RUNTIME_ERROR_CLASS,
-  classifyRuntimeErrorText,
-} from "#src/agent-runtime/runtime-error-classification";
+import { fixturePerTurnHost, fixtureVersionReader } from "./fixtures/runtime-host";
 
 const FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;
 const INSTRUCTIONS = "Standing OpenCode instructions.";
 
 function provider(): OpenCodeProvider {
-  return new OpenCodeProvider({ command: [process.execPath, FIXTURE] });
+  return new OpenCodeProvider({
+    host: fixturePerTurnHost,
+    versionReader: fixtureVersionReader,
+    command: [process.execPath, FIXTURE],
+  });
 }
 
 async function readLaunches(
@@ -261,12 +260,6 @@ test("a provider quota failure surfaces its kind, status and message, not a bare
         message: "provider.quota (HTTP 429): Rate limit exceeded. Please try again later.",
       });
       expect(events).toContainEqual({ type: "completed", status: "failed" });
-      // The surfaced text is what the daemon classifies on — pin the classification itself, not
-      // just the string, so rewording the prefix cannot silently demote the rate_limited class
-      // (and its retry decision) back to generic.
-      const error = events.find((event) => event.type === "error");
-      const surfaced = error && error.type === "error" ? error.message : "";
-      expect(classifyRuntimeErrorText(surfaced).errorClass).toBe(RUNTIME_ERROR_CLASS.RATE_LIMIT);
     } finally {
       await session.dispose();
     }

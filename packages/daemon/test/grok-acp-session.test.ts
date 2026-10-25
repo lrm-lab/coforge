@@ -6,8 +6,8 @@ import type { AgentRuntimeEvent, AgentSession, AgentSessionOptions } from "@cofo
 import { isGrokVersionUnsupported } from "#src/code-agent/grok/version";
 import { GrokProvider } from "#src/code-agent/grok/provider";
 import { ACP_TIMEOUT_MS } from "#src/code-agent/grok/session";
-import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+import { VERSION_PROBE_TIMEOUT_MS, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+
 const FIXTURE = new URL("./fixtures/grok-acp-fixture.ts", import.meta.url).pathname;
 const sessionTestBudgetMs = (acpTimeoutMs: number) =>
   VERSION_PROBE_TIMEOUT_MS + acpTimeoutMs + 2 * PROCESS_TREE_EXIT_GRACE_MS;

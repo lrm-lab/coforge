@@ -1,5 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { cliVersionGate } from "#src/code-agent/version-gate";
+import { cliVersionGate } from "@lrm/coforge-anvil";
+import { readVersionOutput } from "#src/code-agent/version-probe";
 
 /**
  * The Antigravity CLI (`agy`) baseline this runtime launches against.
@@ -24,4 +25,5 @@ const gate = cliVersionGate({
 
 export const isAntigravityVersionUnsupported = gate.isUnsupported;
 export const logAntigravityVersionUnsupported = gate.logUnsupported;
-export const assertAntigravityVersionSupported = gate.assertSupported;
+export const assertAntigravityVersionSupported = (command: readonly string[]) =>
+  gate.assertSupported(command, readVersionOutput);

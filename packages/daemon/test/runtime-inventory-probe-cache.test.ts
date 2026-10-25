@@ -10,8 +10,9 @@ import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
 import { fileStatCacheKey, writeInventoryCache } from "#src/code-agent/runtime-inventory-cache";
 import { OPENCODE_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
-const OPENCODE_FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;
+const OPENCODE_FIXTURE = anvilRuntimeFixtures.opencode;
 
 describe("Code Agent probe cache", () => {
   test("skips the version spawn when the cached probe key still matches the executable", async () => {

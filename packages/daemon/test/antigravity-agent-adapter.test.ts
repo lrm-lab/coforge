@@ -2,13 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
-import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
+import { PROCESS_TREE_EXIT_GRACE_MS, VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
 
 const FIXTURE = new URL("./fixtures/antigravity-fixture.ts", import.meta.url).pathname;
 const INSTRUCTIONS = "Standing Antigravity instructions.";

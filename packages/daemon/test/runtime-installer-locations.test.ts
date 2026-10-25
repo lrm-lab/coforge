@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { discoverCodeAgentInventory } from "#src/code-agent/runtime-inventory";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
-const OPENCODE_FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;
+const OPENCODE_FIXTURE = anvilRuntimeFixtures.opencode;
 
 describe("provider installer locations", () => {
   test("finds CLIs in provider-specific locations when PATH misses them", async () => {

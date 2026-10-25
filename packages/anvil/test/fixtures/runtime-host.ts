@@ -1,5 +1,9 @@
-import type { CatalogCommandRunner, PerTurnSessionHost } from "@lrm/coforge-anvil";
-import { withDeadline } from "@lrm/coforge-anvil";
+import type {
+  CatalogCommandRunner,
+  PerTurnSessionHost,
+  CliVersionReader,
+} from "@lrm/coforge-anvil";
+import { VERSION_PROBE_TIMEOUT_MS, withDeadline } from "@lrm/coforge-anvil";
 
 /** The fixture never spawns descendants. Production tree ownership is tested by daemon. */
 export const fixturePerTurnHost: PerTurnSessionHost = {
@@ -79,6 +83,21 @@ export const fixtureCatalogCommand: CatalogCommandRunner = async (
       timeoutMs,
       () => new Error("Fixture catalog timed out"),
     );
+  } finally {
+    child.kill();
+  }
+};
+
+/** Version probes inherit the isolated test process environment, as production probes do. */
+export const fixtureVersionReader: CliVersionReader = async (command, versionFrom) => {
+  const child = Bun.spawn({ cmd: [...command, "--version"], stdout: "pipe", stderr: "ignore" });
+  try {
+    const [output, exitCode] = await withDeadline(
+      Promise.all([new Response(child.stdout).text(), child.exited]),
+      VERSION_PROBE_TIMEOUT_MS,
+      () => new Error("Fixture version probe timed out"),
+    );
+    return exitCode === 0 ? versionFrom(output) : undefined;
   } finally {
     child.kill();
   }

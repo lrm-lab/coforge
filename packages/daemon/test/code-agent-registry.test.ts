@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
-const OPENCODE_FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;
+const OPENCODE_FIXTURE = anvilRuntimeFixtures.opencode;
 
 function completed(session: {
   subscribe(listener: (event: AgentRuntimeEvent) => void): () => void;

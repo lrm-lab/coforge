@@ -15,9 +15,10 @@ import {
   resolveClaudeCodeExecutable,
 } from "#src/code-agent/claude-code/runtime";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
+import { VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 import { FULL_EFFORTS, probeFor } from "./fixtures/runtime-probe";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 /** The hung version probe test gives up this soon, so it need not wait out production's. */
 const SHORT_VERSION_PROBE_TIMEOUT_MS = 50;
@@ -313,11 +314,7 @@ describe("external Code Agent inventory", () => {
         "cursor-agent": { path: "/bin/cursor-agent", version: "2026.08.11-e8db854\n" },
       }),
       commands: {
-        cursor: [
-          process.execPath,
-          new URL("../../anvil/test/fixtures/cursor-agent-fixture.ts", import.meta.url).pathname,
-          "models",
-        ],
+        cursor: [process.execPath, anvilRuntimeFixtures.cursor, "models"],
       },
       environment: {
         HOME: "/fixture/home",

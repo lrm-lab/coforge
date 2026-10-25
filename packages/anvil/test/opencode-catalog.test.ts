@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
+import {
+  discoverOpenCodeCatalog,
+  parseOpenCodeModelList,
+  OPENCODE_VERBOSE_MODELS_TIMEOUT_MS,
+  OPENCODE_PLAIN_MODELS_TIMEOUT_MS,
+} from "@lrm/coforge-anvil";
+import { fixtureCatalogCommand } from "./fixtures/runtime-host";
 
-import { discoverOpenCodeCatalog, parseOpenCodeModelList } from "#src/code-agent/opencode/catalog";
-import { OPENCODE_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
+const OPENCODE_DISCOVERY_BUDGET_MS =
+  OPENCODE_VERBOSE_MODELS_TIMEOUT_MS + OPENCODE_PLAIN_MODELS_TIMEOUT_MS;
 
 const FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;
 
@@ -123,6 +130,7 @@ test(
       [process.execPath, FIXTURE, "models"],
       process.cwd(),
       { PATH: process.env.PATH, HOME: process.env.HOME },
+      fixtureCatalogCommand,
     );
     expect(catalog?.provider).toBe("opencode");
     expect(catalog?.models.map((model) => model.id)).toEqual([
@@ -145,6 +153,7 @@ test(
         HOME: process.env.HOME,
         COFORGE_OPENCODE_MODELS_OUTPUT: "",
       },
+      fixtureCatalogCommand,
     );
     expect(catalog?.models.map((model) => model.id)).toEqual([
       "opencode/big-pickle",
@@ -169,6 +178,7 @@ test(
         COFORGE_OPENCODE_MODELS_OUTPUT:
           "USAGE\n  opencode models [flags]\n\nERROR\n  Unrecognized flag: --verbose in command opencode models\n",
       },
+      fixtureCatalogCommand,
     );
     expect(catalog?.models.map((model) => model.id)).toEqual([
       "opencode/big-pickle",
@@ -181,6 +191,12 @@ test(
 
 test("no catalog (never a thrown error) when the CLI cannot be run", async () => {
   expect(
-    await discoverOpenCodeCatalog(["/nonexistent/opencode"], process.cwd(), {}, 200),
+    await discoverOpenCodeCatalog(
+      ["/nonexistent/opencode"],
+      process.cwd(),
+      {},
+      fixtureCatalogCommand,
+      200,
+    ),
   ).toBeUndefined();
 });

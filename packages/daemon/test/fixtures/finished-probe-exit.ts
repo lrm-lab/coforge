@@ -6,7 +6,8 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { runCatalogCommand } from "#src/code-agent/catalog-command";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
-import { cliVersionGate } from "#src/code-agent/version-gate";
+import { cliVersionGate } from "@lrm/coforge-anvil";
+import { readVersionOutput } from "#src/code-agent/version-probe";
 
 const mode = Bun.argv[2];
 if (mode === "inventory") {
@@ -27,7 +28,7 @@ if (mode === "inventory") {
     label: "OpenCode",
     executable: "opencode",
     minimum: "0.0.1",
-  }).readVersion([process.execPath]);
+  }).readVersion([process.execPath], readVersionOutput);
 } else {
   throw new Error(`unknown probe: ${mode}`);
 }

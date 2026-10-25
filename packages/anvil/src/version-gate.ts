@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import { RuntimeVersionUnsupportedError, withDeadline } from "@lrm/coforge-anvil";
+import { RuntimeVersionUnsupportedError } from "./contract";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -22,9 +22,18 @@ const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 export type CliVersionGate = {
   isUnsupported(version: string): boolean;
   logUnsupported(name: string, version: string): void;
-  readVersion(command: readonly string[]): Promise<string | undefined>;
-  assertSupported(command: readonly string[]): Promise<void>;
+  readVersion(
+    command: readonly string[],
+    readVersionOutput: CliVersionReader,
+  ): Promise<string | undefined>;
+  assertSupported(command: readonly string[], readVersionOutput: CliVersionReader): Promise<void>;
 };
+
+/** The host owns bounded --version process I/O and the inherited process environment. */
+export type CliVersionReader = (
+  command: readonly string[],
+  versionFrom: (output: string) => string | undefined,
+) => Promise<string | undefined>;
 
 /** How long a `--version` probe may take before it is killed and its version treated as unread. */
 export const VERSION_PROBE_TIMEOUT_MS = 5_000;
@@ -53,24 +62,6 @@ export function isVersionBelow(version: string, minimum: string): boolean {
 /** The CLI prints its version last (`kiro-cli 2.21.2`). */
 const lastWhitespaceToken = (output: string) => output.trim().split(/\s+/).pop() || undefined;
 
-/** Reads `[...command, "--version"]`, killing the child if it outlives the probe budget. */
-async function readVersionOutput(
-  command: readonly string[],
-  versionFrom: (output: string) => string | undefined,
-): Promise<string | undefined> {
-  const child = Bun.spawn({ cmd: [...command, "--version"], stdout: "pipe", stderr: "ignore" });
-  try {
-    const [output, exitCode] = await withDeadline(
-      Promise.all([new Response(child.stdout).text(), child.exited]),
-      VERSION_PROBE_TIMEOUT_MS,
-      () => new Error("runtime version probe timed out"),
-    );
-    return exitCode === 0 ? versionFrom(output) : undefined;
-  } finally {
-    child.kill();
-  }
-}
-
 export function cliVersionGate(options: {
   provider: RuntimeProvider;
   /** The build's name as the launch error says it: Grok Build, Kiro CLI, OpenCode. */
@@ -96,13 +87,16 @@ export function cliVersionGate(options: {
   return {
     isUnsupported,
     logUnsupported,
-    readVersion: (command) => readVersionOutput(command, versionFrom),
+    readVersion: (command, readVersionOutput) => readVersionOutput(command, versionFrom),
     /**
      * Re-checks a launch's base command against the minimum immediately before spawn. Discovery
      * already gates the reported inventory; this covers an existing Agent on a Computer whose CLI
      * is too old. A probe that fails, times out, or returns an unparseable version never gates.
      */
-    async assertSupported(command: readonly string[]): Promise<void> {
+    async assertSupported(
+      command: readonly string[],
+      readVersionOutput: CliVersionReader,
+    ): Promise<void> {
       let version: string | undefined;
       try {
         version = await readVersionOutput(command, versionFrom);

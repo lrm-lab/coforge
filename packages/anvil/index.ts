@@ -17,3 +17,7 @@ export * from "./src/deadline";
 export * from "./src/catalog-command";
 export * from "./src/cursor/provider";
 export * from "./src/cursor/catalog";
+export * from "./src/version-gate";
+export * from "./src/opencode/provider";
+export * from "./src/opencode/catalog";
+export * from "./src/opencode/version";

@@ -8,18 +8,18 @@ import type {
   RuntimeAuthProvider,
   CodeAgentProvider,
 } from "@lrm/coforge-anvil";
-import { CursorProvider } from "@lrm/coforge-anvil";
+import { CursorProvider, OpenCodeProvider } from "@lrm/coforge-anvil";
 import { perTurnSessionHost } from "./per-turn-host";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
 import { GrokProvider } from "#src/code-agent/grok/provider";
-import { OpenCodeProvider } from "#src/code-agent/opencode/provider";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   resolveHostCodeAgentExecutable,
   type ExternalCodeAgentProvider,
 } from "#src/code-agent/runtime-executable";
+import { readVersionOutput } from "./version-probe";
 
 type CodeAgentProviderRegistryOptions = {
   environment?: Readonly<Record<string, string | undefined>>;
@@ -67,7 +67,11 @@ export function createCodeAgentProvider(
       return new CursorProvider({ host: perTurnSessionHost });
     case RUNTIME_PROVIDER.OPENCODE: {
       const executable = providerExecutable(RUNTIME_PROVIDER.OPENCODE, options);
-      return new OpenCodeProvider(executable ? { command: [executable] } : undefined);
+      return new OpenCodeProvider({
+        command: executable ? [executable] : undefined,
+        host: perTurnSessionHost,
+        versionReader: readVersionOutput,
+      });
     }
     case RUNTIME_PROVIDER.GROK: {
       const executable = providerExecutable(RUNTIME_PROVIDER.GROK, options);

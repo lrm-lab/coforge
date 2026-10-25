@@ -3,7 +3,7 @@ import {
   type CodeAgentModelCatalog,
   type CodeAgentModelMetadata,
 } from "@lrm/coforge-sdk/internal";
-import { isVersionBelow } from "#src/code-agent/version-gate";
+import { isVersionBelow } from "@lrm/coforge-anvil";
 
 /**
  * The oldest Claude Code that can run a pinned model, from "Version history" and the model notes

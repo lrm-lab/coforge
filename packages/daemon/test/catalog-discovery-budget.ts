@@ -3,8 +3,8 @@ import { ANTIGRAVITY_USAGE_TIMEOUT_MS } from "#src/code-agent/antigravity/usage"
 import {
   OPENCODE_PLAIN_MODELS_TIMEOUT_MS,
   OPENCODE_VERBOSE_MODELS_TIMEOUT_MS,
-} from "#src/code-agent/opencode/catalog";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+  PROCESS_TREE_EXIT_GRACE_MS,
+} from "@lrm/coforge-anvil";
 import { CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/catalog-discovery";
 import { PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/pi/catalog";
 

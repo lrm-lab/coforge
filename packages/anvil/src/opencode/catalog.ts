@@ -5,9 +5,9 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
-import { runCatalogCommand } from "#src/code-agent/catalog-command";
+import type { CatalogCommandRunner } from "#src/catalog-command";
 
-const logger = getLogger(["coforge", "daemon", "code-agent", "opencode"]);
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.OPENCODE]);
 
 /**
  * OpenCode's reasoning-effort names and their order. A model's `variants` map keyed by these
@@ -167,14 +167,22 @@ export async function discoverOpenCodeCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  runCatalogCommand: CatalogCommandRunner,
   timeoutMs = OPENCODE_VERBOSE_MODELS_TIMEOUT_MS,
 ): Promise<CodeAgentModelCatalog | undefined> {
-  const verbose = await runOpenCodeModels([...command, "--verbose"], cwd, environment, timeoutMs);
+  const verbose = await runOpenCodeModels(
+    [...command, "--verbose"],
+    cwd,
+    environment,
+    timeoutMs,
+    runCatalogCommand,
+  );
   // A CLI that does not know `--verbose` answers with its usage text; that is not a model list, so
   // treat it exactly like an empty result and fall through to the plain command.
   const usable = verbose && !/unrecognized flag/i.test(verbose) ? verbose : undefined;
   const models = usable ? parseOpenCodeModelList(usable) : [];
-  const resolved = models.length > 0 ? models : await runPlainModels(command, cwd, environment);
+  const resolved =
+    models.length > 0 ? models : await runPlainModels(command, cwd, environment, runCatalogCommand);
   return resolved.length > 0
     ? { provider: RUNTIME_PROVIDER.OPENCODE, models: resolved }
     : undefined;
@@ -184,12 +192,14 @@ async function runPlainModels(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  runCatalogCommand: CatalogCommandRunner,
 ): Promise<CodeAgentModelMetadata[]> {
   const plain = await runOpenCodeModels(
     command,
     cwd,
     environment,
     OPENCODE_PLAIN_MODELS_TIMEOUT_MS,
+    runCatalogCommand,
   );
   return plain ? parseOpenCodeModelList(plain) : [];
 }
@@ -199,6 +209,7 @@ async function runOpenCodeModels(
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
   timeoutMs: number,
+  runCatalogCommand: CatalogCommandRunner,
 ): Promise<string | undefined> {
   try {
     const { output, exitCode } = await runCatalogCommand(command, cwd, environment, timeoutMs);

@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
+import { OpenCodeProvider, isOpenCodeVersionUnsupported, isVersionBelow } from "@lrm/coforge-anvil";
 
-import { OpenCodeProvider } from "#src/code-agent/opencode/provider";
-import { isOpenCodeVersionUnsupported } from "#src/code-agent/opencode/version";
-import { isVersionBelow } from "#src/code-agent/version-gate";
+import { fixturePerTurnHost, fixtureVersionReader } from "./fixtures/runtime-host";
 
 test("a single leading v is part of the dotted version", () => {
   expect(isVersionBelow("v1.9.0", "2.0.0")).toBe(true);
@@ -28,6 +27,8 @@ test("OpenCode's minimum applies to the v prefix its CLI prints", () => {
 
 test("an OpenCode launch is refused when --version prints opencode v1", async () => {
   const provider = new OpenCodeProvider({
+    host: fixturePerTurnHost,
+    versionReader: fixtureVersionReader,
     command: ["/bin/sh", "-c", 'printf "opencode v1.18.31\\n"'],
   });
 
