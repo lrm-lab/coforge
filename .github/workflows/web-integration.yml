@@ -106,6 +106,25 @@ jobs:
         shell: bash
         run: mise run test:integration:web 2>&1 | tee "$RUNNER_TEMP/web-integration.log"
 
+      # What failed, in which file, and which files ran before it: a slow or interrupted suite can
+      # depend on what the same database held when it started.
+      - name: Summarize the failure
+        if: failure()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/web-integration.log"
+          [ -f "$log" ] || exit 0
+          {
+            echo '### Failed tests, with their file'
+            echo '```'
+            awk '/^[^ ].*[.]ts:$/ { file = $0 } /^[(]fail[)]/ { print file " " $0 }' "$log"
+            echo '```'
+            echo '### Files in the order they ran'
+            echo '```'
+            grep -E '^[^ ].*[.]ts:$' "$log" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # A red run is read from the run page; the log is kept for a week for whoever follows it up.
       - name: Keep the log of a failed run
         if: failure()
