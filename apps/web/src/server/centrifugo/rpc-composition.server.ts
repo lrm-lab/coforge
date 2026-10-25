@@ -37,7 +37,6 @@ import { PrismaWorkspaceAccess } from "#src/server/db/repositories/setup.reposit
 import {
   createAgentSessionMethod,
   createAgentSessionInvalidateMethod,
-  createDaemonRuntimeCodeAgentsUpdateMethod,
   createWorkspaceListMethod,
   createDaemonRuntimeReadyMethod,
   createDaemonRuntimeUsageScanResultMethod,
@@ -52,7 +51,6 @@ import {
   createAppConfigSnapshotMethod,
 } from "./rpc-handler.server";
 import {
-  DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
   DAEMON_RUNTIME_READY_METHOD,
   DAEMON_RUNTIME_SHUTDOWN_METHOD,
   DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD,
@@ -107,12 +105,12 @@ import {
   isAgentApiKeyBoundToComputer,
 } from "#src/server/agents/agent-api-key.server";
 import { PrismaAgentApiKeyRepository } from "#src/server/db/repositories/agent-api-key.repositories.server";
-import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
 import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
 import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
 import { AgentSessionReceiver } from "#src/server/agents/agent-session.server";
 import { createAgentControlResultMethod } from "./agent-control-receiver.server";
+import { computerRuntimeMethods } from "./runtime-auth-report-receiver.server";
 import { agentTurnInterruptMethods } from "./agent-turn-interrupt-receiver.server";
 import { agentReadingMethods } from "./agent-reading-methods";
 import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
@@ -350,9 +348,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           capabilityLeases,
           getComputerUpgradeStore(),
         ),
-        [DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD]: createDaemonRuntimeCodeAgentsUpdateMethod(
-          new PrismaComputerRuntimeRepository(db),
-        ),
+        ...computerRuntimeMethods(db),
         [DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD]: createDaemonRuntimeUsageScanResultMethod(),
         [DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD]:
           createDaemonRuntimeProviderModelRefreshResultMethod(),
@@ -407,7 +403,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       [DAEMON_RUNTIME_READY_METHOD]: createDaemonRuntimeReadyMethod(),
       [DAEMON_RUNTIME_SHUTDOWN_METHOD]: unavailableMethod,
       [DAEMON_CONNECTION_STATUS_METHOD]: createDaemonConnectionStatusMethod(),
-      [DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD]: unavailableMethod,
+      ...computerRuntimeMethods(null),
       [DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD]: createDaemonRuntimeUsageScanResultMethod(),
       [DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD]:
         createDaemonRuntimeProviderModelRefreshResultMethod(),

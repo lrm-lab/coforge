@@ -43,3 +43,7 @@ These rules apply to `src/features/computers/`.
 - The slot's "What's new" opens the notes the release catalog (`server/release-catalog/`) holds for
   the release on offer or being installed, in the UI's language with the other as fallback. No
   notes, or a failed read, means no link and never an error; it never holds up Upgrade.
+- A login-capable runtime's chip carries its last reported login state
+  (`runtime-chip.tsx`). The account and plan come only to the Computer's owner
+  and Workspace owners and admins (`runtimeAuthView`); everyone else receives
+  the state alone. A Computer that never reported shows no state.

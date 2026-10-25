@@ -50,3 +50,8 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   logged as `daemon_shutdown.rejected` with its reason. The ready receiver
   starts `ComputerLifecycleActivity.ready` after it succeeds and never awaits
   it.
+- The runtime login report receiver (`daemon:v1:runtime_auth:status_report`,
+  `runtime-auth-report-receiver.server.ts`) accepts only the connection's own
+  Computer, sanitizes every status again with anvil's
+  `sanitizeRuntimeAuthStatus`, and keeps the newest report per Computer in
+  `computers.runtimeAuth`; an older report is accepted and dropped.

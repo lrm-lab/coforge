@@ -52,6 +52,8 @@ import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/com
 import { RestartComputer } from "#src/server/computers/restart-computer.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
+import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
+import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
 import { UpgradeComputer } from "#src/server/computers/upgrade-computer.server";
 import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
 import { productionReleaseCatalog } from "#src/server/release-catalog/release-catalog-production.server";
@@ -158,6 +160,7 @@ export const listComputers = createServerFn({ method: "GET" })
     const visibility = runtimeVisibility(db);
     const computerStatus = getComputerStatusCache();
     const agentViewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
+    const canManage = agentViewer.role === "owner" || agentViewer.role === "admin";
     const [connections, runtimes] = await Promise.all([
       db.workspaceComputer.findMany({
         where: { workspaceId, computer: { deletedAt: null } },
@@ -174,6 +177,7 @@ export const listComputers = createServerFn({ method: "GET" })
               computerVersion: true,
               platform: true,
               osVersion: true,
+              runtimeAuth: true,
               owner: {
                 select: {
                   id: true,
@@ -251,7 +255,12 @@ export const listComputers = createServerFn({ method: "GET" })
           },
           connectedAt: createdAt,
           ownedByCurrentUser: computer.ownerId === user.id,
-          canManageAgents: agentViewer.role === "owner" || agentViewer.role === "admin",
+          canManageAgents: canManage,
+          // The account and plan only for whoever may sign the runtimes in or out (task #94).
+          runtimeAuth: runtimeAuthView(computer.runtimeAuth, {
+            showAccount: computer.ownerId === user.id || canManage,
+            visibleProviders: computerRuntimes.map((runtime) => runtime.provider),
+          }),
           online: statuses[index] ?? false,
           runtimeDetecting: detecting[index] ?? false,
           agents: computer.agents.map((agent) => ({
@@ -377,47 +386,11 @@ export const upgradeComputer = createServerFn({ method: "POST" })
     ).execute({ workspaceId, userId: user.id }, { ...data, placement });
   });
 
-/** The release feed answers a version string that changes at most once per release, so a
- * short-TTL module cache keeps the Computers page's loader off the network path: the first read
- * in a window fetches, every read within the window reuses the answer. A failed fetch is also
- * cached briefly (a shorter TTL) so an unreachable feed turns into one bounded stall per window
- * instead of one on every page load. Single-instance server, so a module global is the cache. */
-const VERSION_TTL_MS = 60_000;
-const VERSION_FAILURE_TTL_MS = 10_000;
-let versionCache: { value: string | null; at: number } | undefined;
-
 export const getLatestComputerVersion = createServerFn({ method: "GET" }).handler(async () => {
   const feedUrl = resolveReleaseFeedUrl();
   if (!feedUrl) return null;
   return readLatestComputerVersion(feedUrl);
 });
-
-/** One feed read through the TTL cache; exported for tests (inject the fetch so no network). */
-export async function readLatestComputerVersion(
-  feedUrl: string,
-  fetchImpl: typeof fetch = fetch,
-  now = Date.now,
-): Promise<string | null> {
-  if (
-    versionCache &&
-    now() - versionCache.at <
-      (versionCache.value === null ? VERSION_FAILURE_TTL_MS : VERSION_TTL_MS)
-  )
-    return versionCache.value;
-  try {
-    const response = await fetchImpl(`${feedUrl}/latest`, { signal: AbortSignal.timeout(3_000) });
-    if (!response.ok) throw new Error("release feed unavailable");
-    const version = (await response.text()).trim();
-    const value = isValidReleaseVersion(version) ? version : null;
-    versionCache = { value, at: now() };
-    return value;
-  } catch {
-    // Feed down or unparsable: remember the miss briefly so page loads during an outage
-    // skip the stall, but let the next read retry rather than pinning the failure a minute.
-    versionCache = { value: null, at: now() };
-    return null;
-  }
-}
 
 /** One Computer release's notes from the release catalog, or `null` when it has none. */
 export const getComputerReleaseNotes = createServerFn({ method: "GET" })

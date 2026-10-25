@@ -4,7 +4,6 @@ import {
   Edit01 as Pencil,
   Plus,
   FolderSearch,
-  Globe01,
   RefreshCw01 as RotateCw,
   Terminal,
   Trash01 as Trash,
@@ -56,7 +55,9 @@ import {
   ComputerUpgradeSlot,
   type ComputerUpgradeRequest,
 } from "./computer-upgrade-slot";
-import { RuntimeUsage, UsageHealthDot, type UsageHealth } from "./runtime-usage";
+import { RuntimeUsage } from "./runtime-usage";
+import { RuntimeChip } from "./runtime-chip";
+import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
@@ -102,6 +103,8 @@ export type ComputerDetailView = ComputerIdentity & {
     username: string;
     avatarUrl: string | null;
   };
+  /** Each visible login-capable runtime's status, account fields only for those allowed them. */
+  runtimeAuth?: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>>;
   runtimes: {
     id: string;
     provider: RuntimeProvider;
@@ -568,6 +571,7 @@ export function ComputerDetail({
                           trigger={(health) => (
                             <RuntimeChip
                               runtime={runtime}
+                              auth={computer.runtimeAuth?.[runtime.provider as RuntimeAuthProvider]}
                               health={health}
                               isPublic={runtime.isPublic}
                             />
@@ -602,7 +606,10 @@ export function ComputerDetail({
                           }
                         />
                       ) : (
-                        <RuntimeChip runtime={runtime} />
+                        <RuntimeChip
+                          runtime={runtime}
+                          auth={computer.runtimeAuth?.[runtime.provider as RuntimeAuthProvider]}
+                        />
                       )}
                     </li>
                   ))}
@@ -1164,33 +1171,6 @@ function WorkspaceInventory({
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
   "rounded-full outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
-
-/** A detected runtime as a compact chip: its mark and name, a globe when it is Public, and its
- * usage health when the viewer may see it. */
-function RuntimeChip({
-  runtime,
-  health,
-  isPublic = false,
-}: {
-  runtime: { provider: RuntimeProvider; displayName: string };
-  health?: UsageHealth;
-  isPublic?: boolean;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-secondary bg-primary py-1 pr-2.5 pl-1.5 text-xs font-medium text-secondary hover:bg-primary_hover">
-      <RuntimeProviderMark provider={runtime.provider} className="size-4" />
-      {runtime.displayName}
-      {isPublic && (
-        <Globe01
-          role="img"
-          aria-label={m.computer_runtime_public()}
-          className="size-3.5 text-fg-brand-secondary"
-        />
-      )}
-      <UsageHealthDot health={health} />
-    </span>
-  );
-}
 
 /** The day this Computer joined the Workspace, in the viewer's zone once the page is hydrated. */
 function ComputerDate({ value, timeZone }: { value: Date | string; timeZone: string | null }) {

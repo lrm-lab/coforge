@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { readLatestComputerVersion } from "#src/features/computers/computers.functions";
+import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
 
 /** The version cache is a module global, so every case drives it through the exported seam with
  * an explicitly injected clock. The clock only ever moves forward (the cache keys on `now - at`),
