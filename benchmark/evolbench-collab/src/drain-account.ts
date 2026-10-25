@@ -91,3 +91,19 @@ export function drainEvaluatorResults(
     },
   ];
 }
+
+/**
+ * Whether an episode is drained into the memory account after it finishes.
+ * Cold episodes drain only into a shared corpus account (`coldDrain`). Warm episodes are drained into the account
+ * they read, unless COFORGE_EVAL_WARM_READONLY=1 asks for a truly read-only warm arm: then nothing is written to it
+ * (the account file is still read for its keys). The default (flag unset) keeps the previous behaviour.
+ */
+export function shouldDrainEpisode(
+  arm: "warm" | "cold",
+  frozenKnowledge: unknown,
+  coldDrain: unknown,
+  warmReadonly: boolean = (Bun.env.COFORGE_EVAL_WARM_READONLY ?? "") === "1",
+): boolean {
+  if (arm === "warm") return !frozenKnowledge && !warmReadonly;
+  return Boolean(coldDrain);
+}

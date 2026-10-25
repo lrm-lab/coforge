@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { readKnowledgeAccountCreatedAt, validateKnowledgeReady } from "./knowledge";
 import {
   drainEvaluatorResults,
+  shouldDrainEpisode,
   loadSharedDrainAccount,
   stageEpisodeFiles,
   warmReuseAccountId,
@@ -433,7 +434,7 @@ async function executeEpisode(
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
   episodeEvaluatorResults = drainEvaluatorResults(drainOutcomeMode, row.status, episode.episodeId);
   const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
-  if ((arm === "warm" && !frozenKnowledge) || coldDrain) {
+  if (shouldDrainEpisode(arm, frozenKnowledge, coldDrain)) {
     // Every drained arm: warm, and cold when it drains into the shared corpus account.
     const outcomeEvaluatorResults = sidecarVerdict
       ? evaluatorResultFromVerdict({
