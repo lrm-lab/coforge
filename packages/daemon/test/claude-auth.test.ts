@@ -94,11 +94,13 @@ test("reads a signed-in account with a masked email", async () => {
   expect(status).toEqual({
     provider: "claude-code",
     state: "logged_in",
-    accountLabel: expect.not.stringContaining("someone.long@example.com"),
-    plan: "max",
-    loginMethod: "claude.ai",
+    account: {
+      maskedLabel: expect.not.stringContaining("someone.long@example.com"),
+      planLabel: "max",
+      methodLabel: "claude.ai",
+    },
   });
-  expect(status.accountLabel).toContain("@example.com");
+  expect(status.account?.maskedLabel).toContain("@example.com");
 });
 
 test("reads a signed-out account and an unreadable answer", async () => {
@@ -155,7 +157,7 @@ test("login surfaces the authorization link, takes the pasted code and signs in"
   login.finish(0);
   await expect(result).resolves.toMatchObject({
     status: "logged_in",
-    authStatus: { state: "logged_in", plan: "max" },
+    authStatus: { state: "logged_in", account: { planLabel: "max" } },
   });
   expect(commands).toContainEqual(["claude", "auth", "login"]);
 });

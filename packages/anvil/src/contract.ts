@@ -1,4 +1,8 @@
-import type { AgentContextReport, RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentContextReport,
+  RuntimeAuthAccount,
+  RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 export type { AgentContextReport } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
@@ -96,9 +100,8 @@ export function normalizeRuntimeAuthCode(value: string): string {
 export type RuntimeAuthStatus = Readonly<{
   provider: RuntimeAuthProvider;
   state: "logged_in" | "logged_out" | "unknown" | "unavailable";
-  accountLabel?: string;
-  plan?: string;
-  loginMethod?: string;
+  /** The signed-in account, the same message the login report carries; its label is masked. */
+  account?: RuntimeAuthAccount;
   unavailableReason?: "not_installed" | "version_unsupported" | "unsupported_installation";
 }>;
 

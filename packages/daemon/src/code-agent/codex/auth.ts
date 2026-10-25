@@ -5,11 +5,12 @@ import type {
   RuntimeAuthLogoutResult,
   RuntimeAuthStatus,
 } from "@lrm/coforge-anvil";
+import { maskEmail } from "#src/code-agent/mask-email";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { asRecord } from "@lrm/coforge-anvil";
+import { asRecord, runtimeAuthAccount } from "@lrm/coforge-anvil";
 
 export const CODEX_LOGIN_MINIMUM_VERSION = "0.118.0";
 export const CODEX_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
@@ -160,7 +161,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       return {
         provider: RUNTIME_PROVIDER.CODEX,
         state: method ? "logged_in" : "unknown",
-        ...(method ? { loginMethod: method } : {}),
+        ...runtimeAuthAccount({ methodLabel: method }),
       };
     }
     if (output.exitCode === 1 && /^Not logged in/iu.test(text))
@@ -308,11 +309,12 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
         authStatus: {
           provider: RUNTIME_PROVIDER.CODEX,
           state: "logged_in",
-          ...(typeof accountRecord?.email === "string"
-            ? { accountLabel: accountRecord.email }
-            : {}),
-          ...(typeof accountRecord?.planType === "string" ? { plan: accountRecord.planType } : {}),
-          ...(typeof accountRecord?.type === "string" ? { loginMethod: accountRecord.type } : {}),
+          ...runtimeAuthAccount({
+            maskedLabel:
+              typeof accountRecord?.email === "string" ? maskEmail(accountRecord.email) : undefined,
+            planLabel: accountRecord?.planType,
+            methodLabel: accountRecord?.type,
+          }),
         },
       };
     } catch (error) {

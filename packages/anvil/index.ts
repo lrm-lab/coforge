@@ -12,3 +12,4 @@ export * from "./src/stderr-tail";
 export * from "./src/per-turn/session";
 export * from "./src/per-turn/turn-process";
 export * from "./src/per-turn/turn-protocol";
+export * from "./src/runtime-auth-status";

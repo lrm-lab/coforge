@@ -59,7 +59,7 @@ test("streams Codex device code and matches completion notification", async () =
   });
   await expect(login).resolves.toMatchObject({
     status: "logged_in",
-    authStatus: { accountLabel: "user@example.com", plan: "pro" },
+    authStatus: { account: { maskedLabel: "u****@example.com", planLabel: "pro" } },
   });
   expect(events).toHaveLength(2);
   expect(process.disposed).toBe(true);

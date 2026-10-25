@@ -8,6 +8,7 @@ import {
   type RuntimeAuthSecretSink,
   type RuntimeAuthStatus,
   asRecord,
+  runtimeAuthAccount,
 } from "@lrm/coforge-anvil";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
@@ -174,13 +175,14 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     }
     if (!parsed || typeof parsed.loggedIn !== "boolean") return { provider, state: "unknown" };
     if (!parsed.loggedIn) return { provider, state: "logged_out" };
-    const accountLabel = typeof parsed.email === "string" ? maskEmail(parsed.email) : undefined;
     return {
       provider,
       state: "logged_in",
-      ...(accountLabel ? { accountLabel } : {}),
-      ...(typeof parsed.subscriptionType === "string" ? { plan: parsed.subscriptionType } : {}),
-      ...(typeof parsed.authMethod === "string" ? { loginMethod: parsed.authMethod } : {}),
+      ...runtimeAuthAccount({
+        maskedLabel: typeof parsed.email === "string" ? maskEmail(parsed.email) : undefined,
+        planLabel: parsed.subscriptionType,
+        methodLabel: parsed.authMethod,
+      }),
     };
   }
 
