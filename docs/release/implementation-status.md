@@ -90,19 +90,30 @@ Platform coverage and remaining acceptance gaps are explicit:
   Developer ID certificate with notarization is to be proposed later. A local
   check re-signed 0.1.7 and 0.1.9 with one such certificate: both report the
   same requirement (`identifier "cn.coforge.computer" and certificate leaf =
-  H"…"`) and still run. Open before it ships: whether TCC keeps its grants
-  across an upgrade on a real Mac; where the signature is applied, since the
-  darwin targets are built on Linux runners; Bun's JIT entitlements
-  ([Bun: code signing on macOS](https://bun.com/docs/bundler/executables));
-  and who holds the private key and how it is rotated, since a new key costs
-  every user one more grant. Signing keys are a security change
-  ([Routine release boundary](routine-release-boundary.md)) and need Frank's
-  approval of the concrete design. A version-stable executable path is
-  deferred: it leaves the `cdhash` requirement unchanged.
+  H"…"`) and still run. A probe run as its own launchd job on macOS 27.0.1
+  (2026-10-25) showed TCC also keys a grant to the executable's real path: with
+  one self-signed certificate, a new version replaced in place at the granted
+  path read `~/Documents` without a prompt, while the same bytes at a new path,
+  or behind a symlink re-pointed to a new path, prompted again. In the probe a
+  grant carried over an upgrade only when the new version replaced the
+  executable at the same real path under the same certificate; `versions/<version>/`
+  and the `active` symlink change that path with every version. Agents run in
+  launchd jobs whose program is `coforge-computer __managed-agent`, so TCC
+  attributes their privacy prompts to the Computer executable. Chosen direction
+  for 0.1.11, pending approval of its design: sign, and run the executable from
+  one fixed real path that the installer replaces atomically. Open: where the signature is
+  applied, since the darwin targets are built on Linux runners; Bun's JIT
+  entitlements ([Bun: code signing on macOS](https://bun.com/docs/bundler/executables));
+  who holds the private key and how it is rotated, since a new key costs every
+  user one more grant; and the installer's activation, rollback and repair on
+  a fixed path. Signing keys are a security change
+  ([Routine release boundary](routine-release-boundary.md)), and the concrete
+  signing and fixed-path design needs Frank's approval.
 - **Windows code identity**: the Windows executables are unsigned. Windows has
   no per-version privacy grants, but SmartScreen reputation and path-keyed
   firewall or Controlled Folder Access rules start over with each version.
-  Authenticode signing and a version-stable executable path are deferred.
+  Authenticode signing is deferred; a fixed executable path is not yet decided
+  for Windows.
 
 Distribution credentials come from GitHub OIDC federation to the Alibaba Cloud
 RAM role `coforge-release-publisher` (`ALIBABA_CLOUD_ROLE_ARN`/
