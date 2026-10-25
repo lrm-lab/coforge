@@ -4,7 +4,8 @@ The scheduled Web integration workflow (`.github/workflows/web-integration.yml`)
 (`apps/web/test/*.integration*.ts`). It blocks nothing and publishes nothing, and a
 red run is read from the run page, whose summary lists each failed test with its file and the order the files ran in. The service containers use the
 images staging deploys, by digest; `scripts/ci/web-integration-images.test.ts` fails CI when
-they drift from `infra/staging/docker-compose.yml`. Preparation lives in
+they drift from `infra/staging/docker-compose.yml`, and the same test compares the
+Centrifugo channel namespaces set in the workflow with `infra/staging/centrifugo/config.yaml` (proxy settings left out). Preparation lives in
 `scripts/test/prepare-web-integration.sh`, the same script a developer runs. Centrifugo is
 configured through its environment, since a service container cannot mount the staging
 config file. A failed scheduled run is announced only by GitHub itself: to whoever last
