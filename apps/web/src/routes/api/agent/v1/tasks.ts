@@ -7,6 +7,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
 const taskOperations = [
@@ -91,7 +92,16 @@ export async function handleAgentTaskPost(
       // the HTTP status that code means, so a claim of an already-claimed task is a 409 and not a
       // shapeless 400 the caller can only report as an opaque failure.
       const status = TASK_REFUSAL_STATUS[error.code] ?? 500;
-      return Response.json({ error: "task request refused", code: error.code }, { status });
+      return Response.json(
+        {
+          error:
+            error.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED
+              ? "Assigning or unassigning someone else requires a Workspace owner or admin."
+              : "task request refused",
+          code: error.code,
+        },
+        { status },
+      );
     }
     if (error instanceof z.ZodError) {
       return Response.json(

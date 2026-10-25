@@ -2,6 +2,7 @@
 
 These rules apply to `src/features/tasks/`.
 
+- `use-task-assignment-access.ts` reads the same current Workspace-role predicate as writes. The owner menu (`task-assignee-menu.tsx`, with `task-field-trigger.tsx`) offers other members only to Workspace owners/admins; ordinary members see themselves and cannot take another holder’s Task. The server rechecks every write.
 - Every status edit goes through `executeTask` with claim semantics. The
   browser supplies revisions for the optional revision check; the Agent CLI
   need not.

@@ -1,6 +1,7 @@
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
+import { assertCanAssignOther } from "./task-assignment-authority.server";
 import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
@@ -639,14 +640,6 @@ export class TaskBoard {
     return matches.find((member) => member.userId) ?? matches[0] ?? null;
   }
 
-  /**
-   * Any human member of the conversation may hand a Task to someone else or take it off its
-   * holder, as a Linear member reassigns an issue; an Agent changes only its own assignment.
-   */
-  private requireHuman(member: Member) {
-    if (!member.userId) throw new AppError("ACCESS_DENIED");
-  }
-
   /** Only Workspace owners and admins may delete or record receipts on Tasks they do not hold. */
   private async requireManager(tx: Transaction, workspaceId: string, member: Member) {
     const membership = member.userId
@@ -970,7 +963,8 @@ export class TaskBoard {
         ? await this.assigneeMember(tx, scope.conversationId, scope.workspaceId, command.assignee)
         : null;
       if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
-      if (assignee && assignee.id !== member.id) this.requireHuman(member);
+      if (assignee && assignee.id !== member.id)
+        await assertCanAssignOther(tx, scope.workspaceId, member);
       const started = assignee?.id === member.id;
       const tasks: SelectedTask[] = [];
       const sequences: number[] = [];
@@ -1400,6 +1394,7 @@ export class TaskBoard {
       if (!claim) return existing;
       if (
         existing.ownerMemberId === member.id &&
+        existing.claimedAt !== null &&
         (existing.status === "in_progress" || existing.status === "in_review")
       ) {
         if (member.agentId && !existing.executionSessions[0]) {
@@ -1586,7 +1581,7 @@ export class TaskBoard {
         (owner && owner.id !== member.id) ||
         (current.ownerMemberId && current.ownerMemberId !== member.id)
       )
-        this.requireHuman(member);
+        await assertCanAssignOther(tx, workspaceId, member);
       assertExpectedRevision(current, command.expectedRevision);
       if (current.ownerMemberId === (owner?.id ?? null))
         return { task: current, receipt: null, assigneeHandle: null, changed: false };
@@ -1642,12 +1637,12 @@ export class TaskBoard {
     member: Member,
     command: TaskCommand,
   ): Promise<TaskResult> {
-    const { conversationId } = conversation;
+    const { conversationId, workspaceId } = conversation;
     const result = await this.withNotices(conversation, async (tx, notices) => {
       const current = await findTaskByNumber(tx, conversationId, command.number!);
       if (!current) throw new AppError("NOT_FOUND");
       if (!current.ownerMemberId) return { task: current, changed: false };
-      if (current.ownerMemberId !== member.id) this.requireHuman(member);
+      if (current.ownerMemberId !== member.id) await assertCanAssignOther(tx, workspaceId, member);
       assertExpectedRevision(current, command.expectedRevision);
       const { task } = await this.commitTaskChange(
         tx,

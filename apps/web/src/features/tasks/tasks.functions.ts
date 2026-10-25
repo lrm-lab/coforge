@@ -1,3 +1,4 @@
+import { canAssignOther } from "#src/server/tasks/task-assignment-authority.server";
 import { TASK_STATUSES, type TaskCommand } from "@lrm/coforge-sdk/internal";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
@@ -149,3 +150,10 @@ export const executeTask = createServerFn({ method: "POST" })
     if (data.operation === "claim") refuseUnclaimed(result);
     return result;
   });
+
+/** Only an affordance: the write rechecks the actor's current role in its transaction. */
+export const loadTaskAssignmentAccess = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(({ context: { db, workspaceId, user } }) =>
+    canAssignOther(db, workspaceId, { userId: user.id }),
+  );

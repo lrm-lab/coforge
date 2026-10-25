@@ -1,3 +1,8 @@
+import { isAppError } from "#src/lib/app-error";
+import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
+import { useTaskAssignmentAccess } from "./use-task-assignment-access";
+import { AssigneeMenu } from "./task-assignee-menu";
+import { TaskFieldTrigger as EditableTrigger } from "./task-field-trigger";
 import type { TaskCommand, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -5,19 +10,10 @@ import {
   ChevronDown,
   ChevronUp,
   DotsHorizontal as MoreHorizontal,
-  Edit05,
-  SearchLg,
   XClose,
 } from "@untitledui/icons";
 import { useState, type ComponentProps, type CSSProperties, type ReactNode } from "react";
-import { useFilter } from "react-aria";
-import {
-  Autocomplete as AriaAutocomplete,
-  Button as AriaButton,
-  Heading,
-  Input as AriaInput,
-  SearchField as AriaSearchField,
-} from "react-aria-components";
+import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { Button } from "#src/components/base/buttons/button";
@@ -27,7 +23,6 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useVisualViewportTop } from "#src/hooks/use-visual-viewport-top";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { assigneeFace } from "./assignee-face";
 import { StatusBadge, TaskHistory, type TimelineNames } from "./task-history";
 import { TaskPerson } from "./task-owner";
 import { getTaskMoveCommand, taskStatusOptions } from "./task-move";
@@ -36,9 +31,6 @@ import { useConversationTaskWrites } from "./use-conversation-tasks";
 import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workflow";
 
 type DetailCommand = Omit<TaskCommand, "idempotencyKey" | "conversationId"> & { number: number };
-
-const UNASSIGNED = "unassigned";
-const memberKey = (member: { kind: string; id: string }) => `${member.kind}:${member.id}`;
 
 export function TaskDetailMenu({
   task,
@@ -218,7 +210,13 @@ function TaskSection({
   const writeTasks = useConversationTaskWrites();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"permission" | "other" | null>(null);
+  const access = useTaskAssignmentAccess();
+  const canEditAssignment =
+    access.canAssignOthers || !task.owner || task.owner.memberId === currentMemberId;
+  const assignableMembers = access.canAssignOthers
+    ? members
+    : members?.filter((member) => member.kind === "user" && member.id === access.userId);
   // Keyed by revision: every change bumps it, so the history reloads whenever the Task changes
   // and an older response can never overwrite a newer one.
   const history = useQuery({
@@ -240,7 +238,7 @@ function TaskSection({
   async function run(command: DetailCommand) {
     if (pending) return;
     setPending(true);
-    setError(false);
+    setError(null);
     try {
       if (onCommand) {
         await onCommand(command);
@@ -256,8 +254,11 @@ function TaskSection({
         });
         writeTasks(task.conversationId, [{ tasks: result.tasks, deleted: [] }]);
       }
-    } catch {
-      setError(true);
+    } catch (failure) {
+      const permission =
+        isAppError(failure) && failure.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED;
+      setError(permission ? "permission" : "other");
+      if (permission) void access.refetch();
     } finally {
       setPending(false);
     }
@@ -307,8 +308,8 @@ function TaskSection({
         <TaskField label={m.tasks_overview_owner()}>
           <AssigneeMenu
             task={task}
-            members={members}
-            disabled={pending || !currentMemberId}
+            members={assignableMembers}
+            disabled={pending || !currentMemberId || !canEditAssignment}
             onSelect={(assignee) =>
               void run(
                 assignee
@@ -324,7 +325,9 @@ function TaskSection({
       </dl>
       {error && (
         <p role="alert" className="text-sm text-error-primary">
-          {m.tasks_update_failed()}
+          {error === "permission"
+            ? m.tasks_assignment_requires_workspace_manager()
+            : m.tasks_update_failed()}
         </p>
       )}
 
@@ -372,31 +375,6 @@ function TaskField({
   );
 }
 
-/** A value that opens its menu when pressed; hover shows a light fill and a pencil. */
-function EditableTrigger({
-  label,
-  disabled,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <AriaButton
-      aria-label={label}
-      isDisabled={disabled}
-      className="group -mx-2 inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-primary outline-focus-ring transition-colors focus-visible:outline-2 enabled:hover:bg-primary_hover disabled:cursor-not-allowed"
-    >
-      {children}
-      <Edit05
-        aria-hidden="true"
-        className="size-3.5 shrink-0 text-fg-quaternary opacity-0 transition-opacity group-focus-visible:opacity-100 group-enabled:group-hover:opacity-100"
-      />
-    </AriaButton>
-  );
-}
-
 function StatusMenu({
   task,
   currentMemberId,
@@ -440,90 +418,6 @@ function StatusMenu({
             />
           ))}
         </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown.Root>
-  );
-}
-
-function AssigneeMenu({
-  task,
-  members,
-  disabled,
-  onSelect,
-}: {
-  task: TaskView;
-  members?: readonly Mentionable[];
-  disabled: boolean;
-  /** The picked member bound by id (`user:<id>` or `agent:<id>`), or null for no one. */
-  onSelect: (assignee: string | null) => void;
-}) {
-  const { contains } = useFilter({ sensitivity: "base" });
-  const [search, setSearch] = useState("");
-  const name = task.owner?.name ?? m.tasks_unassigned();
-  const value = task.owner ? (
-    <TaskPerson person={task.owner} />
-  ) : (
-    <span className="text-tertiary">{name}</span>
-  );
-  if (!members) return value;
-  const ownerKey = task.owner ? memberKey(task.owner) : undefined;
-  return (
-    <Dropdown.Root onOpenChange={(isOpen) => isOpen && setSearch("")}>
-      <EditableTrigger
-        label={`${m.tasks_change_assignee()}: ${name}${task.owner?.deleted ? `, ${m.agent_deleted_badge()}` : ""}`}
-        disabled={disabled}
-      >
-        {value}
-      </EditableTrigger>
-      <Dropdown.Popover placement="bottom start" className="w-72">
-        <AriaAutocomplete filter={contains} inputValue={search} onInputChange={setSearch}>
-          <div className="border-b border-secondary py-1">
-            <AriaSearchField
-              aria-label={m.tasks_search_members()}
-              value={search}
-              onChange={setSearch}
-              autoFocus
-            >
-              <div className="flex items-center gap-2 px-3 py-2">
-                <SearchLg aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-                <AriaInput
-                  placeholder={m.tasks_search_members()}
-                  className="w-full bg-transparent text-sm text-primary outline-hidden placeholder:text-placeholder"
-                />
-              </div>
-            </AriaSearchField>
-          </div>
-          <Dropdown.Menu
-            aria-label={m.tasks_change_assignee()}
-            selectionMode="single"
-            selectedKeys={[ownerKey ?? UNASSIGNED]}
-            className="max-h-72"
-            onAction={(key) => {
-              if (key === UNASSIGNED) {
-                if (task.owner) onSelect(null);
-                return;
-              }
-              const member = members.find((candidate) => memberKey(candidate) === key);
-              // By id, never by handle: a person and an Agent may share a name.
-              if (member && key !== ownerKey) onSelect(memberKey(member));
-            }}
-          >
-            <Dropdown.Item id={UNASSIGNED} label={m.tasks_unassigned()} />
-            {members.map((member) => (
-              <Dropdown.Item
-                key={memberKey(member)}
-                id={memberKey(member)}
-                textValue={
-                  member.kind === "agent" ? `${member.label} ${member.handle}` : member.label
-                }
-                label={member.label}
-                icon={member.avatarUrl ? assigneeFace(member.avatarUrl) : undefined}
-                // An Agent is told from a person by its `@handle`; a person is only their name.
-                addon={member.kind === "agent" ? `@${member.handle}` : undefined}
-              />
-            ))}
-          </Dropdown.Menu>
-        </AriaAutocomplete>
       </Dropdown.Popover>
     </Dropdown.Root>
   );

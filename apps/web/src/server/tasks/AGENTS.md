@@ -9,6 +9,7 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   assignment, card amendments and history, resource receipts, and status
   writes. Agent Task RPC adapters under `server/agents/` call the same
   TaskBoard and never duplicate its business rules.
+- `task-assignment-authority.server.ts` owns current Workspace-role permission for assignments affecting other actors (owner/admin humans or Agents). Ordinary members may assign/release only themselves; Web reads the same predicate. Assignment preserves status, clears claimedAt, and the reserved holder must claim.
 - `task-command-validation.server.ts` (`validateTaskCommand`) owns the shape
   a `TaskCommand` must have, which `execute` checks before it reads anything:
   a malformed one is `INVALID_INPUT`. It reads no database and decides no
