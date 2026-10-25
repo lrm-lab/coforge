@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 
 import type { OwnedProcessTreeKillReport } from "@lrm/coforge-anvil";
+import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import { cleanupOwnedTree } from "#src/code-agent/process-tree-cleanup";
 import { hostProcessTable, ProcessTreeOwner } from "#src/platform/process-tree";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
@@ -364,18 +365,41 @@ test.skipIf(process.platform === "win32")(
       { PATH: "/usr/bin:/bin" },
     );
     const reader = (tree.child.stdout as ReadableStream<Uint8Array>).getReader();
-    const earlier = Number(new TextDecoder().decode((await reader.read()).value).trim());
-    const reports: OwnedProcessTreeKillReport[] = [];
-    await cleanupOwnedTree(tree, tree.child, { onKillReport: (report) => reports.push(report) });
-    // No kill report: the whole-tree ladder ran, so nothing was filtered by the turn.
-    expect(reports).toEqual([]);
-    let alive = true;
     try {
-      globalThis.process.kill(earlier, 0);
-    } catch {
-      alive = false;
+      const earlier = Number(new TextDecoder().decode((await reader.read()).value).trim());
+      expect(Number.isSafeInteger(earlier) && earlier > 0).toBe(true);
+      const reports: OwnedProcessTreeKillReport[] = [];
+      await cleanupOwnedTree(tree, tree.child, { onKillReport: (report) => reports.push(report) });
+      // No kill report: the whole-tree ladder ran, so nothing was filtered by the turn.
+      expect(reports).toEqual([]);
+      // macOS can finish group cleanup while the killed child is still in P_WEXIT. Wait for
+      // that PID to disappear rather than assuming the kernel has already released it.
+      const deadline = performance.now() + 2_000;
+      for (;;) {
+        try {
+          globalThis.process.kill(earlier, 0);
+        } catch (error) {
+          if (hasErrorCode(error, "ESRCH")) break;
+          throw error;
+        }
+        if (performance.now() >= deadline) {
+          const state = Bun.spawnSync({
+            cmd: ["ps", "-o", "pid=,ppid=,pgid=,stat=,command=", "-p", String(earlier)],
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 1_000,
+          });
+          throw new Error(
+            `Child PID ${earlier} still exists 2000ms after cleanup (kill(pid, 0) succeeded): ${state.stdout.toString().trim()} ${state.stderr.toString().trim()}`,
+          );
+        }
+        await Bun.sleep(10);
+      }
+    } finally {
+      await tree.terminate(true);
+      await tree.child.exited;
+      await reader.cancel();
     }
-    expect(alive).toBe(false);
   },
   20_000,
 );
