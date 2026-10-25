@@ -4,9 +4,8 @@ import {
   sanitizeRuntimeAuthStatus,
   type RuntimeAuthProvider,
   type RuntimeAuthStatus,
+  withDeadline,
 } from "@lrm/coforge-anvil";
-
-import { withDeadline } from "./deadline";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "runtime-auth-status"]);
 

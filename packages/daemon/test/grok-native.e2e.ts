@@ -9,7 +9,7 @@ import type { AgentSession, AgentRuntimeEvent } from "@coforge/agent";
 import { GrokProvider } from "#src/code-agent/grok/provider";
 import { discoverGrokCatalog } from "#src/code-agent/grok/catalog";
 import { readGrokVersion } from "#src/code-agent/grok/version";
-import { withDeadline } from "#src/code-agent/deadline";
+import { withDeadline } from "@lrm/coforge-anvil";
 
 const command = Bun.env.COFORGE_GROK_E2E_COMMAND;
 if (!command) throw new Error("Set COFORGE_GROK_E2E_COMMAND to the installed Grok executable");

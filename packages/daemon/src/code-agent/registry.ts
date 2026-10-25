@@ -3,9 +3,13 @@ import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import { ClaudeRuntimeAuthAdapter } from "#src/code-agent/claude-code/auth";
 import { CodexRuntimeAuthAdapter } from "#src/code-agent/codex/auth";
-import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
-import type { CodeAgentProvider } from "@lrm/coforge-anvil";
-import { CursorProvider } from "#src/code-agent/cursor/provider";
+import type {
+  RuntimeAuthAdapter,
+  RuntimeAuthProvider,
+  CodeAgentProvider,
+} from "@lrm/coforge-anvil";
+import { CursorProvider } from "@lrm/coforge-anvil";
+import { perTurnSessionHost } from "./per-turn-host";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
 import { GrokProvider } from "#src/code-agent/grok/provider";
@@ -60,7 +64,7 @@ export function createCodeAgentProvider(
     case RUNTIME_PROVIDER.KIRO:
       return new KiroProvider();
     case RUNTIME_PROVIDER.CURSOR:
-      return new CursorProvider();
+      return new CursorProvider({ host: perTurnSessionHost });
     case RUNTIME_PROVIDER.OPENCODE: {
       const executable = providerExecutable(RUNTIME_PROVIDER.OPENCODE, options);
       return new OpenCodeProvider(executable ? { command: [executable] } : undefined);

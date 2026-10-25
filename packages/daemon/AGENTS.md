@@ -87,29 +87,29 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 
 ## Module map
 
-| Path                                 | Single responsibility                                                                                                                                                  |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts`                           | Process entrypoint and package exports; dependency assembly only                                                                                                       |
-| `src/daemon-host/`                   | Login-session startup through launchd, systemd user, and Windows tasks                                                                                                 |
-| `src/supervisor/`                    | Machine Coordinator: Workspace binding registry and per-Workspace process lifecycle                                                                                    |
-| `src/daemon-runtime/`                | One Workspace child's runtime: cloud use cases, attention, delivery, mention tracking                                                                                  |
-| `src/connection/`                    | The Workspace's WSS connection, ordered replay, reconnect, and Agent HTTPS transport                                                                                   |
-| `src/pi-chat/`                       | Independent native Pi worker processes and bounded command/event relay on the Workspace connection                                                                     |
-| `src/agent-runtime/`                 | Agent lifecycle state machine, control, native Session state, and Activity                                                                                             |
-| `src/code-agent/`                    | Runtime adapters awaiting migration, runtime inventory and standing instructions; contracts, per-turn execution and shared runtime utilities live in `packages/anvil/` |
-| `src/code-agent/grok/`               | Persistent Grok ACP sessions, native turn admission and background turn updates                                                                                        |
-| `src/code-agent/per-turn-host.ts`    | Host environment composition and platform process-tree injection for Anvil per-turn execution                                                                          |
-| `src/agent-migration/`               | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                                                        |
-| `src/agent-app-inbox/`               | Typed Agent App items (incl. the transient client-secret notice), apart from chat Message attention                                                                    |
-| `src/agent-reminder/`                | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                                                                                               |
-| `src/system-cleaner/`                | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle                                                                                  |
-| `src/agent-app-config/`              | Agent App config sync: snapshot requests per connection, routing each config to its App runtime                                                                        |
-| `src/credentials/`                   | Daemon credential store and Agent API keys                                                                                                                             |
-| `src/persistence/`                   | Durable local daemon state and configuration validation                                                                                                                |
-| `src/platform/`                      | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release                                                                                  |
-| `src/local-rpc.ts`                   | Computer↔Daemon local socket server, framing, validation, and dispatch                                                                                                 |
-| `src/agent-proxy.ts`                 | Local Agent capability boundary and approved HTTPS forwarding                                                                                                          |
-| `src/agent-proxy-domain-failures.ts` | The domain errors the Agent proxy answers                                                                                                                              |
+| Path                                 | Single responsibility                                                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `index.ts`                           | Process entrypoint and package exports; dependency assembly only                                                         |
+| `src/daemon-host/`                   | Login-session startup through launchd, systemd user, and Windows tasks                                                   |
+| `src/supervisor/`                    | Machine Coordinator: Workspace binding registry and per-Workspace process lifecycle                                      |
+| `src/daemon-runtime/`                | One Workspace child's runtime: cloud use cases, attention, delivery, mention tracking                                    |
+| `src/connection/`                    | The Workspace's WSS connection, ordered replay, reconnect, and Agent HTTPS transport                                     |
+| `src/pi-chat/`                       | Independent native Pi worker processes and bounded command/event relay on the Workspace connection                       |
+| `src/agent-runtime/`                 | Agent lifecycle state machine, control, native Session state, and Activity                                               |
+| `src/code-agent/`                    | Remaining runtime adapters, inventory and instructions; Cursor, contracts and shared execution live in `packages/anvil/` |
+| `src/code-agent/grok/`               | Persistent Grok ACP sessions, native turn admission and background turn updates                                          |
+| `src/code-agent/per-turn-host.ts`    | Host environment composition and platform process-tree injection for Anvil per-turn execution                            |
+| `src/agent-migration/`               | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                          |
+| `src/agent-app-inbox/`               | Typed Agent App items (incl. the transient client-secret notice), apart from chat Message attention                      |
+| `src/agent-reminder/`                | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                                                 |
+| `src/system-cleaner/`                | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle                                    |
+| `src/agent-app-config/`              | Agent App config sync: snapshot requests per connection, routing each config to its App runtime                          |
+| `src/credentials/`                   | Daemon credential store and Agent API keys                                                                               |
+| `src/persistence/`                   | Durable local daemon state and configuration validation                                                                  |
+| `src/platform/`                      | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release                                    |
+| `src/local-rpc.ts`                   | Computer↔Daemon local socket server, framing, validation, and dispatch                                                   |
+| `src/agent-proxy.ts`                 | Local Agent capability boundary and approved HTTPS forwarding                                                            |
+| `src/agent-proxy-domain-failures.ts` | The domain errors the Agent proxy answers                                                                                |
 
 Do not create a new directory or rename a module solely for aesthetics. First
 state the responsibility that needs the boundary, then update this map in the

@@ -315,7 +315,7 @@ describe("external Code Agent inventory", () => {
       commands: {
         cursor: [
           process.execPath,
-          new URL("./fixtures/cursor-agent-fixture.ts", import.meta.url).pathname,
+          new URL("../../anvil/test/fixtures/cursor-agent-fixture.ts", import.meta.url).pathname,
           "models",
         ],
       },

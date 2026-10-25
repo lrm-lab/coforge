@@ -1,6 +1,6 @@
 # Cursor adapter
 
-These rules extend [`../AGENTS.md`](../AGENTS.md).
+These rules extend [`../../AGENTS.md`](../../AGENTS.md).
 
 - Launch print turns with `--output-format stream-json --stream-partial-output`. Follow the
   [official output format](https://cursor.com/docs/cli/reference/output-format): assistant text

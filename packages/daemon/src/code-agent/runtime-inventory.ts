@@ -8,7 +8,8 @@ import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
 import { discoverKiroCatalog } from "#src/code-agent/kiro/catalog";
-import { discoverCursorCatalog } from "#src/code-agent/cursor/catalog";
+import { discoverCursorCatalog } from "@lrm/coforge-anvil";
+import { runCatalogCommand } from "./catalog-command";
 import { discoverGrokCatalog } from "#src/code-agent/grok/catalog";
 import { discoverAntigravityCatalog } from "#src/code-agent/antigravity/catalog";
 import { discoverOpenCodeCatalog } from "#src/code-agent/opencode/catalog";
@@ -260,7 +261,12 @@ export async function discoverCodeAgentCatalogs(
     const executable = await resolveExecutable(RUNTIME_PROVIDER.CURSOR);
     if (executable)
       discoveries.push(
-        discoverCursorCatalog(commands.cursor ?? [executable, "models"], cwd, environment)
+        discoverCursorCatalog(
+          commands.cursor ?? [executable, "models"],
+          cwd,
+          environment,
+          runCatalogCommand,
+        )
           .catch(() => undefined)
           .then((catalog) => ({
             provider: RUNTIME_PROVIDER.CURSOR,

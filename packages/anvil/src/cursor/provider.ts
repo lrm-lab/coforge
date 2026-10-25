@@ -1,8 +1,7 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import type { CodeAgentProvider } from "@lrm/coforge-anvil";
-import { createPerTurnSession } from "@lrm/coforge-anvil";
-import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
+import type { CodeAgentProvider } from "#src/contract";
+import { createPerTurnSession, type PerTurnSessionHost } from "#src/per-turn/session";
 import { createCursorTurnProtocol } from "./turn-protocol";
 
 /**
@@ -11,9 +10,11 @@ import { createCursorTurnProtocol } from "./turn-protocol";
  */
 export class CursorProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CURSOR;
+  readonly #host: PerTurnSessionHost;
   readonly #command: readonly string[];
 
-  constructor(options: { command?: readonly string[] } = {}) {
+  constructor(options: { command?: readonly string[]; host: PerTurnSessionHost }) {
+    this.#host = options.host;
     this.#command = options.command ?? ["cursor-agent"];
   }
 
@@ -23,7 +24,7 @@ export class CursorProvider implements CodeAgentProvider {
     return createPerTurnSession(
       createCursorTurnProtocol(options, this.#command),
       options,
-      perTurnSessionHost,
+      this.#host,
     );
   }
 }

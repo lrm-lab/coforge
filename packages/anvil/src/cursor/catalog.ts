@@ -5,9 +5,9 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
-import { runCatalogCommand } from "#src/code-agent/catalog-command";
+import type { CatalogCommandRunner } from "#src/catalog-command";
 
-const logger = getLogger(["coforge", "daemon", "code-agent", "cursor"]);
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CURSOR]);
 
 // eslint-disable-next-line no-control-regex -- Strips ANSI escapes from `cursor-agent models`.
 const ANSI_ESCAPE_PATTERN = /\x1b\[[0-9;]*m/g;
@@ -60,6 +60,7 @@ export async function discoverCursorCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  runCatalogCommand: CatalogCommandRunner,
   timeoutMs = 5_000,
 ): Promise<CodeAgentModelCatalog | undefined> {
   try {

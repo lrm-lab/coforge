@@ -1,14 +1,14 @@
 import type { AgentSessionOptions } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { asRecord, eventTime, nonEmptyString } from "@lrm/coforge-anvil";
+import { asRecord, eventTime, nonEmptyString } from "#src/json-record";
+import type { TurnRecord } from "#src/per-turn/turn-process";
 import type {
-  TurnRecord,
   TurnCommand,
   TurnProtocol,
   TurnReader,
   TurnRequest,
   TurnScope,
-} from "@lrm/coforge-anvil";
+} from "#src/per-turn/turn-protocol";
 
 import {
   cursorToolCall,

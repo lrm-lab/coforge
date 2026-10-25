@@ -8,3 +8,19 @@
 - Agent instructions, assigned Skills, Git hooks, runtime inventory and caches stay with the host. Adapters consume the prepared session options; they do not coordinate those policies.
 - `src/per-turn/` owns the one Session state machine, input queue, interrupt/dispose, identity reports and child-process wrapper shared by per-turn adapters. Provider differences belong to `TurnProtocol` fields or `TurnReader` hooks; do not copy the Session or parse provider output there.
 - Preserve provider behavior while migrating one contract or runtime slice at a time. Run the package checks and the daemon checks for every slice.
+
+## Module map
+
+| Path | Responsibility |
+| --- | --- |
+| `src/contract.ts` | Provider-neutral sessions, provider and auth contracts |
+| `src/runtime-auth-status.ts` | Shared runtime auth status values |
+| `src/process-tree.ts` | Host process ownership ports |
+| `src/catalog-command.ts` | Host catalog command execution port |
+| `src/per-turn/` | Shared per-turn session and process execution |
+| `src/cursor/` | Cursor turn protocol, provider and model catalog parsing |
+| Other `src/` modules | Shared runtime Activity, error, JSON, stream and deadline utilities |
+
+## Runtime instructions
+
+- [Cursor adapter](src/cursor/AGENTS.md)

@@ -6,13 +6,13 @@ import { join } from "node:path";
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
-import { CursorProvider } from "#src/code-agent/cursor/provider";
+import { CursorProvider, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { OpenCodeProvider } from "#src/code-agent/opencode/provider";
 import { GrokProvider } from "#src/code-agent/grok/provider";
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
 import { VERSION_PROBE_TIMEOUT_MS } from "#src/code-agent/version-gate";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 
 const command = (name: string) => [
   process.execPath,
@@ -22,7 +22,13 @@ const providers = [
   new CodexProvider({ command: command("codex-app-server.ts") }),
   new ClaudeCodeProvider({ command: command("claude-stream-json.ts") }),
   new KiroProvider({ command: command("kiro-acp.ts") }),
-  new CursorProvider({ command: command("cursor-agent-fixture.ts") }),
+  new CursorProvider({
+    host: perTurnSessionHost,
+    command: [
+      process.execPath,
+      new URL("../../anvil/test/fixtures/cursor-agent-fixture.ts", import.meta.url).pathname,
+    ],
+  }),
   new OpenCodeProvider({ command: command("opencode-fixture.ts") }),
   new GrokProvider({ command: command("grok-acp-fixture.ts") }),
   new AntigravityProvider({ command: command("antigravity-fixture.ts") }),

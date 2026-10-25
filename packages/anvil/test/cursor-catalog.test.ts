@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { discoverCursorCatalog, parseCursorModelList } from "#src/code-agent/cursor/catalog";
+import { discoverCursorCatalog, parseCursorModelList } from "@lrm/coforge-anvil";
+
+import { fixtureCatalogCommand } from "./fixtures/runtime-host";
 
 const FIXTURE = new URL("./fixtures/cursor-agent-fixture.ts", import.meta.url).pathname;
 const MODELS_FIXTURE_PATH = new URL("./fixtures/cursor-models.txt", import.meta.url).pathname;
@@ -76,9 +78,14 @@ test("skips unavailable/failure lines the CLI can print instead of a catalog", (
 });
 
 test("discoverCursorCatalog parses a live `cursor-agent models` process", async () => {
-  const catalog = await discoverCursorCatalog([process.execPath, FIXTURE, "models"], tmpdir(), {
-    COFORGE_CURSOR_MODELS_OUTPUT: "Available models\n\nauto - Auto (default)\n",
-  });
+  const catalog = await discoverCursorCatalog(
+    [process.execPath, FIXTURE, "models"],
+    tmpdir(),
+    {
+      COFORGE_CURSOR_MODELS_OUTPUT: "Available models\n\nauto - Auto (default)\n",
+    },
+    fixtureCatalogCommand,
+  );
   expect(catalog).toEqual({
     provider: "cursor",
     models: [
@@ -96,10 +103,15 @@ test("discoverCursorCatalog parses a live `cursor-agent models` process", async 
 });
 
 test("discoverCursorCatalog returns undefined on a non-zero exit", async () => {
-  const catalog = await discoverCursorCatalog([process.execPath, FIXTURE, "models"], tmpdir(), {
-    COFORGE_CURSOR_MODELS_EXIT: "1",
-    COFORGE_CURSOR_MODELS_STDERR: "boom",
-  });
+  const catalog = await discoverCursorCatalog(
+    [process.execPath, FIXTURE, "models"],
+    tmpdir(),
+    {
+      COFORGE_CURSOR_MODELS_EXIT: "1",
+      COFORGE_CURSOR_MODELS_STDERR: "boom",
+    },
+    fixtureCatalogCommand,
+  );
   expect(catalog).toBeUndefined();
 });
 
@@ -108,6 +120,7 @@ test("discoverCursorCatalog times out instead of hanging when the CLI never exit
     [process.execPath, FIXTURE, "hang-models"],
     tmpdir(),
     {},
+    fixtureCatalogCommand,
     30,
   );
   expect(catalog).toBeUndefined();

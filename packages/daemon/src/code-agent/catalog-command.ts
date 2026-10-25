@@ -1,10 +1,5 @@
-import { withDeadline } from "./deadline";
+import { withDeadline, type CatalogCommandResult } from "@lrm/coforge-anvil";
 import { agentEnvironment } from "./environment";
-
-export type CatalogCommandResult = Readonly<{
-  output: string;
-  exitCode: number;
-}>;
 
 /**
  * Runs one provider catalog command and owns its child-process lifecycle.

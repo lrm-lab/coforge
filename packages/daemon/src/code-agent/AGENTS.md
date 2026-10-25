@@ -31,7 +31,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   embedded SDK and version; never scan PATH for them.
 - Translate persisted model and reasoning selections into each provider's
   native startup configuration.
-- Bound every probe and catalog discovery wait with `withDeadline` (`deadline.ts`), never an
+- Bound every probe and catalog discovery wait with `withDeadline` (`@lrm/coforge-anvil`), never an
   uncancelled `Bun.sleep` race, whose timer keeps a stopped daemon alive. A catalog discovery
   gets `CATALOG_DISCOVERY_TIMEOUT_MS` per wait. Pi's in-process SDK call gets the network refresh
   cap plus one wait (`PI_CATALOG_DISCOVERY_TIMEOUT_MS`, derived from `PI_MODEL_REFRESH_TIMEOUT_MS`
@@ -106,7 +106,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Per-turn providers (Cursor, OpenCode, Antigravity)
 
-- Cursor's partial-output framing rules are in [`cursor/AGENTS.md`](cursor/AGENTS.md).
+- Cursor's partial-output framing rules are in [Anvil Cursor rules](../../../anvil/src/cursor/AGENTS.md).
 - One child process per turn. Anvil `src/per-turn/session.ts` is their one `AgentSession` (state machine,
   input queue, interrupt, dispose, session identity and its reports, exit handling) and
   Anvil `src/per-turn/turn-process.ts` their one process wrapper. A provider adds `<provider>/turn-protocol.ts`

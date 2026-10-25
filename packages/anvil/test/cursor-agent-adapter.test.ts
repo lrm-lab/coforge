@@ -4,16 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AgentSession } from "@coforge/agent";
-import { CursorProvider } from "#src/code-agent/cursor/provider";
+import { CursorProvider, withDeadline, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { withDeadline } from "#src/code-agent/deadline";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+
+import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 const FIXTURE = new URL("./fixtures/cursor-agent-fixture.ts", import.meta.url).pathname;
 const INSTRUCTIONS = "Standing Cursor instructions.";
 
 function provider(): CursorProvider {
-  return new CursorProvider({ command: [process.execPath, FIXTURE] });
+  return new CursorProvider({ host: fixturePerTurnHost, command: [process.execPath, FIXTURE] });
 }
 
 async function readLaunches(

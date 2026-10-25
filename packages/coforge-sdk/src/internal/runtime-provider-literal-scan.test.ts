@@ -42,7 +42,6 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
   "packages/daemon/src/code-agent/codex/usage.ts":
     'the Codex CLI executable/subcommand ("codex", "app-server")',
   "packages/daemon/src/code-agent/kiro/catalog.ts": "a logger category",
-  "packages/daemon/src/code-agent/cursor/catalog.ts": "a logger category",
   "packages/daemon/src/code-agent/opencode/provider.ts":
     'the OpenCode CLI executable name ("opencode")',
   "packages/daemon/src/code-agent/opencode/catalog.ts": "a logger category and its event names",

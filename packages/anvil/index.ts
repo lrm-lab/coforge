@@ -13,3 +13,7 @@ export * from "./src/per-turn/session";
 export * from "./src/per-turn/turn-process";
 export * from "./src/per-turn/turn-protocol";
 export * from "./src/runtime-auth-status";
+export * from "./src/deadline";
+export * from "./src/catalog-command";
+export * from "./src/cursor/provider";
+export * from "./src/cursor/catalog";

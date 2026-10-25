@@ -1,4 +1,4 @@
-import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
+import { asRecord, nonEmptyString } from "#src/json-record";
 
 /**
  * How cursor-agent 2026.08.11's top-level `tool_call` frames read, from captured streams and the

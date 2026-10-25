@@ -5,8 +5,7 @@ import {
 } from "./memory-conversation-sessions";
 import type { AgentRuntimeConfig, AgentSession, AgentSessionOptions } from "@coforge/agent";
 import type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
-import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
-import { withDeadline } from "#src/code-agent/deadline";
+import { AgentProcessCleanupError, withDeadline } from "@lrm/coforge-anvil";
 import {
   buildCoforgeAgentInstructions,
   type AgentLaunchIdentity,

@@ -3,12 +3,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent, AgentSession } from "@coforge/agent";
-import { CursorProvider } from "#src/code-agent/cursor/provider";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
-import { withDeadline } from "#src/code-agent/deadline";
+import { CursorProvider, PROCESS_TREE_EXIT_GRACE_MS, withDeadline } from "@lrm/coforge-anvil";
+
+import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 const fixture = new URL("./fixtures/cursor-agent-fixture.ts", import.meta.url).pathname;
-const provider = () => new CursorProvider({ command: [process.execPath, fixture] });
+const provider = () =>
+  new CursorProvider({ host: fixturePerTurnHost, command: [process.execPath, fixture] });
 const FIRST_TEXT_BUDGET_MS = 5_000;
 const text = (events: AgentRuntimeEvent[]) =>
   events.flatMap((event) => (event.type === "text-delta" ? [event.text] : [])).join("");

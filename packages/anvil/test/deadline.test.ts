@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { withDeadline } from "#src/code-agent/deadline";
+import { withDeadline } from "@lrm/coforge-anvil";
 
 test("a deadline whose timeout handler throws rejects with that error", async () => {
   const handlerFailure = new Error("kill failed");
