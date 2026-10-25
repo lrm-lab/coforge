@@ -16,6 +16,11 @@ import {
   AgentMessageResponseSchema,
 } from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
 import { assertValidMessageSender, type MessageSenderKind } from "./message-sender";
+import {
+  decodeMessageAttentionSummary,
+  encodeMessageAttentionSummary,
+  type MessageAttentionSummary,
+} from "./local-attention-summary";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
 
 export const LOCAL_RPC_PROTOCOL_MAJOR = 1 as const;
@@ -34,6 +39,7 @@ export const LOCAL_RPC_METHODS = {
   USAGE_SCAN: "usage:scan",
 } as const;
 export * from "./local-inbox";
+export * from "./local-attention-summary";
 /** A structured @mention binding: a handle claimed to name a specific actor. */
 export type LocalMentionSelector = { type: "user" | "agent"; id: string; name: string };
 
@@ -243,16 +249,6 @@ export type AgentMessageResponse = LocalSearchPaging & {
   /** `message send` only: `@handle`s that name nobody the Agent can see. */
   unresolvedMentionHandles?: string[];
 };
-export type MessageAttentionSummary = {
-  target: string;
-  pendingCount: number;
-  firstPendingSequence: number;
-  latestSequence: number;
-  latestSenderKind?: MessageSenderKind;
-  /** Public handle without a leading "@". No description on this summary. */
-  latestSenderHandle?: string;
-  flags: string[];
-};
 function encodeAgentMessageRecords(records: readonly AgentMessageRecord[]) {
   for (const m of records)
     assertValidMessageSender(m.senderKind, m.senderHandle, "Agent message record");
@@ -329,19 +325,7 @@ export function encodeAgentMessageResponse(value: AgentMessageResponse): Uint8Ar
       messages: encodeAgentMessageRecords(safeValue.messages),
       heldMessages: encodeAgentMessageRecords(safeValue.heldMessages ?? []),
       recentUnread: encodeAgentMessageRecords(safeValue.recentUnread ?? []),
-      summaries: safeValue.summaries.map((summary) => {
-        if (summary.latestSenderKind !== undefined)
-          assertValidMessageSender(
-            summary.latestSenderKind,
-            summary.latestSenderHandle ?? "",
-            "message attention summary",
-          );
-        return {
-          ...summary,
-          firstPendingSequence: BigInt(summary.firstPendingSequence),
-          latestSequence: BigInt(summary.latestSequence),
-        };
-      }),
+      summaries: safeValue.summaries.map(encodeMessageAttentionSummary),
       hasOlder: safeValue.hasOlder ?? false,
       hasNewer: safeValue.hasNewer ?? false,
       olderCursor: safeValue.olderCursor,
@@ -401,28 +385,7 @@ export function decodeAgentMessageResponse(bytes: Uint8Array): AgentMessageRespo
     accepted: v.accepted,
     attentionCount: v.attentionCount,
     messageId: v.messageId,
-    summaries: v.summaries.map((summary) => {
-      if (summary.latestSenderKind !== undefined)
-        assertValidMessageSender(
-          summary.latestSenderKind,
-          summary.latestSenderHandle ?? "",
-          "message attention summary",
-        );
-      return {
-        target: summary.target,
-        pendingCount: summary.pendingCount,
-        firstPendingSequence: Number(summary.firstPendingSequence),
-        latestSequence: Number(summary.latestSequence),
-        ...(summary.latestSenderKind
-          ? {
-              latestSenderKind:
-                summary.latestSenderKind as MessageAttentionSummary["latestSenderKind"],
-              latestSenderHandle: summary.latestSenderHandle,
-            }
-          : {}),
-        flags: summary.flags,
-      };
-    }),
+    summaries: v.summaries.map(decodeMessageAttentionSummary),
     messages: decodeAgentMessageRecords(v.messages),
     state: (v.state || undefined) as AgentMessageResponse["state"],
     decision: (v.decision || undefined) as AgentMessageResponse["decision"],

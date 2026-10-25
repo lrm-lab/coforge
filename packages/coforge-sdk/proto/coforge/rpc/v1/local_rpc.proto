@@ -63,6 +63,9 @@ message MessageAttentionSummary {
   // Public handle without a leading "@".
   optional string latest_sender_handle = 6;
   repeated string flags = 7;
+  // When the newest pending message was created, in epoch milliseconds; unset when the server
+  // predates it.
+  optional uint64 latest_created_at_ms = 8;
 }
 
 message AgentMessageResponse {

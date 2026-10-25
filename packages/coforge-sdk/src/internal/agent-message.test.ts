@@ -436,3 +436,28 @@ test("withholds the daemon-local events drain hasMore flag under reviewer isolat
   };
   expect(decodeAgentMessageResponse(encodeAgentMessageResponse(local)).hasMore).toBeUndefined();
 });
+
+test("round-trips the server's creation time of a delivered message, and leaves it unset when absent", () => {
+  const delivery = {
+    protocolMajor: 1,
+    requestId: "request-created",
+    messageId: "message-created",
+    deliveryId: "delivery-created",
+    sequence: 5,
+    workspaceId: "workspace-a",
+    conversationId: "conversation-a",
+    agentId: "agent-a",
+    body: "hello",
+    method: AGENT_MESSAGE_METHOD,
+  } as const;
+  const created = { ...delivery, createdAtMs: 1_761_350_000_123 };
+
+  expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(created))).toEqual(created);
+  // A server that predates the field sends none, which is not the epoch.
+  expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery))).not.toHaveProperty(
+    "createdAtMs",
+  );
+  expect(() => encodeAgentMessageDelivery({ ...delivery, createdAtMs: -1 })).toThrow(
+    "invalid Agent message creation time",
+  );
+});

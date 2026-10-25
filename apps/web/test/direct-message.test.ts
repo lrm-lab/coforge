@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import {
-  ReadDirectMessages,
-  SendDirectMessage,
-} from "#src/server/conversations/direct-message.server";
+import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import type {
   MessageRequestIdempotency,
   MessageRequestScope,
@@ -160,6 +157,7 @@ describe("SendDirectMessage", () => {
     expect(decodeAgentMessageDelivery(publication!.data)).toEqual({
       protocolMajor: 1,
       requestId: "request-a",
+      createdAtMs: persisted.createdAt.getTime(),
       messageId: "message-a",
       deliveryId: "delivery-a",
       sequence: 1,
@@ -738,60 +736,5 @@ describe("SendDirectMessage", () => {
     ).resolves.toMatchObject({ id: "message-a", sequence: 1 });
     expect(persistedCalled).toBe(true);
     expect(calls).toEqual(["notify:message-a"]);
-  });
-});
-
-describe("ReadDirectMessages", () => {
-  test("coordinates target lookup and conversation selection before reading persisted messages", async () => {
-    const calls: string[] = [];
-    const messages = [
-      {
-        id: "message-a",
-        sequence: 1,
-        senderKind: "human" as const,
-        senderHandle: "ada",
-        senderDescription: "",
-        body: "Hello",
-        createdAt: new Date("2026-08-28T00:00:00Z"),
-        target: "@user",
-        attachments: [],
-      },
-    ];
-    const repository = {
-      async userIdForUsername(target: string) {
-        calls.push(`lookup:${target}`);
-        return "user-a";
-      },
-      async openAgentDirect(workspaceId: string, agentId: string, parentTarget: string) {
-        const userId = await this.userIdForUsername?.(parentTarget);
-        if (!userId) throw new Error("target user not found");
-        const conversation = await this.getOrCreateUserAgent(workspaceId, userId, agentId);
-        return { conversation, peer: { kind: "user" as const, userId } };
-      },
-      async getOrCreateUserAgent(workspaceId: string, userId: string, agentId: string) {
-        calls.push(`conversation:${workspaceId}:${userId}:${agentId}`);
-        return { id: "conversation-a" };
-      },
-      async sendMessage() {
-        throw new Error("not used");
-      },
-      async readMessages(_workspaceId: string, _agentId: string, target: string) {
-        calls.push(`read:${target}`);
-        return messages;
-      },
-    } satisfies DirectConversationRepository;
-
-    await expect(
-      new ReadDirectMessages(repository).execute({
-        workspaceId: "workspace-a",
-        agentId: "agent-a",
-        target: "@user",
-      }),
-    ).resolves.toEqual(messages);
-    expect(calls).toEqual([
-      "lookup:@user",
-      "conversation:workspace-a:user-a:agent-a",
-      "read:@user",
-    ]);
   });
 });

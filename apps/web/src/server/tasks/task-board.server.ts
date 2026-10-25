@@ -66,7 +66,11 @@ import {
   quotedTask,
   type QuotedTask,
 } from "./task-notices.server";
-import { validateTaskCommand } from "./task-command-validation.server";
+import {
+  DUPLICATE_TASK_WINDOW_MS,
+  normalizeTaskTitle,
+  validateTaskCommand,
+} from "./task-command-validation.server";
 import { creationChanges, historyEventView, historyRows, taskChanges } from "./task-history.server";
 import { createMessageTask } from "./sent-as-task.server";
 import {
@@ -242,13 +246,6 @@ const CLAIM_REFUSAL = {
   held: "already claimed",
   changed: "the task changed while it was being claimed; read it again",
 } as const;
-
-/** A short duplicate window catches concurrent Agent work without banning legitimate repeated work. */
-const DUPLICATE_TASK_WINDOW_MS = 15 * 60 * 1000;
-
-function normalizeTaskTitle(title: string): string {
-  return title.trim().replace(/\s+/g, " ").toLowerCase();
-}
 
 /** What another member's hold on a Task leaves open. Illustrative, not a permission table. */
 const CLAIM_CONFLICT_UNBLOCKED_EXAMPLES = [
@@ -775,6 +772,7 @@ export class TaskBoard {
       workspaceId: string;
       conversationId: string;
       sequence: number;
+      createdAt: Date;
       body: string;
       mentions: readonly MessageMentionRef[];
       deliveries: Array<{
@@ -805,6 +803,7 @@ export class TaskBoard {
         messageId: message.id,
         deliveryId: delivery.deliveryId,
         sequence: message.sequence,
+        createdAtMs: message.createdAt.getTime(),
         body: message.body,
         mentions: message.mentions,
         target,

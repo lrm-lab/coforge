@@ -30,6 +30,9 @@ function pendingRows(inbox: DaemonInbox): InboxPendingRow[] {
         pendingCount: row.pendingCount ?? 0,
         flags: row.flags ?? [],
         ...(row.latestSenderHandle ? { latestSenderHandle: row.latestSenderHandle } : {}),
+        ...(row.latestCreatedAtMs === undefined
+          ? {}
+          : { latestCreatedAtMs: row.latestCreatedAtMs }),
         ...(row.firstPendingSequence === undefined
           ? {}
           : { firstPendingSequence: row.firstPendingSequence }),

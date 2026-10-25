@@ -10,6 +10,8 @@ export type InboxPendingRow = {
   target: string;
   pendingCount: number;
   latestSenderHandle?: string;
+  /** When the newest held message was created, in epoch milliseconds; unset from an older server. */
+  latestCreatedAtMs?: number;
   flags: string[];
   firstPendingSequence?: number;
 };
@@ -67,10 +69,14 @@ function conversationRow(
   return rowOf(parts, open);
 }
 
-function pendingOnlyRow(row: InboxPendingRow): Row {
+function pendingOnlyRow(row: InboxPendingRow, nowMs: number): Row {
   const parts = [row.target, `${row.pendingCount} new, not yet delivered`];
   if (mentionsYou(row.flags)) parts.push("mentions you");
-  if (row.latestSenderHandle) parts.push(`latest @${row.latestSenderHandle}`);
+  const latest = [
+    row.latestSenderHandle ? `@${row.latestSenderHandle}` : null,
+    row.latestCreatedAtMs === undefined ? null : agoLabel(new Date(row.latestCreatedAtMs), nowMs),
+  ].filter(Boolean);
+  if (latest.length > 0) parts.push(`latest ${latest.join(" ")}`);
   const open = openCommand(
     row.target,
     row.firstPendingSequence === undefined ? undefined : row.firstPendingSequence - 1,
@@ -107,7 +113,7 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
         )
       : [];
   const rows = [
-    ...extraPending.map(pendingOnlyRow),
+    ...extraPending.map((row) => pendingOnlyRow(row, nowMs)),
     ...list.items.map((item) => conversationRow(item, pendingByTarget.get(item.target), nowMs)),
   ];
   let top = header(result, extraPending.length);

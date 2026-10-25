@@ -201,6 +201,7 @@ export class SendDirectMessage {
     message: {
       id: string;
       sequence: number;
+      createdAt: Date;
       body: string;
       workspaceId: string;
       target?: string;
@@ -219,6 +220,7 @@ export class SendDirectMessage {
         messageId: message.id,
         deliveryId: delivery.deliveryId,
         sequence: message.sequence,
+        createdAtMs: message.createdAt.getTime(),
         body: message.body,
         mentions: message.mentions ?? [],
         target: message.target ?? "",
@@ -286,6 +288,7 @@ export class SendDirectMessage {
           messageId: message.id,
           deliveryId: message.deliveryId,
           sequence: message.sequence,
+          createdAtMs: message.createdAt.getTime(),
           conversationId,
           agentId: message.agentId,
           // A DM has no mention rows; its task and channel tokens still read back as text. It

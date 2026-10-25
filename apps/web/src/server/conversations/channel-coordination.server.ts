@@ -151,6 +151,7 @@ export async function changeChannelCoordinator(
             messageId: message.id,
             deliveryId: delivery.deliveryId,
             sequence: message.sequence,
+            createdAtMs: message.createdAt.getTime(),
             body: message.body,
             mentions: [],
             target,

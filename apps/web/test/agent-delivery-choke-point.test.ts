@@ -48,6 +48,7 @@ test("a delivery's body never carries a stored token", () => {
     latestSenderDescription: "",
     body: TOKENIZED,
     mentions: MENTIONS,
+    createdAtMs: 1_700_000_000_000,
   });
   expect(decodeAgentMessageDelivery(payload).body).toBe(READABLE);
 });

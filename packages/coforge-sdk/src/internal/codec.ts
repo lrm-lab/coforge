@@ -44,7 +44,6 @@ import {
   AgentStopIntentSchema,
   AgentActivityProbeSchema,
   AgentInboxPurgeSchema,
-  AgentMessageDeliverySchema,
   AgentStatusSchema,
   AgentMessageDeliveryAckSchema,
   AgentMessageDeliveryRejectionSchema,
@@ -58,7 +57,6 @@ import type {
   AgentInboxPurge,
   AgentRuntimeProviderConfig,
   AgentRecoveryMessage,
-  AgentMessageDelivery,
   AgentStatus,
   AgentMessageDeliveryAck,
   AgentMessageDeliveryRejection,
@@ -78,11 +76,7 @@ import {
   AGENT_CONTEXT_SCAN_MESSAGE_TYPE,
   AGENT_CONTEXT_SCAN_RESPONSE_MESSAGE_TYPE,
 } from "./index";
-import {
-  AGENT_MESSAGE_METHOD,
-  AGENT_MESSAGE_ACK_METHOD,
-  AGENT_MESSAGE_REJECT_METHOD,
-} from "./index";
+import { AGENT_MESSAGE_ACK_METHOD, AGENT_MESSAGE_REJECT_METHOD } from "./index";
 import { isSeenExactSeqs } from "./freshness-decision";
 import { mentionDeliveryEnvelopeMessage, readMentionDeliveryEnvelope } from "./mention-delivery";
 import type {
@@ -103,7 +97,7 @@ const runtimeMetadata = (runtime: RuntimeMetadata) => ({
   ...runtime,
 });
 
-function assertUint(value: number, maximum: number, field: string): void {
+export function assertUint(value: number, maximum: number, field: string): void {
   if (!Number.isSafeInteger(value) || value < 0 || value > maximum)
     throw new Error(`invalid ${field}`);
 }
@@ -678,6 +672,8 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
       message.latestSenderHandle,
       "Agent recovery message",
     );
+    if (message.createdAtMs !== undefined)
+      assertUint(message.createdAtMs, Number.MAX_SAFE_INTEGER, "Agent recovery creation time");
   }
   for (const count of Object.values(value.unreadSummary ?? {}))
     assertUint(count, 0xffff_ffff, "Agent unread count");
@@ -704,12 +700,14 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
         ? {
             ...value.wakeMessage,
             sequence: BigInt(value.wakeMessage.sequence),
+            createdAtMs: recoveryCreatedAt(value.wakeMessage),
             memoryHint: memoryHintMessage(value.wakeMessage.memoryHint),
           }
         : undefined,
       resumeMessages: (value.resumeMessages ?? []).map((message) => ({
         ...message,
         sequence: BigInt(message.sequence),
+        createdAtMs: recoveryCreatedAt(message),
         memoryHint: memoryHintMessage(message.memoryHint),
       })),
       unreadSummary: Object.entries(value.unreadSummary ?? {}).map(([target, count]) => ({
@@ -720,6 +718,8 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
     }),
   );
 }
+const recoveryCreatedAt = ({ createdAtMs }: AgentRecoveryMessage) =>
+  createdAtMs === undefined ? undefined : BigInt(createdAtMs);
 export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
   const v = fromBinary(AgentStartIntentSchema, bytes);
   if (
@@ -797,6 +797,9 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     body: message.body,
     ...(message.memoryHint ? { memoryHint: readMemoryHint(message.memoryHint) } : {}),
     ...(message.nonMemberMention ? { nonMemberMention: true } : {}),
+    ...(message.createdAtMs !== undefined
+      ? { createdAtMs: safeUint64(message.createdAtMs, "Agent recovery creation time") }
+      : {}),
   });
   return {
     protocolMajor: v.protocolMajor,
@@ -963,84 +966,6 @@ function parseAgentRuntimeProviderConfig(
   throw new Error("invalid Agent runtime provider config");
 }
 
-export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
-  // Protobuf omits an empty string, and the daemon rejects a delivery with no request_id.
-  if (!value.requestId?.trim()) throw new Error("agent message delivery requires requestId");
-  assertUint(value.sequence, Number.MAX_SAFE_INTEGER, "Agent message sequence");
-  if (value.latestSenderKind !== undefined)
-    assertValidMessageSender(
-      value.latestSenderKind,
-      value.latestSenderHandle ?? "",
-      "Agent message delivery",
-    );
-  return toBinary(
-    AgentMessageDeliverySchema,
-    create(AgentMessageDeliverySchema, {
-      protocolMajor: value.protocolMajor,
-      requestId: value.requestId,
-      messageId: value.messageId,
-      deliveryId: value.deliveryId,
-      sequence: BigInt(value.sequence),
-      workspaceId: value.workspaceId,
-      conversationId: value.conversationId,
-      agentId: value.agentId,
-      body: value.body,
-      method: value.method,
-      target: value.target ?? "",
-      latestSenderKind: value.latestSenderKind ?? "",
-      latestSenderHandle: value.latestSenderHandle ?? "",
-      latestSenderDescription: value.latestSenderDescription ?? "",
-      mentionsAgent: value.mentionsAgent,
-      nonMemberMention: value.nonMemberMention,
-      taskExecutionSessionId: value.taskExecutionSessionId ?? "",
-      mentionDelivery: mentionDeliveryEnvelopeMessage(value.mentionDelivery),
-      memoryHint: memoryHintMessage(value.memoryHint),
-    }),
-  );
-}
-export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDelivery {
-  const value = fromBinary(AgentMessageDeliverySchema, bytes);
-  if (
-    value.method !== AGENT_MESSAGE_METHOD ||
-    !value.requestId ||
-    !value.messageId ||
-    !value.workspaceId ||
-    !value.conversationId ||
-    !value.agentId ||
-    !value.body ||
-    (value.latestSenderKind &&
-      !isValidMessageSender(value.latestSenderKind, value.latestSenderHandle))
-  )
-    throw new Error("invalid agent message delivery");
-  const mentionDelivery = readMentionDeliveryEnvelope(value.mentionDelivery);
-  return {
-    protocolMajor: value.protocolMajor,
-    requestId: value.requestId,
-    messageId: value.messageId,
-    deliveryId: value.deliveryId,
-    sequence: safeUint64(value.sequence, "Agent message sequence"),
-    workspaceId: value.workspaceId,
-    conversationId: value.conversationId,
-    agentId: value.agentId,
-    body: value.body,
-    method: AGENT_MESSAGE_METHOD,
-    ...(value.target ? { target: value.target } : {}),
-    ...(value.latestSenderKind
-      ? {
-          latestSenderKind: value.latestSenderKind as AgentMessageDelivery["latestSenderKind"],
-          latestSenderHandle: value.latestSenderHandle,
-          latestSenderDescription: value.latestSenderDescription,
-        }
-      : {}),
-    ...(value.mentionsAgent !== undefined ? { mentionsAgent: value.mentionsAgent } : {}),
-    ...(value.nonMemberMention ? { nonMemberMention: true } : {}),
-    ...(value.taskExecutionSessionId
-      ? { taskExecutionSessionId: value.taskExecutionSessionId }
-      : {}),
-    ...(mentionDelivery ? { mentionDelivery } : {}),
-    ...(value.memoryHint ? { memoryHint: readMemoryHint(value.memoryHint) } : {}),
-  };
-}
 export function encodeAgentMessageDeliveryAck(value: AgentMessageDeliveryAck): Uint8Array {
   assertUint(value.sequence, Number.MAX_SAFE_INTEGER, "Agent delivery ACK sequence");
   return toBinary(

@@ -18,6 +18,7 @@ import {
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
+import { attentionFlags, latestCreatedAtField } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import type {
@@ -36,6 +37,7 @@ export type MessageAttention = Readonly<{
   pendingCount: number;
   firstPendingSequence: number;
   latestSequence: number;
+  latestCreatedAtMs?: number;
   latestSenderKind?: MessageSenderKind;
   latestSenderHandle?: string;
   flags: readonly string[];
@@ -363,16 +365,11 @@ export class AgentMessageAttentionIndex {
       pendingCount: (previous?.pendingCount ?? 0) + 1,
       firstPendingSequence: previous?.firstPendingSequence ?? message.sequence,
       latestSequence: Math.max(previous?.latestSequence ?? 0, message.sequence),
+      ...latestCreatedAtField(previous, message.createdAtMs),
       ...(latestSender
         ? { latestSenderKind: latestSender.kind, latestSenderHandle: latestSender.handle }
         : {}),
-      flags: [
-        isChannelMessageTarget(target) ? "channel" : target.includes(":") ? "thread" : "dm",
-        // Reached the Agent from outside the channel: it can read the message, not reply there.
-        ...(message.nonMemberMention || previous?.flags.includes("non_member_mention")
-          ? ["non_member_mention"]
-          : []),
-      ],
+      flags: attentionFlags(target, message.nonMemberMention, previous),
     };
     byTarget.set(target, current);
     this.#attention.set(message.agentId, byTarget);
@@ -514,18 +511,10 @@ export class AgentMessageAttentionIndex {
           message.sequence,
         ),
         latestSequence: Math.max(previous?.latestSequence ?? 0, message.sequence),
+        ...latestCreatedAtField(previous, message.createdAtMs),
         latestSenderKind: message.latestSenderKind,
         latestSenderHandle: message.latestSenderHandle,
-        flags: [
-          isChannelMessageTarget(message.target)
-            ? "channel"
-            : message.target.includes(":")
-              ? "thread"
-              : "dm",
-          ...(message.nonMemberMention || previous?.flags.includes("non_member_mention")
-            ? ["non_member_mention"]
-            : []),
-        ],
+        flags: attentionFlags(message.target, message.nonMemberMention, previous),
       });
     }
     const summaryOnly = Object.entries(unreadSummary).filter(

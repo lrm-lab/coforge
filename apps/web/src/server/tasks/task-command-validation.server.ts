@@ -105,3 +105,10 @@ export function validateTaskCommand(command: TaskCommand) {
   if (command.operation !== "claim" && (command.numbers || command.messageIds))
     throw new AppError("INVALID_INPUT");
 }
+
+/** A short duplicate window catches concurrent Agent work without banning legitimate repeated work. */
+export const DUPLICATE_TASK_WINDOW_MS = 15 * 60 * 1000;
+
+export function normalizeTaskTitle(title: string): string {
+  return title.trim().replace(/\s+/g, " ").toLowerCase();
+}

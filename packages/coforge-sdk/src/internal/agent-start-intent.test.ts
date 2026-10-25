@@ -225,3 +225,29 @@ test("rejects a blank or oversized introduction prompt on encode and decode", ()
     expect(() => decodeAgentStartIntent(encoded)).toThrow("introduction prompt");
   }
 });
+
+test("recovery messages carry when the server created them, and leave it unset otherwise", () => {
+  const message = (id: string, createdAtMs?: number) => ({
+    messageId: id,
+    deliveryId: `delivery-${id}`,
+    conversationId: "conversation-1",
+    sequence: 1,
+    target: "#general",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "ada",
+    latestSenderDescription: "",
+    body: "hello",
+    ...(createdAtMs === undefined ? {} : { createdAtMs }),
+  });
+  const intent = {
+    ...base,
+    wakeMessage: message("a", 1_700_000_000_123),
+    resumeMessages: [message("b")],
+  };
+  const decoded = decodeAgentStartIntent(encodeAgentStartIntent(intent));
+  expect(decoded.wakeMessage?.createdAtMs).toBe(1_700_000_000_123);
+  expect(decoded.resumeMessages?.[0] && "createdAtMs" in decoded.resumeMessages[0]).toBe(false);
+  expect(() => encodeAgentStartIntent({ ...base, resumeMessages: [message("c", -1)] })).toThrow(
+    "invalid Agent recovery creation time",
+  );
+});

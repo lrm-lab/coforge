@@ -26,8 +26,10 @@ export function channelTarget(channelName: string): string {
  * already readable reads back unchanged.
  */
 export function encodeAgentDelivery(
-  delivery: Omit<AgentMessageDelivery, "protocolMajor" | "method"> & {
+  delivery: Omit<AgentMessageDelivery, "protocolMajor" | "method" | "createdAtMs"> & {
     mentions: readonly MessageMentionRef[];
+    /** When the message was created: every path that delivers one knows it, so none may omit it. */
+    createdAtMs: number;
   },
 ): Uint8Array {
   const { mentions, body, ...rest } = delivery;

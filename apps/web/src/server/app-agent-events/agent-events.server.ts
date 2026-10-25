@@ -28,6 +28,7 @@ export type StoredAgentEvent = {
   conversationId: string;
   messageId: string;
   sequence: number;
+  createdAtMs: number;
   deliveryId: string;
   /** The Computer to push the delivery to; none when the Agent is stopped or has no Computer. */
   computerId: string | null;
@@ -126,6 +127,7 @@ export class AgentEvents {
       messageId: stored.messageId,
       deliveryId: stored.deliveryId,
       sequence: stored.sequence,
+      createdAtMs: stored.createdAtMs,
       body,
       mentions: [],
       target: appEventTarget(sender.appKey),

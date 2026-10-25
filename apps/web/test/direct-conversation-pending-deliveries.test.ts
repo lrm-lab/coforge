@@ -25,6 +25,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
               sequence: 4,
               conversation: { channelName: null, members: [{ user: { username: "alice" } }] },
               message: {
+                createdAt: new Date(1_700_000_000_123),
                 body: "pending body",
                 sender: {
                   agentId: null,
@@ -65,6 +66,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
         latestSenderHandle: "alice",
         latestSenderDescription: "",
         body: "pending body",
+        createdAtMs: 1_700_000_000_123,
       },
     ]);
   });
@@ -83,6 +85,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
             sequence: 5,
             conversation: { channelName: "general", members: [] },
             message: {
+              createdAt: new Date(1_700_000_005_000),
               body: "@reviewer please review",
               sender: {
                 agentId: "sender-agent",
@@ -113,6 +116,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
         latestSenderHandle: "helper",
         latestSenderDescription: "",
         body: "@reviewer please review",
+        createdAtMs: 1_700_000_005_000,
       },
     ]);
   });

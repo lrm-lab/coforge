@@ -233,6 +233,8 @@ message AgentRecoveryMessage {
   // True when the Agent is not in the channel and was notified of this one message.
   optional bool non_member_mention = 10;
   MemoryHintDelivery memory_hint = 11;
+  // When the server created the message, in epoch milliseconds; unset from a server that predates it.
+  optional uint64 created_at_ms = 12;
 }
 
 message AgentUnreadSummaryEntry {
@@ -309,6 +311,9 @@ message AgentMessageDelivery {
   // envelope once the mention is drained into that launch's session, or with a terminal error.
   MentionDeliveryEnvelope mention_delivery = 18;
   MemoryHintDelivery memory_hint = 19;
+  // When the server created the message, in epoch milliseconds. Unset from a server that predates
+  // it. Not when the daemon received it: a message replayed after a reconnect differs.
+  optional uint64 created_at_ms = 20;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.

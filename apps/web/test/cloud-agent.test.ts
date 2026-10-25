@@ -84,6 +84,7 @@ describe("PublishAgentRuntimeControl", () => {
                 latestSenderHandle: "alice",
                 latestSenderDescription: "",
                 body: "recover this message",
+                createdAtMs: 1_700_000_000_000,
               },
             ],
             unreadSummary: { "@alice": 4 },

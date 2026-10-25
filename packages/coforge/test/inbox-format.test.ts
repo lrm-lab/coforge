@@ -129,6 +129,7 @@ test("lists undelivered-only conversations first and annotates listed ones", () 
           pendingCount: 1,
           flags: ["non_member_mention"],
           latestSenderHandle: "bot",
+          latestCreatedAtMs: Date.parse("2026-10-25T11:55:00Z"),
           firstPendingSequence: 9,
         },
         { target: "#new", pendingCount: 1, flags: [], firstPendingSequence: 1 },
@@ -137,7 +138,9 @@ test("lists undelivered-only conversations first and annotates listed ones", () 
     NOW,
   );
   expect(output.indexOf("#ops")).toBeLessThan(output.indexOf("#general"));
-  expect(output).toContain("#ops · 1 new, not yet delivered · mentions you · latest @bot");
+  expect(output).toContain("#ops · 1 new, not yet delivered · mentions you · latest @bot 5m ago");
+  // From a server that does not send the time, no time is shown.
+  expect(output).toContain("#new · 1 new, not yet delivered\n");
   expect(output).toContain('--target "#ops" --after 8');
   expect(output).toContain('--target "#new" --after 0');
   expect(output).toContain("#general · 1 unread · 3 new, not yet delivered");

@@ -56,6 +56,7 @@ import {
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
+import { isClosedAndUnpinned } from "./channel-closed.server";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
@@ -299,17 +300,6 @@ export async function enrollThreadReplyFollowers(
     })),
     skipDuplicates: true,
   });
-}
-
-/**
- * A channel the viewer closed and did not pin: its row leaves the list unless a newer message
- * reopens it (`arrivedSinceClosed`). A channel that is not closed, or is pinned, is always listed.
- */
-function isClosedAndUnpinned(channel: {
-  members: readonly { hiddenAt: Date | null; pins: readonly unknown[] }[];
-}): boolean {
-  const member = channel.members[0];
-  return member?.hiddenAt != null && member.pins.length === 0;
 }
 
 /** The Workspace's channels as every read here sees them: channels only (not DMs), and not hidden
@@ -2281,6 +2271,7 @@ export class PublicChannels {
         messageId: message.id,
         deliveryId: delivery.deliveryId,
         sequence: message.sequence,
+        createdAtMs: message.createdAt.getTime(),
         body: message.body,
         mentions: message.mentions,
         target: `#${channel.channelName}${message.threadRootId ? `:${message.threadRootId}` : ""}`,

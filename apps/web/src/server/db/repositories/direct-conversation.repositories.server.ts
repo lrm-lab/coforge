@@ -131,7 +131,11 @@ import {
   type AgentMessageSearchOptions,
   type AgentMessageSearchPage,
 } from "./agent-message-search.repositories.server";
-import { AGENT_RECOVERY_MESSAGE_LIMIT, type AgentRecoveryRow } from "./agent-recovery-row.server";
+import {
+  AGENT_RECOVERY_MESSAGE_LIMIT,
+  recoverySecondPass,
+  type AgentRecoveryRow,
+} from "./agent-recovery-row.server";
 
 const MESSAGE_NOT_VISIBLE = "message not found or not visible to this Agent";
 
@@ -198,6 +202,7 @@ export type AgentRecoveryContext = {
       deliveryId: string;
       conversationId: string;
       sequence: number;
+      createdAtMs: number;
       target: string;
       body: string;
       memoryHint?: import("@lrm/coforge-sdk/agent").MemoryHintDelivery;
@@ -1287,6 +1292,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         message: {
           select: {
             body: true,
+            createdAt: true,
             threadRootId: true,
             sender: MESSAGE_SENDER_SELECT,
             mentions: MESSAGE_MENTIONS_SELECT,
@@ -1336,6 +1342,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         deliveryId: delivery.deliveryId,
         conversationId: delivery.conversationId,
         sequence: delivery.sequence,
+        createdAtMs: delivery.message.createdAt.getTime(),
         target,
         latestSenderKind: sender.kind,
         latestSenderHandle: sender.handle,
@@ -1527,7 +1534,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           (ROW_NUMBER() OVER (ORDER BY "conversationId", "rootSequence", "sequence"))::int AS "globalRank"
         FROM unread u
       )
-      SELECT "id", "sequence", "body", "conversationId", "threadRootId", "senderMemberId",
+      SELECT "id", "sequence", "body", "conversationId", "threadRootId", "senderMemberId", "createdAt",
         "deliveryId", "senderAgentName", "senderAgentDescription", "senderUsername",
         "senderUserDescription", "channelName", "otherUsername", "agentPeer", "unreadCount", "globalRank",
         "nonMemberMention"
@@ -1537,35 +1544,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
     const unreadSummary: Record<string, number> = {};
     const unreadConversationIds: Record<string, string> = {};
-    // The raw statement cannot join the mention rows, so translate embedded tokens in a second
-    // pass; Agents only ever read plain `@handle` text.
-    const mentionRows = rows.length
-      ? await this.db.messageMention.findMany({
-          where: { messageId: { in: rows.map((row) => row.id) } },
-          select: { messageId: true, kind: true, actorId: true, handle: true },
-        })
-      : [];
-    const mentionsByMessage = new Map<
-      string,
-      { kind: string; actorId: string; handle: string }[]
-    >();
-    for (const mention of mentionRows) {
-      const list = mentionsByMessage.get(mention.messageId) ?? [];
-      list.push(mention);
-      mentionsByMessage.set(mention.messageId, list);
-    }
-    const hints = rows.length
-      ? await this.db.memoryHintRecord.findMany({
-          where: {
-            workspaceId,
-            targetAgentId: agentId,
-            deliveredAt: { not: null },
-            messageId: { in: rows.map((row) => row.id) },
-          },
-          select: { id: true, messageId: true },
-        })
-      : [];
-    const hintsByMessage = new Map(hints.map((hint) => [hint.messageId, hint.id]));
+    const { mentionsByMessage, hintsByMessage } = await recoverySecondPass(
+      this.db,
+      workspaceId,
+      agentId,
+      rows,
+    );
     const coordination = await readChannelCoordination(
       this.db,
       workspaceId,
@@ -1606,6 +1590,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         deliveryId: row.deliveryId,
         conversationId: row.conversationId,
         sequence: row.sequence,
+        createdAtMs: row.createdAt.getTime(),
         target,
         latestSenderKind: sender.kind,
         latestSenderHandle: sender.handle,

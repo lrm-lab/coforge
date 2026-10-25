@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { RECOVERY_CREATED_AT, recoverySecondPassStubs } from "./helpers/recovery-second-pass-stubs";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
@@ -6,8 +7,7 @@ describe("PrismaDirectConversationRepository recovery refusals", () => {
   test("rejects recovery when an unread message has no Agent delivery", async () => {
     const db = {
       agent: { findMany: async () => [] },
-      messageMention: { findMany: async () => [] },
-      memoryHintRecord: { findMany: async () => [] },
+      ...recoverySecondPassStubs,
       $queryRaw: async () => [
         {
           id: "message-1",
@@ -16,6 +16,7 @@ describe("PrismaDirectConversationRepository recovery refusals", () => {
           conversationId: "conversation-1",
           threadRootId: null,
           senderMemberId: "member-alice",
+          createdAt: RECOVERY_CREATED_AT,
           deliveryId: null,
           senderUsername: "alice",
           channelName: null,
@@ -33,8 +34,7 @@ describe("PrismaDirectConversationRepository recovery refusals", () => {
 
   test("rejects recovery for a direct conversation with no other member to target", async () => {
     const db = {
-      messageMention: { findMany: async () => [] },
-      memoryHintRecord: { findMany: async () => [] },
+      ...recoverySecondPassStubs,
       $queryRaw: async () => [
         {
           id: "message-1",
@@ -43,6 +43,7 @@ describe("PrismaDirectConversationRepository recovery refusals", () => {
           conversationId: "conversation-1",
           threadRootId: null,
           senderMemberId: null,
+          createdAt: RECOVERY_CREATED_AT,
           deliveryId: "delivery-1",
           senderUsername: null,
           channelName: null,

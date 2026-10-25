@@ -208,7 +208,7 @@ export function unreadAgentMessagesFragment(
   )`;
   return Prisma.sql`
     SELECT m."id", m."sequence", m."body", m."conversationId", m."threadRootId",
-      m."senderMemberId", COALESCE(r."sequence", 0) AS "rootSequence",
+      m."senderMemberId", m."createdAt", COALESCE(r."sequence", 0) AS "rootSequence",
       d."deliveryId", (am."id" IS NULL) AS "nonMemberMention",
       sa."name" AS "senderAgentName", sa."description" AS "senderAgentDescription",
       su."username" AS "senderUsername", su."description" AS "senderUserDescription",
@@ -223,7 +223,7 @@ export function unreadAgentMessagesFragment(
       COALESCE(c."directKey" ~ '^agent:[0-9a-f-]+[|]agent:[0-9a-f-]+$', FALSE) AS "agentPeer"
     FROM (
       SELECT cm."id", cm."sequence", cm."body", cm."conversationId", cm."threadRootId",
-        cm."senderMemberId"
+        cm."senderMemberId", cm."createdAt"
       FROM "conversation_members" cam
       JOIN "conversations" cc ON cc."id" = cam."conversationId" AND cc."channelName" IS NOT NULL
         AND cc."hiddenFromWorkspaceAt" IS NULL
@@ -242,7 +242,7 @@ export function unreadAgentMessagesFragment(
         AND cam."leftAt" IS NULL AND ${notReadAsNonMember}
       UNION ALL
       SELECT cm."id", cm."sequence", cm."body", cm."conversationId", cm."threadRootId",
-        cm."senderMemberId"
+        cm."senderMemberId", cm."createdAt"
       FROM "conversation_members" cam
       JOIN "conversations" cc ON cc."id" = cam."conversationId" AND cc."channelName" IS NOT NULL
         AND cc."hiddenFromWorkspaceAt" IS NULL
@@ -258,7 +258,7 @@ export function unreadAgentMessagesFragment(
         AND ${notReadAsNonMember}
       UNION ALL
       SELECT dm."id", dm."sequence", dm."body", dm."conversationId", dm."threadRootId",
-        dm."senderMemberId"
+        dm."senderMemberId", dm."createdAt"
       FROM "conversation_members" dam
       JOIN "conversations" dc ON dc."id" = dam."conversationId" AND dc."channelName" IS NULL
       JOIN "messages" dm ON dm."conversationId" = dam."conversationId"
@@ -267,7 +267,7 @@ export function unreadAgentMessagesFragment(
         AND dam."leftAt" IS NULL
       UNION ALL
       SELECT dm."id", dm."sequence", dm."body", dm."conversationId", dm."threadRootId",
-        dm."senderMemberId"
+        dm."senderMemberId", dm."createdAt"
       FROM "conversation_members" dam
       JOIN "conversations" dc ON dc."id" = dam."conversationId" AND dc."channelName" IS NULL
       JOIN "messages" dm ON dm."conversationId" = dam."conversationId"
@@ -280,7 +280,7 @@ export function unreadAgentMessagesFragment(
       -- A channel message the Agent was notified of without being a member: unread until it is
       -- read once. A member reads it through its channel branch above instead.
       SELECT nm."id", nm."sequence", nm."body", nm."conversationId", nm."threadRootId",
-        nm."senderMemberId"
+        nm."senderMemberId", nm."createdAt"
       FROM "pending_mention_actions" pma
       JOIN "messages" nm ON nm."id" = pma."messageId"
       JOIN "conversations" nc ON nc."id" = nm."conversationId" AND nc."hiddenFromWorkspaceAt" IS NULL

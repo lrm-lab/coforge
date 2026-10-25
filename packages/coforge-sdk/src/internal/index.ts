@@ -281,6 +281,7 @@ export type WorkspaceQueryRequest = {
 
 export * from "./runtime-provider";
 import type { RuntimeProvider } from "./runtime-provider";
+import type { AgentMessageDelivery } from "./agent-message-delivery";
 export type AgentRuntimeProviderConfig =
   | { kind: "default" }
   | { kind: "coforge"; providerId: string };
@@ -569,35 +570,12 @@ export type AgentRecoveryMessage = {
   body: string;
   /** True when the Agent is not in the channel and was notified of this one message. */
   nonMemberMention?: boolean;
-};
-export type AgentMessageDelivery = {
-  memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
-  protocolMajor: number;
-  requestId: string;
-  messageId: string;
-  deliveryId: string;
-  sequence: number;
-  workspaceId: string;
-  conversationId: string;
-  agentId: string;
-  body: string;
-  method: typeof AGENT_MESSAGE_METHOD;
-  target?: string;
-  latestSenderKind?: import("./message-sender").MessageSenderKind;
-  latestSenderHandle?: string;
-  latestSenderDescription?: string;
-  /** True when this delivery personally @mentioned the recipient Agent. */
-  mentionsAgent?: boolean;
-  /** True when the recipient Agent was notified of this message without being a channel member. */
-  nonMemberMention?: boolean;
-  /** Present when this delivery starts an isolated Task execution session. */
-  taskExecutionSessionId?: string;
-  /** Present on a tracked @mention delivery; an ACK echoes it once the mention is drained. */
-  mentionDelivery?: import("./mention-delivery").MentionDeliveryEnvelope;
+  /** When the server created the message, in epoch milliseconds; unset from an older server. */
+  createdAtMs?: number;
 };
 export type AgentMessageDeliveryAck = Omit<
   AgentMessageDelivery,
-  "body" | "conversationId" | "method" | "requestId"
+  "body" | "conversationId" | "createdAtMs" | "method" | "requestId"
 > & { method: typeof AGENT_MESSAGE_ACK_METHOD; requestId: string };
 /** Versioned daemon-to-server rejection of a delivery: never an ACK, so the delivery stays unread. */
 export type AgentMessageDeliveryRejection = Omit<AgentMessageDeliveryAck, "method"> & {
@@ -844,8 +822,6 @@ export {
   decodeAgentActivityProbe,
   encodeAgentInboxPurge,
   decodeAgentInboxPurge,
-  encodeAgentMessageDelivery,
-  decodeAgentMessageDelivery,
   encodeAgentMessageDeliveryAck,
   decodeAgentMessageDeliveryAck,
   encodeAgentActivity,
@@ -854,6 +830,7 @@ export {
   decodeAgentStatus,
   validateAgentMessageRequest,
 } from "./codec";
+export * from "./agent-message-delivery";
 export * from "./agent-skills";
 export * from "./agent-workspace-files";
 export * from "./agent-control";

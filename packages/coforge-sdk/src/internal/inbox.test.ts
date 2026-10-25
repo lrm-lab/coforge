@@ -57,3 +57,30 @@ test("round trips a transient System Cleaner item", () => {
   };
   expect(decodeInboxResponse(encodeInboxResponse(response))).toEqual(response);
 });
+
+test("round trips when the newest pending message was created, and leaves it unset otherwise", () => {
+  const entry = (latestCreatedAtMs?: number) => ({
+    kind: "message_target" as const,
+    messageTarget: {
+      target: "#general",
+      pendingCount: 2,
+      firstPendingSequence: 3,
+      latestSequence: 4,
+      ...(latestCreatedAtMs === undefined ? {} : { latestCreatedAtMs }),
+      flags: ["channel"],
+    },
+  });
+  const response = {
+    idempotencyKey: "r",
+    accepted: true,
+    entries: [entry(1_700_000_000_123), entry()],
+  };
+  const decoded = decodeInboxResponse(encodeInboxResponse(response));
+  expect(decoded).toEqual(response);
+  expect(
+    "latestCreatedAtMs" in (decoded.entries[1] as ReturnType<typeof entry>).messageTarget,
+  ).toBe(false);
+  expect(() => encodeInboxResponse({ ...response, entries: [entry(-1)] })).toThrow(
+    "invalid message attention time",
+  );
+});

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { canJoinChannel } from "./mention-target-availability.server";
 import { humanLabel } from "#src/lib/human-label";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -167,20 +168,6 @@ const PENDING_MENTION_ACTION_SELECT = {
     select: { displayName: true, avatarMascot: true, visibility: true, deletedAt: true },
   },
 } satisfies Prisma.PendingMentionActionSelect;
-
-/**
- * Whether a pending mention's target can still become a channel member: a human still in the
- * Workspace, or an Agent that is public and not deleted.
- */
-function canJoinChannel(row: {
-  targetAgent: { visibility: string; deletedAt: Date | null } | null;
-  /** The target human's memberships of the mention's own Workspace. */
-  targetUser: { memberships: readonly unknown[] } | null;
-}): boolean {
-  if (row.targetAgent)
-    return row.targetAgent.visibility === AGENT_VISIBILITY.PUBLIC && !row.targetAgent.deletedAt;
-  return Boolean(row.targetUser?.memberships.length);
-}
 
 type PendingMentionActionRow = Prisma.PendingMentionActionGetPayload<{
   select: typeof PENDING_MENTION_ACTION_SELECT;
@@ -604,6 +591,7 @@ export async function publishNonMemberDeliveries(
           id: true,
           conversationId: true,
           threadRootId: true,
+          createdAt: true,
           body: true,
           mentions: MESSAGE_MENTIONS_SELECT,
           conversation: { select: { channelName: true } },
@@ -635,6 +623,7 @@ export async function publishNonMemberDeliveries(
         messageId: row.message.id,
         deliveryId: row.deliveryId,
         sequence: row.sequence,
+        createdAtMs: row.message.createdAt.getTime(),
         body: row.message.body,
         mentions: row.message.mentions,
         target: `${channelTarget(row.message.conversation.channelName ?? "")}${row.message.threadRootId ? `:${row.message.threadRootId}` : ""}`,

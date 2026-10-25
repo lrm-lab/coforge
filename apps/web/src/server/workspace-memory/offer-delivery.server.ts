@@ -58,6 +58,7 @@ export function createPrismaMemoryOfferPublisher(db: PrismaClient): MemoryOfferP
           conversationId: input.conversationId,
           messageId: saved.id,
           sequence: saved.sequence,
+          createdAtMs: saved.createdAt.getTime(),
           body: saved.body,
           mentions: saved.mentions ?? [],
           target: saved.target,

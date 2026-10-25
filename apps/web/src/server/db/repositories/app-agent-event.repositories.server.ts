@@ -84,6 +84,7 @@ export class PrismaAgentEventStore implements AgentEventStore {
           conversationId,
           messageId: message.id,
           sequence,
+          createdAtMs: message.createdAt.getTime(),
           deliveryId: message.deliveries[0]!.deliveryId,
           computerId: agent.stoppedAt ? null : agent.computerId,
         };

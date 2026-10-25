@@ -6,9 +6,12 @@ import {
   AppInboxItemSchema,
   MessageAttentionSummarySchema,
 } from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
-import { assertValidMessageSender } from "./message-sender";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
-import type { MessageAttentionSummary } from "./local-daemon";
+import {
+  decodeMessageAttentionSummary,
+  encodeMessageAttentionSummary,
+  type MessageAttentionSummary,
+} from "./local-attention-summary";
 
 export type LocalInboxRequest = {
   idempotencyKey: string;
@@ -42,13 +45,6 @@ export function decodeLocalInboxRequest(bytes: Uint8Array): LocalInboxRequest {
   return fromWireRequestId({ requestId, context, operation: "check" as const });
 }
 export function encodeInboxResponse(value: InboxResponse): Uint8Array {
-  for (const entry of value.entries)
-    if (entry.kind === "message_target" && entry.messageTarget.latestSenderKind !== undefined)
-      assertValidMessageSender(
-        entry.messageTarget.latestSenderKind,
-        entry.messageTarget.latestSenderHandle ?? "",
-        "Inbox message-target",
-      );
   return toBinary(
     InboxResponseSchema,
     create(InboxResponseSchema, {
@@ -60,11 +56,10 @@ export function encodeInboxResponse(value: InboxResponse): Uint8Array {
             ? {
                 value: {
                   case: "messageTarget",
-                  value: create(MessageAttentionSummarySchema, {
-                    ...entry.messageTarget,
-                    firstPendingSequence: BigInt(entry.messageTarget.firstPendingSequence),
-                    latestSequence: BigInt(entry.messageTarget.latestSequence),
-                  }),
+                  value: create(
+                    MessageAttentionSummarySchema,
+                    encodeMessageAttentionSummary(entry.messageTarget),
+                  ),
                 },
               }
             : {
@@ -92,28 +87,9 @@ export function decodeInboxResponse(bytes: Uint8Array): InboxResponse {
     accepted: value.accepted,
     entries: value.entries.map((entry): InboxEntry => {
       if (entry.value.case === "messageTarget") {
-        const { latestSenderKind, latestSenderHandle } = entry.value.value;
-        if (latestSenderKind !== undefined)
-          assertValidMessageSender(
-            latestSenderKind,
-            latestSenderHandle ?? "",
-            "Inbox message-target",
-          );
         return {
           kind: "message_target",
-          messageTarget: {
-            target: entry.value.value.target,
-            pendingCount: entry.value.value.pendingCount,
-            firstPendingSequence: Number(entry.value.value.firstPendingSequence),
-            latestSequence: Number(entry.value.value.latestSequence),
-            ...(latestSenderKind
-              ? {
-                  latestSenderKind: latestSenderKind as MessageAttentionSummary["latestSenderKind"],
-                  latestSenderHandle,
-                }
-              : {}),
-            flags: entry.value.value.flags,
-          },
+          messageTarget: decodeMessageAttentionSummary(entry.value.value),
         };
       }
       if (entry.value.case !== "app") throw new Error("invalid Inbox entry");

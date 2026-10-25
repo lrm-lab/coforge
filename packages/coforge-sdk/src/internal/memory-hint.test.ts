@@ -1,10 +1,6 @@
 import { expect, test } from "bun:test";
-import {
-  encodeAgentMessageDelivery,
-  decodeAgentMessageDelivery,
-  encodeAgentStartIntent,
-  decodeAgentStartIntent,
-} from "./codec";
+import { encodeAgentMessageDelivery, decodeAgentMessageDelivery } from "./agent-message-delivery";
+import { encodeAgentStartIntent, decodeAgentStartIntent } from "./codec";
 import { encodeAgentMessageResponse, decodeAgentMessageResponse } from "./local-daemon";
 import { AGENT_MESSAGE_METHOD, AGENT_START_MESSAGE_TYPE, WORKSPACE_PROTOCOL_MAJOR } from "./index";
 
