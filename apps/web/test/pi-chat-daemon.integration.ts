@@ -8,10 +8,8 @@ import { RedisClient } from "bun";
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "@lrm/coforge-daemon/src/connection/daemon-connection";
+import { DaemonConnection } from "@lrm/coforge-daemon/src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "@lrm/coforge-daemon/src/connection/centrifuge-workspace-client";
 import { PiChatRelay } from "@lrm/coforge-daemon/src/pi-chat/relay";
 import {
   decodePiChatFrame,

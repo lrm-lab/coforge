@@ -1,10 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { agentApiRoutes, type AgentAppRequest } from "@lrm/coforge-sdk/agent";
 import { startAgentProxy } from "#src/agent-proxy";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 
 /** `coforge app list|token` through the daemon: the local proxy admits the two routes and hands
  * them to the runtime, and the connection forwards each to the cloud with the Agent's credentials,

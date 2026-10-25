@@ -1,10 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { agentApiRoutes, type AgentAppRequest } from "@lrm/coforge-sdk/agent";
 import { startAgentProxy } from "#src/agent-proxy";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 
 /** `coforge app status|list --owned|rotate-secret` through the daemon: the local proxy admits one
  * operation route, and the connection forwards each operation to its cloud route with the Agent's

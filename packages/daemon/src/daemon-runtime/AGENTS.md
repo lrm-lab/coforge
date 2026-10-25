@@ -15,7 +15,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - A launch this runtime initiates itself follows the launch-identity rules in
   [`agent-runtime/AGENTS.md`](../agent-runtime/AGENTS.md).
 - `code-agent-inventory-sync.ts` owns inventory/catalog reports, liveness checks and
-  refresh serialization. `runtime.ts` decides when to report; Agent traffic never waits.
+  refresh serialization. `runtime.ts` decides when to report; Agent traffic never waits. Each inventory also feeds `runtime-auth-reporter.ts`, which reports login status, never on a timer (inventory reports, login-capable provider changes, `refreshRuntimeAuth()`, `reauth` scans); a refused report is a debug log.
 - `session-invalidate-activity.ts` narrates the cold-start Activity after a session invalidate. `runtime.ts` only publishes it.
 - A start that fails stops its transport before replacing it, so a connection
   that came up never keeps reporting the Computer online for a Workspace that

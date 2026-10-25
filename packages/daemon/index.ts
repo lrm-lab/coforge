@@ -15,10 +15,7 @@ import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-invent
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
-import {
-  DaemonConnection,
-  defaultCentrifugeWorkspaceClientFactory,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
 import { COFORGE_DAEMON_SERVER_URL, daemonConnectionEndpoint } from "#src/connection/built-server";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
@@ -171,11 +168,11 @@ export {
 export type { AgentMessageHttpClient } from "#src/connection/agent-http-clients";
 export {
   DaemonConnection,
-  defaultCentrifugeWorkspaceClientFactory,
   type DaemonConnectionClient,
   type DaemonConnectionConfig,
   type DaemonConnectionClientFactory,
 } from "#src/connection/daemon-connection";
+export { defaultCentrifugeWorkspaceClientFactory } from "#src/connection/centrifuge-workspace-client";
 export { COFORGE_DAEMON_SERVER_URL, daemonConnectionEndpoint } from "#src/connection/built-server";
 
 const DAEMON_CATEGORY = ["coforge", "daemon"];
@@ -315,11 +312,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           createCodeAgentProvider,
           credentials,
           {
-            create: () =>
-              new DaemonConnection(
-                daemonConnectionEndpoint(COFORGE_DAEMON_SERVER_URL),
-                defaultCentrifugeWorkspaceClientFactory,
-              ),
+            create: () => new DaemonConnection(daemonConnectionEndpoint(COFORGE_DAEMON_SERVER_URL)),
           },
           agentProxy,
           defaultCodeAgentDiscovery(daemonStateDirectory),

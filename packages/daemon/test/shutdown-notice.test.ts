@@ -10,10 +10,8 @@ import {
   type DaemonRuntimeReadyRequest,
   type DaemonRuntimeShutdown,
 } from "@lrm/coforge-sdk/internal";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { SHUTDOWN_HOLD_REASON_WINDOW_MS } from "#src/daemon-runtime/shutdown-reason";

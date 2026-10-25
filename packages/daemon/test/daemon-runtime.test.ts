@@ -48,10 +48,8 @@ import type {
   AgentSendReconciliationRequest,
 } from "#src/connection/agent-http-clients";
 import type { AgentSendReconciliationResponse } from "@lrm/coforge-sdk/agent";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { startAgentProxy, type AgentProxy } from "#src/agent-proxy";
 import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
@@ -10806,6 +10804,22 @@ function connectedClient(): CentrifugeWorkspaceClient {
   };
 }
 
+/** A Pi runtime connected over `client`. */
+function runtimeOver(
+  credentials: InMemoryDaemonCredentialStore,
+  client: CentrifugeWorkspaceClient,
+) {
+  return new DaemonRuntime(
+    connection,
+    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
+    credentials,
+    { create: () => new DaemonConnection("wss://cloud.example", () => client) },
+    undefined,
+    emptyCodeAgentDiscovery,
+    workspaceRoot,
+  );
+}
+
 function retryingRuntime(token: string) {
   const attempted = Promise.withResolvers<void>();
   let connectErrors: ((error: unknown) => void) | undefined;
@@ -10821,17 +10835,8 @@ function retryingRuntime(token: string) {
     async rpc() {},
   };
   const credentials = new InMemoryDaemonCredentialStore();
-  const runtime = new DaemonRuntime(
-    connection,
-    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
-    credentials,
-    { create: () => new DaemonConnection("wss://cloud.example", () => retryingClient) },
-    undefined,
-    emptyCodeAgentDiscovery,
-    workspaceRoot,
-  );
   return {
-    runtime,
+    runtime: runtimeOver(credentials, retryingClient),
     attempted: attempted.promise,
     saveCredential: () => credentials.save(connection.workspaceId, connection.computerId, token),
   };
@@ -10870,15 +10875,7 @@ test("stopping a runtime whose first ready keeps failing ends its start", async 
       throw Object.assign(new Error("daemon ready failed"), { code: 503 });
     },
   };
-  const runtime = new DaemonRuntime(
-    connection,
-    () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
-    credentials,
-    { create: () => new DaemonConnection("wss://cloud.example", () => client) },
-    undefined,
-    emptyCodeAgentDiscovery,
-    workspaceRoot,
-  );
+  const runtime = runtimeOver(credentials, client);
   const start = runtime.start(connection).catch((error: unknown) => error);
   await readyAttempted.promise;
 

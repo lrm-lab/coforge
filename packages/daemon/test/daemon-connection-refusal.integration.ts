@@ -3,10 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DAEMON_CONNECT_REJECTION_CODES } from "@lrm/coforge-sdk/internal";
-import {
-  DaemonConnection,
-  defaultCentrifugeWorkspaceClientFactory,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import { defaultCentrifugeWorkspaceClientFactory } from "#src/connection/centrifuge-workspace-client";
 import { DaemonConnectionRefusedError } from "#src/connection/daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 

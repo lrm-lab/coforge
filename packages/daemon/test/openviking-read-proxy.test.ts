@@ -14,10 +14,8 @@ import {
   forwardOpenVikingRead,
   OpenVikingReadProxyError,
 } from "../src/openviking-read-proxy";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "../src/connection/daemon-connection";
+import { DaemonConnection } from "../src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "../src/connection/centrifuge-workspace-client";
 
 const proxies: Array<{ close(): void }> = [];
 const servers: Array<{ stop(close?: boolean): void }> = [];

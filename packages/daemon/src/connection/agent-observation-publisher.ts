@@ -1,4 +1,4 @@
-import type { CentrifugeWorkspaceClient } from "./daemon-connection";
+import type { CentrifugeWorkspaceClient } from "./centrifuge-workspace-client";
 import type { AgentContextUsage, AgentServiceTier } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { encodeAgentContextUsage, encodeAgentServiceTier } from "@lrm/coforge-sdk/internal";

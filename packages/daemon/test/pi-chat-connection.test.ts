@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 const config = { workspaceId: crypto.randomUUID(), computerId: crypto.randomUUID() };
 function fakeClient() {
   let connected = () => {};

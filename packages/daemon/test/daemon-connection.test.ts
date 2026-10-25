@@ -7,10 +7,8 @@ import {
   defaultAgentChannelHttpClient,
   type AgentMessageTransportResponse,
 } from "#src/connection/agent-http-clients";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 import { DaemonConnectionRefusedError } from "#src/connection/daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import { HELD_NOTICE_CAP } from "#src/connection/held-publications";
@@ -91,13 +89,19 @@ function fakeClient() {
   };
 }
 
-test("sends delivery ACK through the RPC method, not a publication", async () => {
-  const fake = fakeClient();
+/** Answers every RPC on the fake with an empty payload and records it. */
+function recordRpc(fake: ReturnType<typeof fakeClient>) {
   const calls: { method: string; data: Uint8Array }[] = [];
   fake.client.rpc = async (method, data) => {
     calls.push({ method, data });
     return new Uint8Array();
   };
+  return calls;
+}
+
+test("sends delivery ACK through the RPC method, not a publication", async () => {
+  const fake = fakeClient();
+  const calls = recordRpc(fake);
   let published = false;
   fake.client.publish = async () => {
     published = true;
@@ -126,11 +130,7 @@ test("sends delivery ACK through the RPC method, not a publication", async () =>
 
 test("sends a delivery rejection through its own RPC method, never as an ACK", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
   await transport.start("secret", config);
   const rejection = {
@@ -222,11 +222,7 @@ test("publishes Agent activity best effort on its restricted channel", async () 
 
 test("sends Agent status transitions through the status RPC", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
   await transport.start("secret", config);
   transport.sendAgentStatus({
@@ -261,11 +257,7 @@ test("sends Agent status transitions through the status RPC", async () => {
 
 test("refreshes Computer online status while the connection remains active", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   let refresh!: () => void;
   const transport = new DaemonConnection("wss://cloud.example", () => fake.client, undefined, {
     schedule: () => 1,
@@ -430,11 +422,7 @@ function sessionReport(
 
 test("sends the session invalidate RPC (not a publication) when connected", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   let published = false;
   fake.client.publish = async () => {
     published = true;
@@ -457,11 +445,7 @@ test("sends the session invalidate RPC (not a publication) when connected", asyn
 
 test("buffers the session invalidate while disconnected and flushes once on reconnect", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
   await transport.start("secret", config);
   fake.disconnect();
@@ -703,11 +687,7 @@ function contextUsage(
 
 test("sends the context usage RPC (not a publication) when connected", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   let published = false;
   fake.client.publish = async () => {
     published = true;
@@ -730,11 +710,7 @@ test("sends the context usage RPC (not a publication) when connected", async () 
 
 test("buffers the context usage while disconnected and flushes once on reconnect", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
   await transport.start("secret", config);
   fake.disconnect();
@@ -2225,11 +2201,7 @@ test("routes an agent:context_scan publication to its slot and answers through t
       status: "no_session",
     });
   });
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   await transport.start("secret", config);
 
   const request = {
@@ -4409,11 +4381,7 @@ test("reconnect ready retries back off exponentially up to a minute", async () =
 
 test("reports one Computer upgrade result through its RPC method and replays it at most once", async () => {
   const fake = fakeClient();
-  const calls: { method: string; data: Uint8Array }[] = [];
-  fake.client.rpc = async (method, data) => {
-    calls.push({ method, data });
-    return new Uint8Array();
-  };
+  const calls = recordRpc(fake);
   const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
   await transport.start("secret", config);
   const result = {

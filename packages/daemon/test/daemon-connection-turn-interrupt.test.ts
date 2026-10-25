@@ -6,10 +6,8 @@ import {
   encodeAgentTurnInterruptIntent,
   type AgentTurnInterruptIntent,
 } from "@lrm/coforge-sdk/internal";
-import {
-  DaemonConnection,
-  type CentrifugeWorkspaceClient,
-} from "#src/connection/daemon-connection";
+import { DaemonConnection } from "#src/connection/daemon-connection";
+import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 
 const config = { workspaceId: "workspace-1", computerId: "computer-1" };
 

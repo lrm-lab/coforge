@@ -204,6 +204,8 @@ import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
+import { RuntimeAuthReporter } from "./runtime-auth-reporter";
+import { subscribeProviderScans } from "./provider-scan-handlers";
 import {
   UpgradeResultReporter,
   type RecoveredUpgradeResult,
@@ -499,6 +501,7 @@ export class DaemonRuntime {
     review: this.#trackPhase("review"),
   };
   readonly #codeAgentInventory: CodeAgentInventorySync;
+  readonly #runtimeAuth: RuntimeAuthReporter;
   readonly #upgradeResults: UpgradeResultReporter;
   #piChat?: PiChatRelay;
   readonly #workspaceQueries = new AgentWorkspaceQueries(
@@ -567,10 +570,18 @@ export class DaemonRuntime {
     this.#credentials = credentials;
     this.#transportFactory = transportFactory;
     this.#agentProxy = agentProxy;
+    const owner = { workspaceId: connection.workspaceId, computerId: connection.computerId };
+    this.#runtimeAuth = new RuntimeAuthReporter({
+      owner,
+      workingDirectory: connection.workspaceRoot,
+      transport: () => this.#transport,
+      isStopping: () => this.#stopping,
+    });
     this.#codeAgentInventory = new CodeAgentInventorySync(
       codeAgentDiscovery,
-      { workspaceId: connection.workspaceId, computerId: connection.computerId },
+      owner,
       (transport) => !this.#stopping && this.#transport === transport,
+      this.#runtimeAuth,
     );
     this.#transport = transportFactory.create(connection);
     const recovered = { results: lifecycle.recoveredUpgradeResults ?? [], pending: false };
@@ -831,6 +842,11 @@ export class DaemonRuntime {
     if (!isAgentApiKey(agentApiKey))
       throw new AgentPreflightError("Agent API key is missing", "AGENT_API_KEY_MISSING");
     return agentId;
+  }
+
+  /** Reads and reports every runtime's login status again, e.g. after a login or logout. */
+  refreshRuntimeAuth(): Promise<void> {
+    return this.#runtimeAuth.refresh();
   }
 
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
@@ -1107,32 +1123,15 @@ export class DaemonRuntime {
             await transport.sendWorkspaceDeleteResult?.({ ...request, ...result });
         }),
       );
-      this.#subscribe(
-        this.#transport.onUsageScan?.(async (request) => {
-          if (request.computerId !== connection.computerId) return;
-          const result = await this.scanUsage(request.provider);
-          await this.#transport.sendUsageScanResult?.({
-            ...result,
-            requestId: request.requestId,
-            workspaceId: connection.workspaceId,
-            computerId: connection.computerId,
-            provider: request.provider,
-          });
-        }),
-      );
-      this.#subscribe(
-        this.#transport.onProviderModelRefresh?.(async (request) => {
-          if (this.#stopping || request.computerId !== connection.computerId) return;
-          await this.#codeAgentInventory.refreshModels(request, transport);
-        }),
-      );
-      this.#subscribe(
-        this.#transport.onAgentContextScan?.(async (request) => {
-          if (request.computerId !== connection.computerId) return;
-          const result = await this.scanAgentContext(request);
-          await this.#transport.sendAgentContextScanResult?.(result);
-        }),
-      );
+      for (const unsubscribe of subscribeProviderScans(this.#transport, {
+        connection,
+        runtime: this,
+        currentTransport: () => this.#transport,
+        isStopping: () => this.#stopping,
+        runtimeAuth: this.#runtimeAuth,
+        inventory: this.#codeAgentInventory,
+      }))
+        this.#subscribe(unsubscribe);
       // Register publication listeners before the ready RPC. The server may
       // recover persisted Agents immediately as part of that RPC.
       this.#subscribe(

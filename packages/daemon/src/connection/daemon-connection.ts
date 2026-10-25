@@ -1,4 +1,9 @@
-import { Centrifuge, disconnectedCodes, type ErrorContext } from "centrifuge/build/protobuf";
+import { disconnectedCodes } from "centrifuge/build/protobuf";
+import {
+  type CentrifugeWorkspaceClient,
+  type CentrifugeWorkspaceClientFactory,
+  defaultCentrifugeWorkspaceClientFactory,
+} from "./centrifuge-workspace-client";
 import type { PiChatRequest, PiChatFrame } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import {
   encodeAgentReplyIntent,
@@ -111,6 +116,9 @@ import {
   type AgentMentionDeliveryTerminalError,
   encodeDaemonRuntimeReadyRequest,
   encodeDaemonRuntimeCodeAgentsUpdateRequest,
+  encodeRuntimeAuthStatusReport,
+  RUNTIME_AUTH_STATUS_REPORT_METHOD,
+  type RuntimeAuthStatusReport,
   DAEMON_RUNTIME_READY_METHOD,
   DAEMON_RUNTIME_SHUTDOWN_METHOD,
   encodeDaemonRuntimeShutdown,
@@ -343,6 +351,7 @@ export interface DaemonConnectionClient {
    * Rejects only on `stop` or `signal` aborting. */
   ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void>;
   updateCodeAgents?(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void>;
+  reportRuntimeAuthStatus?(report: RuntimeAuthStatusReport): Promise<void>;
   onSkillsList?(callback: (request: AgentSkillsListRequest) => Promise<void>): () => void;
   onPiChatRequest?(callback: (request: PiChatRequest) => Promise<void>): () => void;
   sendPiChatFrame?(frame: PiChatFrame): Promise<void>;
@@ -476,38 +485,6 @@ export interface DaemonConnectionClient {
 export interface DaemonConnectionClientFactory {
   create(config: DaemonConnectionConfig): DaemonConnectionClient;
 }
-
-export interface CentrifugeWorkspaceClient {
-  on(event: "connected", callback: () => void): void;
-  on(event: "disconnected", callback: (context?: { code: number; reason: string }) => void): void;
-  /** `connect` and `transport` errors are failed connect attempts the client retries itself;
-   * other types are not about connecting. */
-  on(event: "error", callback: (context: ErrorContext) => void): void;
-  on(
-    event: "publication",
-    callback: (publication: { channel: string; data: Uint8Array }) => void,
-  ): void;
-  connect(): void;
-  disconnect(): void;
-  rpc(method: string, data: Uint8Array): Promise<unknown>;
-  publish?(channel: string, data: Uint8Array): Promise<unknown>;
-}
-
-export type CentrifugeWorkspaceClientFactory = (
-  endpoint: string,
-  token: string,
-  data?: Uint8Array,
-) => CentrifugeWorkspaceClient;
-
-export const defaultCentrifugeWorkspaceClientFactory: CentrifugeWorkspaceClientFactory = (
-  endpoint,
-  _token,
-  data,
-) =>
-  new Centrifuge(endpoint, {
-    data,
-    websocket: globalThis.WebSocket,
-  }) as unknown as CentrifugeWorkspaceClient;
 
 /** A migration lease as it arrived: `deadline` is its expiry in this Computer's clock. */
 export type ReceivedAgentMigrationLease = AgentMigrationLease & { deadline: number };
@@ -2228,6 +2205,10 @@ export class DaemonConnection implements DaemonConnectionClient {
       DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
       encodeDaemonRuntimeCodeAgentsUpdateRequest(request),
     );
+  }
+
+  async reportRuntimeAuthStatus(report: RuntimeAuthStatusReport): Promise<void> {
+    await this.#rpc(RUNTIME_AUTH_STATUS_REPORT_METHOD, encodeRuntimeAuthStatusReport(report));
   }
 
   async reportAgentSession(report: AgentSessionReport): Promise<void> {

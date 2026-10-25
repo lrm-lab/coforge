@@ -13,6 +13,7 @@ import {
 } from "#src/code-agent/runtime-inventory";
 import { hostCodeAgentProbe } from "#src/code-agent/runtime-probe";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 // Deliberately the runtime's category: these records predate this module and keep their routing.
@@ -57,6 +58,8 @@ export class CodeAgentInventorySync {
   readonly #owner: { workspaceId: string; computerId: string };
   /** Whether `transport` is still the runtime's live transport and the runtime is not stopping. */
   readonly #isLive: (transport: DaemonConnectionClient) => boolean;
+  /** Told which runtimes each report found, so login status follows the inventory. */
+  readonly #runtimeAuth: RuntimeAuthReporter | undefined;
   /** Serializes on-demand model-catalog refreshes (one CLI-spawning discovery at a time). */
   #modelRefreshChain: Promise<void> = Promise.resolve();
 
@@ -64,7 +67,9 @@ export class CodeAgentInventorySync {
     discovery: CodeAgentDiscovery,
     owner: { workspaceId: string; computerId: string },
     isLive: (transport: DaemonConnectionClient) => boolean,
+    runtimeAuth?: RuntimeAuthReporter,
   ) {
+    this.#runtimeAuth = runtimeAuth;
     this.#discovery = discovery;
     this.#owner = owner;
     this.#isLive = isLive;
@@ -91,6 +96,7 @@ export class CodeAgentInventorySync {
         catalog_count: catalogs.length,
         outcome: "ok",
       });
+      void this.#runtimeAuth?.inventoryReported(runtimes);
       return { runtimes, needsCatalogRefresh: needsRefresh };
     } catch (error) {
       logger.warning("Code Agent inventory report failed", {
@@ -159,6 +165,7 @@ export class CodeAgentInventorySync {
       const catalogs = await this.#discovery.catalogs(runtimes, { force: true });
       if (!this.#isLive(transport)) return;
       await this.#sendInventory(transport, requestId, runtimes, catalogs);
+      this.#runtimeAuth?.inventoryObserved(runtimes);
       logger.info("Code Agent catalog refresh completed", {
         event: "code_agent_catalog:refresh_completed",
         ...scope,
