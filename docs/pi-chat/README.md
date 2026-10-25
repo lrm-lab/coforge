@@ -168,11 +168,11 @@ UI acceptance and the manual checklist are in [Validation](validation.md).
 
 ## Upstream contracts
 
-Pi Chat reuses Pi SDK 1.3.0 (MIT) and Bun 1.4.3 in the existing Computer binary.
+Pi Chat reuses Pi SDK 1.4.0 (MIT) and Bun 1.4.3 in the existing Computer binary.
 Memory and storage grow with active chats within the bounds above. Existing WSS and
 Activity contracts remain; Pi Chat has its own RPC and `pi-chat:v1` / `pi-chat-controls:v1` capabilities.
 
-- [Pi SDK 1.3.0: sessions, streaming, cancellation and Bun support](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/sdk.md)
-- [Pi session format](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/session-format.md)
+- [Pi SDK 1.4.0: sessions, streaming, cancellation and Bun support](https://github.com/earendil-works/pi/blob/v1.4.0/packages/coding-agent/docs/sdk.md)
+- [Pi session format](https://github.com/earendil-works/pi/blob/v1.4.0/packages/coding-agent/docs/session-format.md)
 - [Bun subprocess API](https://bun.com/docs/runtime/child-process)
 - [Centrifugo Server API and private publication](https://centrifugal.dev/docs/server/server_api)

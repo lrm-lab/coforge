@@ -30,8 +30,8 @@
     "check:models": "bun scripts/generate-coforge-models.ts --check"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "1.3.0",
-    "@earendil-works/pi-coding-agent": "1.3.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.4.0",
     "@lrm/coforge-sdk": "workspace:*",
     "typebox": "1.3.7",
     "zod": "4.5.4"
