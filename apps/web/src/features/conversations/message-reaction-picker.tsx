@@ -7,12 +7,13 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 
 /**
- * One-tap emojis for message reactions. Kept to single emojis without whitespace so
+ * One-tap emojis for message reactions: Raft's seven, in Raft's order. ✅ is among them because
+ * it is what marks a file comment resolved. Kept to single emojis without whitespace so
  * every entry satisfies the server's `isValidReactionEmoji` (shared with the Agent
  * reaction API); a full picker would need a new dependency for little gain here.
  * Exported for the mobile message-actions menu, which offers the same set inline.
  */
-export const QUICK_REACTION_EMOJIS = ["👍", "❤️", "🎉", "👀", "🔥", "😂", "😮", "😢"] as const;
+export const QUICK_REACTION_EMOJIS = ["👍", "❤️", "🎉", "👀", "🔥", "😂", "✅"] as const;
 
 /**
  * The smiley button in a message's hover toolbar. Opens a small popover with the

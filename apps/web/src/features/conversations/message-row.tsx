@@ -16,7 +16,7 @@ import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { useAppToast } from "#src/components/ui/toast";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -45,6 +45,7 @@ import { useIsMessageSaved } from "./conversation-host";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-markdown";
 import { formatSelectionQuote, selectionAffordancePlacement } from "./message-quote";
+import { MessageReactionBadges } from "./message-reaction-badges";
 import { MessageReactionPicker, QUICK_REACTION_EMOJIS } from "./message-reaction-picker";
 import type { ReactionSummary } from "./message-reactions";
 import { RootThread, ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
@@ -840,40 +841,13 @@ export const MessageRow = memo(function MessageRow({
           {message.attachments.map((attachment) => (
             <AttachmentCard key={attachment.id} attachment={attachment} />
           ))}
-          {message.reactions && message.reactions.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-0.5">
-              {message.reactions.map((reaction) => {
-                // A badge counts as mine when a reactor is the viewer, and flips to brand to show it.
-                const mine = viewerId
-                  ? reaction.reactors.some((reactor) => reactor.id === viewerId)
-                  : false;
-                return (
-                  <Tooltip
-                    key={reaction.emoji}
-                    title={reaction.reactors.map((reactor) => reactor.label).join(", ")}
-                  >
-                    <TooltipTrigger>
-                      <Button
-                        color="tertiary"
-                        size="sm"
-                        noTextPadding
-                        onPress={() => onToggleReaction?.(message.id, reaction.emoji, !mine)}
-                        aria-pressed={mine}
-                        className={cn(
-                          "h-auto rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-                          mine
-                            ? "bg-utility-brand-50 text-utility-brand-700 ring-utility-brand-200 hover:bg-utility-brand-100"
-                            : "bg-utility-neutral-50 text-utility-neutral-700 ring-utility-neutral-200 hover:bg-utility-neutral-100",
-                        )}
-                      >
-                        {reaction.emoji} {reaction.count}
-                      </Button>
-                    </TooltipTrigger>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          )}
+          <MessageReactionBadges
+            reactions={message.reactions}
+            viewerId={viewerId}
+            onToggle={
+              onToggleReaction && ((emoji, active) => onToggleReaction(message.id, emoji, active))
+            }
+          />
           {/* Saved is a per-viewer state, so this marker is only ever the viewer's own: it says
               "this one is in your Saved" without opening the hover bar to check its bookmark. The
               Saved page itself does not repeat it — that list has its own row (see
@@ -1018,8 +992,8 @@ export const MessageRow = memo(function MessageRow({
                           setActionsOpen(false);
                           onToggleReaction(message.id, emoji, true);
                         }}
-                        // `px-0!` overrides the size's horizontal padding so the eight
-                        // cells share the row's width evenly instead of overflowing it.
+                        // `px-0!` overrides the size's horizontal padding so the quick
+                        // emojis share the row's width evenly instead of overflowing it.
                         className="h-auto min-w-0 flex-1 rounded-full px-0! py-3 text-display-xs leading-none"
                       >
                         {emoji}
