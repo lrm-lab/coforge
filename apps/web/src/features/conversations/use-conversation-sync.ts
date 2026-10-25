@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { StreamRead } from "./stream-state";
 import { messageIdFromHash, threadRootFromMessageAnchor } from "./conversation-thread-search";
@@ -27,6 +27,7 @@ export function useConversationSync({
   conversation,
   searchThreadRootId,
   openTaskMessageId,
+  taskRootReads,
   selected,
   threadInView,
   threadInViewSequence,
@@ -38,6 +39,8 @@ export function useConversationSync({
   conversation: ConversationSyncView;
   searchThreadRootId?: string;
   openTaskMessageId?: string;
+  /** The read cursors that came with a Task popup root read outside the window (`useTaskPopupRoot`). */
+  taskRootReads?: Readonly<Record<string, number>>;
   selected?: string;
   threadInView?: string;
   threadInViewSequence?: number;
@@ -86,31 +89,21 @@ export function useConversationSync({
     [loadWindowAround],
   );
 
+  const persistedReads = useMemo(
+    () =>
+      taskRootReads
+        ? { ...taskRootReads, ...conversation.threadReadThrough }
+        : conversation.threadReadThrough,
+    [taskRootReads, conversation.threadReadThrough],
+  );
+
   const [readThrough, setReadThrough] = useState<Record<string, number>>({});
   // This thread's read cursor (`threadReadThrough`): the stored one, raised by this visit's reads.
   const threadCursor = useCallback(
     (rootMessageId: string) =>
-      threadReadThrough(
-        { persistedReads: conversation.threadReadThrough, localReads: readThrough },
-        rootMessageId,
-      ),
-    [readThrough, conversation.threadReadThrough],
+      threadReadThrough({ persistedReads, localReads: readThrough }, rootMessageId),
+    [readThrough, persistedReads],
   );
-
-  // The task popup can point at a message outside the bounded stream window.
-  const attemptedTaskLoad = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (!openTaskMessageId) {
-      attemptedTaskLoad.current = undefined;
-      return;
-    }
-    if (attemptedTaskLoad.current === openTaskMessageId) return;
-    if (conversation.messages.some((message) => message.id === openTaskMessageId)) return;
-    attemptedTaskLoad.current = openTaskMessageId;
-    // A failed read leaves the popup showing the task without its thread; the rejection is not
-    // left unhandled.
-    loadWindowAround(openTaskMessageId).catch(() => {});
-  }, [openTaskMessageId, conversation.messages, loadWindowAround]);
 
   // Keep the selected thread mounted while the reader moves between threads. The task popup owns
   // its own pane, so it removes its root from this retained set below; a thread that stays
@@ -194,4 +187,31 @@ export function useConversationSync({
   ]);
 
   return { visited, windowRead, threadCursor, threadRootFailure, loadThreadRoot };
+}
+
+/**
+ * The Task popup's root message, which its thread pane hangs from. The popup can name a message
+ * outside the bounded stream window; it then reads that message alone, beside the stream, and
+ * never replaces the window around it: that would move the stream under the popup, and closing
+ * the popup would leave the reader somewhere else in the history. A failed read leaves the popup
+ * showing the Task without its thread.
+ */
+export function useTaskPopupRoot(
+  conversation: Pick<ConversationSyncView, "conversationId" | "messages">,
+  messageId: string | undefined,
+) {
+  const inWindow =
+    messageId === undefined
+      ? undefined
+      : conversation.messages.find((message) => message.id === messageId);
+  const read = useQuery({
+    ...conversationAroundQuery(conversation.conversationId, messageId ?? ""),
+    enabled: messageId !== undefined && !inWindow,
+    select: (around) => ({
+      root: around.messages.find((message) => message.id === messageId),
+      reads: around.threadReadThrough,
+    }),
+  }).data;
+  if (inWindow) return { root: inWindow, reads: undefined };
+  return { root: read?.root, reads: read?.root ? read.reads : undefined };
 }

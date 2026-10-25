@@ -77,7 +77,9 @@ These rules apply to `src/features/tasks/`.
   `ThreadedConversation`'s `taskPopup` mode. The full Task section stays fixed above an
   independently scrolling reply list, which opens at its oldest unread reply or at the bottom
   when all are read or no cursor exists; expanded History has its own bounded scroll and never
-  consumes the reply workspace. Never build a second thread view for a popup.
+  consumes the reply workspace. Never build a second thread view for a popup. A Task
+  whose message is outside the loaded window has its message read alone
+  (`useTaskPopupRoot`); opening a popup never replaces the stream's window.
 - `/tasks` names its open popup as `task=<conversationId>:<number>`
   (`task-overview-search.ts`); a conversation route's `task` is the bare
   number. Opening pushes a history entry, closing replaces it.

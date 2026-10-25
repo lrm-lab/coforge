@@ -15,7 +15,7 @@ import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
 import { ConversationPane } from "./conversation-pane";
 import { useConversationDetailVisible } from "./conversation-navigation";
 import { useConversationHostChannels } from "./conversation-host";
-import { useConversationSync } from "./use-conversation-sync";
+import { useConversationSync, useTaskPopupRoot } from "./use-conversation-sync";
 import { useStandaloneThread } from "./standalone-thread";
 import {
   useConversationPositionJump,
@@ -108,8 +108,11 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     closeTask: closeTaskReference,
   } = taskPopup ?? conversationTaskPopup;
   const openTask = useNumberedTask(conversation.conversationId, openTaskNumber) ?? taskPopup?.task;
-  const openTaskRoot =
-    openTask && conversation.messages.find((message) => message.id === openTask.messageId);
+  const openTaskMessageId = openTask?.messageId;
+  const { root: openTaskRoot, reads: taskRootReads } = useTaskPopupRoot(
+    conversation,
+    openTaskMessageId,
+  );
   // What every thread pane shares: the side pane and the thread under the task popup.
   const threadPaneProps = (root: DirectConversationView["messages"][number]) => ({
     ...conversationProps,
@@ -172,10 +175,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       {dialog}
     </>
   );
-  // The popup shows the task's thread itself, so a side pane for the same thread closes (two
-  // composers on one thread would share and overwrite its draft), and a task message outside the
-  // loaded window is fetched the way a thread link is.
-  const openTaskMessageId = openTask?.messageId;
   const profileAgentId = agentProfile?.agentId;
   const profilePersonId = agentProfile?.personId;
   const profileOpen = Boolean(profileAgentId || profilePersonId);
@@ -216,6 +215,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       conversation,
       searchThreadRootId,
       openTaskMessageId,
+      taskRootReads,
       selected,
       threadInView,
       threadInViewSequence,
