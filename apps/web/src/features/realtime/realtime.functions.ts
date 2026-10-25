@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { AppError } from "#src/lib/app-error";
+import { authorizeConversationRealtime } from "#src/server/conversations/conversation-realtime-access.server";
 import {
   issueBrowserRealtimeToken,
   issueConversationRealtimeToken,
@@ -10,10 +10,6 @@ import {
   issueWorkspacePresenceSubscriptionToken,
 } from "#src/server/auth/browser-realtime-token.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import {
-  ACTIVE_MEMBER_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
 
 export const getBrowserRealtimeConnectionToken = createServerFn({
   method: "GET",
@@ -29,26 +25,14 @@ export const getConversationRealtimeToken = createServerFn({ method: "GET" })
   .validator(z.object({ conversationId: z.uuid() }))
   .handler(async ({ data, context }) => {
     const { user, db, workspaceId } = context;
-    const conversation = await db.conversation.findFirst({
-      where: {
-        id: data.conversationId,
-        workspaceId,
-        OR: [
-          { channelName: null, members: { some: { userId: user.id, ...ACTIVE_MEMBER_WHERE } } },
-          {
-            channelName: { not: null },
-            // A channel hidden from the Workspace has no live signal for anyone.
-            ...VISIBLE_CONVERSATION_WHERE,
-            workspace: { members: { some: { userId: user.id } } },
-          },
-        ],
-      },
-      select: { id: true },
+    const conversationId = await authorizeConversationRealtime(db, {
+      workspaceId,
+      userId: user.id,
+      conversationId: data.conversationId,
     });
-    if (!conversation) throw new AppError("ACCESS_DENIED");
     return issueConversationRealtimeToken({
       userId: user.id,
-      conversationId: conversation.id,
+      conversationId,
     });
   });
 

@@ -1,0 +1,17 @@
+{
+  "attachment_comments_title": "评论",
+  "attachment_comments_input": "评论整个文件",
+  "attachment_comments_post": "发表评论",
+  "attachment_comments_empty": "暂无评论",
+  "attachment_comments_loading": "正在加载评论…",
+  "attachment_comments_load_failed": "无法加载评论。",
+  "attachment_comments_post_failed": "评论未发表，请重试。",
+  "attachment_comments_retry": "重试",
+  "attachment_comments_older": "更早的评论",
+  "attachment_comments_archived": "原会话已归档，评论只读。",
+  "attachment_comments_not_member": "加入原会话后可发表评论。",
+  "attachment_comments_read_only": "原会话只读。",
+  "attachment_comments_preview": "预览",
+  "attachment_comments_no_preview": "暂不支持预览",
+  "attachment_comments_open": "查看 {name} 的评论"
+}

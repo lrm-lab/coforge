@@ -35,3 +35,9 @@ export const PUBLIC_CHANNEL_WHERE = {
   archivedAt: null,
   ...VISIBLE_CONVERSATION_WHERE,
 } satisfies Prisma.ConversationWhereInput;
+
+/** Ordinary message targets name a channel or DM. Attachment comment seats only satisfy
+ * Message author FKs; their membership never grants generic read/search/subscription access. */
+export const TARGETABLE_CONVERSATION_WHERE = {
+  OR: [{ channelName: { not: null } }, { directKey: { not: null } }],
+} satisfies Prisma.ConversationWhereInput;

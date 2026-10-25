@@ -20,6 +20,9 @@ model Attachment {
   uploaderAgent   Agent?       @relation(fields: [uploaderAgentId], references: [id], onDelete: Cascade)
   message         Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
+  commentThread   AttachmentCommentThread?
+
+  @@unique([id, workspaceId])
   @@index([conversationId, workspaceId])
   @@index([uploaderId])
   @@index([uploaderAgentId])

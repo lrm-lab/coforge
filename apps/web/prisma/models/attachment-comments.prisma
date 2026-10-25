@@ -1,0 +1,34 @@
+/// One lazy-created comment Conversation per Attachment. Its membership is not authority:
+/// every read/write rechecks access to the attachment's original Conversation.
+model AttachmentCommentThread {
+  attachmentId   String       @id @db.Uuid
+  workspaceId    String       @db.Uuid
+  conversationId String       @unique @db.Uuid
+  createdAt      DateTime     @default(now())
+  attachment     Attachment   @relation(fields: [attachmentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  conversation   Conversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  comments       AttachmentComment[]
+
+  @@unique([attachmentId, workspaceId])
+  @@unique([conversationId, workspaceId])
+  @@unique([attachmentId, workspaceId, conversationId])
+  @@map("attachment_comment_threads")
+}
+
+/// Root-comment metadata only; text, author, replies and reactions stay in Message.
+/// Both anchor fields are null for whole-file comments. Position discovery is presentation state;
+/// completion is derived from the Message's existing checkmark reactions.
+model AttachmentComment {
+  messageId      String                  @id @db.Uuid
+  attachmentId   String                  @db.Uuid
+  workspaceId    String                  @db.Uuid
+  conversationId String                  @db.Uuid
+  anchorType     String?
+  anchorData     Json?                   @db.JsonB
+  message        Message                 @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  thread         AttachmentCommentThread @relation(fields: [attachmentId, workspaceId, conversationId], references: [attachmentId, workspaceId, conversationId], onDelete: Cascade)
+
+  @@unique([messageId, conversationId])
+  @@index([attachmentId, messageId])
+  @@map("attachment_comments")
+}

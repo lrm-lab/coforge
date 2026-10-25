@@ -25,7 +25,8 @@ model Conversation {
   coordinatorAgentId String?             @db.Uuid
   directKey      String?
   /// What a conversation not made by people is for: `app_events`, an app's events for one Agent
-  /// (`server/app-agent-events/`; `conversations_kind_check`). Null for channels and direct conversations.
+  /// (`server/app-agent-events/`) or `attachment_comments` (one attachment's discussion).
+  /// Null for channels and direct conversations; enforced by `conversations_kind_check`.
   kind           String?
   channelName    String?
   description    String                 @default("")
@@ -43,6 +44,7 @@ model Conversation {
   deliveries     AgentMessageDelivery[]
   attachments    Attachment[]
   attachmentUploadSessions AttachmentUploadSession[]
+  attachmentCommentThread AttachmentCommentThread?
   tasks          Task[]
   actionCards    ActionCard[]
   savedMessages  SavedMessage[]

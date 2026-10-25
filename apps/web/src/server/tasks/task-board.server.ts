@@ -44,10 +44,7 @@ import {
   type MessageMentionRef,
 } from "#src/server/conversations/mentions.server";
 import { storeMessageBody } from "#src/server/conversations/message-references.server";
-import {
-  ACTIVE_MEMBER_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
+import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
@@ -80,6 +77,7 @@ import {
   taskSelection,
   taskView,
   CONVERSATION_KIND_WHERE,
+  TASK_SCOPE_WHERE,
   UNFINISHED_TASK_STATUSES,
   type FinishedTaskStatus,
   type SelectedTask,
@@ -201,7 +199,7 @@ function ownTaskScope(actor: { agentId: string } | { userId: string }): {
   const { kinds, includesArchived } = AGENT_OWN_TASK_READ;
   return {
     conversations: {
-      ...VISIBLE_CONVERSATION_WHERE,
+      ...TASK_SCOPE_WHERE,
       ...(includesArchived ? {} : { archivedAt: null }),
       OR:
         "agentId" in actor
@@ -483,7 +481,7 @@ export class TaskBoard {
         where: {
           id: command.conversationId,
           workspaceId: principal.workspaceId,
-          ...VISIBLE_CONVERSATION_WHERE,
+          ...TASK_SCOPE_WHERE,
         },
         select: {
           id: true,
@@ -537,7 +535,7 @@ export class TaskBoard {
           where: {
             workspaceId: principal.workspaceId,
             channelName: target.slice(1),
-            ...VISIBLE_CONVERSATION_WHERE,
+            ...TASK_SCOPE_WHERE,
             members: { some: { agentId: principal.agentId, ...ACTIVE_MEMBER_WHERE } },
           },
           select: {

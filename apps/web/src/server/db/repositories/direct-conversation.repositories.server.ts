@@ -1,3 +1,4 @@
+import { findAgentScopedMessage } from "./agent-message-lookup.repositories.server";
 import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
@@ -62,7 +63,10 @@ import { AppError, isAppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { userIdOfUsernameTarget } from "./public-user-target.repositories.server";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
-import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
+import {
+  AgentMessageValidationError,
+  MESSAGE_NOT_VISIBLE,
+} from "#src/server/conversations/agent-message-validation-error.server";
 import { messageAnchorWhere, messageIdMatchesAnchor } from "#src/server/db/message-anchor.server";
 import {
   channelAgentRecipients,
@@ -136,8 +140,6 @@ import {
   recoverySecondPass,
   type AgentRecoveryRow,
 } from "./agent-recovery-row.server";
-
-const MESSAGE_NOT_VISIBLE = "message not found or not visible to this Agent";
 
 /** The three Agent-visible sender facts, spread onto every Agent-facing message shape
  * in this file so they cannot drift into three different field sets. */
@@ -711,26 +713,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     );
   }
 
-  /** Looks a Message up by anchor across every conversation the Agent is a member of. */
-  private async resolveAgentScopedMessage(workspaceId: string, agentId: string, anchor: string) {
-    assertMessageAnchor(anchor);
-    const rows = await this.db.message.findMany({
-      where: {
-        workspaceId,
-        conversation: {
-          ...VISIBLE_CONVERSATION_WHERE,
-          members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
-        },
-        id: messageAnchorWhere(anchor),
-      },
-      take: 2,
-      include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
-    });
-    return onlyAnchorMatch(rows, MESSAGE_NOT_VISIBLE);
-  }
-
   async resolveAgentMessage(workspaceId: string, agentId: string, anchor: string) {
-    const row = await this.resolveAgentScopedMessage(workspaceId, agentId, anchor);
+    const row = await findAgentScopedMessage(this.db, workspaceId, agentId, anchor);
     const coordination = await readChannelCoordination(
       this.db,
       workspaceId,
@@ -753,7 +737,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     emoji: string,
     active: boolean,
   ) {
-    const row = await this.resolveAgentScopedMessage(workspaceId, agentId, anchor);
+    const row = await findAgentScopedMessage(this.db, workspaceId, agentId, anchor);
     const member = await this.db.conversationMember.findFirst({
       where: { conversationId: row.conversationId, workspaceId, agentId, ...ACTIVE_MEMBER_WHERE },
       select: { id: true },

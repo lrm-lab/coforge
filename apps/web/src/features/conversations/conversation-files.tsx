@@ -1,25 +1,19 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { Download01, MarkerPin01, XClose } from "@untitledui/icons";
+import { Download01, MarkerPin01 } from "@untitledui/icons";
 
 import { m } from "#src/paraglide/messages";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import {
-  Dialog,
-  DialogTrigger,
-  Modal,
-  ModalOverlay,
-} from "#src/components/application/modals/modal";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { useState } from "react";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 
-import { AttachmentPreview } from "./attachment-preview";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
+import { AttachmentReviewDialog } from "./attachment-review";
 import { loadConversationFiles, type ConversationFile } from "./conversation-files.functions";
 import { attachmentUrl } from "./message-row";
 
@@ -50,9 +44,6 @@ export function FileRow({
   const href = attachmentUrl(file);
   const messageId = file.messageId;
   const isImage = file.inlineImage;
-  // The same preview rule a message attachment follows; `previewUrl` (signed) is what a PDF
-  // needs, and images prefer it so the bytes skip the backend while the URL is fresh.
-  const previewKind = attachmentPreviewKind(file.fileName, file.contentType, file.previewUrl);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [imgBroken, setImgBroken] = useState(false);
   const previewSrc = !previewFailed && file.previewUrl ? file.previewUrl : href;
@@ -71,10 +62,13 @@ export function FileRow({
   );
   // One preview affordance per card, covering the whole card body — the thumbnail *and* the name —
   // with the actions beside it: a file opens wherever the reader clicks the card, not only on the
-  // thumbnail (or, worse, only on the file name). A card with nothing to preview stays unclickable.
+  // thumbnail (or, worse, only on the file name). Every file can open its discussion, including a type without a preview.
+  const previewable = attachmentPreviewKind(file.fileName, file.contentType, file.previewUrl);
   const previewLabel = isImage
     ? file.fileName
-    : m.conversation_attachment_preview_open({ name: file.fileName });
+    : previewable
+      ? m.conversation_attachment_preview_open({ name: file.fileName })
+      : m.attachment_comments_open({ name: file.fileName });
   // `Button` wraps children in one `display: block` span. The row owns its own flex so the
   // thumbnail and name sit side by side instead of stacking, then centering in the leftover
   // `flex-1` space (`justify-center` is the Button default).
@@ -113,102 +107,18 @@ export function FileRow({
   );
   return (
     <li className="flex items-center gap-2 rounded-xl border border-secondary bg-primary py-2 pr-2 pl-3">
-      {isImage || previewKind ? (
-        <div className="min-w-0 flex-1">
-          <DialogTrigger>
-            <Button
-              color="tertiary"
-              noTextPadding
-              aria-label={previewLabel}
-              className="h-auto w-full min-w-0 justify-start rounded-lg p-0 text-left hover:bg-transparent [&>span]:w-full [&>span]:min-w-0"
-            >
-              {cardBody}
-            </Button>
-            {isImage ? (
-              <ModalOverlay isDismissable>
-                <Modal className="h-full w-full max-w-full bg-transparent shadow-none">
-                  <Dialog aria-label={file.fileName} className="h-full">
-                    {({ close }) => {
-                      // Same backdrop behavior as the message lightbox: pressing an overlay area
-                      // itself (not the image or the actions) closes.
-                      const dismissOnBackdrop = (event: React.PointerEvent) => {
-                        if (event.target === event.currentTarget) close();
-                      };
-                      return (
-                        <div className="flex h-full w-full flex-col">
-                          <div
-                            className="flex shrink-0 justify-end p-4"
-                            onPointerDown={dismissOnBackdrop}
-                          >
-                            <div className="flex items-center gap-1 rounded-lg bg-primary/90 p-1 shadow-xs">
-                              {download}
-                              <ButtonUtility
-                                icon={XClose}
-                                size="sm"
-                                color="tertiary"
-                                tooltip={m.controls_close()}
-                                onClick={close}
-                              />
-                            </div>
-                          </div>
-                          <div
-                            className="flex min-h-0 flex-1 items-center justify-center"
-                            onPointerDown={dismissOnBackdrop}
-                          >
-                            <img
-                              src={previewSrc}
-                              onError={handlePreviewError}
-                              alt={file.fileName}
-                              className="block max-h-full max-w-[min(96vw,80rem)] rounded-lg object-contain"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </Dialog>
-                </Modal>
-              </ModalOverlay>
-            ) : previewKind ? (
-              <ModalOverlay isDismissable>
-                <Modal className="h-full max-h-full w-full max-sm:overflow-hidden sm:h-[85vh] sm:max-w-4xl">
-                  <Dialog
-                    aria-label={file.fileName}
-                    className="flex h-full flex-col overflow-hidden"
-                  >
-                    {({ close }) => (
-                      <>
-                        <div className="flex shrink-0 items-center gap-2 border-b border-secondary p-3 pl-4 sm:pl-5">
-                          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-                            {file.fileName}
-                          </p>
-                          {download}
-                          <ButtonUtility
-                            icon={XClose}
-                            size="sm"
-                            color="tertiary"
-                            tooltip={m.controls_close()}
-                            onClick={close}
-                          />
-                        </div>
-                        <div className="flex min-h-0 flex-1 flex-col">
-                          <AttachmentPreview
-                            fileName={file.fileName}
-                            kind={previewKind}
-                            href={href}
-                            previewUrl={file.previewUrl}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </Dialog>
-                </Modal>
-              </ModalOverlay>
-            ) : null}
-          </DialogTrigger>
-        </div>
-      ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-3">{cardBody}</div>
-      )}
+      <div className="min-w-0 flex-1">
+        <AttachmentReviewDialog file={file}>
+          <Button
+            color="tertiary"
+            noTextPadding
+            aria-label={previewLabel}
+            className="h-auto w-full min-w-0 justify-start rounded-lg p-0 text-left hover:bg-transparent [&>span]:w-full [&>span]:min-w-0"
+          >
+            {cardBody}
+          </Button>
+        </AttachmentReviewDialog>
+      </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {messageId && onOpenMessage && (
           <ButtonUtility

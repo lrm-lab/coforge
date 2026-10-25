@@ -10,7 +10,6 @@ import {
   Copy01,
   CornerUpLeft,
   Download01,
-  XClose,
 } from "@untitledui/icons";
 import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 
@@ -21,12 +20,7 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useAppToast } from "#src/components/ui/toast";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import {
-  Dialog,
-  DialogTrigger,
-  Modal,
-  ModalOverlay,
-} from "#src/components/application/modals/modal";
+import { Dialog } from "#src/components/application/modals/modal";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import type {
   OpenAgentProfile,
@@ -45,8 +39,8 @@ import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
-import { AttachmentPreview } from "./attachment-preview";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
+import { AttachmentReviewDialog } from "./attachment-review";
 import { useIsMessageSaved } from "./conversation-host";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-markdown";
@@ -183,12 +177,7 @@ export function attachmentUrl(attachment: { id: string }) {
 
 export function AttachmentCard({ attachment }: { attachment: MessageView["attachments"][number] }) {
   const href = attachmentUrl(attachment);
-  // Prefer the signed CDN preview URL so the image never round-trips the backend; fall back to
-  // the authenticated proxy once (it expires after a fixed TTL, or may not be configured).
   const [previewFailed, setPreviewFailed] = useState(false);
-  // Both sources failed (or the "image" is one the route will not serve inline, such as SVG —
-  // it streams as octet-stream, which <img> refuses): drop to the plain file row below rather
-  // than leaving a broken thumbnail behind.
   const [imgBroken, setImgBroken] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const previewSrc = !previewFailed && attachment.previewUrl ? attachment.previewUrl : href;
@@ -197,38 +186,14 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
     if (previewFailed || !attachment.previewUrl) setImgBroken(true);
     else setPreviewFailed(true);
   };
-  const downloadButton = (className?: string) => (
-    <ButtonUtility
-      icon={Download01}
-      size="xs"
-      color="secondary"
-      tooltip={m.conversation_attachment_download()}
-      href={`${href}?download`}
-      className={cn("shrink-0", className)}
-    />
-  );
-  /** Inside a file row the control is part of the row, so it stays visible. */
-  const download = downloadButton();
-  /** Separates the file from its actions. Both row variants carry it, so a previewable file and a
-   * download-only one are the same shape. */
-  const actionDivider = (
-    <span className="mx-1 h-8 w-px shrink-0 bg-border-secondary" aria-hidden="true" />
-  );
-  /** One bordered row holding the file and its actions: an IM file row rather than a wide banner.
-   * Bounded width so a long name cannot stretch the bubble, and the name truncates inside it. */
-  const attachmentRowClassName =
-    "group/attachment mt-1 flex w-full max-w-sm min-w-0 items-center rounded-xl bg-primary ring-1 ring-secondary ring-inset";
   if (attachment.contentType.startsWith("image/") && !imgBroken)
     return (
       <div className="relative mt-1 w-fit max-w-full">
-        {/* Clicking the preview opens the image at full size in a lightbox. */}
-        <DialogTrigger>
+        <AttachmentReviewDialog file={attachment}>
           <Button
             color="tertiary"
             noTextPadding
             aria-label={attachment.fileName}
-            // The min footprint centers degenerate images (a 1×1 png, a still-loading one) inside
-            // a card-sized box while the image loads.
             className="grid h-auto min-h-16 min-w-16 place-items-center overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
           >
             {!imgLoaded && (
@@ -243,160 +208,56 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
               className="block max-h-80 max-w-full object-contain"
             />
           </Button>
-          <ModalOverlay isDismissable>
-            {/* The lightbox fills the viewport: the action bar owns a top strip so it pins to the
-                page's top-right corner and never overlaps the image, even for viewport-filling
-                images; the image is centered in the remaining space below. */}
-            <Modal className="h-full w-full max-w-full bg-transparent shadow-none">
-              <Dialog aria-label={attachment.fileName} className="h-full">
-                {({ close }) => {
-                  // The modal covers the whole overlay, so backdrop dismissal is handled here:
-                  // pressing a backdrop area itself (not the image or the actions) closes,
-                  // matching ModalOverlay's dismiss behavior.
-                  const dismissOnBackdrop = (event: React.PointerEvent) => {
-                    if (event.target === event.currentTarget) close();
-                  };
-                  return (
-                    <div className="flex h-full w-full flex-col">
-                      <div
-                        className="flex shrink-0 justify-end p-4"
-                        onPointerDown={dismissOnBackdrop}
-                      >
-                        <div className="flex items-center gap-1 rounded-lg bg-primary/90 p-1 shadow-xs">
-                          <ButtonUtility
-                            icon={Download01}
-                            size="sm"
-                            color="tertiary"
-                            tooltip={m.conversation_attachment_download()}
-                            href={`${href}?download`}
-                          />
-                          <ButtonUtility
-                            icon={XClose}
-                            size="sm"
-                            color="tertiary"
-                            tooltip={m.controls_close()}
-                            onClick={close}
-                          />
-                        </div>
-                      </div>
-                      <div
-                        className="flex min-h-0 flex-1 items-center justify-center"
-                        onPointerDown={dismissOnBackdrop}
-                      >
-                        <img
-                          src={previewSrc}
-                          onError={handlePreviewError}
-                          alt={attachment.fileName}
-                          className="block max-h-full max-w-[min(96vw,80rem)] rounded-lg object-contain"
-                        />
-                      </div>
-                    </div>
-                  );
-                }}
-              </Dialog>
-            </Modal>
-          </ModalOverlay>
-        </DialogTrigger>
+        </AttachmentReviewDialog>
       </div>
     );
   const typeLabel = fileTypeLabel(attachment.fileName, attachment.contentType);
-  const previewKind = attachmentPreviewKind(
+  const previewable = attachmentPreviewKind(
     attachment.fileName,
     attachment.contentType,
     attachment.previewUrl,
   );
-  // The row owns its own flex: `Button` puts its children inside one `display: block` span, so an
-  // icon and a text block handed to it directly stack vertically instead of sitting side by side.
-  const card = (
-    <span className="flex min-w-0 items-center gap-3">
-      <FileTypeIcon
-        fileName={attachment.fileName}
-        contentType={attachment.contentType}
-        className="size-10"
-      />
-      <span className="min-w-0 text-left">
-        <span className="block truncate text-sm font-medium text-secondary">
-          {attachment.fileName}
-        </span>
-        <span className="block truncate text-xs text-tertiary">
-          {typeLabel ? `${typeLabel} · ` : ""}
-          {getReadableFileSize(attachment.sizeBytes)}
-          {previewKind ? ` · ${m.conversation_attachment_preview_hint()}` : ""}
-        </span>
-      </span>
-    </span>
-  );
-  // A file we can show reads in place instead of forcing a download: the card becomes the control
-  // that opens the preview, with the download still one click away inside it. The preview lives in
-  // a dialog rather than expanding inline so opening one never changes a message row's height.
-  if (previewKind)
-    return (
-      <div className={attachmentRowClassName}>
-        <DialogTrigger>
-          <Button
-            color="tertiary"
-            noTextPadding
-            aria-label={m.conversation_attachment_preview_open({ name: attachment.fileName })}
-            // `Button` wraps its children in one `display: block` span of intrinsic width; without
-            // `w-full min-w-0` on it the name cannot shrink, so it overflows under the download
-            // control instead of truncating.
-            className="h-auto min-w-0 flex-1 justify-start rounded-xl rounded-r-none p-3 hover:bg-secondary [&>span]:w-full [&>span]:min-w-0"
-          >
-            {card}
-          </Button>
-          <ModalOverlay isDismissable>
-            {/* Full height on a phone (where the overlay already reserves its own padding), a
-                centered panel from `sm` up. The panel owns its scrolling so the preview pane
-                keeps its height instead of the whole dialog growing. */}
-            <Modal className="h-full max-h-full w-full max-sm:overflow-hidden sm:h-[85vh] sm:max-w-4xl">
-              <Dialog
-                aria-label={attachment.fileName}
-                className="flex h-full flex-col overflow-hidden"
-              >
-                {({ close }) => (
-                  <>
-                    <div className="flex shrink-0 items-center gap-2 border-b border-secondary p-3 pl-4 sm:pl-5">
-                      <p className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-                        {attachment.fileName}
-                      </p>
-                      <ButtonUtility
-                        icon={Download01}
-                        size="sm"
-                        color="tertiary"
-                        tooltip={m.conversation_attachment_download()}
-                        href={`${href}?download`}
-                      />
-                      <ButtonUtility
-                        icon={XClose}
-                        size="sm"
-                        color="tertiary"
-                        tooltip={m.controls_close()}
-                        onClick={close}
-                      />
-                    </div>
-                    <div className="flex min-h-0 flex-1 flex-col">
-                      <AttachmentPreview
-                        fileName={attachment.fileName}
-                        kind={previewKind}
-                        href={href}
-                        previewUrl={attachment.previewUrl}
-                      />
-                    </div>
-                  </>
-                )}
-              </Dialog>
-            </Modal>
-          </ModalOverlay>
-        </DialogTrigger>
-        {actionDivider}
-        <div className="shrink-0 pr-2">{download}</div>
-      </div>
-    );
   return (
-    <div className={attachmentRowClassName}>
-      <div className="min-w-0 flex-1 p-3">{card}</div>
-      {actionDivider}
-      <div className="shrink-0 pr-2">{download}</div>
+    <div className="group/attachment mt-1 flex w-full max-w-sm min-w-0 items-center rounded-xl bg-primary ring-1 ring-secondary ring-inset">
+      <AttachmentReviewDialog file={attachment}>
+        <Button
+          color="tertiary"
+          noTextPadding
+          aria-label={
+            previewable
+              ? m.conversation_attachment_preview_open({ name: attachment.fileName })
+              : m.attachment_comments_open({ name: attachment.fileName })
+          }
+          className="h-auto min-w-0 flex-1 justify-start rounded-xl rounded-r-none p-3 hover:bg-secondary [&>span]:w-full [&>span]:min-w-0"
+        >
+          <span className="flex min-w-0 items-center gap-3 text-left">
+            <FileTypeIcon
+              fileName={attachment.fileName}
+              contentType={attachment.contentType}
+              className="size-10 shrink-0"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-primary">
+                {attachment.fileName}
+              </span>
+              <span className="block truncate text-xs text-tertiary">
+                {typeLabel ? `${typeLabel} · ` : ""}
+                {getReadableFileSize(attachment.sizeBytes)}
+              </span>
+            </span>
+          </span>
+        </Button>
+      </AttachmentReviewDialog>
+      <span className="mx-1 h-8 w-px shrink-0 bg-border-secondary" aria-hidden="true" />
+      <div className="shrink-0 pr-2">
+        <ButtonUtility
+          icon={Download01}
+          size="xs"
+          color="secondary"
+          tooltip={m.conversation_attachment_download()}
+          href={`${href}?download`}
+        />
+      </div>
     </div>
   );
 }

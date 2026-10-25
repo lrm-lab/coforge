@@ -84,3 +84,40 @@ tenancy concept. An index on `(conversationId, messageId)` supports listing a
 message's reactions when rendering conversation history. Removing a message or
 a conversation member cascades to its reactions. The browser groups reactions
 by emoji for display; there is no separate reaction-count column.
+
+## Attachment comments
+
+`AttachmentCommentThread` (`attachment_comment_threads`) lazily binds one
+Attachment to one dedicated Conversation with `kind = attachment_comments` and
+no channel name or DM key. `AttachmentComment` (`attachment_comments`) stores
+root-Message metadata; the Message owns body, author, sequence, replies and
+reactions. Composite foreign keys keep the attachment, Workspace, discussion
+and Message together. Anchor type and JSON data are both null for a whole-file
+comment or both present for a positional anchor. The type is one of
+`md-section`, `lines`, `csv-rows`, `html-region`; stored data is a JSON object
+whose PostgreSQL text representation occupies at most 4096 UTF-8 bytes. There
+is no stored location status or completion status: the viewer discovers lost
+positions and an ordinary ✅ reaction means resolved.
+
+`AttachmentComments.list/post` rechecks the original conversation's visibility
+on every request. A human Workspace member may read a public-channel file's
+comments without joining, but only current original-conversation members may
+post. Private files require original membership. Archived and read-only
+conversations refuse writes. Comment author seats do not grant generic message
+reads, searches, bookmarks or subscriptions. Stable targets are
+`attachment:<attachment UUID>` and `attachment:<attachment UUID>:<root UUID>`;
+The follow-on Agent HTTP/CLI adapter uses these identities; the Web calls its own Server Functions.
+
+First writes lock the original Conversation then Attachment, recheck authority,
+and create the discussion, author seat, Message and metadata in one transaction.
+Unlinking the source Message keeps the discussion. Removing an Attachment must
+use `deleteAttachmentRows`, which removes discussion Messages before its
+Conversation and file row; binding-row cascades alone cannot remove the parent
+Conversation. Channel deletion uses the same operation inside its transaction.
+Workspace deletion removes all Message batches before its conversation/member
+cascades. Stored bytes are removed after commit through the existing file flow.
+
+Deploy the migration before enabling the new Web handlers. A rollback that keeps
+comment data must also keep the ordinary-destination guards: older membership-only
+Task/upload/subscription paths must not reinterpret comment author seats as grants.
+Do not delete users' comments automatically to roll back the feature.

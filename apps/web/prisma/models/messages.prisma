@@ -11,6 +11,7 @@ model Message {
   sender         ConversationMember?    @relation(fields: [senderMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Restrict)
   deliveries     AgentMessageDelivery[]
   attachments    Attachment[]
+  attachmentComment AttachmentComment?
   threadRootId   String?                @db.Uuid
   threadRoot     Message?               @relation("MessageThread", fields: [threadRootId, conversationId], references: [id, conversationId], onDelete: Cascade)
   replies        Message[]              @relation("MessageThread")

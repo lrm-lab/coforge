@@ -3,6 +3,7 @@
 These rules apply to `src/server/tasks/`. The framework-free shared Task
 contract is `packages/coforge-sdk/src/internal/tasks.ts`.
 
+- A comment author seat is never a Task destination. Task scopes keep `TASK_SCOPE_WHERE` (channel or DM only), including create and conversion; a comment Conversation id is refused exactly like a missing one.
 - `TaskBoard.execute(principal, command)` is the single place for Task
   authorization, atomic message and Task creation, numbering, exclusive claims,
   assignment, card amendments and history, resource receipts, and status

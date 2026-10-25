@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   ACTIVE_MEMBER_WHERE,
   VISIBLE_CONVERSATION_WHERE,
+  TARGETABLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
 import {
   AGENT_MESSAGE_WITH_TARGET_INCLUDE,
@@ -91,6 +92,7 @@ export async function searchAgentMessagePage(
       workspaceId,
       conversation: {
         ...VISIBLE_CONVERSATION_WHERE,
+        AND: [TARGETABLE_CONVERSATION_WHERE],
         members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
         ...(scope ? { id: scope.conversationId } : {}),
       },

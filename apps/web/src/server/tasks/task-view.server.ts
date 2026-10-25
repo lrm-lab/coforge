@@ -1,4 +1,8 @@
 import {
+  TARGETABLE_CONVERSATION_WHERE,
+  VISIBLE_CONVERSATION_WHERE,
+} from "#src/server/conversations/active-member.server";
+import {
   isRecord,
   TASK_STATUSES,
   type TaskConversationKind,
@@ -23,6 +27,12 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
  * How a stored Task reads: the rows a Task read selects, the `TaskView` the task board and an
  * Agent's `task` commands see them as, and the stored status every Task reader parses.
  */
+
+/** A Task belongs to a channel or DM; comment-author seats never confer Task authority. */
+export const TASK_SCOPE_WHERE = {
+  ...VISIBLE_CONVERSATION_WHERE,
+  AND: [TARGETABLE_CONVERSATION_WHERE],
+} satisfies Prisma.ConversationWhereInput;
 
 export const TASK_MEMBER_SELECT = {
   id: true,

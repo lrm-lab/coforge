@@ -1,3 +1,4 @@
+import { deleteChannelRows } from "#src/server/db/repositories/channel-deletion.repositories.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
 import type { SentMessageHook } from "./sent-message-hook.server";
@@ -1118,24 +1119,11 @@ export class PublicChannels {
         }),
       ),
     );
-    await this.db.$transaction([
-      // Holds off a concurrent send, Task write or join until the channel is gone, so none of
-      // them lands between the message delete and the channel delete.
-      lockConversation(this.db, channel.id),
-      this.db.reminder.updateMany({
-        where: {
-          workspaceId,
-          status: "scheduled",
-          OR: [{ target: `#${name}` }, { target: { startsWith: `#${name}:` } }],
-        },
-        data: { status: "canceled" },
-      }),
-      // Messages (and the Tasks that cascade with them) name their sender, owner and creator
-      // member with `onDelete: Restrict`, so they go before the channel, whose delete then
-      // cascades to its members and everything else.
-      this.db.message.deleteMany({ where: { conversationId: channel.id } }),
-      this.db.conversation.delete({ where: { id: channel.id } }),
-    ]);
+    await deleteChannelRows(this.db, {
+      workspaceId,
+      conversationId: channel.id,
+      channelName: name,
+    });
     await Promise.all([
       announceChannelUpdated(this.realtime, {
         workspaceId,

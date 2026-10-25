@@ -1,0 +1,17 @@
+{
+  "attachment_comments_title": "Comments",
+  "attachment_comments_input": "Comment on file",
+  "attachment_comments_post": "Post comment",
+  "attachment_comments_empty": "No comments yet",
+  "attachment_comments_loading": "Loading comments…",
+  "attachment_comments_load_failed": "Comments could not be loaded.",
+  "attachment_comments_post_failed": "Your comment was not posted. Try again.",
+  "attachment_comments_retry": "Retry",
+  "attachment_comments_older": "Earlier comments",
+  "attachment_comments_archived": "This conversation is archived. Comments are read-only.",
+  "attachment_comments_not_member": "Join the original conversation to comment.",
+  "attachment_comments_read_only": "This conversation is read-only.",
+  "attachment_comments_preview": "Preview",
+  "attachment_comments_no_preview": "Preview unavailable",
+  "attachment_comments_open": "Comments on {name}"
+}

@@ -1,6 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import {
+  ACTIVE_MEMBER_WHERE,
+  VISIBLE_CONVERSATION_WHERE,
+  TARGETABLE_CONVERSATION_WHERE,
+} from "./active-member.server";
 import { browserMessageFields, mapBrowserMessage } from "./conversation-history.server";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
 
@@ -35,7 +39,12 @@ export async function saveUserMessage(
 ): Promise<void> {
   const { workspaceId, conversationId, userId, messageId } = input;
   const message = await db.message.findFirst({
-    where: { id: messageId, conversationId, workspaceId, conversation: VISIBLE_CONVERSATION_WHERE },
+    where: {
+      id: messageId,
+      conversationId,
+      workspaceId,
+      conversation: { ...VISIBLE_CONVERSATION_WHERE, AND: [TARGETABLE_CONVERSATION_WHERE] },
+    },
     select: { id: true },
   });
   if (!message) throw new AppError("NOT_FOUND");
@@ -137,7 +146,7 @@ export async function listUserSavedMessages(
     where: {
       workspaceId,
       member: { workspaceId, userId },
-      conversation: VISIBLE_CONVERSATION_WHERE,
+      conversation: { ...VISIBLE_CONVERSATION_WHERE, AND: [TARGETABLE_CONVERSATION_WHERE] },
     },
     select: savedMessageSelect,
     orderBy: { createdAt: "desc" },

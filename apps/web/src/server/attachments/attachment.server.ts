@@ -9,6 +9,7 @@ import {
 import {
   ACTIVE_MEMBER_WHERE,
   VISIBLE_CONVERSATION_WHERE,
+  TARGETABLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
 
 import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
@@ -65,6 +66,7 @@ export async function storeAttachment(
     where: {
       id: input.conversationId,
       ...VISIBLE_CONVERSATION_WHERE,
+      AND: [TARGETABLE_CONVERSATION_WHERE],
       members: { some: { userId: input.userId, ...ACTIVE_MEMBER_WHERE } },
       OR: [{ channelName: null }, { workspace: { members: { some: { userId: input.userId } } } }],
     },
