@@ -1,0 +1,117 @@
+name: Web integration
+
+# The Web integration suites need PostgreSQL, Redis and Centrifugo, which CI's jobs do not have, so
+# nothing else exercises them between a developer's machine and `main`. This runs them once a day
+# and on demand. It blocks nothing and publishes nothing; docs/release/github-actions.md.
+on:
+  schedule:
+    # 19:17 UTC, off the hour so it does not queue with every other scheduled run.
+    - cron: "17 19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A manual run queues behind a running one instead of cancelling it.
+concurrency:
+  group: web-integration
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    name: Web integration suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    # The images are the ones staging runs, by digest; scripts/ci/web-integration-images.test.ts
+    # fails when they drift apart.
+    services:
+      postgres:
+        image: postgres:18.6@sha256:253a1c96c9f96d2a7c30f1396f9cb7c2ce105ee6c2886c6b48d1ce9fdfcc01aa
+        env:
+          POSTGRES_USER: coforge
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: coforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U coforge -d coforge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:8.2.6@sha256:b0ae7835ccef4872b65d82202b944a45235dafb2cfc82a1dc32ae9ad58ebfd30
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      # A service container cannot mount infra/staging/centrifugo/config.yaml, so the same
+      # configuration is set through the environment: the Redis engine, the HTTP API key, and the
+      # channel namespaces the Web publishes to (without the proxies, which call a running Web).
+      # Services start together, so it restarts if it comes up before Redis accepts connections.
+      centrifugo:
+        image: centrifugo/centrifugo:v6.9.2@sha256:f89352e38ef8043aaaa9045dec41cc8f2d35075b86ff553d4091ac19b547a3a6
+        env:
+          CENTRIFUGO_HTTP_API_KEY: integration-api-key
+          CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: integration-token-secret
+          CENTRIFUGO_ENGINE_TYPE: redis
+          CENTRIFUGO_ENGINE_REDIS_ADDRESS: redis:6379
+          CENTRIFUGO_HEALTH_ENABLED: "true"
+          CENTRIFUGO_CHANNEL_NAMESPACES: >-
+            [{"name":"workspace"},
+            {"name":"daemon","presence":true},
+            {"name":"chat","history_size":200,"history_ttl":"5m","force_recovery":true},
+            {"name":"agent","publication_data_format":"binary"},
+            {"name":"presence","presence":true,"join_leave":true,"force_push_join_leave":true,"allow_presence_for_subscriber":true}]
+        ports:
+          - 8000:8000
+        options: >-
+          --restart on-failure
+          --health-cmd "wget --spider -q http://127.0.0.1:8000/health"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      INTEGRATION_DATABASE_URL: postgresql://coforge:test@127.0.0.1:5432/coforge
+      INTEGRATION_REDIS_URL: redis://127.0.0.1:6379
+      COFORGE_CENTRIFUGO_API_URL: http://127.0.0.1:8000/api
+      COFORGE_CENTRIFUGO_API_KEY: integration-api-key
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          install: false
+          cache: false
+
+      - name: Install toolchain
+        run: mise install
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prepare the checkout and database
+        run: ./scripts/test/prepare-web-integration.sh
+
+      - name: Run the integration suites
+        # `shell: bash` makes a failing `mise run` fail the pipe, not just `tee`.
+        shell: bash
+        run: mise run test:integration:web 2>&1 | tee "$RUNNER_TEMP/web-integration.log"
+
+      # A red run is read from the run page; the log is kept for a week for whoever follows it up.
+      - name: Keep the log of a failed run
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-integration-log
+          path: ${{ runner.temp }}/web-integration.log
+          if-no-files-found: ignore
+          retention-days: 7

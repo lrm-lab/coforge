@@ -194,6 +194,12 @@ test("documentation skips application checks, while shared and unknown inputs fa
     "windows-release",
   ]);
   expect(selectChecks(["infra/staging/caddy/Caddyfile"], "changes")).toEqual(["deploy", "web"]);
+  // Its image digests must stay equal to the scheduled Web integration workflow's.
+  expect(selectChecks(["infra/staging/docker-compose.yml"], "changes")).toEqual([
+    "ci",
+    "deploy",
+    "web",
+  ]);
   expect(selectChecks(["scripts/ops/renew-cdn-certificates.ts"], "changes")).toEqual(["cdn-certs"]);
   expect(selectChecks(["scripts/docs/publish-docs-site.ts"], "changes")).toEqual(["docs-site"]);
   expect(selectChecks([".github/workflows/docs-production.yml"], "changes")).toEqual([

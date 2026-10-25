@@ -9,12 +9,15 @@
 | **Publish installer (production)** | Manually started from `main` with an approved commit and version | Verify staging published it → approval → plan → build that commit natively against the production feed → package, upload, and verify, and update `installer/latest`; or with `pointer_only` move that pointer alone |
 | **Publish Computer (production)** | Manually started from `main` with an approved commit, stable version, and release notes | Check the notes and verify the selected staging version's `latest` and manifest identify that commit and that the version follows the version rule below → approval → build that commit against the production feed → upload and verify → update production `latest` → register the notes |
 | **Edit Computer release notes** | Manually started from `main` with an environment, a published version, and notes; also called by both Computer publications | Replace that version's notes in the environment's release catalog and verify the read-back |
+| **Web integration**            | Daily at 19:17 UTC, or manually started | Prepare the checkout and a scratch database → run `mise run test:integration:web` against PostgreSQL, Redis and Centrifugo service containers |
 
 Every staging workflow is manual. A Web deployment validates, builds, and
 deploys the selected `main` commit whatever it changed. Computer publication's
 run title includes the version. Its build, upload, integrity checks, and
 selector update stay together in one publication transaction; expand that step
 to see each platform and object.
+
+Web integration is a test run, not a release: see [Web integration](web-integration.md).
 
 Both Computer publications take the `notes_en` and `notes_zh_cn` inputs and
 fail before building when either is missing, blank, or longer than 16000

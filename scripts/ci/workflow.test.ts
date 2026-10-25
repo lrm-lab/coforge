@@ -70,7 +70,7 @@ test("deploy and release jobs restore nothing from the Actions cache", async () 
       }
     }
   }
-  expect(checked).toBe(21);
+  expect(checked).toBe(22);
 });
 
 test("the aggregate gate executes even after failure and rejects missing, skipped, or cancelled required jobs", () => {
@@ -139,10 +139,11 @@ test("a push to main starts no deployment or publication", async () => {
     if (file === "ci.yml") continue;
     const workflow = Bun.YAML.parse(await Bun.file(`.github/workflows/${file}`).text());
     const triggers = Object.keys(workflow.on).filter((trigger) => trigger !== "workflow_call");
-    // Exemption: cdn-certificates.yml also runs on a schedule. It is scheduled certificate
-    // maintenance, not a deployment (approved by Frank 2026-10-23).
-    const expected =
-      file === "cdn-certificates.yml" ? ["schedule", "workflow_dispatch"] : ["workflow_dispatch"];
+    // Exemptions: cdn-certificates.yml also runs on a schedule. It is scheduled certificate
+    // maintenance, not a deployment (approved by Frank 2026-10-23). web-integration.yml runs the
+    // Web integration suites daily; it deploys and publishes nothing.
+    const scheduled = file === "cdn-certificates.yml" || file === "web-integration.yml";
+    const expected = scheduled ? ["schedule", "workflow_dispatch"] : ["workflow_dispatch"];
     expect(triggers, file).toEqual(expected);
   }
 });

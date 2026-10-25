@@ -127,7 +127,10 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
     } else if (path.startsWith("scripts/release/")) {
       affected = ["computer", "daemon", "macos-lifecycle", "release", "windows-release"];
     } else if (path.startsWith("scripts/deploy/") || path.startsWith("infra/")) {
-      affected = ["deploy", "web"];
+      // Staging's image digests are also pinned in the scheduled Web integration workflow, and the
+      // scripts/ci test that keeps the two equal runs only under the `ci` check.
+      affected =
+        path === "infra/staging/docker-compose.yml" ? ["ci", "deploy", "web"] : ["deploy", "web"];
     } else if (/^scripts\/verify-oss-cdn[.]/.test(path)) {
       affected = ["oss-cdn"];
     } else if (path.startsWith("scripts/docs/")) {
