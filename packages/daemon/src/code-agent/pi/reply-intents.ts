@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { asRecord, nonEmptyString } from "#src/code-agent/json-record";
+import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
 import { isShellToolName } from "#src/code-agent/send-command-target";
 import type { PiSessionEvent } from "./session-events";

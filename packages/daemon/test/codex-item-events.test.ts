@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CodexItemEvents } from "#src/code-agent/codex/item-events";
-import { asRecord, type JsonRecord } from "#src/code-agent/json-record";
+import { asRecord, type JsonRecord } from "@lrm/coforge-anvil";
 
 // Shapes follow the official app-server v2 schema (`codex app-server generate-ts`, ThreadItem.ts
 // and ServerNotification.ts). The mapping follows the reference Computer 1.0.50.

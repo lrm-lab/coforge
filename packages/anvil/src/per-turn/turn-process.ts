@@ -1,13 +1,9 @@
 import { getLogger, type Logger } from "@logtape/logtape";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
-import { ProcessTreeOwner } from "#src/platform/process-tree";
-import { LineBuffer } from "#src/code-agent/line-buffer";
-import {
-  cleanupOwnedTree,
-  type ProcessTreeCleanupOptions,
-} from "#src/code-agent/process-tree-cleanup";
-import { readStderrTail } from "#src/code-agent/stderr-tail";
+import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "#src/process-tree";
+import { LineBuffer } from "#src/line-buffer";
+import { cleanupOwnedTree, type ProcessTreeCleanupOptions } from "#src/process-tree-cleanup";
+import { readStderrTail } from "#src/stderr-tail";
 
 export type TurnRecord = Readonly<Record<string, unknown>>;
 
@@ -61,7 +57,7 @@ export class TurnProcess {
   readonly exited: Promise<TurnResult>;
   #cleanupPromise: Promise<void> | undefined;
 
-  constructor(launch: TurnLaunch, processTreeOwner: ProcessTreeSpawner = new ProcessTreeOwner()) {
+  constructor(launch: TurnLaunch, processTreeOwner: ProcessTreeSpawner) {
     this.#logger = getLogger(["coforge", "daemon", "code-agent", launch.provider]);
     this.#displayName = launch.displayName;
     this.#tree = processTreeOwner.spawn(launch.argv, launch.cwd, launch.environment);

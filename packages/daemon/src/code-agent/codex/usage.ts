@@ -4,9 +4,9 @@ import type {
   UsageSnapshot,
   UsageWindow,
 } from "@lrm/coforge-anvil";
-import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil";
+import { UsageUnavailableError, UsageUnsupportedError, asRecord } from "@lrm/coforge-anvil";
 import { agentEnvironment } from "#src/code-agent/environment";
-import { asRecord } from "#src/code-agent/json-record";
+
 import { maskEmail } from "#src/code-agent/mask-email";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { COFORGE_DAEMON_VERSION } from "#src/version";

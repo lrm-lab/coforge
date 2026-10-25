@@ -10,6 +10,7 @@ import {
   ModelProviderSettingError,
   RuntimeModelNotFoundError,
   type CodeAgentProvider,
+  errorMessage,
 } from "@lrm/coforge-anvil";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { evalMemoryOfferOnly } from "#src/code-agent/agent-instructions";
@@ -24,7 +25,7 @@ import {
   PI_SESSION_DIR,
 } from "@coforge/agent";
 import { join } from "node:path";
-import { errorMessage } from "#src/code-agent/json-record";
+
 import { PiReplyIntents } from "./reply-intents";
 import { piSessionEvents } from "./session-events";
 

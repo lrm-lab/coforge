@@ -1,13 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { TurnProcess, type TurnInput } from "#src/code-agent/per-turn/turn-process";
+import {
+  createPerTurnSession,
+  TurnProcess,
+  type TurnInput,
+  type TurnProtocol,
+} from "@lrm/coforge-anvil";
 import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 
 /** Records what the turn does to the child's stdin, in order, so a test can assert how the input
  * reaches it. */
 class RecordingSpawner implements ProcessTreeSpawner {
   readonly stdin: string[] = [];
+  readonly launches: {
+    command: readonly string[];
+    cwd: string;
+    environment: Readonly<Record<string, string>>;
+  }[] = [];
   readonly exited: Promise<number>;
   #release: (exitCode: number) => void = () => {};
 
@@ -21,7 +31,12 @@ class RecordingSpawner implements ProcessTreeSpawner {
     this.#release(exitCode);
   }
 
-  spawn(): OwnedProcessTree {
+  spawn(
+    command: readonly string[],
+    cwd: string,
+    environment: Readonly<Record<string, string>>,
+  ): OwnedProcessTree {
+    this.launches.push({ command, cwd, environment });
     const stdin = this.stdin;
     const empty = async function* (): AsyncGenerator<Uint8Array> {};
     const child: OwnedChildProcess = {
@@ -96,8 +111,8 @@ describe("TurnProcess input", () => {
   test("a child that closed stdin before it was fed does not fail the turn", async () => {
     const spawner = new RecordingSpawner();
     const spawn = spawner.spawn.bind(spawner);
-    spawner.spawn = () => {
-      const tree = spawn();
+    spawner.spawn = (...args) => {
+      const tree = spawn(...args);
       tree.child.stdin.write = () => {
         throw new Error("stdin is closed");
       };
@@ -117,4 +132,57 @@ describe("TurnProcess input", () => {
     spawner.finish(1);
     expect((await turn.exited).exitCode).toBe(1);
   });
+});
+
+test("per-turn sessions ask the host for a fresh launch environment on every turn", async () => {
+  const spawner = new RecordingSpawner();
+  const options = {
+    agentWorkspaceDirectory: "/isolated-workspace",
+    instructions: "Standing instructions",
+    sessionId: "native-session",
+  };
+  const protocol: TurnProtocol = {
+    provider: RUNTIME_PROVIDER.CURSOR,
+    displayName: "Cursor",
+    resumedIdentity: "resumable",
+    repeatedSessionId: "ignore",
+    identityReports: "every-completion",
+    environment: { NO_COLOR: "1" },
+    launch: ({ prompt }) => ({ argv: ["host-resolved-cursor", prompt], input: { kind: "open" } }),
+    openTurn: () => ({ failed: false, read: () => {} }),
+  };
+  let generation = "first";
+  const session = await createPerTurnSession(protocol, options, {
+    processTreeSpawner: spawner,
+    buildEnvironment(sessionOptions, policy) {
+      expect(sessionOptions).toBe(options);
+      expect(policy.environment).toEqual({ NO_COLOR: "1" });
+      return { HOST_GENERATION: generation };
+    },
+  });
+  try {
+    const completed = Promise.withResolvers<void>();
+    session.subscribe((event) => {
+      if (event.type === "completed") completed.resolve();
+    });
+    await session.sendMessage("hello");
+    spawner.finish();
+    await completed.promise;
+    generation = "second";
+    await session.sendMessage("again");
+    expect(spawner.launches).toEqual([
+      {
+        command: ["host-resolved-cursor", "hello"],
+        cwd: "/isolated-workspace",
+        environment: { HOST_GENERATION: "first" },
+      },
+      {
+        command: ["host-resolved-cursor", "again"],
+        cwd: "/isolated-workspace",
+        environment: { HOST_GENERATION: "second" },
+      },
+    ]);
+  } finally {
+    await session.dispose();
+  }
 });

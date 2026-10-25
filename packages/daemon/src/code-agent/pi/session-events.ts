@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent, createSession } from "@coforge/agent";
-import { asRecord, integerField, textContent } from "#src/code-agent/json-record";
+import { asRecord, integerField, textContent } from "@lrm/coforge-anvil";
 
 type PiSession = Awaited<ReturnType<typeof createSession>>["session"];
 /** One event the Pi SDK session reports to its subscribers. */

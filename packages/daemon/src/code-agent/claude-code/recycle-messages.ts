@@ -1,4 +1,4 @@
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import { cliClock, toolResultText } from "./recycle-actions";
 import { readTranscriptTailLines, transcriptRecords } from "./session-transcript";
 

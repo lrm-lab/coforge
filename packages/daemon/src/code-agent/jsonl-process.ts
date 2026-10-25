@@ -1,7 +1,7 @@
 import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
-import { LineBuffer } from "./line-buffer";
-import { cleanupOwnedTree, type ProcessTreeCleanupOptions } from "./process-tree-cleanup";
+import { LineBuffer, cleanupOwnedTree, type ProcessTreeCleanupOptions } from "@lrm/coforge-anvil";
+
 import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "jsonl"]);

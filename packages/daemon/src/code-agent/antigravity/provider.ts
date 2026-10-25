@@ -1,7 +1,8 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import type { CodeAgentProvider } from "@lrm/coforge-anvil";
-import { createPerTurnSession } from "#src/code-agent/per-turn/session";
+import { createPerTurnSession } from "@lrm/coforge-anvil";
+import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import { readAntigravityUsage } from "./usage";
 import { createAntigravityTurnProtocol } from "./turn-protocol";
 import { assertAntigravityVersionSupported } from "./version";
@@ -30,6 +31,10 @@ export class AntigravityProvider implements CodeAgentProvider {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
     await assertAntigravityVersionSupported(this.#command);
-    return createPerTurnSession(createAntigravityTurnProtocol(options, this.#command), options);
+    return createPerTurnSession(
+      createAntigravityTurnProtocol(options, this.#command),
+      options,
+      perTurnSessionHost,
+    );
   }
 }

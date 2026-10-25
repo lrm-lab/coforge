@@ -1,4 +1,4 @@
-import { asRecord, integerField } from "#src/code-agent/json-record";
+import { asRecord, integerField } from "@lrm/coforge-anvil";
 
 /**
  * How grok 1.0.41's `tool_call` / `tool_call_update` frames read, from captured streams. The user

@@ -9,7 +9,7 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 
 export const CODEX_LOGIN_MINIMUM_VERSION = "0.118.0";
 export const CODEX_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;

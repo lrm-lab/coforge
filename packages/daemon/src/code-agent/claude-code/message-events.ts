@@ -1,6 +1,12 @@
 import type { ActivitySubagent } from "@lrm/coforge-sdk/internal";
-import { isHttpErrorStatus, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { asRecord, eventTime, nonEmptyString, textContent } from "#src/code-agent/json-record";
+import {
+  isHttpErrorStatus,
+  type AgentRuntimeEvent,
+  asRecord,
+  eventTime,
+  nonEmptyString,
+  textContent,
+} from "@lrm/coforge-anvil";
 
 /**
  * What one Claude Code `assistant` record reports, block by block in order: a completed `thinking`

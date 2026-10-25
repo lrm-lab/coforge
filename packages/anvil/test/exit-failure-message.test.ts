@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { exitFailureMessage } from "#src/code-agent/exit-failure-message";
+import { exitFailureMessage } from "@lrm/coforge-anvil";
 
 describe("exitFailureMessage", () => {
   test("names the exit code and appends the stderr tail", () => {

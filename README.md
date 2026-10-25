@@ -36,7 +36,7 @@ The architecture invariants every change must respect are in
 | [packages/computer/AGENTS.md](packages/computer/AGENTS.md) | Computer package rules and module map |
 | [packages/agent/AGENTS.md](packages/agent/AGENTS.md) | Agent runtime rules and module map |
 | [packages/daemon/AGENTS.md](packages/daemon/AGENTS.md) | Daemon package rules and module map |
-| [packages/anvil/AGENTS.md](packages/anvil/AGENTS.md) | Anvil provider-neutral interface library rules |
+| [packages/anvil/AGENTS.md](packages/anvil/AGENTS.md) | Anvil contracts, adapters, execution and host boundary rules |
 | [crates/installer/AGENTS.md](crates/installer/AGENTS.md) | Rust installer crate (`coforge-installer`): toolchain, commands, contract, CI, supply-chain gate |
 | [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md) | Installer module map |
 | [docs/workspace-assistant.md](docs/workspace-assistant.md) | Workspace platform assistant setup, isolated sessions, and backfill |
@@ -74,7 +74,7 @@ The architecture invariants every change must respect are in
 | [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |
 | [packages/computer/README.md](packages/computer/README.md) | `coforge-computer` package |
 | [packages/daemon/README.md](packages/daemon/README.md) | `coforge-daemon` package |
-| [packages/anvil/README.md](packages/anvil/README.md) | `@lrm/coforge-anvil` provider-neutral Agent interface library |
+| [packages/anvil/README.md](packages/anvil/README.md) | `@lrm/coforge-anvil` Agent contracts, runtime adapters and shared execution |
 | [packages/agent/README.md](packages/agent/README.md) | Built-in Pi-based Agent runtime |
 | [packages/coforge/README.md](packages/coforge/README.md) | Agent-facing `coforge` CLI and its module map |
 | [docs/agent-cli/](docs/agent-cli/README.md) | `coforge` Agent CLI command reference |
@@ -96,7 +96,7 @@ apps/web                Web UI and backend control plane
 apps/docs               Public developer docs site (VitePress, English and zh-CN)
 packages/computer       Machine-level setup and supervisor package component
 packages/daemon         Single-workspace daemon package component
-packages/anvil          Provider-neutral Agent interface library
+packages/anvil          Agent contracts, runtime adapters and shared execution
 packages/agent          Independently packable built-in Agent runtime using Pi SDK
 packages/coforge        Agent CLI
 packages/coforge-sdk    Shared protocol and Agent SDK

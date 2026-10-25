@@ -12,7 +12,7 @@ import {
   supportedReasoningEfforts,
 } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
   CATALOG_DISCOVERY_TIMEOUT_MS,

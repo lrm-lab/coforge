@@ -1,6 +1,6 @@
 import { truncateCodePoints, truncateCodePointsWithEllipsis } from "@lrm/coforge-sdk/internal";
 import { collapseWhitespace } from "#src/code-agent/agent-instructions";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import { readTranscriptTailLines, transcriptRecords } from "./session-transcript";
 
 /**

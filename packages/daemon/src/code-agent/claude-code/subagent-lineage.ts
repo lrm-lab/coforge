@@ -1,6 +1,6 @@
 import type { ActivitySubagent } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import { subagentTypeLabel } from "#src/code-agent/subagent-type";
 
 /** Claude Code's subagent-starting tool, under its current and its earlier name. */

@@ -12,8 +12,9 @@ import {
   AGENT_RUNTIME_EVENT_TYPE,
   type AgentRuntimeEvent,
   type AgentSession,
+  PROCESS_TREE_EXIT_GRACE_MS,
 } from "@lrm/coforge-anvil";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
+
 import {
   backgroundBash,
   claudeFixtureProvider,

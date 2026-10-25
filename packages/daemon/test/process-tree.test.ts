@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 
 import type { OwnedProcessTreeKillReport } from "@lrm/coforge-anvil";
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
-import { cleanupOwnedTree } from "#src/code-agent/process-tree-cleanup";
+import { cleanupOwnedTree } from "@lrm/coforge-anvil";
 import { hostProcessTable, ProcessTreeOwner } from "#src/platform/process-tree";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
 

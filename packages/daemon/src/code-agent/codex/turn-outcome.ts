@@ -1,4 +1,4 @@
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 
 export type CodexTurnOutcome = {
   status: "completed" | "interrupted" | "failed";

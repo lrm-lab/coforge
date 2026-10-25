@@ -5,7 +5,7 @@ import {
   integerField,
   nonEmptyString,
   type JsonRecord,
-} from "#src/code-agent/json-record";
+} from "@lrm/coforge-anvil";
 
 /**
  * Maps one Codex app-server thread's turn, item and delta notifications to normalized runtime

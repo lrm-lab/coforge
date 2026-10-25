@@ -1,7 +1,8 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import type { CodeAgentProvider } from "@lrm/coforge-anvil";
-import { createPerTurnSession } from "#src/code-agent/per-turn/session";
+import { createPerTurnSession } from "@lrm/coforge-anvil";
+import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import { createCursorTurnProtocol } from "./turn-protocol";
 
 /**
@@ -19,6 +20,10 @@ export class CursorProvider implements CodeAgentProvider {
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
-    return createPerTurnSession(createCursorTurnProtocol(options, this.#command), options);
+    return createPerTurnSession(
+      createCursorTurnProtocol(options, this.#command),
+      options,
+      perTurnSessionHost,
+    );
   }
 }

@@ -281,6 +281,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@coforge/agent": "workspace:*",
+        "@logtape/logtape": "2.3.2",
         "@lrm/coforge-sdk": "workspace:*",
       },
       "devDependencies": {

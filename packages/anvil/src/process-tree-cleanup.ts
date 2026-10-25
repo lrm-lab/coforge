@@ -2,8 +2,8 @@ import type {
   OwnedChildProcess,
   OwnedProcessTree,
   OwnedProcessTreeKillReport,
-} from "@lrm/coforge-anvil";
-import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
+} from "./process-tree";
+import { AgentProcessCleanupError } from "./contract";
 import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["coforge", "daemon", "process-tree-cleanup"]);

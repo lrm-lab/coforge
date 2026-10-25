@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent, UsageSnapshot } from "@lrm/coforge-anvil";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 type FailureEvent = Extract<AgentRuntimeEvent, { type: "error" }>;

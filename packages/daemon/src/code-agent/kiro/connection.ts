@@ -1,4 +1,4 @@
-import { asRecord as record } from "#src/code-agent/json-record";
+import { asRecord as record } from "@lrm/coforge-anvil";
 import {
   client,
   type AnyMessage,

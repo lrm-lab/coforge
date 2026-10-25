@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 

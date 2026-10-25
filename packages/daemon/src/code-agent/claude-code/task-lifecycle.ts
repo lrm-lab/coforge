@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { eventTime, nonEmptyString } from "#src/code-agent/json-record";
+import { eventTime, nonEmptyString } from "@lrm/coforge-anvil";
 import type { ClaudeSubagentLineage } from "./subagent-lineage";
 
 /** Claude Code's task lifecycle `system` subtypes, by the phase each reports. */

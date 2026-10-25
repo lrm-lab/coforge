@@ -7,8 +7,9 @@ import {
   type UsageOfficialGroup,
   type UsageSnapshot,
   type UsageWindow,
+  asRecord,
 } from "@lrm/coforge-anvil";
-import { asRecord } from "#src/code-agent/json-record";
+
 import { withoutSshSessionVariables } from "./ssh-environment";
 
 /** How long `agy -p /usage` may run when the caller sets no deadline. It answers from the

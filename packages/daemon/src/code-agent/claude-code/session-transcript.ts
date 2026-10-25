@@ -2,7 +2,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import type { SessionResumeFacts } from "@lrm/coforge-anvil";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import { claudeUsageContextTokens } from "./observations";
 
 /**

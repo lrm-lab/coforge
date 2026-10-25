@@ -1,7 +1,8 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import type { CodeAgentProvider } from "@lrm/coforge-anvil";
-import { createPerTurnSession } from "#src/code-agent/per-turn/session";
+import { createPerTurnSession } from "@lrm/coforge-anvil";
+import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import { createOpenCodeTurnProtocol } from "./turn-protocol";
 import { assertOpenCodeVersionSupported } from "./version";
 
@@ -22,6 +23,10 @@ export class OpenCodeProvider implements CodeAgentProvider {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
     await assertOpenCodeVersionSupported(this.#command);
-    return createPerTurnSession(createOpenCodeTurnProtocol(options, this.#command), options);
+    return createPerTurnSession(
+      createOpenCodeTurnProtocol(options, this.#command),
+      options,
+      perTurnSessionHost,
+    );
   }
 }

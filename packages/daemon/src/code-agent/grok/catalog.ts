@@ -8,7 +8,7 @@ import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { withDeadline } from "#src/code-agent/deadline";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
-import { asRecord, nonEmptyString } from "#src/code-agent/json-record";
+import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.GROK]);
 

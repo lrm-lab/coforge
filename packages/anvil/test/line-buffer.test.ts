@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { LineBuffer } from "#src/code-agent/line-buffer";
+import { LineBuffer } from "@lrm/coforge-anvil";
 
 function feed(chunks: readonly string[]): { lines: string[]; rest: string } {
   const buffer = new LineBuffer();

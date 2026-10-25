@@ -305,15 +305,16 @@ test("workflow selection accepts NUL-delimited filenames and emits job and matri
   const output = await new Response(child.stdout).text();
   expect(await child.exited).toBe(0);
   expect(output).toContain('libraries=["anvil","coforge","coforge-sdk"]\n');
-  expect(output).toContain("contracts=[]\n");
+  expect(output).toContain('contracts=["ci"]\n');
   expect(output).toContain(
-    'jobs=["changes","libraries","computer","daemon","macos-lifecycle","web","windows-release"]\n',
+    'jobs=["changes","libraries","infrastructure-contracts","computer","daemon","macos-lifecycle","web","windows-release"]\n',
   );
 });
 
 test("Anvil source changes validate every product consumer", () => {
   expect(selectChecks(["packages/anvil/src/contract.ts"], "changes")).toEqual([
     "anvil",
+    "ci",
     "coforge-sdk",
     "computer",
     "daemon",
@@ -321,4 +322,13 @@ test("Anvil source changes validate every product consumer", () => {
     "web",
     "windows-release",
   ]);
+});
+
+test("Anvil library changes run its dependency-direction guard", () => {
+  for (const path of ["packages/anvil/index.ts", "packages/anvil/src/per-turn/session.ts"]) {
+    expect(selectChecks([path], "changes")).toContain("ci");
+  }
+  expect(selectChecks(["packages/anvil/test/per-turn-process.test.ts"], "changes")).not.toContain(
+    "ci",
+  );
 });

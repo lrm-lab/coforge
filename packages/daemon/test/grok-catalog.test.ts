@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { discoverGrokCatalog, GROK_CATALOG_TIMEOUT_MS } from "#src/code-agent/grok/catalog";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 
 test(
   "discovers the native per-model reasoning choices without creating a session",

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent, AgentSession } from "@coforge/agent";
 import { CursorProvider } from "#src/code-agent/cursor/provider";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { withDeadline } from "#src/code-agent/deadline";
 
 const fixture = new URL("./fixtures/cursor-agent-fixture.ts", import.meta.url).pathname;

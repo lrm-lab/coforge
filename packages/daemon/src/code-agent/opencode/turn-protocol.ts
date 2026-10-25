@@ -1,14 +1,14 @@
 import type { AgentSessionOptions } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { asRecord, eventTime } from "#src/code-agent/json-record";
-import type { TurnRecord } from "#src/code-agent/per-turn/turn-process";
+import { asRecord, eventTime } from "@lrm/coforge-anvil";
 import type {
+  TurnRecord,
   TurnCommand,
   TurnProtocol,
   TurnReader,
   TurnRequest,
   TurnScope,
-} from "#src/code-agent/per-turn/turn-protocol";
+} from "@lrm/coforge-anvil";
 
 /**
  * OpenCode (`opencode`, SST): every turn is its own `opencode run --format json` child process,

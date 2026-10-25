@@ -12,7 +12,7 @@ import type {
 } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { CodexProvider } from "#src/code-agent/codex/provider";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { COMPACTION_STALE_MS, REVIEW_STALE_MS } from "#src/agent-runtime/runtime-phases";
 import type { AgentActivity, AgentActivityDetailKind } from "@lrm/coforge-sdk/internal";

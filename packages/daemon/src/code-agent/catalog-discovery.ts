@@ -3,7 +3,7 @@ import { agentEnvironment } from "./environment";
 import { JsonlProcess, JsonlRequestError } from "./jsonl-process";
 import { getLogger } from "@logtape/logtape";
 import { withDeadline } from "./deadline";
-import { asRecord } from "./json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);

@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { asRecord, eventTime, nonEmptyString, type JsonRecord } from "#src/code-agent/json-record";
+import { asRecord, eventTime, nonEmptyString, type JsonRecord } from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
 import { scrubError } from "./provider-support";
 

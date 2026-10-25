@@ -8,13 +8,13 @@ import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "@lrm/coforge-anvil";
 import { KiroProvider } from "#src/code-agent/kiro/provider";
-import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
+import { AgentSessionRecoveryError, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import {
   AGENT_STARTUP_TIMEOUT_MS,
   AgentStartup,
   agentStartupInput,
 } from "#src/agent-runtime/agent-startup";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "#src/code-agent/process-tree-cleanup";
+
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
 import { captureDaemonLogs } from "./log-capture";
 

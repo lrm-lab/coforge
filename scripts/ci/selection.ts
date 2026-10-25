@@ -32,6 +32,11 @@ export const crossPackageScans: {
   check: string;
 }[] = [
   {
+    test: "scripts/ci/anvil-boundary.test.ts",
+    scans: (path) => /^packages\/anvil\/(index\.ts|src\/.+\.ts)$/.test(path) && walked(path),
+    check: "ci",
+  },
+  {
     // Scan scope mirrors runtime-provider-literal-scan.test.ts's scanRoots (and its
     // isScannableSource and collectSourceFiles filters): tests and generated files are skipped.
     test: "packages/coforge-sdk/src/internal/runtime-provider-literal-scan.test.ts",

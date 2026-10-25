@@ -5,7 +5,7 @@ import {
   type RequestPermissionResponse,
 } from "@agentclientprotocol/sdk";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 
 type RecordValue = Readonly<Record<string, unknown>>;
 const record = (value: unknown): RecordValue => {

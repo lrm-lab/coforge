@@ -1,4 +1,4 @@
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 
 /**
  * agy's own tool names and the CoForge tool each one is, with the single argument that carries its

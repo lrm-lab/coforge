@@ -3,8 +3,12 @@ import {
   type UsageSnapshot,
   type AgentRuntimeEvent,
   type CodeAgentProvider,
+  InterruptTracker,
+  asRecord,
+  eventTime,
+  nonEmptyString,
 } from "@lrm/coforge-anvil";
-import { InterruptTracker } from "#src/code-agent/interrupt-tracker";
+
 import type { AgentSession, AgentSessionIdentity, AgentSessionOptions } from "@coforge/agent";
 import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { RUNTIME_PROVIDER, type AgentServiceTierObserved } from "@lrm/coforge-sdk/internal";
@@ -17,7 +21,7 @@ import { ClaudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
-import { asRecord, eventTime, nonEmptyString } from "#src/code-agent/json-record";
+
 import { claudeContextUsage, claudeServiceTierState } from "./observations";
 import { readClaudeRecycleBriefing } from "./recycle-briefing";
 import { readClaudeSessionResumeFacts } from "./session-transcript";

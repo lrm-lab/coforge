@@ -2,7 +2,7 @@ import {
   AGENT_SERVICE_TIER_OBSERVED,
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
-import { asRecord, eventTime } from "#src/code-agent/json-record";
+import { asRecord, eventTime } from "@lrm/coforge-anvil";
 
 /**
  * The service tier a top-level `result` record reports for this launch, normalized to the SDK's

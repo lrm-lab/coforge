@@ -107,11 +107,11 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 ## Per-turn providers (Cursor, OpenCode, Antigravity)
 
 - Cursor's partial-output framing rules are in [`cursor/AGENTS.md`](cursor/AGENTS.md).
-- One child process per turn. `per-turn/session.ts` is their one `AgentSession` (state machine,
+- One child process per turn. Anvil `src/per-turn/session.ts` is their one `AgentSession` (state machine,
   input queue, interrupt, dispose, session identity and its reports, exit handling) and
-  `per-turn/turn-process.ts` their one process wrapper. A provider adds `<provider>/turn-protocol.ts`
+  Anvil `src/per-turn/turn-process.ts` their one process wrapper. A provider adds `<provider>/turn-protocol.ts`
   (argv, environment, stdin mode, record mapping) and calls `createPerTurnSession` from its
-  `provider.ts`, which keeps provider-wide concerns (usage, the version gate). Never add a session copy.
+  `provider.ts`, which keeps provider-wide concerns (usage, the version gate). The host injects environment composition and OS process ownership through `per-turn-host.ts`; never copy the Session.
 - Composition, not inheritance: a difference is a `TurnProtocol` field or a `TurnReader` hook. Each
   one (`instructionsTurn`, `resumedIdentity`, `repeatedSessionId`, `identityReports`,
   `mintSessionId`, `sanitizeEnvironment`, `lostResume`, reader `end`) records an observed CLI difference. Check the real CLI before adding

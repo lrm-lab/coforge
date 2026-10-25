@@ -1,12 +1,21 @@
 import type { AgentSession, AgentSessionIdentity, AgentSessionOptions } from "@coforge/agent";
-import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { agentEnvironment } from "#src/code-agent/environment";
-import { exitFailureMessage } from "#src/code-agent/exit-failure-message";
-import { InterruptTracker } from "#src/code-agent/interrupt-tracker";
-import { errorMessage } from "#src/code-agent/json-record";
+import type { AgentRuntimeEvent } from "#src/contract";
+import type { ProcessTreeSpawner } from "#src/process-tree";
+import { exitFailureMessage } from "#src/exit-failure-message";
+import { InterruptTracker } from "#src/interrupt-tracker";
+import { errorMessage } from "#src/json-record";
 import { TurnProcess, type TurnResult } from "./turn-process";
-import type { ProcessTreeCleanupOptions } from "#src/code-agent/process-tree-cleanup";
+import type { ProcessTreeCleanupOptions } from "#src/process-tree-cleanup";
 import type { TurnProtocol, TurnReader, TurnRequest, TurnScope } from "./turn-protocol";
+
+/** Host capabilities; Anvil does not discover executables or assemble a platform environment. */
+export interface PerTurnSessionHost {
+  readonly processTreeSpawner: ProcessTreeSpawner;
+  buildEnvironment(
+    options: AgentSessionOptions,
+    policy: Pick<TurnProtocol, "sanitizeEnvironment" | "environment">,
+  ): Record<string, string>;
+}
 
 type SessionState = "idle" | "running" | "interrupting" | "disposed";
 type QueuedInput = { text: string; resolve(): void; reject(error: Error): void };
@@ -33,8 +42,9 @@ function toError(error: unknown): Error {
 export async function createPerTurnSession(
   protocol: TurnProtocol,
   options: AgentSessionOptions,
+  host: PerTurnSessionHost,
 ): Promise<AgentSession> {
-  const session = new PerTurnAgentSession(protocol, options);
+  const session = new PerTurnAgentSession(protocol, options, host);
   if (!options.sessionId && protocol.instructionsTurn) {
     try {
       await session.bootstrap(protocol.instructionsTurn.identityNoun);
@@ -49,6 +59,7 @@ export async function createPerTurnSession(
 class PerTurnAgentSession implements AgentSession {
   readonly #protocol: TurnProtocol;
   readonly #options: AgentSessionOptions;
+  readonly #host: PerTurnSessionHost;
   readonly #scope: TurnScope = {
     emit: (event) => this.#emit(event),
     observeSessionId: (sessionId) => this.#observeSessionId(sessionId),
@@ -78,9 +89,10 @@ class PerTurnAgentSession implements AgentSession {
   #bootstrap: { identityNoun: string; resolve(): void; reject(error: Error): void } | undefined;
   #interrupt = new InterruptTracker();
 
-  constructor(protocol: TurnProtocol, options: AgentSessionOptions) {
+  constructor(protocol: TurnProtocol, options: AgentSessionOptions, host: PerTurnSessionHost) {
     this.#protocol = protocol;
     this.#options = options;
+    this.#host = host;
     // A provider that chooses its own session ids is told a session is new when the daemon asks to
     // `create` it, however it got its id (`AgentSessionOptions.sessionMode`); only a `resume`
     // carries a conversation to continue. Every other provider resumes any id it is given.
@@ -197,14 +209,17 @@ class PerTurnAgentSession implements AgentSession {
     // throw (`Bun.spawn` throws synchronously for a working directory that no longer exists), so
     // the session records the turn as running only once the process exists; a throw leaves it
     // exactly as it was, and the caller reports it.
-    const turnProcess = new TurnProcess({
-      provider: this.#protocol.provider,
-      displayName: this.#protocol.displayName,
-      argv: command.argv,
-      cwd: this.#options.agentWorkspaceDirectory,
-      environment: this.#environment(),
-      input: command.input,
-    });
+    const turnProcess = new TurnProcess(
+      {
+        provider: this.#protocol.provider,
+        displayName: this.#protocol.displayName,
+        argv: command.argv,
+        cwd: this.#options.agentWorkspaceDirectory,
+        environment: this.#host.buildEnvironment(this.#options, this.#protocol),
+        input: command.input,
+      },
+      this.#host.processTreeSpawner,
+    );
     const reader = this.#protocol.openTurn(this.#scope, request);
     const turn: ActiveTurn = { process: turnProcess, prompt, reader, abandoned: false };
     this.#currentTurn = turn;
@@ -215,20 +230,6 @@ class PerTurnAgentSession implements AgentSession {
     });
     void turnProcess.exited.then((result) => this.#onTurnExit(turn, result));
     if (this.#sessionId) this.#setIdentity("unknown");
-  }
-
-  #environment(): Record<string, string> {
-    const sanitize = this.#protocol.sanitizeEnvironment;
-    const declared = this.#options.environment;
-    return {
-      ...agentEnvironment(
-        sanitize && declared ? sanitize(declared) : declared,
-        sanitize ? sanitize(Bun.env) : Bun.env,
-        undefined,
-        { envVars: this.#options.runtime?.envVars, gitHooks: this.#options.gitHooks },
-      ),
-      ...this.#protocol.environment,
-    };
   }
 
   /** Stops reading the current turn's records and kills its process. */

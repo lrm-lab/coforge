@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
-import { asRecord, nonEmptyString } from "#src/code-agent/json-record";
+import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
 import {
   grokToolEnded,
   grokToolExitCode,

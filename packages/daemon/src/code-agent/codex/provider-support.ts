@@ -2,7 +2,7 @@ import {
   AGENT_SERVICE_TIER_OBSERVED,
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 
 export type CodexSessionState =
   | { type: "idle" }

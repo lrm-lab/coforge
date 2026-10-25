@@ -8,7 +8,7 @@ import type {
 } from "@coforge/agent";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { withDeadline } from "#src/code-agent/deadline";
-import { asRecord, nonEmptyString } from "#src/code-agent/json-record";
+import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { GrokConnection } from "./connection";
 import { GrokTurnEvents } from "./update-events";

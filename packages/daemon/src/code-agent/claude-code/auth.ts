@@ -7,10 +7,11 @@ import {
   type RuntimeAuthLogoutResult,
   type RuntimeAuthSecretSink,
   type RuntimeAuthStatus,
+  asRecord,
 } from "@lrm/coforge-anvil";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
-import { asRecord } from "#src/code-agent/json-record";
+
 import { maskEmail } from "#src/code-agent/mask-email";
 
 export const CLAUDE_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;

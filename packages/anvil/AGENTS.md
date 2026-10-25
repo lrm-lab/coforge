@@ -1,7 +1,10 @@
 # Anvil instructions
 
-`@lrm/coforge-anvil` is the provider-neutral Agent interface library. Keep it independent of daemon runtime orchestration, platform implementations, filesystem state, transports, and provider-specific adapters.
+`@lrm/coforge-anvil` owns provider-neutral Agent contracts, runtime adapters and their shared execution machinery. Keep it independent of daemon orchestration and platform implementations.
 
-- Public contracts and exports belong here; daemon imports them by package name.
-- OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default.
+- Public contracts and exports belong here; daemon imports them by package name. Never import daemon modules, including through relative paths or aliases. `scripts/ci/anvil-boundary.test.ts` checks this direction.
+- OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default, read Workspace configuration, discover executables or read PATH.
+- The host supplies per-turn environment composition through `PerTurnSessionHost.buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
+- Agent instructions, assigned Skills, Git hooks, runtime inventory and caches stay with the host. Adapters consume the prepared session options; they do not coordinate those policies.
+- `src/per-turn/` owns the one Session state machine, input queue, interrupt/dispose, identity reports and child-process wrapper shared by per-turn adapters. Provider differences belong to `TurnProtocol` fields or `TurnReader` hooks; do not copy the Session or parse provider output there.
 - Preserve provider behavior while migrating one contract or runtime slice at a time. Run the package checks and the daemon checks for every slice.

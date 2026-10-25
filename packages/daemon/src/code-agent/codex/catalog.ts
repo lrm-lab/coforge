@@ -7,7 +7,7 @@ import {
 import type { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { getLogger } from "@logtape/logtape";
-import { asRecord } from "#src/code-agent/json-record";
+import { asRecord } from "@lrm/coforge-anvil";
 import {
   CatalogDiscoveryError,
   isModel,
