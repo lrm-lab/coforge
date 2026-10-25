@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// Server-to-daemon intents that drive a Code Agent runtime's own sign-in and sign-out, and the
+// daemon's reports back. The login code is a credential: it travels in RuntimeAuthLoginCodeIntent
+// only and is never stored or logged.
+
+message RuntimeAuthAccount {
+  optional string masked_label = 1;
+  optional string plan_label = 2;
+  optional string method_label = 3;
+}
+
+message RuntimeAuthLoginStart {
+  string login_id = 1;
+  string provider = 2;
+}
+
+message RuntimeAuthLoginCode {
+  string login_id = 1;
+  string code = 2;
+}
+
+message RuntimeAuthLoginCancel {
+  string login_id = 1;
+}
+
+message RuntimeAuthLogout {
+  string request_id = 1;
+  string provider = 2;
+}
+
+// The one envelope of the four server-to-daemon intents, so a receiver never guesses which message
+// the bytes are.
+message RuntimeAuthIntent {
+  uint32 protocol_major = 1;
+  string workspace_id = 2;
+  string computer_id = 3;
+  oneof kind {
+    RuntimeAuthLoginStart login_start = 4;
+    RuntimeAuthLoginCode login_code = 5;
+    RuntimeAuthLoginCancel login_cancel = 6;
+    RuntimeAuthLogout logout = 7;
+  }
+  string message_type = 8;
+}
+
+message RuntimeAuthAuthUrlEvent {
+  string url = 1;
+  optional string instructions = 2;
+}
+
+message RuntimeAuthDeviceCodeEvent {
+  string user_code = 1;
+  string verification_url = 2;
+  optional uint32 expires_in_seconds = 3;
+}
+
+message RuntimeAuthInfoEvent {
+  string message = 1;
+}
+
+message RuntimeAuthCodePromptEvent {
+  optional string message = 1;
+  optional bool retry = 2;
+}
+
+message RuntimeAuthLoginEvent {
+  oneof kind {
+    RuntimeAuthAuthUrlEvent auth_url = 1;
+    RuntimeAuthDeviceCodeEvent device_code = 2;
+    RuntimeAuthInfoEvent info = 3;
+    RuntimeAuthCodePromptEvent code_prompt = 4;
+  }
+}
+
+message RuntimeAuthLoggedIn {
+  optional RuntimeAuthAccount account = 1;
+}
+
+message RuntimeAuthFailed {
+  string reason = 1;
+  optional string detail = 2;
+}
+
+message RuntimeAuthCancelled {}
+
+message RuntimeAuthUnsupported {
+  string reason = 1;
+  optional string detail = 2;
+}
+
+message RuntimeAuthBusy {}
+
+message RuntimeAuthLoggedOut {}
+
+message RuntimeAuthLoginResult {
+  oneof kind {
+    RuntimeAuthLoggedIn logged_in = 1;
+    RuntimeAuthFailed failed = 2;
+    RuntimeAuthCancelled cancelled = 3;
+    RuntimeAuthUnsupported unsupported = 4;
+    RuntimeAuthBusy busy = 5;
+  }
+}
+
+// One login's progress or its single terminal result; `sequence` orders reports that may reach
+// different Web instances.
+message RuntimeAuthLoginReport {
+  uint32 protocol_major = 1;
+  string workspace_id = 2;
+  string computer_id = 3;
+  string login_id = 4;
+  uint32 sequence = 5;
+  oneof report {
+    RuntimeAuthLoginEvent event = 6;
+    RuntimeAuthLoginResult result = 7;
+  }
+  string message_type = 8;
+}
+
+message RuntimeAuthLogoutResult {
+  oneof kind {
+    RuntimeAuthLoggedOut logged_out = 1;
+    RuntimeAuthFailed failed = 2;
+    RuntimeAuthUnsupported unsupported = 3;
+  }
+}
+
+message RuntimeAuthLogoutReport {
+  uint32 protocol_major = 1;
+  string workspace_id = 2;
+  string computer_id = 3;
+  string request_id = 4;
+  RuntimeAuthLogoutResult result = 5;
+  string message_type = 6;
+}
