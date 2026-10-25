@@ -6,6 +6,7 @@ import {
   issueAgentStatusSubscriptionToken,
   issueAgentStatusSubscriptionTokenForAgent,
   issueConversationRealtimeToken,
+  issueRuntimeAuthSubscriptionToken,
   issueBrowserRealtimeToken,
 } from "#src/server/auth/browser-realtime-token.server";
 
@@ -120,4 +121,17 @@ test("subscription token authorizes one User for one conversation channel", asyn
   expect(payload.channel).toBe("chat:12345678-0000-4000-8000-000000000001");
   expect(payload.channels).toBeUndefined();
   expect((payload.exp ?? 0) - (payload.iat ?? 0)).toBe(300);
+});
+
+test("runtime sign-in subscription token authorizes only the caller's own channel", async () => {
+  const { environment, publicKey } = await signingFixture();
+  const token = await issueRuntimeAuthSubscriptionToken({ userId: "user-1" }, environment);
+  const { payload } = await jwtVerify(token, publicKey, {
+    issuer: "coforge-test",
+    audience: "coforge-test-centrifugo",
+  });
+
+  expect(payload.sub).toBe("user-1");
+  expect(payload.channel).toBe("runtimeauth:user:user-1");
+  expect(payload.channels).toBeUndefined();
 });

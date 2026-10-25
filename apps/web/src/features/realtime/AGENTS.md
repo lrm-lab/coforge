@@ -19,6 +19,9 @@ These rules apply to `src/features/realtime/`.
   Centrifugo namespace; do not enable them on another namespace for that. The
   `daemon` namespace keeps presence (no join/leave) only so the server can
   disconnect one daemon connection; browser code never reads it.
+- `runtimeauth:user:<user_id>` carries one person's runtime sign-in progress (authorization link,
+  device code, result). Its namespace and `daemon` must never set history
+  (`apps/web/test/centrifugo-no-history.test.ts`): a sign-in code or link is not kept after delivery.
 - Re-read state a channel may have missed in its `onSubscribed`, as
   `subscriptionGap` (`subscription-gap.ts`) classifies the event, never on
   the client's `connected` event: a channel receives nothing until its own

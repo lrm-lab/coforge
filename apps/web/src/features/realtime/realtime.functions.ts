@@ -5,6 +5,7 @@ import { authorizeConversationRealtime } from "#src/server/conversations/convers
 import {
   issueBrowserRealtimeToken,
   issueConversationRealtimeToken,
+  issueRuntimeAuthSubscriptionToken,
   issueUserConversationSubscriptionToken,
   issueWorkspaceConversationSubscriptionToken,
   issueWorkspacePresenceSubscriptionToken,
@@ -61,3 +62,8 @@ export const getWorkspacePresenceSubscriptionToken = createServerFn({ method: "G
     const { user, workspaceId } = context;
     return issueWorkspacePresenceSubscriptionToken({ userId: user.id, workspaceId });
   });
+
+/** Subscription token for the caller's own runtime sign-in channel. */
+export const getRuntimeAuthSubscriptionToken = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => issueRuntimeAuthSubscriptionToken({ userId: context.user.id }));

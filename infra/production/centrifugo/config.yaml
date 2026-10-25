@@ -66,6 +66,9 @@ channel:
       history_size: 200
       history_ttl: 5m
       force_recovery: true
+    # `runtimeauth:user:<user_id>`: one person's runtime sign-in progress (authorization link, device
+    # code, result). No history: nothing in it may be kept after it is delivered.
+    - name: runtimeauth
     - name: agent
       publish_proxy_enabled: true
       publication_data_format: binary

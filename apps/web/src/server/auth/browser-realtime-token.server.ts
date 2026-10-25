@@ -13,6 +13,7 @@ import {
   userConversationChannel,
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
+import { runtimeAuthChannel } from "#src/features/computers/runtime-auth-realtime";
 import { workspacePresenceChannel } from "#src/features/workspaces/presence-channel";
 
 async function browserRealtimeSigner(
@@ -141,6 +142,18 @@ export async function issueUserConversationSubscriptionToken(
   return browserRealtimeSigner(
     environment,
     { channel: userConversationChannel(input.userId) },
+    input.userId,
+  );
+}
+
+/** The caller's own runtime sign-in channel; bound to their user id like their DM signal channel. */
+export async function issueRuntimeAuthSubscriptionToken(
+  input: { userId: string },
+  environment: Record<string, string | undefined> = process.env,
+): Promise<string> {
+  return browserRealtimeSigner(
+    environment,
+    { channel: runtimeAuthChannel(input.userId) },
     input.userId,
   );
 }
