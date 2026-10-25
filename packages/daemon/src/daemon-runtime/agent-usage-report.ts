@@ -1,5 +1,5 @@
 import type { AgentServiceTierObserved, RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { PublishedActivityLaunch } from "./agent-activity-publisher";
 
 export type AgentUsageReportPorts = Readonly<{

@@ -1,5 +1,5 @@
 import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 
 export type HeldTaskResultDeps = Readonly<{

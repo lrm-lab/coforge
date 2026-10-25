@@ -89,6 +89,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 
 | Path                                 | Single responsibility                                                                                                    |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `src/daemon-startup-options.ts`      | Private daemon invocation options and default state directory                                                            |
 | `index.ts`                           | Process entrypoint and package exports; dependency assembly only                                                         |
 | `src/daemon-host/`                   | Login-session startup through launchd, systemd user, and Windows tasks                                                   |
 | `src/supervisor/`                    | Machine Coordinator: Workspace binding registry and per-Workspace process lifecycle                                      |

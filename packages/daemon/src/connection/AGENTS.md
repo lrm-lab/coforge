@@ -5,6 +5,7 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
 
 ## Boundary
 
+- `daemon-connection-client.ts` holds the transport contract; `daemon-connection.ts` implements it.
 - This directory owns the daemon's long-lived WSS connection, ordered replay,
   reconnect, and protocol transport mechanics. Domain decisions stay in
   `daemon-runtime/` and below.

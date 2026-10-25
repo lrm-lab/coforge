@@ -190,8 +190,10 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     options: { workingDirectory: string; timeoutMs?: number; onSecret?: RuntimeAuthSecretSink },
     interaction: RuntimeAuthLoginInteraction,
   ): Promise<RuntimeAuthLoginResult> {
+    if (interaction.signal?.aborted) return { status: "cancelled" };
     if (this.#active) return { status: "busy" };
     const tooOld = await this.#versionBelowFloor(options.workingDirectory);
+    if (interaction.signal?.aborted) return { status: "cancelled" };
     if (tooOld)
       return {
         status: "unsupported",

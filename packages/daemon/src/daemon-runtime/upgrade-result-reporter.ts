@@ -5,7 +5,7 @@ import {
   type ComputerUpgradeResult,
 } from "@lrm/coforge-sdk/internal";
 import { launchFailureCooldownMs } from "#src/agent-runtime/launch-failure-backoff";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { scheduleUnrefTimer, type UnrefTimerSchedule } from "./unref-timer";
 

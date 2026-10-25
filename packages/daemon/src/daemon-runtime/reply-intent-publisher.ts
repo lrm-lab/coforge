@@ -1,5 +1,5 @@
 import { REPLY_INTENT_PHASE } from "@lrm/coforge-sdk/internal/reply-intent";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { ReplyIntentTracker, type ReplyIntentSignal } from "./reply-intent-tracker";
 
 export type ReplyIntentPublisherPorts<L extends { stopping: boolean }> = Readonly<{

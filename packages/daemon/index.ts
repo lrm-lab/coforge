@@ -1,5 +1,4 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { daemonStartupOptions } from "#src/daemon-startup-options";
 import type { LocalInboxRequest, RunnerHoldReason } from "@lrm/coforge-sdk/internal";
 import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { startDaemonLocalRpcServer } from "#src/local-rpc";
@@ -169,25 +168,19 @@ export {
   type DaemonCredentialStore,
 } from "#src/credentials/credential-store";
 export type { AgentMessageHttpClient } from "#src/connection/agent-http-clients";
-export {
-  DaemonConnection,
-  type DaemonConnectionClient,
-  type DaemonConnectionConfig,
-  type DaemonConnectionClientFactory,
-} from "#src/connection/daemon-connection";
+export { DaemonConnection } from "#src/connection/daemon-connection";
+export type {
+  DaemonConnectionClient,
+  DaemonConnectionConfig,
+  DaemonConnectionClientFactory,
+} from "#src/connection/daemon-connection-client";
 export { defaultCentrifugeWorkspaceClientFactory } from "#src/connection/centrifuge-workspace-client";
 export { COFORGE_DAEMON_SERVER_URL, daemonConnectionEndpoint } from "#src/connection/built-server";
 
 const DAEMON_CATEGORY = ["coforge", "daemon"];
 
 export async function runDaemon(args: string[], computerVersion?: string): Promise<void> {
-  const argument = (flag: string) => {
-    const index = args.indexOf(flag);
-    return index >= 0 ? args[index + 1] : undefined;
-  };
-  const socketPath = argument("--socket");
-  const stateDirectoryArg = argument("--state-directory");
-  const daemonStateDirectory = stateDirectoryArg ?? join(homedir(), ".coforge", "daemon");
+  const { socketPath, stateDirectoryArg, daemonStateDirectory } = daemonStartupOptions(args);
   await configureDaemonLogging(daemonStateDirectory);
   const healthJournal = new WorkspaceHealthJournal(
     workspaceHealthJournalPath(daemonStateDirectory),

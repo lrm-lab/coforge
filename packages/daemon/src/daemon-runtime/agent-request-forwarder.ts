@@ -38,7 +38,7 @@ import type {
   WorkspaceInfoRequest,
   WorkspaceInfoResponse,
 } from "@lrm/coforge-sdk/internal";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { OpenVikingAgentProxyCommand } from "#src/openviking-read-proxy";
 
 export type AgentRequestForwarderPorts = Readonly<{

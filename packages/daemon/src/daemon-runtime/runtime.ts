@@ -1,3 +1,8 @@
+import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
+import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
+import type { RuntimeAuthController } from "./runtime-auth-controller";
+import { createRuntimeAuthAdapter } from "#src/code-agent/registry";
+import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
 import {
   AGENT_RUNTIME_EVENT_TYPE,
   AgentProcessCleanupError,
@@ -104,7 +109,7 @@ import { readyCapabilities } from "./ready-capabilities";
 import type {
   DaemonConnectionClient,
   DaemonConnectionClientFactory,
-} from "#src/connection/daemon-connection";
+} from "#src/connection/daemon-connection-client";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import { HeldPublications } from "#src/connection/held-publications";
@@ -502,6 +507,7 @@ export class DaemonRuntime {
   };
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #runtimeAuth: RuntimeAuthReporter;
+  #runtimeAuthControl: RuntimeAuthController | undefined;
   readonly #upgradeResults: UpgradeResultReporter;
   #piChat?: PiChatRelay;
   readonly #workspaceQueries = new AgentWorkspaceQueries(
@@ -546,6 +552,9 @@ export class DaemonRuntime {
       SystemCleanerOptions,
       "clock" | "measureMemoryFile" | "measureDiskSpace"
     > = {},
+    private readonly runtimeAuthFactory: (
+      provider: RuntimeAuthProvider,
+    ) => RuntimeAuthAdapter = createRuntimeAuthAdapter,
   ) {
     const runtime = this;
     this.#activityPublisher = new AgentActivityPublisher<ActivityLaunch>({
@@ -1023,6 +1032,18 @@ export class DaemonRuntime {
           logAgentOperationFailure(this.#connection.computerId, operation, request, error),
         );
     try {
+      const auth = subscribeRuntimeAuth(this.#transport, {
+        owner: {
+          protocolMajor: 1,
+          workspaceId: connection.workspaceId,
+          computerId: connection.computerId,
+        },
+        workingDirectory: connection.workspaceRoot,
+        createAdapter: this.runtimeAuthFactory,
+        refresh: () => this.refreshRuntimeAuth(),
+      });
+      this.#runtimeAuthControl = auth?.controller;
+      this.#subscribe(auth?.unsubscribe);
       this.#upgradeResults.start();
       this.#subscribe(
         this.#transport.onReconnect?.(() => {
@@ -1067,62 +1088,14 @@ export class DaemonRuntime {
           await this.#piChat?.execute(request);
         }),
       );
-      this.#subscribe(
-        transport.onSkillsList?.(async (request) => {
-          if (
-            this.#stopping ||
-            request.workspaceId !== connection.workspaceId ||
-            request.computerId !== connection.computerId
-          )
-            return;
-          const result = await this.#workspaceQueries.listSkills(connection, request);
-          if (!this.#stopping && this.#transport === transport)
-            await transport.sendSkillsListResult?.({
-              ...request,
-              ...result,
-              scannedAtMs: Date.now(),
-            });
-        }),
-      );
-      this.#subscribe(
-        transport.onWorkspaceFilesList?.(async (request) => {
-          if (
-            this.#stopping ||
-            request.workspaceId !== connection.workspaceId ||
-            request.computerId !== connection.computerId
-          )
-            return;
-          const result = await this.#workspaceQueries.listFiles(connection, request);
-          if (!this.#stopping && this.#transport === transport)
-            await transport.sendWorkspaceFilesListResult?.({ ...request, ...result });
-        }),
-      );
-      this.#subscribe(
-        transport.onWorkspaceFileRead?.(async (request) => {
-          if (
-            this.#stopping ||
-            request.workspaceId !== connection.workspaceId ||
-            request.computerId !== connection.computerId
-          )
-            return;
-          const result = await this.#workspaceQueries.readFile(connection, request);
-          if (!this.#stopping && this.#transport === transport)
-            await transport.sendWorkspaceFileReadResult?.({ ...request, ...result });
-        }),
-      );
-      this.#subscribe(
-        transport.onWorkspaceDelete?.(async (request) => {
-          if (
-            this.#stopping ||
-            request.workspaceId !== connection.workspaceId ||
-            request.computerId !== connection.computerId
-          )
-            return;
-          const result = await this.#deleteWorkspace(connection, request);
-          if (!this.#stopping && this.#transport === transport)
-            await transport.sendWorkspaceDeleteResult?.({ ...request, ...result });
-        }),
-      );
+      for (const unsubscribe of subscribeWorkspaceQueries(transport, {
+        connection,
+        observations: this.#workspaceQueries,
+        deleteWorkspace: (request) => this.#deleteWorkspace(connection, request),
+        currentTransport: () => this.#transport,
+        isStopping: () => this.#stopping,
+      }))
+        this.#subscribe(unsubscribe);
       for (const unsubscribe of subscribeProviderScans(this.#transport, {
         connection,
         runtime: this,
@@ -1286,7 +1259,7 @@ export class DaemonRuntime {
           ...readOperatingSystem(),
           recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
-          capabilities: readyCapabilities(!!this.#migrations),
+          capabilities: readyCapabilities(!!this.#migrations, !!this.#runtimeAuthControl),
         }),
         signal,
       );
@@ -1317,6 +1290,8 @@ export class DaemonRuntime {
         .then((report) => this.#codeAgentInventory.refreshStaleCatalogs(report, transport))
         .catch(() => {});
     } catch (error) {
+      this.#runtimeAuthControl?.stop();
+      this.#runtimeAuthControl = undefined;
       this.#unsubscribeAll();
       this.#upgradeResults.stop();
       this.#started = false;
@@ -3984,6 +3959,8 @@ export class DaemonRuntime {
     this.#runnerHold = undefined;
     // Close every local capability synchronously before any shutdown await.
     this.#stopping = true;
+    this.#runtimeAuthControl?.stop();
+    this.#runtimeAuthControl = undefined;
     this.#started = false;
     this.#coldIdleSweep.stop();
     this.#activityPublisher.disable();

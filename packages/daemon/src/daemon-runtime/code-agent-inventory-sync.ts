@@ -12,7 +12,7 @@ import {
   loadCachedCodeAgentCatalogs,
 } from "#src/code-agent/runtime-inventory";
 import { hostCodeAgentProbe } from "#src/code-agent/runtime-probe";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 

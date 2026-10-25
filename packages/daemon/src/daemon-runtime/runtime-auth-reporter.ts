@@ -11,7 +11,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { createRuntimeAuthAdapter } from "#src/code-agent/registry";
 import { RuntimeAuthStatusCollector } from "#src/code-agent/runtime-auth-status";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 
 type Ports = {
   owner: { workspaceId: string; computerId: string };

@@ -3,7 +3,7 @@ import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil
 import type { RuntimeAuthStatusReport } from "@lrm/coforge-sdk/internal";
 import type { RuntimeMetadata } from "@lrm/coforge-sdk/internal";
 
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { RuntimeAuthReporter } from "#src/daemon-runtime/runtime-auth-reporter";
 
 const runtime = (provider: string) => ({ provider, version: "1.0.0", displayName: provider });

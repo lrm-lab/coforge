@@ -1,3 +1,4 @@
+import { sessionSpy } from "./fixtures/session-spy";
 import {
   AGENT_MIGRATION_CAPABILITY,
   APP_CONFIG_CAPABILITY,
@@ -5,7 +6,7 @@ import {
   CLEANER_APP_ID,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
-import type { ReceivedAgentMigrationLease } from "#src/connection/daemon-connection";
+import type { ReceivedAgentMigrationLease } from "#src/connection/daemon-connection-client";
 import {
   afterAll,
   afterEach,
@@ -76,20 +77,6 @@ import {
 import type { LogRecord } from "@logtape/logtape";
 import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
-
-function sessionSpy() {
-  return {
-    async sendMessage() {},
-    subscribe() {
-      return () => undefined;
-    },
-    async interrupt() {},
-    onExit() {
-      return () => undefined;
-    },
-    async dispose() {},
-  } satisfies AgentSession;
-}
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());

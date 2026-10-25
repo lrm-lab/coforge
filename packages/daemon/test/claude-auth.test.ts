@@ -487,3 +487,37 @@ test("a success line is not believed when auth status says signed out", async ()
   login.finish(0);
   await expect(result).resolves.toMatchObject({ status: "failed" });
 });
+
+test("cancelling during the version probe never starts a Claude login", async () => {
+  const version = new FakeAuthProcess();
+  const login = new FakeAuthProcess();
+  const probed = Promise.withResolvers<void>();
+  const commands: string[][] = [];
+  const adapter = new ClaudeRuntimeAuthAdapter({
+    create: (command) => {
+      commands.push([...command]);
+      if (command[1] === "--version") {
+        probed.resolve();
+        return version;
+      }
+      return login;
+    },
+  });
+  const abort = new AbortController();
+  const pending = adapter.startLogin(
+    { workingDirectory: "/fixture", timeoutMs: 20 },
+    { signal: abort.signal, onEvent() {}, prompt: async () => "unused" },
+  );
+  try {
+    await probed.promise;
+    abort.abort();
+    version.say("2.1.310 (Claude Code)");
+    version.finish(0);
+    expect(await pending).toEqual({ status: "cancelled" });
+    expect(commands).toEqual([["claude", "--version"]]);
+  } finally {
+    version.finish(0);
+    login.finish(143);
+    await pending;
+  }
+});

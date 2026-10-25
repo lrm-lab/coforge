@@ -4,7 +4,7 @@ import type {
   RuntimeProvider,
   UsageScanResponse,
 } from "@lrm/coforge-sdk/internal";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { CodeAgentInventorySync } from "./code-agent-inventory-sync";
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
 

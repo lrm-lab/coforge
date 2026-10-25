@@ -177,6 +177,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       signal?: AbortSignal;
     },
   ): Promise<RuntimeAuthLoginResult> {
+    if (interaction.signal?.aborted) return { status: "cancelled" };
     if (this.#active) return { status: "busy" };
     if (!versionAtLeast(this.#version, CODEX_LOGIN_MINIMUM_VERSION))
       return {

@@ -1,11 +1,26 @@
-import type { AgentApiConnectionClient } from "./agent-api-connection-client";
+import type {
+  AgentLaunchConfig,
+  DaemonConnectionConfig,
+  DaemonConnectionClient,
+  ReceivedAgentMigrationLease,
+} from "./daemon-connection-client";
+import {
+  decodeRuntimeAuthIntent,
+  encodeRuntimeAuthLoginReport,
+  encodeRuntimeAuthLogoutReport,
+  RUNTIME_AUTH_LOGIN_REPORT_METHOD,
+  RUNTIME_AUTH_LOGOUT_REPORT_METHOD,
+  type RuntimeAuthIntent,
+  type RuntimeAuthLoginReport,
+  type RuntimeAuthLogoutReport,
+} from "@lrm/coforge-sdk/internal";
 import { disconnectedCodes } from "centrifuge/build/protobuf";
 import {
   type CentrifugeWorkspaceClient,
   type CentrifugeWorkspaceClientFactory,
   defaultCentrifugeWorkspaceClientFactory,
 } from "./centrifuge-workspace-client";
-import type { PiChatRequest, PiChatFrame } from "@lrm/coforge-sdk/internal/pi-chat-wire";
+
 import {
   encodeAgentReplyIntent,
   type AgentReplyIntent,
@@ -72,14 +87,6 @@ import {
   decodeAgentTurnInterruptIntent,
   decodeAgentActivityProbe,
   decodeAgentInboxPurge,
-  type AgentSkillsListRequest,
-  type AgentSkillsListResult,
-  type AgentWorkspaceFilesListRequest,
-  type AgentWorkspaceFilesListResult,
-  type AgentWorkspaceFileReadRequest,
-  type AgentWorkspaceFileReadResult,
-  type AgentWorkspaceDeleteRequest,
-  type AgentWorkspaceDeleteResult,
   type ComputerUpgradeResult,
   decodeDaemonRuntimeUsageScanRequest,
   encodeDaemonRuntimeUsageScanResponse,
@@ -150,7 +157,6 @@ import {
   encodeReminderFireRequest,
   encodeReminderSnapshotRequest,
   type AgentReminderOperationRequest,
-  type AgentReminderOperationResponse,
   type ReminderFireRequest,
   type ReminderFireResponse,
   type ReminderSnapshotRequest,
@@ -161,7 +167,6 @@ import {
   type AppConfigSnapshotRequest,
   type AppConfigSync,
   type AgentMigrationCancel,
-  type AgentMigrationLease,
   type TaskRequest,
   type TaskResponse,
   type WeeklyReportRequest,
@@ -170,8 +175,7 @@ import {
   refusalText,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeProviderConfig } from "@lrm/coforge-anvil";
-import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
+
 import { parseAgentLaunchIdentity } from "./agent-launch-identity";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
@@ -235,16 +239,6 @@ import {
   type ConnectOutage,
 } from "./connection-retry";
 
-export type AgentLaunchConfig = {
-  agentApiKey: string;
-  providerConfig?: AgentRuntimeProviderConfig;
-  envVars?: Record<string, string>;
-  assignedSkillPacks?: string[];
-  /** Server-authored Agent identity for the standing prompt; see `agent-instructions.ts`. Not
-   * part of the shared SDK today because the whole launch-config contract lives only here. */
-  identity?: AgentLaunchIdentity;
-};
-
 const AGENT_STATUS_REFRESH_MS = 30_000;
 export const COMPUTER_STATUS_REFRESH_MS = 30_000;
 const REMEMBERED_REQUEST_IDS = 256;
@@ -271,167 +265,6 @@ const defaultDaemonConnectionTiming: DaemonConnectionTiming = {
   },
 };
 
-/** Configuration identifying the daemon's Workspace connection. */
-export interface DaemonConnectionConfig {
-  workspaceId: string;
-  computerId: string;
-  /** Server HTTP origin used only for Agent read/send RPCs. */
-  serverHttpUrl?: string;
-  /** Requests replacement of only this Workspace runtime. The supervisor supplies recovery evidence. */
-  requestRestart?(requestId: string): Promise<void>;
-  requestUpgrade?(requestId: string, expectedVersion?: string): Promise<void>;
-  /** Aborting it gives up a `start` still waiting for its first connection; no effect after. */
-  signal?: AbortSignal;
-}
-
-/** Provider-neutral client contract for the daemon's Workspace connection. */
-export interface DaemonConnectionClient extends AgentApiConnectionClient {
-  onAgentWorkspaceReset?(callback: (request: AgentWorkspaceResetRequest) => void): () => void;
-  sendAgentControlResult?(result: AgentControlResult): Promise<void>;
-  sendAgentTurnInterruptResult?(result: AgentTurnInterruptResult): Promise<void>;
-  start(token: string, config: DaemonConnectionConfig): Promise<void>;
-  /** Resolves once the cloud accepts the first ready, retrying like a reconnect ready until then.
-   * Rejects only on `stop` or `signal` aborting. */
-  ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void>;
-  updateCodeAgents?(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void>;
-  reportRuntimeAuthStatus?(report: RuntimeAuthStatusReport): Promise<void>;
-  onSkillsList?(callback: (request: AgentSkillsListRequest) => Promise<void>): () => void;
-  onPiChatRequest?(callback: (request: PiChatRequest) => Promise<void>): () => void;
-  sendPiChatFrame?(frame: PiChatFrame): Promise<void>;
-  sendSkillsListResult?(result: AgentSkillsListResult): Promise<void>;
-  onWorkspaceFilesList?(
-    callback: (request: AgentWorkspaceFilesListRequest) => Promise<void>,
-  ): () => void;
-  sendWorkspaceFilesListResult?(result: AgentWorkspaceFilesListResult): Promise<void>;
-  onWorkspaceFileRead?(
-    callback: (request: AgentWorkspaceFileReadRequest) => Promise<void>,
-  ): () => void;
-  sendWorkspaceFileReadResult?(result: AgentWorkspaceFileReadResult): Promise<void>;
-  onWorkspaceDelete?(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void;
-  sendWorkspaceDeleteResult?(result: AgentWorkspaceDeleteResult): Promise<void>;
-  onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
-  sendUsageScanResult?(response: DaemonRuntimeUsageScanResponse): Promise<void>;
-  onProviderModelRefresh?(
-    callback: (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>,
-  ): () => void;
-  sendProviderModelRefreshResult?(
-    response: DaemonRuntimeProviderModelRefreshResponse,
-  ): Promise<void>;
-  onAgentContextScan?(callback: (request: AgentContextScanRequest) => Promise<void>): () => void;
-  sendAgentContextScanResult?(response: AgentContextScanResponse): Promise<void>;
-  sendUpgradeResult?(result: ComputerUpgradeResult): Promise<boolean>;
-  sendShutdownNotice?(notice: DaemonRuntimeShutdown): Promise<void>;
-  stop(): Promise<void>;
-  /** Why the latest connect attempt failed, while the connection is not up. */
-  connectFailure?(): string | undefined;
-  onReconnect?(callback: () => void): () => void;
-  /** The cloud refused an already-running connection for good; the connection no longer
-   * reconnects. A refusal while `start` is connecting rejects `start` instead. */
-  onConnectionRefused?(callback: (reason: DaemonConnectRejectionReason) => void): () => void;
-  onAgentStart?(callback: (intent: AgentStartIntent) => void): () => void;
-  onAgentStop?(callback: (intent: AgentStopIntent) => void): () => void;
-  onAgentTurnInterrupt?(callback: (intent: AgentTurnInterruptIntent) => void): () => void;
-  onAgentActivityProbe?(callback: (probe: AgentActivityProbe) => void): () => void;
-  onAgentInboxPurge?(callback: (purge: AgentInboxPurge) => void): () => void;
-  onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
-  onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
-  onAppConfigSync?(callback: (sync: AppConfigSync) => void): () => void;
-  onAppRegistrationNotice?(callback: (notice: AppRegistrationNotice) => void): () => void;
-  onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
-  onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;
-  agentMigrationServer?(): AgentMigrationServer;
-  requestSnapshot?(request: ReminderSnapshotRequest): Promise<ReminderSync>;
-  requestAppConfigSnapshot?(request: AppConfigSnapshotRequest): Promise<AppConfigSync>;
-  fireReminder?(request: ReminderFireRequest): Promise<ReminderFireResponse>;
-  agentReminder?(
-    request: AgentReminderOperationRequest,
-    agentApiKey: string,
-  ): Promise<AgentReminderOperationResponse>;
-  sendAgentActivity?(activity: AgentActivity): void;
-  /** Best effort: dropped, never buffered, while disconnected. */
-  sendAgentReplyIntent?(frame: AgentReplyIntent): void;
-  sendAgentStatus?(status: AgentStatus): void;
-  reportAgentSession?(report: AgentSessionReport): Promise<void>;
-  /** Fire-and-forget: never blocks or fails a launch. Buffered latest-per-agent while
-   * disconnected and flushed on reconnect, like `sendAgentActivity`. */
-  sendSessionInvalidate?(message: AgentSessionInvalidate): void;
-  /** Fire-and-forget: never blocks or fails a turn. Buffered latest-per-agent while
-   * disconnected and flushed on reconnect, like `sendSessionInvalidate`. */
-  sendAgentContextUsage?(message: AgentContextUsage): void;
-  /** Fire-and-forget observation of the launch's service tier, buffered and flushed the same way
-   * as `sendAgentContextUsage`. */
-  sendAgentServiceTier?(message: AgentServiceTier): void;
-  sendAgentDeliveryAck?(ack: AgentMessageDeliveryAck): Promise<void>;
-  /** Rejects a delivery the daemon did not take custody of back to the server; never an ACK. */
-  sendAgentDeliveryRejection?(rejection: AgentMessageDeliveryRejection): Promise<void>;
-  /** Progress of a tracked @mention delivery; diagnostic only, never an ACK. */
-  sendAgentMentionDeliveryTransition?(report: AgentMentionDeliveryTransition): Promise<void>;
-  /** The final result of a tracked @mention delivery the daemon will not drain. */
-  sendAgentMentionDeliveryTerminalError?(report: AgentMentionDeliveryTerminalError): Promise<void>;
-  agentMessage?(
-    request: AgentMessageRequest,
-    agentApiKey: string,
-  ): Promise<AgentMessageTransportResponse>;
-  /** Whether a send's idempotency key already committed (`reconcileOnly`); never sends. */
-  reconcileAgentSend?(
-    request: AgentSendReconciliationRequest,
-    agentApiKey: string,
-  ): Promise<AgentSendReconciliationResponse>;
-  agentTask?(request: TaskRequest, agentApiKey: string): Promise<TaskResponse>;
-  agentChannel?(
-    request: AgentChannelRequest,
-    agentApiKey: string,
-  ): Promise<Record<string, unknown>>;
-  agentActionPrepare?(
-    request: AgentActionPrepareRequest,
-    agentApiKey: string,
-  ): Promise<AgentActionPrepareResponse>;
-  agentWeeklyReport?(
-    request: WeeklyReportRequest,
-    agentApiKey: string,
-  ): Promise<WeeklyReportResponse>;
-  agentWeeklyReportCollect?(
-    request:
-      | import("./weekly-report-collect").WeeklyReportCollectCommand
-      | import("./weekly-report-collect").WeeklyReportCollectFailRunningCommand,
-    agentApiKey: string,
-  ): Promise<import("./weekly-report-collect").WeeklyReportCollectResult>;
-  agentWeeklyReportKeyPoints?(
-    request: import("./weekly-report-key-points").WeeklyReportKeyPointsCommand,
-    agentApiKey: string,
-  ): Promise<import("./weekly-report-key-points").WeeklyReportKeyPointsResult>;
-  agentWeeklyReportMemory?(
-    request: import("./weekly-report-memory").WeeklyReportMemoryCommand,
-    agentApiKey: string,
-  ): Promise<import("./weekly-report-memory").WeeklyReportMemoryResult>;
-  agentMemoryDisposition?(request: unknown, agentApiKey: string): Promise<unknown>;
-  agentOpenviking?(request: OpenVikingAgentProxyCommand, agentApiKey: string): Promise<unknown>;
-  agentAttachment?(attachmentId: string, agentApiKey: string): Promise<Response>;
-  agentAttachmentUpload?(request: Request, agentApiKey: string): Promise<Response>;
-  agentAttachmentUploadSessionCreate?(body: unknown, agentApiKey: string): Promise<Response>;
-  agentAttachmentUploadSessionComplete?(uploadId: string, agentApiKey: string): Promise<Response>;
-  agentAttachmentUploadSessionCancel?(uploadId: string, agentApiKey: string): Promise<Response>;
-  agentAttachmentUploadSessionGet?(uploadId: string, agentApiKey: string): Promise<Response>;
-  agentApp?(request: AgentAppRequest, agentApiKey: string): Promise<Response>;
-  requestAgentApiKey?(input: { agentId: string; workspaceId: string }): Promise<string>;
-  requestAgentLaunchConfig?(input: {
-    agentId: string;
-    workspaceId: string;
-    controlEpoch?: number;
-    requestId?: string;
-    launchId?: string;
-  }): Promise<AgentLaunchConfig>;
-  revokeAgentApiKey?(agentApiKey: string): Promise<void>;
-}
-
-/** Creates the Daemon connection client owned by the daemon. */
-export interface DaemonConnectionClientFactory {
-  create(config: DaemonConnectionConfig): DaemonConnectionClient;
-}
-
-/** A migration lease as it arrived: `deadline` is its expiry in this Computer's clock. */
-export type ReceivedAgentMigrationLease = AgentMigrationLease & { deadline: number };
-
 /** The Daemon's single connection for its configured Workspace. */
 export class DaemonConnection implements DaemonConnectionClient {
   #client: CentrifugeWorkspaceClient | undefined;
@@ -439,6 +272,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   #hasConnected = false;
   #token = "";
   #serverHttpUrl = "";
+  readonly #runtimeAuthIntent = new ListenerSlot<(intent: RuntimeAuthIntent) => void>();
   readonly #agentStart = new ListenerSlot<(intent: AgentStartIntent) => void>();
   readonly #agentStop = new ListenerSlot<(intent: AgentStopIntent) => void>();
   readonly #agentTurnInterrupt = new ListenerSlot<(intent: AgentTurnInterruptIntent) => void>();
@@ -749,6 +583,10 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   onAgentWorkspaceReset(callback: (request: AgentWorkspaceResetRequest) => void): () => void {
     return this.#agentWorkspaceReset.set(callback);
+  }
+
+  onRuntimeAuth(callback: (intent: RuntimeAuthIntent) => void): () => void {
+    return this.#runtimeAuthIntent.set(callback);
   }
 
   onReminderSync(callback: (sync: ReminderSync) => void): () => void {
@@ -1841,6 +1679,10 @@ export class DaemonConnection implements DaemonConnectionClient {
     const ownsDaemon = (value: { workspaceId: string; computerId?: string }) =>
       value.workspaceId === workspaceId && value.computerId === computerId;
     const handled =
+      this.#route(data, decodeRuntimeAuthIntent, (intent) => {
+        if (ownsDaemon(intent)) this.#runtimeAuthIntent.current?.(intent);
+        return true;
+      }) ||
       this.#queries.receive(data, config) ||
       this.#route(data, decodeReminderSync, (sync) => {
         if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
@@ -2160,6 +2002,14 @@ export class DaemonConnection implements DaemonConnectionClient {
       DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
       encodeDaemonRuntimeCodeAgentsUpdateRequest(request),
     );
+  }
+
+  async reportRuntimeAuthLogin(report: RuntimeAuthLoginReport): Promise<void> {
+    await this.#rpc(RUNTIME_AUTH_LOGIN_REPORT_METHOD, encodeRuntimeAuthLoginReport(report));
+  }
+
+  async reportRuntimeAuthLogout(report: RuntimeAuthLogoutReport): Promise<void> {
+    await this.#rpc(RUNTIME_AUTH_LOGOUT_REPORT_METHOD, encodeRuntimeAuthLogoutReport(report));
   }
 
   async reportRuntimeAuthStatus(report: RuntimeAuthStatusReport): Promise<void> {

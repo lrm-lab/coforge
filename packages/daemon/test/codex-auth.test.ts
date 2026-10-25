@@ -287,3 +287,21 @@ test("uses separate login and logout version floors", async () => {
   });
   expect(logoutRan).toBe(true);
 });
+
+test("an already-cancelled login never starts a Codex app-server", async () => {
+  let spawned = 0;
+  const adapter = new CodexRuntimeAuthAdapter({
+    create: () => {
+      spawned++;
+      return new FakeProcess();
+    },
+  });
+  const abort = new AbortController();
+  abort.abort();
+  const result = await adapter.startLogin(
+    { workingDirectory: "/fixture", timeoutMs: 10 },
+    { signal: abort.signal, onEvent() {}, prompt: async () => "unused" },
+  );
+  expect(result).toEqual({ status: "cancelled" });
+  expect(spawned).toBe(0);
+});

@@ -1,4 +1,4 @@
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { DaemonConnectionRefusedError } from "#src/connection/daemon-connection-refused-error";
 import type { DaemonConnectRejectionReason } from "@lrm/coforge-sdk/internal";
 import { join } from "node:path";

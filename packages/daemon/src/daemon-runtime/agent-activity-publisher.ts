@@ -1,5 +1,5 @@
 import { AGENT_ACTIVITY_DETAIL_KIND, type AgentActivity } from "@lrm/coforge-sdk/internal";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 
 /** An activity envelope before the launch assigns its sequence metadata. */
 export type ActivityDraft = Omit<AgentActivity, "launchId" | "clientSeq" | "observedAtMs">;
