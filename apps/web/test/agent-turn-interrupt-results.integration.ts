@@ -36,7 +36,11 @@ const anyResult = () => true;
 test("a result stored by another instance reaches the one waiting", async () => {
   const waiting = instance();
   const receiving = instance();
-  const scope = { workspaceId: "workspace-1", requestId: `cross-${crypto.randomUUID()}` };
+  const scope = {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    requestId: `cross-${crypto.randomUUID()}`,
+  };
   const waited = waiting.wait(scope, 5_000, anyResult);
   await Bun.sleep(100);
   await receiving.put(scope, result(scope.requestId));
@@ -44,7 +48,11 @@ test("a result stored by another instance reaches the one waiting", async () => 
 });
 
 test("a result stored before the wait begins is found by the read after subscribing", async () => {
-  const scope = { workspaceId: "workspace-1", requestId: `early-${crypto.randomUUID()}` };
+  const scope = {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    requestId: `early-${crypto.randomUUID()}`,
+  };
   await instance().put(scope, result(scope.requestId));
   const started = performance.now();
   expect(await instance().wait(scope, 5_000, anyResult)).toMatchObject({ status: "interrupted" });
@@ -52,7 +60,11 @@ test("a result stored before the wait begins is found by the read after subscrib
 });
 
 test("the first result for a request wins", async () => {
-  const scope = { workspaceId: "workspace-1", requestId: `nx-${crypto.randomUUID()}` };
+  const scope = {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    requestId: `nx-${crypto.randomUUID()}`,
+  };
   const store = instance();
   await store.put(scope, result(scope.requestId, { status: "interrupted" }));
   await store.put(scope, result(scope.requestId, { status: "not_running" }));
@@ -60,7 +72,11 @@ test("the first result for a request wins", async () => {
 });
 
 test("a result the waiter refuses is skipped and the wait times out", async () => {
-  const scope = { workspaceId: "workspace-1", requestId: `refused-${crypto.randomUUID()}` };
+  const scope = {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    requestId: `refused-${crypto.randomUUID()}`,
+  };
   const store = instance();
   await store.put(scope, result(scope.requestId, { launchId: "launch-0" }));
   expect(await store.wait(scope, 300, (r) => r.launchId === "launch-1")).toBe("timeout");
@@ -69,10 +85,10 @@ test("a result the waiter refuses is skipped and the wait times out", async () =
 test("results are scoped to the Workspace", async () => {
   const requestId = `scoped-${crypto.randomUUID()}`;
   const store = instance();
-  await store.put({ workspaceId: "workspace-2", requestId }, result(requestId));
-  expect(await store.wait({ workspaceId: "workspace-1", requestId }, 300, anyResult)).toBe(
-    "timeout",
-  );
+  await store.put({ workspaceId: "workspace-2", agentId: "agent-1", requestId }, result(requestId));
+  expect(
+    await store.wait({ workspaceId: "workspace-1", agentId: "agent-1", requestId }, 300, anyResult),
+  ).toBe("timeout");
 });
 
 test("a waiter is notified after the subscriber's connection was lost and restored", async () => {
@@ -80,7 +96,11 @@ test("a waiter is notified after the subscriber's connection was lost and restor
   const subscriber = new RedisClient(url!, { maxRetries: 4_294_967_295 });
   clients.push(redis, subscriber);
   const store = new RedisAgentTurnInterruptResults(redis, subscriber);
-  const scope = { workspaceId: "workspace-1", requestId: `reconnect-${crypto.randomUUID()}` };
+  const scope = {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    requestId: `reconnect-${crypto.randomUUID()}`,
+  };
   const waited = store.wait(scope, 10_000, anyResult);
   await Bun.sleep(100);
   // Closes the subscriber's connection on the server side; the client reconnects by itself.
@@ -88,4 +108,34 @@ test("a waiter is notified after the subscriber's connection was lost and restor
   await Bun.sleep(1_000);
   await store.put(scope, result(scope.requestId));
   expect(await waited).toMatchObject({ status: "interrupted" });
+});
+
+test("a result naming another Agent cannot take the key of a request", async () => {
+  const requestId = `agent-${crypto.randomUUID()}`;
+  const store = instance();
+  await store.put(
+    { workspaceId: "workspace-1", agentId: "agent-2", requestId },
+    result(requestId, { agentId: "agent-2" }),
+  );
+  await store.put({ workspaceId: "workspace-1", agentId: "agent-1", requestId }, result(requestId));
+  expect(
+    await store.wait(
+      { workspaceId: "workspace-1", agentId: "agent-1", requestId },
+      2_000,
+      anyResult,
+    ),
+  ).toMatchObject({ agentId: "agent-1", status: "interrupted" });
+});
+
+test("a wait ends at its timeout even when the subscription never completes", async () => {
+  const store = new RedisAgentTurnInterruptResults(new RedisClient(url!), {
+    subscribe: () => new Promise(() => {}),
+    onconnect: null,
+  });
+  const scope = {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    requestId: `hung-${crypto.randomUUID()}`,
+  };
+  expect(await store.wait(scope, 300, anyResult)).toBe("timeout");
 });

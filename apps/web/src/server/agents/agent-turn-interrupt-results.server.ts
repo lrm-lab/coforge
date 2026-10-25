@@ -6,7 +6,7 @@ import { workspaceRedisKey } from "#src/server/redis-keys.server";
 const RESULT_TTL_SECONDS = 60;
 const READY_CHANNEL = "coforge:agent-turn-interrupt-result-ready:v1";
 
-type Scope = { workspaceId: string; requestId: string };
+type Scope = { workspaceId: string; agentId: string; requestId: string };
 
 /**
  * Where a daemon's turn interrupt result reaches the web instance waiting for it. The instance that
@@ -83,27 +83,21 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
     const settled = new Promise<AgentTurnInterruptResult | "timeout">((resolve) => {
       settle = resolve;
     });
-    let done = false;
+    // `settle` takes the first value only, so a late check or the timer cannot overwrite it.
     const check = async () => {
-      if (done) return;
       let result: AgentTurnInterruptResult | undefined;
       try {
         result = this.#parse(await this.redis.get(key));
       } catch {
         return;
       }
-      if (result && accept(result) && !done) {
-        done = true;
-        settle(result);
-      }
+      if (result && accept(result)) settle(result);
     };
-    const timer = setTimeout(() => {
-      done = true;
-      settle("timeout");
-    }, timeoutMs);
+    const timer = setTimeout(() => settle("timeout"), timeoutMs);
     this.#register(key, check);
     try {
-      await this.#subscribe();
+      // A subscribe that hangs while Redis is down must not outlast the timeout.
+      await Promise.race([this.#subscribe(), settled]);
       await check();
       return await settled;
     } finally {
@@ -144,8 +138,9 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
     }
   }
 
-  #key({ workspaceId, requestId }: Scope) {
-    return `${workspaceRedisKey({ workspaceId, name: "agent-turn-interrupt-result", version: "v1" })}:request:${encodeURIComponent(requestId)}`;
+  /** Scoped to the Agent, so only a result naming the Agent a waiter interrupts can take its key. */
+  #key({ workspaceId, agentId, requestId }: Scope) {
+    return `${workspaceRedisKey({ workspaceId, agentId, name: "agent-turn-interrupt-result", version: "v1" })}:request:${encodeURIComponent(requestId)}`;
   }
 }
 
@@ -155,7 +150,7 @@ export class MemoryAgentTurnInterruptResults implements AgentTurnInterruptResult
   readonly #listeners = new Set<Listener>();
 
   async put(scope: Scope, result: AgentTurnInterruptResult) {
-    const key = `${scope.workspaceId}:${scope.requestId}`;
+    const key = `${scope.workspaceId}:${scope.agentId}:${scope.requestId}`;
     if (!this.#results.has(key)) this.#results.set(key, result);
     for (const listener of [...this.#listeners]) listener();
   }
@@ -165,7 +160,7 @@ export class MemoryAgentTurnInterruptResults implements AgentTurnInterruptResult
     timeoutMs: number,
     accept: (result: AgentTurnInterruptResult) => boolean,
   ): Promise<AgentTurnInterruptResult | "timeout"> {
-    const key = `${scope.workspaceId}:${scope.requestId}`;
+    const key = `${scope.workspaceId}:${scope.agentId}:${scope.requestId}`;
     return new Promise((resolve) => {
       const finish = (value: AgentTurnInterruptResult | "timeout") => {
         clearTimeout(timer);

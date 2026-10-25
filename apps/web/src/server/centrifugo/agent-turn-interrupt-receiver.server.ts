@@ -26,8 +26,13 @@ export function createAgentTurnInterruptResultMethod(
       metadata.principal.computerId !== result.computerId
     )
       return { code: 403, message: "Agent turn interrupt result is not authorized" };
-    if (!(await interrupts.receive(metadata.principal, result)))
-      return { code: 403, message: "Agent turn interrupt result is not authorized" };
+    let stored: boolean;
+    try {
+      stored = await interrupts.receive(metadata.principal, result);
+    } catch {
+      return { code: 503, message: "Agent turn interrupt result could not be stored" };
+    }
+    if (!stored) return { code: 403, message: "Agent turn interrupt result is not authorized" };
     return new Uint8Array();
   };
 }

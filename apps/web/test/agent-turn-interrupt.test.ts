@@ -165,3 +165,38 @@ test("a result for another launch is skipped and the wait times out", async () =
   });
   await expect(waiting.interrupt(request)).resolves.toBe("failed");
 });
+
+test("Redis failing while waiting returns failed instead of throwing", async () => {
+  const broken: AgentTurnInterruptResults = {
+    put: async () => {},
+    wait: async () => {
+      throw new Error("redis down");
+    },
+  };
+  await expect(serviceOn(broken, () => {}).interrupt(request)).resolves.toBe("failed");
+});
+
+test("a result for another Agent on the same request id does not block the real one", async () => {
+  const results = new MemoryAgentTurnInterruptResults();
+  const other = {
+    ...agent,
+    id: "agent-2",
+    computerId: "computer-2",
+  };
+  const foreign = new AgentTurnInterrupt(
+    { get: async () => other as never, memberRole: async () => "member" },
+    { publish: async () => {} },
+    { run: async (_agentId, callback) => callback() },
+    { get: async () => true },
+    { supports: async () => true },
+    results,
+  );
+  const waiting = serviceOn(results, async (intent) => {
+    await foreign.receive(
+      { workspaceId: "workspace-1", computerId: "computer-2" },
+      { ...intent, agentId: "agent-2", computerId: "computer-2", status: "not_running" },
+    );
+    await serviceOn(results, () => {}).receive(intent, { ...intent, status: "interrupted" });
+  });
+  await expect(waiting.interrupt(request)).resolves.toBe("interrupted");
+});

@@ -101,7 +101,11 @@ export class AgentTurnInterrupt {
     try {
       // Publishing first is safe: `wait` reads the stored result after it subscribes.
       const settled = await this.results.wait(
-        { workspaceId: intent.workspaceId, requestId: intent.requestId },
+        {
+          workspaceId: intent.workspaceId,
+          agentId: intent.agentId,
+          requestId: intent.requestId,
+        },
         this.timeoutMs,
         (result) =>
           intent.agentId === result.agentId &&
@@ -109,6 +113,8 @@ export class AgentTurnInterrupt {
           intent.launchId === result.launchId,
       );
       return settled === "timeout" ? "failed" : settled.status;
+    } catch {
+      return "failed";
     } finally {
       this.#pending.delete(intent.requestId);
     }
@@ -127,7 +133,10 @@ export class AgentTurnInterrupt {
     const agent = await this.store.get(result.agentId);
     if (!agent || agent.workspaceId !== scope.workspaceId || agent.computerId !== scope.computerId)
       return false;
-    await this.results.put({ workspaceId: scope.workspaceId, requestId: result.requestId }, result);
+    await this.results.put(
+      { workspaceId: scope.workspaceId, agentId: result.agentId, requestId: result.requestId },
+      result,
+    );
     return true;
   }
 }
