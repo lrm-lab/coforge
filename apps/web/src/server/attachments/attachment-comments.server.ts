@@ -44,7 +44,7 @@ function readable(
   access: AttachmentCommentAccess | null,
 ): asserts access is AttachmentCommentAccess {
   if (!access) throw new AppError("NOT_FOUND");
-  if (!access.canRead) throw new AppError("ACCESS_DENIED");
+  if (!access.canRead) throw new AppError("NOT_FOUND");
 }
 export function attachmentCommentDisabledReason(access: AttachmentCommentAccess) {
   if (access.archived) return "archived" as const;

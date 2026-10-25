@@ -7,7 +7,7 @@ import {
   type ReminderFireResponse,
 } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
+import { resolveReminderAnchor } from "./reminder-anchor.repositories.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   MAX_ACTIVE_REMINDERS,
@@ -17,10 +17,6 @@ import {
   type ReminderRepository,
   type StoredReminder,
 } from "#src/server/reminders/reminders.server";
-import {
-  ACTIVE_MEMBER_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
 
 type Scope = { workspaceId: string; computerId: string; agentId: string; userId: string };
 type ReminderRow = Prisma.ReminderGetPayload<Record<string, never>>;
@@ -149,60 +145,8 @@ export class PrismaReminderRepository implements ReminderRepository {
     return replayedOperation(this.db, scope, requestId, fingerprint, reminderId);
   }
 
-  async resolveAnchor(scope: Scope, target: string, messageId: string) {
-    const [base, threadPrefix] = target.split(":");
-    const conversation = base!.startsWith("#")
-      ? await this.db.conversation.findFirst({
-          where: {
-            workspaceId: scope.workspaceId,
-            channelName: base!.slice(1),
-            ...VISIBLE_CONVERSATION_WHERE,
-            members: { some: { agentId: scope.agentId, ...ACTIVE_MEMBER_WHERE } },
-          },
-          select: { id: true },
-        })
-      : await this.db.conversation.findFirst({
-          where: {
-            workspaceId: scope.workspaceId,
-            channelName: null,
-            AND: [
-              { members: { some: { agentId: scope.agentId, ...ACTIVE_MEMBER_WHERE } } },
-              {
-                members: { some: { user: { username: base!.slice(1) }, ...ACTIVE_MEMBER_WHERE } },
-              },
-            ],
-          },
-          select: { id: true },
-        });
-    if (!conversation)
-      throw new ReminderRefusal("ACCESS_DENIED", "reminder target is not authorized");
-    let rootId: string | undefined;
-    if (threadPrefix) {
-      const roots = await this.db.message.findMany({
-        where: {
-          conversationId: conversation.id,
-          threadRootId: null,
-          id: messageAnchorWhere(threadPrefix),
-        },
-        select: { id: true },
-        take: 2,
-      });
-      if (roots.length !== 1)
-        throw new ReminderRefusal("NOT_FOUND", "thread target is missing or ambiguous");
-      rootId = roots[0]!.id;
-    }
-    const candidates = await this.db.message.findMany({
-      where: {
-        conversationId: conversation.id,
-        id: messageAnchorWhere(messageId),
-        ...(rootId ? { OR: [{ id: rootId }, { threadRootId: rootId }] } : { threadRootId: null }),
-      },
-      select: { id: true },
-      take: 2,
-    });
-    if (candidates.length !== 1)
-      throw new ReminderRefusal("NOT_FOUND", "message anchor is missing or ambiguous");
-    return { messageId: candidates[0]!.id, target: rootId ? `${base}:${rootId}` : base! };
+  resolveAnchor(scope: Scope, target: string, messageId: string) {
+    return resolveReminderAnchor(this.db, scope, target, messageId);
   }
 
   async create(

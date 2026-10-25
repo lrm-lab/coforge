@@ -31,6 +31,7 @@ export function AttachmentReviewDialog({
   file: ReviewFile;
   children: ReactNode;
 }) {
+  const [commentsExpanded, setCommentsExpanded] = useState(true);
   const [commentsOnPhone, setCommentsOnPhone] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [imageUrlFailed, setImageUrlFailed] = useState(false);
@@ -60,12 +61,21 @@ export function AttachmentReviewDialog({
                     <Button
                       color="tertiary"
                       size="sm"
-                      className="lg:hidden"
-                      onClick={() => setCommentsOnPhone(!commentsOnPhone)}
+                      onClick={() => {
+                        setCommentsOnPhone(!commentsOnPhone);
+                        setCommentsExpanded(!commentsExpanded);
+                      }}
                     >
-                      {commentsOnPhone
-                        ? m.attachment_comments_preview()
-                        : m.attachment_comments_title()}
+                      <span className="lg:hidden">
+                        {commentsOnPhone
+                          ? m.attachment_comments_preview()
+                          : m.attachment_comments_title()}
+                      </span>
+                      <span className="hidden lg:inline">
+                        {commentsExpanded
+                          ? m.attachment_comments_collapse()
+                          : m.attachment_comments_expand()}
+                      </span>
                     </Button>
                   )}
                   <ButtonUtility
@@ -120,12 +130,12 @@ export function AttachmentReviewDialog({
                   <div
                     className={cn(
                       "min-h-0 min-w-0 flex-1",
-                      canPreview &&
-                        "lg:block lg:w-[22rem] lg:flex-none lg:border-l lg:border-secondary",
+                      canPreview && "lg:w-[22rem] lg:flex-none lg:border-l lg:border-secondary",
+                      canPreview && (commentsExpanded ? "lg:block" : "lg:hidden"),
                       showComments ? "block" : "hidden",
                     )}
                   >
-                    <AttachmentCommentsPane attachmentId={file.id} />
+                    <AttachmentCommentsPane attachmentId={file.id} fileName={file.fileName} />
                   </div>
                 </div>
               </>

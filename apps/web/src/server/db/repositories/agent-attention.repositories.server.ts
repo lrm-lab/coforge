@@ -1,6 +1,9 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   ACTIVE_MEMBER_WHERE,
+  DIRECT_CONVERSATION_WHERE,
+  TARGETABLE_CONVERSATION_WHERE,
+  directConversationSql,
   VISIBLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
 
@@ -48,9 +51,9 @@ export async function pendingDeliveryWhere(
     agentId,
     ...selected,
     deliveryId: { notIn: stale.map((row) => row.deliveryId) },
-    conversation: VISIBLE_CONVERSATION_WHERE,
+    conversation: { ...VISIBLE_CONVERSATION_WHERE, AND: [TARGETABLE_CONVERSATION_WHERE] },
     OR: [
-      { conversation: { channelName: null } },
+      { conversation: DIRECT_CONVERSATION_WHERE },
       { conversation: { members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } } } },
       { message: { pendingMentionActions: { some: NOTIFIED_AGENT_WHERE(agentId) } } },
     ],
@@ -260,7 +263,7 @@ export function unreadAgentMessagesFragment(
       SELECT dm."id", dm."sequence", dm."body", dm."conversationId", dm."threadRootId",
         dm."senderMemberId", dm."createdAt"
       FROM "conversation_members" dam
-      JOIN "conversations" dc ON dc."id" = dam."conversationId" AND dc."channelName" IS NULL
+      JOIN "conversations" dc ON dc."id" = dam."conversationId" AND ${directConversationSql("dc")}
       JOIN "messages" dm ON dm."conversationId" = dam."conversationId"
         AND dm."threadRootId" IS NULL AND dm."sequence" > dam."agentReadThroughSequence"
       WHERE dam."workspaceId" = ${workspaceId}::uuid AND dam."agentId" = ${agentId}::uuid
@@ -269,7 +272,7 @@ export function unreadAgentMessagesFragment(
       SELECT dm."id", dm."sequence", dm."body", dm."conversationId", dm."threadRootId",
         dm."senderMemberId", dm."createdAt"
       FROM "conversation_members" dam
-      JOIN "conversations" dc ON dc."id" = dam."conversationId" AND dc."channelName" IS NULL
+      JOIN "conversations" dc ON dc."id" = dam."conversationId" AND ${directConversationSql("dc")}
       JOIN "messages" dm ON dm."conversationId" = dam."conversationId"
         AND dm."threadRootId" IS NOT NULL
       LEFT JOIN "thread_reads" dtr
@@ -283,7 +286,7 @@ export function unreadAgentMessagesFragment(
         nm."senderMemberId", nm."createdAt"
       FROM "pending_mention_actions" pma
       JOIN "messages" nm ON nm."id" = pma."messageId"
-      JOIN "conversations" nc ON nc."id" = nm."conversationId" AND nc."hiddenFromWorkspaceAt" IS NULL
+      JOIN "conversations" nc ON nc."id" = nm."conversationId" AND nc."hiddenFromWorkspaceAt" IS NULL AND nc."channelName" IS NOT NULL
       WHERE pma."workspaceId" = ${workspaceId}::uuid AND pma."targetAgentId" = ${agentId}::uuid
         AND pma."notifiedAt" IS NOT NULL AND pma."targetReadAt" IS NULL
         AND NOT EXISTS (
@@ -306,6 +309,6 @@ export function unreadAgentMessagesFragment(
     WHERE (am."id" IS NULL OR m."sequence" > CASE WHEN m."threadRootId" IS NULL
         THEN am."agentReadThroughSequence" ELSE COALESCE(tr."readThroughSequence", 0) END)
       AND (sm."userId" IS NOT NULL OR d."deliveryId" IS NOT NULL)
-      AND (c."channelName" IS NULL OR d."deliveryId" IS NOT NULL)
+      AND (${directConversationSql("c")} OR d."deliveryId" IS NOT NULL)
       ${targetFilter}`;
 }

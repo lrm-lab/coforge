@@ -18,7 +18,7 @@ import {
   createCentrifugoServerApi,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
-import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { readConversationSignalParticipants } from "#src/server/db/repositories/conversation-signal.repositories.server";
 import { errorType } from "#src/server/errors/error-type.server";
 
 export type ConversationRealtimeMessage = {
@@ -81,23 +81,7 @@ export async function conversationSignalScopes(
   conversationId: string,
   workspaceId: string,
 ): Promise<{ message: MessageSignalScope; task?: MessageSignalScope }> {
-  const conversation = await db.conversation.findUnique({
-    where: { id: conversationId },
-    select: {
-      channelName: true,
-      directKey: true,
-      // Only a direct message's members name where it goes; a channel's roster (all of
-      // `#general`) is never read. A person who left the Workspace hears of nothing new; a
-      // deleted Agent's row still says whose conversation it is.
-      members: {
-        where: {
-          conversation: { channelName: null },
-          OR: [{ agentId: { not: null } }, ACTIVE_MEMBER_WHERE],
-        },
-        select: { userId: true, agentId: true },
-      },
-    },
-  });
+  const conversation = await readConversationSignalParticipants(db, conversationId);
   if (!conversation) return { message: { workspaceId } };
   if (conversation.channelName !== null) return { message: { workspaceId }, task: { workspaceId } };
   // The key says what kind of direct conversation it is (`user:<a>|user:<b>` between people);

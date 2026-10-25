@@ -1,6 +1,6 @@
 {
   "attachment_comments_title": "Comments",
-  "attachment_comments_input": "Comment on file",
+  "attachment_comments_input": "Comment on {name}…",
   "attachment_comments_post": "Post comment",
   "attachment_comments_empty": "No comments yet",
   "attachment_comments_loading": "Loading comments…",
@@ -13,5 +13,8 @@
   "attachment_comments_read_only": "This conversation is read-only.",
   "attachment_comments_preview": "Preview",
   "attachment_comments_no_preview": "Preview unavailable",
-  "attachment_comments_open": "Comments on {name}"
+  "attachment_comments_open": "Comments on {name}",
+  "attachment_comments_empty_hint": "Comments here relate only to {name}. For general discussion, reply in the message list.",
+  "attachment_comments_collapse": "Collapse comments",
+  "attachment_comments_expand": "Expand comments"
 }

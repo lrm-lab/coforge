@@ -121,3 +121,31 @@ Deploy the migration before enabling the new Web handlers. A rollback that keeps
 comment data must also keep the ordinary-destination guards: older membership-only
 Task/upload/subscription paths must not reinterpret comment author seats as grants.
 Do not delete users' comments automatically to roll back the feature.
+
+### Attachment discussion destination audit
+
+An ordinary DM is identified only by `DIRECT_CONVERSATION_WHERE` / `directConversationSql`
+(`directKey IS NOT NULL`). A null channel name also occurs in internal discussions and is never
+an authorization grant. Review of all 17 original `channelName: null` / SQL `IS NULL` occurrences:
+
+| File under `apps/web/src` | Decision |
+| --- | --- |
+| `server/agents/agent-inbox-list.server.ts` (2) | Replace DM join/read-boundary conditions with shared SQL predicate; include directKey in its membership projection. |
+| `server/agents/workspace-assistant-commands.server.ts` (1) | Resolve only real DMs or channels. |
+| `server/attachments/attachment.server.ts` (2) | Upload/download DM branches use shared Prisma predicate. |
+| `server/conversations/conversation-realtime-access.server.ts` (1) | Subscription DM branch uses shared predicate. |
+| `server/conversations/conversation-realtime.server.ts` (1) | Only real DM members contribute notification destinations; participant lookup moves to `conversation-signal.repositories.server.ts`. |
+| `server/db/repositories/agent-attention.repositories.server.ts` (4) | Both DM scan branches, delivery eligibility and final DM attention condition use shared predicates; generic deliveries additionally require an ordinary destination. |
+| `server/db/repositories/reminder.repositories.server.ts` (1) | A human target resolves only a real DM; anchor lookup moves to `reminder-anchor.repositories.server.ts`. |
+| `features/conversations/saved-messages-collection.ts` (1) | Retain: optimistic DTO placeholder, not a database predicate; server reload supplies the destination. |
+| `server/tasks/task-overview.server.ts` (1) | Retain: output DTO discriminant, not authorization. |
+| `server/workspace-memory/{detect-segments,ov-sink.server,sweep}.test.ts` (3) | Retain: DM test fixture values, not queries. |
+
+Uploader lifecycle: production has no User hard-delete operation; Agent deletion is the existing
+soft-delete transaction (`PrismaAgentDeletionStore`), preserving attachment and discussion rows.
+Regression coverage guards the absence of raw User/Agent deletion calls in production server code,
+verifies soft-deleting an uploader preserves its discussion, and verifies PostgreSQL refuses raw
+hard deletion of a comment author through the existing Message sender Restrict constraint.
+A future account hard-delete operation must first call `deleteAttachmentRows` for that uploader
+within its transaction: the attachment-binding cascade does not delete the parent Conversation,
+so bypassing that flow can orphan a discussion when the uploader is not a message author.

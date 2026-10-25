@@ -1,5 +1,9 @@
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
-import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import {
+  ACTIVE_MEMBER_WHERE,
+  DIRECT_CONVERSATION_WHERE,
+  VISIBLE_CONVERSATION_WHERE,
+} from "#src/server/conversations/active-member.server";
 import { searchMessages } from "#src/server/conversations/message-search.server";
 import { visibleAgentWhere, agentVisibilityViewerForUser } from "./agent-visibility.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -9,7 +13,6 @@ import { workspaceAssistantUser } from "./workspace-assistant-authority.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
-import { VISIBLE_CONVERSATION_WHERE } from "#src/server/conversations/active-member.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -281,7 +284,7 @@ export class WorkspaceAssistantCommands {
           OR: [
             { channelName: { not: null } },
             {
-              channelName: null,
+              ...DIRECT_CONVERSATION_WHERE,
               members: { some: { userId: actor.userId, ...ACTIVE_MEMBER_WHERE } },
             },
           ],

@@ -27,7 +27,7 @@ test("comment reads follow source visibility, while only current source members 
       code: "ACCESS_DENIED",
     });
     await expect(comments.list({ ...viewer, userId: f.outsider.id }, input)).rejects.toEqual(
-      new AppError("ACCESS_DENIED"),
+      new AppError("NOT_FOUND"),
     );
     await expect(comments.list({ ...f.actor, workspaceId: f.outsider.id }, input)).rejects.toEqual(
       new AppError("NOT_FOUND"),
@@ -62,7 +62,7 @@ test("comment reads follow source visibility, while only current source members 
       where: { id: f.conversation.id },
       data: { hiddenFromWorkspaceAt: new Date() },
     });
-    await expect(comments.list(f.actor, input)).rejects.toEqual(new AppError("ACCESS_DENIED"));
+    await expect(comments.list(f.actor, input)).rejects.toEqual(new AppError("NOT_FOUND"));
   } finally {
     await f.close();
   }
@@ -137,7 +137,7 @@ test("Agent comment authority also follows source membership, never its comment 
       data: { leftAt: new Date() },
     });
     await expect(comments.list(actor, { attachmentId: f.attachment.id })).rejects.toEqual(
-      new AppError("ACCESS_DENIED"),
+      new AppError("NOT_FOUND"),
     );
     expect(
       await f.db.conversationMember.count({
@@ -190,7 +190,7 @@ test("private attachment discussions and app-event read-only state follow their 
     await comments.post(f.actor, { ...input, body: "Private review" });
     await expect(
       comments.list({ workspaceId: f.workspace.id, userId: f.viewer.id }, input),
-    ).rejects.toEqual(new AppError("ACCESS_DENIED"));
+    ).rejects.toEqual(new AppError("NOT_FOUND"));
     await f.db.conversation.update({
       where: { id: f.conversation.id },
       data: { kind: "app_events" },

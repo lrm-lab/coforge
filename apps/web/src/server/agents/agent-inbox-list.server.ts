@@ -1,3 +1,4 @@
+import { directConversationSql } from "#src/server/conversations/active-member.server";
 import {
   AGENT_INBOX_PAGE_SIZE,
   type AgentInboxItem,
@@ -27,7 +28,7 @@ type UnreadRow = {
 /** The Agent's memberships in conversations that can have unread: still a member, the channel
  * neither archived nor hidden from the Workspace, and not an App event conversation. */
 const activeMemberships = (workspaceId: string, agentId: string) => Prisma.sql`
-  SELECT m.id AS "memberId", m."conversationId", c."channelName",
+  SELECT m.id AS "memberId", m."conversationId", c."channelName", c."directKey",
          m."channelMuted" AS muted, m."agentReadThroughSequence" AS "readSeq",
          m."joinedAt" AS "joinedAt"
   FROM "conversation_members" m
@@ -65,7 +66,7 @@ async function unreadConversations(
       FROM "messages" x
       WHERE x."conversationId" = mine."conversationId" AND x."threadRootId" IS NULL
         AND x.sequence > mine."readSeq"
-        AND (mine."channelName" IS NULL OR x."createdAt" >= mine."joinedAt")
+        AND (${directConversationSql("mine")} OR x."createdAt" >= mine."joinedAt")
         AND x."senderMemberId" IS DISTINCT FROM mine."memberId"
     ) u
     LEFT JOIN LATERAL (
@@ -75,7 +76,7 @@ async function unreadConversations(
       LEFT JOIN "users" usr ON usr.id = o."userId"
       LEFT JOIN "agents" agt ON agt.id = o."agentId" AND agt."workspaceId" = o."workspaceId"
       WHERE o."conversationId" = mine."conversationId" AND o.id <> mine."memberId" LIMIT 1
-    ) peer ON mine."channelName" IS NULL
+    ) peer ON ${directConversationSql("mine")}
     WHERE u.unread > 0 AND (NOT mine.muted OR u.mentions > 0)`;
 }
 

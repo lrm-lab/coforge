@@ -1,4 +1,13 @@
-import type { Prisma } from "#src/generated/prisma/client";
+import { Prisma } from "#src/generated/prisma/client";
+
+/** Only a destination key identifies a DM; internal conversations also have no channel name. */
+export const DIRECT_CONVERSATION_WHERE = {
+  directKey: { not: null },
+} satisfies Prisma.ConversationWhereInput;
+
+/** SQL counterpart of DIRECT_CONVERSATION_WHERE; aliases are repository-owned identifiers. */
+export const directConversationSql = (alias: string) =>
+  Prisma.sql`${Prisma.raw(alias)}."directKey" IS NOT NULL`;
 
 /**
  * A `ConversationMember` row that has not left. `leftAt` is a soft-leave marker: member rows
@@ -39,5 +48,5 @@ export const PUBLIC_CHANNEL_WHERE = {
 /** Ordinary message targets name a channel or DM. Attachment comment seats only satisfy
  * Message author FKs; their membership never grants generic read/search/subscription access. */
 export const TARGETABLE_CONVERSATION_WHERE = {
-  OR: [{ channelName: { not: null } }, { directKey: { not: null } }],
+  OR: [{ channelName: { not: null } }, DIRECT_CONVERSATION_WHERE],
 } satisfies Prisma.ConversationWhereInput;

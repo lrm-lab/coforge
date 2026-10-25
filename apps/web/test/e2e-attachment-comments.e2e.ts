@@ -125,14 +125,14 @@ afterAll(async () => {
   // A failed round keeps its one diagnostic space for recovery; successful standalone runs close it.
   if (browserPassed && Bun.env.COFORGE_E2E_KEEP_BROWSER !== "1")
     await runBrowser(
-      'const task = await taskSpace("coforge-backend task116 attachment comments"); await task.finish({ keep: [] });',
+      'const task = await taskSpace("coforge-backend task116 review revisions"); await task.finish({ keep: [] });',
     );
 });
 
 test("commenting on the whole attachment survives refreshing and reopening its preview", async () => {
   const preview = `button[aria-label="Preview ${filename}"]`;
   const result = await runBrowser(`
-    const task = await taskSpace("coforge-backend task116 attachment comments");
+    const task = await taskSpace("coforge-backend task116 review revisions");
     const page = task.page("p1");
     console.log({ spaceId: task.spaceId });
     await page.goto(${JSON.stringify(pageUrl)});
@@ -140,8 +140,36 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.waitForSelector(${JSON.stringify(preview)}, { timeout: 30000 });
     console.log(await page.snapshot());
     await page.click(${JSON.stringify(preview)});
-    await page.waitForSelector('textarea[aria-label="Comment on file"]', { timeout: 8000 });
-    await page.fill('textarea[aria-label="Comment on file"]', ${JSON.stringify(body)});
+    await page.waitForSelector('[role="dialog"] textarea', { timeout: 8000 });
+    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Comment on " + name + "…" && document.body.innerText.includes("No comments yet") && document.body.innerText.includes("Comments here relate only to " + name), ${JSON.stringify(filename)});
+    await page.hover('[role="dialog"] h2 button');
+    await page.waitForSelector('[role="tooltip"]');
+    if (!(await page.evaluate(() => document.querySelector('[role="tooltip"]').textContent)).includes(${JSON.stringify(filename)})) throw new Error("Missing filename tooltip");
+    await page.click("loc=role:button[name='Collapse comments']");
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length === 0);
+    await page.click("loc=role:button[name='Expand comments']");
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length > 0);
+    await page.keyboard.press("Escape");
+    await page.goto(${JSON.stringify(pageUrl.replace("/en/", "/zh-CN/"))});
+    await page.cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await page.waitForSelector(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
+    await page.click(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
+    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "评论 " + name + "…" && document.body.innerText.includes("还没有评论") && document.body.innerText.includes("这里的评论仅关联 " + name), ${JSON.stringify(filename)});
+    await page.hover('[role="dialog"] h2 button');
+    await page.waitForSelector('[role="tooltip"]');
+    if (!(await page.evaluate(() => document.querySelector('[role="tooltip"]').textContent)).includes(${JSON.stringify(filename)})) throw new Error("Missing Chinese filename tooltip");
+    await page.click("loc=role:button[name='收起评论']");
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length === 0);
+    await page.click("loc=role:button[name='展开评论']");
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length > 0);
+    await page.waitForFunction(() => !document.querySelector('[role="dialog"]')?.closest('[data-entering]'));
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "desktop-zh.png"))} }));
+    await page.keyboard.press("Escape");
+    await page.goto(${JSON.stringify(pageUrl)});
+    await page.waitForSelector(${JSON.stringify(preview)});
+    await page.click(${JSON.stringify(preview)});
+    await page.waitForSelector('[role="dialog"] textarea');
+    await page.fill('[role="dialog"] textarea', ${JSON.stringify(body)});
     await page.click("loc=role:button[name='Post comment']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(body)}, { timeout: 10000 });
     await page.reload();
@@ -160,10 +188,10 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.waitForSelector('button[aria-label="Back to conversations"]');
     await page.click(${JSON.stringify(preview)});
     await page.click("loc=role:button[name='Comments']");
-    await page.fill('textarea[aria-label="Comment on file"]', "Mobile draft survives switching");
+    await page.fill('[role="dialog"] textarea', "Mobile draft survives switching");
     await page.click("loc=role:button[name='Preview']");
     await page.click("loc=role:button[name='Comments']");
-    if (await page.evaluate(() => document.querySelector('textarea[aria-label="Comment on file"]').value) !== "Mobile draft survives switching") throw new Error("Mobile draft was lost");
+    if (await page.evaluate(() => document.querySelector('[role="dialog"] textarea').value) !== "Mobile draft survives switching") throw new Error("Mobile draft was lost");
     await page.evaluate(() => {
       document.documentElement.classList.remove("light-mode");
       document.documentElement.classList.add("dark-mode");
@@ -173,8 +201,8 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
     await page.click(${JSON.stringify(`button[aria-label="Comments on ${zipName}"]`)});
-    await page.waitForSelector('textarea[aria-label="Comment on file"]', { timeout: 5000 });
-    await page.fill('textarea[aria-label="Comment on file"]', ${JSON.stringify(zipBody)});
+    await page.waitForSelector('[role="dialog"] textarea', { timeout: 5000 });
+    await page.fill('[role="dialog"] textarea', ${JSON.stringify(zipBody)});
     await page.click("loc=role:button[name='Post comment']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(zipBody)});
     const zipSafety = await page.evaluate(({ id, contents }) => ({
@@ -192,12 +220,12 @@ test("commenting on the whole attachment survives refreshing and reopening its p
   expect(await db.message.count({ where: { workspaceId, body: zipBody } })).toBe(1);
   await db.conversation.update({ where: { id: conversationId }, data: { archivedAt: new Date() } });
   const archived = await runBrowser(`
-    const task = await taskSpace("coforge-backend task116 attachment comments");
+    const task = await taskSpace("coforge-backend task116 review revisions");
     const page = task.page("p1");
     await page.goto(${JSON.stringify(pageUrl)});
     await page.waitForSelector(${JSON.stringify(preview)});
     await page.click(${JSON.stringify(preview)});
-    await page.waitForSelector('textarea[aria-label="Comment on file"]:disabled', { timeout: 20000 });
+    await page.waitForSelector('[role="dialog"] textarea:disabled', { timeout: 20000 });
     await page.waitForFunction(() => document.body.innerText.includes("This conversation is archived"), undefined, { timeout: 20000 });
     console.log(await page.snapshot());
     console.log("E2E_ARCHIVED_READ_ONLY");

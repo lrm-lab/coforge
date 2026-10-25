@@ -1,3 +1,4 @@
+import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type {
   AttachmentCommentAccess,
@@ -83,12 +84,12 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
           ? await tx.conversationMember.upsert({
               where: { conversationId_userId: { conversationId, userId: actor.userId } },
               create: { workspaceId: actor.workspaceId, conversationId, userId: actor.userId },
-              update: {},
+              update: { leftAt: null },
             })
           : await tx.conversationMember.upsert({
               where: { conversationId_agentId: { conversationId, agentId: actor.agentId } },
               create: { workspaceId: actor.workspaceId, conversationId, agentId: actor.agentId },
-              update: {},
+              update: { leftAt: null },
             });
       const latest = await tx.message.findFirst({
         where: { conversationId },
@@ -178,6 +179,15 @@ async function readAccess(
         select: { id: true },
       }),
     );
+  const directVisible =
+    source.channelName !== null ||
+    !actor.userId ||
+    Boolean(
+      await db.conversation.findFirst({
+        where: { id: attachment.conversationId, ...viewerDirectConversationWhere(actor.userId) },
+        select: { id: true },
+      }),
+    );
   const activeMember = Boolean(member && member.leftAt === null);
   return {
     workspaceId: actor.workspaceId,
@@ -186,6 +196,7 @@ async function readAccess(
     conversationId: attachment.commentThread?.conversationId ?? null,
     canRead:
       workspaceMember &&
+      directVisible &&
       source.hiddenFromWorkspaceAt === null &&
       Boolean(attachment.messageId || attachment.commentThread) &&
       (Boolean(actor.userId && source.channelName !== null) || activeMember),

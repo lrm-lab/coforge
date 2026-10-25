@@ -8,6 +8,7 @@ import {
 } from "#src/server/files/file-storage.server";
 import {
   ACTIVE_MEMBER_WHERE,
+  DIRECT_CONVERSATION_WHERE,
   VISIBLE_CONVERSATION_WHERE,
   TARGETABLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
@@ -68,7 +69,10 @@ export async function storeAttachment(
       ...VISIBLE_CONVERSATION_WHERE,
       AND: [TARGETABLE_CONVERSATION_WHERE],
       members: { some: { userId: input.userId, ...ACTIVE_MEMBER_WHERE } },
-      OR: [{ channelName: null }, { workspace: { members: { some: { userId: input.userId } } } }],
+      OR: [
+        DIRECT_CONVERSATION_WHERE,
+        { workspace: { members: { some: { userId: input.userId } } } },
+      ],
     },
     select: { id: true, workspaceId: true },
   });
@@ -176,7 +180,7 @@ export async function readAuthorizedAttachment(
             ...VISIBLE_CONVERSATION_WHERE,
             OR: [
               {
-                channelName: null,
+                ...DIRECT_CONVERSATION_WHERE,
                 members: { some: { userId: input.userId, ...ACTIVE_MEMBER_WHERE } },
               },
               {

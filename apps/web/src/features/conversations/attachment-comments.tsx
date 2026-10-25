@@ -1,9 +1,10 @@
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "#src/components/base/buttons/button";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { Empty, EmptyTitle } from "#src/components/ui/empty";
+import { Empty, EmptyTitle, EmptyDescription } from "#src/components/ui/empty";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -14,7 +15,13 @@ import { loadAttachmentComments, postAttachmentComment } from "./attachment-comm
 import { MessageBody } from "./message-body";
 
 /** Only mounted while its file is open. A draft survives switching preview/comments on a phone. */
-export function AttachmentCommentsPane({ attachmentId }: { attachmentId: string }) {
+export function AttachmentCommentsPane({
+  attachmentId,
+  fileName,
+}: {
+  attachmentId: string;
+  fileName: string;
+}) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
@@ -37,6 +44,7 @@ export function AttachmentCommentsPane({ attachmentId }: { attachmentId: string 
     : [];
   const canComment = Boolean(state?.canComment && !query.isError);
   const disabledReason = state?.disabledReason;
+  const emptyHint = m.attachment_comments_empty_hint({ name: "{name}" }).split("{name}");
   const disabledText =
     disabledReason === "archived"
       ? m.attachment_comments_archived()
@@ -66,7 +74,11 @@ export function AttachmentCommentsPane({ attachmentId }: { attachmentId: string 
       className="flex h-full min-h-0 min-w-0 flex-col bg-primary"
     >
       <h2 className="shrink-0 border-b border-secondary px-4 py-3 text-sm font-semibold text-primary">
-        {m.attachment_comments_title()}
+        <Tooltip title={m.attachment_comments_open({ name: fileName })}>
+          <TooltipTrigger aria-label={m.attachment_comments_open({ name: fileName })}>
+            {m.attachment_comments_title()}
+          </TooltipTrigger>
+        </Tooltip>
       </h2>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-live="polite">
         {query.isPending ? (
@@ -85,6 +97,11 @@ export function AttachmentCommentsPane({ attachmentId }: { attachmentId: string 
             <EmptyTitle className="text-sm text-tertiary">
               {m.attachment_comments_empty()}
             </EmptyTitle>
+            <EmptyDescription>
+              {emptyHint[0]}
+              <strong>{fileName}</strong>
+              {emptyHint[1]}
+            </EmptyDescription>
           </Empty>
         ) : (
           <div className="space-y-5">
@@ -126,8 +143,8 @@ export function AttachmentCommentsPane({ attachmentId }: { attachmentId: string 
       >
         {disabledText && <p className="text-sm text-tertiary">{disabledText}</p>}
         <TextArea
-          aria-label={m.attachment_comments_input()}
-          placeholder={m.attachment_comments_input()}
+          aria-label={m.attachment_comments_input({ name: fileName })}
+          placeholder={m.attachment_comments_input({ name: fileName })}
           value={body}
           onChange={setBody}
           maxLength={8_000}

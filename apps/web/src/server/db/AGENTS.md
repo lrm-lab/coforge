@@ -2,6 +2,7 @@
 
 These rules apply to `src/server/db/`.
 
+- `conversation-signal.repositories.server.ts` reads real DM participants for signal destinations; `reminder-anchor.repositories.server.ts` resolves reminder anchors through actual channel/DM authority.
 - Use parameterized Prisma queries. Use `$queryRaw`/`$executeRaw` only for a
   reviewed PostgreSQL-specific requirement, and keep that SQL in a server-only
   repository or migration.
