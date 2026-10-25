@@ -38,6 +38,11 @@ model Computer {
   platform          String?
   osVersion         String?
   metadataStartedAt BigInt?
+  /// The newest runtime login report from this Computer's daemon, sanitized on receipt:
+  /// `{ collectedAtMs, runtimes: { [provider]: RuntimeAuthStatus } }`. It belongs to the machine,
+  /// not a Workspace, so it lives here rather than on `computer_runtimes`. Null until a daemon that
+  /// reports it connects.
+  runtimeAuth       Json?
   /// Where this Computer runs: "local" on a machine the User controls,
   /// "cloud" on the deployment's Swarm cluster.
   kind              String                 @default("local")
