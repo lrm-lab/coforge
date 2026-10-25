@@ -64,7 +64,7 @@ export function piSessionEvents(event: PiSessionEvent): AgentRuntimeEvent[] {
           type: "tool-end",
           id: event.toolCallId,
           isError: event.isError,
-          // A shell tool's exit code is in its structured result (pi-coding-agent 1.3.0 `bash`).
+          // A shell tool's exit code is in its structured result (pi-coding-agent 1.4.0 `bash`).
           exitCode: integerField(asRecord(asRecord(event.result)?.structuredContent)?.exit_code),
           durationMs: event.durationMs,
         },

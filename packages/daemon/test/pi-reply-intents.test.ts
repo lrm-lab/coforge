@@ -3,7 +3,7 @@ import { PiReplyIntents } from "#src/code-agent/pi/reply-intents";
 import type { PiSessionEvent } from "#src/code-agent/pi/session-events";
 
 // The SDK's `toolcall_*` events name the call only through `partial.content[contentIndex]`
-// (@earendil-works/pi-ai 1.3.0 `AssistantMessageEvent`, `ToolCall`), and carry the arguments as
+// (@earendil-works/pi-ai 1.4.0 `AssistantMessageEvent`, `ToolCall`), and carry the arguments as
 // JSON text fragments in `delta`.
 const read = (intents: PiReplyIntents, event: Record<string, unknown>) =>
   intents.read(event as PiSessionEvent);
