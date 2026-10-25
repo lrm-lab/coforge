@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Download01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -11,6 +11,8 @@ import {
 import { Empty, EmptyTitle } from "#src/components/ui/empty";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import type { AnchorSurface, Anchoring } from "./attachment-anchoring";
+import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { AttachmentCommentsPane } from "./attachment-comments";
 import { AttachmentPreview } from "./attachment-preview";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
@@ -35,13 +37,33 @@ export function AttachmentReviewDialog({
   const [commentsOnPhone, setCommentsOnPhone] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [imageUrlFailed, setImageUrlFailed] = useState(false);
+  const [pendingAnchor, setPendingAnchor] = useState<AttachmentCommentAnchor | null>(null);
+  const [surface, setSurface] = useState<AnchorSurface | null>(null);
+  const [jumpTo, setJumpTo] = useState<AttachmentCommentAnchor | null>(null);
+  const anchoring = useMemo<Anchoring>(
+    () => ({
+      onSurface: setSurface,
+      onComment(anchor) {
+        setPendingAnchor(anchor);
+        setCommentsExpanded(true);
+        setCommentsOnPhone(true);
+      },
+    }),
+    [],
+  );
+  // Jump once the preview is showing: on a phone it is hidden behind the comments until then.
+  useEffect(() => {
+    if (!jumpTo || !surface || commentsOnPhone) return;
+    surface.jump(jumpTo);
+    setJumpTo(null);
+  }, [jumpTo, surface, commentsOnPhone]);
   const href = `/api/attachments/${file.id}`;
   const kind = attachmentPreviewKind(file.fileName, file.contentType, file.previewUrl);
   const image = file.contentType.startsWith("image/") && !imageFailed;
   const canPreview = file.contentType.startsWith("image/") || kind !== null;
   const showComments = commentsOnPhone || !canPreview;
   return (
-    <DialogTrigger>
+    <DialogTrigger onOpenChange={(open) => !open && setPendingAnchor(null)}>
       {children}
       <ModalOverlay isDismissable>
         <Modal
@@ -119,6 +141,7 @@ export function AttachmentReviewDialog({
                           kind={kind}
                           href={href}
                           previewUrl={file.previewUrl}
+                          anchoring={anchoring}
                         />
                       ) : (
                         <Empty>
@@ -135,7 +158,19 @@ export function AttachmentReviewDialog({
                       showComments ? "block" : "hidden",
                     )}
                   >
-                    <AttachmentCommentsPane attachmentId={file.id} fileName={file.fileName} />
+                    <AttachmentCommentsPane
+                      attachmentId={file.id}
+                      fileName={file.fileName}
+                      pendingAnchor={pendingAnchor}
+                      onClearAnchor={(anchor) =>
+                        setPendingAnchor((current) => (current === anchor ? null : current))
+                      }
+                      surface={surface}
+                      onJump={(anchor) => {
+                        setCommentsOnPhone(false);
+                        setJumpTo(anchor);
+                      }}
+                    />
                   </div>
                 </div>
               </>

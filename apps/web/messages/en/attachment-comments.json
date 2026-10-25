@@ -16,5 +16,13 @@
   "attachment_comments_open": "Comments on {name}",
   "attachment_comments_empty_hint": "Comments here relate only to {name}. For general discussion, reply in the message list.",
   "attachment_comments_collapse": "Collapse comments",
-  "attachment_comments_expand": "Expand comments"
+  "attachment_comments_expand": "Expand comments",
+  "attachment_comments_comment_selection": "Comment",
+  "attachment_comments_anchor_section": "§ {title}",
+  "attachment_comments_anchor_lines": "Lines {range}",
+  "attachment_comments_anchor_rows": "Rows {range}",
+  "attachment_comments_anchor_remove": "Comment on the whole file instead",
+  "attachment_comments_anchor_lost": "Position not found",
+  "attachment_comments_anchor_jump": "Go to {place}",
+  "attachment_comments_whole_file": "Whole file"
 }

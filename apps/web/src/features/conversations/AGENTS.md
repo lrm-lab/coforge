@@ -4,7 +4,7 @@ These rules apply to `src/features/conversations/`.
 
 - This feature does not own Agent state. Read Agent status and Activity through the `features/agents/` hooks, and open, close, or switch the right-hand Agent or person profile panel through `features/agents/profile-panel/open-agent-profile.ts` instead of writing `profile`/`agentTab` search params. The channel settings sheet embeds the
   profile with its own state instead (see the members page below).
-- Attachment review (`attachment-review.tsx`) keeps the file and its whole-file comments together; comment reads/writes use `attachment-comments.functions.ts` and recheck original-conversation authority. The comments pane owns its draft and paged Query.
+- Attachment review (`attachment-review.tsx`) keeps the file and its comments together; comment reads/writes use `attachment-comments.functions.ts` and recheck original-conversation authority. The comments pane owns its draft and paged Query; the dialog owns the place a new comment is about and the preview's `AnchorSurface`, which locates and jumps to anchors (`attachment-comment-anchors.ts` is their one definition, shared with the server).
 - `conversation-navigation.tsx` owns Chat list/detail selection, retained list scroll, and mounted conversation drafts on desktop and mobile. At `lg`
   and above, list and detail stay side by side; narrower viewports switch between them. Neither sidebar renders conversation lists or their creation
   actions. `last-conversation.ts` owns which conversation Chat opens on a desktop (the remembered one while listed, else the first joined channel);

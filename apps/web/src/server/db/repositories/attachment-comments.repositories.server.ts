@@ -4,10 +4,12 @@ import type {
   AttachmentCommentAccess,
   AttachmentCommentActor,
   AttachmentCommentPageInput,
+  AttachmentCommentPostInput,
   AttachmentCommentStore,
   AttachmentCommentView,
 } from "#src/server/attachments/attachment-comments.server";
 import { AppError } from "#src/lib/app-error";
+import { parseAttachmentCommentAnchor } from "#src/features/conversations/attachment-comment-anchors";
 import {
   browserMessageFields,
   mapBrowserMessage,
@@ -45,7 +47,7 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
 
   async post(
     actor: AttachmentCommentActor,
-    input: { attachmentId: string; body: string },
+    input: AttachmentCommentPostInput,
     authorize: (access: AttachmentCommentAccess | null) => void,
   ) {
     const attachment = await this.db.attachment.findUnique({
@@ -111,6 +113,8 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
           workspaceId: actor.workspaceId,
           conversationId,
           messageId: message.id,
+          anchorType: input.anchor?.type,
+          anchorData: input.anchor?.data,
         },
         include: { message: { select: browserMessageFields } },
       });
@@ -132,6 +136,8 @@ async function readAccess(
     select: {
       id: true,
       workspaceId: true,
+      fileName: true,
+      contentType: true,
       conversationId: true,
       messageId: true,
       commentThread: { select: { conversationId: true } },
@@ -192,6 +198,8 @@ async function readAccess(
   return {
     workspaceId: actor.workspaceId,
     attachmentId,
+    fileName: attachment.fileName,
+    contentType: attachment.contentType,
     sourceConversationId: attachment.conversationId,
     conversationId: attachment.commentThread?.conversationId ?? null,
     canRead:
@@ -215,10 +223,9 @@ function commentView(row: CommentRow): AttachmentCommentView {
   const message = mapBrowserMessage(row.message, row.workspaceId);
   return {
     ...message,
-    anchor:
-      row.anchorType && row.anchorData
-        ? { type: row.anchorType, data: row.anchorData as object }
-        : null,
+    anchor: parseAttachmentCommentAnchor(
+      row.anchorType ? { type: row.anchorType, data: row.anchorData } : null,
+    ),
     resolved: message.reactions?.some((reaction) => reaction.emoji === "✅") ?? false,
     replyTarget: `attachment:${row.attachmentId}:${row.messageId}`,
   };

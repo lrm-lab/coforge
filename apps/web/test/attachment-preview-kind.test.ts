@@ -89,6 +89,9 @@ describe("the other kinds are decided by name, then by content type", () => {
 
   test("plain text is previewable by extension or content type, never parsed as Markdown", () => {
     expect(attachmentPreviewKind("readme.txt", "text/plain", undefined, APP_ORIGIN)).toBe("text");
+    // A CSV is a table even when it arrives as `text/plain`.
+    expect(attachmentPreviewKind("data.csv", "text/plain", undefined, APP_ORIGIN)).toBe("csv");
+    expect(attachmentPreviewKind("export", "text/csv", undefined, APP_ORIGIN)).toBe("csv");
     expect(
       attachmentPreviewKind("NOTES.txt", "application/octet-stream", undefined, APP_ORIGIN),
     ).toBe("text");

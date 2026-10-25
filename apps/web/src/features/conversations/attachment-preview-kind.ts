@@ -4,12 +4,20 @@ import { getFileExtension } from "#src/features/files/file-meta";
  * Which preview an attachment supports. Pure decision, kept out of the component so the rule that
  * governs it — above all the cross-origin requirement for a PDF — is testable on its own.
  */
-export type AttachmentPreviewKind = "markdown" | "html" | "text" | "video" | "audio" | "pdf";
+export type AttachmentPreviewKind =
+  | "markdown"
+  | "html"
+  | "text"
+  | "csv"
+  | "video"
+  | "audio"
+  | "pdf";
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdown", "mkd"]);
 const HTML_EXTENSIONS = new Set(["html", "htm"]);
 /** Plain-text files read literally, not as Markdown: a `.txt` must not turn `# line` into a heading. */
 const TEXT_EXTENSIONS = new Set(["txt"]);
+const CSV_EXTENSIONS = new Set(["csv"]);
 
 /**
  * The media types a `<video>`/`<audio>` element may be handed, and the exact MIME type used for
@@ -87,10 +95,12 @@ export function attachmentPreviewKind(
   if (MARKDOWN_EXTENSIONS.has(extension)) return "markdown";
   if (HTML_EXTENSIONS.has(extension)) return "html";
   if (TEXT_EXTENSIONS.has(extension)) return "text";
+  if (CSV_EXTENSIONS.has(extension)) return "csv";
   const media = MEDIA_TYPES.get(extension);
   if (media) return media.kind;
   if (contentType === "text/markdown") return "markdown";
   if (contentType === "text/html") return "html";
+  if (contentType === "text/csv") return "csv";
   if (contentType === "text/plain") return "text";
   return null;
 }

@@ -95,9 +95,13 @@ reactions. Composite foreign keys keep the attachment, Workspace, discussion
 and Message together. Anchor type and JSON data are both null for a whole-file
 comment or both present for a positional anchor. The type is one of
 `md-section`, `lines`, `csv-rows`, `html-region`; stored data is a JSON object
-whose PostgreSQL text representation occupies at most 4096 UTF-8 bytes. There
-is no stored location status or completion status: the viewer discovers lost
-positions and an ordinary ✅ reaction means resolved.
+whose PostgreSQL text representation occupies at most 4096 UTF-8 bytes. The Web
+writes `md-section {headingId, headingTitle, quote?}` on Markdown,
+`lines {start, end, quote?}` on plain text and `csv-rows {start, end, quote?}`
+on CSV (rows from 1, header excluded); the server accepts only the type the
+file's preview offers (`attachment-comment-anchors.ts`). There is no stored
+location status or completion status: the viewer discovers lost positions and
+an ordinary ✅ reaction means resolved.
 
 `AttachmentComments.list/post` rechecks the original conversation's visibility
 on every request. A human Workspace member may read a public-channel file's

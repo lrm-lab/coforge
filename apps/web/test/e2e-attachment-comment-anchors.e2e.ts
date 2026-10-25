@@ -1,0 +1,203 @@
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "#src/generated/prisma/client";
+import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { LocalFileStorage } from "#src/server/files/file-storage.server";
+import { deleteAttachmentRows } from "#src/server/db/repositories/attachment-deletion.repositories.server";
+import { sameOriginProxy } from "./helpers/same-origin-proxy";
+
+/** Opt-in positional comments E2E, on the same private stack as e2e-attachment-comments: local
+ * built Web with development skip-auth, PostgreSQL, Redis, Centrifugo and ego-browser.
+ * DATABASE_URL, COFORGE_E2E_WEB_URL, COFORGE_E2E_CENTRIFUGO_URL and COFORGE_FILE_STORAGE_DIR must
+ * name that stack. Creates one channel with a Markdown and a CSV file and deletes them afterwards.
+ * Screenshots: .amp/e2e/attachment-comment-anchors/. */
+const databaseUrl = Bun.env.DATABASE_URL;
+const web = Bun.env.COFORGE_E2E_WEB_URL;
+const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
+const storageRoot = Bun.env.COFORGE_FILE_STORAGE_DIR;
+const browser = Bun.which("ego-browser");
+if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
+  throw new Error("DATABASE_URL must target local PostgreSQL");
+if (!web || new URL(web).hostname !== "127.0.0.1")
+  throw new Error("COFORGE_E2E_WEB_URL must target local Web");
+if (!centrifugo) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
+if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
+if (!browser) throw new Error("ego-browser is required");
+const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+const files = new LocalFileStorage(storageRoot);
+const proxy = sameOriginProxy(web, centrifugo);
+
+const suffix = String(process.pid);
+const markdownName = `guide-${suffix}.md`;
+const csvName = `data-${suffix}.csv`;
+const markdown = "# Guide\n\nOverview.\n\n## Setup\n\nInstall the tool.\n\n## Usage\n\nRun it.\n";
+const csv = ["id,name", ...Array.from({ length: 60 }, (_, i) => `${i + 1},row ${i + 1}`)].join(
+  "\n",
+);
+const sectionBody = `Setup needs a version ${suffix}`;
+const rowBody = `Row 45 looks wrong ${suffix}`;
+const artifacts = join(import.meta.dir, "../../../.amp/e2e/attachment-comment-anchors");
+const space = "coforge-ui task111 anchors";
+const objectKeys: string[] = [];
+let conversationId = "";
+let pageUrl = "";
+let browserPassed = false;
+
+async function runBrowser(script: string) {
+  const child = Bun.spawn([browser!, "nodejs"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  child.stdin.write(script);
+  child.stdin.end();
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) throw new Error(`${stdout}\n${stderr}`);
+  return `${stdout}\n${stderr}`;
+}
+
+beforeAll(async () => {
+  const membership = await db.workspaceMembership.findFirstOrThrow({
+    where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    include: { workspace: true },
+  });
+  const workspaceId = membership.workspaceId;
+  const conversation = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: `anchors-${suffix}`,
+      members: { create: { userId: DEV_BROWSER_USER.id } },
+    },
+    include: { members: true },
+  });
+  conversationId = conversation.id;
+  const message = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId,
+      senderMemberId: conversation.members[0].id,
+      body: "Please review these files",
+      sequence: 1,
+    },
+  });
+  for (const [position, [fileName, content, contentType]] of [
+    [markdownName, markdown, "text/markdown"],
+    [csvName, csv, "text/csv"],
+  ].entries()) {
+    const objectKey = `e2e/comment-anchors/${suffix}-${position}/original`;
+    objectKeys.push(objectKey);
+    await files.put(objectKey, new Blob([content]), contentType);
+    await db.attachment.create({
+      data: {
+        workspaceId,
+        conversationId,
+        messageId: message.id,
+        uploaderId: DEV_BROWSER_USER.id,
+        objectKey,
+        fileName,
+        contentType,
+        sizeBytes: new TextEncoder().encode(content).length,
+        position,
+      },
+    });
+  }
+  pageUrl = `${proxy.origin}/en/w/${membership.workspace.slug}/channel/${conversationId}`;
+  await mkdir(artifacts, { recursive: true });
+});
+
+afterAll(async () => {
+  proxy.stop();
+  if (conversationId) {
+    await deleteAttachmentRows(db, { conversationId });
+    await db.message.deleteMany({ where: { conversationId } });
+    await db.conversation.delete({ where: { id: conversationId } });
+  }
+  for (const objectKey of objectKeys) await files.remove(objectKey);
+  await db.$disconnect();
+  if (browserPassed && Bun.env.COFORGE_E2E_KEEP_BROWSER !== "1")
+    await runBrowser(
+      `const task = await taskSpace(${JSON.stringify(space)}); await task.finish({ keep: [] });`,
+    );
+});
+
+/** Browser steps: select `selector`'s text in the open preview, then press the comment button. */
+const selectAndComment = (selector: string) => `
+  await page.evaluate((selector) => document.querySelector(selector).scrollIntoView({ block: "center" }), ${JSON.stringify(selector)});
+  await page.waitForTimeout(400);
+  await page.evaluate((selector) => {
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector(selector));
+    const selection = document.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, ${JSON.stringify(selector)});
+  await page.click("loc=role:button[name='Comment']");
+`;
+
+test("a comment on a Markdown section and on CSV rows is placed, kept and jumped to", async () => {
+  const open = (name: string) => `button[aria-label="Preview ${name}"]`;
+  const result = await runBrowser(`
+    const task = await taskSpace(${JSON.stringify(space)});
+    const page = task.page("p1");
+    await page.cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await page.goto(${JSON.stringify(pageUrl)});
+    await page.waitForSelector(${JSON.stringify(open(markdownName))}, { timeout: 30000 });
+    await page.click(${JSON.stringify(open(markdownName))});
+    await page.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] h2')].some((h) => h.textContent === "Setup"));
+    ${selectAndComment('[role="dialog"] h2 + p')}
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("§ Setup"));
+    await page.fill('[role="dialog"] textarea', ${JSON.stringify(sectionBody)});
+    await page.click("loc=role:button[name='Post comment']");
+    await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(sectionBody)}, { timeout: 10000 });
+
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+    await page.click(${JSON.stringify(open(csvName))});
+    await page.waitForSelector('[role="dialog"] [data-anchor-row="60"]');
+    ${selectAndComment('[role="dialog"] [data-anchor-row="45"] [role=cell]:last-child')}
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("Rows 45"));
+    await page.fill('[role="dialog"] textarea', ${JSON.stringify(rowBody)});
+    await page.click("loc=role:button[name='Post comment']");
+    await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(rowBody)}, { timeout: 10000 });
+
+    await page.reload();
+    await page.waitForSelector(${JSON.stringify(open(csvName))});
+    await page.click(${JSON.stringify(open(csvName))});
+    await page.waitForSelector('[role="dialog"] [data-anchor-row="60"]');
+    await page.click("loc=role:button[name='Go to Rows 45']");
+    await page.waitForFunction(() => {
+      const row = document.querySelector('[role="dialog"] [data-anchor-row="45"]');
+      const pane = row?.closest(".overflow-auto")?.getBoundingClientRect();
+      const box = row?.getBoundingClientRect();
+      return row?.classList.contains("bg-tertiary") && box.top >= pane.top && box.bottom <= pane.bottom;
+    }, undefined, { timeout: 5000 });
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "csv-row.png"))} }));
+    console.log("E2E_CSV_ROW_JUMP");
+
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+    await page.click(${JSON.stringify(open(markdownName))});
+    await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(sectionBody)}, { timeout: 10000 });
+    await page.click("loc=role:button[name='Go to § Setup']");
+    await page.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] h2')].some((h) => h.textContent === "Setup" && h.classList.contains("ring-2")), undefined, { timeout: 5000 });
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "markdown-section.png"))} }));
+    console.log("E2E_SECTION_JUMP");
+  `);
+  expect(result).toContain("E2E_CSV_ROW_JUMP");
+  expect(result).toContain("E2E_SECTION_JUMP");
+  const anchors = await db.attachmentComment.findMany({
+    where: { message: { body: { in: [sectionBody, rowBody] } } },
+    select: { anchorType: true, anchorData: true },
+    orderBy: { anchorType: "asc" },
+  });
+  expect(anchors).toEqual([
+    { anchorType: "csv-rows", anchorData: { start: 45, end: 45, quote: "row 45" } },
+    {
+      anchorType: "md-section",
+      anchorData: { headingId: "setup", headingTitle: "Setup", quote: "Install the tool." },
+    },
+  ]);
+  browserPassed = true;
+}, 90_000);

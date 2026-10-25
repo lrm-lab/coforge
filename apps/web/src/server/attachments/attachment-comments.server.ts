@@ -1,4 +1,9 @@
 import { AppError } from "#src/lib/app-error";
+import {
+  anchorTypeForPreview,
+  type AttachmentCommentAnchor,
+} from "#src/features/conversations/attachment-comment-anchors";
+import { attachmentPreviewKind } from "#src/features/conversations/attachment-preview-kind";
 import type { mapBrowserMessage } from "#src/server/conversations/conversation-history.server";
 
 export type AttachmentCommentActor = { workspaceId: string } & (
@@ -8,6 +13,8 @@ export type AttachmentCommentActor = { workspaceId: string } & (
 export type AttachmentCommentAccess = {
   workspaceId: string;
   attachmentId: string;
+  fileName: string;
+  contentType: string;
   sourceConversationId: string;
   conversationId: string | null;
   canRead: boolean;
@@ -16,7 +23,7 @@ export type AttachmentCommentAccess = {
   readOnly: boolean;
 };
 export type AttachmentCommentView = ReturnType<typeof mapBrowserMessage> & {
-  anchor: null | { type: string; data: object };
+  anchor: AttachmentCommentAnchor | null;
   resolved: boolean;
   replyTarget: string;
 };
@@ -24,6 +31,11 @@ export type AttachmentCommentPageInput = {
   attachmentId: string;
   beforeSequence?: number;
   limit?: number;
+};
+export type AttachmentCommentPostInput = {
+  attachmentId: string;
+  body: string;
+  anchor?: AttachmentCommentAnchor;
 };
 export interface AttachmentCommentStore {
   access(
@@ -35,7 +47,7 @@ export interface AttachmentCommentStore {
   ): Promise<{ comments: AttachmentCommentView[]; hasOlder: boolean }>;
   post(
     actor: AttachmentCommentActor,
-    input: { attachmentId: string; body: string },
+    input: AttachmentCommentPostInput,
     authorize: (access: AttachmentCommentAccess | null) => void,
   ): Promise<AttachmentCommentView>;
 }
@@ -72,13 +84,20 @@ export class AttachmentComments {
     };
   }
 
-  async post(actor: AttachmentCommentActor, input: { attachmentId: string; body: string }) {
+  async post(actor: AttachmentCommentActor, input: AttachmentCommentPostInput) {
     const body = input.body.trim();
     if (!body || body.length > 8_000) throw new AppError("INVALID_INPUT");
     return this.store.post(actor, { ...input, body }, (access) => {
       readable(access);
       const reason = attachmentCommentDisabledReason(access);
       if (reason) throw new AppError("ACCESS_DENIED", { errorId: `attachment-comments-${reason}` });
+      // Only the position kind this file's preview offers; the file's content is never read here.
+      if (
+        input.anchor &&
+        input.anchor.type !==
+          anchorTypeForPreview(attachmentPreviewKind(access.fileName, access.contentType))
+      )
+        throw new AppError("INVALID_INPUT");
     });
   }
 }

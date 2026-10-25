@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { mediaMimeType, type AttachmentPreviewKind } from "./attachment-preview-kind";
-import { MessageBody } from "./message-body";
+import type { Anchoring } from "./attachment-anchoring";
+import { LinesPreview, MarkdownPreview } from "./anchored-previews";
+import { CsvPreview } from "./csv-preview";
 
 /** Text previews are for a look, and the bytes travel through the authenticated backend route. */
 const TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
@@ -90,6 +92,7 @@ function PreviewStatus({
  *   attachment reads exactly like Markdown written in the conversation.
  * - `text` (a `.txt` plain-text file) reads literally — rendered as escaped text in a scrollable
  *   monospace pre, never parsed as Markdown.
+ * - `csv` is parsed here and laid out as a table of escaped text.
  * - `html` goes into an iframe with an empty `sandbox`, which is a unique opaque origin with
  *   scripts, forms, popups and same-origin access all denied. The document renders, but it cannot
  *   run code, read this page, or reach our cookies.
@@ -101,6 +104,7 @@ export function AttachmentPreview({
   kind,
   href,
   previewUrl,
+  anchoring,
 }: {
   fileName: string;
   kind: AttachmentPreviewKind;
@@ -108,6 +112,8 @@ export function AttachmentPreview({
   href: string;
   /** The signed delivery URL; required for `pdf`, unused by the other kinds. */
   previewUrl?: string;
+  /** Lets the reader comment on a place in a Markdown, text or CSV file. */
+  anchoring?: Anchoring;
 }) {
   if (kind === "pdf")
     return previewUrl ? (
@@ -117,7 +123,7 @@ export function AttachmentPreview({
     );
   if (kind === "video" || kind === "audio")
     return <MediaPreview fileName={fileName} kind={kind} href={href} />;
-  return <TextPreview fileName={fileName} kind={kind} href={href} />;
+  return <TextPreview fileName={fileName} kind={kind} href={href} anchoring={anchoring} />;
 }
 
 /**
@@ -150,10 +156,12 @@ function TextPreview({
   fileName,
   kind,
   href,
+  anchoring,
 }: {
   fileName: string;
-  kind: "markdown" | "html" | "text";
+  kind: "markdown" | "html" | "text" | "csv";
   href: string;
+  anchoring?: Anchoring;
 }) {
   const blob = useAttachmentBlob(href, TEXT_PREVIEW_MAX_BYTES);
   const [text, setText] = useState<string | null>(null);
@@ -179,22 +187,13 @@ function TextPreview({
       </p>
     );
 
-  if (kind === "markdown")
-    return (
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-4 text-md text-primary sm:px-6 sm:py-5">
-        <MessageBody body={text} />
-      </div>
-    );
+  if (kind === "markdown") return <MarkdownPreview text={text} anchoring={anchoring} />;
 
   // Plain text reads literally, not as Markdown and not through an iframe: the bytes are rendered
   // as React text (auto-escaped, no script surface), in a scrollable monospace pre that preserves
   // the file's line breaks and leading whitespace.
-  if (kind === "text")
-    return (
-      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-4 py-4 font-mono text-sm text-primary sm:px-6 sm:py-5">
-        {text}
-      </pre>
-    );
+  if (kind === "text") return <LinesPreview text={text} anchoring={anchoring} />;
+  if (kind === "csv") return <CsvPreview text={text} anchoring={anchoring} />;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
