@@ -90,8 +90,9 @@ by emoji for display; there is no separate reaction-count column.
 `AttachmentCommentThread` (`attachment_comment_threads`) lazily binds one
 Attachment to one dedicated Conversation with `kind = attachment_comments` and
 no channel name or DM key. `AttachmentComment` (`attachment_comments`) stores
-root-Message metadata; the Message owns body, author, sequence, replies and
-reactions. Composite foreign keys keep the attachment, Workspace, discussion
+each comment Message's metadata; the Message owns body, author, sequence and
+reactions. A reply is a comment Message whose `threadRootId` is its root
+comment's (one level: a reply to a reply joins the same root) and has no anchor. Composite foreign keys keep the attachment, Workspace, discussion
 and Message together. Anchor type and JSON data are both null for a whole-file
 comment or both present for a positional anchor. The type is one of
 `md-section`, `lines`, `csv-rows`, `html-region`; stored data is a JSON object
@@ -103,11 +104,11 @@ file's preview offers (`attachment-comment-anchors.ts`). There is no stored
 location status or completion status: the viewer discovers lost positions and
 an ordinary ✅ reaction means resolved.
 
-`AttachmentComments.list/post` rechecks the original conversation's visibility
+`AttachmentComments.list/post/react` rechecks the original conversation's visibility
 on every request. A human Workspace member may read a public-channel file's
 comments without joining, but only current original-conversation members may
 post. Private files require original membership. Archived and read-only
-conversations refuse writes. Comment author seats do not grant generic message
+conversations refuse writes, reactions included. Comment author seats do not grant generic message
 reads, searches, bookmarks or subscriptions. Stable targets are
 `attachment:<attachment UUID>` and `attachment:<attachment UUID>:<root UUID>`;
 The follow-on Agent HTTP/CLI adapter uses these identities; the Web calls its own Server Functions.

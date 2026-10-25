@@ -1,23 +1,25 @@
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Empty, EmptyTitle, EmptyDescription } from "#src/components/ui/empty";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
-import { formatDateForDisplay } from "#src/lib/dates";
-import { useTimeZone } from "#src/lib/time-zone-context";
-import { useTimeFormat } from "#src/lib/time-format-context";
 import { m } from "#src/paraglide/messages";
-import { getLocale } from "#src/paraglide/runtime";
-import { loadAttachmentComments, postAttachmentComment } from "./attachment-comments.functions";
+import { postAttachmentComment } from "./attachment-comments.functions";
+import {
+  attachmentCommentsKey,
+  CommentThread,
+  useCommentDraft,
+  useCommentPages,
+  useCommentReaction,
+} from "./attachment-comment-thread";
 import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import type { AnchorSurface } from "./attachment-anchoring";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
-import { MessageBody } from "./message-body";
 
 /** How a comment's place reads: `§ heading`, or its lines or rows. */
 function anchorLabel(anchor: AttachmentCommentAnchor): string {
@@ -32,6 +34,8 @@ function anchorLabel(anchor: AttachmentCommentAnchor): string {
     ? m.attachment_comments_anchor_row({ range })
     : m.attachment_comments_anchor_rows({ range });
 }
+
+const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
 type Placed = { comment: AttachmentCommentView; order: number | null };
 
@@ -90,31 +94,15 @@ export function AttachmentCommentsPane({
   surface?: AnchorSurface | null;
   onJump?: (anchor: AttachmentCommentAnchor) => void;
 }) {
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sendFailed, setSendFailed] = useState(false);
+  const viewerId = workspaceRoute.useLoaderData({ select: ({ user }) => user.id });
   const post = useServerFn(postAttachmentComment);
-  const input = useRef<HTMLTextAreaElement>(null);
-  // A place chosen in the preview is what the reader is about to write about.
-  useEffect(() => {
-    if (pendingAnchor) input.current?.focus();
-  }, [pendingAnchor]);
   const queryClient = useQueryClient();
-  const timeZone = useTimeZone();
-  const timeFormat = useTimeFormat();
-  const queryKey = ["attachment-comments", attachmentId];
-  const query = useInfiniteQuery({
-    queryKey,
-    initialPageParam: undefined as number | undefined,
-    queryFn: ({ pageParam }) =>
-      loadAttachmentComments({ data: { attachmentId, beforeSequence: pageParam } }),
-    getNextPageParam: (page) => (page.hasOlder ? page.comments[0]?.sequence : undefined),
-    refetchInterval: 5_000,
-  });
+  const queryKey = attachmentCommentsKey(attachmentId);
+  const react = useCommentReaction(attachmentId);
+  const { query, comments: all } = useCommentPages(attachmentId);
   const state = query.data?.pages[0];
   // Placed once per load of comments or new preview, not on every keystroke in the draft.
   const { comments, located, rest } = useMemo(() => {
-    const all = query.data ? [...query.data.pages].reverse().flatMap((page) => page.comments) : [];
     const found: Placed[] = [];
     const others: Placed[] = [];
     for (const comment of all) {
@@ -123,8 +111,22 @@ export function AttachmentCommentsPane({
     }
     found.sort((a, b) => a.order! - b.order! || a.comment.sequence - b.comment.sequence);
     return { comments: all, located: found, rest: others };
-  }, [query.data, surface]);
+  }, [all, surface]);
   const canComment = Boolean(state?.canComment && !query.isError);
+  const draft = useCommentDraft(
+    canComment,
+    async (body) => {
+      // A place chosen while this posts is the next comment's.
+      const anchor = pendingAnchor;
+      await post({ data: { attachmentId, body, anchor: anchor ?? undefined } });
+      if (anchor) onClearAnchor?.(anchor);
+    },
+    () => queryClient.invalidateQueries({ queryKey, exact: true }),
+  );
+  // A place chosen in the preview is what the reader is about to write about.
+  useEffect(() => {
+    if (pendingAnchor) draft.input.current?.focus();
+  }, [pendingAnchor, draft.input]);
   const disabledReason = state?.disabledReason;
   const emptyHint = m.attachment_comments_empty_hint({ name: "{name}" }).split("{name}");
   const disabledText =
@@ -136,48 +138,25 @@ export function AttachmentCommentsPane({
           ? m.attachment_comments_read_only()
           : null;
   const renderComment = ({ comment, order }: Placed) => (
-    <article key={comment.id} className="flex min-w-0 gap-2.5">
-      <IdentityAvatar src={comment.senderAvatarUrl} name={comment.senderName} size="xs" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-primary">{comment.senderName}</p>
-        <time dateTime={comment.createdAt} className="text-xs text-tertiary">
-          {formatDateForDisplay(comment.createdAt, timeZone, getLocale(), timeFormat)}
-        </time>
-        {comment.anchor && (
+    <CommentThread
+      key={comment.id}
+      attachmentId={attachmentId}
+      root={comment}
+      viewerId={viewerId}
+      canComment={canComment}
+      onReact={canComment ? react : undefined}
+      place={
+        comment.anchor && (
           <AnchorPlace
             anchor={comment.anchor}
             found={order !== null}
             known={Boolean(surface)}
             onJump={onJump}
           />
-        )}
-        <div className="mt-1 text-sm text-secondary">
-          <MessageBody body={comment.body} />
-        </div>
-      </div>
-    </article>
+        )
+      }
+    />
   );
-  async function submit() {
-    if (!body.trim() || sending || !canComment) return;
-    setSending(true);
-    setSendFailed(false);
-    // A place chosen while this posts is the next comment's.
-    const anchor = pendingAnchor;
-    try {
-      await post({ data: { attachmentId, body, anchor: anchor ?? undefined } });
-      setBody("");
-      if (anchor) onClearAnchor?.(anchor);
-      await queryClient.invalidateQueries({ queryKey });
-    } catch {
-      setSendFailed(true);
-      await queryClient.invalidateQueries({ queryKey });
-    } finally {
-      setSending(false);
-      // The post button disables itself once the draft is cleared, which drops focus to the page
-      // (and the dialog stops hearing Escape); give it back to the field.
-      input.current?.focus();
-    }
-  }
   return (
     <section
       aria-label={m.attachment_comments_title()}
@@ -239,7 +218,7 @@ export function AttachmentCommentsPane({
         className="shrink-0 space-y-2 border-t border-secondary p-3"
         onSubmit={(event) => {
           event.preventDefault();
-          void submit();
+          void draft.submit();
         }}
       >
         {disabledText && <p className="text-sm text-tertiary">{disabledText}</p>}
@@ -258,17 +237,17 @@ export function AttachmentCommentsPane({
         <TextArea
           aria-label={m.attachment_comments_input({ name: fileName })}
           placeholder={m.attachment_comments_input({ name: fileName })}
-          value={body}
-          onChange={setBody}
-          textAreaRef={input}
+          value={draft.body}
+          onChange={draft.setBody}
+          textAreaRef={draft.input}
           maxLength={8_000}
           rows={3}
           isDisabled={!canComment}
           // Read-only, not disabled, while sending: a disabled field drops focus to the page, and
           // the dialog would no longer hear Escape.
-          isReadOnly={sending}
+          isReadOnly={draft.sending}
         />
-        {sendFailed && (
+        {draft.sendFailed && (
           <p role="alert" className="text-sm text-error-primary">
             {m.attachment_comments_post_failed()}
           </p>
@@ -277,8 +256,8 @@ export function AttachmentCommentsPane({
           <Button
             type="submit"
             size="sm"
-            isDisabled={!canComment || !body.trim()}
-            isLoading={sending}
+            isDisabled={!canComment || !draft.body.trim()}
+            isLoading={draft.sending}
           >
             {m.attachment_comments_post()}
           </Button>

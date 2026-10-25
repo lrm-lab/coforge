@@ -1,3 +1,4 @@
+import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type {
@@ -5,6 +6,7 @@ import type {
   AttachmentCommentActor,
   AttachmentCommentPageInput,
   AttachmentCommentPostInput,
+  AttachmentCommentReactInput,
   AttachmentCommentStore,
   AttachmentCommentView,
 } from "#src/server/attachments/attachment-comments.server";
@@ -15,8 +17,16 @@ import {
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { DatabaseScope } from "#src/server/db/transaction.server";
+
+/**
+ * Comment reactions are announced to no one: no page follows a discussion's realtime channel (the
+ * comments pane reads it again instead), and without a port of its own a reaction write would
+ * publish there anyway.
+ */
+const UNANNOUNCED: ReactionPort = {};
 
 export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
   constructor(private readonly db: PrismaClient) {}
@@ -31,7 +41,7 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
       where: {
         attachmentId: input.attachmentId,
         message: {
-          threadRootId: null,
+          threadRootId: input.rootId ?? null,
           ...(input.beforeSequence ? { sequence: { lt: input.beforeSequence } } : {}),
         },
       },
@@ -39,8 +49,19 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
       take: limit + 1,
       include: { message: { select: browserMessageFields } },
     });
+    const page = rows.slice(0, limit).reverse();
+    // Counted for root comments only: a reply has none of its own.
+    const counts =
+      input.rootId || page.length === 0
+        ? []
+        : await this.db.message.groupBy({
+            by: ["threadRootId"],
+            where: { threadRootId: { in: page.map((row) => row.messageId) } },
+            _count: { _all: true },
+          });
+    const replies = new Map(counts.map((row) => [row.threadRootId, row._count._all]));
     return {
-      comments: rows.slice(0, limit).reverse().map(commentView),
+      comments: page.map((row) => commentView(row, replies.get(row.messageId) ?? 0)),
       hasOlder: rows.length > limit,
     };
   }
@@ -81,18 +102,8 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
         conversationId = conversation.id;
       }
       await lockConversation(tx, conversationId);
-      const member =
-        actor.userId !== undefined
-          ? await tx.conversationMember.upsert({
-              where: { conversationId_userId: { conversationId, userId: actor.userId } },
-              create: { workspaceId: actor.workspaceId, conversationId, userId: actor.userId },
-              update: { leftAt: null },
-            })
-          : await tx.conversationMember.upsert({
-              where: { conversationId_agentId: { conversationId, agentId: actor.agentId } },
-              create: { workspaceId: actor.workspaceId, conversationId, agentId: actor.agentId },
-              update: { leftAt: null },
-            });
+      const threadRootId = input.rootId ? await rootOf(tx, input.attachmentId, input.rootId) : null;
+      const member = await joinDiscussion(tx, actor, conversationId);
       const latest = await tx.message.findFirst({
         where: { conversationId },
         orderBy: { sequence: "desc" },
@@ -104,6 +115,7 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
           conversationId,
           senderMemberId: member.id,
           body: input.body,
+          threadRootId,
           sequence: (latest?.sequence ?? 0) + 1,
         },
       });
@@ -118,9 +130,69 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
         },
         include: { message: { select: browserMessageFields } },
       });
-      return commentView(comment);
+      return commentView(comment, 0);
     });
   }
+
+  async react(
+    actor: AttachmentCommentActor,
+    input: AttachmentCommentReactInput,
+    authorize: (access: AttachmentCommentAccess | null) => void,
+  ) {
+    const [access, comment] = await Promise.all([
+      readAccess(this.db, actor, input.attachmentId),
+      this.db.attachmentComment.findFirst({
+        where: { messageId: input.messageId, attachmentId: input.attachmentId },
+        select: { conversationId: true, message: { select: { threadRootId: true } } },
+      }),
+    ]);
+    authorize(access);
+    if (!comment) throw new AppError("NOT_FOUND");
+    // The attachment, and with it the discussion, was deleted after it was found.
+    const member = await joinDiscussion(this.db, actor, comment.conversationId).catch((error) => {
+      throw hasErrorCode(error, "P2003") ? new AppError("NOT_FOUND") : error;
+    });
+    const written = await writeReaction(this.db, UNANNOUNCED, {
+      workspaceId: actor.workspaceId,
+      conversationId: comment.conversationId,
+      messageId: input.messageId,
+      threadRootId: comment.message.threadRootId,
+      memberId: member.id,
+      emoji: input.emoji,
+      active: input.active,
+    });
+    // The comment was deleted after it was found.
+    if (!written) throw new AppError("NOT_FOUND");
+    return written;
+  }
+}
+
+/**
+ * The root comment a reply joins: `rootId` itself when it is a root comment on this attachment,
+ * or the root of the reply it names.
+ */
+async function rootOf(db: DatabaseScope, attachmentId: string, rootId: string) {
+  const named = await db.attachmentComment.findFirst({
+    where: { messageId: rootId, attachmentId },
+    select: { message: { select: { threadRootId: true } } },
+  });
+  if (!named) throw new AppError("NOT_FOUND");
+  return named.message.threadRootId ?? rootId;
+}
+
+/** The actor's seat in the discussion, taken (or taken back) by commenting or reacting in it. */
+function joinDiscussion(db: DatabaseScope, actor: AttachmentCommentActor, conversationId: string) {
+  return actor.userId !== undefined
+    ? db.conversationMember.upsert({
+        where: { conversationId_userId: { conversationId, userId: actor.userId } },
+        create: { workspaceId: actor.workspaceId, conversationId, userId: actor.userId },
+        update: { leftAt: null },
+      })
+    : db.conversationMember.upsert({
+        where: { conversationId_agentId: { conversationId, agentId: actor.agentId } },
+        create: { workspaceId: actor.workspaceId, conversationId, agentId: actor.agentId },
+        update: { leftAt: null },
+      });
 }
 
 async function readAccess(
@@ -219,7 +291,7 @@ async function readAccess(
 type CommentRow = Prisma.AttachmentCommentGetPayload<{
   include: { message: { select: typeof browserMessageFields } };
 }>;
-function commentView(row: CommentRow): AttachmentCommentView {
+function commentView(row: CommentRow, replyCount: number): AttachmentCommentView {
   const message = mapBrowserMessage(row.message, row.workspaceId);
   return {
     ...message,
@@ -227,6 +299,7 @@ function commentView(row: CommentRow): AttachmentCommentView {
       row.anchorType ? { type: row.anchorType, data: row.anchorData } : null,
     ),
     resolved: message.reactions?.some((reaction) => reaction.emoji === "✅") ?? false,
-    replyTarget: `attachment:${row.attachmentId}:${row.messageId}`,
+    replyTarget: `attachment:${row.attachmentId}:${row.message.threadRootId ?? row.messageId}`,
+    replyCount,
   };
 }
