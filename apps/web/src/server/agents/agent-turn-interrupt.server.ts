@@ -122,16 +122,22 @@ export class AgentTurnInterrupt {
 
   /**
    * Stores a daemon's result for the instance waiting on it, which may be another one. The entry
-   * point checks the Agent runs on the reporting Computer before anything is written: the first
-   * result stored for a request wins, so a result from a Computer that does not run the Agent must
-   * never get that far.
+   * point checks the Agent runs on the reporting Computer, in the launch the result names, before
+   * anything is written: the first result stored for a request wins, so a result from a Computer
+   * that does not run the Agent, or from an earlier launch, must never get that far.
    */
   async receive(
     scope: { workspaceId: string; computerId: string },
     result: AgentTurnInterruptResult,
   ): Promise<boolean> {
     const agent = await this.store.get(result.agentId);
-    if (!agent || agent.workspaceId !== scope.workspaceId || agent.computerId !== scope.computerId)
+    if (
+      !agent ||
+      agent.workspaceId !== scope.workspaceId ||
+      agent.computerId !== scope.computerId ||
+      agent.state?.launchId !== result.launchId ||
+      agent.state.epoch !== result.epoch
+    )
       return false;
     await this.results.put(
       { workspaceId: scope.workspaceId, agentId: result.agentId, requestId: result.requestId },

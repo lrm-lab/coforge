@@ -5,10 +5,8 @@ import {
   type AgentTurnInterruptResult,
 } from "@lrm/coforge-sdk/internal";
 import { AgentTurnInterrupt } from "#src/server/agents/agent-turn-interrupt.server";
-import {
-  MemoryAgentTurnInterruptResults,
-  type AgentTurnInterruptResults,
-} from "#src/server/agents/agent-turn-interrupt-results.server";
+import type { AgentTurnInterruptResults } from "#src/server/agents/agent-turn-interrupt-results.server";
+import { MemoryAgentTurnInterruptResults } from "./support/memory-agent-turn-interrupt-results";
 
 const agent = {
   id: "agent-1",
@@ -199,4 +197,19 @@ test("a result for another Agent on the same request id does not block the real 
     await serviceOn(results, () => {}).receive(intent, { ...intent, status: "interrupted" });
   });
   await expect(waiting.interrupt(request)).resolves.toBe("interrupted");
+});
+
+test("a result for an earlier launch is refused and does not block the real one", async () => {
+  const results = new MemoryAgentTurnInterruptResults();
+  let refused: boolean | undefined;
+  const waiting = serviceOn(results, async (intent) => {
+    refused = await serviceOn(results, () => {}).receive(intent, {
+      ...intent,
+      launchId: "launch-0",
+      status: "not_running",
+    });
+    await serviceOn(results, () => {}).receive(intent, { ...intent, status: "interrupted" });
+  });
+  await expect(waiting.interrupt(request)).resolves.toBe("interrupted");
+  expect(refused).toBe(false);
 });

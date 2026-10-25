@@ -30,12 +30,14 @@ type Listener = () => void;
 
 type RedisCommands = {
   get(key: string): Promise<string | null>;
+  del(key: string): Promise<unknown>;
   set(...args: string[]): Promise<unknown>;
   publish(channel: string, message: string): Promise<unknown>;
 };
 
 type RedisSubscriber = {
   subscribe(channel: string, listener: (message: string) => void): Promise<unknown>;
+  send(command: "SUBSCRIBE", args: string[]): Promise<unknown>;
   onconnect: (() => void) | null;
 };
 
@@ -52,18 +54,17 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
     private readonly redis: RedisCommands,
     private readonly subscriber: RedisSubscriber,
   ) {
-    // Bun does not subscribe again after a reconnect, and a notification published while the
-    // subscriber was disconnected is lost: subscribe again, then read the keys waiters hold.
+    // After a reconnect Bun keeps its listener but the new connection is not subscribed, and a
+    // notification published meanwhile is lost: subscribe the connection again (a second
+    // `subscribe()` would stack a second listener), then read the keys waiters hold. A failure is
+    // retried by the next reconnect.
     subscriber.onconnect = () => {
-      if (!this.#subscribed) return;
-      this.#subscribed = undefined;
-      void this.#subscribe().then(
-        () => {
-          for (const listeners of [...this.#listeners.values()])
-            for (const listener of [...listeners]) listener();
-        },
-        () => {},
-      );
+      void this.#subscribed
+        ?.then(() => subscriber.send("SUBSCRIBE", [READY_CHANNEL]))
+        .then(
+          () => this.#notify(),
+          () => {},
+        );
     };
   }
 
@@ -91,14 +92,18 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
       } catch {
         return;
       }
-      if (result && accept(result)) settle(result);
+      if (!result || !accept(result)) return;
+      settle(result);
+      // Consumed, so a retry of the same request id within the TTL waits for its own result.
+      this.redis.del(key).catch(() => {});
     };
     const timer = setTimeout(() => settle("timeout"), timeoutMs);
     this.#register(key, check);
     try {
       // A subscribe that hangs while Redis is down must not outlast the timeout.
       await Promise.race([this.#subscribe(), settled]);
-      await check();
+      // Not awaited: a read stalled by Redis must not outlast the timeout either.
+      void check();
       return await settled;
     } finally {
       clearTimeout(timer);
@@ -108,13 +113,17 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
 
   #subscribe() {
     return (this.#subscribed ??= this.subscriber
-      .subscribe(READY_CHANNEL, (key) => {
-        for (const listener of [...(this.#listeners.get(key) ?? [])]) listener();
-      })
+      .subscribe(READY_CHANNEL, (key) => this.#notify(key))
       .catch((error: unknown) => {
         this.#subscribed = undefined;
         throw error;
       }));
+  }
+
+  /** Wakes the waiters of one key, or of every key. */
+  #notify(key?: string) {
+    const sets = key === undefined ? [...this.#listeners.values()] : [this.#listeners.get(key)];
+    for (const listeners of sets) for (const listener of [...(listeners ?? [])]) listener();
   }
 
   #register(key: string, listener: Listener) {
@@ -141,40 +150,6 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
   /** Scoped to the Agent, so only a result naming the Agent a waiter interrupts can take its key. */
   #key({ workspaceId, agentId, requestId }: Scope) {
     return `${workspaceRedisKey({ workspaceId, agentId, name: "agent-turn-interrupt-result", version: "v1" })}:request:${encodeURIComponent(requestId)}`;
-  }
-}
-
-/** For tests: results live in this process only. */
-export class MemoryAgentTurnInterruptResults implements AgentTurnInterruptResults {
-  readonly #results = new Map<string, AgentTurnInterruptResult>();
-  readonly #listeners = new Set<Listener>();
-
-  async put(scope: Scope, result: AgentTurnInterruptResult) {
-    const key = `${scope.workspaceId}:${scope.agentId}:${scope.requestId}`;
-    if (!this.#results.has(key)) this.#results.set(key, result);
-    for (const listener of [...this.#listeners]) listener();
-  }
-
-  wait(
-    scope: Scope,
-    timeoutMs: number,
-    accept: (result: AgentTurnInterruptResult) => boolean,
-  ): Promise<AgentTurnInterruptResult | "timeout"> {
-    const key = `${scope.workspaceId}:${scope.agentId}:${scope.requestId}`;
-    return new Promise((resolve) => {
-      const finish = (value: AgentTurnInterruptResult | "timeout") => {
-        clearTimeout(timer);
-        this.#listeners.delete(check);
-        resolve(value);
-      };
-      const check = () => {
-        const result = this.#results.get(key);
-        if (result && accept(result)) finish(result);
-      };
-      const timer = setTimeout(() => finish("timeout"), timeoutMs);
-      this.#listeners.add(check);
-      check();
-    });
   }
 }
 
