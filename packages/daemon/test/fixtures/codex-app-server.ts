@@ -1,6 +1,7 @@
+import { handleCodexMetadata } from "./codex-metadata";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { appliedServiceTier, CODEX_MODEL_LIST, hasExpectedThreadConfig } from "./codex-models";
+import { appliedServiceTier, hasExpectedThreadConfig } from "./codex-models";
 import { readLines } from "./read-lines";
 
 const expectedSkill = process.argv
@@ -14,16 +15,6 @@ const expectedSession = process.argv
   .find((argument) => argument.startsWith("expected-session="))
   ?.slice("expected-session=".length);
 const threadId = expectedSession && expectedSession !== "new" ? expectedSession : "thread-1";
-const usageUnavailable = process.argv.includes("usage-unavailable");
-const usageUnsupported = process.argv.includes("usage-unsupported");
-const usageTimeout = process.argv.includes("usage-timeout");
-const usageApikeyAccount = process.argv.includes("usage-apikey");
-const usageNoauthAccount = process.argv.includes("usage-noauth");
-const usageLegacyAccount = process.argv.includes("usage-legacy");
-const usageAuthRequired = process.argv.includes("usage-auth");
-const usageRatelimited = process.argv.includes("usage-ratelimited");
-const usageEmpty = process.argv.includes("usage-empty");
-const usageExtra = process.argv.includes("usage-extra");
 const usageClient = process.argv.some((argument) => argument.startsWith("usage"));
 const skillsDirectory = join(process.cwd(), ".agents", "skills");
 let skills: string[] = [];
@@ -75,112 +66,7 @@ function handle(request: Request): void {
     initialized = true;
     return;
   }
-  if (request.method === "account/read" && request.id && usageClient) {
-    if (usageLegacyAccount) {
-      write({ id: request.id, error: { code: -32601, message: "method not found" } });
-      return;
-    }
-    if (usageApikeyAccount) {
-      write({ id: request.id, result: { account: { type: "apiKey" } } });
-      return;
-    }
-    if (usageNoauthAccount) {
-      write({
-        id: request.id,
-        result: {
-          account: { type: "chatgpt", email: "codexuser@example.com" },
-          requiresOpenaiAuth: false,
-        },
-      });
-      return;
-    }
-    write({
-      id: request.id,
-      result: { account: { type: "chatgpt", email: "codexuser@example.com" } },
-    });
-    return;
-  }
-  if (request.method === "account/rateLimits/read" && request.id) {
-    if (usageTimeout) return;
-    if (usageEmpty) {
-      write({ id: request.id, result: {} });
-      return;
-    }
-    if (usageAuthRequired) {
-      write({
-        id: request.id,
-        error: { code: -32001, message: "authentication required" },
-      });
-      return;
-    }
-    if (usageUnavailable || usageUnsupported) {
-      write({
-        id: request.id,
-        error: { code: "not_logged_in", message: "not logged in" },
-      });
-      return;
-    }
-    const primary = {
-      usedPercent: usageRatelimited ? 100 : 25,
-      windowDurationMins: 300,
-      resetsAt: 1_735_780_800,
-    };
-    const secondary = {
-      usedPercent: 75,
-      windowDurationMins: 10_080,
-      resetsAt: "2026-01-09T00:00:00.000Z",
-    };
-    const codexLimit = usageExtra
-      ? {
-          limitId: "codex",
-          limitName: "Codex",
-          primary,
-          secondary,
-          credits: { hasCredits: true, unlimited: false, balance: "12.50" },
-          individualLimit: {
-            limit: "10",
-            used: "3",
-            remainingPercent: 40,
-            resetsAt: 1_735_780_800,
-          },
-        }
-      : { limitId: "codex", primary, secondary };
-    write({
-      id: request.id,
-      result: {
-        planType: "plus",
-        rateLimits: codexLimit,
-        ...(usageExtra
-          ? {
-              rateLimitsByLimitId: {
-                codex: codexLimit,
-                "gpt-5": {
-                  limitId: "gpt-5",
-                  limitName: "GPT-5",
-                  primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: 1_735_780_800 },
-                },
-              },
-            }
-          : {}),
-      },
-    });
-    return;
-  }
-  if (request.method === "model/list" && request.id && initialized) {
-    if (process.argv.includes("catalog-invalid")) {
-      write({ id: request.id, result: { data: "fixture-private-payload" } });
-      return;
-    }
-    if (process.argv.includes("catalog-exit")) process.exit(23);
-    if (process.argv.includes("catalog-timeout")) return;
-    if (process.argv.includes("catalog-error")) {
-      console.error("401 Unauthorized: Bearer fixture-private-token");
-      write({ id: request.id, error: { code: -32001, message: "token=fixture-private-token" } });
-      return;
-    }
-    write({ id: request.id, result: CODEX_MODEL_LIST });
-    return;
-  }
+  if (handleCodexMetadata(request, initialized, usageClient, write)) return;
   if (request.method === "skills/list" && request.id && initialized) {
     skillsLoaded = true;
     const cwds = request.params?.cwds;
