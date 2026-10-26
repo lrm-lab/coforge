@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { CodexProvider } from "@lrm/coforge-anvil/codex";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 
 const command = (fixture: string) => [
   process.execPath,

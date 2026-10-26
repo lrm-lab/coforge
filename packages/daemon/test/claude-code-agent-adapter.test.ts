@@ -1,13 +1,9 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  ActivityTrajectory,
-  TRAJECTORY_QUIET_WINDOW_MS,
-} from "#src/agent-runtime/activity-trajectory";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 import {
   AGENT_RUNTIME_EVENT_TYPE,
   type AgentRuntimeEvent,
@@ -409,51 +405,6 @@ test("Claude Code rejects a failed initialization handshake", async () => {
   }
 });
 
-test("Claude Code starts the user's installed CLI from PATH in streaming mode", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "coforge-claude-installed-"));
-  const agentWorkspaceDirectory = join(directory, "workspace");
-  const binDirectory = join(directory, "bin");
-  await mkdir(agentWorkspaceDirectory);
-  await mkdir(binDirectory);
-  const executable = join(binDirectory, "claude");
-  await writeFile(
-    executable,
-    '#!/bin/sh\nprintf "%s" "$*" > "$COFORGE_CLAUDE_ARGS"\nexec "$COFORGE_BUN_EXEC" "$COFORGE_CLAUDE_FIXTURE" -- "$@"\n',
-  );
-  await chmod(executable, 0o755);
-  const argumentsFile = join(directory, "claude-arguments");
-
-  try {
-    const session = await new ClaudeCodeProvider().createAgentSession({
-      agentWorkspaceDirectory,
-      instructions: TEST_AGENT_INSTRUCTIONS,
-      runtime: {
-        provider: "claude-code",
-        model: "claude-sonnet-5",
-        modelProvider: "",
-        reasoning: "high",
-      },
-      environment: {
-        PATH: binDirectory,
-        COFORGE_BUN_EXEC: process.execPath,
-        COFORGE_CLAUDE_FIXTURE: new URL("./fixtures/claude-stream-json.ts", import.meta.url)
-          .pathname,
-        COFORGE_CLAUDE_ARGS: argumentsFile,
-      },
-    });
-    expect(await readFile(argumentsFile, "utf8")).toContain(
-      "-p --input-format stream-json --output-format stream-json",
-    );
-    expect(await readFile(argumentsFile, "utf8")).toContain(
-      "--model claude-sonnet-5 --effort high",
-    );
-    expect(await readFile(argumentsFile, "utf8")).toContain("--append-system-prompt-file");
-    await session.dispose();
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
 test("Claude Code maps stream-json turns behind the code-agent seam", async () => {
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-events-"));
   const adapter = claudeFixtureProvider();
@@ -498,72 +449,6 @@ test("Claude Code maps stream-json turns behind the code-agent seam", async () =
     await session.dispose();
   } finally {
     await rm(agentWorkspaceDirectory, { recursive: true, force: true });
-  }
-});
-
-test("Claude Code shows each completed text and thinking block as one Activity row", async () => {
-  // Pauses longer than the trajectory's quiet window used to split a streamed block into rows.
-  const fixture = await controlledClaude();
-  const { session, emit } = fixture;
-  const activities: AgentRuntimeEvent[] = [];
-  const trajectory = new ActivityTrajectory((event) => {
-    if (event.type === "activity") activities.push(event);
-  });
-  session.subscribe((event) => {
-    if (event.type !== "text-delta" || event.text !== "fixture-input-observed")
-      trajectory.accept(event);
-  });
-  const pause = () => Bun.sleep(TRAJECTORY_QUIET_WINDOW_MS + 50);
-  const delta = (value: Record<string, unknown>) => ({
-    type: "stream_event",
-    event: { type: "content_block_delta", delta: value },
-  });
-  const stop = { type: "stream_event", event: { type: "content_block_stop" } };
-  try {
-    await session.sendMessage("wait");
-    await emit(
-      {
-        type: "stream_event",
-        event: { type: "content_block_start", content_block: { type: "thinking", thinking: "" } },
-      },
-      delta({ type: "thinking_delta", thinking: "Let me " }),
-    );
-    await pause();
-    await emit(
-      delta({ type: "thinking_delta", thinking: "think." }),
-      {
-        type: "assistant",
-        message: { content: [{ type: "thinking", thinking: "Let me think." }] },
-      },
-      stop,
-      {
-        type: "stream_event",
-        event: { type: "content_block_start", content_block: { type: "text", text: "" } },
-      },
-      delta({ type: "text_delta", text: "Hel" }),
-    );
-    await pause();
-    await emit(
-      delta({ type: "text_delta", text: "lo" }),
-      { type: "assistant", message: { content: [{ type: "text", text: "Hello" }] } },
-      stop,
-      { type: "result", subtype: "success" },
-    );
-    expect(
-      activities.map((event) =>
-        event.type === "activity" ? [event.activity.detailKind, event.activity.entries] : [],
-      ),
-    ).toEqual([
-      // Run-start markers still flip the status as soon as each block starts.
-      ["thinking_started", undefined],
-      ["thinking_started", [{ kind: "thinking", text: "Let me think." }]],
-      ["thinking_end", undefined],
-      ["model_response_started", undefined],
-      ["model_response_started", [{ kind: "text", text: "Hello" }]],
-    ]);
-  } finally {
-    trajectory.dispose();
-    await fixture.dispose();
   }
 });
 

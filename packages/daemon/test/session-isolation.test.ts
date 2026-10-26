@@ -6,7 +6,7 @@ import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 import { CodexProvider } from "@lrm/coforge-anvil/codex";
 
 // macOS tmpdir lives under /var, a symlink. Persisted Pi sessions are keyed by

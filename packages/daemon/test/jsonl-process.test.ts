@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 import { TEST_AGENT_INSTRUCTIONS } from "./fixtures/claude-feed";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { tmpdir } from "node:os";

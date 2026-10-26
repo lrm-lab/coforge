@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 

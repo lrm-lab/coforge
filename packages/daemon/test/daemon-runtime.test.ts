@@ -23,7 +23,7 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { DaemonRuntime, USAGE_SCAN_READ_TIMEOUT_MS } from "#src/daemon-runtime/runtime";
 import { ACTIVITY_HEARTBEAT_MS } from "#src/daemon-runtime/agent-activity-publisher";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 import { RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS } from "#src/agent-runtime/runtime-error-recovery";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";

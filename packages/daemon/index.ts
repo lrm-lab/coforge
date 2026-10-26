@@ -80,7 +80,7 @@ export type {
   CodeAgentProviderFactory,
 } from "@lrm/coforge-anvil";
 export { createCodeAgentProvider } from "#src/code-agent/registry";
-export { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+export { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 export { readClaudeCodeUsage } from "#src/code-agent/claude-code/usage";
 export { CoforgeProvider } from "#src/code-agent/pi/provider";
 export { startDaemonLocalRpcServer } from "#src/local-rpc";

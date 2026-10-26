@@ -10,7 +10,7 @@ import {
   withDefaultAutoCompactWindow,
 } from "#src/code-agent/claude-code/launch-args";
 import { claudeCliEnvironment } from "#src/code-agent/claude-code/process";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import { agentEnvironment } from "#src/code-agent/environment";
 

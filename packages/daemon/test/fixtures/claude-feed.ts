@@ -1,5 +1,5 @@
 import { tmpdir } from "node:os";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 
 export const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";

@@ -17,7 +17,7 @@ import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { KiroProvider } from "@lrm/coforge-anvil/kiro";
 import { GrokProvider } from "@lrm/coforge-anvil/grok";
 import { PiProvider } from "@lrm/coforge-anvil/pi";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
+import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
 import { CodexProvider, CodexRuntimeAuthAdapter } from "@lrm/coforge-anvil/codex";
 import { codexRuntimeHost, createCodexAuthHost } from "#src/code-agent/codex/host";
 import { ClaudeRuntimeAuthAdapter } from "#src/code-agent/claude-code/auth";
