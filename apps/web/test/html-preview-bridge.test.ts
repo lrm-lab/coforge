@@ -72,6 +72,11 @@ test("each render has its own nonce and a later epoch", () => {
   });
 });
 
+test("every nonce has the same length, so none loses entropy", () => {
+  const lengths = new Set(Array.from({ length: 1000 }, () => newBridgeSession().nonce.length));
+  expect([...lengths]).toEqual([32]);
+});
+
 test("the frame starts in standards mode with only the policy and the nonced bridge", () => {
   const session = newBridgeSession();
   const document = bridgeSrcDoc(session);

@@ -57,8 +57,9 @@ export type BridgeSession = { nonce: string; epoch: number };
 let epochs = 0;
 
 export function newBridgeSession(): BridgeSession {
+  // Hex keeps every nonce 32 characters and 128 bits; stripping base64's `+/=` shortened some.
   const bytes = crypto.getRandomValues(new Uint8Array(16));
-  const nonce = btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, "");
+  const nonce = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   return { nonce, epoch: ++epochs };
 }
 
