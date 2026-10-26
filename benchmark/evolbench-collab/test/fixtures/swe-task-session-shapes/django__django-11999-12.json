@@ -1,0 +1,98 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-b22129c9bac64779",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a0e813883d665e25",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-22764bdc-3d2f-4698-a737-07df1afb2cd0",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-cae11117-86f4-4fbb-b0e7-0731ce14a89b",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-a9b79084-603e-41eb-a0d5-cce1af5cae4a",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-1a467ec6-6aba-4285-8d08-553f8161e3d3",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a42a665a6f944bda",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a6d94f6b95d5247b",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a407d7cdc377e3c6",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-b4aa2b55488d93a5",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-91005949df9bed94",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-997f77a97c689753",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

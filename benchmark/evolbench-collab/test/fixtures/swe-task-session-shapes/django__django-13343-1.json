@@ -1,0 +1,98 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-9e7c548e1471a500",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-803f6f0431afb747",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-8d4af97d4350037b",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-ae05b2e0974bd37d",
+    "toolName": "read",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a261a3e323d0f3bb",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-b9b1bf1d-e9e3-4830-8cd0-bddb54e1fafb",
+    "toolName": "edit",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-dbc44146-7ee3-4057-bfcd-76a015b2b59d",
+    "toolName": "edit",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-24c5b66f-fd32-4df7-bf67-98a9c8031fd1",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-852ac098768180fc",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-88b4b264ddf4990c",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-30247625-cb3d-4411-8515-77b0a0a630b5",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-bba59a0c0ec1adda",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  }
+]

@@ -1,0 +1,100 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-9b8f37c64fe8cc71",
+    "toolName": "read",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-d11d7f98-1049-43da-ab35-7d92c7fc3471",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-f7561522-70f7-4489-878b-026e6891bf94",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-b0c0f6b9f03b6f86",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-219bce55-8bee-46b7-95e7-731ca4e6d95b",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-ad823fc58beff436",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-8fac54a7-b4e5-45b1-8160-78426c26fd1c",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-8eea3012-7117-487b-9efc-df330dd04f88",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-890f7575c09eb1ae",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-c36752ef-d640-41ab-b11a-cc87e6a4eefc",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "Message sent to #software-engineering. Message ID: 01a171a9-0b8b-7158-8c2d-0d18e513d8e8 (to reply in this message's thread, use target \"#software-engineering:01a171a9-0b8b\")\n",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-f18dab91-e452-4664-a8f3-2997c9a79aae",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-9b4c619ff601cf63",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

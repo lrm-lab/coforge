@@ -6,7 +6,11 @@ import { listSessionIds } from "./session-ids";
 import type { EvalWorkspace } from "./workspace";
 
 /** Tool exchanges and delivery facts for the episode's channel messages, read from both agents. */
-export async function episodeEnrichment(workspace: EvalWorkspace, daemonWorkspaceRoot: string) {
+export async function episodeEnrichment(
+  workspace: EvalWorkspace,
+  daemonWorkspaceRoot: string,
+  taskTraceFromFile = false,
+) {
   const agentRows = await workspace.db.agent.findMany({
     where: { id: { in: [workspace.memoryAgentId, workspace.taskAgentId] } },
     select: { id: true, name: true },
@@ -19,11 +23,13 @@ export async function episodeEnrichment(workspace: EvalWorkspace, daemonWorkspac
       }),
     ),
     decisions: new AgentAttentionDecisionStore(),
+    taskTraceFromFile,
     warn: (message) => console.warn(sanitizeDiagnostic(message)),
   });
   const messages = await workspace.db.message.findMany({
     where: { conversationId: workspace.channelId },
     select: { id: true, sender: { select: { agentId: true } } },
+    ...(taskTraceFromFile ? { orderBy: { sequence: "asc" as const } } : {}),
   });
   return deriveTurnEnrichment({
     agents,

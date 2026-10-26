@@ -1,3 +1,5 @@
+import { trajectorySessionWrite } from "./task-file-trace";
+import type { EpisodeEnrichment } from "./enrichment";
 import { PrismaWorkspaceMemoryAdmissionStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-admission.repositories.server";
 import { PrismaWorkspaceMemoryProfileStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-profile.repositories.server";
 import {
@@ -43,10 +45,27 @@ export function createEvalDispatcher(input: {
   return createAdmissionDispatcher({
     admission,
     sinks: {
-      openviking: createOpenVikingAdmittedDeliverySink({
-        sessions,
-        owner: "evol-sink",
-      }),
+      openviking: {
+        async deliver(delivery) {
+          const enrichment = delivery.turnEnrichment as EpisodeEnrichment | undefined;
+          const observations = delivery.turns.some(
+            (turn) => turn.messageId === enrichment?.trailingAnchorMessageId,
+          )
+            ? enrichment?.trailingObservations
+            : undefined;
+          if (!observations?.length)
+            return createOpenVikingAdmittedDeliverySink({ sessions, owner: "evol-sink" }).deliver(
+              delivery,
+            );
+          const result = await sessions.writeCommitAndExtract({
+            owner: "evol-sink",
+            write: trajectorySessionWrite(delivery),
+          });
+          return result.ok
+            ? { outcome: "delivered" }
+            : { outcome: "retryable_failure", sanitizedError: result.sanitizedError };
+        },
+      },
     },
   });
 }

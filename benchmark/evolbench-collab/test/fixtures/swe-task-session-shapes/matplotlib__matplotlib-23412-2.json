@@ -1,0 +1,20 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-8e4f4d17224da2af",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-9cf7a4e6-dbf9-430a-b078-2bba21b8fcc0",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "Message sent to #software-engineering:01a172f8-1234. Message ID: 01a17309-18ec-770e-a28a-1142dc5c2b8a\n",
+    "isError": false
+  }
+]

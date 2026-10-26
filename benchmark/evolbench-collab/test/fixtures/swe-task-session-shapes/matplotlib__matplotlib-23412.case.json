@@ -1,0 +1,14 @@
+{
+  "episode": "matplotlib__matplotlib-23412",
+  "sessionId": "e7618248-076a-4e62-b958-88fafe127930",
+  "source_sha256": "6bec7a311d7eefe02e6114c98ed0de501a066c14d8be41876859e316cbb5e0b8",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 1,
+  "tail_tools": 0,
+  "parts": [
+    "matplotlib__matplotlib-23412-0.json",
+    "matplotlib__matplotlib-23412-1.json",
+    "matplotlib__matplotlib-23412-2.json"
+  ]
+}

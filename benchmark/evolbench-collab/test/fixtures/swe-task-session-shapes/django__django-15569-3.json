@@ -1,0 +1,20 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "call-0a02a9f1-ffa4-4fb0-b156-1e62abdf463f",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "Message sent to #software-engineering:01a1718f-1381. Message ID: 01a17191-f3ea-7067-8137-d66eb6a9dffc\n",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-a17b75a1-31ed-480f-9c36-423064190e4d",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "episode": "django__django-12708",
+  "sessionId": "fd9cd90c-ca63-48af-925d-23d6afdf299c",
+  "source_sha256": "a362fe5a8417cfe0b25f2aaae84da2b619489b7ce3f51ad58824fdacfb64ad28",
+  "termination": "quiet_no_offer",
+  "final_complete": false,
+  "sends": 1,
+  "tail_tools": 65,
+  "parts": [
+    "django__django-12708-0.json",
+    "django__django-12708-1.json",
+    "django__django-12708-2.json",
+    "django__django-12708-3.json",
+    "django__django-12708-4.json",
+    "django__django-12708-5.json"
+  ]
+}

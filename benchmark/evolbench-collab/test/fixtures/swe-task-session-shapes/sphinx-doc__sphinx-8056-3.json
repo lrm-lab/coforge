@@ -1,0 +1,26 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-96a48529474efb7b",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-f2de9095-47c1-4c61-9212-c585b3fcd828",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-822467395eab59ee",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

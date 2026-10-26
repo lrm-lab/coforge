@@ -1,0 +1,21 @@
+{
+  "episode": "mwaskom__seaborn-3069",
+  "sessionId": "433619a3-9985-43eb-a681-d51d8385f579",
+  "source_sha256": "0cd22d9a7f0a5d41895cc717832309563624ddfb4c9f512bfd4bec0cfeb81760",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 2,
+  "tail_tools": 2,
+  "parts": [
+    "mwaskom__seaborn-3069-0.json",
+    "mwaskom__seaborn-3069-1.json",
+    "mwaskom__seaborn-3069-2.json",
+    "mwaskom__seaborn-3069-3.json",
+    "mwaskom__seaborn-3069-4.json",
+    "mwaskom__seaborn-3069-5.json",
+    "mwaskom__seaborn-3069-6.json",
+    "mwaskom__seaborn-3069-7.json",
+    "mwaskom__seaborn-3069-8.json",
+    "mwaskom__seaborn-3069-9.json"
+  ]
+}

@@ -1,3 +1,4 @@
+import { exportTaskFileTrace, type TrailingObservation } from "./task-file-trace";
 import {
   exportAgentChannelTrace,
   type AgentChannelTrace,
@@ -9,6 +10,11 @@ import type {
 import type { TurnEnrichment } from "../../../apps/web/src/server/workspace-memory/dispatch";
 import type { OpenVikingOutcomeEvaluatorResult } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 
+export type EpisodeEnrichment = Map<string, TurnEnrichment> & {
+  trailingObservations?: TrailingObservation[];
+  trailingAnchorMessageId?: string;
+};
+
 const SHORT_ID_LENGTH = 13;
 
 export type EnrichmentAgent = {
@@ -17,6 +23,7 @@ export type EnrichmentAgent = {
   name: string;
   trace: AgentChannelTrace | null;
   decisions: readonly AgentAttentionDecisionRecord[];
+  trailingObservations?: TrailingObservation[];
 };
 
 export type EnrichmentMessage = { id: string; senderAgentId: string | null };
@@ -31,8 +38,8 @@ const NOTIFIED = new Set(["notified", "already_notified"]);
 export function deriveTurnEnrichment(input: {
   agents: readonly EnrichmentAgent[];
   messages: readonly EnrichmentMessage[];
-}): Map<string, TurnEnrichment> {
-  const result = new Map<string, TurnEnrichment>();
+}): EpisodeEnrichment {
+  const result: EpisodeEnrichment = new Map<string, TurnEnrichment>();
   const entry = (id: string) => {
     let value = result.get(id);
     if (!value) {
@@ -49,6 +56,10 @@ export function deriveTurnEnrichment(input: {
   const readBy = new Map<string, Set<string>>();
   const notifiedBy = new Map<string, Set<string>>();
   for (const agent of input.agents) {
+    if (agent.trailingObservations?.length) {
+      (result.trailingObservations ??= []).push(...agent.trailingObservations);
+      result.trailingAnchorMessageId = input.messages.at(-1)?.id;
+    }
     const read = new Set<string>();
     for (const short of [
       ...(agent.trace?.sends.flatMap((send) => send.receivedShortIds) ?? []),
@@ -89,14 +100,38 @@ export function deriveTurnEnrichment(input: {
 export async function loadEnrichmentAgents(input: {
   agents: ReadonlyArray<{ id: string; name: string; cwd: string; sessionIds: readonly string[] }>;
   decisions: AgentAttentionDecisionPort;
+  taskTraceFromFile?: boolean;
   warn?: (message: string) => void;
 }): Promise<EnrichmentAgent[]> {
   const loaded: EnrichmentAgent[] = [];
   for (const agent of input.agents) {
     let trace: AgentChannelTrace | null = null;
+    const tails: TrailingObservation[] = [];
+    const fromFile =
+      (input.taskTraceFromFile ?? Bun.env.COFORGE_EVAL_TASK_TRACE_FROM_FILE === "1") &&
+      agent.name.toLowerCase() === "task";
+    if (fromFile && agent.sessionIds.length === 0)
+      throw new Error("Task runtime session identity missing");
     for (const sessionId of agent.sessionIds) {
       try {
-        const next = await exportAgentChannelTrace({ cwd: agent.cwd, sessionId });
+        const next = await (fromFile ? exportTaskFileTrace : exportAgentChannelTrace)({
+          cwd: agent.cwd,
+          sessionId,
+        });
+        if (fromFile) {
+          const incomplete = next.sends.flatMap((send) =>
+            send.toolExchanges.filter((tool) => tool.resultUnavailable),
+          );
+          for (const send of next.sends)
+            send.toolExchanges = send.toolExchanges.filter((tool) => !tool.resultUnavailable);
+          const observations = [...incomplete, ...(next.trailingToolExchanges ?? [])];
+          if (observations.length)
+            tails.push({
+              sessionId,
+              participantId: `coforge__${agent.name}`,
+              toolExchanges: observations,
+            });
+        }
         trace = trace
           ? {
               sessionId: next.sessionId,
@@ -108,6 +143,7 @@ export async function loadEnrichmentAgents(input: {
             }
           : next;
       } catch (error) {
+        if (fromFile) throw error;
         input.warn?.(
           `agent ${agent.name} session ${sessionId} trace unavailable: ${String(error)}`,
         );
@@ -118,6 +154,7 @@ export async function loadEnrichmentAgents(input: {
       name: agent.name,
       trace,
       decisions: input.decisions.read(agent.id),
+      ...(fromFile ? { trailingObservations: tails } : {}),
     });
   }
   return loaded;

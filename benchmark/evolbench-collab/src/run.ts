@@ -92,9 +92,7 @@ Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE ??= "/tmp/pcm-eval-ov-keys.json";
 const runtime = createEvalRuntime(env.ovUrl);
 const rootKey = await readSecretRootKey(env.ovConfPath);
 const root = rootIdentity(rootKey);
-// Parallel-sedimentation protocol: cold episodes each run on their own empty
-// disposable account (no train-time retrieval), then drain their transcript
-// into ONE shared corpus account read by the later warm test phase.
+// Cold episodes use empty disposable accounts, then drain into the shared corpus for warm retrieval.
 const drainAccount = await loadSharedDrainAccount(env.drainAccountFile);
 const db = connectEvalDb(env.databaseUrl);
 const writer = await createAttemptWriter(
@@ -435,7 +433,6 @@ async function executeEpisode(
   episodeEvaluatorResults = drainEvaluatorResults(drainOutcomeMode, row.status, episode.episodeId);
   const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
   if (shouldDrainEpisode(arm, frozenKnowledge, coldDrain)) {
-    // Every drained arm: warm, and cold when it drains into the shared corpus account.
     const outcomeEvaluatorResults = sidecarVerdict
       ? evaluatorResultFromVerdict({
           episodeId: episode.episodeId,
@@ -444,7 +441,12 @@ async function executeEpisode(
         })
       : [];
     const turnEnrichment = env.recordTrajectoryAos
-      ? await episodeEnrichment(provisioned.workspace, provisioned.daemon.workspaceRoot)
+      ? await episodeEnrichment(
+          provisioned.workspace,
+          provisioned.daemon.workspaceRoot,
+          episode.domain === "software_engineering" &&
+            Bun.env.COFORGE_EVAL_TASK_TRACE_FROM_FILE === "1",
+        )
       : undefined;
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,

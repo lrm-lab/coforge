@@ -1,0 +1,15 @@
+{
+  "episode": "sphinx-doc__sphinx-9230",
+  "sessionId": "bf21e9b3-7db3-4501-8e00-07f1c700ed12",
+  "source_sha256": "f8c1709cc2b8c6187a29a68e7a8460cd9349bc51f35c8239315d13d1cad09002",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 1,
+  "tail_tools": 2,
+  "parts": [
+    "sphinx-doc__sphinx-9230-0.json",
+    "sphinx-doc__sphinx-9230-1.json",
+    "sphinx-doc__sphinx-9230-2.json",
+    "sphinx-doc__sphinx-9230-3.json"
+  ]
+}

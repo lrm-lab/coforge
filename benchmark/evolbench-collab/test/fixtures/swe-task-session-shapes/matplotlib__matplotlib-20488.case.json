@@ -1,0 +1,16 @@
+{
+  "episode": "matplotlib__matplotlib-20488",
+  "sessionId": "d916e02c-3723-4348-97bc-237c3dcf9434",
+  "source_sha256": "9df3d25c3c6ce673298475dce6314cc21aaecf89805d7ce56aaabe982eb246e2",
+  "termination": "quiet_no_offer",
+  "final_complete": false,
+  "sends": 0,
+  "tail_tools": 60,
+  "parts": [
+    "matplotlib__matplotlib-20488-0.json",
+    "matplotlib__matplotlib-20488-1.json",
+    "matplotlib__matplotlib-20488-2.json",
+    "matplotlib__matplotlib-20488-3.json",
+    "matplotlib__matplotlib-20488-4.json"
+  ]
+}

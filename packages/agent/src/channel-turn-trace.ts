@@ -9,6 +9,7 @@ export type ChannelToolExchange = {
   input: unknown;
   output: string;
   isError: boolean;
+  resultUnavailable?: true;
 };
 
 /** One channel message an agent sent, with what led up to it in the agent's own session. */
@@ -25,6 +26,8 @@ export type AgentChannelTrace = {
   sends: ChannelSendTrace[];
   /** Short ids the agent was shown after its last send (no later send to attach them to). */
   trailingReceivedShortIds: string[];
+  /** Unpublished tools, included only by the opt-in file exporter. */
+  trailingToolExchanges?: ChannelToolExchange[];
 };
 
 const SEND_COMMAND = /^\s*coforge\s+message\s+send\b/;
@@ -91,6 +94,7 @@ function shortIdsIn(output: string): string[] {
 export function channelTraceFromSteps(
   sessionId: string,
   steps: readonly AgentTrainingStep[],
+  preserveTrailing = false,
 ): AgentChannelTrace {
   const sends: ChannelSendTrace[] = [];
   let exchanges: ChannelToolExchange[] = [];
@@ -110,6 +114,7 @@ export function channelTraceFromSteps(
       input: step.input,
       output: step.output,
       isError: step.isError,
+      ...(step.resultUnavailable ? { resultUnavailable: true as const } : {}),
     });
     const reads =
       (step.toolName === "bash" && READ_COMMAND.test(commandOf(step))) ||
@@ -117,7 +122,12 @@ export function channelTraceFromSteps(
       step.toolName === "message_read";
     if (reads && !step.isError) received.push(...shortIdsIn(step.output));
   }
-  return { sessionId, sends, trailingReceivedShortIds: received };
+  return {
+    sessionId,
+    sends,
+    trailingReceivedShortIds: received,
+    ...(preserveTrailing ? { trailingToolExchanges: exchanges } : {}),
+  };
 }
 
 /** Read one agent's runtime session and trace its channel sends. */

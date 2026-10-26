@@ -1,0 +1,13 @@
+{
+  "episode": "scikit-learn__scikit-learn-11578",
+  "sessionId": "b80b29d4-f91a-4731-9af7-570c5f05d533",
+  "source_sha256": "6ad0958e2b7ff65d6f4d80119c645ae396e398eb0784dd4d677b4bf07ddda92e",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 2,
+  "tail_tools": 1,
+  "parts": [
+    "scikit-learn__scikit-learn-11578-0.json",
+    "scikit-learn__scikit-learn-11578-1.json"
+  ]
+}

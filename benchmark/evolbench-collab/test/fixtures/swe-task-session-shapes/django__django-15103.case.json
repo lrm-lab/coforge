@@ -1,0 +1,14 @@
+{
+  "episode": "django__django-15103",
+  "sessionId": "0a0601a6-378b-4d9c-8ddb-4fd9b635f735",
+  "source_sha256": "e1dbde5e767c412a2593411e342ef536c883efe5080ffcf1a6a3f22ce571dc27",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 1,
+  "tail_tools": 1,
+  "parts": [
+    "django__django-15103-0.json",
+    "django__django-15103-1.json",
+    "django__django-15103-2.json"
+  ]
+}

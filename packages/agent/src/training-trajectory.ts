@@ -17,6 +17,8 @@ export type AgentTrainingStep =
       input: unknown;
       output: string;
       isError: boolean;
+      /** File-only observation: invocation has no matching result at the snapshot. */
+      resultUnavailable?: true;
     };
 
 export type AgentTrainingTrajectory = {
@@ -119,4 +121,29 @@ function textOf(content: string | ReadonlyArray<{ type: string; text?: string }>
     .filter((part) => part.type === "text" && typeof part.text === "string")
     .map((part) => part.text ?? "")
     .join("");
+}
+
+/** Parse an already identity-validated, scoped session without workspace recovery or creation. */
+export function trainingTrajectoryFromFile(
+  file: string,
+  sessionDir: string,
+  cwd: string,
+): AgentTrainingTrajectory {
+  const session = SessionManager.open(file, sessionDir, cwd);
+  const messages = session
+    .getBranch()
+    .flatMap((entry) => (entry.type === "message" ? [entry.message] : []));
+  const steps = stepsFromMessages(messages);
+  const completed = new Set(
+    messages.flatMap((message) => (message.role === "toolResult" ? [message.toolCallId] : [])),
+  );
+  for (const step of steps) {
+    if (
+      step.kind === "tool" &&
+      !step.toolCallId.startsWith("bash:") &&
+      !completed.has(step.toolCallId)
+    )
+      step.resultUnavailable = true;
+  }
+  return { sessionId: session.getSessionId(), steps };
 }

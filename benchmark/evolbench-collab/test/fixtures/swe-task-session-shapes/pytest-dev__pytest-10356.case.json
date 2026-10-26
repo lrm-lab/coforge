@@ -1,0 +1,17 @@
+{
+  "episode": "pytest-dev__pytest-10356",
+  "sessionId": "00bd4fd3-c91a-44a1-8d41-777c05a65617",
+  "source_sha256": "d0f9e0b62ffe566cf7f40f90888503ef53e7bd8b65d2c25d37e17179dc7417e1",
+  "termination": "quiet_no_offer",
+  "final_complete": false,
+  "sends": 1,
+  "tail_tools": 59,
+  "parts": [
+    "pytest-dev__pytest-10356-0.json",
+    "pytest-dev__pytest-10356-1.json",
+    "pytest-dev__pytest-10356-2.json",
+    "pytest-dev__pytest-10356-3.json",
+    "pytest-dev__pytest-10356-4.json",
+    "pytest-dev__pytest-10356-5.json"
+  ]
+}

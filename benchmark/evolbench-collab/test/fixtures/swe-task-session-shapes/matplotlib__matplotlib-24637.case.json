@@ -1,0 +1,20 @@
+{
+  "episode": "matplotlib__matplotlib-24637",
+  "sessionId": "e6f673cf-8591-4342-97da-8982d5565874",
+  "source_sha256": "3fa261e70061736693eebcaf183d9625ec4c2b5a8815b2172465979f70a47202",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 2,
+  "tail_tools": 13,
+  "parts": [
+    "matplotlib__matplotlib-24637-0.json",
+    "matplotlib__matplotlib-24637-1.json",
+    "matplotlib__matplotlib-24637-2.json",
+    "matplotlib__matplotlib-24637-3.json",
+    "matplotlib__matplotlib-24637-4.json",
+    "matplotlib__matplotlib-24637-5.json",
+    "matplotlib__matplotlib-24637-6.json",
+    "matplotlib__matplotlib-24637-7.json",
+    "matplotlib__matplotlib-24637-8.json"
+  ]
+}

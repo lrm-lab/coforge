@@ -1,0 +1,15 @@
+{
+  "episode": "pytest-dev__pytest-10081",
+  "sessionId": "f34c15b0-2f3c-43a2-84fe-299b2b6c6a48",
+  "source_sha256": "f2f389d8f105d53cf9fdca37c35909b47bb6959638c0d7988e992ca994c78cce",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 2,
+  "tail_tools": 11,
+  "parts": [
+    "pytest-dev__pytest-10081-0.json",
+    "pytest-dev__pytest-10081-1.json",
+    "pytest-dev__pytest-10081-2.json",
+    "pytest-dev__pytest-10081-3.json"
+  ]
+}

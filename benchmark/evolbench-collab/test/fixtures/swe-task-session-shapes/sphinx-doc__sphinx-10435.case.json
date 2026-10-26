@@ -1,0 +1,17 @@
+{
+  "episode": "sphinx-doc__sphinx-10435",
+  "sessionId": "d3dc7eb0-7d50-4138-95c6-217645d859a6",
+  "source_sha256": "f5a6b7a9b29da0fb464e3a9ad9b8fc6d3de3c7c1d28d8874fba4aa76dddd0242",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 1,
+  "tail_tools": 1,
+  "parts": [
+    "sphinx-doc__sphinx-10435-0.json",
+    "sphinx-doc__sphinx-10435-1.json",
+    "sphinx-doc__sphinx-10435-2.json",
+    "sphinx-doc__sphinx-10435-3.json",
+    "sphinx-doc__sphinx-10435-4.json",
+    "sphinx-doc__sphinx-10435-5.json"
+  ]
+}
