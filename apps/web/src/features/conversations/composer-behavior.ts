@@ -1,3 +1,5 @@
+import { m } from "#src/paraglide/messages";
+
 /**
  * Pure decision functions for the message composer's Enter-to-send and
  * paste-to-upload behaviour, kept free of React and DOM types so they can be
@@ -72,11 +74,20 @@ export function shouldSendAsTaskOnEnter(
   return shouldSendOnEnter({ ...event, shiftKey: false }, composition);
 }
 
+/** The empty composer's placeholder: the thread's, or "Message #channel" / "Message …". */
+export function composerPlaceholder(inThread: boolean, target?: string): string {
+  if (inThread) return m.conversation_thread_message_placeholder();
+  return target
+    ? m.conversation_message_placeholder_to({ target })
+    : m.conversation_message_placeholder();
+}
+
 /**
  * Whether the composer stacks (the text across the top, the attachments under it, the buttons on
  * a bar below) whatever the text's width: for a newline or any attachment. Otherwise it stacks
- * only when the text would not fit the one-line text column, which the composer measures there,
- * never at the current width: stacking widens the text, and measuring that would collapse it again.
+ * only when the text or the placeholder would not fit the one-line text column, which the composer
+ * measures there, never at the current width: stacking widens the text, and measuring that would
+ * collapse it again.
  */
 export function forcesStackedLayout(body: string, attachmentCount: number): boolean {
   return body.includes("\n") || attachmentCount > 0;

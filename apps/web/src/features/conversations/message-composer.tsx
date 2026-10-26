@@ -25,6 +25,7 @@ import {
   filesFromPaste,
   localId,
   shouldSendAsTaskOnEnter,
+  composerPlaceholder,
   shouldSendOnEnter,
   forcesStackedLayout,
 } from "./composer-behavior";
@@ -281,7 +282,9 @@ export function MessageComposer({
   // always sits in that column (see `forcesStackedLayout`). Once a newline or an attachment
   // stacks the composer anyway, the copy stays empty rather than laying out the draft twice.
   const stacksAnyway = forcesStackedLayout(body, attachments.length);
-  const lineMirrorText = stacksAnyway ? "" : body;
+  const placeholder = composerPlaceholder(inThread, target);
+  // The placeholder must fit too, or the composer stays stacked and typing never moves the box.
+  const lineMirrorText = stacksAnyway ? "" : `${body}\n${placeholder}`;
   const lineMirrorRef = useRef<HTMLSpanElement>(null);
   const [overflowsLine, setOverflowsLine] = useState(false);
   const measureLine = useCallback(() => {
@@ -628,23 +631,15 @@ export function MessageComposer({
           aria-activedescendant={
             completion.open ? completion.optionId(completion.activeIndex) : undefined
           }
-          placeholder={
-            inThread
-              ? m.conversation_thread_message_placeholder()
-              : target
-                ? m.conversation_message_placeholder_to({ target })
-                : m.conversation_message_placeholder()
-          }
-          // While the placeholder shows, the box stays one row: a long "Message #channel" would
-          // otherwise wrap in the narrow one-line column and grow the empty composer.
+          placeholder={placeholder}
+          // Fits what it shows, placeholder included (as Raft's); scrolls only past max height.
           className={cx(
-            "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 outline-none [field-sizing:content] placeholder:text-placeholder placeholder-shown:[field-sizing:fixed] disabled:opacity-50",
+            "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 outline-none [field-sizing:content] placeholder:text-placeholder disabled:opacity-50",
             DRAFT_LINE_CLASS,
             stacked ? "col-span-full" : "col-start-2",
           )}
         />
-        {/* The draft on one unwrapped line in the one-line text column: wider than its box means
-            the text would wrap there. */}
+        {/* The draft and placeholder, unwrapped, in the one-line column: wider means a wrap. */}
         <span
           ref={lineMirrorRef}
           aria-hidden="true"
