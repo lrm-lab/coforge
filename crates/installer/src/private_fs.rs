@@ -65,6 +65,29 @@ pub(crate) fn set_mode(path: &Path, _mode: u32) -> io::Result<()> {
     fs::metadata(path).map(|_| ())
 }
 
+/// Removes whatever is at `path` without following it: a link is removed and its target kept (a
+/// junction or directory link through `remove_dir` on Windows), a real directory or file is
+/// removed; nothing there is fine.
+pub(crate) fn remove_existing(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => remove_link(path),
+        Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(path),
+        Ok(_) => fs::remove_file(path),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(windows)]
+fn remove_link(path: &Path) -> io::Result<()> {
+    fs::remove_dir(path)
+}
+
+#[cfg(not(windows))]
+fn remove_link(path: &Path) -> io::Result<()> {
+    fs::remove_file(path)
+}
+
 /// Persists a rename. Best effort: some filesystems refuse to fsync a directory.
 #[cfg(unix)]
 pub(crate) fn sync_directory(path: &Path) {

@@ -37,13 +37,34 @@ impl Scratch {
 
     /// The names directly inside the directory, sorted.
     pub(crate) fn entries(&self) -> Vec<String> {
-        let mut names: Vec<String> = fs::read_dir(&self.0)
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .collect();
-        names.sort();
-        names
+        entries_of(&self.0)
     }
+}
+
+/// The names directly inside `directory`, sorted.
+pub(crate) fn entries_of(directory: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// What an installer from before `current/` leaves, or does to a newer install: `active` is a
+/// relative symlink to `versions/<version>`.
+#[cfg(unix)]
+pub(crate) fn point_active_at_version(install_root: &Path, version: &str) {
+    let temporary = install_root.join("active.older");
+    std::os::unix::fs::symlink(Path::new("versions").join(version), &temporary).unwrap();
+    fs::rename(&temporary, install_root.join("active")).unwrap();
+}
+
+/// The permission bits of `path`.
+#[cfg(unix)]
+pub(crate) fn mode_of(path: &Path) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path).unwrap().permissions().mode() & 0o777
 }
 
 impl Drop for Scratch {

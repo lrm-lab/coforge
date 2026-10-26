@@ -419,19 +419,19 @@ echo "$KILL_RC" >"$OUT/steps/s5-killed/exit_code"
 record S5 "installer killed (SIGKILL) at the activation stage" "stage seen=$SAW_SWITCH, wait status=$KILL_RC" "$([[ "$SAW_SWITCH" -ge 1 && "$KILL_RC" == 137 ]] && echo 0 || echo 1)" "steps/s5-killed"
 snapshot "$OUT/steps/s5-after-kill"
 record S5 "journal left by the killed run" "$([[ -e "$ROOT/installer-transaction.json" ]] && echo present || echo absent)" "$([[ -e "$ROOT/installer-transaction.json" ]] && echo 0 || echo 1)" "steps/s5-after-kill/journal.json"
-# The installer writes active.json before it moves the `active` link (crates/installer/src/active.rs
+# The installer writes active.json before it syncs `current/` (crates/installer/src/active.rs
 # `activate`), and recover settles on what active.json names. A kill can land before the
 # active.json write (recover rolls back to the version it named before) or after it (recover
-# finishes on the target), with the link possibly still on the old version. Both are correct;
-# the expectation follows active.json as the kill left it, and the link is recorded beside it.
+# finishes on the target), with `current/` still on the old version. Both are correct; the
+# expectation follows active.json as the kill left it, and `current/version` is recorded beside it.
 ACTIVE_AT_KILL=$(json_eval "$ROOT/active.json" "d['current']")
-LINK_AT_KILL=$(basename "$(readlink "$ROOT/active" 2>/dev/null)" 2>/dev/null)
+CURRENT_AT_KILL=$(tr -d '\n' <"$ROOT/current/version" 2>/dev/null)
 case "$ACTIVE_AT_KILL" in
   0.1.0-e2e.1) EXPECT_STATUS=succeeded; EXPECT_CODE="" ;;
   0.1.0-e2e.2) EXPECT_STATUS=failed; EXPECT_CODE=UPGRADE_ROLLED_BACK ;;
   *) EXPECT_STATUS=unexpected; EXPECT_CODE="" ;;
 esac
-record S5 "active.json names 0.1.0-e2e.1 (finish on target) or 0.1.0-e2e.2 (roll back)" "active.json=$ACTIVE_AT_KILL, active link=$LINK_AT_KILL" "$([[ "$EXPECT_STATUS" != unexpected ]] && echo 0 || echo 1)" "steps/s5-after-kill/active.json"
+record S5 "active.json names 0.1.0-e2e.1 (finish on target) or 0.1.0-e2e.2 (roll back)" "active.json=$ACTIVE_AT_KILL, current/version=$CURRENT_AT_KILL" "$([[ "$EXPECT_STATUS" != unexpected ]] && echo 0 || echo 1)" "steps/s5-after-kill/active.json"
 
 RID5B=$(uuid)
 step s5-refused timeout 120 "$INSTALLER" upgrade --request-id "$RID5B" --version 0.1.0-e2e.2 --from-directory "$PKG/0.1.0-e2e.2"

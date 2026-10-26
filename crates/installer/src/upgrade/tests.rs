@@ -1,6 +1,6 @@
 use std::cell::Cell;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::fakes::*;
@@ -157,7 +157,7 @@ fn a_first_install_probes_the_new_executable_and_restarts_nothing() {
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let (outcome, stages) = run(&ports, REQUEST, NEW, None);
@@ -193,7 +193,7 @@ fn an_installed_version_with_no_supervisor_running_restarts_nothing() {
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(stopped(OLD))]);
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let (outcome, stages) = run(&ports, REQUEST, NEW, None);
@@ -368,7 +368,7 @@ fn a_request_id_reused_for_another_selection_is_held_without_a_receipt() {
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
     let (first, _) = run(&ports, REQUEST, NEW, None);
     assert_eq!(exit_of(&first), 0);
@@ -644,7 +644,7 @@ fn a_same_version_upgrade_verifies_the_active_installation_once() {
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(stopped(OLD))]);
-    lifecycle.answers_protocol(&fixture.computer(OLD), vec![Some(protocol(OLD))]);
+    fixture.answers_protocol(&lifecycle, OLD);
     let release = TamperingRelease {
         feed: fixture.feed(),
         tamper: fixture.computer(OLD),
@@ -701,7 +701,7 @@ fn inside_the_supervisor_service_with_it_stopped_the_upgrade_proceeds() {
     let service = FakeService::new(ServiceState::Stopped).inside_unit();
     let lifecycle = FakeLifecycle::default();
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(stopped(OLD))]);
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let (outcome, _) = run(&ports, REQUEST, NEW, None);
@@ -811,3 +811,7 @@ fn a_version_without_semver_precedence_is_refused_without_the_flag() {
 fn the_same_version_is_never_gated_even_without_semver_precedence() {
     assert!(downgrade_refusal("1.0", "1.0", false).is_none());
 }
+
+/// The POSIX layout: processes run from `current/`, which activation replaces in place.
+#[cfg(unix)]
+mod current_layout;

@@ -27,8 +27,8 @@ enum Read<T> {
 enum ImagePath {
     Gone,
     Denied,
-    /// `ENOENT`: the executable file was deleted or replaced after the process started, and
-    /// libproc has no path for the running image any more.
+    /// `ENOENT`: the executable file was unlinked after the process started, and libproc has no
+    /// path for the running image any more. (A file renamed over keeps its path.)
     Unlinked,
     Got(PathBuf),
 }

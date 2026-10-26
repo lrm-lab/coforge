@@ -96,15 +96,16 @@ Platform coverage and remaining acceptance gaps are explicit:
   executable's real path: with one self-signed certificate, a new version
   replaced in place at the granted path read `~/Documents` without a prompt,
   while the same bytes at a new path, or behind a symlink re-pointed to a new
-  path, prompted again. A grant carried over an upgrade only when the new
-  version replaced the executable at the same real path under the same
-  certificate; `versions/<version>/` and the `active` symlink change that path
-  with every version, so signing alone does not keep grants. Agents run in
-  launchd jobs whose program is `coforge-computer __managed-agent`, so TCC
-  attributes their privacy prompts to the Computer executable. Chosen direction
-  for 0.1.11, pending approval of its design: run the executable from one fixed
-  real path that the installer replaces atomically. Open: the installer's
-  activation, rollback and repair on a fixed path.
+  path, prompted again. Agents run in launchd jobs whose program is
+  `coforge-computer __managed-agent`, so TCC attributes their privacy prompts to
+  the Computer executable. On POSIX targets the installer therefore runs the
+  executable from one fixed real path, `<install root>/current/coforge-computer`:
+  `active` is the permanent symlink `current`, and an upgrade, rollback, or
+  repair replaces the files of `current/` one by one with a rename
+  ([installer rules](../../crates/installer/AGENTS.md)). `versions/<version>/`
+  stays the verified store and the rollback source. The first activation by an
+  installer with `current/` still changes the path once, so that one grant is
+  asked again.
 - **Windows code identity**: the Windows executables are unsigned. Windows has
   no per-version privacy grants, but SmartScreen reputation and path-keyed
   firewall or Controlled Folder Access rules start over with each version.

@@ -93,7 +93,15 @@ pub fn recover(
         .ok()
         .flatten()
         .is_some_and(|active| active.current == transaction.to);
-    let executables = executables(ports, &transaction);
+    // The processes of both versions the journal names belong to the supervisor the interrupted
+    // upgrade may have left running.
+    let executables = ports.store.executables_to_stop(
+        transaction
+            .from
+            .iter()
+            .chain(std::iter::once(&transaction.to))
+            .map(String::as_str),
+    );
     let mut switch = ActiveSwitch::new(ports, stage, caller);
 
     // A new version that the interrupted run already activated is kept when it works: it is the
@@ -223,23 +231,6 @@ fn previous_for(transaction: &Transaction, target: &str) -> Option<String> {
         Some(from) => Some(from.clone()),
         None => None,
     }
-}
-
-/// The executables of both versions the journal names, those that exist, each once: their
-/// processes belong to the supervisor the interrupted upgrade may have left running.
-fn executables(ports: &Ports<'_>, transaction: &Transaction) -> Vec<PathBuf> {
-    let mut paths: Vec<PathBuf> = Vec::new();
-    for version in transaction
-        .from
-        .iter()
-        .chain(std::iter::once(&transaction.to))
-    {
-        let path = ports.store.computer_path(version);
-        if path.exists() && !paths.contains(&path) {
-            paths.push(path);
-        }
-    }
-    paths
 }
 
 #[cfg(test)]

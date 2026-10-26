@@ -300,6 +300,46 @@ impl Fixture {
             .into_owned()
     }
 
+    /// The executable that runs, as a process table names it (symlinks resolved):
+    /// `current/coforge-computer` on POSIX, whichever version is active.
+    pub(crate) fn canonical_current(&self) -> String {
+        fs::canonicalize(self.store.running_computer_path(OLD))
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    /// Turns an active install into the layout from before `current/`: `active` points at
+    /// `versions/<current>` and there is no `current/`.
+    #[cfg(unix)]
+    pub(crate) fn use_the_layout_from_before_current(&self, current: &str) {
+        crate::test_support::point_active_at_version(&self.root, current);
+        fs::remove_dir_all(self.root.join("current")).unwrap();
+    }
+
+    /// The bytes of `versions/<version>/<name>`.
+    #[cfg(unix)]
+    pub(crate) fn stored_file(&self, version: &str, name: &str) -> Vec<u8> {
+        fs::read(self.store.version_directory(version).join(name)).unwrap()
+    }
+
+    /// The bytes of `current/<name>`.
+    #[cfg(unix)]
+    pub(crate) fn current_file(&self, name: &str) -> Vec<u8> {
+        fs::read(self.root.join("current").join(name)).unwrap()
+    }
+
+    /// Scripts `version`'s protocol answer for the two executables that may be probed for it: the
+    /// store's copy (the candidate, before it is activated) and the one that runs once it is.
+    pub(crate) fn answers_protocol(&self, lifecycle: &FakeLifecycle, version: &str) {
+        for executable in [
+            self.computer(version),
+            self.store.running_computer_path(version),
+        ] {
+            lifecycle.answers_protocol(&executable, vec![Some(protocol(version))]);
+        }
+    }
+
     /// Installs `version` from the feed into the store, as a completed preparation leaves it.
     pub(crate) fn install(&self, version: &str) {
         let lock = MachineMutationLock::acquire(&self.root).unwrap();
@@ -313,24 +353,18 @@ impl Fixture {
         self.activate(OLD, None);
     }
 
-    /// Creates `version`'s executable path without installing the version, so that a process
-    /// table can name it (a process of an interrupted candidate that was never verified).
-    pub(crate) fn place_executable(&self, version: &str) {
-        fs::create_dir_all(self.computer(version).parent().unwrap()).unwrap();
-        fs::write(self.computer(version), b"").unwrap();
-    }
-
-    /// Points `active.json` and the links at `current`, as a completed switch would.
+    /// Points `active.json` and the links at `current`, as a completed switch would. The version
+    /// must be installed: `current/` is copied from it.
     pub(crate) fn activate(&self, current: &str, previous: Option<&str>) {
         activate(
-            &self.root,
+            &self.store,
             &self.binary_directory,
-            TARGET,
             &ActiveState {
                 schema_version: ACTIVE_STATE_SCHEMA_VERSION,
                 current: current.to_owned(),
                 previous: previous.map(str::to_owned),
             },
+            false,
         )
         .unwrap();
     }

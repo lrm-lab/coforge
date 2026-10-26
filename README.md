@@ -38,7 +38,7 @@ The architecture invariants every change must respect are in
 | [packages/daemon/AGENTS.md](packages/daemon/AGENTS.md) | Daemon package rules and module map |
 | [packages/anvil/AGENTS.md](packages/anvil/AGENTS.md) | Anvil contracts, adapters, execution and host boundary rules |
 | [crates/installer/AGENTS.md](crates/installer/AGENTS.md) | Rust installer crate (`coforge-installer`): toolchain, commands, contract, CI, supply-chain gate |
-| [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md) | Installer module map |
+| [crates/installer/src/AGENTS.md](crates/installer/src/AGENTS.md) | Installer module map and install-layout rules |
 | [docs/workspace-assistant.md](docs/workspace-assistant.md) | Workspace platform assistant setup, isolated sessions, and backfill |
 | [docs/pi-chat/README.md](docs/pi-chat/README.md) | Independent cloud Pi conversations, signed host access, native history, deployment and acceptance |
 | [docs/database-schema/](docs/database-schema/README.md) | Database schema and conversation/delivery model |

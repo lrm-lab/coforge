@@ -4,7 +4,7 @@ crate that builds `coforge-installer`. The root architecture invariants state th
 ownership; this file holds how it controls a running Computer, its commands,
 toolchain, and gotchas.
 ## Module map
-The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it describes.
+The module map and the install-layout rules are in [`src/AGENTS.md`](src/AGENTS.md).
 ## Contract with the product
 - Every change to an installation belongs to this crate: install, upgrade, repair, status, and
   recover, with the machine mutation lock, download and verification, activation, service control,
@@ -63,9 +63,11 @@ The module map is in [`src/AGENTS.md`](src/AGENTS.md), next to the modules it de
 - `coforge-installer repair [--version <v> | --channel main|latest] [--yes] [--allow-downgrade]
   [--json]`: under
   the machine lock, repairs the active installation without stopping the service. Healthy payloads
-  only need activation links recreated; a damaged payload is quarantined and downloaded again
+  only need the activation recreated; a damaged payload is quarantined and downloaded again
   through the manifest/checksum pipeline. An unneeded repair writes a held `REPAIR_NOT_NEEDED`
-  receipt; successful repairs carry `outcome: "repaired"`, and request replays are supported.
+  receipt; successful repairs carry `outcome: "repaired"`, and request replays are supported. A
+  running service's differing executable is left alone: the rest is repaired, then the receipt
+  fails with `UPDATE_BUSY`.
 - `coforge-installer status [--json]`: read-only, no lock. `--json` field names are documented in
   `src/status.rs`.
 - `--version` prints the crate version.
@@ -96,21 +98,18 @@ takes a feed.
   CI pins mise 2026.9.2, which cannot read revision 2, so never run
   `mise lock --upgrade` here. The core Rust backend locks no URL; rustup
   verifies it.
-- The Cargo workspace is the repository root: `Cargo.toml` there lists the
-  members under `crates/` (a new Rust crate goes in `crates/<name>`, never
-  `packages/`), and holds the release profile and the one `Cargo.lock`; build
-  output goes to the root `target/`.
-- Change dependencies with `cargo add` / `cargo remove`, commit the root `Cargo.lock`,
-  and pass `--locked` to every cargo command so CI never resolves a new graph.
-  Add them with `default-features = false` and only the features used:
-  rusqlite's default statement cache pulls in a Zlib-licensed hasher, and
-  `deny.toml` allows only the licenses listed there.
+- The Cargo workspace is the repository root: `Cargo.toml` there lists the members under `crates/`
+  (a new Rust crate goes in `crates/<name>`, never `packages/`), and holds the release profile and
+  the one `Cargo.lock`; build output goes to the root `target/`.
+- Change dependencies with `cargo add` / `cargo remove`, commit the root `Cargo.lock`, and pass
+  `--locked` to every cargo command so CI never resolves a new graph. Add them with
+  `default-features = false` and only the features used: rusqlite's default statement cache pulls in
+  a Zlib-licensed hasher, and `deny.toml` allows only the licenses listed there.
 - `cargo test` needs Bun (the root `mise.toml` pins it): the lock tests import
-  `packages/daemon/src/platform/process-lock.ts` and fail, never skip, without
-  it. Set `BUN` to use another binary. A Bun child that hangs is killed after
-  `BUN_DEADLINE` and fails its test.
-- There is no mise task for this crate, and it is not part of the root
-  `mise run test` / `check` / `build`.
+  `packages/daemon/src/platform/process-lock.ts` and fail, never skip, without it. Set `BUN` to use
+  another binary. A Bun child that hangs is killed after `BUN_DEADLINE` and fails its test.
+- There is no mise task for this crate, and it is not part of the root `mise run test` / `check` /
+  `build`.
 
 ## Commands
 
@@ -126,23 +125,20 @@ mise exec -- cargo about generate --locked --fail --output-file THIRD_PARTY_NOTI
 
 ## CI
 
-- Job `installer-crate` in `.github/workflows/ci.yml`. `scripts/ci/selection.ts`
-  selects it for any `crates/installer/` path, the root `Cargo.toml` and
-  `Cargo.lock`, `packages/daemon/src/platform/process-lock.ts` (the lock tests
-  run it), and for the fail-open cases (CI, toolchain, unclassified paths), but
-  not for workspace `package.json` changes or the Computer publication
-  (`local`) track.
-- One matrix entry per release target, each on its native runner:
-  `darwin-arm64` and `darwin-x64` on `macos-latest` (x64 cross-compiled),
-  `linux-x64` / `linux-arm64` on `ubuntu-24.04` / `ubuntu-24.04-arm` (musl,
-  static), `windows-x64` / `windows-arm64` on `windows-latest` /
+- Job `installer-crate` in `.github/workflows/ci.yml`. `scripts/ci/selection.ts` selects it for any
+  `crates/installer/` path, the root `Cargo.toml` and `Cargo.lock`,
+  `packages/daemon/src/platform/process-lock.ts` (the lock tests run it), and for the fail-open
+  cases (CI, toolchain, unclassified paths), but not for workspace `package.json` changes or the
+  Computer publication (`local`) track.
+- One matrix entry per release target, each on its native runner: `darwin-arm64` and `darwin-x64` on
+  `macos-latest` (x64 cross-compiled), `linux-x64` / `linux-arm64` on `ubuntu-24.04` /
+  `ubuntu-24.04-arm` (musl, static), `windows-x64` / `windows-arm64` on `windows-latest` /
   `windows-11-arm` (MSVC).
-- Every entry: clippy for its target, release build, size in the job summary,
-  `--version` smoke run. Tests run on native entries only; darwin-x64 is built,
-  signed, and run under Rosetta only when the runner has it.
-- `linux-x64` alone also runs `cargo fmt --check`, cargo-deny, cargo-audit, and
-  cargo-about, and uploads `THIRD_PARTY_NOTICES.txt` as the
-  `coforge-installer-third-party-notices` artifact.
+- Every entry: clippy for its target, release build, size in the job summary, `--version` smoke run.
+  Tests run on native entries only; darwin-x64 is built, signed, and run under Rosetta only when the
+  runner has it.
+- `linux-x64` alone also runs `cargo fmt --check`, cargo-deny, cargo-audit, and cargo-about, and
+  uploads `THIRD_PARTY_NOTICES.txt` as the `coforge-installer-third-party-notices` artifact.
 - Released by `release-installer-staging.yml`; see `docs/release/installer-feed.md`.
 
 ## Rules and gotchas

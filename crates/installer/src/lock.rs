@@ -23,7 +23,8 @@ pub const LOCK_STATEMENTS: [&str; 2] = ["PRAGMA busy_timeout = 0", "BEGIN IMMEDI
 
 /// The error code reported when another process holds the lock. It is one of the SDK's upgrade
 /// error codes (crates/installer/contract/upgrade-error-codes.json), so a receipt may carry it as
-/// its `errorCode`.
+/// its `errorCode`. Repair reuses it for "a running executable blocks the repair": no other SDK
+/// code fits and an installer-only one is not allowed.
 pub const BUSY_ERROR_CODE: &str = "UPDATE_BUSY";
 
 #[derive(Debug)]

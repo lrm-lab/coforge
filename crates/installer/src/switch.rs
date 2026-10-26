@@ -132,6 +132,7 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
     /// Collects the processes of `executables` (the caller spared), stops the service, ends what
     /// is still alive, and records each one as dead. Collection comes first: a process that
     /// exists only while the manager runs must be found before the manager stops it.
+    /// [`VersionStore::executables_to_stop`] names the executables.
     fn stop_supervisor(&mut self, executables: &[PathBuf]) -> Result<(), String> {
         let mut identities = Vec::new();
         for executable in executables {
@@ -168,13 +169,9 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
             current: target.version.to_owned(),
             previous: target.previous.map(str::to_owned),
         };
-        active::activate(
-            self.ports.install_root,
-            self.ports.binary_directory,
-            self.ports.store.target(),
-            &state,
-        )
-        .map_err(|error| error.to_string())
+        active::activate(self.ports.store, self.ports.binary_directory, &state, false)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     }
 
     /// Polls the restarted supervisor's status until it runs `version` under an id other than
@@ -223,12 +220,12 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
         }
     }
 
-    /// The probe when no supervisor was running: the activated executable reports `version`.
+    /// The probe when no supervisor was running: the executable that runs reports `version`.
     fn check_executable(&self, version: &str) -> Result<(), String> {
         let protocol = self
             .ports
             .lifecycle
-            .protocol(&self.ports.store.computer_path(version))
+            .protocol(&self.ports.store.running_computer_path(version))
             .map_err(|error| error.to_string())?;
         if protocol.version == version {
             Ok(())

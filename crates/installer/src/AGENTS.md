@@ -1,7 +1,25 @@
 # coforge-installer module map
 
-These rules extend `crates/installer/AGENTS.md` for `crates/installer/src/`. One line per
-module: its file and single responsibility. Update it before adding or reorganizing a module.
+These rules extend `crates/installer/AGENTS.md` for `crates/installer/src/`. The modules list has
+one line per module: its file and single responsibility. Update it before adding or reorganizing
+a module.
+
+## Install layout (POSIX)
+
+How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
+
+- Nothing runs from `versions/<v>/`, the verified store and rollback source: the product runs from
+  `current/`, which `active` links to for good.
+- Activation runs only after the product's processes are stopped, and `VersionStore::
+  executables_to_stop` names the executables to stop: `current/`'s, and the version executables a
+  process started before `current/` existed still runs.
+- Repair does not stop the service, so while it runs (or its state cannot be read) repair leaves a
+  differing `current/coforge-computer` and the `version` marker alone, a conservative choice (a
+  renamed-over executable keeps its path on macOS, so such a process can still be found). The
+  receipt fails `UPDATE_BUSY`.
+- Nothing prunes `versions/`; a pruning step must keep the previous version for rollback.
+
+## Modules
 
 - `src/args.rs`: command-line parser and parser tests; produces typed command intent for `main.rs`.
 - `src/main.rs`: command line. Calls `installation`, prints the
@@ -64,10 +82,13 @@ module: its file and single responsibility. Update it before adding or reorganiz
   Node's `lib/path.js` as Bun runs them, so `paths.rs` writes the same strings
   as the Computer's `paths.ts`.
 - `src/version.rs`: which release version strings are acceptable, and their SemVer precedence.
-- `src/active.rs`: the active version. Reads `<install root>/active.json`, writes it, and
-  points the `active` link (symlink; NTFS junction on Windows) and the
-  `coforge-computer` PATH shim at that version. It trusts the caller to have verified the
+- `src/active.rs`: the active version. Reads and writes `<install root>/active.json`, activates a
+  version (POSIX: `current/` and the `active` and PATH shim links; Windows: a junction and a
+  `.cmd` shim) and tells whether it is activated. It trusts the caller to have verified the
   version's bytes. Tests in `src/active/tests.rs`; they also emit `contract/rust/active.v1.json`.
+- `src/current.rs`: the POSIX `current/` directory, the copy of the active version that runs:
+  syncs it from a version directory and tells whether it is in sync. Tests in
+  `src/current/tests.rs` (real files).
 - `src/contract.rs`: serde types for every file and JSON shape shared with the
   product (manifests, `active.json`, `installation.json`, receipts,
   `__lifecycle` output, lock, service names, paths). Tests in
@@ -122,7 +143,7 @@ module: its file and single responsibility. Update it before adding or reorganiz
   that settles, otherwise restores the previous version. Writes a receipt only when none exists;
   clears the journal only after settling. Tests in `src/recover/tests.rs`.
 - `src/repair.rs`: `coforge-installer repair`. Verifies the selected immutable version, repairs
-  activation links, and quarantines and redownloads a damaged payload without touching service
+  the activation, and quarantines and redownloads a damaged payload without touching service
   processes; writes a repair receipt. Tests live with the module.
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
   scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,

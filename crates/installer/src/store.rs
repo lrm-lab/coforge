@@ -29,6 +29,7 @@ use crate::contract::{
     ArtifactIdentity, INSTALLED_IDENTITY_SCHEMA_VERSION, InstalledIdentity, agent_cli_launcher,
     github_cli_launcher, to_file_json,
 };
+use crate::current;
 use crate::digest::{is_valid_identity, measure_bytes, measure_file};
 use crate::lock::MachineMutationLock;
 use crate::private_fs;
@@ -87,6 +88,50 @@ impl VersionStore {
     /// The version's `coforge-computer` executable, named as this store's target names it.
     pub fn computer_path(&self, version: &str) -> PathBuf {
         self.version_directory(version).join(self.computer_name())
+    }
+
+    /// Whether this store's target is a Windows one, whose install has no `current/`.
+    pub fn targets_windows(&self) -> bool {
+        self.windows
+    }
+
+    /// The executable that runs once `version` is active: `current/coforge-computer` on POSIX
+    /// (whichever version that is), `versions/<v>/coforge-computer.exe` on Windows.
+    pub fn running_computer_path(&self, version: &str) -> PathBuf {
+        if self.windows {
+            self.computer_path(version)
+        } else {
+            self.current_computer_path()
+        }
+    }
+
+    fn current_computer_path(&self) -> PathBuf {
+        current::directory(&self.install_root).join(self.computer_name())
+    }
+
+    /// The executables whose processes an operation on `versions` stops, each once and only if it
+    /// exists: `current/coforge-computer` (where the product runs from on POSIX), then each
+    /// version's own executable (a process started before `current/` existed still runs from
+    /// there).
+    pub fn executables_to_stop<'a>(
+        &self,
+        versions: impl IntoIterator<Item = &'a str>,
+    ) -> Vec<PathBuf> {
+        let mut paths: Vec<PathBuf> = Vec::new();
+        let candidates = (!self.windows)
+            .then(|| self.current_computer_path())
+            .into_iter()
+            .chain(
+                versions
+                    .into_iter()
+                    .map(|version| self.computer_path(version)),
+            );
+        for path in candidates {
+            if path.exists() && !paths.contains(&path) {
+                paths.push(path);
+            }
+        }
+        paths
     }
 
     /// Whether `versions/<v>` exists. A directory that exists is verified, and one that fails
@@ -415,5 +460,7 @@ fn unique_suffix() -> String {
     )
 }
 
+#[cfg(test)]
+mod stop_set_tests;
 #[cfg(test)]
 mod tests;

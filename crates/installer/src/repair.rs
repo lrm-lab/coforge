@@ -1,23 +1,24 @@
 //! Repairs a broken Computer installation while preserving the selected user installation.
 //!
-//! A healthy immutable version only needs its activation links recreated. A damaged version is
-//! quarantined and fetched again through the normal manifest/checksum pipeline. Repair never
-//! stops or starts the Computer supervisor, matching the reference installer's forced-stop-free
-//! repair transaction.
+//! A healthy immutable version only needs its activation recreated: the links, and on POSIX the
+//! `current/` copy that runs. A damaged version is quarantined and fetched again through the
+//! normal manifest/checksum pipeline. Repair never stops or starts the Computer supervisor,
+//! matching the reference installer's forced-stop-free repair transaction.
 
 use std::cmp::Ordering;
 use std::fs;
 
-use crate::active::{self, read_active};
+use crate::active::{self, Activation, ActiveError, read_active};
 use crate::contract::{
     ACTIVE_STATE_SCHEMA_VERSION, ActiveState, ERROR_CODE_DOWNGRADE_REFUSED, EXIT_FAILED, EXIT_HELD,
     EXIT_UNRESOLVED, ReceiptOutcome, UpgradeReceipt,
 };
 use crate::journal::Journal;
-use crate::lock::{LockError, MachineMutationLock};
+use crate::lock::{BUSY_ERROR_CODE, LockError, MachineMutationLock};
 use crate::prepare::prepare_version;
 use crate::private_fs;
 use crate::receipts::{Begin, ReceiptStore};
+use crate::service::ServiceState;
 use crate::switch::Ports;
 use crate::upgrade::Outcome;
 use crate::version::precedence;
@@ -137,7 +138,7 @@ pub fn repair(
     let active_is_target = active.as_ref().is_some_and(|state| state.current == target);
     if active_is_target && ports.store.verify_installed(&target).is_ok() {
         let state = active.as_ref().expect("active_is_target implies active");
-        if !links_need_repair(ports, &target) {
+        if active::is_activated(ports.store, ports.binary_directory, &target) {
             return held(
                 &receipts,
                 &lock,
@@ -146,13 +147,12 @@ pub fn repair(
             );
         }
         stage(&format!("Verifying active CoForge Computer {target}"));
-        if let Err(error) = active::activate(
-            ports.install_root,
-            ports.binary_directory,
-            ports.store.target(),
-            state,
-        ) {
-            return failed(&receipts, &lock, request_id, error.to_string(), None);
+        match activate(ports, state) {
+            Ok(Activation::Complete) => {}
+            Ok(Activation::ExecutableSpared) => {
+                return executable_spared(ports, &receipts, &lock, request_id, &target);
+            }
+            Err(error) => return failed(&receipts, &lock, request_id, error.to_string(), None),
         }
     } else {
         let target_is_damaged = ports.store.version_directory(&target).exists()
@@ -182,18 +182,19 @@ pub fn repair(
             current: prepared.version.clone(),
             previous: active.as_ref().and_then(|old| old.previous.clone()),
         };
-        if let Err(error) = active::activate(
-            ports.install_root,
-            ports.binary_directory,
-            ports.store.target(),
-            &state,
-        ) {
-            restore_quarantine(quarantined_version);
-            restore_active(ports, active.as_ref());
-            restore_quarantine(quarantined_active_metadata.take());
-            return failed(&receipts, &lock, request_id, error.to_string(), None);
-        }
+        let activation = match activate(ports, &state) {
+            Ok(activation) => activation,
+            Err(error) => {
+                restore_quarantine(quarantined_version);
+                restore_active(ports, active.as_ref());
+                restore_quarantine(quarantined_active_metadata.take());
+                return failed(&receipts, &lock, request_id, error.to_string(), None);
+            }
+        };
         drop(quarantined_active_metadata.take());
+        if activation == Activation::ExecutableSpared {
+            return executable_spared(ports, &receipts, &lock, request_id, &target);
+        }
     }
     stage(&format!("Repaired active CoForge Computer {target}"));
     match record(
@@ -209,39 +210,6 @@ pub fn repair(
                 "the active Computer was repaired, but its receipt could not be written: {error}"
             ),
         },
-    }
-}
-
-fn links_need_repair(ports: &Ports<'_>, version: &str) -> bool {
-    let windows = ports.store.target().starts_with("windows-");
-    let active = ports.install_root.join("active");
-    let points_at_version = if windows {
-        // A junction reads back as its absolute target, never the relative `versions/<v>` a Unix
-        // symlink stores, so compare where both resolve to instead.
-        match (
-            fs::canonicalize(&active),
-            fs::canonicalize(ports.store.version_directory(version)),
-        ) {
-            (Ok(active), Ok(version)) => active == version,
-            _ => false,
-        }
-    } else {
-        let expected = std::path::Path::new("versions").join(version);
-        fs::read_link(&active).ok().as_deref() == Some(expected.as_path())
-    };
-    if !points_at_version {
-        return true;
-    }
-    if windows {
-        !ports
-            .binary_directory
-            .join("coforge-computer.cmd")
-            .is_file()
-    } else {
-        fs::read_link(ports.binary_directory.join("coforge-computer"))
-            .ok()
-            .as_deref()
-            != Some(active.join("coforge-computer").as_path())
     }
 }
 
@@ -295,13 +263,45 @@ fn restore_quarantine(paths: Option<(std::path::PathBuf, std::path::PathBuf)>) {
 
 fn restore_active(ports: &Ports<'_>, state: Option<&ActiveState>) {
     if let Some(state) = state {
-        let _ = active::activate(
-            ports.install_root,
-            ports.binary_directory,
-            ports.store.target(),
-            state,
-        );
+        let _ = activate(ports, state);
     }
+}
+
+/// Activates `state`. Repair does not stop the service, so a running supervisor's differing
+/// executable is spared (see [`active::activate`]): replacing it under the process is not
+/// something repair can undo, and the next upgrade could no longer be sure to find that process.
+/// The service state is read right before the activation, not earlier: a re-download takes
+/// minutes, and the service may have started meanwhile. A state that cannot be read may be
+/// running.
+fn activate(ports: &Ports<'_>, state: &ActiveState) -> Result<Activation, ActiveError> {
+    let spare_executable = !matches!(
+        ports.service.state(),
+        Ok(ServiceState::NotInstalled | ServiceState::Stopped)
+    );
+    active::activate(ports.store, ports.binary_directory, state, spare_executable)
+}
+
+/// The failed receipt of a repair that fixed everything but the executable of a running service.
+/// It carries `UPDATE_BUSY`, the SDK's "not now" code (an installer-only code is not allowed).
+fn executable_spared(
+    ports: &Ports<'_>,
+    receipts: &ReceiptStore,
+    lock: &MachineMutationLock,
+    request_id: &str,
+    version: &str,
+) -> Outcome {
+    let service = ports.service.display_name();
+    failed(
+        receipts,
+        lock,
+        request_id,
+        format!(
+            "{service} is running CoForge Computer {version} from a file that differs from the \
+             installed version, so repair left that file as it is and repaired everything else. \
+             Stop {service}, then run the repair again."
+        ),
+        Some(BUSY_ERROR_CODE),
+    )
 }
 
 fn held(
@@ -366,133 +366,4 @@ fn record(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::fs;
-
-    use super::*;
-    use crate::clock::VirtualClock;
-    use crate::processes::fakes::FakeTable;
-    use crate::service::ServiceState;
-    use crate::upgrade::fakes::{FakeLifecycle, FakeService, Fixture, OLD, REQUEST};
-
-    fn exit_code(outcome: &Outcome) -> u8 {
-        match outcome {
-            Outcome::Receipt(receipt) => receipt.exit_code(),
-            Outcome::NoReceipt { exit, .. } => *exit,
-        }
-    }
-
-    #[test]
-    fn repairs_missing_active_links_from_the_verified_active_version() {
-        let fixture = Fixture::new("repair-links");
-        fixture.install_old();
-        // `active` is a symlink on Unix and a directory junction on Windows, which only
-        // `remove_dir` removes.
-        let active = fixture.root().join("active");
-        if cfg!(windows) {
-            fs::remove_dir(&active).unwrap();
-        } else {
-            fs::remove_file(&active).unwrap();
-        }
-        let clock = VirtualClock::new();
-        let table = FakeTable::new(&clock);
-        let service = FakeService::new(ServiceState::NotInstalled);
-        let lifecycle = FakeLifecycle::default();
-        let ports = fixture.ports(&lifecycle, &service, &table, &clock);
-
-        let mut stages = Vec::new();
-        let outcome = repair(&ports, REQUEST, None, false, &mut |line| {
-            stages.push(line.to_owned())
-        });
-
-        assert_eq!(exit_code(&outcome), 0);
-        match &outcome {
-            Outcome::Receipt(receipt) => assert_eq!(receipt.operation(), "repair"),
-            Outcome::NoReceipt { .. } => panic!("repair did not write a receipt"),
-        }
-        assert_eq!(service.calls(), Vec::<&'static str>::new());
-        assert_eq!(
-            fs::canonicalize(&active).unwrap(),
-            fs::canonicalize(fixture.root().join("versions").join(OLD)).unwrap()
-        );
-        #[cfg(not(windows))]
-        assert_eq!(
-            fs::read_link(&active).unwrap(),
-            std::path::Path::new("versions/0.1.0")
-        );
-        assert_eq!(
-            stages,
-            [
-                "Verifying active CoForge Computer 0.1.0",
-                "Repaired active CoForge Computer 0.1.0"
-            ]
-        );
-    }
-
-    #[test]
-    fn reinstalls_a_corrupt_active_version_without_stopping_service() {
-        let fixture = Fixture::new("repair-corrupt");
-        fixture.install_old();
-        fs::remove_file(fixture.computer(OLD)).unwrap();
-        let clock = VirtualClock::new();
-        let table = FakeTable::new(&clock);
-        let service = FakeService::new(ServiceState::NotInstalled);
-        let lifecycle = FakeLifecycle::default();
-        let ports = fixture.ports(&lifecycle, &service, &table, &clock);
-
-        let outcome = repair(&ports, REQUEST, None, false, &mut |_| {});
-
-        assert_eq!(exit_code(&outcome), 0);
-        assert!(fixture.root().join("active").exists());
-        assert!(service.calls().is_empty());
-    }
-
-    #[test]
-    fn a_healthy_active_installation_is_held_without_reactivating() {
-        let fixture = Fixture::new("repair-healthy");
-        fixture.install_old();
-        let clock = VirtualClock::new();
-        let table = FakeTable::new(&clock);
-        let service = FakeService::new(ServiceState::NotInstalled);
-        let lifecycle = FakeLifecycle::default();
-        let ports = fixture.ports(&lifecycle, &service, &table, &clock);
-
-        let mut stages = Vec::new();
-        let outcome = repair(&ports, REQUEST, None, false, &mut |line| {
-            stages.push(line.to_owned())
-        });
-
-        assert_eq!(exit_code(&outcome), 2);
-        match outcome {
-            Outcome::Receipt(receipt) => {
-                assert_eq!(receipt.error_code(), Some("REPAIR_NOT_NEEDED"));
-            }
-            Outcome::NoReceipt { .. } => panic!("repair did not record the held result"),
-        }
-        assert!(
-            stages.is_empty(),
-            "a healthy install was re-activated: {stages:?}"
-        );
-    }
-
-    #[test]
-    fn an_unselected_installation_without_active_state_is_held() {
-        let fixture = Fixture::new("repair-not-needed");
-        let clock = VirtualClock::new();
-        let table = FakeTable::new(&clock);
-        let service = FakeService::new(ServiceState::NotInstalled);
-        let lifecycle = FakeLifecycle::default();
-        let ports = fixture.ports(&lifecycle, &service, &table, &clock);
-
-        let outcome = repair(&ports, REQUEST, None, false, &mut |_| {});
-
-        assert_eq!(exit_code(&outcome), 2);
-        match outcome {
-            Outcome::Receipt(receipt) => {
-                assert_eq!(receipt.status(), crate::contract::ReceiptStatus::Held);
-                assert_eq!(receipt.error_code(), Some("REPAIR_NOT_NEEDED"));
-            }
-            Outcome::NoReceipt { .. } => panic!("repair did not record the held result"),
-        }
-    }
-}
+mod tests;

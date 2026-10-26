@@ -12,6 +12,7 @@ pub mod active;
 pub mod clock;
 pub mod compiled_feed;
 pub mod contract;
+mod current;
 pub mod digest;
 pub mod feed;
 pub mod fetch;

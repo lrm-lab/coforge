@@ -10,7 +10,6 @@
 //! which refuses every other operation until `recover` settles it (`recover.rs`).
 
 use std::cmp::Ordering;
-use std::path::PathBuf;
 
 use crate::active::{ActiveError, read_active};
 use crate::contract::{
@@ -357,9 +356,10 @@ impl Run<'_, '_> {
 
     fn switch_to(&mut self, prepared: &Prepared) -> Result<(), String> {
         let from = prepared.from.as_ref();
-        let stop: Vec<PathBuf> = from
-            .map(|installed| vec![self.ports.store.computer_path(&installed.version)])
-            .unwrap_or_default();
+        let store = self.ports.store;
+        let stop = from.map_or_else(Vec::new, |old| {
+            store.executables_to_stop([old.version.as_str()])
+        });
         let plan = Plan {
             supervisor_running: from.is_some_and(|installed| installed.supervisor_running),
             running_runtimes: from.map(Installed::running_runtimes),
@@ -415,7 +415,7 @@ impl Run<'_, '_> {
             "Upgrade failed: {candidate}; restoring {}",
             from.version
         ));
-        let stop = vec![self.ports.store.computer_path(&prepared.to)];
+        let stop = self.ports.store.executables_to_stop([prepared.to.as_str()]);
         let plan = Plan {
             supervisor_running: from.supervisor_running,
             running_runtimes: Some(from.running_runtimes()),

@@ -263,6 +263,22 @@ fn install_from_a_directory_activates_the_version_in_a_scratch_home() {
         serde_json::from_slice(&fs::read(install.join("active.json")).unwrap()).unwrap();
     assert_eq!(active["current"], version);
     assert!(install.join("versions/0.2.0/coforge-computer").is_file());
+    // On POSIX the executable runs from `current/`, which `active` points at for good.
+    #[cfg(unix)]
+    {
+        assert_eq!(
+            fs::read_link(install.join("active")).unwrap(),
+            std::path::Path::new("current")
+        );
+        assert_eq!(
+            fs::read(install.join("current/coforge-computer")).unwrap(),
+            fs::read(install.join("versions/0.2.0/coforge-computer")).unwrap()
+        );
+        assert_eq!(
+            fs::read_to_string(install.join("current/version")).unwrap(),
+            "0.2.0\n"
+        );
+    }
     let shim = scratch.home().join(".local/bin/coforge-computer");
     assert!(shim.symlink_metadata().is_ok(), "the PATH shim at {shim:?}");
 }

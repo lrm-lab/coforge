@@ -85,13 +85,16 @@ fn an_upgrade_killed_mid_transaction_is_restored_and_its_rollback_is_recorded() 
     fixture.install_old();
     // The switch had moved `active` to the new version and stopped the old supervisor when the
     // process was killed: the journal says what to restore, and no receipt was written.
+    fixture.install(NEW);
     fixture.activate(NEW, Some(OLD));
-    fixture.place_executable(NEW);
+    // The interrupted candidate no longer verifies, so recovery cannot settle on it.
+    fs::write(fixture.computer(NEW), b"").unwrap();
     record_journal(&fixture, &journal(Some(OLD), None, true));
     let clock = VirtualClock::new();
     let table = FakeTable::new(&clock);
-    table.spawn(100, 1, &fixture.canonical_computer(OLD));
-    table.spawn(200, 2, &fixture.canonical_computer(NEW));
+    // Both run `current/coforge-computer`, which holds the new version's files.
+    table.spawn(100, 1, &fixture.canonical_current());
+    table.spawn(200, 2, &fixture.canonical_current());
     let service = FakeService::new(ServiceState::Stopped);
     let lifecycle = FakeLifecycle::default();
     lifecycle.answers_status(
@@ -109,6 +112,12 @@ fn an_upgrade_killed_mid_transaction_is_restored_and_its_rollback_is_recorded() 
         }
     );
     assert_eq!(active(&fixture), active_state(OLD, None));
+    // `current/` is synced back to the restored version.
+    #[cfg(unix)]
+    assert_eq!(
+        fs::read_to_string(fixture.root().join("current/version")).unwrap(),
+        "0.1.0\n"
+    );
     assert_eq!(Journal::new(fixture.root()).read().unwrap(), None);
     assert_eq!(service.calls(), ["stop", "start"]);
     let receipt = stored(&fixture).expect("a receipt for the interrupted upgrade");
@@ -138,7 +147,7 @@ fn an_interrupted_first_install_is_recovered_to_the_new_version_and_reported_suc
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let (outcome, _) = recover_with(&ports);
@@ -184,7 +193,7 @@ fn an_upgrade_whose_success_was_recorded_but_whose_journal_was_not_cleared_keeps
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let (outcome, _) = recover_with(&ports);
@@ -256,8 +265,10 @@ fn a_rollback_that_failed_is_completed_by_recover_without_a_second_receipt() {
 fn an_installed_version_that_no_longer_verifies_is_not_restored() {
     let fixture = Fixture::new("recover-verify");
     fixture.install_old();
+    fixture.install(NEW);
     fixture.activate(NEW, Some(OLD));
-    fixture.place_executable(NEW);
+    // The interrupted candidate no longer verifies, so recovery cannot settle on it.
+    fs::write(fixture.computer(NEW), b"").unwrap();
     record_journal(&fixture, &journal(Some(OLD), None, true));
     fs::write(fixture.computer(OLD), b"tampered").unwrap();
     let clock = VirtualClock::new();
@@ -306,7 +317,7 @@ fn a_success_whose_receipt_could_not_be_written_is_kept_by_recover() {
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(stopped(OLD))]);
     let result = fixture
         .root()

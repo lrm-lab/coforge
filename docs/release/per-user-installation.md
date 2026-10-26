@@ -16,8 +16,8 @@ be on PATH and therefore cannot live in a private directory nobody's PATH names:
   already on PATH for most users, so an install is usable in the shell that ran
   the installer, and `install.sh` writes shell configuration only when the
   directory is genuinely absent from PATH. The shim itself is only a symlink into
-  the versioned installation below `~/.coforge`, so upgrade and downgrade move the
-  `active` link and never touch the user's PATH. Computer background startup is
+  the installation below `~/.coforge` (`active/coforge-computer`), so upgrade and
+  downgrade never touch the user's PATH. Computer background startup is
   user-scoped; only Computer may register a per-user LaunchAgent on macOS.
   `install.sh --workspace <slug>` (`curl ... | sh -s -- --workspace <slug>`, the
   Add Computer dialog's command) then runs `setup` through the shim's full path,
@@ -51,6 +51,15 @@ user's PATH. Computer launches the adjacent executable with `__daemon` through
 the exact path selected by the active version; no standalone Daemon payload or
 service entry is installed.
 
+On Linux and macOS a verified version lives in `versions/<version>/`, which nothing
+runs from. The running copy is `current/`, in the install root: `active` is the
+permanent symlink `current`, the shim and the service definitions name
+`active/coforge-computer`, and activating a version copies its files into `current/`
+one at a time, each through a temporary file renamed over the old one (the executable
+after the other files, the `version` marker last). The executable therefore keeps one
+real path across upgrade, rollback, and repair, which macOS keys privacy grants on.
+Windows keeps `active` as a junction to `versions/<version>`.
+
 Installation also writes a tiny version-local `coforge` launcher which invokes
 that directory's `coforge-computer __agent-cli`. Daemon prepends its own
 executable directory to Agent PATH. The Agent CLI implementation remains in
@@ -58,15 +67,17 @@ executable directory to Agent PATH. The Agent CLI implementation remains in
 logging, sockets, cloud connections or Workspace recovery. Users continue to
 run only Computer management commands; Agents execute `coforge`.
 This adds neither a third native payload nor a Bun/npm requirement. The
-launcher is covered by the installed version's offline integrity check and
-does not follow a later active-version switch underneath an existing Daemon.
+launcher is covered by the installed version's offline integrity check.
 The installer supplies this launcher; Daemon startup does not repair older
 installations. No older-client or older-installer compatibility is maintained.
 `coforge-installer repair` is the narrow recovery for a damaged activation: it verifies the
-immutable version named by `active.json` and recreates the active link and PATH shim under the
+immutable version named by `active.json` and recreates the active link, the PATH shim, and
+(on Linux and macOS) the `current/` copy when it differs from that version, under the
 machine mutation lock. A damaged payload is quarantined and downloaded again through the same
 manifest and checksum checks as an upgrade. Repair does not stop the Computer service; a healthy
-installation produces a held `REPAIR_NOT_NEEDED` receipt.
+installation produces a held `REPAIR_NOT_NEEDED` receipt. While the service runs, repair does not
+replace a `current/coforge-computer` that differs from the version's: it repairs everything else
+and fails with `UPDATE_BUSY`, asking the user to stop the service and repair again.
 Installer identity metadata (`installation.json`) now uses schema 4 and
 records the `computer` identity, the generated `agentCli` and `githubCli`
 launcher identities, and the installed `photon_rs_bg.wasm` identity. It

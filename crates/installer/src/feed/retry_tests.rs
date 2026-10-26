@@ -377,9 +377,7 @@ fn an_upgrade_whose_manifest_connection_is_reset_once_succeeds() {
     use crate::contract::ReceiptStatus;
     use crate::processes::fakes::FakeTable;
     use crate::service::ServiceState;
-    use crate::upgrade::fakes::{
-        FakeLifecycle, FakeService, Fixture, NEW, OLD, REQUEST, protocol, stopped,
-    };
+    use crate::upgrade::fakes::{FakeLifecycle, FakeService, Fixture, NEW, OLD, REQUEST, stopped};
     use crate::upgrade::{Outcome, UpgradeRequest, upgrade};
 
     let first = BTreeMap::from([(MANIFEST.to_owned(), vec![Response::dropped()])]);
@@ -390,7 +388,7 @@ fn an_upgrade_whose_manifest_connection_is_reset_once_succeeds() {
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(stopped(OLD))]);
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
     let request = UpgradeRequest {
         request_id: REQUEST,

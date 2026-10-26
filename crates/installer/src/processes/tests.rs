@@ -99,9 +99,9 @@ fn zombies_and_processes_that_may_not_be_inspected_are_not_collected() {
 
 #[test]
 fn a_process_whose_executable_was_deleted_is_passed_over_not_an_error() {
-    // macOS gives no path for an image whose file is gone: any app that updated itself in place
-    // while running. The installer never deletes a version, so such a process is not the
-    // product's.
+    // macOS gives no path for an image whose file was unlinked outright: any app that deleted
+    // itself while running. Such a process cannot be told from the product's, so it is passed
+    // over.
     let clock = VirtualClock::new();
     let table = FakeTable::new(&clock);
     table.spawn(1, 1, "/Applications/Some.app/Contents/MacOS/Some");

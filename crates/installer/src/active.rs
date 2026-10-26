@@ -1,10 +1,13 @@
 //! The active version: which installed version is selected, and how it is exposed.
 //!
-//! `<install root>/active.json` names the current and the previous version. Two links follow it:
-//! `<install root>/active` points at `versions/<current>`, and the `coforge-computer` shim on the
-//! user's PATH points through `active`, so switching versions never rewrites the shim. This is
-//! the Computer's `#activate` / `#readJson("active.json")` / `#writeJsonAtomic`
-//! (packages/computer/src/updater.ts) and writes the same bytes and links.
+//! `<install root>/active.json` names the current and the previous version. On POSIX targets the
+//! version's payload is then copied into `<install root>/current/` ([`crate::current`]), where
+//! `<install root>/active` points for good, and the `coforge-computer` shim on the user's PATH
+//! points through `active`: switching versions replaces files in `current/` and rewrites no link,
+//! so the executable keeps one real path. On Windows `active` is a junction to
+//! `versions/<current>` and the `.cmd` shim reads `active.json`. `active.json` is the
+//! Computer's `#readJson("active.json")` / `#writeJsonAtomic` (packages/computer/src/updater.ts)
+//! and is written with the same bytes.
 //!
 //! Activation trusts its caller: the version's installed bytes must already have been verified
 //! (another module's job), and its directory must exist.
@@ -19,18 +22,19 @@ use serde::Deserialize;
 use crate::contract::{
     ACTIVE_STATE_SCHEMA_VERSION, ActiveState, to_file_json, windows_computer_launcher,
 };
+#[cfg(unix)]
+use crate::current;
+pub use crate::current::Activation;
 use crate::private_fs::{self, FileMode};
+use crate::store::VersionStore;
 use crate::version::is_valid_release_version;
 
 /// The state file, relative to the install root.
 pub const ACTIVE_FILE: &str = "active.json";
 
-/// The link, relative to the install root, that points at `versions/<current>`.
+/// The link, relative to the install root: `current` on POSIX, a junction to `versions/<current>`
+/// on Windows.
 const ACTIVE_LINK: &str = "active";
-
-/// The executable name inside a version directory and the PATH shim's name on POSIX.
-#[cfg(unix)]
-const COMPUTER_EXECUTABLE: &str = "coforge-computer";
 
 /// The PATH shim's file name on Windows, where a symlink needs privileges the user may lack.
 const WINDOWS_SHIM_FILE: &str = "coforge-computer.cmd";
@@ -130,35 +134,65 @@ pub fn write_active_state(install_root: &Path, state: &ActiveState) -> Result<()
     Ok(())
 }
 
-/// Makes `state.current` the active version: writes `active.json`, then points `active` and the
-/// PATH shim at it, in that order, as the Computer does. The shim directory is created 0755 when
-/// missing. `target` is the release target (`windows-x64`, `linux-arm64`, ...); a `windows-*`
-/// target gets a junction and a `.cmd` shim, any other a symlink and a symlink shim.
+/// Makes `state.current` the active version: writes `active.json`, then exposes the version, in
+/// that order. The shim directory is created 0755 when missing. A `windows-*` target gets a
+/// junction to the version and a `.cmd` shim. Any other target gets `current/` synced from the
+/// version, `active` -> `current` when it points anywhere else (an install from before `current/`
+/// points at the version), and a symlink shim through `active`.
 ///
-/// If a link cannot be switched, `active.json` already names the new version, as it does after a
-/// crash between the steps; running `activate` again finishes the switch.
+/// If a step fails, `active.json` already names the new version, as it does after a crash between
+/// the steps; running `activate` again finishes the switch. The caller stops the product's
+/// processes first: `current/` is replaced under the executable's path. A caller that cannot
+/// (repair) passes `spare_executable`: a `current/coforge-computer` that differs from the
+/// version's is then left alone, with the `version` marker, and the result says so.
 ///
 /// The POSIX links are each replaced by a rename, so a reader never sees one missing. Windows
 /// cannot rename over a junction: there `active` is briefly absent between removing the old
-/// junction and renaming the new one into place.
+/// junction and renaming the new one into place, and nothing is replaced in place.
 pub fn activate(
-    install_root: &Path,
+    store: &VersionStore,
     binary_directory: &Path,
-    target: &str,
     state: &ActiveState,
-) -> Result<(), ActiveError> {
+    spare_executable: bool,
+) -> Result<Activation, ActiveError> {
+    let install_root = store.install_root();
     write_active_state(install_root, state)?;
     // 0755, not the owner-only mode used below `~/.coforge`: the shim directory is a shared
     // conventional location (`~/.local/bin`) that other tools install into, and a recursive
     // create would otherwise leave `~/.local` itself owner-only for every one of them.
     private_fs::create_directories(binary_directory, 0o755)?;
-    if target.starts_with("windows-") {
+    let version_directory = store.version_directory(&state.current);
+    if store.targets_windows() {
         write_windows_launcher(install_root, binary_directory)?;
-        switch_junction(install_root, &state.current)?;
+        switch_junction(install_root, &version_directory)?;
+        Ok(Activation::Complete)
     } else {
-        switch_posix_links(install_root, binary_directory, &state.current)?;
+        Ok(switch_posix_links(
+            install_root,
+            binary_directory,
+            &version_directory,
+            spare_executable,
+        )?)
     }
-    Ok(())
+}
+
+/// Whether `version`, which must be installed and verified, is fully activated: `active`, the
+/// PATH shim, and on POSIX the `current/` copy it points at, which must equal the version's files
+/// (its `version` marker then names it). An install from before `current/`, an `active` an older
+/// installer re-pointed at a version, and a half-finished or damaged sync are all not activated.
+pub fn is_activated(store: &VersionStore, binary_directory: &Path, version: &str) -> bool {
+    let install_root = store.install_root();
+    let version_directory = store.version_directory(version);
+    if store.targets_windows() {
+        // A junction reads back as its absolute target, never a relative path a Unix symlink
+        // stores, so compare where both resolve to.
+        let junction = fs::canonicalize(install_root.join(ACTIVE_LINK));
+        let version = fs::canonicalize(&version_directory);
+        matches!((junction, version), (Ok(junction), Ok(version)) if junction == version)
+            && binary_directory.join(WINDOWS_SHIM_FILE).is_file()
+    } else {
+        posix_is_activated(install_root, binary_directory, &version_directory)
+    }
 }
 
 fn validate(state: &ActiveState) -> Result<(), ActiveError> {
@@ -175,28 +209,63 @@ fn validate(state: &ActiveState) -> Result<(), ActiveError> {
     }
 }
 
-/// `active` -> `versions/<current>` (relative, so the installation can move as a whole), and the
-/// shim -> `<install root>/active/coforge-computer` (absolute: it lives in another directory).
+/// `current/` <- the version directory; `active` -> `current` (relative, so the installation can
+/// move as a whole); the shim -> `<install root>/active/coforge-computer` (absolute: it lives in
+/// another directory). `active` is replaced only when it points anywhere else.
 #[cfg(unix)]
 fn switch_posix_links(
     install_root: &Path,
     binary_directory: &Path,
-    current: &str,
-) -> io::Result<()> {
+    version_directory: &Path,
+    spare_executable: bool,
+) -> io::Result<Activation> {
+    let activation = current::sync(
+        version_directory,
+        &current::directory(install_root),
+        spare_executable,
+    )?;
     let active = install_root.join(ACTIVE_LINK);
-    replace_symlink(&Path::new("versions").join(current), &active)?;
+    if !points_at_current(&active) {
+        replace_symlink(Path::new(current::DIRECTORY), &active)?;
+    }
     replace_symlink(
-        &active.join(COMPUTER_EXECUTABLE),
-        &binary_directory.join(COMPUTER_EXECUTABLE),
-    )
+        &active.join(current::EXECUTABLE),
+        &binary_directory.join(current::EXECUTABLE),
+    )?;
+    Ok(activation)
 }
 
 #[cfg(not(unix))]
-fn switch_posix_links(_: &Path, _: &Path, _: &str) -> io::Result<()> {
+fn switch_posix_links(_: &Path, _: &Path, _: &Path, _: bool) -> io::Result<Activation> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "symlink activation is for POSIX targets",
     ))
+}
+
+#[cfg(unix)]
+fn points_at_current(active: &Path) -> bool {
+    fs::read_link(active).ok().as_deref() == Some(Path::new(current::DIRECTORY))
+}
+
+#[cfg(unix)]
+fn posix_is_activated(
+    install_root: &Path,
+    binary_directory: &Path,
+    version_directory: &Path,
+) -> bool {
+    let active = install_root.join(ACTIVE_LINK);
+    points_at_current(&active)
+        && current::in_sync(version_directory, &current::directory(install_root))
+        && fs::read_link(binary_directory.join(current::EXECUTABLE))
+            .ok()
+            .as_deref()
+            == Some(active.join(current::EXECUTABLE).as_path())
+}
+
+#[cfg(not(unix))]
+fn posix_is_activated(_: &Path, _: &Path, _: &Path) -> bool {
+    false
 }
 
 /// Points `link` at `target` by creating a symlink beside it and renaming it into place, which
@@ -227,19 +296,19 @@ fn write_windows_launcher(install_root: &Path, binary_directory: &Path) -> io::R
     )
 }
 
-/// Makes `active` a junction to `<install root>\versions\<current>`. A junction needs no
+/// Makes `active` a junction to the version directory. A junction needs no
 /// elevation (a symlink does) and, unlike a symlink, must name an absolute path. The new junction
 /// is created under a temporary name first, so a failure to create it leaves the old one alone.
-fn switch_junction(install_root: &Path, current: &str) -> io::Result<()> {
+fn switch_junction(install_root: &Path, version_directory: &Path) -> io::Result<()> {
     let active = install_root.join(ACTIVE_LINK);
     let temporary = private_fs::temporary_sibling(&active);
     // The crate creates the directory, then makes it a junction; the second step can fail.
-    create_junction(&install_root.join("versions").join(current), &temporary)
+    create_junction(version_directory, &temporary)
         .inspect_err(|error| remove_what_creation_left(&temporary, error))?;
-    remove_existing(&active)
+    private_fs::remove_existing(&active)
         .and_then(|()| fs::rename(&temporary, &active))
         .inspect_err(|_| {
-            let _ = remove_existing(&temporary);
+            let _ = private_fs::remove_existing(&temporary);
         })
 }
 
@@ -247,7 +316,7 @@ fn switch_junction(install_root: &Path, current: &str) -> io::Result<()> {
 /// there: that is not ours to remove.
 fn remove_what_creation_left(path: &Path, error: &io::Error) {
     if error.kind() != io::ErrorKind::AlreadyExists {
-        let _ = remove_existing(path);
+        let _ = private_fs::remove_existing(path);
     }
 }
 
@@ -262,18 +331,6 @@ fn create_junction(_: &Path, _: &Path) -> io::Result<()> {
         io::ErrorKind::Unsupported,
         "junctions exist only on Windows",
     ))
-}
-
-/// Removes whatever is at `path` without following it: a link (symlink or junction) is removed
-/// and its target kept; a real directory or file is removed; nothing there is fine.
-fn remove_existing(path: &Path) -> io::Result<()> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => fs::remove_dir(path),
-        Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(path),
-        Ok(_) => fs::remove_file(path),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }
 }
 
 #[cfg(test)]

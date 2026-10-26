@@ -3,8 +3,10 @@
 //!
 //! The supervisor, its daemons, and the `__agent-cli` re-execs all run the one `coforge-computer`
 //! executable, so "every process of this installation" is "every process whose canonical
-//! executable is that file". Agents (claude, codex, ...) are other executables and are not
-//! collected. An upgrade uses this module around the service manager's stop
+//! executable is that file". On POSIX that file is `<install root>/current/coforge-computer`,
+//! whichever version is active; a process started before `current/` existed still runs
+//! `versions/<v>/coforge-computer`, so both are collected. Agents (claude, codex, ...) are other
+//! executables and are not collected. An upgrade uses this module around the service manager's stop
 //! ([`crate::service`]): [`collect`] first, then the stop, then [`terminate`] for whatever is
 //! still alive, which also proves each collected process dead.
 //!
@@ -86,9 +88,9 @@ pub enum Inspection {
     Zombie,
     /// The process exists but this user may not inspect it (another user's process).
     Unreadable,
-    /// The process is alive, but its executable file has been deleted since it started and the
-    /// system no longer has a path for it (macOS; Linux still gives one). Any app that replaced
-    /// itself while running looks like this.
+    /// The process is alive, but its executable file has been unlinked since it started and the
+    /// system no longer has a path for it (macOS; Linux still gives one). Any app that deleted
+    /// itself while running looks like this. A file renamed over keeps its path on macOS.
     Unlinked {
         started_at: u64,
     },
@@ -242,7 +244,8 @@ pub struct ProductExecutable(PathBuf);
 
 impl ProductExecutable {
     /// The canonical form of `path` (symlinks resolved, so `install/active/coforge-computer` is
-    /// the file under `versions/<v>/` it points at).
+    /// the file `install/current/coforge-computer`, or `versions/<v>/...` in an install from
+    /// before `current/`).
     pub fn resolve(path: &Path) -> io::Result<Self> {
         fs::canonicalize(path).map(Self)
     }
@@ -297,9 +300,12 @@ pub fn collect(
             continue;
         }
         // A pid that cannot be inspected is an error, not a skip: a product process missed here
-        // is one the upgrade would replace underneath. One whose executable was deleted has no
-        // path on macOS ([`Inspection::Unlinked`]) and is passed over: the installer never
-        // deletes a version, so it is not the product's. Linux still names the file, and matches.
+        // is one the upgrade would replace underneath. One whose executable was unlinked outright
+        // has no path on macOS ([`Inspection::Unlinked`]) and is passed over: it cannot be told
+        // from any other app that deleted itself while running. Observed on macOS 27: a process
+        // whose executable was renamed over (`mv -f new prog`) keeps running and `proc_pidpath`
+        // still returns the original path, so it matches here. Linux names such a process
+        // `<path> (deleted)`, which `ProcessIdentity` strips, and it matches too.
         if let Inspection::Alive(identity) = table.inspect(pid)?
             && product.matches(&identity.executable)
         {
