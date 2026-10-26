@@ -128,7 +128,15 @@ test("a direct message's immediate response and later history carry the same opt
       attachmentIds: [attachment.id],
       idempotencyKey: crypto.randomUUID(),
     });
-    expect(sent.attachments[0]).toMatchObject({ imageWidth: 300, imageHeight: 200 });
+    const metadata = {
+      id: attachment.id,
+      fileName: attachment.fileName,
+      contentType: attachment.contentType,
+      sizeBytes: attachment.sizeBytes,
+      imageWidth: 300,
+      imageHeight: 200,
+    };
+    expect(sent.attachments[0]).toMatchObject(metadata);
     expect(sent.attachments[0]).not.toHaveProperty("objectKey");
     const page = await new ConversationHistory(f.db).loadAround(
       f.workspace.id,
@@ -136,7 +144,10 @@ test("a direct message's immediate response and later history carry the same opt
       conversationId,
       sent.id,
     );
-    expect(page.messages[0]!.attachments).toEqual(sent.attachments);
+    // Signed preview URLs are fresh per read; the persisted image metadata stays the same.
+    expect(page.messages[0]!.attachments).toHaveLength(1);
+    expect(page.messages[0]!.attachments[0]).toMatchObject(metadata);
+    expect(page.messages[0]!.attachments[0]).not.toHaveProperty("objectKey");
   } finally {
     await f.close();
   }
