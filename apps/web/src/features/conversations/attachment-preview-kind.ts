@@ -15,8 +15,92 @@ export type AttachmentPreviewKind =
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdown", "mkd"]);
 const HTML_EXTENSIONS = new Set(["html", "htm"]);
-/** Plain-text files read literally, not as Markdown: a `.txt` must not turn `# line` into a heading. */
-const TEXT_EXTENSIONS = new Set(["txt"]);
+/**
+ * Plain-text files read literally, not as Markdown: a `.txt` must not turn `# line` into a heading.
+ * Source code, configuration, data and logs read the same way, one numbered line each, so a
+ * comment can point at their lines.
+ */
+const TEXT_EXTENSIONS = new Set([
+  // Plain text and logs
+  "txt",
+  "text",
+  "log",
+  "out",
+  "diff",
+  "patch",
+  // Data and configuration
+  "json",
+  "jsonl",
+  "ndjson",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "properties",
+  "xml",
+  "tsv",
+  "sql",
+  "graphql",
+  "gql",
+  "proto",
+  // Source code
+  "ts",
+  "tsx",
+  "mts",
+  "cts",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "py",
+  "rb",
+  "go",
+  "rs",
+  "java",
+  "kt",
+  "kts",
+  "scala",
+  "swift",
+  "c",
+  "h",
+  "cc",
+  "cpp",
+  "hpp",
+  "cs",
+  "php",
+  "lua",
+  "r",
+  "dart",
+  "pl",
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "ps1",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  "vue",
+  "svelte",
+  "tf",
+  "gradle",
+]);
+/** Content types read as plain text besides `text/*`. */
+const TEXT_CONTENT_TYPES = new Set([
+  "application/json",
+  "application/x-ndjson",
+  "application/xml",
+  "application/yaml",
+  "application/x-yaml",
+  "application/toml",
+  "application/sql",
+  "application/javascript",
+  "application/typescript",
+  "application/x-sh",
+]);
 const CSV_EXTENSIONS = new Set(["csv"]);
 
 /**
@@ -94,6 +178,8 @@ export function attachmentPreviewKind(
     return isFrameableDocumentUrl(previewUrl, applicationOrigin) ? "pdf" : null;
   if (MARKDOWN_EXTENSIONS.has(extension)) return "markdown";
   if (HTML_EXTENSIONS.has(extension)) return "html";
+  // A `.ts` file usually arrives as `video/mp2t`, the MIME table's entry for an MPEG transport
+  // stream, even when it is TypeScript; the bytes tell the two apart (`isTextContent`).
   if (TEXT_EXTENSIONS.has(extension)) return "text";
   if (CSV_EXTENSIONS.has(extension)) return "csv";
   const media = MEDIA_TYPES.get(extension);
@@ -101,6 +187,27 @@ export function attachmentPreviewKind(
   if (contentType === "text/markdown") return "markdown";
   if (contentType === "text/html") return "html";
   if (contentType === "text/csv") return "csv";
-  if (contentType === "text/plain") return "text";
+  if (contentType.startsWith("text/") || TEXT_CONTENT_TYPES.has(contentType)) return "text";
   return null;
+}
+
+/** How much of a file `isTextContent` reads: enough to meet a binary format's header and tables. */
+const TEXT_SNIFF_BYTES = 8 * 1024;
+
+/**
+ * Whether a file named as text really holds text: its first bytes are valid UTF-8 and carry no NUL.
+ * A binary file under a text name (an MPEG transport stream saved as `.ts`, a mislabelled upload)
+ * fails both at once. Only the head is checked, so one stray byte deep inside an older log does not
+ * keep the whole file from previewing.
+ */
+export function isTextContent(bytes: Uint8Array): boolean {
+  const head = bytes.subarray(0, TEXT_SNIFF_BYTES);
+  if (head.includes(0)) return false;
+  try {
+    // `stream` lets a multi-byte character cut by the end of the head pass as incomplete.
+    new TextDecoder("utf-8", { fatal: true }).decode(head, { stream: true });
+    return true;
+  } catch {
+    return false;
+  }
 }

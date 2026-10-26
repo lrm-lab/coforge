@@ -11,7 +11,8 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 /** Opt-in positional comments E2E, on the same private stack as e2e-attachment-comments: local
  * built Web with development skip-auth, PostgreSQL, Redis, Centrifugo and ego-browser.
  * DATABASE_URL, COFORGE_E2E_WEB_URL, COFORGE_E2E_CENTRIFUGO_URL and COFORGE_FILE_STORAGE_DIR must
- * name that stack. Creates one channel with a Markdown and a CSV file and deletes them afterwards.
+ * name that stack. Creates one channel with a Markdown, a CSV and two `.ts` files (TypeScript and an
+ * MPEG transport stream, both labelled `video/mp2t`) and deletes them afterwards.
  * Screenshots: .amp/e2e/attachment-comment-anchors/. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
@@ -36,6 +37,14 @@ const markdown = "# Guide\n\nOverview.\n\n## Setup\n\nInstall the tool.\n\n## Us
 const csv = ["id,name", ...Array.from({ length: 60 }, (_, i) => `${i + 1},row ${i + 1}`)].join(
   "\n",
 );
+const sourceName = `app-${suffix}.ts`;
+const source = Array.from({ length: 40 }, (_, i) => `export const value${i + 1} = ${i + 1};`).join(
+  "\n",
+);
+const streamName = `clip-${suffix}.ts`;
+// Two 188-byte MPEG-TS packets: the 0x47 sync byte, a header, then binary payload with NULs.
+const stream = new Uint8Array(376).map((_, i) => (i % 188 === 0 ? 0x47 : (i * 37) % 256));
+const lineBody = `Line 30 needs a type ${suffix}`;
 const sectionBody = `Setup needs a version ${suffix}`;
 const rowBody = `Row 45 looks wrong ${suffix}`;
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/attachment-comment-anchors");
@@ -82,10 +91,14 @@ beforeAll(async () => {
       sequence: 1,
     },
   });
-  for (const [position, [fileName, content, contentType]] of [
-    [markdownName, markdown, "text/markdown"],
-    [csvName, csv, "text/csv"],
-  ].entries()) {
+  for (const [position, [fileName, content, contentType]] of (
+    [
+      [markdownName, markdown, "text/markdown"],
+      [csvName, csv, "text/csv"],
+      [sourceName, source, "video/mp2t"],
+      [streamName, stream, "video/mp2t"],
+    ] as const
+  ).entries()) {
     const objectKey = `e2e/comment-anchors/${suffix}-${position}/original`;
     objectKeys.push(objectKey);
     await files.put(objectKey, new Blob([content]), contentType);
@@ -98,7 +111,7 @@ beforeAll(async () => {
         objectKey,
         fileName,
         contentType,
-        sizeBytes: new TextEncoder().encode(content).length,
+        sizeBytes: new Blob([content]).size,
         position,
       },
     });
@@ -200,4 +213,51 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     },
   ]);
   browserPassed = true;
+}, 90_000);
+
+test("a TypeScript file labelled video/mp2t takes line comments; a real transport stream does not preview", async () => {
+  const open = (name: string) => `button[aria-label="Preview ${name}"]`;
+  const result = await runBrowser(`
+    const task = await taskSpace(${JSON.stringify(space)});
+    const page = task.page("p1");
+    await page.cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await page.goto(${JSON.stringify(pageUrl)});
+    await page.waitForSelector(${JSON.stringify(open(sourceName))}, { timeout: 30000 });
+    await page.click(${JSON.stringify(open(sourceName))});
+    await page.waitForSelector('[role="dialog"] [data-anchor-line="40"]');
+    ${selectAndComment('[role="dialog"] [data-anchor-line="30"]')}
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("Line 30"));
+    await page.fill('[role="dialog"] textarea', ${JSON.stringify(lineBody)});
+    await page.click("loc=role:button[name='Post comment']");
+    await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(lineBody)}, { timeout: 10000 });
+
+    await page.reload();
+    await page.waitForSelector(${JSON.stringify(open(sourceName))});
+    await page.click(${JSON.stringify(open(sourceName))});
+    await page.waitForSelector('[role="dialog"] [data-anchor-line="40"]');
+    await page.click("loc=role:button[name='Go to Line 30']");
+    await page.waitForFunction(() => document.querySelector('[role="dialog"] [data-anchor-line="30"]')?.classList.contains("bg-tertiary"), undefined, { timeout: 5000 });
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "typescript-line.png"))} }));
+    console.log("E2E_TS_LINE_JUMP");
+
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+    await page.click(${JSON.stringify(open(streamName))});
+    await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes("This file could not be previewed"), undefined, { timeout: 10000 });
+    if (await page.evaluate(() => !!document.querySelector('[role="dialog"] [data-anchor-line]')))
+      throw new Error("binary rendered as lines");
+    await page.waitForTimeout(1000);
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "transport-stream.png"))} }));
+    console.log("E2E_TS_BINARY_REFUSED");
+  `);
+  expect(result).toContain("E2E_TS_LINE_JUMP");
+  expect(result).toContain("E2E_TS_BINARY_REFUSED");
+  const anchor = await db.attachmentComment.findFirstOrThrow({
+    where: { message: { body: lineBody } },
+    select: { anchorType: true, anchorData: true },
+  });
+  expect(anchor).toEqual({
+    anchorType: "lines",
+    anchorData: { start: 30, end: 30, quote: "export const value30 = 30;" },
+  });
 }, 90_000);

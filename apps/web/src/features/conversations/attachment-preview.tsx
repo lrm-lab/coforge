@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
-import { mediaMimeType, type AttachmentPreviewKind } from "./attachment-preview-kind";
+import {
+  isTextContent,
+  mediaMimeType,
+  type AttachmentPreviewKind,
+} from "./attachment-preview-kind";
 import type { Anchoring } from "./attachment-anchoring";
 import { LinesPreview, MarkdownPreview } from "./anchored-previews";
 import { CsvPreview } from "./csv-preview";
@@ -164,15 +168,18 @@ function TextPreview({
   anchoring?: Anchoring;
 }) {
   const blob = useAttachmentBlob(href, TEXT_PREVIEW_MAX_BYTES);
-  const [text, setText] = useState<string | null>(null);
+  // `undefined` while the bytes are read, `null` when they are not text.
+  const [text, setText] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     if (blob.status !== "ready") {
-      setText(null);
+      setText(undefined);
       return;
     }
     let active = true;
-    void blob.value.text().then((value) => {
-      if (active) setText(value);
+    void blob.value.arrayBuffer().then((buffer) => {
+      if (!active) return;
+      const bytes = new Uint8Array(buffer);
+      setText(isTextContent(bytes) ? new TextDecoder().decode(bytes) : null);
     });
     return () => {
       active = false;
@@ -181,6 +188,8 @@ function TextPreview({
 
   if (blob.status !== "ready") return <PreviewStatus state={blob} href={href} />;
   if (text === null)
+    return <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />;
+  if (text === undefined)
     return (
       <p className="p-4 text-sm text-tertiary sm:p-6">
         {m.conversation_attachment_preview_loading()}

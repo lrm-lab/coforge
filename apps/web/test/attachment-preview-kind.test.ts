@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   attachmentPreviewKind,
   isFrameableDocumentUrl,
+  isTextContent,
 } from "#src/features/conversations/attachment-preview-kind";
 
 const APP_ORIGIN = "https://app.coforge.cn";
@@ -100,6 +101,24 @@ describe("the other kinds are decided by name, then by content type", () => {
     expect(attachmentPreviewKind("changelog", "text/plain", undefined, APP_ORIGIN)).toBe("text");
   });
 
+  test("source code, configuration, data and logs read as plain text, so their lines take comments", () => {
+    for (const name of ["app.ts", "main.py", "package.json", "ci.yml", "server.log", "fix.patch"])
+      expect(attachmentPreviewKind(name, "application/octet-stream", undefined, APP_ORIGIN)).toBe(
+        "text",
+      );
+    // A content type alone is enough for text: any `text/*` and the common structured types.
+    expect(attachmentPreviewKind("Makefile", "text/x-makefile", undefined, APP_ORIGIN)).toBe(
+      "text",
+    );
+    expect(attachmentPreviewKind("payload", "application/json", undefined, APP_ORIGIN)).toBe(
+      "text",
+    );
+    // TypeScript routinely arrives as `video/mp2t`; the name still decides, the bytes are checked later.
+    expect(attachmentPreviewKind("app.ts", "video/mp2t", undefined, APP_ORIGIN)).toBe("text");
+    // HTML keeps its own preview however it is labelled.
+    expect(attachmentPreviewKind("page", "text/html", undefined, APP_ORIGIN)).toBe("html");
+  });
+
   test("allowlisted media is previewable, other files are not", () => {
     expect(attachmentPreviewKind("clip.mp4", "video/mp4", undefined, APP_ORIGIN)).toBe("video");
     expect(attachmentPreviewKind("voice.wav", "audio/wav", undefined, APP_ORIGIN)).toBe("audio");
@@ -107,5 +126,38 @@ describe("the other kinds are decided by name, then by content type", () => {
       attachmentPreviewKind("bundle.zip", "application/zip", undefined, APP_ORIGIN),
     ).toBeNull();
     expect(attachmentPreviewKind("logo.svg", "image/svg+xml", undefined, APP_ORIGIN)).toBeNull();
+  });
+});
+
+describe("a file named as text previews only when its bytes are text", () => {
+  const utf8 = (value: string) => new TextEncoder().encode(value);
+
+  test("UTF-8 text passes, including a multi-byte character cut by the end of the checked head", () => {
+    expect(isTextContent(utf8("export const answer = 42;\n"))).toBe(true);
+    expect(isTextContent(new Uint8Array())).toBe(true);
+    // "中" is three bytes and "🚀" four: the head ends two bytes into the first, one into the second.
+    for (const [padding, character] of [
+      [2, "中"],
+      [1, "🚀"],
+    ] as const) {
+      const cut = new Uint8Array([
+        ...new Uint8Array(8 * 1024 - padding).fill(0x61),
+        ...utf8(character),
+      ]);
+      expect(isTextContent(cut)).toBe(true);
+    }
+  });
+
+  test("a NUL or invalid UTF-8 in the head marks the file as binary", () => {
+    // An MPEG transport stream: 188-byte packets opening with the 0x47 sync byte.
+    const packet = new Uint8Array(188);
+    packet.set([0x47, 0x40, 0x00, 0x10]);
+    expect(isTextContent(packet)).toBe(false);
+    expect(isTextContent(new Uint8Array([0x61, 0xff, 0x62]))).toBe(false);
+  });
+
+  test("bytes past the checked head do not count", () => {
+    const tail = new Uint8Array([...new Uint8Array(8 * 1024).fill(0x61), 0xff, 0x00]);
+    expect(isTextContent(tail)).toBe(true);
   });
 });
