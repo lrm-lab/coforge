@@ -79,7 +79,8 @@ test("each preview offers its own anchor type; the others are whole-file only", 
   expect(anchorTypeForPreview("markdown")).toBe("md-section");
   expect(anchorTypeForPreview("text")).toBe("lines");
   expect(anchorTypeForPreview("csv")).toBe("csv-rows");
-  for (const kind of ["html", "pdf", "video", "audio", null] as const)
+  expect(anchorTypeForPreview("html")).toBe("html-region");
+  for (const kind of ["pdf", "video", "audio", null] as const)
     expect(anchorTypeForPreview(kind)).toBeNull();
 });
 
@@ -89,6 +90,43 @@ test("an anchor's label is its heading, or its first and last line or row", () =
   ).toBe("Setup");
   expect(anchorRangeLabel({ type: "lines", data: { start: 3, end: 3 } })).toBe("3");
   expect(anchorRangeLabel({ type: "csv-rows", data: { start: 2, end: 9 } })).toBe("2–9");
+});
+
+const region = {
+  x: 10,
+  y: 400,
+  w: 0,
+  h: 0,
+  viewportWidth: 800,
+  documentWidth: 800,
+  documentHeight: 3000,
+};
+
+test("an HTML region is a box in document pixels; a click is a box of no size", () => {
+  expect(parseAttachmentCommentAnchor({ type: "html-region", data: region })).toEqual({
+    type: "html-region",
+    data: region,
+  });
+  for (const data of [
+    { ...region, x: -1 },
+    { ...region, w: 1.5 },
+    { ...region, y: Number.POSITIVE_INFINITY },
+    { ...region, quote: "" },
+    { x: 1, y: 1, w: 1, h: 1 },
+    { ...region, extra: 1 },
+  ])
+    expect(parseAttachmentCommentAnchor({ type: "html-region", data })).toBeNull();
+});
+
+test("a region's label is its quote cut to 36 characters, or empty for the generic name", () => {
+  const quote = "🚀".repeat(40);
+  expect(anchorRangeLabel({ type: "html-region", data: { ...region, quote } })).toBe(
+    `${"🚀".repeat(36)}…`,
+  );
+  expect(anchorRangeLabel({ type: "html-region", data: { ...region, quote: "Pricing" } })).toBe(
+    "Pricing",
+  );
+  expect(anchorRangeLabel({ type: "html-region", data: region })).toBe("");
 });
 
 test("CSV parses as RFC 4180: quoted commas, line breaks and doubled quotes", () => {

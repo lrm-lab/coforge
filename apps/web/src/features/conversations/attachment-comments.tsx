@@ -25,6 +25,7 @@ import type { AttachmentCommentView } from "#src/server/attachments/attachment-c
 function anchorLabel(anchor: AttachmentCommentAnchor): string {
   const range = anchorRangeLabel(anchor);
   if (anchor.type === "md-section") return m.attachment_comments_anchor_section({ title: range });
+  if (anchor.type === "html-region") return range || m.attachment_comments_anchor_region();
   const single = anchor.data.start === anchor.data.end;
   if (anchor.type === "lines")
     return single
@@ -81,6 +82,7 @@ export function AttachmentCommentsPane({
   attachmentId,
   fileName,
   pendingAnchor,
+  focusRequest,
   onClearAnchor,
   surface,
   onJump,
@@ -89,6 +91,8 @@ export function AttachmentCommentsPane({
   fileName: string;
   /** The place the next comment is about, chosen in the preview; absent for the whole file. */
   pendingAnchor?: AttachmentCommentAnchor | null;
+  /** Changes each time the preview asks to start a comment, with or without a place. */
+  focusRequest?: number;
   /** Drops `anchor` if it is still the pending one. */
   onClearAnchor?: (anchor: AttachmentCommentAnchor) => void;
   surface?: AnchorSurface | null;
@@ -125,8 +129,8 @@ export function AttachmentCommentsPane({
   );
   // A place chosen in the preview is what the reader is about to write about.
   useEffect(() => {
-    if (pendingAnchor) draft.input.current?.focus();
-  }, [pendingAnchor, draft.input]);
+    if (pendingAnchor || focusRequest) draft.input.current?.focus();
+  }, [pendingAnchor, focusRequest, draft.input]);
   const disabledReason = state?.disabledReason;
   const emptyHint = m.attachment_comments_empty_hint({ name: "{name}" }).split("{name}");
   const disabledText =

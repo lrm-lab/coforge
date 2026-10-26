@@ -10,21 +10,13 @@ import {
 import type { Anchoring } from "./attachment-anchoring";
 import { LinesPreview, MarkdownPreview } from "./anchored-previews";
 import { CsvPreview } from "./csv-preview";
+import { HtmlRegionPreview } from "./html-region-preview";
 
 /** Text previews are for a look, and the bytes travel through the authenticated backend route. */
 const TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
 /** Media has no range requests here (see `MediaPreview`), so the whole file is held in memory;
  * past this the reader is better served by the download. */
 const MEDIA_PREVIEW_MAX_BYTES = 50 * 1024 * 1024;
-
-/**
- * The CSP prepended to a previewed HTML document. `sandbox` already blocks scripts, so this is
- * about the rest of the document's reach: no network requests at all, and inline styles only, so
- * opening a preview cannot quietly call out to a third party with the reader's IP and referrer.
- * A file carrying its own CSP cannot loosen this one — the strictest policy of the two applies.
- */
-const PREVIEW_CSP =
-  "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:\">";
 
 type FetchState<T> =
   | { status: "loading" }
@@ -97,9 +89,9 @@ function PreviewStatus({
  * - `text` (a `.txt` plain-text file) reads literally — rendered as escaped text in a scrollable
  *   monospace pre, never parsed as Markdown.
  * - `csv` is parsed here and laid out as a table of escaped text.
- * - `html` goes into an iframe with an empty `sandbox`, which is a unique opaque origin with
- *   scripts, forms, popups and same-origin access all denied. The document renders, but it cannot
- *   run code, read this page, or reach our cookies.
+ * - `html` goes into a frame in a unique opaque origin, with forms, popups and same-origin access
+ *   denied, where only our own bridge script may run (`html-preview-bridge.ts`). The document
+ *   renders, but it cannot run code, read this page, or reach our cookies.
  * - `video`/`audio` play from a Blob built with a MIME type from our own allowlist, so the
  *   browser decodes media and never sniffs the bytes into markup.
  */
@@ -109,6 +101,7 @@ export function AttachmentPreview({
   href,
   previewUrl,
   anchoring,
+  commentsOpen,
 }: {
   fileName: string;
   kind: AttachmentPreviewKind;
@@ -116,8 +109,10 @@ export function AttachmentPreview({
   href: string;
   /** The signed delivery URL; required for `pdf`, unused by the other kinds. */
   previewUrl?: string;
-  /** Lets the reader comment on a place in a Markdown, text or CSV file. */
+  /** Lets the reader comment on a place in a Markdown, text, CSV or HTML file. */
   anchoring?: Anchoring;
+  /** Whether the comments show beside the preview (an HTML file's comment mode needs them). */
+  commentsOpen?: boolean;
 }) {
   if (kind === "pdf")
     return previewUrl ? (
@@ -127,7 +122,15 @@ export function AttachmentPreview({
     );
   if (kind === "video" || kind === "audio")
     return <MediaPreview fileName={fileName} kind={kind} href={href} />;
-  return <TextPreview fileName={fileName} kind={kind} href={href} anchoring={anchoring} />;
+  return (
+    <TextPreview
+      fileName={fileName}
+      kind={kind}
+      href={href}
+      anchoring={anchoring}
+      commentsOpen={commentsOpen}
+    />
+  );
 }
 
 /**
@@ -161,11 +164,13 @@ function TextPreview({
   kind,
   href,
   anchoring,
+  commentsOpen,
 }: {
   fileName: string;
   kind: "markdown" | "html" | "text" | "csv";
   href: string;
   anchoring?: Anchoring;
+  commentsOpen?: boolean;
 }) {
   const blob = useAttachmentBlob(href, TEXT_PREVIEW_MAX_BYTES);
   // `undefined` while the bytes are read, `null` when they are not text.
@@ -205,22 +210,12 @@ function TextPreview({
   if (kind === "csv") return <CsvPreview text={text} anchoring={anchoring} />;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <p className="px-4 pt-3 pb-2 text-xs text-tertiary sm:px-6 sm:pt-4">
-        {m.conversation_attachment_preview_html_note()}
-      </p>
-      <iframe
-        // `aria-label` rather than `title`: the shared lint rule reserves `title` for the Tooltip
-        // component, and an accessible name for a frame can come from either.
-        aria-label={fileName}
-        // Empty sandbox: an opaque origin with scripts, forms, popups and same-origin access all
-        // denied. Do not add `allow-scripts` — an attachment is untrusted content.
-        sandbox=""
-        referrerPolicy="no-referrer"
-        srcDoc={`${PREVIEW_CSP}${text}`}
-        className="min-h-0 w-full flex-1 border-0 bg-white"
-      />
-    </div>
+    <HtmlRegionPreview
+      fileName={fileName}
+      text={text}
+      anchoring={anchoring}
+      commentsOpen={commentsOpen}
+    />
   );
 }
 

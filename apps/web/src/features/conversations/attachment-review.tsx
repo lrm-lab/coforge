@@ -40,13 +40,18 @@ export function AttachmentReviewDialog({
   const [pendingAnchor, setPendingAnchor] = useState<AttachmentCommentAnchor | null>(null);
   const [surface, setSurface] = useState<AnchorSurface | null>(null);
   const [jumpTo, setJumpTo] = useState<AttachmentCommentAnchor | null>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
   const anchoring = useMemo<Anchoring>(
     () => ({
       onSurface: setSurface,
       onComment(anchor) {
         setPendingAnchor(anchor);
+        setFocusRequest((count) => count + 1);
         setCommentsExpanded(true);
         setCommentsOnPhone(true);
+      },
+      onOpenComments() {
+        setCommentsExpanded(true);
       },
     }),
     [],
@@ -142,6 +147,7 @@ export function AttachmentReviewDialog({
                           href={href}
                           previewUrl={file.previewUrl}
                           anchoring={anchoring}
+                          commentsOpen={commentsExpanded}
                         />
                       ) : (
                         <Empty>
@@ -162,6 +168,7 @@ export function AttachmentReviewDialog({
                       attachmentId={file.id}
                       fileName={file.fileName}
                       pendingAnchor={pendingAnchor}
+                      focusRequest={focusRequest}
                       onClearAnchor={(anchor) =>
                         setPendingAnchor((current) => (current === anchor ? null : current))
                       }

@@ -12,6 +12,10 @@ const ANCHOR_TEXT_MAX = 200;
 export const ANCHOR_QUOTE_MAX = 500;
 /** A line or row number past any file a 2 MB text preview can hold. */
 const ANCHOR_INDEX_MAX = 10_000_000;
+/** A pixel coordinate or size past any page a 2 MB HTML file lays out. */
+const ANCHOR_PIXEL_MAX = 10_000_000;
+/** How much of a region's quote its label shows, as in Raft. */
+const REGION_LABEL_MAX = 36;
 
 /** Text JSONB can store and display: no control characters and no half of a surrogate pair. */
 const storable = (value: string) =>
@@ -26,6 +30,7 @@ const range = z
   })
   .strict()
   .refine((value) => value.start <= value.end);
+const pixels = z.number().int().min(0).max(ANCHOR_PIXEL_MAX);
 
 export const attachmentCommentAnchor = z.discriminatedUnion("type", [
   z
@@ -43,6 +48,24 @@ export const attachmentCommentAnchor = z.discriminatedUnion("type", [
     .strict(),
   z.object({ type: z.literal("lines"), data: range }).strict(),
   z.object({ type: z.literal("csv-rows"), data: range }).strict(),
+  z
+    .object({
+      type: z.literal("html-region"),
+      // Document coordinates (scroll included) of the box the reader drew; a click is 0 × 0.
+      data: z
+        .object({
+          x: pixels,
+          y: pixels,
+          w: pixels,
+          h: pixels,
+          viewportWidth: pixels,
+          documentWidth: pixels,
+          documentHeight: pixels,
+          quote,
+        })
+        .strict(),
+    })
+    .strict(),
 ]);
 export type AttachmentCommentAnchor = z.infer<typeof attachmentCommentAnchor>;
 
@@ -59,6 +82,7 @@ export function anchorTypeForPreview(
   if (kind === "markdown") return "md-section";
   if (kind === "text") return "lines";
   if (kind === "csv") return "csv-rows";
+  if (kind === "html") return "html-region";
   return null;
 }
 
@@ -182,9 +206,18 @@ export function rangeLocator(texts: readonly string[]) {
   };
 }
 
-/** An anchor's own label: the heading for a section, else its first and last line or row. */
+/**
+ * An anchor's own label: the heading for a section, the start of the quote for a region (empty
+ * when it kept none, for the caller's generic name), else its first and last line or row.
+ */
 export function anchorRangeLabel(anchor: AttachmentCommentAnchor): string {
   if (anchor.type === "md-section") return anchor.data.headingTitle;
+  if (anchor.type === "html-region") {
+    const characters = Array.from(anchor.data.quote ?? "");
+    return characters.length > REGION_LABEL_MAX
+      ? `${characters.slice(0, REGION_LABEL_MAX).join("")}…`
+      : characters.join("");
+  }
   const { start, end } = anchor.data;
   return start === end ? `${start}` : `${start}–${end}`;
 }

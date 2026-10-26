@@ -25,10 +25,27 @@ test("each previewable kind stores its own anchor, read back on the comment", as
       });
     const markdown = await sibling("guide.md", "text/markdown");
     const csv = await sibling("data.csv", "text/csv");
+    const html = await sibling("page.html", "text/html");
     const cases: [string, AttachmentCommentAnchor][] = [
       [f.attachment.id, { type: "lines", data: { start: 3, end: 5, quote: "three to five" } }],
       [markdown.id, { type: "md-section", data: { headingId: "setup", headingTitle: "Setup" } }],
       [csv.id, { type: "csv-rows", data: { start: 2, end: 2 } }],
+      [
+        html.id,
+        {
+          type: "html-region",
+          data: {
+            x: 40,
+            y: 1200,
+            w: 0,
+            h: 0,
+            viewportWidth: 900,
+            documentWidth: 900,
+            documentHeight: 4000,
+            quote: "Pricing",
+          },
+        },
+      ],
     ];
     for (const [attachmentId, anchor] of cases) {
       const posted = await comments.post(f.actor, { attachmentId, body: "Here", anchor });
@@ -53,6 +70,17 @@ test("an anchor of another file kind is refused and nothing is written", async (
         attachmentId: f.attachment.id,
         body: "Wrong kind",
         anchor: { type: "csv-rows", data: { start: 1, end: 1 } },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    // A text file takes no region either: only an HTML preview draws one.
+    await expect(
+      comments.post(f.actor, {
+        attachmentId: f.attachment.id,
+        body: "Wrong kind",
+        anchor: {
+          type: "html-region",
+          data: { x: 0, y: 0, w: 5, h: 5, viewportWidth: 1, documentWidth: 1, documentHeight: 1 },
+        },
       }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect((await comments.list(f.actor, { attachmentId: f.attachment.id })).comments).toEqual([]);
