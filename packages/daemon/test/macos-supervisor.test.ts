@@ -584,7 +584,7 @@ test.skipIf(process.platform !== "darwin")(
         daemonApiKey: "fixture-only",
         serverHttpUrl: serverUrl,
       });
-      // Setup answers by the same budget, so wait for its start to finish too.
+      // Setup answers by the same budget: wait for its start too.
       const before = await until(
         (runtime) => runtime.processId > 0 && !runtime.lifecycleUnderWay,
         "Workspace a never started",
@@ -595,19 +595,19 @@ test.skipIf(process.platform !== "darwin")(
       expect(answered.find((runtime) => runtime.workspaceId === "a")).toMatchObject({
         lifecycleUnderWay: true,
       });
-      // ... and finishes behind the answer: the replacement is adopted and nothing is under way,
-      // which is what `status` and an upgrade's check read.
+      // ... and finishes behind the answer: the replacement is adopted, nothing is under way
+      // (what `status` and an upgrade's check read).
       const after = await until(
         (runtime) =>
           !runtime.lifecycleUnderWay &&
           runtime.processId > 0 &&
           runtime.processId !== before.processId,
-        "the restart never finished behind its answer",
+        "the restart never finished",
       );
       expect(after).toMatchObject({ enabled: true, version: before.version });
-      // Its result was recorded: replaying the request changes nothing.
+      // Replaying a recorded restart changes nothing, once its queued turn has run.
       await client.control("restart", "a", "restart-1");
-      expect(await until(() => true, "unreachable")).toEqual(after);
+      expect(await until((r) => !r.lifecycleUnderWay, "replay unsettled")).toEqual(after);
 
       // A stop requested right behind the next restart wins over it.
       await client.control("restart", "a", "restart-2");
