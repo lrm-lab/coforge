@@ -49,6 +49,7 @@ function bucket() {
   let active = 0;
   let peak = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const key = new URL(request.url).pathname.slice(1);
@@ -280,7 +281,11 @@ test("an abort stops a transfer between attempts", async () => {
 
 test("an abort while a request is in flight still reads as aborted", async () => {
   const controller = new AbortController();
-  const hanging = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) });
+  const hanging = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Promise<Response>(() => {}),
+  });
   servers.push(hanging);
   const { ports } = server(bucket(), {
     uploadUrl: async () => ({ url: `http://127.0.0.1:${hanging.port}/chunk`, headers: {} }),

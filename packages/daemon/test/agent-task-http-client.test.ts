@@ -17,6 +17,7 @@ const TASK_DEADLINE_MS = 100;
 
 test("Agent Task HTTP client rejects a response for a different request", async () => {
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       return Response.json({ idempotencyKey: "request-2", tasks: [] });
@@ -38,6 +39,7 @@ test("Agent Task HTTP client rejects a response for a different request", async 
 
 test("Agent Task HTTP client reports an authorization denial without treating it as transport", async () => {
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       return Response.json({ error: "details must not be exposed" }, { status: 403 });
@@ -63,6 +65,7 @@ test(
     // Production's client is built with this deadline.
     expect(AGENT_RPC_TIMEOUT_MS).toBe(10_000);
     const server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       async fetch() {
         return await new Promise<Response>(() => {});
@@ -86,6 +89,7 @@ test(
 
 test("Agent Task HTTP client keeps the server's refusal code for the daemon log only", async () => {
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       return Response.json(

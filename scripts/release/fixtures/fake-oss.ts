@@ -67,6 +67,7 @@ export function startFakeOssServer(options: FakeOssOptions = {}): FakeOss {
   const contentTypes = new Map<string, string | undefined>();
 
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const url = new URL(request.url);
@@ -153,4 +154,25 @@ export function startFakeOssServer(options: FakeOssOptions = {}): FakeOss {
  * bucket-name-prefixed virtual hosting (`cname: true`), over plain HTTP (`secure: false`). */
 export function fixtureConnection(fake: FakeOss, bucket = BUCKET): OssConnection {
   return { bucket, endpoint: fake.baseUrl, region: REGION, cname: true, secure: false };
+}
+
+/** A fake OSS origin that fails every authenticated request the same way, whatever credentials
+ * signed it - used by the publication credential-leak tests, which care whether publishing ever
+ * prints a failure response's body/headers, not whether the SDK's own V4 signing is correct
+ * (that's ali-oss's and Alibaba Cloud's problem, not this script's). */
+export function startLeakFixtureServer(body: string) {
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const anonymous = request.method === "GET" && !request.headers.has("authorization");
+      if (anonymous) return new Response("origin", { status: 403 });
+      return new Response(body, {
+        status: 403,
+        headers: { "x-oss-request-id": "fake-request-id-signature" },
+      });
+    },
+  });
+  servers.push(server);
+  return { baseUrl: server.url.origin, stop: () => server.stop(true) };
 }

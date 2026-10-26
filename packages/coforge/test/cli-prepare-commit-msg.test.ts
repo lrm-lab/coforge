@@ -38,6 +38,7 @@ afterEach(async () => {
  * stderr line explaining the trailer was skipped. */
 test("a real proxy failure exits 0 with exactly one explanatory stderr line", async () => {
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch: () => new Response("upstream failed", { status: 500 }),
   });
@@ -77,7 +78,7 @@ test("an unreachable proxy (closed port) also exits 0 with one stderr line", asy
   const messageFile = join(repo, ".git", "COMMIT_EDITMSG");
 
   // Bind a server, read its free port, then stop it immediately so the port stays closed.
-  const probe = Bun.serve({ port: 0, fetch: () => new Response("") });
+  const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
   const closedPort = probe.port;
   probe.stop(true);
 

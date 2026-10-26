@@ -13,6 +13,7 @@ import {
   REGION,
   fixtureConnection,
   startFakeOssServer,
+  startLeakFixtureServer,
   stopFakeOssServers,
 } from "./fixtures/fake-oss";
 import {
@@ -34,11 +35,9 @@ import {
 } from "./publish";
 
 const temporaryDirectories: string[] = [];
-const servers: Array<ReturnType<typeof Bun.serve>> = [];
 
 afterEach(async () => {
   stopFakeOssServers();
-  for (const server of servers.splice(0)) server.stop(true);
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -85,26 +84,6 @@ async function fixtureTree(version: string, outputDirectory: string): Promise<Re
     photonWasm: FIXTURE_PHOTON_WASM,
   };
   return buildReleaseTree(inputs, outputDirectory);
-}
-
-/** A fake OSS origin that fails every authenticated request the same way, whatever credentials
- * signed it - used only by the credential-leak test below, which cares whether publish.ts ever
- * prints a failure response's body/headers, not whether the SDK's own V4 signing is correct
- * (that's ali-oss's and Alibaba Cloud's problem, not this script's). */
-function startLeakFixtureServer(body: string): { baseUrl: string } {
-  const server = Bun.serve({
-    port: 0,
-    fetch(request) {
-      const anonymous = request.method === "GET" && !request.headers.has("authorization");
-      if (anonymous) return new Response("origin", { status: 403 });
-      return new Response(body, {
-        status: 403,
-        headers: { "x-oss-request-id": "fake-request-id-signature" },
-      });
-    },
-  });
-  servers.push(server);
-  return { baseUrl: `http://127.0.0.1:${server.port}` };
 }
 
 function stubCompile(): CompileFn {

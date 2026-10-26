@@ -278,6 +278,7 @@ test("the OpenViking read proxy 404s when the runtime has no handler", async () 
 test("forwardOpenVikingRead posts the command to the injected URL without OV credentials", async () => {
   const seen: Array<{ url: string; headers: Headers; body: unknown }> = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       seen.push({

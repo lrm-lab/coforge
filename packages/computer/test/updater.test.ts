@@ -33,6 +33,7 @@ async function scratchDirectory(): Promise<string> {
 function feed(options: { latest?: string; redirectLatest?: boolean } = {}) {
   const requested: string[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
       const path = new URL(request.url).pathname;
@@ -48,7 +49,7 @@ function feed(options: { latest?: string; redirectLatest?: boolean } = {}) {
     },
   });
   servers.push(server);
-  return { baseUrl: `http://localhost:${server.port}/`, requested };
+  return { baseUrl: server.url.href, requested };
 }
 
 function resolve(baseUrl: string, selection: string): Promise<string> {
@@ -147,10 +148,14 @@ test("a version of '.' or one that starts with '-' is rejected", async () => {
 });
 
 test("a feed that answers 5xx is a download failure carrying the script's exit status", async () => {
-  const server = Bun.serve({ port: 0, fetch: () => new Response("down", { status: 503 }) });
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response("down", { status: 503 }),
+  });
   servers.push(server);
 
-  const failure = await resolve(`http://localhost:${server.port}/`, "latest").catch((e) => e);
+  const failure = await resolve(server.url.href, "latest").catch((e) => e);
 
   expect(failure).toBeInstanceOf(InstallationDownloadError);
   expect(failure.message).toContain("exit 75");

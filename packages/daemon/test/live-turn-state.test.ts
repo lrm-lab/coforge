@@ -94,6 +94,7 @@ for (const provider of [piProvider(), new CoforgeProvider()]) {
     const started = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       async fetch() {
         started.resolve();

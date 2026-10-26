@@ -12,6 +12,7 @@ test("BM25 preparation uploads projected raw documents and resumes without embed
   const posted: { uri: string; text: string; kind: string }[] = [];
   let extraCounts = {};
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       expect(new URL(request.url).pathname).toBe("/api/v1/search/index_lexical");
@@ -77,6 +78,7 @@ test("BM25 preparation uploads projected raw documents and resumes without embed
 test("raw import refuses a backend without BM25 provenance or a matching content hash", async () => {
   let result: unknown = { resources: [] };
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       return Response.json({ status: "ok", result });
@@ -100,6 +102,7 @@ test("raw import refuses a backend without BM25 provenance or a matching content
 test("large raw document batches respect the existing transport byte cap", async () => {
   const posted: string[][] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const { resources } = (await request.json()) as {

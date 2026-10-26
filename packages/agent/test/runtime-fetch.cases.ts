@@ -16,9 +16,9 @@ import { runtimeFetch } from "#src/runtime-provider";
  */
 
 test("session fetch uses proxy precedence and honors exact host, wildcard, and port exclusions", async () => {
-  const target = Bun.serve({ port: 0, fetch: () => new Response("direct") });
-  const upper = Bun.serve({ port: 0, fetch: () => new Response("upper") });
-  const lower = Bun.serve({ port: 0, fetch: () => new Response("lower") });
+  const target = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("direct") });
+  const upper = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("upper") });
+  const lower = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("lower") });
   const url = new URL(`http://127.0.0.1:${target.port}/probe`);
   const proxy = `http://127.0.0.1:${upper.port}`;
   const cases: Array<[Record<string, string>, string]> = [
@@ -62,7 +62,7 @@ test("session fetch trusts the Agent's NODE_EXTRA_CA_CERTS beside the daemon's, 
         fetch: () => new Response(`${name} of ${chain}`),
       });
       servers.push(server);
-      return `https://localhost:${server.port}/probe`;
+      return `${server.url.origin}/probe`;
     };
     const daemonChain = join(directory, "daemon");
     const agentChain = join(directory, "agent");
@@ -117,7 +117,7 @@ test("the daemon's own NODE_EXTRA_CA_CERTS never fails a launch, as Bun only war
 });
 
 /**
- * Throwaway certificates for `localhost` in `directory`: root -> intermediate -> `leaf`, the
+ * Throwaway certificates for `localhost` and `127.0.0.1` in `directory`: root -> intermediate -> `leaf`, the
  * root + intermediate bundle, and a self-signed `unrelated` leaf outside that chain.
  */
 async function writeCertificates(directory: string) {
@@ -159,7 +159,10 @@ async function writeCertificates(directory: string) {
     ]);
   };
   const authority = ["basicConstraints=critical,CA:TRUE", "keyUsage=critical,keyCertSign,cRLSign"];
-  const server = ["basicConstraints=critical,CA:FALSE", "subjectAltName=DNS:localhost"];
+  const server = [
+    "basicConstraints=critical,CA:FALSE",
+    "subjectAltName=DNS:localhost,IP:127.0.0.1",
+  ];
   issue("root", authority);
   issue("intermediate", authority, "root");
   issue("leaf", server, "intermediate");

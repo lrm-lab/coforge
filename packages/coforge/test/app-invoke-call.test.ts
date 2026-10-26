@@ -81,6 +81,7 @@ type Seen = { method: string; url: URL; headers: Headers; body: string };
 let handler: (request: Request) => Response | Promise<Response> = () => new Response("{}");
 const seen: Seen[] = [];
 const server = Bun.serve({
+  hostname: "127.0.0.1",
   port: 0,
   async fetch(request) {
     seen.push({
@@ -138,7 +139,7 @@ async function call(
       env: {},
       fetchManifest: async () => ({ kind: "valid", manifest: MANIFEST }),
       fetch: (input, init) =>
-        fetch(input.replace("https://notes.acme.example", `http://localhost:${server.port}`), init),
+        fetch(input.replace("https://notes.acme.example", server.url.origin), init),
       requestTimeoutMs: extra.timeoutMs,
       readStdin: async () => extra.stdin ?? "",
       readFile: async (path) => Bun.file(path).text(),

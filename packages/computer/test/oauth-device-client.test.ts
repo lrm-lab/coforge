@@ -252,11 +252,12 @@ test("login completes against a reproducible local device-code server without qu
   const requests: Array<{ path: string; authorization: string | null }> = [];
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request): Response {
       const url = new URL(request.url);
       requests.push({ path: url.pathname, authorization: request.headers.get("authorization") });
-      const issuer = `http://localhost:${server.port}`;
+      const issuer = server.url.origin;
       if (url.pathname === "/.well-known/oauth-authorization-server") {
         return Response.json({
           issuer,
@@ -288,7 +289,7 @@ test("login completes against a reproducible local device-code server without qu
       writeLine: () => undefined,
       openVerificationPage: async () => undefined,
       sleep: async () => undefined,
-    }).run({ serverUrl: `http://localhost:${server.port}` });
+    }).run({ serverUrl: server.url.origin });
     expect(requests).toEqual([
       { path: "/.well-known/oauth-authorization-server", authorization: null },
       { path: "/oauth/device", authorization: null },

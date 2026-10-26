@@ -15,6 +15,7 @@ function route(answer: (body: Record<string, unknown>) => Response) {
     body: Record<string, unknown>;
   }[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const body = (await request.json()) as Record<string, unknown>;

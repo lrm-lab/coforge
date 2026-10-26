@@ -111,6 +111,7 @@ test("single-file installation provides management and Agent CLI without a Daemo
   const requests: string[] = [];
   const agentRequests: { path: string; body: unknown }[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const path = new URL(request.url).pathname;
@@ -271,6 +272,7 @@ test.each(["n\n", "\n", ""])("compiled upgrade cancels safely with stdin %j", (i
 test("local test build strips terminal controls from device authorization instructions", async () => {
   const requests: string[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
       const url = new URL(request.url);

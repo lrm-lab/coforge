@@ -45,6 +45,7 @@ test("Pi announces each model request before its response, including after a com
   let session: AgentSession | undefined;
   let run: Promise<void> | undefined;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       const index = request++;

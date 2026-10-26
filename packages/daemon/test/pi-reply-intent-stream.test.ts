@@ -50,6 +50,7 @@ test("embedded Pi reports the Agent's send target while the call's arguments str
     await mkdir(workspace);
     let requests = 0;
     server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       fetch() {
         requests += 1;

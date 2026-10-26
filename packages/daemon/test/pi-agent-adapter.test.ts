@@ -1,4 +1,4 @@
-import { piProvider } from "./fixtures/pi-host";
+import { piProvider, completionStream, writeOpenAiHost, piRuntime } from "./fixtures/pi-host";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,6 +39,7 @@ test("Pi resolves native provider environment auth below stored auth and Agent k
   const oldKey = Bun.env.OPENAI_API_KEY;
   const keys: Array<string | null> = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
       keys.push(request.headers.get("authorization"));
@@ -114,6 +115,7 @@ test("Pi reports a raw error event, not a classified activity, when the provider
   // 400 (a client error), not 5xx: the SDK retries transient server errors, which would
   // make this test outrun its timeout instead of exercising the failure path quickly.
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch: () => new Response(JSON.stringify({ error: { message: "boom" } }), { status: 400 }),
   });
@@ -145,45 +147,6 @@ test("Pi reports a raw error event, not a classified activity, when the provider
     await rm(root, { recursive: true, force: true });
   }
 });
-
-function completionStream(delta: Record<string, unknown>, finishReason: string | null) {
-  return new Response(
-    [
-      `data: ${JSON.stringify({ id: crypto.randomUUID(), object: "chat.completion.chunk", created: 1, model: "custom", choices: [{ index: 0, delta, finish_reason: finishReason }] })}\n\n`,
-      "data: [DONE]\n\n",
-    ].join(""),
-    { headers: { "content-type": "text/event-stream" } },
-  );
-}
-
-async function writeOpenAiHost(agentDir: string, baseUrl: string) {
-  await mkdir(join(agentDir, "extensions"), { recursive: true });
-  await Bun.write(join(agentDir, "auth.json"), JSON.stringify({ openai: "host-key" }));
-  await Bun.write(
-    join(agentDir, "models.json"),
-    JSON.stringify({
-      providers: {
-        openai: {
-          baseUrl,
-          models: [{ id: "custom", name: "Custom", api: "openai-completions" }],
-        },
-      },
-    }),
-  );
-}
-
-function piRuntime(agentDir: string) {
-  return {
-    environment: { PI_CODING_AGENT_DIR: agentDir },
-    runtime: {
-      provider: "pi" as const,
-      modelProvider: "openai",
-      model: "custom",
-      reasoning: "",
-      providerConfig: { kind: "coforge" as const, providerId: "openai", apiKey: "agent-key" },
-    },
-  };
-}
 
 test("embedded Pi preserves a terminal failure with an empty provider error message", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-empty-error-"));
@@ -250,6 +213,7 @@ test("embedded Pi reports extension cancellation as interrupted and can run agai
     await Bun.write(join(workspace, "fixture.txt"), "fixture");
     let requests = 0;
     server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       fetch() {
         requests += 1;
@@ -314,6 +278,7 @@ test("embedded Pi reports progress for content-free turn/message lifecycle frame
   const agentDir = join(root, "host-pi-agent");
   await mkdir(workspace);
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch: () => completionStream({ role: "assistant", content: "done" }, "stop"),
   });
@@ -374,6 +339,7 @@ test("embedded Pi uses host models and resources while an Agent key overrides ho
   await mkdir(workspace);
   const requests: Array<{ authorization: string | null; body: string }> = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       requests.push({
@@ -475,6 +441,7 @@ test("concurrent embedded Pi sessions keep distinct in-memory Agent keys", async
   await mkdir(agentDir, { recursive: true });
   const keys: string[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       keys.push(request.headers.get("authorization") ?? "");
@@ -540,6 +507,7 @@ test("embedded Pi default bash preserves host prefix and composes runtime and ho
   process.env.COFORGE_UNDECLARED_DAEMON_SENTINEL = "must-not-leak";
   let requestCount = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch() {
       requestCount += 1;
@@ -621,6 +589,7 @@ test("embedded Pi keeps a host extension bash override instead of installing def
   let requestCount = 0;
   const requests: string[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       requests.push(await request.text());
@@ -671,6 +640,7 @@ test("embedded Pi launches despite a duplicate host skill warning", async () => 
   const agentDir = join(root, "host-pi-agent");
   await mkdir(workspace);
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch: () => completionStream({ role: "assistant", content: "launched" }, "stop"),
   });
@@ -705,6 +675,7 @@ for (const phase of ["tool", "preflight"] as const) {
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const barrier = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       async fetch(request) {
         const path = new URL(request.url).pathname;
@@ -722,6 +693,7 @@ for (const phase of ["tool", "preflight"] as const) {
     });
     const requests: string[] = [];
     const completion = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       async fetch(request) {
         requests.push(await request.text());
@@ -790,6 +762,7 @@ test("built-in notifications are accepted before completion and steer the existi
   const release = Promise.withResolvers<void>();
   const requests: string[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       requests.push(await request.text());
@@ -876,6 +849,7 @@ test("embedded Pi notifications are accepted before completion and steer the exi
   const release = Promise.withResolvers<void>();
   const requests: string[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       requests.push(await request.text());
@@ -959,6 +933,7 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
   await mkdir(agentDir);
   const proxyRequests: string[] = [];
   const proxy = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       proxyRequests.push(await request.text());
@@ -1001,6 +976,7 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
       },
     }));
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       modelRequests.push(await request.text());

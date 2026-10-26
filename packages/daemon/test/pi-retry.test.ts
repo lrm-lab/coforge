@@ -57,6 +57,7 @@ test("embedded Pi reports a recovered retry as completed without a terminal erro
     await mkdir(workspace);
     let requests = 0;
     server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       fetch() {
         requests += 1;

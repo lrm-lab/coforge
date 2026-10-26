@@ -103,6 +103,7 @@ function releaseInputs(overrides: Partial<ReleaseInputs> = {}): ReleaseInputs {
 function serveTree(root: string) {
   const requested: string[] = [];
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const pathname = new URL(request.url).pathname;
@@ -113,7 +114,7 @@ function serveTree(root: string) {
     },
   });
   servers.push(server);
-  return { baseUrl: `http://localhost:${server.port}`, requested };
+  return { baseUrl: server.url.origin, requested };
 }
 
 /** Flips one hex character to a *different* valid hex character, so the mutated value still

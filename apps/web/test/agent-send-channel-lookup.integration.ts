@@ -39,7 +39,11 @@ async function withChannel(
     channelName: string;
   }) => Promise<void>,
 ) {
-  const centrifugo = Bun.serve({ port: 0, fetch: () => Response.json({ result: {} }) });
+  const centrifugo = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => Response.json({ result: {} }),
+  });
   const env = {
     url: process.env.COFORGE_CENTRIFUGO_API_URL,
     key: process.env.COFORGE_CENTRIFUGO_API_KEY,

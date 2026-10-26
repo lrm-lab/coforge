@@ -15,6 +15,7 @@ test("deployment readiness requires a successful WebSocket handshake, rejecting 
   ).run;
   for (const status of [404, 502, 101]) {
     const server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       fetch(request, server) {
         if (status === 101 && server.upgrade(request)) return;

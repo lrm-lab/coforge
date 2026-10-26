@@ -25,6 +25,7 @@ export function claudeEventFeed() {
   const responses: Response[] = [];
   let waiting: ((response: Response) => void) | undefined;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch: () =>
       responses.shift() ??
@@ -193,4 +194,17 @@ export async function waitForEvent(
     await Bun.sleep(5);
   }
   throw new Error(`timed out waiting for ${type}`);
+}
+
+/** Holds native initialization at the request boundary until the test releases it. */
+export function startClaudeInitGate(onRequested: () => void, release: Promise<void>) {
+  return Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch() {
+      onRequested();
+      await release;
+      return new Response("ready");
+    },
+  });
 }

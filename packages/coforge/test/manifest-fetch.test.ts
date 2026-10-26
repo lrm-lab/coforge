@@ -17,6 +17,7 @@ const json = (body: unknown, init: ResponseInit = {}) =>
 
 beforeAll(() => {
   server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch: (request) =>
       handlers.get(new URL(request.url).pathname)?.() ?? new Response("", { status: 404 }),

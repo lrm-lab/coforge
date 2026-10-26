@@ -126,6 +126,7 @@ test.skipIf(!connectionString)(
   async () => {
     const published: unknown[] = [];
     const centrifugo = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       async fetch(request) {
         published.push(await request.json());

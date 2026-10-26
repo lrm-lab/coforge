@@ -22,6 +22,7 @@ import {
   CREDENTIALS,
   fixtureConnection,
   startFakeOssServer,
+  startLeakFixtureServer,
   stopFakeOssServers,
   type FakeOss,
 } from "./fixtures/fake-oss";
@@ -624,19 +625,12 @@ test("an invalid version is refused before any credential is resolved or client 
 test("a failed installer publication never prints the access key or its secret", async () => {
   const directory = await tempDir();
   const cargo = await cargoToml(directory, VERSION);
-  const server = Bun.serve({
-    port: 0,
-    fetch: (request) =>
-      request.method === "GET" && !request.headers.has("authorization")
-        ? new Response("origin", { status: 403 })
-        : new Response(
-            `<Error><Code>SignatureDoesNotMatch</Code><AccessKeyId>${CREDENTIALS.accessKeyId}</AccessKeyId><StringToSign>s</StringToSign><Message>${CREDENTIALS.accessKeySecret}</Message></Error>`,
-            { status: 403 },
-          ),
-  });
+  const server = startLeakFixtureServer(
+    `<Error><Code>SignatureDoesNotMatch</Code><AccessKeyId>${CREDENTIALS.accessKeyId}</AccessKeyId><StringToSign>s</StringToSign><Message>${CREDENTIALS.accessKeySecret}</Message></Error>`,
+  );
   try {
     const result = await cli(["plan", "--cargo-toml", cargo, ...bucketFlags], {
-      baseUrl: `http://127.0.0.1:${server.port}`,
+      baseUrl: server.baseUrl,
     } as FakeOss);
     const combined = [...result.stdout, ...result.stderr].join("\n");
     expect(result.exitCode).toBe(1);
@@ -644,6 +638,6 @@ test("a failed installer publication never prints the access key or its secret",
     expect(combined).not.toContain(CREDENTIALS.accessKeySecret);
     expect(combined).not.toContain("StringToSign");
   } finally {
-    server.stop(true);
+    server.stop();
   }
 });

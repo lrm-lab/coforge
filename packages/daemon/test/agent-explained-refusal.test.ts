@@ -85,7 +85,11 @@ test("an unauthorized answer is not a refusal the Agent can act on", async () =>
 });
 
 test("an action card the server refuses carries the same code and reason", async () => {
-  const server = Bun.serve({ port: 0, fetch: () => Response.json(departed, { status: 403 }) });
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => Response.json(departed, { status: 403 }),
+  });
   try {
     const error = await defaultAgentActionPrepareHttpClient
       .execute({

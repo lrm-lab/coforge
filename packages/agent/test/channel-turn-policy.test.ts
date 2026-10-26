@@ -64,6 +64,7 @@ test("empty channel polling settles the native turn and a later input resumes it
   const root = await mkdtemp(join(tmpdir(), "coforge-channel-idle-"));
   let requests = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       requests++;
@@ -112,6 +113,7 @@ test("a published Memory Offer settles without an extra model request", async ()
     excerpt: "Source evidence.",
   };
   const proxy = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const body = (await request.json()) as { op: string; operationId: string };
@@ -133,6 +135,7 @@ test("a published Memory Offer settles without an extra model request", async ()
   });
   let requests = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       requests++;
@@ -194,6 +197,7 @@ test("a notice queued while an empty poll is running is not discarded", async ()
   const releaseSecond = Promise.withResolvers<void>();
   let requests = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch() {
       requests++;
@@ -247,6 +251,7 @@ test("useful work between empty checks resets idle detection", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-idle-progress-"));
   let requests = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       requests++;
@@ -291,6 +296,7 @@ test("a published autonomous diagnosis settles the native turn without another m
   const root = await mkdtemp(join(tmpdir(), "coforge-diagnosis-settled-"));
   let requests = 0;
   const proxy = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const command = (await request.json()) as { operationId: string; messageId: string };
@@ -306,6 +312,7 @@ test("a published autonomous diagnosis settles the native turn without another m
     },
   });
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       requests++;
@@ -352,6 +359,7 @@ test("QA send settlement ends a receipted channel send and later inbox input res
   const root = await mkdtemp(join(tmpdir(), "coforge-channel-sent-"));
   let requests = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch() {
       requests++;
@@ -434,6 +442,7 @@ test.each([
     const root = await mkdtemp(join(tmpdir(), "coforge-send-receipt-"));
     let requests = 0;
     const server = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       fetch() {
         requests++;
@@ -480,6 +489,7 @@ test("a notice queued during a receipted send survives turn settlement", async (
   const release = Promise.withResolvers<void>();
   let requests = 0;
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch() {
       requests++;

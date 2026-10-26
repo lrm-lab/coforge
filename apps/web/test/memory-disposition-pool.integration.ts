@@ -128,6 +128,7 @@ test("a disposition authorizes and commits with one PostgreSQL connection", asyn
     });
     let checkedIdentity = false;
     const backend = Bun.serve({
+      hostname: "127.0.0.1",
       port: 0,
       fetch(request) {
         checkedIdentity =

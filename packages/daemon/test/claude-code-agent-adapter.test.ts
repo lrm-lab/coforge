@@ -18,6 +18,7 @@ import {
 import {
   backgroundBash,
   claudeFixtureProvider,
+  startClaudeInitGate,
   controlledClaude,
   TEST_AGENT_INSTRUCTIONS,
   waitForEvent,
@@ -333,14 +334,7 @@ test("Claude Code retains concurrent notices while initial session metadata is p
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-starting-"));
   const arrived = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const gate = Bun.serve({
-    port: 0,
-    async fetch() {
-      arrived.resolve();
-      await release.promise;
-      return new Response("ready");
-    },
-  });
+  const gate = startClaudeInitGate(() => arrived.resolve(), release.promise);
   const session = await claudeFixtureProvider().createAgentSession({
     agentWorkspaceDirectory,
     instructions: TEST_AGENT_INSTRUCTIONS,
@@ -698,14 +692,7 @@ test(
     let session: AgentSession | undefined;
 
     try {
-      gate = Bun.serve({
-        port: 0,
-        async fetch() {
-          initRequested.resolve();
-          await releaseInit.promise;
-          return new Response("ready");
-        },
-      });
+      gate = startClaudeInitGate(() => initRequested.resolve(), releaseInit.promise);
       session = await adapter.createAgentSession({
         agentWorkspaceDirectory,
         instructions: TEST_AGENT_INSTRUCTIONS,
