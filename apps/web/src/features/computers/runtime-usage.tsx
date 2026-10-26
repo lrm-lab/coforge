@@ -281,24 +281,28 @@ export function RuntimeUsagePopoverContent({
             {auth && (
               <p className="text-xs text-tertiary">{m.computer_runtime_account_visibility()}</p>
             )}
-          </div>
-          {showUsage &&
-            !signedOut && (
-              // `isLoading` (React Aria's `isPending`) keeps focus on the button mid-press, where
-              // `isDisabled` would drop it (task #109). The tooltip repeats its name.
-              <Tooltip title={refreshLabel}>
-                <Button
-                  size="xs"
-                  color="tertiary"
-                  iconLeading={RefreshCw}
-                  aria-label={refreshLabel}
-                  isLoading={scanning}
-                  isDisabled={computerOnline === false}
-                  className="-mt-1 shrink-0"
-                  onPress={onRefresh}
-                />
-              </Tooltip>
+            {signedOut && showUsage && (scanFailed || data?.result?.status === "error") && (
+              <p role="alert" className="text-sm text-tertiary">
+                {m.computer_usage_read_failed_retry()}
+              </p>
             )}
+          </div>
+          {showUsage && (
+            // `isLoading` (React Aria's `isPending`) keeps focus on the button mid-press, where
+            // `isDisabled` would drop it (task #109). The tooltip repeats its name.
+            <Tooltip title={refreshLabel}>
+              <Button
+                size="xs"
+                color="tertiary"
+                iconLeading={RefreshCw}
+                aria-label={refreshLabel}
+                isLoading={scanning}
+                isDisabled={computerOnline === false}
+                className="-mt-1 shrink-0"
+                onPress={onRefresh}
+              />
+            </Tooltip>
+          )}
           {onClose && (
             <ButtonUtility
               icon={XClose}

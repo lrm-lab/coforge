@@ -10,7 +10,9 @@ These rules apply to `src/features/computers/`.
   not whether they launch an external CLI. Pi, CoForge, Cursor, and OpenCode
   carry no status dot; for the Computer's owner every chip still opens its
   popover for the Public switch. A supported reader's account-specific
-  `unsupported` result remains visible in its popover.
+  `unsupported` result remains visible in its popover. Refresh waits for the daemon to re-read
+  and report native login status as well as usage, then invalidates route data so the new
+  Computer authentication snapshot reaches its popover; Agent Profile shares the usage refresh.
 - A runtime's popover opens on a press, with a close button and Escape, as on
   Raft, on the Computer page and the Agent profile alike (`runtime-usage.tsx`).
   A quota reads as the share left.

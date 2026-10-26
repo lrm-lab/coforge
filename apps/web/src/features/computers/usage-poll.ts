@@ -10,8 +10,10 @@ export async function waitForUsageScanResult<T extends { result?: { scanId: stri
   sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
     new Promise((resolve) => setTimeout(resolve, milliseconds)),
 ): Promise<T> {
+  // A scan also waits for bounded auth collection (20s, plus one coalesced collection).
+  // Match the server's 60s pending-scan lifetime instead of the old 15s usage-only budget.
   let current = await read();
-  for (let attempt = 0; attempt < 150 && current.result?.scanId !== scanId; attempt += 1) {
+  for (let attempt = 0; attempt < 600 && current.result?.scanId !== scanId; attempt += 1) {
     await sleep(100);
     current = await read();
   }

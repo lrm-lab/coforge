@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
@@ -22,6 +23,7 @@ export function useRuntimeUsage(
 ) {
   const { enabled, computerOnline } = options;
   const queryClient = useQueryClient();
+  const router = useRouter();
   const queryKey = runtimeUsageQueryKey(computerId, provider);
   const query = useQuery({
     queryKey,
@@ -31,8 +33,9 @@ export function useRuntimeUsage(
   });
   const scan = useMutation({
     mutationFn: () => scanRuntimeUsage(computerId, provider),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       queryClient.setQueryData(queryKey, result);
+      await router.invalidate({ sync: true });
     },
   });
 

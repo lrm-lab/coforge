@@ -5,6 +5,11 @@ Computer's runtime popover. Authentication runs on that Computer. The browser re
 private progress and the masked account; the native runtime keeps its credentials locally.
 Claude Code and Codex use their existing native browser/code flows.
 
+The runtime popover’s **Refresh** re-reads both usage and native login status. A runtime can be
+signed in even when its account does not support reading usage. The previous result stays visible
+until the Computer replies; the browser then reloads the Computer’s login report. If the fresh
+login report cannot be recorded, Refresh reports an error instead of claiming success.
+
 ## Kiro enterprise accounts
 
 This enterprise flow currently supports macOS and Linux. Windows does not advertise the

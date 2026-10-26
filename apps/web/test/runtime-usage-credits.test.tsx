@@ -192,7 +192,7 @@ test("a chip names its usage dot with the popover badge's own word", () => {
   expect(chip).toContain(`aria-label="${m.computer_usage_limit_reached()}"`);
 });
 
-test("a signed-out runtime shows no account or usage, and the caller's actions come last", () => {
+test("a signed-out runtime keeps Refresh, shows no account or usage, and the caller's actions come last", () => {
   const html = renderToStaticMarkup(
     <RuntimeUsagePopoverContent
       runtime={{
@@ -223,7 +223,7 @@ test("a signed-out runtime shows no account or usage, and the caller's actions c
   expect(account).toBeGreaterThan(footer);
   expect(html).not.toContain(">Not signed in<");
   expect(html).toContain('aria-label="Close"');
-  expect(html).not.toContain('aria-label="Refresh"');
+  expect(html).toContain('aria-label="Refresh"');
   expect(html).not.toContain(m.computer_usage_reading());
 });
 

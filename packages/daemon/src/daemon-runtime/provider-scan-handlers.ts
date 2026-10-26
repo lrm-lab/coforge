@@ -12,7 +12,7 @@ export type ProviderScans = {
   /** The runtime's live transport, read when an answer is sent. */
   currentTransport: () => DaemonConnectionClient;
   isStopping: () => boolean;
-  /** Watches answered usage scans for `reauth`. */
+  /** Re-reads authentication before the answered scan reaches the browser. */
   runtimeAuth: Pick<RuntimeAuthReporter, "usageScanned">;
   inventory: Pick<CodeAgentInventorySync, "refreshModels">;
 };
@@ -29,8 +29,18 @@ export function subscribeProviderScans(
   return [
     transport.onUsageScan?.(async (request) => {
       if (request.computerId !== connection.computerId) return;
-      const result = await runtime.scanUsage(request.provider);
-      scans.runtimeAuth.usageScanned(request.provider, result.status);
+      let result = await runtime.scanUsage(request.provider);
+      try {
+        await scans.runtimeAuth.usageScanned(request.provider, result.status);
+      } catch {
+        result = {
+          protocolMajor: result.protocolMajor,
+          requestId: result.requestId,
+          accepted: false,
+          status: "error",
+          message: "Runtime login status could not be refreshed",
+        };
+      }
       await scans.currentTransport().sendUsageScanResult?.({
         ...result,
         requestId: request.requestId,

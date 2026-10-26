@@ -44,8 +44,6 @@ function subject() {
   };
 }
 
-const settle = () => Bun.sleep(0);
-
 describe("the Workspace runtime's login status reporter", () => {
   test("reports the inventory's providers once the inventory is known", async () => {
     const { reporter, sent, reads } = subject();
@@ -110,19 +108,19 @@ describe("the Workspace runtime's login status reporter", () => {
     expect(sent).toHaveLength(1);
   });
 
-  test("only a reauth scan of a login-capable provider refreshes", async () => {
+  test("every answered scan of a login-capable provider waits for a new authentication report", async () => {
     const { reporter, sent } = subject();
-    await reporter.inventoryReported([runtime("codex")] as RuntimeMetadata[]);
+    await reporter.inventoryReported([runtime("kiro")] as RuntimeMetadata[]);
 
-    reporter.usageScanned("codex", "available");
-    reporter.usageScanned("pi", "reauth");
-    reporter.usageScanned("codex", "error");
-    await settle();
-    expect(sent).toHaveLength(1);
+    for (const status of ["available", "unknown", "unsupported", "error", "reauth"] as const) {
+      const count = sent.length;
+      await reporter.usageScanned("kiro", status);
+      expect(sent).toHaveLength(count + 1);
+      expect(sent.at(-1)!.runtimes).toContainEqual({ provider: "kiro", state: "logged_out" });
+    }
 
-    reporter.usageScanned("codex", "reauth");
-    await settle();
-    expect(sent).toHaveLength(2);
+    await reporter.usageScanned("pi", "reauth");
+    expect(sent).toHaveLength(6);
   });
 
   test("a stopping runtime sends nothing", async () => {
@@ -147,4 +145,11 @@ describe("the Workspace runtime's login status reporter", () => {
       reporter.inventoryReported([runtime("codex")] as RuntimeMetadata[]),
     ).resolves.toBeUndefined();
   });
+});
+
+test("a usage refresh refuses to claim completion when the auth report was rejected", async () => {
+  const { reporter, fail } = subject();
+  await reporter.inventoryReported([runtime("kiro")] as RuntimeMetadata[]);
+  fail(new Error("503 auth storage unavailable"));
+  await expect(reporter.usageScanned("kiro", "available")).rejects.toThrow();
 });

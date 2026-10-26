@@ -26,7 +26,7 @@ type Ports = {
 /**
  * Reports this Workspace runtime's login status to the cloud. It never polls: its owner calls it
  * when an inventory is reported or re-discovered, after a login or logout, and when a usage scan
- * found the login gone. Every call is fire-and-forget for the caller; a failed report is logged at info.
+ * answered. Callers may await collection and reporting; a failed report is logged at info.
  */
 export class RuntimeAuthReporter {
   readonly #collector: RuntimeAuthStatusCollector;
@@ -40,8 +40,10 @@ export class RuntimeAuthReporter {
       readStatus: (provider) =>
         createAdapter(provider).readStatus({ workingDirectory: ports.workingDirectory }),
       report: async ({ collectedAtMs, runtimes }) => {
-        if (ports.isStopping()) return;
-        await ports.transport().reportRuntimeAuthStatus?.({
+        const transport = ports.transport();
+        if (ports.isStopping() || !transport.reportRuntimeAuthStatus)
+          throw new Error("Runtime login status reporting unavailable");
+        await transport.reportRuntimeAuthStatus({
           protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
           requestId: crypto.randomUUID(),
           ...ports.owner,
@@ -69,9 +71,11 @@ export class RuntimeAuthReporter {
     return this.refresh();
   }
 
-  /** A usage scan answered; `reauth` for a login-capable provider means its login is gone. */
-  usageScanned(provider: string, status: UsageScanResponse["status"]): void {
-    if (status === "reauth" && isRuntimeAuthProvider(provider)) void this.refresh();
+  /** Every scan re-reads authentication independently of usage support or its result. */
+  usageScanned(provider: string, _status: UsageScanResponse["status"]): Promise<void> {
+    if (!isRuntimeAuthProvider(provider)) return Promise.resolve();
+    if (!this.#installed) return Promise.reject(new Error("Runtime inventory unavailable"));
+    return this.#collector.refresh({ requireReport: true });
   }
 }
 

@@ -43,7 +43,7 @@ test("the previous result stays readable the whole time a new scan is pending", 
   expect(seen).toEqual(["old-scan", "new-scan"]);
 });
 
-test("gives up after the 15s timeout when the scan never produces its own result", async () => {
+test("gives up after the 60s timeout when the scan never produces its own result", async () => {
   let count = 0;
   await expect(
     waitForUsageScanResult(
@@ -55,6 +55,16 @@ test("gives up after the 15s timeout when the scan never produces its own result
       async () => undefined,
     ),
   ).rejects.toThrow("usage scan timed out");
-  // One initial read plus 150 retries at the 100ms poll interval covers 15s.
-  expect(count).toBe(151);
+  // One initial read plus 600 retries at the 100ms poll interval covers 60s.
+  expect(count).toBe(601);
+});
+
+test("a scan may still be checking authentication after the former 15s usage-only deadline", async () => {
+  let count = 0;
+  const result = await waitForUsageScanResult(
+    "new-scan",
+    async () => (++count > 200 ? { result: { scanId: "new-scan" } } : {}),
+    async () => undefined,
+  );
+  expect(result).toEqual({ result: { scanId: "new-scan" } });
 });
