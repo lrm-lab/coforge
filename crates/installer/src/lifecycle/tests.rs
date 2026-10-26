@@ -17,6 +17,15 @@ fn golden(name: &str) -> String {
     .unwrap()
 }
 
+/// Runs the calling test again in a process of its own, and returns `false` in the test process.
+/// A test that writes a script and then executes it cannot share a process with tests that spawn
+/// children: a child forked while the script is still open for writing holds that descriptor until
+/// it execs, and executing the script meanwhile fails with ETXTBSY ("Text file busy").
+#[cfg(unix)]
+fn isolated(test: &str) -> bool {
+    crate::test_support::in_child(&format!("lifecycle::tests::{test}"), ":")
+}
+
 /// A stand-in `coforge-computer` that answers `__lifecycle <command>` with `stdout` and `code`.
 #[cfg(unix)]
 fn computer(scratch: &Scratch, command: &str, stdout: &str, code: i32) -> PathBuf {
@@ -37,6 +46,9 @@ fn computer(scratch: &Scratch, command: &str, stdout: &str, code: i32) -> PathBu
 #[cfg(unix)]
 #[test]
 fn the_status_of_a_running_computer_is_read() {
+    if !isolated("the_status_of_a_running_computer_is_read") {
+        return;
+    }
     let scratch = Scratch::new("lifecycle-status");
     let computer = computer(
         &scratch,
@@ -55,6 +67,9 @@ fn the_status_of_a_running_computer_is_read() {
 #[cfg(unix)]
 #[test]
 fn the_protocol_names_the_version_of_the_executable() {
+    if !isolated("the_protocol_names_the_version_of_the_executable") {
+        return;
+    }
     let scratch = Scratch::new("lifecycle-protocol");
     let computer = computer(&scratch, "protocol", &golden("lifecycle.protocol.json"), 0);
     let protocol = Lifecycle::new(&SystemRunner).protocol(&computer).unwrap();
@@ -64,6 +79,9 @@ fn the_protocol_names_the_version_of_the_executable() {
 #[cfg(unix)]
 #[test]
 fn a_failed_call_carries_the_computers_own_message() {
+    if !isolated("a_failed_call_carries_the_computers_own_message") {
+        return;
+    }
     let scratch = Scratch::new("lifecycle-failed");
     let computer = computer(&scratch, "status", &golden("lifecycle.error.json"), 1);
     let error = Lifecycle::new(&SystemRunner).status(&computer).unwrap_err();
@@ -75,6 +93,9 @@ fn a_failed_call_carries_the_computers_own_message() {
 #[cfg(unix)]
 #[test]
 fn another_lifecycle_protocol_is_refused() {
+    if !isolated("another_lifecycle_protocol_is_refused") {
+        return;
+    }
     let scratch = Scratch::new("lifecycle-version");
     let computer = computer(
         &scratch,
@@ -94,6 +115,9 @@ fn another_lifecycle_protocol_is_refused() {
 #[cfg(unix)]
 #[test]
 fn output_that_is_not_the_contract_is_unreadable() {
+    if !isolated("output_that_is_not_the_contract_is_unreadable") {
+        return;
+    }
     let scratch = Scratch::new("lifecycle-garbage");
     let computer = computer(&scratch, "status", "Usage: coforge-computer [command]", 0);
     let error = Lifecycle::new(&SystemRunner).status(&computer).unwrap_err();
