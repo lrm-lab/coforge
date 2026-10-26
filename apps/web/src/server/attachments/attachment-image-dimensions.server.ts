@@ -6,6 +6,10 @@ export const IMAGE_HEADER_MAX_BYTES = 256 * 1024;
 export const IMAGE_HEADER_TIMEOUT_MS = 1000;
 
 export type ImageDimensions = { imageWidth: number; imageHeight: number };
+export type StoredImageDimensionsResult =
+  | { status: "known"; dimensions: ImageDimensions }
+  | { status: "unknown"; reason: "unknown_header" }
+  | { status: "failed"; reason: "object_missing" | "storage_error" | "timeout" };
 
 /** Metadata only: never decode pixels or turn an unrecognized upload into an image. */
 export function imageDimensions(bytes: Uint8Array, contentType: string): ImageDimensions | null {
@@ -127,6 +131,46 @@ export async function readStoredImageDimensions(
     return bytes ? imageDimensions(bytes, input.contentType) : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Maintenance callers need bounded, non-sensitive failure categories while upload callers keep
+ * the original null-only optional metadata contract. */
+export async function readStoredImageDimensionsResult(
+  storage: Pick<FileStorage, "readPrefix">,
+  input: { objectKey: string; contentType: string; sizeBytes: number },
+  options: { timeoutMs?: number } = {},
+): Promise<StoredImageDimensionsResult> {
+  if (!isInlineImage(input.contentType) || !storage.readPrefix || input.sizeBytes <= 0)
+    return { status: "failed", reason: "object_missing" };
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  try {
+    const expired = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        resolve(null);
+      }, options.timeoutMs ?? IMAGE_HEADER_TIMEOUT_MS);
+    });
+    const bytes = await Promise.race([
+      storage.readPrefix(input.objectKey, {
+        maxBytes: Math.min(input.sizeBytes, IMAGE_HEADER_MAX_BYTES),
+        signal: controller.signal,
+      }),
+      expired,
+    ]);
+    if (timedOut) return { status: "failed", reason: "timeout" };
+    if (!bytes) return { status: "failed", reason: "object_missing" };
+    const dimensions = imageDimensions(bytes, input.contentType);
+    return dimensions
+      ? { status: "known", dimensions }
+      : { status: "unknown", reason: "unknown_header" };
+  } catch {
+    return { status: "failed", reason: timedOut ? "timeout" : "storage_error" };
   } finally {
     clearTimeout(timer);
   }
