@@ -338,3 +338,59 @@ describe("a direct message's reply intents on the viewer's own channel", () => {
     expect(entries()).toEqual([]);
   });
 });
+
+describe("conversation-scoped reply intent state", () => {
+  test("an end on another conversation cannot clear an active call", () => {
+    const { intents, entries } = subject();
+    intents.apply(start("atlas", "c1"), "conversation-1");
+    intents.apply(end("atlas", "c1"), "conversation-2");
+    expect(entries()).toHaveLength(1);
+    intents.apply(end("atlas", "c1"), "conversation-1");
+    expect(entries()).toEqual([]);
+  });
+  test("a channel cannot inject another conversation's start", () => {
+    const { intents, entries } = subject();
+    intents.apply(start("atlas", "c1"), "conversation-2");
+    expect(entries()).toEqual([]);
+  });
+  test("an early end tombstones only its own conversation", () => {
+    const { intents, entries } = subject();
+    intents.apply(end("atlas", "c1"), "conversation-2");
+    intents.apply(start("atlas", "c1"), "conversation-1");
+    expect(entries()).toHaveLength(1);
+    intents.apply(end("atlas", "c1"), "conversation-1");
+    intents.apply(start("atlas", "c1"), "conversation-1");
+    expect(entries()).toEqual([]);
+  });
+  test("a foreign scoped call cannot extend another conversation's deadline", () => {
+    const { intents, entries, advance } = subject();
+    intents.apply(start("atlas", "c1"), "conversation-1");
+    advance(10_000);
+    intents.apply(start("atlas", "c1", "conversation-2"), "conversation-2");
+    advance(10_000);
+    expect(entries()).toEqual([]);
+  });
+  test("only the last conversation view release clears its entries, leaving other scopes live", () => {
+    const { intents, entries } = subject();
+    const releaseFirst = intents.retainConversation("conversation-1");
+    const releaseSecond = intents.retainConversation("conversation-1");
+    const releaseOther = intents.retainConversation("conversation-2");
+    try {
+      intents.apply(start("atlas", "c1"), "conversation-1");
+      intents.apply(start("ben", "c2", "conversation-2"), "conversation-2");
+      releaseFirst();
+      expect(entries()).toHaveLength(2);
+      releaseFirst();
+      expect(entries()).toHaveLength(2);
+      releaseSecond();
+      expect(entries().map((entry) => entry.conversationId)).toEqual(["conversation-2"]);
+      releaseOther();
+      expect(entries()).toEqual([]);
+    } finally {
+      releaseFirst();
+      releaseSecond();
+      releaseOther();
+      intents.clear();
+    }
+  });
+});

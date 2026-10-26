@@ -11,7 +11,8 @@ import { AgentMascotView } from "./agent-mascot-view";
 import { replyingAgentIds } from "./reply-intents";
 import { useReplyIntentStore } from "./reply-intents-context";
 import { MAX_REPLYING_FACES, replyingAgentsAmong, replyingNames } from "./replying-agents-summary";
-import { useLiveAgents } from "./workspace-agents-realtime";
+import { useConversationReplyIntents } from "./reply-intents-realtime";
+import { useCurrentWorkspaceId, useLiveAgents } from "./workspace-agents-realtime";
 import "./replying-agents-line.css";
 
 /** Agent ids never contain a comma, so a place's Agents travel as one comparable string. */
@@ -34,6 +35,7 @@ export function ReplyingAgentsLine({
   threadRootId: string | null;
   className?: string;
 }) {
+  useConversationReplyIntents(useCurrentWorkspaceId(), conversationId);
   const replyingIds = useReplyingAgentIds(conversationId, threadRootId);
   // The pill eases out naming the Agents it last named and unmounts when that animation ends;
   // with reduced motion there is none, so it goes at once.

@@ -3,10 +3,11 @@ import { useServerFn } from "@tanstack/react-start";
 
 import {
   useBrowserRealtime,
-  type BrowserRealtimeSubscription,
+  subscribeToSharedRealtime,
+  type SharedRealtimeClient,
 } from "#src/features/realtime/browser-realtime";
 import { getConversationRealtimeToken } from "#src/features/realtime/realtime.functions";
-import { subscriptionGap, type SubscribedRecovery } from "#src/features/realtime/subscription-gap";
+import { subscriptionGap } from "#src/features/realtime/subscription-gap";
 import {
   conversationRealtimeChannel,
   decodeChannelUpdatedEvent,
@@ -20,27 +21,8 @@ import { deviceComposerOutbox } from "./use-message-outbox";
 /** Which member lists a missed membership change may have stale-dated (see `onMemberChanged`). */
 export type MemberDirectoryStale = "page-payload" | "all";
 
-type RealtimeSubscription = {
-  on(event: "subscribed", listener: (context: SubscribedRecovery) => void): unknown;
-  on(event: "publication", listener: (context: { data: unknown }) => void): unknown;
-  subscribe(): void;
-  unsubscribe(): void;
-};
-
-type RealtimeClient<T extends RealtimeSubscription> = {
-  newSubscription(
-    channel: string,
-    options: {
-      recoverable: boolean;
-      positioned: boolean;
-      getToken: () => Promise<string>;
-    },
-  ): T;
-  removeSubscription(subscription: T): void;
-};
-
-export function subscribeToConversationRealtime<T extends RealtimeSubscription>(
-  client: RealtimeClient<T>,
+export function subscribeToConversationRealtime(
+  client: SharedRealtimeClient,
   input: {
     conversationId: string;
     getToken: () => Promise<string>;
@@ -72,58 +54,57 @@ export function subscribeToConversationRealtime<T extends RealtimeSubscription>(
   const requestReconciliation = () => {
     if (document.visibilityState === "visible") input.reconcile();
   };
-  const subscription = client.newSubscription(channel, {
+  const releaseSubscription = subscribeToSharedRealtime(client, {
+    channel,
     recoverable: true,
     positioned: true,
     getToken: input.getToken,
-  });
-  subscription.on("subscribed", (context) => {
-    // Anything the subscription could not replay — before the first subscribe, or across a
-    // resubscribe that lost publications — may include a member change as well as messages.
-    const gap = subscriptionGap(context);
-    if (gap === "none") return;
-    requestReconciliation();
-    if (gap === "lost") input.onPublicationsLost?.();
-    input.onMemberChanged?.(gap === "unrecovered" ? "page-payload" : "all");
-  });
-  subscription.on("publication", ({ data }) => {
-    try {
-      const event = decodeMessageAvailableEvent(data);
-      if (event.conversationId !== input.conversationId) return;
-      if (event.idempotencyKey) input.onSentMessage?.(event.idempotencyKey, event.messageId);
+    onSubscribed: (context) => {
+      // Anything the subscription could not replay — before the first subscribe, or across a
+      // resubscribe that lost publications — may include a member change as well as messages.
+      const gap = subscriptionGap(context);
+      if (gap === "none") return;
       requestReconciliation();
-      return;
-    } catch {}
-    const reaction = decodeMessageReactionEvent(data);
-    if (reaction) {
-      if (reaction.conversationId === input.conversationId) input.onReaction?.(reaction);
-      return;
-    }
-    // Not a message event: the other payloads this channel carries are a membership change,
-    // which stale-dates the member directory, and a change to the channel's own facts. Neither
-    // touches the message window.
-    try {
-      const event = decodeMemberChangedEvent(data);
-      if (event.conversationId === input.conversationId) input.onMemberChanged?.("all");
-      return;
-    } catch {}
-    try {
-      const event = decodeChannelUpdatedEvent(data);
-      if (event.conversationId === input.conversationId) input.onChannelUpdated?.();
-    } catch {}
+      if (gap === "lost") input.onPublicationsLost?.();
+      input.onMemberChanged?.(gap === "unrecovered" ? "page-payload" : "all");
+    },
+    onPublication: ({ data }) => {
+      try {
+        const event = decodeMessageAvailableEvent(data);
+        if (event.conversationId !== input.conversationId) return;
+        if (event.idempotencyKey) input.onSentMessage?.(event.idempotencyKey, event.messageId);
+        requestReconciliation();
+        return;
+      } catch {}
+      const reaction = decodeMessageReactionEvent(data);
+      if (reaction) {
+        if (reaction.conversationId === input.conversationId) input.onReaction?.(reaction);
+        return;
+      }
+      // Not a message event: the other payloads this channel carries are a membership change,
+      // which stale-dates the member directory, and a change to the channel's own facts. Neither
+      // touches the message window.
+      try {
+        const event = decodeMemberChangedEvent(data);
+        if (event.conversationId === input.conversationId) input.onMemberChanged?.("all");
+        return;
+      } catch {}
+      try {
+        const event = decodeChannelUpdatedEvent(data);
+        if (event.conversationId === input.conversationId) input.onChannelUpdated?.();
+      } catch {}
+    },
   });
   const onVisibilityChange = () => requestReconciliation();
   const onOnline = () => requestReconciliation();
   const safetyTimer = window.setInterval(requestReconciliation, 30_000);
   document.addEventListener("visibilitychange", onVisibilityChange);
   window.addEventListener("online", onOnline);
-  subscription.subscribe();
   return () => {
     window.clearInterval(safetyTimer);
     document.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("online", onOnline);
-    subscription.unsubscribe();
-    client.removeSubscription(subscription);
+    releaseSubscription();
   };
 }
 
@@ -150,7 +131,7 @@ export function useConversationRealtime(
 
   useEffect(() => {
     if (!client || !conversationId) return;
-    return subscribeToConversationRealtime<BrowserRealtimeSubscription>(client, {
+    return subscribeToConversationRealtime(client, {
       conversationId,
       getToken: () => getToken({ data: { conversationId } }),
       reconcile: () => void reconcileRef.current().catch(() => {}),

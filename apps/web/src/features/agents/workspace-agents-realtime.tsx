@@ -257,7 +257,6 @@ export function WorkspaceAgentsProvider({
     workspaceId,
     privateAgentIds,
     workspaceId ? (agentId) => getPrivateActivityToken({ data: { agentId } }) : undefined,
-    replyIntents,
   );
   useUserChannelReplyIntents(workspaceId, viewerId, replyIntents);
 

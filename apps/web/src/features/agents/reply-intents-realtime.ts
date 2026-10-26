@@ -1,10 +1,24 @@
+import { useCallback, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
-import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
+import {
+  conversationRealtimeChannel,
+  userConversationChannel,
+} from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getUserConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
+import {
+  getConversationRealtimeToken,
+  getUserConversationSubscriptionToken,
+} from "#src/features/realtime/realtime.functions";
 
-import { applyUserChannelPublication, type ReplyIntentStore } from "./reply-intents";
+import { useLiveAgentActivity } from "#src/features/settings/live-agent-activity";
+import { useReplyIntentStore } from "./reply-intents-context";
+
+import {
+  applyConversationChannelPublication,
+  applyUserChannelPublication,
+  type ReplyIntentStore,
+} from "./reply-intents";
 
 /**
  * The reply intents of a direct message with the viewer, which the server publishes to the
@@ -18,13 +32,53 @@ export function useUserChannelReplyIntents(
   viewerId: string | undefined,
   replyIntents: ReplyIntentStore,
 ) {
+  const [live] = useLiveAgentActivity();
+  useEffect(() => {
+    if (!live) replyIntents.clear();
+  }, [live, replyIntents]);
   const getToken = useServerFn(getUserConversationSubscriptionToken);
   useRealtimeSubscription({
-    channel: workspaceId && viewerId ? userConversationChannel(viewerId) : undefined,
+    channel: live && workspaceId && viewerId ? userConversationChannel(viewerId) : undefined,
     getToken,
     onSubscribed: () => replyIntents.clear(),
     onPublication: ({ data }) => {
-      if (workspaceId) applyUserChannelPublication(replyIntents, data, workspaceId);
+      if (live && workspaceId) applyUserChannelPublication(replyIntents, data, workspaceId);
+    },
+  });
+}
+
+/** Only mounted conversation panes read typing; their message stream shares this lease. */
+export function useConversationReplyIntents(
+  workspaceId: string | undefined,
+  conversationId: string,
+) {
+  const replyIntents = useReplyIntentStore();
+  const [live] = useLiveAgentActivity();
+  const getToken = useServerFn(getConversationRealtimeToken);
+  const getConversationToken = useCallback(
+    () => getToken({ data: { conversationId } }),
+    [getToken, conversationId],
+  );
+  useEffect(() => {
+    if (live && workspaceId && conversationId)
+      return replyIntents.retainConversation(conversationId);
+  }, [live, workspaceId, conversationId, replyIntents]);
+  useRealtimeSubscription({
+    channel:
+      live && workspaceId && conversationId
+        ? conversationRealtimeChannel(conversationId)
+        : undefined,
+    getToken: getConversationToken,
+    recoverable: true,
+    positioned: true,
+    onSubscribed: ({ wasRecovering }) => {
+      // Typing is never replayed. A reconnect may have swallowed END; wait for the next START.
+      // Joining an already-open subscription is not a gap for its existing readers.
+      if (wasRecovering) replyIntents.clearConversation(conversationId);
+    },
+    onPublication: ({ data }) => {
+      if (live && workspaceId)
+        applyConversationChannelPublication(replyIntents, data, workspaceId, conversationId);
     },
   });
 }

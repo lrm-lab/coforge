@@ -126,6 +126,7 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
   const store = createStore<readonly ReplyIntentEntry[]>([]);
   const deadlines = new Map<string, number>();
   const ended = new Map<string, number>();
+  const readers = new Map<string, number>();
   /** Messages already seen, and the places where a message beat its start, until they expire. */
   const seenPosts = new Map<string, number>();
   const earlyPosts = new Map<string, number>();
@@ -176,21 +177,65 @@ export function createReplyIntentStore(options: { now?: () => number; schedule?:
     arm();
   }
 
+  const clearConversation = (conversationId: string) => {
+    end((entry) => entry.conversationId === conversationId, { tombstone: false });
+    arm();
+  };
+
   return {
     store,
+    clearConversation,
+    /** Views share live state; closing one must not clear another view of the same conversation. */
+    retainConversation(conversationId: string) {
+      readers.set(conversationId, (readers.get(conversationId) ?? 0) + 1);
+      let retained = true;
+      return () => {
+        if (!retained) return;
+        retained = false;
+        const remaining = (readers.get(conversationId) ?? 1) - 1;
+        if (remaining) readers.set(conversationId, remaining);
+        else {
+          readers.delete(conversationId);
+          clearConversation(conversationId);
+        }
+      };
+    },
 
-    apply({ agentId, intent }: AgentReplyIntent) {
+    apply({ agentId, intent }: AgentReplyIntent, conversationId?: string) {
       const key = callKey(agentId, intent.callId);
+      const endedKey = conversationId ? `${key}\0${conversationId}` : key;
+      if (
+        conversationId &&
+        intent.phase === REPLY_INTENT_PHASE.START &&
+        intent.conversationId !== conversationId
+      )
+        return;
       if (intent.phase === REPLY_INTENT_PHASE.END) {
         // Remembered even when no start was seen: an end can beat its start.
-        ended.set(key, now() + REPLY_INTENT_TOMBSTONE_MS);
-        end((entry) => entry.agentId === agentId && entry.callId === intent.callId, {
-          tombstone: true,
-        });
+        ended.set(endedKey, now() + REPLY_INTENT_TOMBSTONE_MS);
+        end(
+          (entry) =>
+            entry.agentId === agentId &&
+            entry.callId === intent.callId &&
+            (conversationId === undefined || entry.conversationId === conversationId),
+          {
+            tombstone: conversationId === undefined,
+          },
+        );
         arm();
         return;
       }
-      if (ended.has(key) || !intent.conversationId) return;
+      if (ended.has(key) || ended.has(endedKey) || !intent.conversationId) return;
+      if (
+        conversationId &&
+        store.state.some(
+          (entry) =>
+            entry.agentId === agentId &&
+            entry.callId === intent.callId &&
+            entry.conversationId !== conversationId,
+        )
+      )
+        return;
       const isNew = !deadlines.has(key);
       const place = placeKey(agentId, intent.conversationId, intent.threadRootId ?? null);
       if (isNew && earlyPosts.has(place)) {
@@ -272,4 +317,19 @@ export function applyUserChannelPublication(
       ? replyIntentInScope(frame.replyIntent, { workspaceId })
       : undefined;
   if (replyIntent) replyIntents.apply(replyIntent);
+}
+
+/** A chat channel supplies the scope missing from a stripped end; other publications are inert. */
+export function applyConversationChannelPublication(
+  replyIntents: ReplyIntentStore,
+  data: unknown,
+  workspaceId: string,
+  conversationId: string,
+) {
+  const frame = decodeActivityFrame(data);
+  const intent =
+    frame && "replyIntent" in frame
+      ? replyIntentInScope(frame.replyIntent, { workspaceId })
+      : undefined;
+  if (intent) replyIntents.apply(intent, conversationId);
 }

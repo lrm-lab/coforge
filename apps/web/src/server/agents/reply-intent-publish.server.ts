@@ -4,12 +4,14 @@ import {
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 
-import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
+import {
+  conversationRealtimeChannel,
+  userConversationChannel,
+} from "#src/features/conversations/conversation-realtime";
 import {
   agentInPublicationScope,
   publicationDenied,
   publicationRerouted,
-  relayActivityFrame,
   type ActivityRelayDependencies,
 } from "./agent-activity-relay.server";
 
@@ -36,20 +38,10 @@ export type ReplyIntentPublicationDependencies = ActivityRelayDependencies & {
 };
 
 /**
- * One daemon "about to post" frame (`AgentActivity.reply_intent`), validated against the trusted
- * connection scope exactly like Activity. Where it goes depends on its target, which an end
- * repeats from its start:
- *
- * - a channel's frame is relayed on the channel the Agent's Activity uses: the shared one for a
- *   public Agent, its own for any other;
- * - a direct message's frame never touches an Activity channel, which would show the
- *   conversation's existence and timing to the Workspace: it is published to the one person's
- *   own channel (`chat:user:<id>`), and the daemon's publication is dropped.
- *
- * A start leaves with the conversation and thread its target resolves to; an end leaves as the
- * phase and call id alone. Nothing the daemon sent is relayed as it came, nothing is stored and
- * the Agent's display does not change. A frame the server cannot resolve is denied, which
- * Centrifugo answers by dropping that one publication.
+ * A transient send intent, checked against the trusted daemon scope, then published once to its
+ * resolved conversation (or a DM viewer's own channel). Both phases resolve the same target;
+ * repeats reuse its cache. An end carries only call/phase to the browser, whose subscription
+ * supplies the conversation scope. No intent reaches Activity, history, storage or display.
  */
 export async function handleReplyIntentPublication(
   frame: AgentReplyIntent,
@@ -64,40 +56,49 @@ export async function handleReplyIntentPublication(
   )
     return publicationDenied();
   const visibility = await dependencies.agentVisibility(workspaceId, agentId);
+  if (visibility === undefined) return publicationDenied();
+  const unresolvedTarget = () => {
+    if (intent.phase === REPLY_INTENT_PHASE.END)
+      console.debug(
+        JSON.stringify({
+          event: "reply_intent:end_unresolved",
+          workspace_id: workspaceId,
+          agent_id: agentId,
+          call_id: intent.callId,
+        }),
+      );
+    return publicationDenied();
+  };
   const { target } = intent;
-  if (visibility === undefined || !target) return publicationDenied();
-
+  if (!target) return unresolvedTarget();
   const direct = !target.startsWith("#");
   const isStart = intent.phase === REPLY_INTENT_PHASE.START;
-  // A channel's end goes where the Agent's Activity goes and needs nothing resolved.
-  const resolved =
-    isStart || direct
-      ? await dependencies.resolveReplyTarget?.({
-          workspaceId,
-          agentId,
-          callId: intent.callId,
-          target,
-        })
-      : undefined;
-  if ((isStart || direct) && !resolved) return publicationDenied();
+  const resolved = await dependencies
+    .resolveReplyTarget?.({
+      workspaceId,
+      agentId,
+      callId: intent.callId,
+      target,
+    })
+    .catch(() => undefined);
+  if (!resolved) return unresolvedTarget();
 
   const data = encodeAgentReplyIntent({
     ...frame,
-    intent:
-      isStart && resolved
-        ? {
-            phase: intent.phase,
-            callId: intent.callId,
-            ...(intent.early ? { early: true } : {}),
-            conversationId: resolved.conversationId,
-            ...(resolved.threadRootId ? { threadRootId: resolved.threadRootId } : {}),
-          }
-        : { phase: intent.phase, callId: intent.callId },
+    intent: isStart
+      ? {
+          phase: intent.phase,
+          callId: intent.callId,
+          ...(intent.early ? { early: true } : {}),
+          conversationId: resolved.conversationId,
+          ...(resolved.threadRootId ? { threadRootId: resolved.threadRootId } : {}),
+        }
+      : { phase: intent.phase, callId: intent.callId },
   });
-  if (!direct) return relayActivityFrame(data, { workspaceId, agentId, visibility }, dependencies);
-  if (!resolved?.peerUserId) return publicationDenied();
-  await dependencies
-    .publish?.(userConversationChannel(resolved.peerUserId), data, { skipHistory: true })
-    .catch(() => {});
-  return publicationRerouted("the person's own channel");
+  const channel = direct
+    ? resolved.peerUserId && userConversationChannel(resolved.peerUserId)
+    : conversationRealtimeChannel(resolved.conversationId);
+  if (!channel) return publicationDenied();
+  await dependencies.publish?.(channel, data, { skipHistory: true }).catch(() => {});
+  return publicationRerouted(direct ? "the person's own channel" : "the conversation's channel");
 }

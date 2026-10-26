@@ -5,7 +5,7 @@ These rules apply to `src/features/realtime/`.
 - The Workspace layout (`w.$workspaceSlug.tsx`) owns one Centrifuge
   connection for the Workspace the page URL names. Feature modules may subscribe to authorized channels but must not
   create additional browser WebSocket connections.
-- Subscribe through `useRealtimeSubscription` from `browser-realtime.tsx`; it
+- React consumers subscribe through `useRealtimeSubscription`; imperative conversation readers use `subscribeToSharedRealtime` from `browser-realtime.tsx`. Both use its one ref-counted pool. It
   owns the client type. A channel with a narrower server-issued grant supplies
   its own subscription token to the hook.
 - Subscription hooks must run below `BrowserRealtimeProvider`. Do not call one

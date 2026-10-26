@@ -161,6 +161,8 @@ export type RealtimeSubscriptionError = {
  * caller's own `onPublication`/`onSubscribed`/`onJoin`/`onLeave`/`onError` still only ever sees
  * its own latest closure, exactly as before sharing.
  */
+export type SharedRealtimeClient = Pick<Centrifuge, "newSubscription" | "removeSubscription">;
+
 type SharedSubscriptionEntry = {
   subscription: Subscription;
   refCount: number;
@@ -174,12 +176,16 @@ type SharedSubscriptionEntry = {
   errorHandlers: Set<(error: RealtimeSubscriptionError) => void>;
 };
 
-const sharedSubscriptions = new WeakMap<Centrifuge, Map<string, SharedSubscriptionEntry>>();
+const sharedSubscriptions = new WeakMap<
+  SharedRealtimeClient,
+  Map<string, SharedSubscriptionEntry>
+>();
 
 function acquireSharedSubscription(
-  client: Centrifuge,
+  client: SharedRealtimeClient,
   channel: string,
   getToken?: () => Promise<string>,
+  options?: { recoverable?: boolean; positioned?: boolean },
 ): SharedSubscriptionEntry {
   let byChannel = sharedSubscriptions.get(client);
   if (!byChannel) {
@@ -188,7 +194,15 @@ function acquireSharedSubscription(
   }
   let entry = byChannel.get(channel);
   if (!entry) {
-    const subscription = client.newSubscription(channel, getToken ? { getToken } : undefined);
+    const nativeOptions = {
+      ...(getToken ? { getToken } : {}),
+      ...(options?.recoverable !== undefined ? { recoverable: options.recoverable } : {}),
+      ...(options?.positioned !== undefined ? { positioned: options.positioned } : {}),
+    };
+    const subscription = client.newSubscription(
+      channel,
+      Object.keys(nativeOptions).length ? nativeOptions : undefined,
+    );
     const publicationHandlers = new Set<(publication: RealtimePublication) => void>();
     const subscribedHandlers = new Set<(recovery: SubscribedRecovery) => void>();
     const joinHandlers = new Set<(client: RealtimeClient) => void>();
@@ -249,7 +263,7 @@ function acquireSharedSubscription(
   return entry;
 }
 
-function releaseSharedSubscription(client: Centrifuge, channel: string) {
+function releaseSharedSubscription(client: SharedRealtimeClient, channel: string) {
   const byChannel = sharedSubscriptions.get(client);
   const entry = byChannel?.get(channel);
   if (!entry) return;
@@ -260,16 +274,10 @@ function releaseSharedSubscription(client: Centrifuge, channel: string) {
   byChannel!.delete(channel);
 }
 
-export function useRealtimeSubscription({
-  channel,
-  getToken,
-  onSubscribed,
-  onPublication,
-  onJoin,
-  onLeave,
-  onError,
-}: {
-  channel?: string;
+export type SharedRealtimeOptions = {
+  channel: string;
+  recoverable?: boolean;
+  positioned?: boolean;
   getToken?: () => Promise<string>;
   /** The channel became `subscribed`: its first subscribe and every resubscribe. The recovery
    * flags say whether publications may have been missed (see `subscriptionGap`). */
@@ -278,7 +286,66 @@ export function useRealtimeSubscription({
   onJoin?: (client: RealtimeClient) => void;
   onLeave?: (client: RealtimeClient) => void;
   onError?: (error: RealtimeSubscriptionError) => void;
-}) {
+};
+
+/** One ref-counted subscription lease, shared by React hooks and imperative message readers. */
+export function subscribeToSharedRealtime(
+  client: SharedRealtimeClient,
+  {
+    channel,
+    getToken,
+    recoverable,
+    positioned,
+    onSubscribed,
+    onPublication,
+    onJoin,
+    onLeave,
+    onError,
+  }: SharedRealtimeOptions,
+): () => void {
+  const entry = acquireSharedSubscription(client, channel, getToken, { recoverable, positioned });
+  const onPublicationHandler = (publication: RealtimePublication) => onPublication?.(publication);
+  const onSubscribedHandler = (recovery: SubscribedRecovery) => onSubscribed?.(recovery);
+  const onJoinHandler = (joined: RealtimeClient) => onJoin?.(joined);
+  const onLeaveHandler = (left: RealtimeClient) => onLeave?.(left);
+  const onErrorHandler = (error: RealtimeSubscriptionError) => onError?.(error);
+  entry.publicationHandlers.add(onPublicationHandler);
+  entry.subscribedHandlers.add(onSubscribedHandler);
+  entry.joinHandlers.add(onJoinHandler);
+  entry.leaveHandlers.add(onLeaveHandler);
+  entry.errorHandlers.add(onErrorHandler);
+  // A caller joining an already-subscribed shared channel missed its "subscribed" event, and
+  // everything published before it joined.
+  if (entry.subscription.state === "subscribed")
+    onSubscribedHandler({
+      wasRecovering: false,
+      recovered: false,
+      position: () => entry.position,
+    });
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    entry.publicationHandlers.delete(onPublicationHandler);
+    entry.subscribedHandlers.delete(onSubscribedHandler);
+    entry.joinHandlers.delete(onJoinHandler);
+    entry.leaveHandlers.delete(onLeaveHandler);
+    entry.errorHandlers.delete(onErrorHandler);
+    releaseSharedSubscription(client, channel);
+  };
+}
+
+export function useRealtimeSubscription({
+  channel,
+  getToken,
+  recoverable,
+  positioned,
+  onSubscribed,
+  onPublication,
+  onJoin,
+  onLeave,
+  onError,
+}: Omit<SharedRealtimeOptions, "channel"> & { channel?: string }) {
   const client = useBrowserRealtime();
   const handlers = useRef({
     channel,
@@ -306,36 +373,18 @@ export function useRealtimeSubscription({
   useEffect(() => {
     if (!client || !channel) return;
     const current = () => (handlers.current.channel === channel ? handlers.current : undefined);
-    const entry = acquireSharedSubscription(client, channel, getToken);
-    const onPublicationHandler = (publication: RealtimePublication) =>
-      current()?.onPublication?.(publication);
-    const onSubscribedHandler = (recovery: SubscribedRecovery) =>
-      current()?.onSubscribed?.(recovery);
-    const onJoinHandler = (joined: RealtimeClient) => current()?.onJoin?.(joined);
-    const onLeaveHandler = (left: RealtimeClient) => current()?.onLeave?.(left);
-    const onErrorHandler = (error: RealtimeSubscriptionError) => current()?.onError?.(error);
-    entry.publicationHandlers.add(onPublicationHandler);
-    entry.subscribedHandlers.add(onSubscribedHandler);
-    entry.joinHandlers.add(onJoinHandler);
-    entry.leaveHandlers.add(onLeaveHandler);
-    entry.errorHandlers.add(onErrorHandler);
-    // A caller joining an already-subscribed shared channel missed its "subscribed" event, and
-    // everything published before it joined.
-    if (entry.subscription.state === "subscribed")
-      onSubscribedHandler({
-        wasRecovering: false,
-        recovered: false,
-        position: () => entry.position,
-      });
-    return () => {
-      entry.publicationHandlers.delete(onPublicationHandler);
-      entry.subscribedHandlers.delete(onSubscribedHandler);
-      entry.joinHandlers.delete(onJoinHandler);
-      entry.leaveHandlers.delete(onLeaveHandler);
-      entry.errorHandlers.delete(onErrorHandler);
-      releaseSharedSubscription(client, channel);
-    };
-  }, [client, channel, getToken]);
+    return subscribeToSharedRealtime(client, {
+      channel,
+      getToken,
+      recoverable,
+      positioned,
+      onPublication: (publication) => current()?.onPublication?.(publication),
+      onSubscribed: (recovery) => current()?.onSubscribed?.(recovery),
+      onJoin: (joined) => current()?.onJoin?.(joined),
+      onLeave: (left) => current()?.onLeave?.(left),
+      onError: (error) => current()?.onError?.(error),
+    });
+  }, [client, channel, getToken, recoverable, positioned]);
 }
 
 /**

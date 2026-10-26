@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { createReplyIntentStore } from "#src/features/agents/reply-intents";
 import { ReplyIntentStoreProvider } from "#src/features/agents/reply-intents-context";
+import { BrowserRealtimeProvider } from "#src/features/realtime/browser-realtime";
 import { ConversationPane } from "#src/features/conversations/direct-conversation";
 import { m } from "#src/paraglide/messages";
 
@@ -49,27 +50,29 @@ const replyMessage = {
 };
 
 function renderThreadPane() {
-  // The pane always sits inside WorkspaceAgentsProvider, which provides the reply intents.
+  // The Workspace shell provides both realtime and reply intents to every pane.
   const markup = renderToStaticMarkup(
-    <ReplyIntentStoreProvider value={createReplyIntentStore()}>
-      <ConversationPane
-        conversation={{
-          conversationId: "conv-1",
-          senderMemberId: "member-user-1",
-          readThroughSequence: 11,
-          viewerId: "user-dev",
-          messages: [replyMessage],
-        }}
-        root={rootMessage}
-        emptyState={{
-          title: m.conversation_thread_empty_title(),
-          description: m.conversation_thread_empty(),
-          media: null,
-        }}
-        onSend={async () => {}}
-        onToggleReaction={async () => {}}
-      />
-    </ReplyIntentStoreProvider>,
+    <BrowserRealtimeProvider getConnectionToken={async () => ""}>
+      <ReplyIntentStoreProvider value={createReplyIntentStore()}>
+        <ConversationPane
+          conversation={{
+            conversationId: "conv-1",
+            senderMemberId: "member-user-1",
+            readThroughSequence: 11,
+            viewerId: "user-dev",
+            messages: [replyMessage],
+          }}
+          root={rootMessage}
+          emptyState={{
+            title: m.conversation_thread_empty_title(),
+            description: m.conversation_thread_empty(),
+            media: null,
+          }}
+          onSend={async () => {}}
+          onToggleReaction={async () => {}}
+        />
+      </ReplyIntentStoreProvider>
+    </BrowserRealtimeProvider>,
   );
   return markup;
 }

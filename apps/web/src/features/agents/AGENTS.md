@@ -96,6 +96,7 @@ These rules apply to `src/features/agents/`.
   while the member timeline aggregates groups. Timeline rows show no conversation link (like
   every other Agent's); the lineage stays in the data. Unscoped historical rows keep their
   original meaning.
+- Reply intents arrive only on authorized open conversation channels (or the viewer's own DM channel), never Activity. `ReplyingAgentsLine` owns one conversation lease; threads share the same channel and the message subscription pool. Reconnect clears only that conversation's live hints; closing the last reader clears it too.
 - Mascots and the replying lines (`replying-agents-line.tsx`) follow
   [mascots.md](mascots.md); its store, feeds and clearing: [reply-intent.md](../../../../../docs/observability/reply-intent.md).
 - The Agent card (`agent-hover-card.tsx`) peeks from the avatars and the

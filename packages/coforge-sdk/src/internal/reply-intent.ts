@@ -10,8 +10,9 @@ import type { AgentActivity } from "./index";
 
 /**
  * The "about to post" signal: an Agent's tool call is sending a message, so its sentence in the
- * conversation is coming. It rides the Agent Activity channel as an additive field of
- * `AgentActivity` (`reply_intent`), but it is not an observation: it has no launch or sequence, is
+ * conversation is coming. Daemon sends it as an additive field of `AgentActivity`
+ * (`reply_intent`); the server routes it to the authorized conversation (or peer user) channel.
+ * It is not an observation: it has no launch or sequence, is
  * never stored and never changes the Agent's display. Best effort like all Activity; a lost frame
  * only means the line is missing or ends at its deadline.
  *

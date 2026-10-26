@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { cachedReplyTargetResolver } from "#src/server/agents/reply-target-cache.server";
 import {
   decodeAgentActivityFrame,
   encodeAgentReplyIntent,
@@ -25,8 +26,6 @@ const base64 = (bytes: Uint8Array) => {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 };
-const fromBase64 = (value: string) =>
-  Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
 
 const startFrame = frame({ phase: REPLY_INTENT_PHASE.START, callId: "call-1", target: "#general" });
 const endFrame = frame({ phase: REPLY_INTENT_PHASE.END, callId: "call-1", target: "#general" });
@@ -96,70 +95,108 @@ function replyIntentOf(bytes: Uint8Array): AgentReplyIntent {
   return decoded.replyIntent;
 }
 
-async function relayed(response: Response) {
-  const body = (await response.json()) as { result?: { skip_history: boolean; b64data: string } };
-  return body.result && replyIntentOf(fromBase64(body.result.b64data));
-}
 const errorCode = async (response: Response) =>
   ((await response.json()) as { error: { code: number } }).error.code;
 
 describe("reply intent publication to a channel", () => {
-  test("a public Agent's start is relayed with the resolved conversation and thread, never the raw target", async () => {
-    const { deps, observed, displayed, resolved } = dependencies();
-    const response = await handleAgentActivityPublication(request(startFrame), deps);
-    const body = (await response.clone().json()) as { result: { skip_history: boolean } };
-    expect(body.result.skip_history).toBe(true);
-    expect(resolved).toEqual(["#general"]);
-    expect(await relayed(response)).toEqual(
-      frame({
-        phase: REPLY_INTENT_PHASE.START,
-        callId: "call-1",
-        conversationId: "conversation-1",
-        threadRootId: "root-1",
-      }),
-    );
-    // It is a signal, not an observation: nothing stored, no display change.
-    expect(observed).toEqual([]);
-    expect(displayed).toEqual([]);
-  });
-
-  test("a top-level target is relayed without a thread root, and the early flag survives", async () => {
-    const { deps } = dependencies({
+  for (const visibility of ["public", "private"]) {
+    test(`a ${visibility} Agent's start reaches only its conversation without history`, async () => {
+      const { deps, observed, displayed, resolved, published } = dependencies({
+        agentVisibility: async () => visibility,
+      });
+      const response = await handleAgentActivityPublication(request(startFrame), deps);
+      expect(await errorCode(response)).toBe(1000);
+      expect(published.map((item) => item.channel)).toEqual(["chat:conversation-1"]);
+      expect(published[0]!.skipHistory).toBe(true);
+      expect(replyIntentOf(published[0]!.data)).toEqual(
+        frame({
+          phase: "start",
+          callId: "call-1",
+          conversationId: "conversation-1",
+          threadRootId: "root-1",
+        }),
+      );
+      expect(resolved).toEqual(["#general"]);
+      expect(observed).toEqual([]);
+      expect(displayed).toEqual([]);
+    });
+    test(`a ${visibility} Agent's end resolves the same conversation and carries only call/phase`, async () => {
+      const { deps, resolved, published } = dependencies({
+        agentVisibility: async () => visibility,
+      });
+      expect(await errorCode(await handleAgentActivityPublication(request(endFrame), deps))).toBe(
+        1000,
+      );
+      expect(published.map((item) => item.channel)).toEqual(["chat:conversation-1"]);
+      expect(published[0]!.skipHistory).toBe(true);
+      expect(replyIntentOf(published[0]!.data)).toEqual(frame({ phase: "end", callId: "call-1" }));
+      expect(resolved).toEqual(["#general"]);
+    });
+  }
+  test("a top-level target keeps the early flag without a thread root", async () => {
+    const { deps, published } = dependencies({
       resolveReplyTarget: async () => ({ conversationId: "conversation-1", threadRootId: null }),
     });
-    const early = frame({ ...startFrame.intent, early: true });
-    expect(
-      (await relayed(await handleAgentActivityPublication(request(early), deps)))?.intent,
-    ).toEqual({ phase: "start", callId: "call-1", early: true, conversationId: "conversation-1" });
-  });
-
-  test("an end is relayed as the call id and phase alone, resolving nothing", async () => {
-    const { deps, resolved } = dependencies();
-    const response = await handleAgentActivityPublication(request(endFrame), deps);
-    expect(await relayed(response)).toEqual(
-      frame({ phase: REPLY_INTENT_PHASE.END, callId: "call-1" }),
+    await handleAgentActivityPublication(
+      request(frame({ ...startFrame.intent, early: true })),
+      deps,
     );
-    expect(resolved).toEqual([]);
-  });
-
-  test("a private Agent's start goes to its own channel and is denied on the shared one", async () => {
-    const { deps, published } = dependencies({ agentVisibility: async () => "private" });
-    const response = await handleAgentActivityPublication(request(startFrame), deps);
-    expect(await errorCode(response)).toBe(1000);
     expect(published).toHaveLength(1);
-    expect(published[0]!.channel).toBe("agent:activity:workspace-1:agent-1");
-    expect(replyIntentOf(published[0]!.data).intent).toMatchObject({
+    expect(replyIntentOf(published[0]!.data).intent).toEqual({
+      phase: "start",
+      callId: "call-1",
+      early: true,
       conversationId: "conversation-1",
-      threadRootId: "root-1",
     });
   });
-
-  test("a private Agent's end goes to its own channel too, stripped", async () => {
-    const { deps, published } = dependencies({ agentVisibility: async () => "private" });
+  test("a long turn's repeated starts keep its end on the resolved conversation", async () => {
+    let now = 0;
+    let reads = 0;
+    const resolveReplyTarget = cachedReplyTargetResolver(
+      async () => {
+        if (++reads !== 1) return undefined;
+        return { conversationId: "conversation-1", threadRootId: null };
+      },
+      { now: () => now },
+    );
+    const { deps, published } = dependencies({ resolveReplyTarget });
+    for (let repeat = 0; repeat < 9; repeat++) {
+      now = repeat * 8_000;
+      await handleAgentActivityPublication(request(startFrame), deps);
+    }
+    now += 8_000;
     await handleAgentActivityPublication(request(endFrame), deps);
-    expect(published.map((item) => item.channel)).toEqual(["agent:activity:workspace-1:agent-1"]);
-    expect(replyIntentOf(published[0]!.data).intent).toEqual({ phase: "end", callId: "call-1" });
+    expect(reads).toBe(1);
+    expect(published).toHaveLength(10);
+    expect(new Set(published.map((item) => item.channel))).toEqual(
+      new Set(["chat:conversation-1"]),
+    );
+    expect(replyIntentOf(published.at(-1)!.data).intent).toEqual({
+      phase: "end",
+      callId: "call-1",
+    });
   });
+  test.each([endFrame, frame({ phase: "end", callId: "call-1" })])(
+    "an unresolved end is dropped and debugged without its target: %j",
+    async (end) => {
+      const debug = spyOn(console, "debug").mockImplementation(() => {});
+      try {
+        const { deps, published } = dependencies({ resolveReplyTarget: async () => undefined });
+        expect(await errorCode(await handleAgentActivityPublication(request(end), deps))).toBe(403);
+        expect(published).toEqual([]);
+        expect(debug.mock.calls).toHaveLength(1);
+        expect(JSON.parse(String(debug.mock.calls[0]![0]))).toMatchObject({
+          event: "reply_intent:end_unresolved",
+          workspace_id: "workspace-1",
+          agent_id: "agent-1",
+          call_id: "call-1",
+        });
+        expect(JSON.stringify(debug.mock.calls)).not.toContain("#general");
+      } finally {
+        debug.mockRestore();
+      }
+    },
+  );
 });
 
 describe("reply intent publication to a direct message", () => {

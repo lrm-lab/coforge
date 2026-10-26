@@ -16,7 +16,6 @@ import {
   useRealtimeSubscription,
   useRealtimeSubscriptions,
 } from "#src/features/realtime/browser-realtime";
-import { replyIntentInScope, type ReplyIntentStore } from "./reply-intents";
 import type { QueryClient } from "@tanstack/react-query";
 
 export const agentActivityKeys = {
@@ -86,18 +85,12 @@ function applyActivityPublication(
   queryClient: QueryClient,
   workspaceId: string,
   data: unknown,
-  replyIntents: ReplyIntentStore,
   scope?: { agentId: string },
 ) {
   const frame = decodeActivityFrame(data);
   if (!frame) return;
-  // An "about to post" signal shares the channel but is no observation: it feeds the line above
-  // the composer and nothing else.
-  if ("replyIntent" in frame) {
-    const replyIntent = replyIntentInScope(frame.replyIntent, { workspaceId, ...scope });
-    if (replyIntent) replyIntents.apply(replyIntent);
-    return;
-  }
+  // Reply intents belong to the authorized conversation stream, never Activity.
+  if ("replyIntent" in frame) return;
   const observation = activityObservation(frame.activity, { workspaceId, ...scope });
   if (!observation) return;
   const { agentId, entry } = observation;
@@ -125,14 +118,12 @@ function applyActivityPublication(
  *
  * `privateAgentIds` are the viewer's own visible private Agents: their Activity no
  * longer arrives on the shared channel at all, so each gets its own per-Agent subscription on
- * the same shared client. `replyIntents` takes the "about to post" signals from both; a
- * (re)subscribe empties it, since the gap may have swallowed their ends.
+ * the same shared client.
  */
 export function useWorkspaceActivityRealtime(
   workspaceId: string | undefined,
   privateAgentIds: readonly string[],
   getPrivateAgentActivityToken: ((agentId: string) => Promise<string>) | undefined,
-  replyIntents: ReplyIntentStore,
 ) {
   const queryClient = useQueryClient();
   const getConnectionToken = useServerFn(getAgentActivitySubscriptionToken);
@@ -141,12 +132,11 @@ export function useWorkspaceActivityRealtime(
     channel: workspaceId ? agentActivityChannel(workspaceId) : undefined,
     getToken: getConnectionToken,
     onSubscribed: () => {
-      replyIntents.clear();
       void queryClient.invalidateQueries({ queryKey: agentActivityKeys.all });
     },
     onPublication: (publication) => {
       if (!workspaceId) return;
-      applyActivityPublication(queryClient, workspaceId, publication.data, replyIntents);
+      applyActivityPublication(queryClient, workspaceId, publication.data);
     },
   });
 
@@ -167,7 +157,6 @@ export function useWorkspaceActivityRealtime(
         queryClient,
         workspaceId,
         publication.data,
-        replyIntents,
         agentId ? { agentId } : undefined,
       );
     },

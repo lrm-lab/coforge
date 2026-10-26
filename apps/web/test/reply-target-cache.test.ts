@@ -18,15 +18,15 @@ function subject(options: { ttlMs?: number; maxEntries?: number } = {}) {
   return { resolve, reads, advance: (ms: number) => (now += ms) };
 }
 
-test("a call's repeats and its end are answered without reading again, until the entry expires", async () => {
+test("a call's repeats renew its target and an idle entry expires", async () => {
   const { resolve, reads, advance } = subject();
   expect(await resolve(call)).toEqual(target);
   advance(8_000);
   expect(await resolve(call)).toEqual(target);
-  advance(21_999);
+  advance(29_999);
   await resolve(call);
   expect(reads).toHaveLength(1);
-  advance(1);
+  advance(30_000);
   await resolve(call);
   expect(reads).toHaveLength(2);
 });
@@ -65,4 +65,16 @@ test("it holds a bounded number of entries and forgets the oldest", async () => 
   expect(reads).toHaveLength(3);
   await resolve({ ...call, callId: "c1" });
   expect(reads).toHaveLength(4);
+});
+
+test("a long call keeps its resolved conversation through repeated starts and a late end", async () => {
+  const { resolve, reads, advance } = subject();
+  expect(await resolve(call)).toEqual(target);
+  for (let repeat = 0; repeat < 8; repeat++) {
+    advance(8_000);
+    expect(await resolve(call)).toEqual(target);
+  }
+  advance(8_000);
+  expect(await resolve(call)).toEqual(target);
+  expect(reads).toEqual(["c1:#general"]);
 });

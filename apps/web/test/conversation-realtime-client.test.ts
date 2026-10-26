@@ -6,26 +6,39 @@ type PublicationListener = (context: { data: unknown }) => void;
 type SubscribedListener = (context: { wasRecovering: boolean; recovered: boolean }) => void;
 
 function fakeClient() {
+  let created = 0;
+  let stopped = 0;
+  let removed = 0;
   const publications: PublicationListener[] = [];
   const subscribedListeners: SubscribedListener[] = [];
   const subscription = {
+    state: "subscribing",
     on(event: string, listener: PublicationListener | SubscribedListener) {
       if (event === "publication") publications.push(listener as PublicationListener);
       if (event === "subscribed") subscribedListeners.push(listener as SubscribedListener);
       return subscription;
     },
     subscribe() {},
-    unsubscribe() {},
+    unsubscribe() {
+      stopped++;
+    },
   };
   return {
     client: {
-      newSubscription: () => subscription,
-      removeSubscription() {},
-    },
+      newSubscription: () => {
+        created++;
+        return subscription;
+      },
+      removeSubscription() {
+        removed++;
+      },
+    } as unknown as Parameters<typeof subscribeToConversationRealtime>[0],
+    counts: () => ({ created, stopped, removed }),
     publish(data: unknown) {
       for (const listener of publications) listener({ data });
     },
     subscribed(context: { wasRecovering: boolean; recovered: boolean }) {
+      subscription.state = "subscribed";
       for (const listener of subscribedListeners) listener(context);
     },
   };
@@ -231,4 +244,35 @@ describe("subscribeToConversationRealtime", () => {
     subscribed({ wasRecovering: true, recovered: false });
     expect(lost).toBe(1);
   });
+});
+
+test("conversation views share one physical subscription until the last release", () => {
+  const { client, publish, counts } = fakeClient();
+  let first = 0;
+  let second = 0;
+  const releaseFirst = subscribeToConversationRealtime(client, {
+    conversationId: "c",
+    getToken: async () => "token",
+    reconcile: () => first++,
+  });
+  const releaseSecond = subscribeToConversationRealtime(client, {
+    conversationId: "c",
+    getToken: async () => "token",
+    reconcile: () => second++,
+  });
+  try {
+    expect(counts()).toEqual({ created: 1, stopped: 0, removed: 0 });
+    publish({ type: "message.available.v1", conversationId: "c", messageId: "m1", sequence: 1 });
+    expect([first, second]).toEqual([1, 1]);
+    releaseFirst();
+    releaseFirst();
+    expect(counts()).toEqual({ created: 1, stopped: 0, removed: 0 });
+    publish({ type: "message.available.v1", conversationId: "c", messageId: "m2", sequence: 2 });
+    expect([first, second]).toEqual([1, 2]);
+    releaseSecond();
+    expect(counts()).toEqual({ created: 1, stopped: 1, removed: 1 });
+  } finally {
+    releaseFirst();
+    releaseSecond();
+  }
 });

@@ -21,7 +21,7 @@ export type ActivityRelayDependencies = {
   /** Raw binary publish (Centrifugo server API `publish`, not the JSON `publishJson`): re-routes
    * a private Agent's frame to its own per-Agent activity channel — the public path still lets
    * Centrifugo do the actual shared-channel publish via the returned `result.b64data` — and puts
-   * a reply intent on a person's own channel. `skipHistory` keeps a transient frame out of the
+   * a reply intent on its conversation or peer user channel. `skipHistory` keeps a transient frame out of the
    * channel's history. */
   publish?(channel: string, data: Uint8Array, options?: { skipHistory?: boolean }): Promise<void>;
 };
