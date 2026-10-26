@@ -19,8 +19,8 @@ export const Route = createFileRoute("/join/$token")({
       }),
       getSignedInAccount(),
     ]);
-    // Joining is a way in like any other: the person's personal Workspace is made the same way,
-    // with the name they give first, and the link is where they land after.
+    // Joining needs a name first, and the link is where they land after. A working link makes the
+    // name step name-only: the invited Workspace is the person's way in, so no personal one is made.
     if (viewer && !viewer.named)
       throw nameStepRedirect(`/join/${encodeURIComponent(params.token)}`);
     return { preview, viewerAccount: viewer?.account ?? null };

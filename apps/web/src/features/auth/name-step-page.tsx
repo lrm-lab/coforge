@@ -7,6 +7,7 @@ import { Input } from "#src/components/base/input/input";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { AuthSplitLayout } from "#src/features/auth/auth-split-layout";
 import { checkWorkspaceSlug, submitDisplayName } from "#src/features/auth/first-sign-in.functions";
+import type { InviteState } from "#src/server/auth/first-sign-in.server";
 import { afterSignInHref, localizedReturnHref } from "#src/features/auth/return-to";
 import { githubStepHref, isDefaultStartPage } from "#src/features/onboarding/github-step";
 import {
@@ -54,21 +55,29 @@ function SlugPrefix({ className }: { className?: string }) {
 /**
  * Where a signed-in person who has not been asked for a display name lands once, before anything is
  * created for them. Continuing saves the name, makes their personal Workspace, titled with it, and
- * goes on to `returnTo`, or, with none, to the new Workspace's "Connect GitHub" step.
+ * goes on to `returnTo`, or, with none, to the new Workspace's "Connect GitHub" step. Arriving from
+ * a working invite link (`invite` is "active", as the server confirmed) asks for the name alone:
+ * nothing else is made, and the person goes on to the join page to join.
  */
 export function NameStepPage({
   prefill,
   slugPrefill,
+  invite: initialInvite,
   returnTo,
 }: {
   /** What the provider reported as the person's name, when it reads as one. */
   prefill: string;
   /** The URL the personal Workspace starts with: the username, unless it is only the fallback. */
   slugPrefill: string;
+  /** What the server found out about an invite `returnTo`; the name-only form is for "active". */
+  invite: InviteState;
   returnTo: string | undefined;
 }) {
   const submit = useServerFn(submitDisplayName);
   const navigate = useNavigate();
+  // An invite that stops working after the page loaded turns the form into the normal one.
+  const [invite, setInvite] = useState(initialInvite);
+  const nameOnly = invite === "active";
   const [displayName, setDisplayName] = useState(prefill);
   const [workspaceSlug, setWorkspaceSlug] = useState(slugPrefill);
   // Until the person edits the URL, it follows the display name, unless the provider's name had
@@ -85,7 +94,7 @@ export function NameStepPage({
   const slug = workspaceSlug.trim();
 
   useEffect(() => {
-    if (!isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)) return;
+    if (nameOnly || !isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)) return;
     let current = true;
     const timer = window.setTimeout(() => {
       // Errors are ignored: submitting asks the server again.
@@ -100,7 +109,7 @@ export function NameStepPage({
       current = false;
       window.clearTimeout(timer);
     };
-  }, [slug]);
+  }, [slug, nameOnly]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,7 +117,7 @@ export function NameStepPage({
     // The server judges the name and the URL again; asking here first only spares a round trip.
     const checked = checkPersonName(displayName);
     if (!checked.ok) return setProblem(checked.problem);
-    if (!isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)) {
+    if (!nameOnly && (!isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug))) {
       return setProblem("slug_invalid");
     }
     setProblem(null);
@@ -121,21 +130,35 @@ export function NameStepPage({
     };
     let result: Awaited<ReturnType<typeof submit>> | undefined;
     try {
-      result = await submit({ data: { displayName, workspaceSlug: slug } });
+      // The server decides whether the invite still works; the page only sends `returnTo`.
+      result = await submit({
+        data: nameOnly ? { displayName, returnTo } : { displayName, workspaceSlug: slug },
+      });
     } catch {
       return stop("save_failed");
     }
     // `useServerFn` resolves with nothing when the call redirected (the session is gone): the
     // router is already taking the person to sign in.
     if (!result) return;
-    if (!result.ok) return stop(result.problem);
+    if (!result.ok) {
+      if (result.problem !== "invite_unavailable") return stop(result.problem);
+      // Nothing was saved: show the notice and the URL field, and let the person go on.
+      setInvite("unavailable");
+      if (!slugEdited && slugPrefill === "") setWorkspaceSlug(nameToWorkspaceSlug(displayName));
+      setSubmitting(false);
+      inFlight.current = false;
+      return;
+    }
     // The name is saved, so a failure from here on is not a failed save. Stay busy through the
     // navigation: the page is replaced, not returned to.
-    // With nowhere particular to go on to, the new Workspace asks about GitHub first; an invite or
-    // join link's `returnTo` goes on as it always has.
-    const destination = isDefaultStartPage(returnTo)
-      ? localizedReturnHref(githubStepHref(slug))
-      : afterSignInHref(returnTo);
+    // With nowhere particular to go on to, the new Workspace asks about GitHub first, and so it
+    // does when `returnTo` is an invite that no longer works (its page is a dead end); any other
+    // `returnTo` goes on as it always has.
+    const destination = nameOnly
+      ? afterSignInHref(returnTo)
+      : invite === "unavailable" || isDefaultStartPage(returnTo)
+        ? localizedReturnHref(githubStepHref(slug))
+        : afterSignInHref(returnTo);
     try {
       await navigate({ href: destination });
     } catch {
@@ -160,6 +183,11 @@ export function NameStepPage({
         </div>
         <form noValidate onSubmit={onSubmit}>
           <div className="flex flex-col gap-6">
+            {invite === "unavailable" ? (
+              <p role="status" className="text-center text-md text-tertiary">
+                {m.welcome_invite_unavailable()}
+              </p>
+            ) : null}
             <Input
               label={m.welcome_display_name_label()}
               name="displayName"
@@ -176,23 +204,27 @@ export function NameStepPage({
                 nameProblem ? <span role="alert">{problemText[nameProblem]()}</span> : undefined
               }
             />
-            <Input
-              label={m.welcome_workspace_url_label()}
-              name="workspaceSlug"
-              autoComplete="off"
-              value={workspaceSlug}
-              icon={SlugPrefix}
-              inputClassName="font-mono"
-              onChange={(value) => {
-                setWorkspaceSlug(value);
-                setSlugEdited(true);
-                setProblem(null);
-              }}
-              isInvalid={slugMessage !== null}
-              hint={
-                slugMessage ? <span role="alert">{slugProblemText[slugMessage]()}</span> : undefined
-              }
-            />
+            {nameOnly ? null : (
+              <Input
+                label={m.welcome_workspace_url_label()}
+                name="workspaceSlug"
+                autoComplete="off"
+                value={workspaceSlug}
+                icon={SlugPrefix}
+                inputClassName="font-mono"
+                onChange={(value) => {
+                  setWorkspaceSlug(value);
+                  setSlugEdited(true);
+                  setProblem(null);
+                }}
+                isInvalid={slugMessage !== null}
+                hint={
+                  slugMessage ? (
+                    <span role="alert">{slugProblemText[slugMessage]()}</span>
+                  ) : undefined
+                }
+              />
+            )}
           </div>
           <Button
             type="submit"

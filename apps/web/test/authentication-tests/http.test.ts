@@ -100,7 +100,6 @@ test("login callback stores a host-only session cookie and returns home", async 
     sessionSecret,
     authing: fakeAuthing(),
     resolveUser: async () => persistedAda,
-    enrollUser: async () => {},
   });
   expect(response.status).toBe(302);
   expect(response.headers.get("location")).toBe("/");
@@ -147,7 +146,6 @@ test("login callback signs in an Authing account that has no email, and /api/me 
         resolved.push(input);
         return { ...persistedAda, username: "user-0a1b2c3d" };
       },
-      enrollUser: async () => {},
     });
   } finally {
     spy.mockRestore();
@@ -183,32 +181,12 @@ test("login callback signs in an Authing account that has no email, and /api/me 
   });
 });
 
-test("login callback enrolls a named user into a Workspace titled with their stored display name", async () => {
-  const { state, cookie } = startSignIn(null);
-  const enrolled: unknown[] = [];
-  // The provider says "Ada"; the person's own answer is what titles their Workspace.
-  const response = await callbackFor(state, [cookie], async (user) => {
-    enrolled.push(user);
-  });
-  expect(response.status).toBe(302);
-  expect(enrolled).toEqual([{ id: persistedAda.id, username: "ada", displayName: "Ada Lovelace" }]);
-});
-
 test("a user with no display name is sent to the name step, signed in, with nothing created for them", async () => {
   const { state, cookie } = startSignIn(null);
-  const enrolled: unknown[] = [];
-  const response = await callbackFor(
-    state,
-    [cookie],
-    async (user) => {
-      enrolled.push(user);
-    },
-    unnamedAda,
-  );
+  const response = await callbackFor(state, [cookie], unnamedAda);
 
   expect(response.status).toBe(302);
   expect(response.headers.get("location")).toBe("/en/welcome");
-  expect(enrolled).toEqual([]);
   expect(
     response.headers
       .getSetCookie()
@@ -220,19 +198,10 @@ test("a user with no display name is sent to the name step, signed in, with noth
 test("the name step carries the page sign-in started from, and the person goes there after it", async () => {
   const returnTo = "/join/abc?x=1";
   const unnamedSignIn = startSignIn(returnTo);
-  const enrolled: unknown[] = [];
-  const unnamed = await callbackFor(
-    unnamedSignIn.state,
-    [unnamedSignIn.cookie],
-    async (user) => {
-      enrolled.push(user);
-    },
-    unnamedAda,
-  );
+  const unnamed = await callbackFor(unnamedSignIn.state, [unnamedSignIn.cookie], unnamedAda);
   expect(unnamed.headers.get("location")).toBe(
     `/en/welcome?returnTo=${encodeURIComponent(returnTo)}`,
   );
-  expect(enrolled).toEqual([]);
 
   const namedSignIn = startSignIn(returnTo);
   const named = await callbackFor(namedSignIn.state, [namedSignIn.cookie]);
@@ -393,7 +362,6 @@ async function loginRoundTrip(
   returnTo: string | null,
   options: {
     tamper?: (payload: Record<string, unknown>) => void;
-    enrollUser?: () => Promise<void>;
   } = {},
 ) {
   const started = handleLoginStart({ config, sessionSecret, returnTo });
@@ -416,7 +384,6 @@ async function loginRoundTrip(
     sessionSecret,
     authing: fakeAuthing(),
     resolveUser: async () => persistedAda,
-    enrollUser: options.enrollUser ?? (async () => {}),
   });
 }
 
@@ -450,18 +417,6 @@ test("a tampered state cookie is rejected, and its returnTo is not followed", as
   ).toBe(false);
 });
 
-test("a failed sign-in goes back to /login with the page it started from", async () => {
-  const response = await loginRoundTrip("/join/abc", {
-    enrollUser: async () => {
-      throw new Error("database is required");
-    },
-  });
-  const location = new URL(response.headers.get("location") ?? "");
-  expect(location.pathname).toBe("/login");
-  expect(location.searchParams.get("error")).toBe("login_failed");
-  expect(location.searchParams.get("returnTo")).toBe("/join/abc");
-});
-
 function startSignIn(returnTo: string | null) {
   const started = handleLoginStart({ config, sessionSecret, returnTo });
   const state = new URL(started.headers.get("location") ?? "").searchParams.get("state") ?? "";
@@ -469,16 +424,7 @@ function startSignIn(returnTo: string | null) {
   return { state, cookie };
 }
 
-function callbackFor(
-  state: string,
-  cookies: string[],
-  enrollUser: (user: {
-    id: string;
-    username: string;
-    displayName: string;
-  }) => Promise<void> = async () => {},
-  user: typeof persistedAda = persistedAda,
-) {
+function callbackFor(state: string, cookies: string[], user: typeof persistedAda = persistedAda) {
   return handleLoginCallback({
     request: new Request(`http://localhost:3000/auth/callback?code=valid-code&state=${state}`, {
       headers: { cookie: cookies.join("; ") },
@@ -487,7 +433,6 @@ function callbackFor(
     sessionSecret,
     authing: fakeAuthing(),
     resolveUser: async () => user,
-    enrollUser,
   });
 }
 
@@ -524,8 +469,19 @@ test("a sign-in that finishes clears only its own state cookie", async () => {
 test("a sign-in that fails clears only its own state cookie and offers its own page again", async () => {
   const first = startSignIn("/w/acme");
   const second = startSignIn("/join/abc");
-  const response = await callbackFor(second.state, [first.cookie, second.cookie], async () => {
-    throw new Error("database is required");
+  const response = await handleLoginCallback({
+    request: new Request(
+      `http://localhost:3000/auth/callback?code=valid-code&state=${second.state}`,
+      {
+        headers: { cookie: [first.cookie, second.cookie].join("; ") },
+      },
+    ),
+    config,
+    sessionSecret,
+    authing: fakeAuthing(),
+    resolveUser: async () => {
+      throw new Error("database is required");
+    },
   });
   const location = new URL(response.headers.get("location") ?? "");
   expect(location.searchParams.get("error")).toBe("login_failed");

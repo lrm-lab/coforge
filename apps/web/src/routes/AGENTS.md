@@ -23,9 +23,12 @@ These rules apply to `src/routes/`.
   from `/` and from a `/w/<slug>` they cannot open to `workspaces/new`. A page that needs sign-in sends
   people to `/login?returnTo=<its path>`.
 - A signed-in User with no display name is asked for one (and their personal Workspace's URL) once, at `welcome?returnTo=<page>`: sign-in
-  sends them there before it makes their personal Workspace, and `/w/$workspaceSlug` (its loader),
-  `workspaces/new` and `join/$token` send them there with `nameStepRedirect`, so every way in makes
-  that Workspace after the answer. `oauth/verify` and `oidc/auth` are not gated: approving a Computer or an app needs no name.
+  sends them there before anything is made for them, and `/w/$workspaceSlug` (its loader),
+  `workspaces/new` and `join/$token` send them there with `nameStepRedirect`. Answering makes their
+  personal Workspace, except when `returnTo` is a join page the server confirms is a working invite:
+  then only the name is asked and saved, no Workspace is made, and joining is the way in. Sign-in
+  never makes a Workspace for someone who has already answered; one in no Workspace goes to
+  `workspaces/new`. `oauth/verify` and `oidc/auth` are not gated: approving a Computer or an app needs no name.
 - The page URL names the Workspace: server functions act on it
   (`workspaceUserMiddleware`), and a Workspace the User is not in is a 404
   (for a User in no Workspace at all, `workspaces/new`).

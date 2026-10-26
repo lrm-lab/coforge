@@ -11,15 +11,10 @@ import {
   type InternalUserResolver,
   type TokenExchanger,
 } from "./browser-login.server";
-import {
-  atLoginStage,
-  LoginCallbackError,
-  reportLoginCallbackFailure,
-} from "./login-failure.server";
+import { LoginCallbackError, reportLoginCallbackFailure } from "./login-failure.server";
 import { UserIdentityRepository } from "./user-identity.repository.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
-import { workspaceIdForUser } from "#src/server/workspaces/enrollment.server";
 import { localizedReturnHref, welcomeHref } from "#src/features/auth/return-to";
 
 export function handleLoginStart(input: {
@@ -47,7 +42,6 @@ export async function handleLoginCallback(input: {
   sessionSecret: string;
   authing?: TokenExchanger;
   resolveUser?: Parameters<typeof completeBrowserLogin>[0]["resolveUser"];
-  enrollUser?: (user: { id: string; username: string; displayName: string }) => Promise<void>;
 }): Promise<Response> {
   const url = new URL(input.request.url);
   const code = url.searchParams.get("code") ?? "";
@@ -64,22 +58,17 @@ export async function handleLoginCallback(input: {
       resolveUser: input.resolveUser ?? persistedIdentityResolver(),
     });
     const cookies = [completed.sessionCookie, completed.clearStateCookie];
-    const { displayName, welcomed } = completed;
+    const { welcomed } = completed;
     // A person who has not finished first sign-in is signed in, but nothing is made for them until
-    // they confirm their name: their personal Workspace is titled with it (`completeFirstSignIn`).
+    // they confirm their name (`completeFirstSignIn`). A person who has finished it is never given
+    // a Workspace here: one in no Workspace (an invite sign-up that never joined, or who left them
+    // all) lands where `/` sends them, on "create your first Workspace".
     if (!welcomed) {
       return redirect(welcomeHref(completed.returnTo), {
         "set-cookie": cookies,
         "cache-control": "no-store",
       });
     }
-    await atLoginStage("enrollment", async () => {
-      const enrolling = { id: completed.user.id, username: completed.user.username, displayName };
-      if (input.enrollUser) return input.enrollUser(enrolling);
-      const db = getDatabaseClient();
-      if (!db) throw new LoginCallbackError("enrollment", { reason: "database is unavailable" });
-      await workspaceIdForUser(db, enrolling, input.request.headers.get("accept-language") ?? "");
-    });
     return redirect(completed.returnTo ? localizedReturnHref(completed.returnTo) : "/", {
       "set-cookie": cookies,
       "cache-control": "no-store",

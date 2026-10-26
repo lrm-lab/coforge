@@ -54,6 +54,7 @@
   "welcome_workspace_url_label": "工作区网址",
   "welcome_workspace_url_invalid": "只能使用小写字母、数字和单个连字符，最多 48 个字符。",
   "welcome_workspace_url_taken": "这个网址已被占用。",
+  "welcome_invite_unavailable": "这个邀请链接已经失效。你仍然可以创建自己的工作区。",
   "welcome_continue": "继续",
   "welcome_error_empty": "请输入你的昵称。",
   "welcome_error_too_long": "昵称最多 {max} 个字符。",

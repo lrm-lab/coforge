@@ -173,9 +173,19 @@ export class WorkspaceJoinLinks {
     return landing;
   }
 
-  private async requireActive(token: string) {
+  /** Whether `token` names a link that admits people right now. */
+  async isActive(token: string): Promise<boolean> {
+    return (await this.findActive(token)) !== null;
+  }
+
+  private async findActive(token: string) {
     const found = await this.store.findByToken(token);
-    if (!found || !isJoinLinkActive(found.link, this.now())) throw new AppError("NOT_FOUND");
+    return found && isJoinLinkActive(found.link, this.now()) ? found : null;
+  }
+
+  private async requireActive(token: string) {
+    const found = await this.findActive(token);
+    if (!found) throw new AppError("NOT_FOUND");
     return found;
   }
 

@@ -38,7 +38,12 @@ until they answer. The same page asks for their personal Workspace's URL
 (slug), starting from the username unless that is only the fallback `user…`;
 submitting locks that User and commits the Workspace, name and `welcomedAt` in
 one transaction, so concurrent tabs share the first accepted name and a URL found
-taken rolls back confirmation. Cloud Computer and assistant provisioning follow
+taken rolls back confirmation. A person who arrives from a working invite link
+(the server checks the link, never the client) is asked for the name only: the
+same lock commits just the name and `welcomedAt`, no Workspace is made, and
+joining the invited Workspace is their way in. If they never join, they have a
+name and no membership; later sign-ins never make a Workspace for them, and they
+are offered "create your first Workspace" like anyone in none. Cloud Computer and assistant provisioning follow
 the commit; failures leave enrollment intact. When the owner opens the Workspace,
 `loadWorkspaceSwitcher` repairs missing Memory Agent and assistant identities and
 retries pending cloud provisioning through platform-assistant onboarding. Existing

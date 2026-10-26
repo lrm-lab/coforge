@@ -7,9 +7,14 @@ import { isRedirect } from "@tanstack/react-router";
 // read that decides it is stood in for.
 type NameStep =
   | { status: "named" }
-  | { status: "ask"; prefill: string; slugPrefill: string }
+  | {
+      status: "ask";
+      prefill: string;
+      slugPrefill: string;
+      invite: "none" | "active" | "unavailable";
+    }
   | { status: "account_gone" };
-let step: NameStep = { status: "ask", prefill: "", slugPrefill: "" };
+let step: NameStep = { status: "ask", prefill: "", slugPrefill: "", invite: "none" };
 
 await mockModuleForFile("#src/features/auth/first-sign-in.functions", () => ({
   getNameStep: async () => step,
@@ -20,7 +25,7 @@ await mockModuleForFile("#src/features/auth/first-sign-in.functions", () => ({
 const { Route } = await import("#src/routes/welcome");
 
 beforeEach(() => {
-  step = { status: "ask", prefill: "", slugPrefill: "" };
+  step = { status: "ask", prefill: "", slugPrefill: "", invite: "none" };
 });
 
 async function enter(search: { returnTo?: string }): Promise<unknown> {
@@ -63,10 +68,11 @@ test("a person who has a display name is sent straight on, to the page they were
 });
 
 test("a person who has none is asked, starting from what the provider reported", async () => {
-  step = { status: "ask", prefill: "Ada Lovelace", slugPrefill: "ada" };
+  step = { status: "ask", prefill: "Ada Lovelace", slugPrefill: "ada", invite: "none" };
   expect(await enter({ returnTo: "/join/abc" })).toEqual({
     prefill: "Ada Lovelace",
     slugPrefill: "ada",
+    invite: "none",
   });
 });
 

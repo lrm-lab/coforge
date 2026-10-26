@@ -11,7 +11,6 @@ const FAILURE_REASONS = {
   token_exchange: "failed to exchange authorization code",
   userinfo: "failed to fetch Authing user info",
   user_resolution: "failed to resolve user",
-  enrollment: "failed to enroll user in a Workspace",
 } as const;
 
 export type LoginFailureStage = keyof typeof FAILURE_REASONS;

@@ -8,7 +8,8 @@ import { afterSignInHref, safeReturnTo, signInHref } from "#src/features/auth/re
  * The one question of first sign-in: a person's display name. Outside the Workspace layout on
  * purpose: it is asked before their personal Workspace exists. Sign-in and every page that would
  * make or open that Workspace send a person here while they have no display name, with the page to go
- * on to as `returnTo`; someone who has one is sent straight on.
+ * on to as `returnTo`; someone who has one is sent straight on. Someone coming from a working
+ * invite link is asked for the name only: joining is their way in, so no personal Workspace is made.
  */
 export const Route = createFileRoute("/welcome")({
   // Only a page of this site is a place to go on to. The key is always returned, like `/login`.
@@ -16,20 +17,22 @@ export const Route = createFileRoute("/welcome")({
     returnTo: safeReturnTo(search.returnTo),
   }),
   beforeLoad: async ({ search }) => {
-    const step = await getNameStep();
+    const step = await getNameStep({ data: { returnTo: search.returnTo } });
     if (step.status === "named") throw redirect({ href: afterSignInHref(search.returnTo) });
     // The session outlived its user: nothing can be saved for them, so they sign in again (a
     // document load, `/auth/login` being a server route), which makes the user and a new session.
     if (step.status === "account_gone") {
       throw redirect({ href: signInHref(search.returnTo), reloadDocument: true });
     }
-    return { prefill: step.prefill, slugPrefill: step.slugPrefill };
+    return { prefill: step.prefill, slugPrefill: step.slugPrefill, invite: step.invite };
   },
   component: Welcome,
 });
 
 function Welcome() {
-  const { prefill, slugPrefill } = Route.useRouteContext();
+  const { prefill, slugPrefill, invite } = Route.useRouteContext();
   const { returnTo } = Route.useSearch();
-  return <NameStepPage prefill={prefill} slugPrefill={slugPrefill} returnTo={returnTo} />;
+  return (
+    <NameStepPage prefill={prefill} slugPrefill={slugPrefill} invite={invite} returnTo={returnTo} />
+  );
 }

@@ -4,6 +4,7 @@ import {
   PrismaFirstSignInNames,
   withFirstSignInUser,
 } from "#src/server/db/repositories/first-sign-in.repositories.server";
+import { joinTokenFromReturnTo } from "#src/features/auth/return-to";
 import { namePrefill } from "#src/features/auth/name-prefill";
 import { checkPersonName, type PersonNameProblem } from "#src/features/profiles/person-name";
 import {
@@ -20,6 +21,7 @@ import {
   WorkspaceEnrollment,
   provisionWorkspaceEnrollment,
 } from "#src/server/workspaces/enrollment.server";
+import { workspaceJoinLinks } from "#src/server/workspaces/join-links-store.server";
 import {
   defaultCloudComputerId,
   startDefaultCloudComputer,
@@ -29,6 +31,9 @@ export type FirstSignInInput = {
   user: { id: string; username: string };
   displayName: string;
   workspaceSlug?: string;
+  /** The page the person is on their way to; an active invite's join page makes the submit a
+   * name-only one (see `FirstSignIn.complete`). */
+  returnTo?: string;
   acceptLanguage: string;
 };
 
@@ -42,21 +47,35 @@ export type ConfirmedEnrollment = {
 export type FirstSignInStore = {
   lookup(userId: string): Promise<{ displayName: string | null } | null>;
   enroll(input: FirstSignInInput): Promise<ConfirmedEnrollment>;
+  /** Saves the display name alone, under the same per-User serialization as `enroll`; returns the
+   * name that stands (the first one saved). */
+  confirmName(input: { userId: string; displayName: string }): Promise<string>;
 };
+
+/** Whether the invite token names a join link that admits people right now. */
+export type InviteCheck = (token: string) => Promise<boolean>;
+
+/** What the page's `returnTo` says about an invite: `none` when it is no join page, `active` when
+ * the server confirmed the link works, `unavailable` when it does not (unknown, revoked, expired
+ * or used up). */
+export type InviteState = "none" | "active" | "unavailable";
 
 export type NameStep =
   | { status: "named" }
   /** `prefill` starts the name field, `slugPrefill` the Workspace URL field; either may be empty. */
-  | { status: "ask"; prefill: string; slugPrefill: string }
+  | { status: "ask"; prefill: string; slugPrefill: string; invite: InviteState }
   /** The session's user is gone: the person has to sign in again. */
   | { status: "account_gone" };
 
 /** Why the personal Workspace's URL was not accepted. */
 export type WorkspaceSlugProblem = "slug_invalid" | "slug_taken";
 
+/** `workspaceId` is null when only the name was saved (an active invite: joining makes the person
+ * a member, so no personal Workspace is made). `invite_unavailable`: a name-only submit found its
+ * invite no longer works; nothing was saved. */
 export type FirstSignInResult =
-  | { ok: true; workspaceId: string }
-  | { ok: false; problem: PersonNameProblem | WorkspaceSlugProblem };
+  | { ok: true; workspaceId: string | null }
+  | { ok: false; problem: PersonNameProblem | WorkspaceSlugProblem | "invite_unavailable" };
 
 /** The username as a Workspace URL to start from, or "" when it is only the fallback name (`user`,
  * `user-2`, `user-<hex>`: a sign-in that told us nothing to name the person by) or not usable. */
@@ -87,6 +106,10 @@ export type WeeklyReportAssistantBind = (input: {
  * computer is started for it, the weekly-report assistant is bound to that default
  * computer. The name and Workspace commit before those resources start. Sign-in itself finishes
  * without either; a person without a name is sent here before anything is created for them.
+ *
+ * The exception is someone arriving through a working invite link: they only give a name, no
+ * personal Workspace is made, and joining the invited Workspace is their way in. Whether the link
+ * works is decided here, on the server, from the `returnTo` it is given, never from the client.
  */
 export class FirstSignIn {
   constructor(
@@ -97,11 +120,21 @@ export class FirstSignIn {
       userId: string;
       workspaceId: string;
     }) => Promise<void>,
+    private readonly isInviteActive?: InviteCheck,
   ) {}
+
+  private async inviteState(returnTo: string | undefined): Promise<InviteState> {
+    const token = joinTokenFromReturnTo(returnTo);
+    if (token === undefined) return "none";
+    return (await this.isInviteActive?.(token)) ? "active" : "unavailable";
+  }
 
   /** Whether to ask at all, and what the fields start with: the provider's own name, when it reads
    * as one, and the username as a URL, when it is more than the fallback. */
-  async readNameStep(user: { id: string; name: string; username: string }): Promise<NameStep> {
+  async readNameStep(
+    user: { id: string; name: string; username: string },
+    returnTo?: string,
+  ): Promise<NameStep> {
     const person = await this.store.lookup(user.id);
     if (!person) return { status: "account_gone" };
     if (person.displayName !== null) return { status: "named" };
@@ -109,6 +142,7 @@ export class FirstSignIn {
       status: "ask",
       prefill: namePrefill(user.name),
       slugPrefill: workspaceSlugPrefill(user.username),
+      invite: await this.inviteState(returnTo),
     };
   }
 
@@ -119,10 +153,24 @@ export class FirstSignIn {
    * or a repeated submit, cannot replace it or retitle anything), and someone who already has
    * memberships gets them back as they are. `problem` says why a name or URL was not accepted;
    * nothing is saved or created then.
+   *
+   * A submit without a Workspace URL whose `returnTo` is a join page is the invite path: while the
+   * link works only the name is saved and nothing else is made (`workspaceId: null`); once it does
+   * not, `invite_unavailable` is returned and nothing is saved, so the person can go on the normal
+   * way with a URL. A `returnTo` that is no join page, or one naming an unknown token, never skips
+   * the Workspace.
    */
   async complete(input: FirstSignInInput): Promise<FirstSignInResult> {
     const checked = checkPersonName(input.displayName);
     if (!checked.ok) return { ok: false, problem: checked.problem };
+    if (input.workspaceSlug === undefined) {
+      const invite = await this.inviteState(input.returnTo);
+      if (invite === "unavailable") return { ok: false, problem: "invite_unavailable" };
+      if (invite === "active") {
+        await this.store.confirmName({ userId: input.user.id, displayName: checked.name });
+        return { ok: true, workspaceId: null };
+      }
+    }
     const slug = input.workspaceSlug?.trim();
     if (slug !== undefined && (!isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)))
       return { ok: false, problem: "slug_invalid" };
@@ -161,6 +209,12 @@ export class FirstSignIn {
 class PrismaFirstSignInStore implements FirstSignInStore {
   constructor(private readonly db: PrismaClient) {}
 
+  confirmName(input: { userId: string; displayName: string }) {
+    return withFirstSignInUser(this.db, input.userId, (tx) =>
+      new PrismaFirstSignInNames(tx).confirm(input.userId, input.displayName),
+    );
+  }
+
   lookup(userId: string) {
     return new PrismaFirstSignInNames(this.db).lookup(userId);
   }
@@ -188,6 +242,7 @@ class PrismaFirstSignInStore implements FirstSignInStore {
 }
 
 function firstSignIn(db: PrismaClient): FirstSignIn {
+  const joinLinks = workspaceJoinLinks(db);
   return new FirstSignIn(
     new PrismaFirstSignInStore(db),
     (request) =>
@@ -200,14 +255,16 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
       return ensureWeeklyReportAssistant(db, request);
     },
     ({ workspaceId, userId }) => provisionWorkspaceEnrollment(db, workspaceId, userId),
+    (token) => joinLinks.isActive(token),
   );
 }
 
 export function readNameStep(input: {
   db: PrismaClient;
   user: { id: string; name: string; username: string };
+  returnTo?: string;
 }): Promise<NameStep> {
-  return firstSignIn(input.db).readNameStep(input.user);
+  return firstSignIn(input.db).readNameStep(input.user, input.returnTo);
 }
 
 export function completeFirstSignIn(input: {
@@ -215,6 +272,7 @@ export function completeFirstSignIn(input: {
   user: { id: string; username: string };
   displayName: string;
   workspaceSlug?: string;
+  returnTo?: string;
   acceptLanguage: string;
 }): Promise<FirstSignInResult> {
   return firstSignIn(input.db).complete(input);

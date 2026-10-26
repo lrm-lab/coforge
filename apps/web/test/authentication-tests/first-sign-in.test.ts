@@ -51,6 +51,8 @@ function setup(
       workspaceId: string;
       computerId: string;
     }) => Promise<unknown>;
+    /** Join-link tokens that admit people; any other token is not an active invite. */
+    activeInvites?: string[];
   } = {},
 ) {
   const users = new Set(input.userExists === false ? [] : [ada.id]);
@@ -77,6 +79,10 @@ function setup(
     async lookup(userId) {
       return users.has(userId) ? { displayName: names.get(userId) ?? null } : null;
     },
+    async confirmName(request) {
+      if (!names.has(request.userId)) names.set(request.userId, request.displayName);
+      return names.get(request.userId)!;
+    },
     enroll(input) {
       const accepted = turn.then(async () => {
         const displayName = names.get(input.user.id) ?? input.displayName;
@@ -97,7 +103,13 @@ function setup(
   };
 
   return {
-    firstSignIn: new FirstSignIn(store, input.startCloudComputer, input.bindWeeklyReportAssistant),
+    firstSignIn: new FirstSignIn(
+      store,
+      input.startCloudComputer,
+      input.bindWeeklyReportAssistant,
+      undefined,
+      async (token) => (input.activeInvites ?? []).includes(token),
+    ),
     names,
     created,
   };
@@ -254,6 +266,7 @@ test("a person without one is asked, starting from the provider's name when it r
     status: "ask",
     prefill: "Ada Lovelace",
     slugPrefill: "ada",
+    invite: "none",
   });
   expect(
     await firstSignIn.readNameStep({ id: ada.id, name: "13800138000", username: "ada" }),
@@ -261,11 +274,13 @@ test("a person without one is asked, starting from the provider's name when it r
     status: "ask",
     prefill: "",
     slugPrefill: "ada",
+    invite: "none",
   });
   expect(await firstSignIn.readNameStep({ id: ada.id, name: "", username: "ada" })).toEqual({
     status: "ask",
     prefill: "",
     slugPrefill: "ada",
+    invite: "none",
   });
 });
 
@@ -329,4 +344,83 @@ test("the URL field starts from the username, unless that is only the fallback n
   expect(await step("ada_lovelace")).toMatchObject({ status: "ask", slugPrefill: "ada-lovelace" });
   for (const username of ["user", "user-2", "user-1a2b3c4d", "settings"])
     expect(await step(username)).toMatchObject({ status: "ask", slugPrefill: "" });
+});
+
+// Someone arriving through an invite link: the server confirms the link, the client's say-so counts
+// for nothing.
+
+test("with a working invite the name step asks for the name only, and says so", async () => {
+  const { firstSignIn } = setup({ activeInvites: ["good"] });
+  const ada3 = { id: ada.id, name: "Ada", username: "ada" };
+
+  expect(await firstSignIn.readNameStep(ada3, "/join/good")).toMatchObject({ invite: "active" });
+  expect(await firstSignIn.readNameStep(ada3, "/zh-CN/join/good?x=1")).toMatchObject({
+    invite: "active",
+  });
+  expect(await firstSignIn.readNameStep(ada3, "/join/gone")).toMatchObject({
+    invite: "unavailable",
+  });
+  expect(await firstSignIn.readNameStep(ada3, "/w/acme/tasks")).toMatchObject({ invite: "none" });
+  expect(await firstSignIn.readNameStep(ada3, "//evil.com/join/good")).toMatchObject({
+    invite: "none",
+  });
+});
+
+test("a name-only submit with a working invite saves the name and makes nothing", async () => {
+  const { firstSignIn, names, created } = setup({ activeInvites: ["good"] });
+  const submit = (displayName: string) =>
+    firstSignIn.complete({
+      user: ada,
+      displayName,
+      returnTo: "/en/join/good",
+      acceptLanguage: "en",
+    });
+
+  expect(await submit("  Ada   Lovelace ")).toEqual({ ok: true, workspaceId: null });
+  expect(names.get(ada.id)).toBe("Ada Lovelace");
+  // Repeating it keeps the first name.
+  expect(await submit("Ada King")).toEqual({ ok: true, workspaceId: null });
+  expect(names.get(ada.id)).toBe("Ada Lovelace");
+  expect(created).toEqual([]);
+});
+
+test("a name-only submit whose invite stopped working saves and makes nothing", async () => {
+  const { firstSignIn, names, created } = setup({ activeInvites: [] });
+
+  expect(
+    await firstSignIn.complete({
+      user: ada,
+      displayName: "Ada Lovelace",
+      returnTo: "/join/good",
+      acceptLanguage: "en",
+    }),
+  ).toEqual({ ok: false, problem: "invite_unavailable" });
+  expect(names.size).toBe(0);
+  expect(created).toEqual([]);
+});
+
+test("a submit with a Workspace URL, or with a returnTo that is no join page, still makes the Workspace", async () => {
+  const withUrl = setup({ activeInvites: ["good"] });
+  expect(
+    await withUrl.firstSignIn.complete({
+      user: ada,
+      displayName: "Ada Lovelace",
+      workspaceSlug: "ada-lab",
+      returnTo: "/join/good",
+      acceptLanguage: "en",
+    }),
+  ).toEqual({ ok: true, workspaceId: "workspace-ada-lab" });
+  expect(withUrl.created).toHaveLength(1);
+
+  for (const returnTo of ["/w/acme/join/good", "https://evil.com/join/good", "/join/good/extra"]) {
+    const forged = setup({ activeInvites: ["good", "extra"] });
+    const result = await forged.firstSignIn.complete({
+      user: ada,
+      displayName: "Ada Lovelace",
+      returnTo,
+      acceptLanguage: "en",
+    });
+    expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
+    expect(forged.created).toHaveLength(1);
+  }
 });

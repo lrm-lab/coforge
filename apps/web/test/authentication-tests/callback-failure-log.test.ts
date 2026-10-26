@@ -77,8 +77,7 @@ type Callback = {
     displayName: string;
     welcomedAt: Date | null;
   }>;
-  enrollUser?: () => Promise<void>;
-  /** Leaves user resolution and enrollment to the database the callback ships with. */
+  /** Leaves user resolution to the database the callback ships with. */
   persisted?: boolean;
 };
 
@@ -119,7 +118,6 @@ async function failedCallback(options: Callback = {}) {
                 displayName: "Ada Lovelace",
                 welcomedAt: new Date("2026-10-01T00:00:00Z"),
               })),
-            enrollUser: options.enrollUser ?? (async () => {}),
           }),
     });
   } finally {
@@ -285,24 +283,6 @@ test("a user that cannot be resolved says so, without the error's message or the
   );
   expectNoSecrets(lines, secrets);
   expect(lines.join("\n")).not.toContain("duplicate key");
-});
-
-test("a Workspace enrollment that fails says the enrollment failed", async () => {
-  const config = authingAt({ token: tokenGranted, userinfo: userinfoOk });
-  const { response, lines, secrets } = await failedCallback({
-    config,
-    enrollUser: async () => {
-      throw new Error(`no seat for ${email}`);
-    },
-  });
-  expectLoginFailedRedirect(response);
-  expect(callbackFailure(lines)).toMatchObject({
-    event: "auth.login_callback_failed",
-    stage: "enrollment",
-    reason: "failed to enroll user in a Workspace",
-    errorType: "error",
-  });
-  expectNoSecrets(lines, secrets);
 });
 
 test("a database that is missing says so as the step that needed it", async () => {

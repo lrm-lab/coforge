@@ -1,5 +1,5 @@
 import { isNonLocalizedPath } from "#src/lib/non-localized-path";
-import { localizeHref } from "#src/paraglide/runtime";
+import { deLocalizeHref, localizeHref } from "#src/paraglide/runtime";
 
 /** Longer return paths are dropped: the signed sign-in cookie that carries one must stay under the
  * browser's 4 KB cookie limit. */
@@ -77,4 +77,20 @@ export function welcomeHref(returnTo: string | undefined): string {
   return localizedReturnHref(
     returnTo ? `/welcome?returnTo=${encodeURIComponent(returnTo)}` : "/welcome",
   );
+}
+
+/** The invite token when `returnTo` is a join page (`/join/<token>`, with or without a locale
+ * prefix, any query), else `undefined`. Only the shape is read: whether the link works is for the
+ * server to find out. */
+export function joinTokenFromReturnTo(returnTo: unknown): string | undefined {
+  const path = safeReturnTo(returnTo);
+  if (!path) return undefined;
+  const { pathname } = new URL(deLocalizeHref(path), SAME_SITE_BASE);
+  const match = /^\/join\/([^/]+)\/?$/.exec(pathname);
+  if (!match?.[1]) return undefined;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return undefined;
+  }
 }
