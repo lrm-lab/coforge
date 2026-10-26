@@ -1,11 +1,16 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { ANTIGRAVITY_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
 import {
+  ANTIGRAVITY_MODELS_TIMEOUT_MS,
+  PROCESS_TREE_EXIT_GRACE_MS,
   discoverAntigravityCatalog,
   parseAntigravityModelList,
-} from "#src/code-agent/antigravity/catalog";
+} from "@lrm/coforge-anvil";
+import { fixtureAntigravityHost } from "./fixtures/antigravity-host";
+
+const ANTIGRAVITY_DISCOVERY_BUDGET_MS =
+  ANTIGRAVITY_MODELS_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
 
 const FIXTURE = new URL("./fixtures/antigravity-models-fixture.ts", import.meta.url).pathname;
 const MODELS_FIXTURE_PATH = new URL("./fixtures/antigravity-models.txt", import.meta.url).pathname;
@@ -90,6 +95,7 @@ test(
       {
         COFORGE_ANTIGRAVITY_MODELS_OUTPUT: "gemini-3.1-pro-high\tGemini 3.1 Pro (High)\n",
       },
+      fixtureAntigravityHost.catalogCommandRunner,
     );
     expect(catalog).toEqual({
       provider: "antigravity",
@@ -116,6 +122,7 @@ test(
       [process.execPath, FIXTURE, "models"],
       tmpdir(),
       {},
+      fixtureAntigravityHost.catalogCommandRunner,
     );
     expect(catalog?.models).toHaveLength(14);
   },
@@ -130,6 +137,7 @@ test(
       [process.execPath, FIXTURE, "models"],
       tmpdir(),
       { SSH_CLIENT: "10.0.0.1 1 22", SSH_CONNECTION: "10.0.0.1 1 10.0.0.2 22" },
+      fixtureAntigravityHost.catalogCommandRunner,
     );
     expect(catalog?.models).toHaveLength(14);
   },
@@ -145,6 +153,7 @@ test(
       {
         COFORGE_ANTIGRAVITY_MODELS_EXIT: "1",
       },
+      fixtureAntigravityHost.catalogCommandRunner,
     );
     expect(catalog).toBeUndefined();
   },
@@ -160,6 +169,7 @@ test(
       {
         COFORGE_ANTIGRAVITY_MODELS_OUTPUT: "not logged in\n",
       },
+      fixtureAntigravityHost.catalogCommandRunner,
     );
     expect(catalog).toBeUndefined();
   },
@@ -173,6 +183,7 @@ test(
       [process.execPath, FIXTURE, "hang-models"],
       tmpdir(),
       {},
+      fixtureAntigravityHost.catalogCommandRunner,
       30,
     );
     expect(catalog).toBeUndefined();

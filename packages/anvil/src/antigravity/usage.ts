@@ -1,5 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { runCatalogCommand } from "#src/code-agent/catalog-command";
+import type { AntigravityRuntimeHost } from "./host";
 import {
   UsageUnavailableError,
   UsageUnsupportedError,
@@ -7,8 +7,8 @@ import {
   type UsageOfficialGroup,
   type UsageSnapshot,
   type UsageWindow,
-  asRecord,
-} from "@lrm/coforge-anvil";
+} from "#src/contract";
+import { asRecord } from "#src/json-record";
 
 import { withoutSshSessionVariables } from "./ssh-environment";
 
@@ -46,11 +46,12 @@ export async function readAntigravityUsage(
     environment?: Readonly<Record<string, string | undefined>>;
     timeoutMs?: number;
   } = {},
+  host: AntigravityRuntimeHost,
 ): Promise<UsageSnapshot> {
-  const { output, exitCode } = await runCatalogCommand(
+  const { output, exitCode } = await host.catalogCommandRunner(
     [...(options.command ?? ["agy"]), "-p", "/usage", "--output-format", "json"],
     workingDirectory,
-    withoutSshSessionVariables(options.environment ?? Bun.env),
+    withoutSshSessionVariables(options.environment ?? host.readUsageEnvironment()),
     options.timeoutMs ?? ANTIGRAVITY_USAGE_TIMEOUT_MS,
   );
   // A local wrapper may print a banner before the JSON answer; the answer starts at the first

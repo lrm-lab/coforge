@@ -17,16 +17,14 @@ import {
   logKiroVersionUnsupported,
   isGrokVersionUnsupported,
   logGrokVersionUnsupported,
+  isAntigravityVersionUnsupported,
+  logAntigravityVersionUnsupported,
 } from "@lrm/coforge-anvil";
 import {
   probeClaudeCodeVersion,
   resolveClaudeCodeExecutable,
 } from "#src/code-agent/claude-code/runtime";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
-import {
-  isAntigravityVersionUnsupported,
-  logAntigravityVersionUnsupported,
-} from "#src/code-agent/antigravity/version";
 import { getLogger } from "@logtape/logtape";
 import {
   externalCodeAgents,

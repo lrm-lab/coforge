@@ -1,5 +1,11 @@
 /** Runtime fixtures belong to Anvil; daemon integration tests locate them through this module. */
 export const anvilRuntimeFixtures = {
+  antigravity: new URL("../../../anvil/test/fixtures/antigravity-fixture.ts", import.meta.url)
+    .pathname,
+  antigravityModels: new URL(
+    "../../../anvil/test/fixtures/antigravity-models-fixture.ts",
+    import.meta.url,
+  ).pathname,
   grok: new URL("../../../anvil/test/fixtures/grok-acp-fixture.ts", import.meta.url).pathname,
   grokUsage: new URL("../../../anvil/test/fixtures/grok-usage-fixture.ts", import.meta.url)
     .pathname,

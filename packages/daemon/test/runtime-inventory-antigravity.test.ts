@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  ANTIGRAVITY_MIN_CLI_VERSION,
-  isAntigravityVersionUnsupported,
-} from "#src/code-agent/antigravity/version";
+import { ANTIGRAVITY_MIN_CLI_VERSION, isAntigravityVersionUnsupported } from "@lrm/coforge-anvil";
 import {
   discoverCodeAgentCatalogs,
   discoverCodeAgentInventory,
@@ -17,14 +14,14 @@ import {
   ANTIGRAVITY_DISCOVERY_BUDGET_MS,
   CATALOG_DISCOVERY_BUDGET_MS,
 } from "./catalog-discovery-budget";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 import { captureDaemonLogs } from "./log-capture";
 
 /** An inventory pass runs every provider's discovery at once and ends with the slowest. */
 const PASS_BUDGET_MS = Math.max(CATALOG_DISCOVERY_BUDGET_MS, ANTIGRAVITY_DISCOVERY_BUDGET_MS);
 
-const MODELS_FIXTURE = new URL("./fixtures/antigravity-models-fixture.ts", import.meta.url)
-  .pathname;
+const MODELS_FIXTURE = anvilRuntimeFixtures.antigravityModels;
 
 function agyProbe(versionOutput: string, path = "/bin/agy"): ExternalCodeAgentProbe {
   return {

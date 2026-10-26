@@ -2,10 +2,10 @@ import {
   RUNTIME_PROVIDER,
   type CodeAgentModelCatalog,
   type CodeAgentModelMetadata,
+  diagnosticErrorCode,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
-import { runCatalogCommand } from "#src/code-agent/catalog-command";
+import type { CatalogCommandRunner } from "#src/catalog-command";
 import { withoutSshSessionVariables } from "./ssh-environment";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.ANTIGRAVITY]);
@@ -50,6 +50,7 @@ export async function discoverAntigravityCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  runCatalogCommand: CatalogCommandRunner,
   timeoutMs = ANTIGRAVITY_MODELS_TIMEOUT_MS,
 ): Promise<CodeAgentModelCatalog | undefined> {
   try {

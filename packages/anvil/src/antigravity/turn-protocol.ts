@@ -1,14 +1,14 @@
+import type { TurnRecord } from "#src/per-turn/turn-process";
 import type { AgentSessionOptions } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
-import type {
-  TurnRecord,
-  TurnCommand,
-  TurnProtocol,
-  TurnReader,
-  TurnRequest,
-  TurnScope,
-} from "@lrm/coforge-anvil";
+import { asRecord, nonEmptyString } from "#src/json-record";
+import {
+  type TurnCommand,
+  type TurnProtocol,
+  type TurnReader,
+  type TurnRequest,
+  type TurnScope,
+} from "#src/per-turn/turn-protocol";
 
 import { withoutSshSessionVariables } from "./ssh-environment";
 import { antigravityToolCall } from "./tool-call";

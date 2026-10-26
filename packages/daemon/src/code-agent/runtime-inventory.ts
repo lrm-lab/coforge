@@ -1,3 +1,4 @@
+import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { join } from "node:path";
@@ -15,9 +16,9 @@ import {
   discoverCursorCatalog,
   discoverOpenCodeCatalog,
   discoverGrokCatalog,
+  discoverAntigravityCatalog,
 } from "@lrm/coforge-anvil";
 import { runCatalogCommand } from "./catalog-command";
-import { discoverAntigravityCatalog } from "#src/code-agent/antigravity/catalog";
 import {
   externalCodeAgent,
   resolveExternalCodeAgentExecutable,
@@ -305,6 +306,7 @@ export async function discoverCodeAgentCatalogs(
           commands.antigravity ?? [executable, "models"],
           cwd,
           environment,
+          antigravityRuntimeHost.catalogCommandRunner,
         ).then((catalog) => ({
           provider: RUNTIME_PROVIDER.ANTIGRAVITY,
           keyPaths: [executable],

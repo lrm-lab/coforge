@@ -1,8 +1,8 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import type { CodeAgentProvider } from "@lrm/coforge-anvil";
-import { createPerTurnSession } from "@lrm/coforge-anvil";
-import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
+import { type CodeAgentProvider } from "#src/contract";
+import { createPerTurnSession } from "#src/per-turn/session";
+import type { AntigravityProviderOptions, AntigravityRuntimeHost } from "./host";
 import { readAntigravityUsage } from "./usage";
 import { createAntigravityTurnProtocol } from "./turn-protocol";
 import { assertAntigravityVersionSupported } from "./version";
@@ -14,27 +14,33 @@ import { assertAntigravityVersionSupported } from "./version";
  */
 export class AntigravityProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.ANTIGRAVITY;
+  readonly #host: AntigravityRuntimeHost;
   readonly #command: readonly string[];
 
-  constructor(options: { command?: readonly string[] } = {}) {
+  constructor(options: AntigravityProviderOptions) {
+    this.#host = options.host;
     this.#command = options.command ?? ["agy"];
   }
 
   async readUsage(options: { workingDirectory: string; timeoutMs?: number }) {
-    return readAntigravityUsage(options.workingDirectory, {
-      command: this.#command,
-      timeoutMs: options.timeoutMs,
-    });
+    return readAntigravityUsage(
+      options.workingDirectory,
+      {
+        command: this.#command,
+        timeoutMs: options.timeoutMs,
+      },
+      this.#host,
+    );
   }
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
-    await assertAntigravityVersionSupported(this.#command);
+    await assertAntigravityVersionSupported(this.#command, this.#host.versionReader);
     return createPerTurnSession(
       createAntigravityTurnProtocol(options, this.#command),
       options,
-      perTurnSessionHost,
+      this.#host.sessionHost,
     );
   }
 }

@@ -34,3 +34,8 @@ export * from "./src/grok/usage";
 export * from "./src/grok/version";
 export * from "./src/grok/host";
 export { GrokTurnEvents } from "./src/grok/update-events";
+export * from "./src/antigravity/provider";
+export * from "./src/antigravity/catalog";
+export * from "./src/antigravity/usage";
+export * from "./src/antigravity/version";
+export * from "./src/antigravity/host";
