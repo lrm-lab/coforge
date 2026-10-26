@@ -25,6 +25,7 @@ import {
 import { runCatalogCommand } from "./catalog-command";
 import {
   externalCodeAgent,
+  dshCodeAgent,
   resolveExternalCodeAgentExecutable,
   type ExternalCodeAgentProbe,
   type ExternalCodeAgentProvider,
@@ -40,6 +41,14 @@ import { claudeStaticCatalog } from "./claude-code/catalog";
 import { discoverCodexCatalog } from "./codex/catalog";
 import { discoverCoforgeCatalog } from "./pi/catalog";
 import { piRuntimeHost } from "./pi/host";
+import { DshCatalogDiscovery } from "./dsh/catalog";
+import { agentEnvironment } from "./environment";
+import { getLogger } from "@logtape/logtape";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+
+const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
+
+const dshCatalogs = new DshCatalogDiscovery();
 
 export type CodeAgentInventory = {
   runtimes: RuntimeMetadata[];
@@ -48,6 +57,7 @@ export type CodeAgentInventory = {
 
 type CatalogCommands = {
   codex?: readonly string[];
+  dsh?: readonly string[];
   kiro?: readonly string[];
   cursor?: readonly string[];
   opencode?: readonly string[];
@@ -71,8 +81,9 @@ export type CodeAgentDiscoveryOptions = {
   /** The wait for each external runtime's generic `--version` probe (`versionProbeOutput`);
    * `VERSION_PROBE_TIMEOUT_MS` when unset. Provider-specific probes keep their own bounds. */
   versionProbeTimeoutMs?: number;
-  /** Each bounded wait of Codex's model catalog discovery; `CATALOG_DISCOVERY_TIMEOUT_MS` when
-   * unset. The runtime probe's own `initialize` wait is not affected. */
+  /** Each bounded wait of Codex or DSH model catalog discovery. Defaults are
+   * `CATALOG_DISCOVERY_TIMEOUT_MS` for Codex and the native ACP 120-second budget for DSH.
+   * The runtime probe's own `initialize` wait is not affected. */
   catalogDiscoveryTimeoutMs?: number;
   /** Pi's in-process catalog discovery; `PI_CATALOG_DISCOVERY_TIMEOUT_MS` when unset. */
   piCatalogDiscoveryTimeoutMs?: number;
@@ -111,6 +122,25 @@ async function catalogCacheKeyPaths(
     platform,
   );
   return executable ? [executable] : undefined;
+}
+
+async function dshCatalogOptions(options: CodeAgentDiscoveryOptions) {
+  const environment = options.environment ?? Bun.env;
+  const executable = await resolveExternalCodeAgentExecutable(
+    dshCodeAgent,
+    options.probe,
+    codeAgentExecutableSearchPath(environment, options.platform),
+    environment,
+    options.platform ?? process.platform,
+  );
+  if (!executable) return undefined;
+  return {
+    command: options.commands?.dsh ?? [executable],
+    cwd: options.cwd ?? process.cwd(),
+    environment: agentEnvironment(undefined, environment),
+    timeoutMs: options.catalogDiscoveryTimeoutMs,
+    force: options.force,
+  };
 }
 
 /**
@@ -175,6 +205,12 @@ export async function loadCachedCodeAgentCatalogs(
     if (fresh) catalogs.push(cached.catalog!);
     if (!fresh || Date.now() - (cached?.catalogProbedAt ?? 0) > CATALOG_CACHE_TTL_MS)
       needsRefresh = true;
+  }
+  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DSH)) {
+    const dshOptions = await dshCatalogOptions(options);
+    const cached = dshOptions ? await dshCatalogs.cached(dshOptions) : undefined;
+    if (cached) catalogs.push(cached);
+    else needsRefresh = true;
   }
   return { catalogs, needsRefresh };
 }
@@ -333,6 +369,27 @@ export async function discoverCodeAgentCatalogs(
             catalog,
           })),
       );
+  }
+  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DSH)) {
+    const dshOptions = await dshCatalogOptions(options);
+    if (dshOptions)
+      discoveries.push(
+        dshCatalogs
+          .discover(dshOptions)
+          .catch(async (error) => {
+            logger.warning("DSH model catalog discovery failed", {
+              event: "code_agent_catalog:discovery_failed",
+              provider: RUNTIME_PROVIDER.DSH,
+              error_code: diagnosticErrorCode(error),
+              outcome: "unavailable",
+            });
+            if (options.force) throw error;
+            return dshCatalogs.cached(dshOptions);
+          })
+          .then((catalog) => ({ catalog })),
+      );
+    else if (options.force)
+      discoveries.push(Promise.reject(new Error("DSH model catalog refresh failed")));
   }
   const results = await Promise.all(discoveries);
   if (options.cacheDirectory) {

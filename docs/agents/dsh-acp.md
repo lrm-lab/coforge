@@ -95,10 +95,35 @@ preview are native tool names. Shell reply-intent recognition stays a host polic
 
 `session/new` returns the model/reasoning directory, so discovery must create a
 native session, read config options, then close it and stop the probe process.
-Closing leaves a persisted empty session. The reviewed inventory policy is one
-probe per version, cached by the host, using a CoForge temporary cwd and the real
-profile/account. Anvil provides native exchange/parsing without a persistent
-cache. Inventory wiring and its cache precede user exposure.
+Closing leaves a persisted empty session; the pinned ACP and JSONL persistence
+backend provide no deletion API. The daemon removes its temporary cwd, never the
+native session files, and retains the real home/profile/account. After the separate rollout opens, discovery runs
+in the background after daemon readiness. Its successful model metadata is cached
+only within the process, keyed by installation/configuration file stats and the
+effective environment. Relative DSH_HOME resolves against the inventory probe cwd
+(the daemon cwd by default), before launching in the temporary directory. Credential files are stat'd without reading their contents.
+The environment fingerprint stays in memory, so a disk catalog cannot be validated
+after restart and is never trusted. There is no periodic DSH refresh; a new
+process, changed inputs or explicit refresh creates another native session.
+Concurrent discovery shares one in-flight operation, including initial profile
+preparation and cleanup. Ordinary waiters re-check their latest inputs afterward;
+explicit refresh requests are serialized and still each perform a new probe.
+Explicit refresh failures report an error and preserve the previous cache.
+Tracked files are the executable, home patch,
+`.credentials.yaml`, home `.env`, and ACP profile patch/package/lock files.
+The profile's presence is checked; directory timestamps and the generated
+`cordis.yml` (rewritten by native boot) do not invalidate model metadata.
+Custom plugins or credential-store paths outside those roots require explicit refresh.
+Anvil owns the native exchange and parsing; the daemon owns this cache and cwd.
+
+ACP advertises no authentication methods; its authenticate method is a no-op.
+For account authentication, log in through native `dsh web` using the same DSH_HOME;
+ACP can reuse its stored grant. API keys use native credential resolution: stored
+file, launch environment, project `.env`, then harness-home `.env`. Catalog probes
+use their temporary project directory, so agent-specific project `.env` files are
+not a source for the Computer-wide catalog. Account and API-key routes are separate;
+neither falls back to the other. A listed model is configuration metadata, not proof
+of a valid login, balance or successful model request.
 
 The local fake model endpoint verified exact instruction content, including
 nested braces and a 115,041-byte sample; it intentionally refused generation.

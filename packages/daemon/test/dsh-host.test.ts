@@ -23,10 +23,15 @@ test("DSH host preserves the selected home and credentials and supplies the revi
       reasoning: "",
       envVars: { COFORGE_DAEMON_HOME: "/stale-host-scope" },
     },
-    environment: { DEEPSEEK_API_KEY: "dummy-test-key", DSH_HOME: "/custom-dsh-home" },
+    environment: {
+      DEEPSEEK_API_KEY: "dummy-test-key",
+      DSH_HOME: "/custom-dsh-home",
+      PWD: "/previous-probe",
+    },
   });
   expect(environment.DEEPSEEK_API_KEY).toBe("dummy-test-key");
   expect(environment.DSH_HOME).toBe("/custom-dsh-home");
+  expect(environment.PWD).toBe("/agent");
   expect(environment.DSH_PERMISSION_MODE).toBe("danger-full-access");
   expect(environment.COFORGE_DAEMON_HOME).toBeUndefined();
 });

@@ -36,7 +36,7 @@ type CodeAgentProviderRegistryOptions = {
 };
 
 function providerExecutable(
-  provider: ExternalCodeAgentProvider,
+  provider: ExternalCodeAgentProvider | typeof RUNTIME_PROVIDER.DSH,
   options: CodeAgentProviderRegistryOptions,
 ): string | undefined {
   return resolveHostCodeAgentExecutable(provider, options.environment, options.platform);
@@ -105,8 +105,13 @@ export function createCodeAgentProvider(
     }
     case RUNTIME_PROVIDER.ANTIGRAVITY:
       return new AntigravityProvider({ host: antigravityRuntimeHost });
-    case RUNTIME_PROVIDER.DSH:
-      return new DshProvider({ host: dshRuntimeHost });
+    case RUNTIME_PROVIDER.DSH: {
+      const executable = providerExecutable(RUNTIME_PROVIDER.DSH, options);
+      return new DshProvider({
+        host: dshRuntimeHost,
+        ...(executable ? { command: [executable] } : {}),
+      });
+    }
     default: {
       const unreachable: never = provider;
       throw new Error(`Unhandled runtime provider: ${unreachable}`);

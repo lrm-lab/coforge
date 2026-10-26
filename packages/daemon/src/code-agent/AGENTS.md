@@ -48,6 +48,18 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   (`CLAUDE_CODE_MODEL_MINIMUM_VERSION`); aliases stay, an unknown version keeps every model;
   efforts follow Raft's catalog (`opus`/`fable`/`sonnet` all; `haiku` none).
 
+## DeepSeek Harness
+
+- DSH remains unadvertised until native and UI acceptance. Its descriptor may resolve the
+  executable without enrolling it in `externalCodeAgents`.
+- DSH catalog probes use a private temporary cwd and the selected native home/profile. Native
+  close does not delete persisted sessions; never delete their files ourselves. Reuse successful
+  metadata within the process by install/config stat and effective-environment fingerprint.
+  Neither credentials nor their fingerprint may be written to disk. Restart invalidates the
+  cache; no periodic TTL refresh. Failed explicit refreshes retain old cache but report failure.
+- ACP has no login flow. Existing native API-key/account configuration remains native; catalog
+  availability is not proof of authentication, quota or successful generation.
+
 ## Standing instructions
 
 - Keep the standing CoForge Agent instructions in one provider-neutral source,

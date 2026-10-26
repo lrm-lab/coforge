@@ -76,6 +76,13 @@ function grokInstalledExecutableCandidates(
   ];
 }
 
+/** Kept outside advertised inventory until native/UI acceptance opens the rollout. */
+export const dshCodeAgent = {
+  provider: RUNTIME_PROVIDER.DSH,
+  executable: "dsh",
+  installedExecutableCandidates: noInstalledExecutableCandidates,
+} as const;
+
 export const externalCodeAgents = [
   {
     provider: RUNTIME_PROVIDER.CODEX,
@@ -128,7 +135,7 @@ export const externalCodeAgent: Record<ExternalCodeAgentProvider, ExternalCodeAg
   >;
 
 export async function resolveExternalCodeAgentExecutable(
-  agent: ExternalCodeAgent,
+  agent: ExternalCodeAgent | typeof dshCodeAgent,
   probe: ExternalCodeAgentProbe,
   searchPath: string | undefined,
   environment: Readonly<Record<string, string | undefined>>,
@@ -147,11 +154,11 @@ export async function resolveExternalCodeAgentExecutable(
  * candidates as inventory. Provider construction is synchronous, so this host-only form uses
  * filesystem checks directly rather than the asynchronous test probe seam above. */
 export function resolveHostCodeAgentExecutable(
-  provider: ExternalCodeAgentProvider,
+  provider: ExternalCodeAgentProvider | typeof RUNTIME_PROVIDER.DSH,
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
   platform: NodeJS.Platform = process.platform,
 ): string | undefined {
-  const agent = externalCodeAgent[provider];
+  const agent = provider === RUNTIME_PROVIDER.DSH ? dshCodeAgent : externalCodeAgent[provider];
   const searchPath = codeAgentExecutableSearchPath(environment, platform);
   const fromPath = Bun.which(agent.executable, { PATH: searchPath });
   if (fromPath) return fromPath;
