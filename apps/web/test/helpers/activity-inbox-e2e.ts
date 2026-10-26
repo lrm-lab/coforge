@@ -68,6 +68,27 @@ export const currentRow = `[...document.querySelectorAll(${rowItems})].find((ite
  * `thread:` for a thread shown alone). */
 export const openParam = `new URLSearchParams(location.search).get("open")`;
 
+/** One agent-browser session: its commands, and a page expression read back as JSON. */
+export function browserSession(browserPath: string, session: string) {
+  async function browser(...args: string[]) {
+    const child = Bun.spawn([browserPath, "--session", session, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
+    return stdout;
+  }
+  async function evaluate<T>(expression: string): Promise<T> {
+    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
+  }
+  return { browser, evaluate };
+}
+
 /**
  * A channel shared by the viewer and the seeded peer, reset to this run's messages: the viewer's
  * thread root (`root`), which they follow, the peer's reply in it (`reply`), then a newer top-level

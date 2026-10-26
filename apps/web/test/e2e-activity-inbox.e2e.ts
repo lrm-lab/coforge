@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectKey } from "#src/features/conversations/direct-key";
+import { personAvatarUrl } from "#src/lib/person-picture";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import {
   activeCount,
+  browserSession,
   currentRow,
   hydrated,
   inPane,
@@ -48,35 +50,14 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
 
-/** One agent-browser session: its commands, and a page expression read back as JSON. */
-function browserSession(session: string) {
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
-  return { browser, evaluate };
-}
-
 test("the Activity page lists, filters, marks Done and opens inbox items", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-${process.pid}`;
-  const { browser, evaluate } = browserSession(session);
-  /** The text of every row this test seeded, in page order. */
+  const { browser, evaluate } = browserSession(browserPath, session);
+  /** The text of every row this test seeded (its channel's and its thread's), in page order. */
   const seededRows = `[...document.querySelectorAll(${rowItems})]
     .map((row) => row.textContent)
-    .filter((text) => text.includes("E2E activity"))`;
+    .filter((text) => text.includes("e2e-activity-inbox"))`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -494,10 +475,10 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
 test("a direct message with a member, and the one with themself, list with the member's face and name", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-dm-${process.pid}`;
-  const { browser, evaluate } = browserSession(session);
-  /** One seeded row's text and avatar initial, found by a message it previews. */
+  const { browser, evaluate } = browserSession(browserPath, session);
+  /** One seeded row's text and the picture its avatar shows, found by a message it previews. */
   const row = (text: string) =>
-    `(() => { const row = [...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return row ? { text: row.textContent, avatar: row.querySelector("[data-avatar]")?.textContent ?? null } : null; })()`;
+    `(() => { const row = [...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return row ? { text: row.textContent, avatar: row.querySelector("[data-avatar] img")?.getAttribute("src") ?? null } : null; })()`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -598,7 +579,8 @@ test("a direct message with a member, and the one with themself, list with the m
     expect(dm.text).not.toContain("@Activity DM Peer");
     expect(dm.text).toContain("1 new");
     expect(dm.text).toContain("Activity DM Peer: E2E activity DM hello");
-    expect(dm.avatar).toBe("A");
+    // A member with no picture shows the cartoon person their id chooses.
+    expect(dm.avatar).toBe(personAvatarUrl(peer.id, null));
     const self = await evaluate<{ text: string; avatar: string | null }>(
       row("E2E activity note to self"),
     );
@@ -632,7 +614,7 @@ test("a direct message with a member, and the one with themself, list with the m
 test("a pinned channel lists under Pinned, before All conversations, and stays there after Done", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-pinned-${process.pid}`;
-  const { browser, evaluate } = browserSession(session);
+  const { browser, evaluate } = browserSession(browserPath, session);
   const channelId = seededUuid("e2e-activity-inbox:pinned-channel");
   /** The text of every row under `selector` that previews this test's messages. */
   const rowsIn = (selector: string) =>
@@ -729,8 +711,12 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
       expect.stringContaining("E2E pinned root"),
     ]);
 
-    // A pinned row opens beside the list and is marked as the open one.
-    await browser("find", "text", "E2E pinned hello", "click");
+    // A pinned row opens beside the list and is marked as the open one. Its preview's text runs on
+    // from a mention chip, so the row's link is clicked rather than an element with that text.
+    await evaluate(`[...document.querySelectorAll(${pinnedItems})]
+      .find((item) => item.textContent.includes("E2E pinned hello"))
+      .querySelector("a")
+      .click() ?? true`);
     await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
     await browser("wait", "--fn", inPane(helloId));
     await browser(
