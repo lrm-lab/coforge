@@ -5,11 +5,11 @@ import {
   type RuntimeAuthLoginResult,
   type RuntimeAuthLogoutResult,
   type RuntimeAuthStatus,
-  JsonlProcess,
   asRecord,
   runtimeAuthAccount,
   scrubRuntimeErrorText,
 } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { processSpawner } from "#src/code-agent/process-host";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";

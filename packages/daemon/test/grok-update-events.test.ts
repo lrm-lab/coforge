@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { GrokTurnEvents } from "@lrm/coforge-anvil";
+import { GrokTurnEvents } from "@lrm/coforge-anvil/grok";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 
 test("real Grok ACP delta frames emit an early intent only after the target is closed", async () => {

@@ -1,5 +1,5 @@
 import type { CodeAgentModelMetadata } from "@lrm/coforge-sdk/internal";
-import { JsonlRequestError } from "#src/jsonl-process";
+import { JsonlRequestError } from "#src/jsonl-error";
 import { withDeadline } from "#src/deadline";
 
 /** How long each bounded wait of a catalog discovery (`within`) lasts. A discovery that waits on

@@ -1,9 +1,10 @@
-import type {
-  CatalogCommandRunner,
-  PerTurnSessionHost,
-  CliVersionReader,
+import {
+  type CatalogCommandRunner,
+  type CliVersionReader,
+  VERSION_PROBE_TIMEOUT_MS,
+  withDeadline,
 } from "@lrm/coforge-anvil";
-import { VERSION_PROBE_TIMEOUT_MS, withDeadline } from "@lrm/coforge-anvil";
+import type { PerTurnSessionHost } from "@lrm/coforge-anvil/execution";
 
 /** The fixture never spawns descendants. Production tree ownership is tested by daemon. */
 export const fixturePerTurnHost: PerTurnSessionHost = {

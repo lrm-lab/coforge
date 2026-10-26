@@ -1,7 +1,8 @@
 import { type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
 import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
-import { JsonlProcess, JsonlRequestError, catalogErrorMessage, asRecord } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
+import { JsonlRequestError, catalogErrorMessage, asRecord } from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 

@@ -7,12 +7,9 @@ import { join } from "node:path";
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { kiroProvider } from "./fixtures/kiro-host";
-import {
-  CursorProvider,
-  PROCESS_TREE_EXIT_GRACE_MS,
-  OpenCodeProvider,
-  VERSION_PROBE_TIMEOUT_MS,
-} from "@lrm/coforge-anvil";
+import { CursorProvider } from "@lrm/coforge-anvil/cursor";
+import { PROCESS_TREE_EXIT_GRACE_MS, VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
+import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
 import { grokProvider } from "./fixtures/grok-host";
 import { antigravityProvider } from "./fixtures/antigravity-host";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";

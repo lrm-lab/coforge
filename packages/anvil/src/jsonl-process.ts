@@ -1,25 +1,18 @@
 import { getLogger } from "@logtape/logtape";
-import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "./process-tree";
-import { LineBuffer } from "./line-buffer";
+import { JsonlProtocolError, JsonlRequestError } from "./jsonl-error";
 import {
   PROCESS_TREE_EXIT_GRACE_MS,
-  cleanupOwnedTree,
-  type ProcessTreeCleanupOptions,
-} from "./process-tree-cleanup";
+  type OwnedChildProcess,
+  type OwnedProcessTree,
+  type ProcessTreeSpawner,
+} from "./process-tree";
+import { LineBuffer } from "./line-buffer";
+import { cleanupOwnedTree, type ProcessTreeCleanupOptions } from "./process-tree-cleanup";
 import { withDeadline } from "./deadline";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "jsonl"]);
 
 type JsonRecord = Readonly<Record<string, unknown>>;
-
-/** Adapter-authored diagnostics only; never pass raw provider output here. */
-export class JsonlProtocolError extends Error {}
-
-export class JsonlRequestError extends Error {
-  constructor(readonly responseError: unknown) {
-    super("code agent request failed");
-  }
-}
 
 interface PendingRequest {
   resolve(value: JsonRecord): void;

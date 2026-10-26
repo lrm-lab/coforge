@@ -6,22 +6,24 @@ import {
 import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
 import { withoutClaudeCodeMarker } from "#src/code-agent/claude-code/launch-args";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import {
-  JsonlProcess,
   isOpenCodeVersionUnsupported,
   logOpenCodeVersionUnsupported,
+} from "@lrm/coforge-anvil/opencode";
+import {
   VERSION_PROBE_TIMEOUT_MS,
   withDeadline,
   type CodeAgentProbe,
-  isKiroVersionUnsupported,
-  logKiroVersionUnsupported,
-  isGrokVersionUnsupported,
-  logGrokVersionUnsupported,
-  isAntigravityVersionUnsupported,
-  logAntigravityVersionUnsupported,
   CATALOG_DISCOVERY_TIMEOUT_MS,
   within,
 } from "@lrm/coforge-anvil";
+import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "@lrm/coforge-anvil/kiro";
+import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "@lrm/coforge-anvil/grok";
+import {
+  isAntigravityVersionUnsupported,
+  logAntigravityVersionUnsupported,
+} from "@lrm/coforge-anvil/antigravity";
 import {
   probeClaudeCodeVersion,
   resolveClaudeCodeExecutable,

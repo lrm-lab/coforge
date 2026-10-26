@@ -7,14 +7,15 @@ import type {
 } from "@coforge/agent";
 import {
   AGENT_RUNTIME_EVENT_TYPE,
-  JsonlProcess,
   type CodeAgentProvider,
   InterruptTracker,
   asRecord,
   eventTime,
   nonEmptyString,
 } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { processSpawner } from "#src/code-agent/process-host";
+import type { SessionState, SessionInitialization, PendingNotice } from "./session-state";
 
 import { RUNTIME_PROVIDER, type AgentServiceTierObserved } from "@lrm/coforge-sdk/internal";
 import { readClaudeCodeUsage } from "./usage";
@@ -118,14 +119,14 @@ class ClaudeCodeAgentSession implements AgentSession {
   #replacedSessionId: string | undefined;
   readonly #removePrompt: () => Promise<void>;
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  #state: "idle" | "running" | "interrupting" | "disposed" = "idle";
+  #state: SessionState = "idle";
   #nativeTurnQueued = false;
   /** Whether a top-level `result` has been seen. Set once and never reset: the fresh relau
    * (`#startFresh`) runs only before any progress, and a result is progress. */
   #resultObserved = false;
   #initialized = false;
   #nativeIdentityObserved = false;
-  #initialization: { process: JsonlProcess; promise: Promise<void> } | undefined;
+  #initialization: SessionInitialization | undefined;
   #sessionId: string | undefined;
   #sessionReports = Promise.resolve();
   #identity: AgentSessionIdentity | undefined;
@@ -140,11 +141,7 @@ class ClaudeCodeAgentSession implements AgentSession {
   #inputFailure: Error | undefined;
   #recoveryFailed = false;
   readonly #outstandingTools = new Set<string>();
-  readonly #waitingNotices: Array<{
-    text: string;
-    resolve(): void;
-    reject(error: Error): void;
-  }> = [];
+  readonly #waitingNotices: PendingNotice[] = [];
   readonly #rateLimits = new ClaudeRateLimitState();
   /** The last service tier reported for this session, so a repeated reading is not re-emitted. */
   #serviceTier: AgentServiceTierObserved | undefined;
@@ -153,10 +150,7 @@ class ClaudeCodeAgentSession implements AgentSession {
   constructor(
     process: JsonlProcess,
     removePrompt: () => Promise<void>,
-    private readonly reportSessionId?: (
-      sessionId: string,
-      replacedSessionId?: string,
-    ) => Promise<void>,
+    private readonly reportSessionId?: AgentSessionOptions["onSessionId"],
     private expectedSessionId?: string,
     private readonly spawnFresh?: () => { process: JsonlProcess; sessionId: string },
     initialFreshSessionId?: string,

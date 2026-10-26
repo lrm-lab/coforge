@@ -3,10 +3,10 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   ANTIGRAVITY_MODELS_TIMEOUT_MS,
-  PROCESS_TREE_EXIT_GRACE_MS,
   discoverAntigravityCatalog,
   parseAntigravityModelList,
-} from "@lrm/coforge-anvil";
+} from "@lrm/coforge-anvil/antigravity";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { fixtureAntigravityHost } from "./fixtures/antigravity-host";
 
 const ANTIGRAVITY_DISCOVERY_BUDGET_MS =

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { readKiroUsage as parseKiroUsage, UsageUnavailableError } from "@lrm/coforge-anvil";
+import { readKiroUsage as parseKiroUsage } from "@lrm/coforge-anvil/kiro";
+import { UsageUnavailableError } from "@lrm/coforge-anvil";
 import { kiroUsagePayload as payload } from "./fixtures/kiro-usage";
 
 function readKiroUsage(options: { fetch(): Promise<Response> }) {

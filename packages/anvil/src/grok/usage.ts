@@ -13,7 +13,8 @@ import {
   UsageUnsupportedError,
 } from "#src/contract";
 import { asRecord } from "#src/json-record";
-import { JsonlProcess, JsonlRequestError } from "#src/jsonl-process";
+import { JsonlProcess } from "#src/jsonl-process";
+import { JsonlRequestError } from "#src/jsonl-error";
 
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 

@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 
-import { JsonlProcess, type OwnedProcessTree } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
+import { type OwnedProcessTree } from "@lrm/coforge-anvil";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
 import { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { AgentSession } from "@coforge/agent";

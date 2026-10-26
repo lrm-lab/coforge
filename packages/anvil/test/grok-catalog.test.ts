@@ -1,10 +1,7 @@
 import { fixtureGrokHost } from "./fixtures/grok-host";
 import { expect, test } from "bun:test";
-import {
-  discoverGrokCatalog,
-  GROK_CATALOG_TIMEOUT_MS,
-  PROCESS_TREE_EXIT_GRACE_MS,
-} from "@lrm/coforge-anvil";
+import { discoverGrokCatalog, GROK_CATALOG_TIMEOUT_MS } from "@lrm/coforge-anvil/grok";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 
 test(
   "discovers the native per-model reasoning choices without creating a session",

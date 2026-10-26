@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import type { JsonlProcess } from "@lrm/coforge-anvil";
+import type { JsonlProcess } from "@lrm/coforge-anvil/execution";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
 

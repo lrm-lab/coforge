@@ -1,11 +1,7 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSessionOptions } from "@coforge/agent";
-import {
-  AgentSessionRecoveryError,
-  asRecord,
-  JsonlRequestError,
-  type JsonlProcess,
-} from "@lrm/coforge-anvil";
+import { AgentSessionRecoveryError, asRecord, JsonlRequestError } from "@lrm/coforge-anvil";
+import { type JsonlProcess } from "@lrm/coforge-anvil/execution";
 
 import { getLogger } from "@logtape/logtape";
 

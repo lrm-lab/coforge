@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { discoverGrokCatalog, readGrokUsage } from "@lrm/coforge-anvil";
+import { discoverGrokCatalog, readGrokUsage } from "@lrm/coforge-anvil/grok";
 import { fixtureGrokHost, grokProvider } from "./fixtures/grok-host";
 const command = [
   process.execPath,

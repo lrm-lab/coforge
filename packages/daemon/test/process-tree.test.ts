@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 
 import type { OwnedProcessTreeKillReport } from "@lrm/coforge-anvil";
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
-import { cleanupOwnedTree } from "@lrm/coforge-anvil";
+import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
 import {
   hostProcessTable,
   processClockMs,

@@ -5,8 +5,8 @@ import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { antigravityProvider } from "./antigravity-host";
 import {
   type AgentRuntimeEvent,
-  PROCESS_TREE_EXIT_GRACE_MS,
   VERSION_PROBE_TIMEOUT_MS,
+  PROCESS_TREE_EXIT_GRACE_MS,
 } from "@lrm/coforge-anvil";
 
 const FIXTURE = new URL("./antigravity-fixture.ts", import.meta.url).pathname;

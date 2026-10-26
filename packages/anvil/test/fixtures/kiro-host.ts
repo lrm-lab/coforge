@@ -1,4 +1,8 @@
-import { KiroProvider, type KiroRuntimeHost, type KiroProviderOptions } from "@lrm/coforge-anvil";
+import {
+  KiroProvider,
+  type KiroRuntimeHost,
+  type KiroProviderOptions,
+} from "@lrm/coforge-anvil/kiro";
 import { fixturePerTurnHost, fixtureVersionReader } from "./runtime-host";
 
 /** Fixture I/O only; daemon tests cover real environment and native credential composition. */

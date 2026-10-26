@@ -1,4 +1,4 @@
-import type { KiroRuntimeHost } from "@lrm/coforge-anvil";
+import type { KiroRuntimeHost } from "@lrm/coforge-anvil/kiro";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { processSpawner } from "#src/code-agent/process-host";
 import { readVersionOutput } from "#src/code-agent/version-probe";

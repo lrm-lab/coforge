@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
-import { JsonlProcess, type OwnedProcessTree } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
+import { type OwnedProcessTree } from "@lrm/coforge-anvil";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 test("a response written just before the process exits is delivered, not failed as an exit", async () => {

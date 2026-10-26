@@ -46,3 +46,6 @@ export interface ProcessTreeSpawner {
     environment: Readonly<Record<string, string>>,
   ): OwnedProcessTree;
 }
+
+/** How long each rung of process cleanup waits for the owned tree to exit. */
+export const PROCESS_TREE_EXIT_GRACE_MS = 5_000;

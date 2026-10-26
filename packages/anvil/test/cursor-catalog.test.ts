@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { discoverCursorCatalog, parseCursorModelList } from "@lrm/coforge-anvil";
+import { discoverCursorCatalog, parseCursorModelList } from "@lrm/coforge-anvil/cursor";
 
 import { fixtureCatalogCommand } from "./fixtures/runtime-host";
 

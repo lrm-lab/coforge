@@ -2,16 +2,16 @@ import { piRuntimeHost } from "#src/code-agent/pi/host";
 import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
+import { AntigravityProvider } from "@lrm/coforge-anvil/antigravity";
 import {
-  AntigravityProvider,
   type RuntimeAuthAdapter,
   type RuntimeAuthProvider,
   type CodeAgentProvider,
-  CursorProvider,
-  OpenCodeProvider,
-  KiroProvider,
-  GrokProvider,
 } from "@lrm/coforge-anvil";
+import { CursorProvider } from "@lrm/coforge-anvil/cursor";
+import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
+import { KiroProvider } from "@lrm/coforge-anvil/kiro";
+import { GrokProvider } from "@lrm/coforge-anvil/grok";
 import { PiProvider } from "@lrm/coforge-anvil/pi";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { CodexProvider } from "#src/code-agent/codex/provider";

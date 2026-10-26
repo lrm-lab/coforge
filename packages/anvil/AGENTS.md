@@ -2,7 +2,7 @@
 
 `@lrm/coforge-anvil` owns provider-neutral Agent contracts, runtime adapters and their shared execution machinery. Keep it independent of daemon orchestration and platform implementations.
 
-- Pi runtime implementations are exported only through `@lrm/coforge-anvil/pi`. Keep the root entry free of Pi SDK value imports so Web consumers cannot load an embedded runtime.
+- The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (`/cursor`, `/opencode`, `/kiro`, `/grok`, `/antigravity`, `/pi`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
 - Public contracts and exports belong here; daemon imports them by package name. Never import daemon modules, including through relative paths or aliases. `scripts/ci/anvil-boundary.test.ts` checks this direction.
 - OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default, read Workspace configuration, discover executables or read PATH.
 - The host supplies per-turn environment composition through `PerTurnSessionHost.buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
@@ -16,8 +16,10 @@
 | --- | --- |
 | `src/contract.ts` | Provider-neutral sessions, provider and auth contracts |
 | `src/runtime-auth-status.ts` | Shared runtime auth status values |
+| `src/execution.ts` | Explicit public entry for JSONL, per-turn sessions and process cleanup |
+| `src/jsonl-error.ts` | Pure JSONL protocol/request errors, shared by neutral projections and execution |
 | `src/jsonl-process.ts` | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership |
-| `src/process-tree.ts` | Host process ownership ports |
+| `src/process-tree.ts` | Host process ownership ports and shared cleanup deadline policy |
 | `src/catalog-discovery.ts` | Catalog wait deadlines and trusted discovery error projection |
 | `src/catalog-command.ts` | Host catalog command execution port |
 | `src/per-turn/` | Shared per-turn session and process execution |

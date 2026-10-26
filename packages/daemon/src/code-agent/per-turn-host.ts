@@ -1,4 +1,4 @@
-import type { PerTurnSessionHost } from "@lrm/coforge-anvil";
+import type { PerTurnSessionHost } from "@lrm/coforge-anvil/execution";
 import { agentEnvironment } from "./environment";
 import { processSpawner } from "./process-host";
 

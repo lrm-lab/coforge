@@ -3,9 +3,13 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { AgentSession } from "@coforge/agent";
-import { CursorProvider, withDeadline, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
-import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import {
+  type AgentSession,
+  withDeadline,
+  type AgentRuntimeEvent,
+  PROCESS_TREE_EXIT_GRACE_MS,
+} from "@lrm/coforge-anvil";
+import { CursorProvider } from "@lrm/coforge-anvil/cursor";
 
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 

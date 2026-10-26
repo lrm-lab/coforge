@@ -2,11 +2,10 @@ import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { readAntigravityUsage, ANTIGRAVITY_USAGE_TIMEOUT_MS } from "@lrm/coforge-anvil/antigravity";
 import {
-  readAntigravityUsage,
   UsageUnavailableError,
   UsageUnsupportedError,
-  ANTIGRAVITY_USAGE_TIMEOUT_MS,
   PROCESS_TREE_EXIT_GRACE_MS,
 } from "@lrm/coforge-anvil";
 import { fixtureAntigravityHost } from "./fixtures/antigravity-host";

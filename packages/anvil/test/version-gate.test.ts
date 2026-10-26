@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
-import { OpenCodeProvider, isOpenCodeVersionUnsupported, isVersionBelow } from "@lrm/coforge-anvil";
+import { OpenCodeProvider, isOpenCodeVersionUnsupported } from "@lrm/coforge-anvil/opencode";
+import { isVersionBelow } from "@lrm/coforge-anvil";
 
 import { fixturePerTurnHost, fixtureVersionReader } from "./fixtures/runtime-host";
 

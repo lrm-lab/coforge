@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { discoverCodeAgentInventory } from "#src/code-agent/runtime-inventory";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
-import { KIRO_MIN_CLI_VERSION } from "@lrm/coforge-anvil";
+import { KIRO_MIN_CLI_VERSION } from "@lrm/coforge-anvil/kiro";
 import { captureDaemonLogs } from "./log-capture";
 
 function kiroProbe(versionOutput: string): ExternalCodeAgentProbe {

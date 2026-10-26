@@ -1,7 +1,8 @@
-import type {
-  OwnedChildProcess,
-  OwnedProcessTree,
-  OwnedProcessTreeKillReport,
+import {
+  PROCESS_TREE_EXIT_GRACE_MS,
+  type OwnedChildProcess,
+  type OwnedProcessTree,
+  type OwnedProcessTreeKillReport,
 } from "./process-tree";
 import { AgentProcessCleanupError } from "./contract";
 import { getLogger } from "@logtape/logtape";
@@ -12,9 +13,6 @@ export type ProcessTreeCleanupOptions = Readonly<{
   cutoffAtMs?: number;
   onKillReport?: (report: OwnedProcessTreeKillReport) => void;
 }>;
-
-/** How long each rung of the cleanup ladder waits for the tree to exit. */
-export const PROCESS_TREE_EXIT_GRACE_MS = 5_000;
 
 /**
  * The one cleanup ladder a code-agent process runs over the tree it owns: ask politely, wait a

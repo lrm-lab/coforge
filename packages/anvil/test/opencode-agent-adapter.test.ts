@@ -2,9 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentSession } from "@coforge/agent";
-import { OpenCodeProvider, isOpenCodeVersionUnsupported } from "@lrm/coforge-anvil";
-import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import type { AgentSession, AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { OpenCodeProvider, isOpenCodeVersionUnsupported } from "@lrm/coforge-anvil/opencode";
 import { fixturePerTurnHost, fixtureVersionReader } from "./fixtures/runtime-host";
 
 const FIXTURE = new URL("./fixtures/opencode-fixture.ts", import.meta.url).pathname;

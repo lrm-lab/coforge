@@ -10,15 +10,12 @@ import {
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
-import {
-  discoverKiroCatalog,
-  KIRO_ACP_ARGS,
-  discoverCursorCatalog,
-  discoverOpenCodeCatalog,
-  discoverGrokCatalog,
-  discoverAntigravityCatalog,
-  CATALOG_DISCOVERY_TIMEOUT_MS,
-} from "@lrm/coforge-anvil";
+import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
+import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
+import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
+import { discoverGrokCatalog } from "@lrm/coforge-anvil/grok";
+import { discoverAntigravityCatalog } from "@lrm/coforge-anvil/antigravity";
+import { CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import {
   discoverPiCatalog,
   piAgentDirectory,

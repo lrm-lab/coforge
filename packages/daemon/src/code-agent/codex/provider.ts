@@ -6,13 +6,8 @@ import type {
   UsageSnapshot,
 } from "@coforge/agent";
 import { processSpawner } from "#src/code-agent/process-host";
-import {
-  type CodeAgentProvider,
-  JsonlProcess,
-  JsonlRequestError,
-  asRecord,
-  eventTime,
-} from "@lrm/coforge-anvil";
+import { type CodeAgentProvider, JsonlRequestError, asRecord, eventTime } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
 import { rejectServerRequests } from "./server-requests";
 import { openCodexThread } from "./thread-open";

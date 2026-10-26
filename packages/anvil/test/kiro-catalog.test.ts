@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
-import { discoverKiroCatalog } from "@lrm/coforge-anvil";
+import { discoverKiroCatalog } from "@lrm/coforge-anvil/kiro";
 import { fixtureKiroHost } from "./fixtures/kiro-host";
 
 test("Kiro catalog fails closed when model discovery never completes", async () => {

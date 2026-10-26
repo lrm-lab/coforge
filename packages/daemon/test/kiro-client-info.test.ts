@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
-import { discoverKiroCatalog } from "@lrm/coforge-anvil";
+import { discoverKiroCatalog } from "@lrm/coforge-anvil/kiro";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { COFORGE_DAEMON_VERSION } from "#src/version";

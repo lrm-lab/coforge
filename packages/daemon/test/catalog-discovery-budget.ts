@@ -1,11 +1,12 @@
 import {
   ANTIGRAVITY_MODELS_TIMEOUT_MS,
   ANTIGRAVITY_USAGE_TIMEOUT_MS,
+} from "@lrm/coforge-anvil/antigravity";
+import {
   OPENCODE_PLAIN_MODELS_TIMEOUT_MS,
   OPENCODE_VERBOSE_MODELS_TIMEOUT_MS,
-  PROCESS_TREE_EXIT_GRACE_MS,
-  CATALOG_DISCOVERY_TIMEOUT_MS,
-} from "@lrm/coforge-anvil";
+} from "@lrm/coforge-anvil/opencode";
+import { PROCESS_TREE_EXIT_GRACE_MS, CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil/pi";
 
 /**

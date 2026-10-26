@@ -5,12 +5,12 @@ import {
   type UsageOfficialBucket,
   type UsageSnapshot,
   type UsageWindow,
-  cleanupOwnedTree,
   withDeadline,
+  type OwnedChildProcess,
 } from "@lrm/coforge-anvil";
+import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
-import type { OwnedChildProcess } from "@lrm/coforge-anvil";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { runClaudeCli } from "./process";
 

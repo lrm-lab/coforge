@@ -8,7 +8,13 @@
   },
   "exports": {
     ".": "./index.ts",
-    "./pi": "./src/pi/index.ts"
+    "./pi": "./src/pi/index.ts",
+    "./cursor": "./src/cursor/index.ts",
+    "./opencode": "./src/opencode/index.ts",
+    "./kiro": "./src/kiro/index.ts",
+    "./grok": "./src/grok/index.ts",
+    "./antigravity": "./src/antigravity/index.ts",
+    "./execution": "./src/execution.ts"
   },
   "scripts": {
     "typecheck": "bun check",

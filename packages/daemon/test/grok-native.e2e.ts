@@ -7,8 +7,9 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSession, AgentRuntimeEvent } from "@coforge/agent";
-import { grokProvider, readGrokVersion } from "./fixtures/grok-host";
-import { discoverGrokCatalog, withDeadline } from "@lrm/coforge-anvil";
+import { grokProvider, readGrokVersion, isolatedEnvironment } from "./fixtures/grok-host";
+import { discoverGrokCatalog } from "@lrm/coforge-anvil/grok";
+import { withDeadline } from "@lrm/coforge-anvil";
 
 const command = Bun.env.COFORGE_GROK_E2E_COMMAND;
 if (!command) throw new Error("Set COFORGE_GROK_E2E_COMMAND to the installed Grok executable");
@@ -92,23 +93,6 @@ function writeFixtureConfig(
       "",
     ].join("\n"),
   );
-}
-
-/** The inherited environment with Grok confined to `home`: fixture credentials, no ambient Grok
- * config, and no proxy between the CLI and the local model endpoint. */
-function isolatedEnvironment(home: string) {
-  return {
-    ...Bun.env,
-    GROK_HOME: home,
-    GROK_AUTH_PATH: join(home, "auth.json"),
-    XAI_API_KEY: "fixture-only",
-    GROK_CONFIG: "",
-    GROK_CONFIG_PATH: "",
-    NO_PROXY: "127.0.0.1,localhost",
-    HTTP_PROXY: "",
-    HTTPS_PROXY: "",
-    ALL_PROXY: "",
-  };
 }
 
 test("native Grok discovers custom reasoning choices and reports compaction in a resumed turn", async () => {

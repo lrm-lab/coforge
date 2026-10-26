@@ -2,7 +2,7 @@ import {
   AntigravityProvider,
   type AntigravityRuntimeHost,
   type AntigravityProviderOptions,
-} from "@lrm/coforge-anvil";
+} from "@lrm/coforge-anvil/antigravity";
 import { fixturePerTurnHost, fixtureVersionReader, fixtureCatalogCommand } from "./runtime-host";
 export const fixtureAntigravityHost: AntigravityRuntimeHost = {
   sessionHost: fixturePerTurnHost,

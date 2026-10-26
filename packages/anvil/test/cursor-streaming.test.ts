@@ -3,7 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent, AgentSession } from "@coforge/agent";
-import { CursorProvider, PROCESS_TREE_EXIT_GRACE_MS, withDeadline } from "@lrm/coforge-anvil";
+import { CursorProvider } from "@lrm/coforge-anvil/cursor";
+import { PROCESS_TREE_EXIT_GRACE_MS, withDeadline } from "@lrm/coforge-anvil";
 
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 

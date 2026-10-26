@@ -4,7 +4,7 @@ import {
   parseOpenCodeModelList,
   OPENCODE_VERBOSE_MODELS_TIMEOUT_MS,
   OPENCODE_PLAIN_MODELS_TIMEOUT_MS,
-} from "@lrm/coforge-anvil";
+} from "@lrm/coforge-anvil/opencode";
 import { fixtureCatalogCommand } from "./fixtures/runtime-host";
 
 const OPENCODE_DISCOVERY_BUDGET_MS =

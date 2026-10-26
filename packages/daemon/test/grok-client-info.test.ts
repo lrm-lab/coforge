@@ -2,7 +2,7 @@ import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { expect, test } from "bun:test";
 import { grokProvider } from "./fixtures/grok-host";
-import { discoverGrokCatalog, readGrokUsage } from "@lrm/coforge-anvil";
+import { discoverGrokCatalog, readGrokUsage } from "@lrm/coforge-anvil/grok";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 
 const command = [process.execPath, anvilRuntimeFixtures.grokClientInfo];

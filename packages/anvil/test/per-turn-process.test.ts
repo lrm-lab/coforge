@@ -6,7 +6,7 @@ import {
   TurnProcess,
   type TurnInput,
   type TurnProtocol,
-} from "@lrm/coforge-anvil";
+} from "@lrm/coforge-anvil/execution";
 import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 
 /** Records what the turn does to the child's stdin, in order, so a test can assert how the input

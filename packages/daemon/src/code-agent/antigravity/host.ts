@@ -1,4 +1,4 @@
-import type { AntigravityRuntimeHost } from "@lrm/coforge-anvil";
+import type { AntigravityRuntimeHost } from "@lrm/coforge-anvil/antigravity";
 import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import { readVersionOutput } from "#src/code-agent/version-probe";
 import { runCatalogCommand } from "#src/code-agent/catalog-command";

@@ -1,4 +1,8 @@
-import { GrokProvider, type GrokRuntimeHost, type GrokProviderOptions } from "@lrm/coforge-anvil";
+import {
+  GrokProvider,
+  type GrokRuntimeHost,
+  type GrokProviderOptions,
+} from "@lrm/coforge-anvil/grok";
 import { fixturePerTurnHost, fixtureVersionReader } from "./runtime-host";
 
 export const fixtureGrokHost: GrokRuntimeHost = {

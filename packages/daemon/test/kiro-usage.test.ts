@@ -3,7 +3,8 @@ import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readKiroUsage as parseKiroUsage, UsageUnavailableError } from "@lrm/coforge-anvil";
+import { readKiroUsage as parseKiroUsage } from "@lrm/coforge-anvil/kiro";
+import { UsageUnavailableError } from "@lrm/coforge-anvil";
 import { readKiroUsageResponse } from "#src/code-agent/kiro/usage-host";
 
 function readKiroUsage(options: Parameters<typeof readKiroUsageResponse>[0]) {

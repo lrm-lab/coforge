@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OpenCodeProvider, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
+import { type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import {
   RUNTIME_ERROR_CLASS,

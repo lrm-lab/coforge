@@ -6,8 +6,8 @@ import {
   UsageUnavailableError,
   UsageUnsupportedError,
   asRecord,
-  JsonlProcess,
 } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "#src/code-agent/environment";
 

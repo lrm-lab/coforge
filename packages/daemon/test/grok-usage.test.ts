@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readGrokUsage } from "@lrm/coforge-anvil";
+import { readGrokUsage } from "@lrm/coforge-anvil/grok";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 const fixture = [process.execPath, anvilRuntimeFixtures.grokUsage];
