@@ -137,8 +137,12 @@ export function HtmlRegionPreview({
   // Esc leaves comment mode before the dialog sees it, which would otherwise close.
   useEffect(() => {
     if (!active) return;
+    const dialog = frame.current?.closest('[role="dialog"]');
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // A popover or another dialog over this one keeps its own Esc.
+      const target = event.target instanceof Element ? event.target : null;
+      if (target && target.closest('[role="dialog"]') !== dialog) return;
       event.stopPropagation();
       event.preventDefault();
       setCommenting(false);
@@ -152,9 +156,13 @@ export function HtmlRegionPreview({
   useEffect(() => {
     if (!active) setMarked(null);
   }, [active]);
+  // Held inside the layer: a captured drag can carry the pointer past its edges.
   const pointIn = (event: PointerEvent<HTMLDivElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect();
-    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    return {
+      x: Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width),
+      y: Math.min(Math.max(event.clientY - bounds.top, 0), bounds.height),
+    };
   };
   const finish = async (from: Point, to: Point) => {
     const current = viewRef.current;
@@ -234,7 +242,7 @@ export function HtmlRegionPreview({
           </Button>
         )}
       </div>
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <iframe
           ref={frame}
           // `aria-label` rather than `title`: the shared lint rule reserves `title` for the Tooltip
@@ -246,6 +254,9 @@ export function HtmlRegionPreview({
           sandbox="allow-scripts"
           referrerPolicy="no-referrer"
           srcDoc={srcDoc}
+          // Also asks for the file once the bridge is listening, in case its `ready` went out
+          // before this page's listener did; the bridge renders only the first request.
+          onLoad={() => post({ type: "render", html: text })}
           className={cn(
             "absolute inset-0 h-full w-full border-0 bg-white",
             !rendered && "pointer-events-none",
@@ -258,8 +269,8 @@ export function HtmlRegionPreview({
         )}
         <div
           className={cn(
-            "absolute inset-0 touch-none",
-            active ? "cursor-crosshair" : "pointer-events-none",
+            "absolute inset-0",
+            active ? "cursor-crosshair touch-none" : "pointer-events-none",
           )}
           onPointerDown={(event) => {
             if (!active || event.button !== 0) return;
@@ -278,8 +289,9 @@ export function HtmlRegionPreview({
             void finish(drag.from, to);
           }}
           onPointerCancel={() => setDrag(null)}
+          // Over the layer, or a link's hotspot outside comment mode, the wheel still scrolls the
+          // page under it.
           onWheel={(event) => {
-            if (!active) return;
             const step = WHEEL_STEP[event.deltaMode] ?? 1;
             post({ type: "scrollBy", x: event.deltaX * step, y: event.deltaY * step });
           }}

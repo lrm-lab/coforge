@@ -172,9 +172,13 @@ function bridgeMain(bridge: string, nonce: string, epoch: number) {
       if (url.protocol !== "http:" && url.protocol !== "https:") continue;
       for (const rect of Array.from(anchor.getClientRects())) {
         if (links.length >= LINKS_MAX) return links;
-        if (rect.width === 0 || rect.bottom < 0 || rect.right < 0) continue;
-        if (rect.top > window.innerHeight || rect.left > window.innerWidth) continue;
-        links.push({ href: url.href, x: rect.left, y: rect.top, w: rect.width, h: rect.height });
+        // Only the part inside the viewport: a hotspot never reaches past the frame.
+        const left = Math.max(0, rect.left);
+        const top = Math.max(0, rect.top);
+        const right = Math.min(window.innerWidth, rect.right);
+        const bottom = Math.min(window.innerHeight, rect.bottom);
+        if (right <= left || bottom <= top) continue;
+        links.push({ href: url.href, x: left, y: top, w: right - left, h: bottom - top });
       }
     }
     return links;
@@ -296,9 +300,14 @@ function bridgeMain(bridge: string, nonce: string, epoch: number) {
 
   const copyAttributes = (from: Element | null, to: Element) => {
     if (!from) return;
-    for (const attribute of Array.from(from.attributes))
-      if (!attribute.name.toLowerCase().startsWith("on"))
+    for (const attribute of Array.from(from.attributes)) {
+      if (attribute.name.toLowerCase().startsWith("on")) continue;
+      try {
         to.setAttribute(attribute.name, attribute.value);
+      } catch {
+        // A name the parser accepts but `setAttribute` refuses (`@click`, `:class`): left out.
+      }
+    }
   };
 
   let rendered = false;
@@ -333,7 +342,21 @@ function bridgeMain(bridge: string, nonce: string, epoch: number) {
     "click",
     (event) => {
       const target = event.target as Element | null;
-      if (target && target.closest && target.closest("a, area")) event.preventDefault();
+      const link = target && target.closest ? target.closest("a, area") : null;
+      if (!link) return;
+      event.preventDefault();
+      // An in-page link still scrolls to its target, which is all it ever did.
+      const href = link.getAttribute("href") || "";
+      if (href.startsWith("#") && href.length > 1) {
+        let id = href.slice(1);
+        try {
+          id = decodeURIComponent(id);
+        } catch {
+          // Kept as written.
+        }
+        const destination = document.getElementById(id) || document.getElementsByName(id)[0];
+        if (destination) destination.scrollIntoView();
+      }
     },
     true,
   );

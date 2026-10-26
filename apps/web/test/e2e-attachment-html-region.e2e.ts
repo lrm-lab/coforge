@@ -45,7 +45,7 @@ body { margin: 0; font: 16px/1.5 sans-serif; }
 #links { position: absolute; left: 620px; top: 20px; }
 #spacer { height: 1800px; }
 #footer { box-sizing: border-box; height: 80px; margin: 0; padding: 20px; }
-</style></head><body>
+</style></head><body @click="go" :class="page">
 <section id="pricing"><h2>Pricing plan</h2><p>Starter costs ten dollars</p></section>
 <div id="links"><a href="javascript:document.body.prepend('PWNED-js')">js link</a><br><a href="${outside}">external link</a></div>
 <noscript><p title="</noscript><meta http-equiv=refresh content='1;url=https://example.com/'>">noscript fallback</p></noscript>
