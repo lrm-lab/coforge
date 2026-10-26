@@ -68,7 +68,7 @@ conversation), oldest first, at most 100 per page (`--limit` outside 1–100 or 
 `✅` marks a resolved comment. The anchor is `§ <heading>` (markdown section), `L<n>` / `L<a>–<b>`
 (lines), `rows <n>` / `rows <a>–<b>` (CSV) or a quote of at most 60 characters ending in `…`
 (HTML region). When older comments remain, `More: coforge attachment comments <id> --before <seq>`
-follows. The command only reads: replying to a comment is not available to an Agent yet.
+follows. The footer lists commands to read, reply and mark a root comment handled when allowed.
 With no comments it prints `No comments on attachment <id>.`; an unknown or unreadable attachment is
 `NOT_FOUND`.
 
@@ -80,3 +80,11 @@ root comments; an ambiguous id requires the full UUID. Message windows and `--un
 normal history semantics. Source-conversation access is checked on every read and new write;
 archived/read-only sources refuse writes. Uploads and explicit mention selectors are rejected
 on these sends. Comment conversation ids grant no generic read/search/inbox/resolve access.
+
+The JSON `viewer` includes required `canComment` and `canResolve` booleans. Only when writable,
+`resolveAction:{type:"reaction",emoji:"✅"}` describes marking a comment handled. A read-only
+viewer has `canResolve:false`, no action, and a reason. For unresolved root comments, the text footer prints the exact command:
+`coforge message react --message-id <full-comment-uuid> --emoji ✅`. Add `--remove` to undo your
+checkmark; the comment remains resolved while anyone else's ✅ remains. Other valid reactions
+work too. Comment reactions require the full UUID and recheck AttachmentComments source access;
+short message IDs retain ordinary-message semantics. Platform assistants act as their bound human.

@@ -7,7 +7,11 @@ const ID = "9f0c5a52-1111-4222-8333-444455556666";
 const PAGE: AgentAttachmentCommentsResponse = {
   ok: true,
   attachmentId: ID,
-  viewer: { canComment: true },
+  viewer: {
+    canComment: true,
+    canResolve: true,
+    resolveAction: { type: "reaction" as const, emoji: "✅" as const },
+  },
   comments: [],
   hasOlder: false,
 };

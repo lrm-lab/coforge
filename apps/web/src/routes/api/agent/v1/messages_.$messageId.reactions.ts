@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isAppError } from "#src/lib/app-error";
+import { agentMessageReactionRepository } from "#src/server/agents/agent-message-reactions.server";
 import type { AgentReactionResponse } from "@lrm/coforge-sdk/agent";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -12,6 +14,7 @@ import {
 import {
   agentIdempotencyKey,
   agentRouteErrorResponse,
+  agentRouteDomainErrorResponse,
   readAgentJsonBody,
 } from "#src/server/agents/agent-http-routes.server";
 
@@ -38,14 +41,19 @@ export async function handleAgentMessageReaction(
     };
     return Response.json(response);
   } catch (error) {
-    return agentRouteErrorResponse(error, "message reaction failed");
+    return isAppError(error)
+      ? agentRouteDomainErrorResponse(error, "message reaction failed")
+      : agentRouteErrorResponse(error, "message reaction failed");
   }
 }
 
-/** The repository an Agent reacts through, announcing each reaction to open pages. */
+/** Ordinary reactions announce to open pages; comment reactions use AttachmentComments. */
 function agentReactionRepository(db: PrismaClient) {
   const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
-  return new PrismaDirectConversationRepository(db, {}, realtime);
+  return agentMessageReactionRepository(
+    db,
+    new PrismaDirectConversationRepository(db, {}, realtime),
+  );
 }
 
 export const Route = createFileRoute("/api/agent/v1/messages_/$messageId/reactions")({

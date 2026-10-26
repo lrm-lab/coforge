@@ -27,7 +27,11 @@ const comment = (overrides: Partial<AgentAttachmentComment> = {}): AgentAttachme
 const page = (comments: AgentAttachmentComment[], hasOlder = false) => ({
   ok: true as const,
   attachmentId: ID,
-  viewer: { canComment: true },
+  viewer: {
+    canComment: true,
+    canResolve: true,
+    resolveAction: { type: "reaction" as const, emoji: "✅" as const },
+  },
   comments,
   hasOlder,
 });
@@ -82,7 +86,7 @@ test("an attachment without comments says so", () => {
 test("a viewer who cannot comment is told why", () => {
   const text = formatAttachmentComments({
     ...page([comment()]),
-    viewer: { canComment: false, reason: "archived" },
+    viewer: { canComment: false, canResolve: false, reason: "archived" },
   });
   expect(text).toContain("You cannot comment on this attachment (archived).");
 });
@@ -137,4 +141,16 @@ test("--json returns the response as is", async () => {
   );
   expect(result).toBe(response);
   expect(seen).toEqual([{ attachmentId: ID, limit: 2, before: undefined }]);
+});
+
+test("only an actionable viewer sees the exact checkmark command for each root", () => {
+  const command = `coforge message react --message-id ${MSG} --emoji ✅`;
+  expect(formatAttachmentComments(page([comment()]))).toContain(command);
+  expect(formatAttachmentComments(page([comment({ resolved: true })]))).not.toContain(command);
+  expect(
+    formatAttachmentComments({
+      ...page([comment()]),
+      viewer: { canComment: false, canResolve: false, reason: "not-member" },
+    }),
+  ).not.toContain(command);
 });

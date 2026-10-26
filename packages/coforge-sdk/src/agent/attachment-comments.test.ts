@@ -21,7 +21,7 @@ const comment = (overrides: Record<string, unknown> = {}) => ({
 const response = (overrides: Record<string, unknown> = {}) => ({
   ok: true,
   attachmentId: "a",
-  viewer: { canComment: false, reason: "archived" },
+  viewer: { canComment: false, canResolve: false, reason: "archived" },
   comments: [comment()],
   hasOlder: false,
   ...overrides,
@@ -32,7 +32,7 @@ test("decodes a page of comments with and without an anchor", () => {
     response({ comments: [comment(), comment({ anchor: null, resolved: false })] }),
   );
   expect(decoded.comments.map((c) => c.anchor?.type ?? null)).toEqual(["lines", null]);
-  expect(decoded.viewer).toEqual({ canComment: false, reason: "archived" });
+  expect(decoded.viewer).toEqual({ canComment: false, canResolve: false, reason: "archived" });
 });
 
 test("refuses a response whose comment or viewer is malformed", () => {
@@ -56,4 +56,22 @@ test("decodes only the documented error codes", () => {
   expect(
     decodeAgentAttachmentCommentsErrorResponse({ ok: false, errorCode: "BOOM", error: "x" }),
   ).toBeUndefined();
+});
+
+test("requires a resolve capability and preserves only an executable checkmark action", () => {
+  const viewer = {
+    canComment: true,
+    canResolve: true,
+    resolveAction: { type: "reaction" as const, emoji: "✅" as const },
+  };
+  expect(decodeAgentAttachmentCommentsResponse(response({ viewer })).viewer).toEqual(viewer);
+  for (const bad of [
+    { canComment: true },
+    { canComment: true, canResolve: true },
+    { canComment: false, canResolve: false, resolveAction: viewer.resolveAction },
+    { ...viewer, resolveAction: { type: "reaction", emoji: "👍" } },
+    { ...viewer, resolveAction: { type: "resolve", emoji: "✅" } },
+    { ...viewer, canResolve: "true" },
+  ])
+    expect(() => decodeAgentAttachmentCommentsResponse(response({ viewer: bad }))).toThrow();
 });

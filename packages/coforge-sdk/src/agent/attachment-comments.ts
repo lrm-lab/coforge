@@ -48,13 +48,24 @@ export type AgentAttachmentCommentsResponse = {
   ok: true;
   attachmentId: string;
   /** Whether the Agent may add a comment, and why not when it may not. */
-  viewer: { canComment: boolean; reason?: AgentAttachmentCommentDisabledReason };
+  viewer: {
+    canComment: boolean;
+    canResolve: boolean;
+    resolveAction?: { type: "reaction"; emoji: "✅" };
+    reason?: AgentAttachmentCommentDisabledReason;
+  };
   comments: AgentAttachmentComment[];
   hasOlder: boolean;
 };
 
 const isCount = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+function isResolveAction(
+  value: unknown,
+): value is NonNullable<AgentAttachmentCommentsResponse["viewer"]["resolveAction"]> {
+  return isRecord(value) && value.type === "reaction" && value.emoji === "✅";
+}
 
 function isAnchor(value: unknown): value is AgentAttachmentCommentAnchor {
   return isRecord(value) && typeof value.type === "string" && isRecord(value.data);
@@ -89,6 +100,10 @@ export function decodeAgentAttachmentCommentsResponse(
     typeof value.attachmentId !== "string" ||
     !isRecord(value.viewer) ||
     typeof value.viewer.canComment !== "boolean" ||
+    typeof value.viewer.canResolve !== "boolean" ||
+    (value.viewer.canResolve
+      ? !isResolveAction(value.viewer.resolveAction)
+      : value.viewer.resolveAction !== undefined) ||
     !(
       value.viewer.reason === undefined ||
       (AGENT_ATTACHMENT_COMMENT_DISABLED_REASONS as readonly unknown[]).includes(
@@ -105,6 +120,10 @@ export function decodeAgentAttachmentCommentsResponse(
     attachmentId: value.attachmentId,
     viewer: {
       canComment: value.viewer.canComment,
+      canResolve: value.viewer.canResolve,
+      ...(isResolveAction(value.viewer.resolveAction)
+        ? { resolveAction: value.viewer.resolveAction }
+        : {}),
       ...(value.viewer.reason === undefined
         ? {}
         : { reason: value.viewer.reason as AgentAttachmentCommentDisabledReason }),

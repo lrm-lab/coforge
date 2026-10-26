@@ -119,6 +119,12 @@ export function formatAttachmentComments(response: AgentAttachmentCommentsRespon
     for (const comment of comments)
       lines.push(`Reply: coforge message send --target 'attachment:${attachmentId}:${comment.id}'`);
   }
+  if (response.viewer.canResolve && response.viewer.resolveAction)
+    for (const comment of comments)
+      if (!comment.resolved)
+        lines.push(
+          `Mark handled: coforge message react --message-id ${comment.id} --emoji ${response.viewer.resolveAction.emoji}`,
+        );
   if (!response.viewer.canComment)
     lines.push(
       `You cannot comment on this attachment (${response.viewer.reason ?? "unavailable"}).`,

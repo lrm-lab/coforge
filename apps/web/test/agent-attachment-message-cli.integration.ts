@@ -1,3 +1,9 @@
+import { agentMessageReactionRepository } from "#src/server/agents/agent-message-reactions.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { handleAgentMessageReaction } from "#src/routes/api/agent/v1/messages_.$messageId.reactions";
+import { handleAgentAttachmentCommentsGet } from "#src/routes/api/agent/v1/attachments/$attachmentId.comments";
+import { readAgentAttachmentComments } from "#src/server/attachments/agent-attachment-comments.server";
+import { adaptAgentReactionResponse } from "@lrm/coforge-daemon/src/connection/agent-message-adapters";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -32,15 +38,29 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
     server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: (request) =>
-        request.method === "GET"
+      fetch: (request) => {
+        const path = new URL(request.url).pathname;
+        if (path.endsWith("/reactions"))
+          return handleAgentMessageReaction(
+            request,
+            path.split("/").at(-2)!,
+            request.method === "POST",
+            f.principal,
+            agentMessageReactionRepository(f.db, new PrismaDirectConversationRepository(f.db)),
+          );
+        if (path.endsWith("/comments"))
+          return handleAgentAttachmentCommentsGet(request, f.attachment.id, (options) =>
+            readAgentAttachmentComments(f.db, f.principal, options),
+          );
+        return request.method === "GET"
           ? handleAgentMessagesGet(request, f.principal, repository, f.messages)
           : handleAgentMessagesPost(request, f.principal, {
               repository: {},
               sender: f.messages,
               attachmentMessages: f.messages,
               requestRecords: getMessageRequestIdempotency(),
-            }),
+            });
+      },
     });
     const client = createAgentMessageHttpClient();
     const apiKey = `sk_agent_${"a".repeat(43)}`;
@@ -61,14 +81,30 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
       inbox: () => inbox,
       reportFreshnessHold: () => {},
       transport: {
-        agentMessage: async (request) =>
-          request.operation === "read"
+        agentMessage: async (request) => {
+          if (request.operation === "react" || request.operation === "unreact")
+            return adaptAgentReactionResponse(
+              await client.requestReaction!({
+                ...keys,
+                url: `${server!.url}api/agent/v1/messages/${request.messageId}/reactions`,
+                method: request.operation === "react" ? "POST" : "DELETE",
+                request,
+              }),
+            );
+          return request.operation === "read"
             ? adaptAgentHistoryResponse(await client.requestRead!({ ...keys, request }))
-            : adaptAgentSendResponse(await client.requestSend!({ ...keys, request })),
+            : adaptAgentSendResponse(await client.requestSend!({ ...keys, request }));
+        },
       },
     });
     proxy = startAgentProxy({
       runtime: {
+        attachmentComments: async (_context, request) =>
+          client.requestAttachmentComments!({
+            ...keys,
+            url: `${server!.url}api/agent/v1/attachments/${f.attachment.id}/comments`,
+            request,
+          }),
         agentMessage: async (_context, request, key) => {
           const target = request.target
             ? await canonicalThreadTarget(request.target, async (parent, anchor) =>
@@ -118,6 +154,23 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
       expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
       return stdout;
     };
+    const capabilities = await cli(["attachment", "comments", f.attachment.id]);
+    expect(capabilities).toContain(`coforge message react --message-id ${comment.id} --emoji ✅`);
+    const resolution = [];
+    for (const remove of [false, true]) {
+      const output = await cli([
+        "message",
+        "react",
+        "--message-id",
+        comment.id,
+        "--emoji",
+        "✅",
+        ...(remove ? ["--remove"] : []),
+      ]);
+      const humanPage = await f.comments.list(f.actor, { attachmentId: f.attachment.id });
+      expect(humanPage.comments[0]!.resolved).toBe(!remove);
+      resolution.push({ output, resolved: humanPage.comments[0]!.resolved });
+    }
     const before = await cli(["message", "read", "--target", f.target, "--unread"]);
     expect(before).toContain("Please review this file");
     expect(before).toContain(`replyTarget=${f.target}:${comment.id.slice(0, 13)}`);
@@ -140,6 +193,8 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
         attachmentId: f.attachment.id,
         rootId: comment.id,
         replyId: human.comments[0]!.id,
+        capabilities,
+        resolution,
         before,
         send,
         after,

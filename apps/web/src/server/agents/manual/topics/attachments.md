@@ -61,3 +61,10 @@ A short root-comment id is resolved only inside this attachment; use the full id
 These operations always recheck access to the source conversation. Archived/read-only sources
 remain readable but refuse comments. Uploads and explicit `--mention` selectors are unsupported
 on attachment discussion sends; generic conversation targets do not grant access to comments.
+
+When the comments footer offers it, mark a root comment handled with
+`coforge message react --message-id <full-comment-uuid> --emoji ✅`; add `--remove` to undo your
+checkmark. ✅ is a reaction: a comment stays resolved while anyone's checkmark remains.
+The JSON viewer has `canResolve` and, only when writable, `resolveAction:{type:"reaction",emoji:"✅"}`.
+A read-only viewer has `canResolve:false` and no action. Use the full comment UUID; reaction
+permissions always follow the attachment's current source, including for platform assistants.
