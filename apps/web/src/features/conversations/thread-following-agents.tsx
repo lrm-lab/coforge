@@ -56,6 +56,7 @@ function FollowingAgentRow({
       agentId={agent.id}
       name={agent.displayName}
       src={agent.avatarUrl}
+      mascot={live?.mascot}
       display={live?.display}
       onOpenProfile={onOpenProfile ? () => onOpenProfile(agent.id) : undefined}
       action={

@@ -15,6 +15,7 @@ function BusyAgentRow({ agent, onOpen }: { agent: BusyAgent; onOpen: () => void 
       agentId={agent.id}
       name={agent.name}
       src={agent.avatarUrl}
+      mascot={agent.mascot}
       display={live?.display}
       caption={agent.label}
       onOpenProfile={onOpen}

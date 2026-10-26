@@ -5,7 +5,9 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
 - A mascot animates where the surface shows the Agent's live state; lists and history stay static.
   It moves only where `AgentMascotView` draws it, and only on these surfaces: the replying lines
   (above a composer in the main pane and thread pane, and under a root in the stream), the chat
-  list header's busy Agents (below), the
+  list header's busy Agents (below) and the popovers listing them and a thread's following Agents
+  (`AgentListRow` in `agent-list-popover.tsx`, given the Agent's `mascot`; the row's pointer state
+  reaches it as `hovered`), the
   Direct-message list rows (`DirectAgentAvatar` in
   `features/conversations/`, through `AgentMascotAvatar`; the row's pointer state reaches it as
   `hovered` through `useRowHovered`, so a hover repaints only the mascot), the Agent's

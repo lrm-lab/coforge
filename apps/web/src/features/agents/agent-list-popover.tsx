@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Dialog as AriaDialog, Popover as AriaPopover } from "react-aria-components";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
@@ -7,6 +7,8 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 import { AgentDisplayAvatar } from "./agent-display-avatar";
+import type { AgentMascot } from "./agent-mascot";
+import { AgentMascotAvatar } from "./agent-mascot-avatar";
 
 /**
  * The popover a header control opens with a list of Agents (the thread's following Agents, the
@@ -53,13 +55,16 @@ export function AgentListRows({ children }: { children: ReactNode }) {
 
 /**
  * One Agent in an `AgentListPopover`: its avatar with status dot and name, with a muted `caption`
- * line under the name when given. With `onOpenProfile` the identity is a button that opens the
- * Agent's profile; `action` is a control after it (unfollow).
+ * line under the name when given. With a `mascot` the avatar is the moving one, acting out
+ * `display` and reacting to the pointer over the row; without one it stays the still picture.
+ * With `onOpenProfile` the identity is a button that opens the Agent's profile; `action` is a
+ * control after it (unfollow).
  */
 export function AgentListRow({
   agentId,
   name,
   src,
+  mascot,
   display,
   caption,
   onOpenProfile,
@@ -68,14 +73,27 @@ export function AgentListRow({
   agentId: string;
   name: string;
   src?: string | null;
+  mascot?: AgentMascot;
   display?: AgentDisplaySnapshot;
   caption?: string;
   onOpenProfile?: () => void;
   action?: ReactNode;
 }) {
+  const [hovered, setHovered] = useState(false);
   const identity = (
     <>
-      <AgentDisplayAvatar agentId={agentId} name={name} src={src} display={display} size="sm" />
+      {mascot ? (
+        <AgentMascotAvatar
+          mascot={mascot}
+          name={name}
+          display={display}
+          cornerDot
+          announced
+          hovered={hovered}
+        />
+      ) : (
+        <AgentDisplayAvatar agentId={agentId} name={name} src={src} display={display} size="sm" />
+      )}
       {caption ? (
         <span className="flex min-w-0 flex-1 flex-col text-left">
           <span className="truncate text-sm font-medium text-primary">{name}</span>
@@ -87,7 +105,11 @@ export function AgentListRow({
     </>
   );
   return (
-    <li className="flex items-center gap-2 px-3 py-2">
+    <li
+      className="flex items-center gap-2 px-3 py-2"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
       {onOpenProfile ? (
         <Button
           color="tertiary"
