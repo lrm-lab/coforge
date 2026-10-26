@@ -139,7 +139,7 @@ These rules apply to `src/features/conversations/`.
   board, files, reading), one page for channels and DMs: each kind supplies its data, header,
   conversation and read cursor (both kinds of DM share `dm:<conversationId>`). Chat's routes and
   `HostedConversationPane` (Search's preview from `md`, Activity's pane from `lg`, beside their list;
-  full-page below; one `ListBesideFrom` per host drives its list, back arrow, pane and `useListEntryHistory`) render it, so they never differ. Activity opens a thread alone
+  full-page below with Chat's back header) render it, so they never differ. Activity opens a thread alone
   (`open=thread:<kind>:<id>`, `standalone-thread.ts`): the conversation is never shown or read until
   "View in channel"; a profile covers the thread and its close returns to it. A host loads through
   `conversation-page-loader.ts` (a pane's, `loadHostedConversation`, with channel names and Saved);

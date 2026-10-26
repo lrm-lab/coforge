@@ -1,9 +1,6 @@
 /** Session recall for the Records sidebar entry: leave 周报 for Agents/Projects, come back to the same path. */
 
-import {
-  browserSessionStorage,
-  type BrowserSessionStorage,
-} from "#src/features/browser-session-storage";
+import { browserSessionStorage, type BrowserSessionStorage } from "./browser-session-storage";
 
 export const DEFAULT_RECORDS_NAV_HREF = "/records?tab=weekly";
 

@@ -2,10 +2,7 @@
 
 import { isRecord } from "@lrm/coforge-sdk/internal";
 import { currentIsoWeek } from "./records-content";
-import {
-  browserSessionStorage,
-  type BrowserSessionStorage,
-} from "#src/features/browser-session-storage";
+import { browserSessionStorage, type BrowserSessionStorage } from "./browser-session-storage";
 
 export type RecordsSidebarSectionId = "favorites" | "myReports" | "members" | "notes";
 

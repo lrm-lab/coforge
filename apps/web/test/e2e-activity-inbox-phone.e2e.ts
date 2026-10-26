@@ -18,10 +18,10 @@ import {
 /**
  * The Activity page on a phone, in a real browser: the tabs under the title; a row opening its
  * conversation full-screen in place of the list, a step in history that the header's back arrow
- * (past a thread opened in the conversation, and after a reload) and the back gesture return
- * from; a thread's row
- * opening its thread alone; and a link naming a conversation opening it full-screen, its back
- * arrow returning to the list.
+ * (past a thread opened in the conversation, after a reload, and after leaving the page and
+ * coming back with Back) and the back gesture return from; a thread's row opening its thread
+ * alone; and a link naming a conversation opening it full-screen, its back arrow returning to the
+ * list.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the list
@@ -94,6 +94,19 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
     await browser("reload");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${pageHydrated}`);
+    await browser("find", "role", "button", "click", "--name", "Back to Activity");
+    await browser("wait", "--fn", listAlone);
+    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
+    // So does leaving for another page in the app and coming back with Back: the arrow returns to
+    // the list's entry rather than stacking a copy of the list.
+    await browser("find", "text", "E2E phone unread", "click");
+    await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
+    const tasksPath = JSON.stringify(`${workspacePath}/tasks`);
+    // The rail's link is in the closed drawer on a phone; its click still navigates in the app.
+    await evaluate(`document.querySelector('a[href=${tasksPath}]').click() ?? true`);
+    await browser("wait", "--fn", `location.pathname === ${tasksPath}`);
+    await browser("back");
+    await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
     await browser("find", "role", "button", "click", "--name", "Back to Activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);

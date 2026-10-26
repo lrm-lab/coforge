@@ -84,7 +84,7 @@ function ActivityPage() {
       }),
     [navigate],
   );
-  const listHistory = useListEntryHistory(open, ACTIVITY_LIST_BESIDE_FROM);
+  const listHistory = useListEntryHistory(ACTIVITY_LIST_BESIDE_FROM);
   // The open conversation lives in the URL, so a reload or a shared link reopens it. Below `lg` it
   // takes the list's place, so opening it from the list pushes an entry (`useListEntryHistory`);
   // any other open replaces the entry. Only the list's view carries over: the previous

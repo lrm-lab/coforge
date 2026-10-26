@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 
-import { browserSessionStorage } from "#src/features/browser-session-storage";
+import { browserSessionStorage } from "#src/features/records/browser-session-storage";
 
 const original = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
 
@@ -29,7 +29,7 @@ test("returns undefined when even reading sessionStorage throws (blocked storage
 });
 
 test("returns the storage when there is one", () => {
-  const fake = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  const fake = { getItem: () => null, setItem: () => {} };
   stubSessionStorage(fake);
   expect(browserSessionStorage()).toBe(fake);
 });
