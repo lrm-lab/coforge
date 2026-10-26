@@ -76,6 +76,9 @@ export function SearchPage({
     [preview, onPreviewChange],
   );
   const shortcut = useSearchShortcutLabel();
+  // Below `SEARCH_LIST_BESIDE_FROM` a preview takes the results' place, hiding the box with them.
+  const previewBeside = useBreakpoint(SEARCH_LIST_BESIDE_FROM);
+  const boxHidden = Boolean(preview) && !previewBeside;
   const [text, setText] = useState(query);
   // State, not a ref: ending a composition must re-run the commit effect even when the last
   // input event (which browsers fire before `compositionend`) already set the final text.
@@ -97,21 +100,22 @@ export function SearchPage({
     // Surrounding spaces never change the search, so they are not committed (and a space
     // typed ahead of a word is not wiped by the URL coming back without it).
     const next = text.trim();
-    if (composing || next === lastCommitted.current) return;
+    // A preview that hides the box holds its commit until the results show again, so a commit
+    // landing after a tap never rewrites the preview's entry.
+    if (composing || boxHidden || next === lastCommitted.current) return;
     const timer = setTimeout(() => {
       lastCommitted.current = next;
       onQueryChange(next);
     }, COMMIT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [text, composing, onQueryChange]);
+  }, [text, composing, boxHidden, onQueryChange]);
 
   // The box opens focused with its text selected, ready to be typed over; Cmd/Ctrl+K on this
   // page does the same again. A preview that has taken the results' place hides the box with
   // them, so the shortcut closes it first and the box takes focus once the results show.
-  const previewBeside = useBreakpoint(SEARCH_LIST_BESIDE_FROM);
   const focusOnResults = useRef(false);
   const onSearchFocus = useEffectEvent(() => {
-    if (preview && !previewBeside) {
+    if (boxHidden) {
       focusOnResults.current = true;
       onPreviewClose();
     } else selectBox(input.current);

@@ -88,7 +88,11 @@ function SearchRoute() {
     [navigate],
   );
   const preview = useMemo(() => parseHostedConversation(open, msg), [open, msg]);
-  const listHistory = useListEntryHistory(SEARCH_LIST_BESIDE_FROM, SEARCH_LIST_PARAMS);
+  const listHistory = useListEntryHistory({
+    open,
+    listBesideFrom: SEARCH_LIST_BESIDE_FROM,
+    listParams: SEARCH_LIST_PARAMS,
+  });
   // The preview lives in the URL, so a reload or a shared link reopens it. Below `md` it takes the
   // results' place, so opening one from them pushes an entry (`useListEntryHistory`); switching it
   // replaces the entry rather than stacking history. Only the search's own fields carry over: the

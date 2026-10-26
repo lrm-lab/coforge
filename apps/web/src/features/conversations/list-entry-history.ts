@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useRouter } from "@tanstack/react-router";
 
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -11,41 +11,61 @@ import type { ListBesideFrom } from "./conversation-list-button";
  * phone's back gesture returns to the list, and closing it goes back to the list's entry, past
  * what the conversation pushed (a thread, a profile), rather than stacking a copy of the list.
  * `listParams` are the search params that are the list's own (its view, its query): an entry is
- * the list's only while they match.
+ * the list's only while they match the conversation's.
  */
-export function useListEntryHistory(listBesideFrom: ListBesideFrom, listParams: readonly string[]) {
+export function useListEntryHistory({
+  open,
+  listBesideFrom,
+  listParams,
+}: {
+  open: string | undefined;
+  listBesideFrom: ListBesideFrom;
+  listParams: readonly string[];
+}) {
   const router = useRouter();
   const wide = useBreakpoint(listBesideFrom);
-  // Without the Navigation API only this visit's own open is known: the list's entry it pushed over.
-  const pushedOver = useRef<number | undefined>(undefined);
-  return useMemo(
-    () => ({
+  // Without the Navigation API only this visit's own open is known: the list's entry it pushed
+  // over and the list's params then. Forgotten once the list shows again.
+  const pushedOver = useRef<{ index: number; list: string } | undefined>(undefined);
+  useEffect(() => {
+    if (open === undefined) pushedOver.current = undefined;
+  }, [open]);
+  return useMemo(() => {
+    const currentList = () => {
+      const search = new URLSearchParams(router.latestLocation.searchStr);
+      return JSON.stringify(listParams.map((name) => search.get(name)));
+    };
+    /** Without the Navigation API: back to the entry this visit's open pushed over, while the
+     * conversation keeps that list's params. */
+    function pushedOverDelta() {
+      const index = router.history.location.state.__TSR_index;
+      const pushed = pushedOver.current;
+      if (!pushed || pushed.index >= index || pushed.list !== currentList()) return undefined;
+      return pushed.index - index;
+    }
+    return {
       /** Whether an open goes over the list (a narrow screen, none open yet): it pushes an entry
        * then, and replaces the current one otherwise. */
       openOverList() {
         // The committed location: a second tap before the first open renders must not push again.
         if (router.latestLocation.search.open !== undefined) return false;
         // An open beside the list replaces the list's entry, so nothing is pushed over it.
-        pushedOver.current = wide ? undefined : router.history.location.state.__TSR_index;
+        pushedOver.current = wide
+          ? undefined
+          : { index: router.history.location.state.__TSR_index, list: currentList() };
         return !wide;
       },
       /** Goes back to the list's entry when it is behind the conversation on this page; false
        * when it is not, so the caller replaces the entry with the list instead. */
       backToList() {
-        const index = router.history.location.state.__TSR_index;
         const delta =
-          typeof navigation === "undefined"
-            ? pushedOver.current !== undefined && pushedOver.current < index
-              ? pushedOver.current - index
-              : undefined
-            : listEntryDelta(listParams);
+          typeof navigation === "undefined" ? pushedOverDelta() : listEntryDelta(listParams);
         if (delta === undefined) return false;
         router.history.go(delta);
         return true;
       },
-    }),
-    [router, wide, listParams],
-  );
+    };
+  }, [router, wide, listParams]);
 }
 
 /**

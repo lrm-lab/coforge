@@ -67,7 +67,7 @@ test("on a phone a result opens its conversation in place of the results", async
     const resultShown = `document.querySelector('${row(match.id)}')?.getClientRects().length > 0`;
     const resultsAlone = `${preview} === null && ${resultShown} && new URLSearchParams(location.search).get("open") === null && new URLSearchParams(location.search).get("q") === ${JSON.stringify(phrase)}`;
     const entry = () => evaluate<number>("navigation.currentEntry.index");
-    const listEntry = await entry();
+    let listEntry = await entry();
     /** Opens the result: its conversation in place of the results, a step in history. */
     const open = async () => {
       await browser("click", row(match.id));
@@ -84,6 +84,34 @@ test("on a phone a result opens its conversation in place of the results", async
     await browser("find", "role", "button", "click", "--name", "Back to results");
     await browser("wait", "--fn", resultsAlone);
     expect(await entry()).toBe(listEntry);
+    // A query typed just before a tap waits for the results to show again, rather than rewriting
+    // the preview's entry, so the arrow still goes back to the results' entry; it commits there.
+    const typed = `${phrase} 补充`;
+    await evaluate(`(() => {
+      const box = document.querySelector('input[type="search"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(box, ${JSON.stringify(typed)});
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('${row(match.id)}').click();
+      return true;
+    })()`);
+    await browser("wait", "--fn", `${preview} !== null`);
+    await Bun.sleep(400);
+    await browser("find", "role", "button", "click", "--name", "Back to results");
+    await browser(
+      "wait",
+      "--fn",
+      `${preview} === null && new URLSearchParams(location.search).get("q") === ${JSON.stringify(typed)}`,
+    );
+    expect(await entry()).toBe(listEntry);
+    await browser("back");
+    await browser(
+      "wait",
+      "--fn",
+      `new URLSearchParams(location.search).get("q") !== ${JSON.stringify(typed)}`,
+    );
+    await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}`);
+    await browser("wait", "--fn", `${resultShown} && ${pageHydrated}`);
+    listEntry = await entry();
     // The back gesture returns to the results too.
     await open();
     await browser("back");

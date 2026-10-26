@@ -25,11 +25,16 @@ import {
   type ActivityInboxFilter,
 } from "#src/features/inbox/activity-inbox.schemas";
 
+/** The list's own search params: its view. A conversation's address keeps them. */
+const activityListSearch = z.object({
+  filter: z.enum(ACTIVITY_INBOX_FILTERS).optional().catch(undefined),
+});
+const ACTIVITY_LIST_PARAMS = Object.keys(activityListSearch.shape);
+
 export const Route = createFileRoute("/w/$workspaceSlug/activity")({
   // Each field falls back to absent when malformed, so a stale or hand-edited address never
   // breaks the page.
-  validateSearch: z.object({
-    filter: z.enum(ACTIVITY_INBOX_FILTERS).optional().catch(undefined),
+  validateSearch: activityListSearch.extend({
     // The conversation open beside the list.
     ...hostedConversationSearchShape,
     // The open conversation's tab, Task board view and what it has open, as Chat keeps them.
@@ -67,9 +72,6 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
   component: ActivityPage,
 });
 
-/** The list's own search params: its view. A conversation's address keeps them. */
-const ACTIVITY_LIST_PARAMS = ["filter"];
-
 function ActivityPage() {
   // Only what the list and the pane's target read: the pane's own address state is read where it
   // is rendered, so a tab or Task popup change there does not re-render the list.
@@ -87,7 +89,11 @@ function ActivityPage() {
       }),
     [navigate],
   );
-  const listHistory = useListEntryHistory(ACTIVITY_LIST_BESIDE_FROM, ACTIVITY_LIST_PARAMS);
+  const listHistory = useListEntryHistory({
+    open,
+    listBesideFrom: ACTIVITY_LIST_BESIDE_FROM,
+    listParams: ACTIVITY_LIST_PARAMS,
+  });
   // The open conversation lives in the URL, so a reload or a shared link reopens it. Below `lg` it
   // takes the list's place, so opening it from the list pushes an entry (`useListEntryHistory`);
   // any other open replaces the entry. Only the list's view carries over: the previous

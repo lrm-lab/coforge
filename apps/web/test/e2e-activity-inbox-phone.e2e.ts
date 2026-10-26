@@ -111,11 +111,17 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // Without the Navigation API (before Safari 26.2 and Firefox 147) the arrow still returns to
-    // the list's entry it was opened over, within the visit.
+    // the list's entry it was opened over, within the visit, past a thread opened meanwhile.
     await evaluate(`(window.navigation = undefined, true)`);
     const listIndex = await evaluate<number>("history.state.__TSR_index");
     await browser("find", "text", "E2E phone unread", "click");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
+    await evaluate(`[...${pane}.querySelectorAll("button")]
+      .find((button) => button.textContent.trim().startsWith("1 reply"))
+      .click() ?? true`);
+    await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
+    await browser("find", "role", "button", "click", "--name", "Back to chat");
+    await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
     await browser("find", "role", "button", "click", "--name", "Back to Activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("history.state.__TSR_index")).toBe(listIndex);
