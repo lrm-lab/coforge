@@ -22,6 +22,11 @@ const VERTICAL_SPACING = /\b(?:m[ty]|p[ty])-/;
 /** Anything that makes the element lay out as a block, so vertical spacing applies. */
 const BLOCK_LAYOUT = /\b(?:block|inline-block|flex|grid|table)\b/;
 
+/** The scan reads every `.tsx` file under `src` and takes about 50ms (three unloaded runs). Its 5s
+ * default was missed once, with 16 other cases, when the machine stalled under parallel suites;
+ * this budget (400x the unloaded time) is for that load, not for a slow scan. */
+const SCAN_TIMEOUT_MS = 20_000;
+
 async function sourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];
@@ -33,18 +38,22 @@ async function sourceFiles(directory: string): Promise<string[]> {
   return files;
 }
 
-test("every Text with its own vertical spacing lays out as a block", async () => {
-  const offenders: string[] = [];
-  for (const path of await sourceFiles(SOURCE_ROOT)) {
-    const source = await readFile(path, "utf8");
-    for (const match of source.matchAll(TEXT_TAG)) {
-      const className = /className=(?:"([^"]*)"|\{(?:cx|cn)\(([^)]*)\))/.exec(match[0]);
-      const classes = [className?.[1], className?.[2]].filter(Boolean).join(" ");
-      if (!VERTICAL_SPACING.test(classes) || BLOCK_LAYOUT.test(classes)) continue;
-      offenders.push(
-        `${path.slice(REPO_ROOT.length + 1)}: className="${classes.trim()}" needs a block`,
-      );
+test(
+  "every Text with its own vertical spacing lays out as a block",
+  async () => {
+    const offenders: string[] = [];
+    for (const path of await sourceFiles(SOURCE_ROOT)) {
+      const source = await readFile(path, "utf8");
+      for (const match of source.matchAll(TEXT_TAG)) {
+        const className = /className=(?:"([^"]*)"|\{(?:cx|cn)\(([^)]*)\))/.exec(match[0]);
+        const classes = [className?.[1], className?.[2]].filter(Boolean).join(" ");
+        if (!VERTICAL_SPACING.test(classes) || BLOCK_LAYOUT.test(classes)) continue;
+        offenders.push(
+          `${path.slice(REPO_ROOT.length + 1)}: className="${classes.trim()}" needs a block`,
+        );
+      }
     }
-  }
-  expect(offenders).toEqual([]);
-});
+    expect(offenders).toEqual([]);
+  },
+  SCAN_TIMEOUT_MS,
+);
