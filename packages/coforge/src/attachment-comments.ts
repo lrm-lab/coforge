@@ -113,6 +113,12 @@ export function formatAttachmentComments(response: AgentAttachmentCommentsRespon
     lines.push(
       `More: coforge attachment comments ${attachmentId} --before ${comments[0]!.sequence}`,
     );
+  lines.push(`Read: coforge message read --target 'attachment:${attachmentId}'`);
+  if (response.viewer.canComment) {
+    lines.push(`Comment: coforge message send --target 'attachment:${attachmentId}'`);
+    for (const comment of comments)
+      lines.push(`Reply: coforge message send --target 'attachment:${attachmentId}:${comment.id}'`);
+  }
   if (!response.viewer.canComment)
     lines.push(
       `You cannot comment on this attachment (${response.viewer.reason ?? "unavailable"}).`,

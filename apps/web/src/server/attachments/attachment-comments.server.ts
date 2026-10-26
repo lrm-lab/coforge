@@ -97,9 +97,14 @@ export function attachmentCommentDisabledReason(access: AttachmentCommentAccess)
 export class AttachmentComments {
   constructor(private readonly store: AttachmentCommentStore) {}
 
-  async list(actor: AttachmentCommentActor, input: AttachmentCommentPageInput) {
-    const access = await this.store.access(actor, input.attachmentId);
+  async readAccess(actor: AttachmentCommentActor, attachmentId: string) {
+    const access = await this.store.access(actor, attachmentId);
     readable(access);
+    return access;
+  }
+
+  async list(actor: AttachmentCommentActor, input: AttachmentCommentPageInput) {
+    const access = await this.readAccess(actor, input.attachmentId);
     const disabledReason = attachmentCommentDisabledReason(access);
     const page = await this.store.list(input);
     return {

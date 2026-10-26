@@ -1,10 +1,10 @@
 import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
 
 const FULL_THREAD_TARGET = new RegExp(
-  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${UUID_LIKE_SOURCE})$`,
+  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})|(?:attachment:${UUID_LIKE_SOURCE})):(${UUID_LIKE_SOURCE})$`,
 );
 const SHORT_THREAD_TARGET = new RegExp(
-  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})):(${MESSAGE_ANCHOR_SOURCE})$`,
+  `^((?:@[^:]+)|(?:#[a-z0-9][a-z0-9_-]{0,31})|(?:attachment:${UUID_LIKE_SOURCE})):(${MESSAGE_ANCHOR_SOURCE})$`,
 );
 
 /** The one-message read of a thread's parent by anchor that settles a short thread target. */

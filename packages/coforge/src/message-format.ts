@@ -2,6 +2,7 @@ import { channelSummaryBody } from "./message-summary";
 import { fenceMessageBody } from "./message-body-format";
 import {
   renderMessageSender,
+  threadParentTarget,
   UUID_LIKE_PATTERN,
   type AgentMessageRecord,
 } from "@lrm/coforge-sdk/internal";
@@ -11,7 +12,7 @@ export function messageSender(message: AgentMessageRecord): string {
 }
 
 export function isThreadTarget(target: string): boolean {
-  return target.includes(":");
+  return threadParentTarget(target) !== undefined;
 }
 
 export function shortId(id: string): string {

@@ -69,7 +69,8 @@ test("the page names the full id and, when older comments remain, how to read th
   const text = formatAttachmentComments(page([comment()], true));
   expect(text).toContain(`## Comments on attachment ${ID} (1)`);
   expect(text).toContain(`More: coforge attachment comments ${ID} --before 4`);
-  expect(text.split("\n").at(-1)).toBe(`More: coforge attachment comments ${ID} --before 4`);
+  expect(text).toContain(`Read: coforge message read --target 'attachment:${ID}'`);
+  expect(text).toContain(`Reply: coforge message send --target 'attachment:${ID}:${MSG}'`);
 });
 
 test("an attachment without comments says so", () => {

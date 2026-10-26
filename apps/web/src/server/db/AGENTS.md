@@ -11,6 +11,7 @@ These rules apply to `src/server/db/`.
   stay in `server/workspaces/resource-recovery.server.ts`.
 - `attachment-deletion.repositories.server.ts` removes a file's comment Messages and Conversation before its row; channel deletion delegates through `channel-deletion.repositories.server.ts`. A future uploader/attachment deletion must reuse this flow, never rely on a binding FK to delete its parent Conversation.
 - `agent-message-lookup.repositories.server.ts` resolves an Agent's message anchor only through an ordinary target and active seat; attachment comment authority belongs to its own store.
+- `agent-message-history.repositories.server.ts` owns sequence windows and Agent read-through after callers authorize their targets.
 - `attachment-comments.repositories.server.ts` persists whole-file comment Messages and metadata; it serializes first comments under source Conversation then Attachment row locks and rechecks source authority inside the transaction.
 - `first-sign-in.repositories.server.ts` owns first-sign-in's User row lock and confirmed name persistence; enrollment commits with it, and resource provisioning follows the commit.
 - Paginate a list with `prisma-extension-pagination` through `paginated(db)`

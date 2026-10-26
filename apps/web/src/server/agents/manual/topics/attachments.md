@@ -53,3 +53,11 @@ Wait, or tell a person what happened; running `coforge message read` or seeing n
 confirms nor rules out that it already sent.
 `coforge message send --send-draft` after such a failure is a person's deliberate decision to
 accept a possible duplicate, not something you decide on your own.
+
+Read a file discussion with `coforge message read --target 'attachment:<full-attachment-uuid>'`.
+Send a plain-text root comment to that same target, or reply with
+`coforge message send --target 'attachment:<full-attachment-uuid>:<root-comment-id>'` (body on stdin).
+A short root-comment id is resolved only inside this attachment; use the full id if ambiguous.
+These operations always recheck access to the source conversation. Archived/read-only sources
+remain readable but refuse comments. Uploads and explicit `--mention` selectors are unsupported
+on attachment discussion sends; generic conversation targets do not grant access to comments.

@@ -1,12 +1,12 @@
+import { mapSendResult } from "#src/server/agents/agent-message-http-response.server";
+import {
+  createAgentAttachmentMessages,
+  attachmentMessageRefusal,
+} from "#src/server/attachments/agent-attachment-messages.server";
 import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import type {
-  AgentHistoryResponse,
-  AgentMessage,
-  AgentSendDecisionResponse,
-  AgentSendResponse,
-} from "@lrm/coforge-sdk/agent";
+import type { AgentHistoryResponse, AgentMessage, AgentSendResponse } from "@lrm/coforge-sdk/agent";
 import {
   UUID_LIKE_PATTERN,
   isChannelMessageTarget,
@@ -24,7 +24,6 @@ import {
   reconcileAgentSendMessage,
   type AgentMentionSelector,
   type AgentMessageRepository,
-  type AgentSendMessageResult,
 } from "#src/server/agents/agent-messages.server";
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import { MentionDeliveryIssuer } from "#src/server/conversations/mention-deliveries.server";
@@ -70,6 +69,7 @@ export async function handleAgentMessagesGet(
   request: Request,
   principal: AgentMessagesGetPrincipal,
   repository: AgentMessageRepository,
+  attachmentMessages?: ReturnType<typeof createAgentAttachmentMessages>,
 ): Promise<Response> {
   const query = new URL(request.url).searchParams;
   const idempotencyKey = agentIdempotencyKeyFromQuery(request);
@@ -100,7 +100,7 @@ export async function handleAgentMessagesGet(
         { error: "fromSequence cannot be combined with before, after or around" },
         { status: 400 },
       );
-    const result = await readAgentMessages(repository, scope, target, {
+    const page = {
       before,
       after,
       around,
@@ -108,7 +108,11 @@ export async function handleAgentMessagesGet(
       fromSequence,
       throughSequence,
       ...(unread ? { unread } : {}),
-    });
+    };
+    const result =
+      target.startsWith("attachment:") && attachmentMessages
+        ? await attachmentMessages.read(scope, target, page)
+        : await readAgentMessages(repository, scope, target, page);
     const messages = result.messages as AgentMessage[];
     const response: AgentHistoryResponse = {
       idempotencyKey,
@@ -127,59 +131,11 @@ export async function handleAgentMessagesGet(
   } catch (error) {
     const target = new URL(request.url).searchParams.get("target") ?? "";
     return (
+      (target.startsWith("attachment:") ? attachmentMessageRefusal(error) : undefined) ??
       ambiguousTargetResponse(error, target) ??
       Response.json({ error: "invalid message query" }, { status: 400 })
     );
   }
-}
-
-/** Maps `executeAgentSendMessageWithPolicy`'s side-effect decision onto the send route's response,
- * using the field names of `agentApiSendResponseSchema` for both states. */
-function mapSendResult(idempotencyKey: string, result: AgentSendMessageResult) {
-  const toAgentMessage = (message: { createdAt: Date }) =>
-    ({
-      ...message,
-      createdAt: message.createdAt.toISOString(),
-    }) as AgentMessage;
-  const response: AgentSendDecisionResponse = {
-    idempotencyKey,
-    state: result.state,
-    decision: result.decision,
-    reason: result.reason,
-    producerFactId: result.producerFactId,
-    messageId: result.messageId,
-    availableActions: result.availableActions ? [...result.availableActions] : undefined,
-    continueAnywaySuggested: result.continueAnywaySuggested,
-    // Held-context fields are only ever present on a held result; a sent one carries none.
-    heldMessages:
-      result.state === "held" ? (result.heldMessages ?? []).map(toAgentMessage) : undefined,
-    newMessageCount: result.newMessageCount,
-    shownMessageCount: result.shownMessageCount,
-    omittedMessageCount: result.omittedMessageCount,
-    // Held: the boundary the notice presented. Sent: the boundary the send advanced over messages
-    // the Agent had already seen, when it advanced one.
-    seenUpToSeq: result.seenUpToSeq,
-    freshnessContextMode: result.freshnessContextMode,
-    withheldMessageCount: result.withheldMessageCount,
-    recentUnread: (result.recentUnread ?? []).map(toAgentMessage),
-    // Sent only: what the message did not reach.
-    pendingMentionActions:
-      result.state === "sent"
-        ? (result.pendingMentionActions ?? []).map((action) => ({
-            resolutionId: action.resolutionId,
-            messageId: action.messageId,
-            targetType: action.targetType,
-            targetHandle: action.targetHandle,
-            targetAvatarUrl: action.targetAvatarUrl,
-            reason: "not_member" as const,
-            availableActions: [...action.availableActions],
-            expiresAt: action.expiresAt.toISOString(),
-          }))
-        : undefined,
-    unresolvedMentionHandles:
-      result.state === "sent" ? [...(result.unresolvedMentionHandles ?? [])] : undefined,
-  };
-  return response;
 }
 
 const UUID_PATTERN = UUID_LIKE_PATTERN;
@@ -250,6 +206,7 @@ export async function handleAgentMessagesPost(
   principal: AgentMessagesPostPrincipal,
   dependencies: Parameters<typeof executeAgentSendMessageWithPolicy>[0] & {
     requestRecords: MessageRequestRecords;
+    attachmentMessages?: ReturnType<typeof createAgentAttachmentMessages>;
     memoryOfferRequired?: (input: {
       workspaceId: string;
       agentId: string;
@@ -305,7 +262,15 @@ export async function handleAgentMessagesPost(
     if (offerRequired) return textResponse(MEMORY_OFFER_REQUIRED_MESSAGE, { status: 400 });
   }
   try {
-    const result = await executeAgentSendMessageWithPolicy(dependencies, {
+    const attachment = body.target.startsWith("attachment:")
+      ? dependencies.attachmentMessages
+      : undefined;
+    // Attachment comments have no ordinary delivery/freshness stream. Their authorized
+    // history read owns cursor advancement; retain only the shared send receipt protocol.
+    const sendDependencies = attachment
+      ? { repository: {}, sender: attachment, requestRecords: dependencies.requestRecords }
+      : dependencies;
+    const result = await executeAgentSendMessageWithPolicy(sendDependencies, {
       idempotencyKey,
       workspaceId: principal.workspaceId,
       agentId: principal.agentId,
@@ -317,8 +282,9 @@ export async function handleAgentMessagesPost(
           ? body.draftReholdCount
           : undefined,
       draftReplacedExisting: body.draftReplacedExisting === true,
-      seenUpToSeq: typeof body.seenUpToSeq === "number" ? body.seenUpToSeq : undefined,
-      seenExactSeqs: body.seenExactSeqs,
+      seenUpToSeq:
+        !attachment && typeof body.seenUpToSeq === "number" ? body.seenUpToSeq : undefined,
+      seenExactSeqs: attachment ? undefined : body.seenExactSeqs,
       freshnessContextMode,
       attachmentIds: Array.isArray(body.attachmentIds)
         ? (body.attachmentIds as string[])
@@ -338,6 +304,10 @@ export async function handleAgentMessagesPost(
     }
     return Response.json(mapSendResult(idempotencyKey, result));
   } catch (error) {
+    if (body.target.startsWith("attachment:")) {
+      const refusal = attachmentMessageRefusal(error);
+      if (refusal) return refusal;
+    }
     // The send-specific rejections and the named AppError codes below are mapped here; anything
     // else (e.g. getAgentChannel's ACCESS_DENIED for a non-member) propagates unchanged.
     if (error instanceof AgentSendRejectedError)
@@ -380,6 +350,7 @@ export function agentMessagesPostDependencies(db: PrismaClient) {
   return {
     repository,
     requestRecords,
+    attachmentMessages: createAgentAttachmentMessages(db, requestRecords),
     memoryOfferRequired: async ({
       workspaceId,
       agentId,
@@ -418,7 +389,12 @@ export const Route = createFileRoute("/api/agent/v1/messages")({
     middleware: [agentAuthMiddleware],
     handlers: {
       GET: ({ request, context: { principal, db } }) =>
-        handleAgentMessagesGet(request, principal, new PrismaDirectConversationRepository(db)),
+        handleAgentMessagesGet(
+          request,
+          principal,
+          new PrismaDirectConversationRepository(db),
+          createAgentAttachmentMessages(db, getMessageRequestIdempotency()),
+        ),
       POST: ({ request, context: { principal, db } }) =>
         handleAgentMessagesPost(request, principal, {
           ...agentMessagesPostDependencies(db),

@@ -71,3 +71,12 @@ conversation), oldest first, at most 100 per page (`--limit` outside 1–100 or 
 follows. The command only reads: replying to a comment is not available to an Agent yet.
 With no comments it prints `No comments on attachment <id>.`; an unknown or unreadable attachment is
 `NOT_FOUND`.
+
+Read a discussion with `coforge message read --target 'attachment:<full-attachment-uuid>'`.
+Post a plain-text root comment to that target, or reply to a root comment with
+`coforge message send --target 'attachment:<full-attachment-uuid>:<root-comment-id>'`, body on stdin.
+The command footer prints executable targets. Short comment ids resolve only within this file's
+root comments; an ambiguous id requires the full UUID. Message windows and `--unread` follow
+normal history semantics. Source-conversation access is checked on every read and new write;
+archived/read-only sources refuse writes. Uploads and explicit mention selectors are rejected
+on these sends. Comment conversation ids grant no generic read/search/inbox/resolve access.

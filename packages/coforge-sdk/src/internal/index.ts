@@ -72,25 +72,7 @@ export const isChannelMessageTarget = (target: string): boolean =>
   new RegExp(
     `^#[a-z0-9][a-z0-9_-]{0,31}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE}))?$`,
   ).test(target);
-/** A thread target split at its first `:` into parent and root, or `undefined` for a top-level
- * target. */
-const splitThreadTarget = (target: string): [parent: string, root: string] | undefined => {
-  const index = target.indexOf(":");
-  return index === -1 ? undefined : [target.slice(0, index), target.slice(index + 1)];
-};
-/**
- * The parent of a thread target (everything before the first `:`), or `undefined` for a
- * top-level target. `#general:12345678` → `#general`; `@frank:12345678` → `@frank`; `#general` →
- * `undefined`.
- */
-export const threadParentTarget = (target: string): string | undefined =>
-  splitThreadTarget(target)?.[0];
-/**
- * The root of a thread target (everything after the first `:`), or `undefined` for a top-level
- * target. `#general:12345678` → `12345678`; `#general` → `undefined`.
- */
-export const threadRootTarget = (target: string): string | undefined =>
-  splitThreadTarget(target)?.[1];
+export { threadParentTarget, threadRootTarget } from "./message-thread-target";
 /** A reaction emoji: trimmed, one to sixteen characters, no whitespace. */
 export const isValidReactionEmoji = (value: string): boolean =>
   value.trim() === value && value.length >= 1 && value.length <= 16 && !/\s/.test(value);

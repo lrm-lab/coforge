@@ -44,3 +44,9 @@ test("a thread target names its parent and its root; a top-level target has neit
   expect(threadRootTarget("@ada:12345678")).toBe("12345678");
   expect(threadRootTarget("@ada")).toBeUndefined();
 });
+
+test("attachment targets have a namespace colon and only comment roots make them threads", () => {
+  const parent = "attachment:11111111-1111-4111-8111-111111111111";
+  expect(threadParentTarget(parent)).toBeUndefined();
+  expect(threadParentTarget(`${parent}:22222222-2222-4222-8222-222222222222`)).toBe(parent);
+});
