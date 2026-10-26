@@ -2,6 +2,5 @@
   "computer_usage_percent_left": "剩余 {percent}",
   "computer_usage_used_up": "已用完",
   "computer_usage_read_error": "出错",
-  "computer_usage_updated": "{time}更新",
   "computer_runtime_account_visibility": "只有这台 Computer 的主人和 Workspace 的 owner、admin 能看到账号。"
 }

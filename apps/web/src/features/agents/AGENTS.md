@@ -195,4 +195,4 @@ These rules apply to `src/features/agents/`.
   or a claim that a running session has loaded each entry.
 - The Context usage row reads passive Agent display observations only: opening a
   runtime popover never launches a context scan. Its colour follows the shared
-  `usageRisk` rule (`features/computers/usage-risk.ts`), like a usage bar.
+  `usageLevel` rule (`features/computers/usage-level.ts`), like a usage bar.

@@ -118,7 +118,6 @@
   "computer_agent_workspace_delete_description": "All files in this Agent workspace on the computer are deleted. This cannot be undone.",
   "computer_not_found": "This computer is not in this workspace",
   "computer_not_found_description": "It may have been removed, or the link may point somewhere else.",
-  "computer_runtime_version": "Version {version}",
   "computer_usage_title": "Usage",
   "computer_usage_account": "Runtime account",
   "computer_usage_notes": "Notes",

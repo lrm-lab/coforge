@@ -5,7 +5,7 @@ import { RelativeTime } from "#src/components/ui/relative-time";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import { USAGE_RISK_FILL_CLASS, usageRisk } from "./usage-risk";
+import { USAGE_LEVEL_CLASS, usageLevel } from "./usage-level";
 import type { UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 /** Stands in for `{time}` while a message is split around the `RelativeTime` that replaces it. */
@@ -42,7 +42,7 @@ export function usedPercentText(usedPercent: number): string {
 
 /**
  * One usage meter row: the label, then the value and its reset on the same line, then a bar
- * coloured by `usageRisk` on the used share. The Agent context popover draws its context window
+ * coloured by `usageLevel`, Raft's plenty/low/empty. The Agent context popover draws its context window
  * with the same row (`resetExpected={false}`: a context window has no reset).
  */
 export function UsageWindow({
@@ -84,6 +84,8 @@ export function UsageWindow({
     window.usedPercent === undefined ? undefined : Math.min(100, Math.max(0, window.usedPercent));
   // A quota at its limit reads "Used up", as on Raft, not "0% left" beside a Limit reached badge.
   const usedUp = used === 100 || window.status === "limit_reached";
+  const level =
+    used !== undefined || usedUp ? USAGE_LEVEL_CLASS[usageLevel(used ?? 100, usedUp)] : undefined;
   const value =
     used !== undefined
       ? showLeft
@@ -106,7 +108,7 @@ export function UsageWindow({
       <div className="flex items-baseline justify-between gap-3 text-xs">
         <p className="min-w-0 truncate font-medium text-secondary">{label}</p>
         <p className="shrink-0 text-tertiary tabular-nums">
-          <span className="font-medium text-primary">{value}</span>
+          <span className={cn("font-medium", level?.value ?? "text-primary")}>{value}</span>
           {hydrated && window.resetsAt !== undefined && (
             <>
               {" · "}
@@ -126,11 +128,8 @@ export function UsageWindow({
         <div role="group" aria-label={label} className="mt-1.5">
           <ProgressBarBase
             value={showLeft ? 100 - used : used}
-            className="h-1.5 rounded-full"
-            progressClassName={cn(
-              "rounded-full",
-              USAGE_RISK_FILL_CLASS[usageRisk(used, window.status === "limit_reached")],
-            )}
+            className={cn("h-1.5 rounded-full", level?.track)}
+            progressClassName={cn("rounded-full", level?.fill)}
           />
         </div>
       )}

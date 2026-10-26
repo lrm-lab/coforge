@@ -11,6 +11,7 @@ import {
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { RelativeTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -21,7 +22,7 @@ import {
   officialBucketLabel,
   usageWindowLabel,
 } from "./runtime-usage-windows";
-import { TimeMessage, UsageWindow } from "./usage-window";
+import { UsageWindow } from "./usage-window";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 export type Runtime = {
@@ -277,16 +278,14 @@ export function RuntimeUsagePopoverContent({
   const planType = snapshot?.planType ?? auth?.account?.planLabel;
   const plan = planType ? formatPlan(planType) : undefined;
   const accountLabel = snapshot?.accountLabel ?? auth?.account?.maskedLabel;
-  // Codex reports whether credits exist and whether they are unlimited, and a balance string
-  // only when that version's schema sends one. No amounts, so this stays a note, not a bar.
+  // Codex reports whether credits exist and whether they are unlimited. Its balance string is
+  // not shown: Raft leaves it out, and with no credits it reads a bare "0".
   const credits = snapshot?.credits?.unlimited
     ? m.computer_usage_credits_unlimited()
     : snapshot?.credits?.hasCredits
       ? m.computer_usage_credits_available()
       : undefined;
-  const accountNote = [plan && accountLabel, credits, snapshot?.credits?.balance]
-    .filter(Boolean)
-    .join(" · ");
+  const accountNote = [plan && accountLabel, credits].filter(Boolean).join(" · ");
   const windows = snapshot
     ? (["primary", "secondary"] as const).flatMap((key) => {
         const window = snapshot[key];
@@ -307,15 +306,38 @@ export function RuntimeUsagePopoverContent({
               {m.computer_runtime_auth_logged_out()}
             </Badge>
           )}
-          {runtime.version && (
+          {/* The version and when usage was read (task #109); RelativeTime is blank until
+              hydration, and the separator waits with it. */}
+          {(runtime.version || (showUsage && data?.result)) && (
             <p className="truncate text-xs text-tertiary">
-              {m.computer_runtime_version({ version: runtime.version })}
+              {runtime.version}
+              {hydrated && showUsage && data?.result && (
+                <>
+                  {runtime.version ? " · " : ""}
+                  <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
+                </>
+              )}
             </p>
           )}
           {auth && (
             <p className="text-xs text-tertiary">{m.computer_runtime_account_visibility()}</p>
           )}
         </div>
+        {showUsage &&
+          !signedOut && (
+            // `isLoading` (React Aria's `isPending`) keeps focus on the button mid-press, where
+            // `isDisabled` would drop it (task #109). No tooltip: it would close the popover.
+            <Button
+              size="xs"
+              color="tertiary"
+              iconLeading={RefreshCw}
+              aria-label={scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
+              isLoading={scanning}
+              isDisabled={computerOnline === false}
+              className="-mt-1 shrink-0"
+              onPress={onRefresh}
+            />
+          )}
         {onClose && (
           <ButtonUtility
             icon={XClose}
@@ -358,24 +380,24 @@ export function RuntimeUsagePopoverContent({
             <>
               {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
               {snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
-                // Default rows are the group name, window, used share, and reset. The
+                // Rows read "group · window", as on Raft, then the used share and reset. The
                 // provider's notes stay on the snapshot and open from this button: a tooltip
                 // inside the peek would close it (task #258). Per-bucket sentences are not
                 // painted; they repeat the reset already on the row.
                 <div className="mt-3 space-y-4">
                   {snapshot.officialGroups.map((group, index) => (
                     <div key={`${group.name ?? "group"}-${index}`} className="space-y-3">
-                      {group.name && (
-                        <h4 className="text-sm font-medium break-words text-primary">
-                          {group.name}
-                        </h4>
-                      )}
                       {group.buckets.map((bucket, bucketIndex) => {
                         const detail = officialBucketDetail(bucket);
+                        const rowLabel = officialBucketLabel(bucket);
                         return (
                           <UsageWindow
                             key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
-                            label={officialBucketLabel(bucket)}
+                            label={
+                              group.name && group.name !== rowLabel
+                                ? `${group.name} · ${rowLabel}`
+                                : rowLabel
+                            }
                             window={{
                               ...(bucket.usedPercent !== undefined
                                 ? { usedPercent: bucket.usedPercent }
@@ -450,35 +472,6 @@ export function RuntimeUsagePopoverContent({
             </>
           )}
         </section>
-      )}
-
-      {showUsage && !signedOut && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          {/* RelativeTime is blank until hydration, so the line waits with it. */}
-          <p className="min-w-0 truncate text-xs text-tertiary">
-            {hydrated && data?.result && (
-              <TimeMessage
-                message={(time) => m.computer_usage_updated({ time })}
-                value={data.result.collectedAt}
-                timeZone={timeZone}
-              />
-            )}
-          </p>
-          {/* `isLoading` is React Aria's `isPending`: the button ignores presses but keeps focus,
-              where `isDisabled` would drop it to the page mid-press (task #109). */}
-          <Button
-            size="sm"
-            color="secondary"
-            iconLeading={RefreshCw}
-            isLoading={scanning}
-            showTextWhileLoading
-            isDisabled={computerOnline === false}
-            className="shrink-0"
-            onPress={onRefresh}
-          >
-            {scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
-          </Button>
-        </div>
       )}
 
       {footer && <div className="px-4 py-3">{footer}</div>}

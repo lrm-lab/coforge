@@ -111,9 +111,12 @@ export function AttachmentReviewDialog({
       () => {},
     );
   };
-  const image = file.contentType.startsWith("image/") && !imageFailed;
-  const canPreview = file.contentType.startsWith("image/") || kind !== null;
-  const showComments = commentsOnPhone || !canPreview;
+  // An image opens as Raft's lightbox: the page dimmed behind it, and no comments. One that fails
+  // to load shows its "no preview" note on the plain sheet, where it can be read.
+  const isImage = file.contentType.startsWith("image/");
+  const image = isImage && !imageFailed;
+  const canPreview = isImage || kind !== null;
+  const showComments = !isImage && (commentsOnPhone || !canPreview);
   const commentsShown = commentsOnPhone || commentsExpanded;
   const toast = useAppToast();
   const copyLabel =
@@ -131,6 +134,7 @@ export function AttachmentReviewDialog({
         className={cn(
           canPreview &&
             "px-0 backdrop-blur-none sm:px-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]",
+          image && "bg-black/65",
         )}
       >
         <Modal
@@ -139,12 +143,13 @@ export function AttachmentReviewDialog({
             canPreview
               ? "h-dvh max-h-dvh rounded-none shadow-none sm:rounded-none"
               : "h-full max-h-full sm:h-[85vh] sm:max-w-lg",
+            image && "bg-transparent",
           )}
         >
           <Dialog aria-label={file.fileName} className="flex h-full flex-col overflow-hidden">
             {({ close }) => (
               <>
-                <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary pr-2 pl-4">
+                <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">
                   <p className="flex min-w-0 flex-1 items-center gap-2">
                     {typeLabel && (
                       <span className="shrink-0 rounded-sm bg-secondary px-1 py-0.5 text-xs leading-none font-semibold text-tertiary ring-1 ring-secondary ring-inset">
@@ -155,7 +160,7 @@ export function AttachmentReviewDialog({
                       {file.fileName}
                     </span>
                   </p>
-                  {canPreview && (
+                  {canPreview && !isImage && (
                     <ButtonUtility
                       icon={MessageSquare01}
                       size="sm"
@@ -240,29 +245,31 @@ export function AttachmentReviewDialog({
                       )}
                     </div>
                   )}
-                  <div
-                    className={cn(
-                      "min-h-0 min-w-0 flex-1",
-                      canPreview && "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
-                      canPreview && (commentsExpanded ? "lg:block" : "lg:hidden"),
-                      showComments ? "block" : "hidden",
-                    )}
-                  >
-                    <AttachmentCommentsPane
-                      attachmentId={file.id}
-                      fileName={file.fileName}
-                      pendingAnchor={pendingAnchor}
-                      focusRequest={focusRequest}
-                      onClearAnchor={(anchor) =>
-                        setPendingAnchor((current) => (current === anchor ? null : current))
-                      }
-                      surface={surface}
-                      onJump={(anchor) => {
-                        setCommentsOnPhone(false);
-                        setJumpTo(anchor);
-                      }}
-                    />
-                  </div>
+                  {!isImage && (
+                    <div
+                      className={cn(
+                        "min-h-0 min-w-0 flex-1",
+                        canPreview && "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
+                        canPreview && (commentsExpanded ? "lg:block" : "lg:hidden"),
+                        showComments ? "block" : "hidden",
+                      )}
+                    >
+                      <AttachmentCommentsPane
+                        attachmentId={file.id}
+                        fileName={file.fileName}
+                        pendingAnchor={pendingAnchor}
+                        focusRequest={focusRequest}
+                        onClearAnchor={(anchor) =>
+                          setPendingAnchor((current) => (current === anchor ? null : current))
+                        }
+                        surface={surface}
+                        onJump={(anchor) => {
+                          setCommentsOnPhone(false);
+                          setJumpTo(anchor);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </>
             )}

@@ -63,7 +63,7 @@ test("a credit plan's header line is the label and the share left; the amounts s
 test("a running scan never disables the refresh button, so its focus stays in the popover", () => {
   // The pointer that asked for the refresh is parked on the button; a disabled state drops the
   // focus out of the popover. The refresh runs as React Aria's isPending: presses ignored, focus
-  // kept, spinner shown; the button's text names the running scan.
+  // kept, spinner shown; the button's name says the scan is running.
   const html = renderToStaticMarkup(
     <RuntimeUsagePopoverContent
       runtime={{ provider: RUNTIME_PROVIDER.GROK, displayName: "Grok Build", version: "1.0.52" }}
@@ -74,7 +74,7 @@ test("a running scan never disables the refresh button, so its focus stays in th
     />,
   );
   expect(html).not.toMatch(/<button[^>]*\sdisabled(?=[\s>])/);
-  expect(html).toContain("Refreshing…");
+  expect(html).toContain('aria-label="Refreshing…"');
   expect(html).toContain("data-pending");
 });
 
@@ -122,13 +122,16 @@ test("a runtime chip shows the runtime's mark, its name and a round status dot",
   expect(chip).toContain("rounded-full");
 });
 
-test("the popover as on Raft: the plan with its OK badge, then a Refresh button", () => {
+// Frank (2026-10-26): the icon Refresh in the title row, as before, not Raft's band at the foot.
+test("the popover: the version and Refresh up top, then the plan with its OK badge", () => {
   const html = render(kiroUsage({ used: 7517.29, limit: 10_000, overage: 0 }));
-  expect(html).toContain(">Version 2.22.0<");
+  expect(html).toContain(">2.22.0<");
   expect(html).toContain(">Kiro Power<");
   expect(html).not.toContain("Runtime account");
   expect(html.indexOf(">OK<")).toBeGreaterThan(html.indexOf(">Kiro Power<"));
-  expect(html.indexOf(">Refresh<")).toBeGreaterThan(html.indexOf("Monthly credits"));
+  expect(html.indexOf('aria-label="Refresh"')).toBeGreaterThan(-1);
+  expect(html.indexOf('aria-label="Refresh"')).toBeLessThan(html.indexOf(">Kiro Power<"));
+  expect(html).not.toContain(">Refresh<");
 });
 
 // Frank (2026-10-26): one state, one name, wherever the popover says it.
@@ -207,14 +210,14 @@ test("a signed-out runtime leads with its state and shows no account or usage", 
   );
   const name = html.indexOf(">Claude Code<");
   const state = html.indexOf(">Not signed in<");
-  const version = html.indexOf(">Version 2.1.306<");
+  const version = html.indexOf(">2.1.306<");
   const visibility = html.indexOf("can see the account");
   expect(name).toBeGreaterThan(-1);
   expect(state).toBeGreaterThan(name);
   expect(version).toBeGreaterThan(state);
   expect(visibility).toBeGreaterThan(version);
   expect(html).toContain('aria-label="Close"');
-  expect(html).not.toContain(">Refresh<");
+  expect(html).not.toContain('aria-label="Refresh"');
   expect(html).not.toContain(m.computer_usage_reading());
 });
 
@@ -234,7 +237,7 @@ test("a viewer without usage still sees the account their role allows", () => {
   );
   expect(html).toContain(">Pro<");
   expect(html).toContain("f***@example.com");
-  expect(html).not.toContain(">Refresh<");
+  expect(html).not.toContain('aria-label="Refresh"');
   expect(html).not.toContain(m.computer_usage_reading());
 });
 
