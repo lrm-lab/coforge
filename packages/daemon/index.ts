@@ -84,7 +84,7 @@ export { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 export { CodexProvider } from "#src/code-agent/codex/provider";
 export { readCodexUsage } from "#src/code-agent/codex/usage";
 export { readClaudeCodeUsage } from "#src/code-agent/claude-code/usage";
-export { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
+export { CoforgeProvider } from "#src/code-agent/pi/provider";
 export { startDaemonLocalRpcServer } from "#src/local-rpc";
 export { startAgentProxy } from "#src/agent-proxy";
 export {

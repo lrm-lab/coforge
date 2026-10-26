@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
-import { discoverPiCatalog, PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/pi/catalog";
+import { discoverPiCatalog, PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 
 test("Pi reasoning levels are the ones the SDK supports for each model", async () => {
   // Pi's thinkingLevelMap marks an unsupported level `null` and leaves a supported one out;
@@ -8,6 +8,7 @@ test("Pi reasoning levels are the ones the SDK supports for each model", async (
   const catalog = await discoverPiCatalog(
     tmpdir(),
     {},
+    { getDefaultAgentDirectory: () => tmpdir() },
     async () =>
       [
         { id: "no-off", provider: "openrouter", reasoning: true, thinkingLevelMap: { off: null } },

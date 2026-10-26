@@ -21,6 +21,7 @@
 | `src/catalog-command.ts` | Host catalog command execution port |
 | `src/per-turn/` | Shared per-turn session and process execution |
 | `src/version-gate.ts` | Shared version policy and required host version-reader port |
+| `src/pi/` | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities |
 | `src/antigravity/` | Antigravity per-turn protocol, tool events, version/catalog policy and usage parsing |
 | `src/grok/` | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities |
 | `src/kiro/` | Kiro ACP provider, native profile, events, version/catalog policy and usage parsing with explicit host ports |
@@ -33,3 +34,4 @@
 - [Cursor adapter](src/cursor/AGENTS.md)
 - [Grok adapter](src/grok/AGENTS.md)
 - [Antigravity adapter](src/antigravity/AGENTS.md)
+- [Pi adapter](src/pi/AGENTS.md)

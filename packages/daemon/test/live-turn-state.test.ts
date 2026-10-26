@@ -1,3 +1,4 @@
+import { piProvider } from "./fixtures/pi-host";
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -14,7 +15,7 @@ import {
 } from "@lrm/coforge-anvil";
 import { grokProvider } from "./fixtures/grok-host";
 import { antigravityProvider } from "./fixtures/antigravity-host";
-import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
+import { CoforgeProvider } from "#src/code-agent/pi/provider";
 import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import { readVersionOutput } from "#src/code-agent/version-probe";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
@@ -90,7 +91,7 @@ for (const provider of providers) {
   );
 }
 
-for (const provider of [new PiProvider(), new CoforgeProvider()]) {
+for (const provider of [piProvider(), new CoforgeProvider()]) {
   test(`${provider.provider} distinguishes SDK preflight and live work from a settled prompt`, async () => {
     const root = await mkdtemp(join(realpathSync(tmpdir()), "coforge-sdk-live-turn-"));
     const started = Promise.withResolvers<void>();

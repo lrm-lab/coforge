@@ -24,24 +24,27 @@ import {
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
+  createCodeAgentProvider,
   DaemonConnection,
   DaemonRuntime,
   InMemoryDaemonCredentialStore,
   defaultCentrifugeWorkspaceClientFactory,
   startAgentProxy,
 } from "@lrm/coforge-daemon";
-import { PiProvider } from "@lrm/coforge-daemon";
+import type { CodeAgentProvider, AgentSessionOptions } from "@lrm/coforge-anvil";
 
 const dbUrl = required("DATABASE_URL");
 const webOrigin = Bun.env.COFORGE_E2E_WEB_ORIGIN ?? "http://127.0.0.1:8789";
 const wssOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_ORIGIN ?? "ws://127.0.0.1:8000";
 const apiKey = required("OPENROUTER_API_KEY");
 
-class DiagnosticPiProvider extends PiProvider {
+class DiagnosticPiProvider implements CodeAgentProvider {
+  readonly provider = "pi" as const;
+  readonly #provider = createCodeAgentProvider("pi");
   creationFailure: string | undefined;
   created = false;
 
-  override async createAgentSession(options: Parameters<PiProvider["createAgentSession"]>[0]) {
+  async createAgentSession(options: AgentSessionOptions) {
     diagnostic("pi_session_create", {
       modelProvider: options.runtime?.modelProvider,
       model: options.runtime?.model,
@@ -53,7 +56,7 @@ class DiagnosticPiProvider extends PiProvider {
     });
     let session;
     try {
-      session = await super.createAgentSession(options);
+      session = await this.#provider.createAgentSession(options);
     } catch (error) {
       this.creationFailure = error instanceof Error ? error.constructor.name : typeof error;
       diagnostic("pi_session_create_failed", {

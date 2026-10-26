@@ -132,14 +132,9 @@ Native session behavior is maintained in [Anvil Grok rules](../../../anvil/src/g
 
 ## Pi and built-in CoForge Agent
 
-- Pi's Provider embeds the bundled Pi SDK and keeps the user's Pi models,
-  settings, packages, extensions, skills, and authentication.
-- An explicit Agent key overrides host authentication only in that session's
-  in-memory model runtime. Never write it to disk or pass it in process arguments.
-- Pi and the built-in Agent report `model_request_started` at the public SDK `agent.streamFunction` seam; lifecycle/progress is not a request start, and compaction keeps its own phase.
-- Pi session files stay in the Agent's `.pi-sessions` directory. The built-in CoForge Agent uses
-  its isolated bundled resources and `.builtin-sessions`; for skills, the Pi SDK still loads the
-  user's `~/.agents/skills`, so that is the one Global root its Skills metadata reports.
+- Pi native session invariants and the shared SDK Session live in [Anvil Pi rules](../../../anvil/src/pi/AGENTS.md).
+- `pi/provider.ts` keeps the built-in CoForge provider's product validation, native resource paths, memory policy and in-process proxy environment writes. Set those fields before calling Anvil's shared Session factory; never create a second Session state machine.
+- Built-in catalog and release metadata remain host-owned.
 
 ## Skills metadata (`agent-skills.ts`)
 

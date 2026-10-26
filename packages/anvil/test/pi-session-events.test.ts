@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { piSessionEvents, type PiSessionEvent } from "#src/code-agent/pi/session-events";
+import { piSessionEvents, type PiSessionEvent } from "@lrm/coforge-anvil";
 
 const events = (event: Record<string, unknown>) => piSessionEvents(event as PiSessionEvent);
 const messageUpdate = (assistantMessageEvent: Record<string, unknown>) =>

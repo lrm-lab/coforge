@@ -1,8 +1,10 @@
+import { piRuntimeHost } from "#src/code-agent/pi/host";
 import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import {
   AntigravityProvider,
+  PiProvider,
   type RuntimeAuthAdapter,
   type RuntimeAuthProvider,
   type CodeAgentProvider,
@@ -16,7 +18,7 @@ import { CodexProvider } from "#src/code-agent/codex/provider";
 import { ClaudeRuntimeAuthAdapter } from "#src/code-agent/claude-code/auth";
 import { CodexRuntimeAuthAdapter } from "#src/code-agent/codex/auth";
 import { perTurnSessionHost } from "./per-turn-host";
-import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
+import { CoforgeProvider } from "#src/code-agent/pi/provider";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   resolveHostCodeAgentExecutable,
@@ -57,7 +59,7 @@ export function createCodeAgentProvider(
     case RUNTIME_PROVIDER.COFORGE:
       return new CoforgeProvider();
     case RUNTIME_PROVIDER.PI:
-      return new PiProvider();
+      return new PiProvider({ host: piRuntimeHost });
     case RUNTIME_PROVIDER.CODEX: {
       const executable = providerExecutable(RUNTIME_PROVIDER.CODEX, options);
       return new CodexProvider(executable ? { command: [executable, "app-server"] } : undefined);

@@ -1,3 +1,5 @@
+import type { AgentSession } from "@lrm/coforge-anvil";
+import { piProvider } from "./fixtures/pi-host";
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
@@ -5,7 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { CodexProvider } from "#src/code-agent/codex/provider";
-import { PiProvider } from "#src/code-agent/pi/provider";
 
 // macOS tmpdir lives under /var, a symlink. Persisted Pi sessions are keyed by
 // the realpath of the workspace, so a literal /var/folders path here would
@@ -38,9 +39,9 @@ test("embedded Pi resumes an exact persisted session ID", async () => {
     sessionFile,
     `${JSON.stringify({ type: "session", version: 3, id: "persisted-exact", cwd: workspace, timestamp: "2026-09-08T00:00:00Z" })}\n`,
   );
-  let session: Awaited<ReturnType<PiProvider["createAgentSession"]>> | undefined;
+  let session: AgentSession | undefined;
   try {
-    session = await new PiProvider().createAgentSession({
+    session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
@@ -61,9 +62,9 @@ test("embedded Pi replaces a selected ID when its workspace history is missing",
   const workspace = join(root, "agent");
   await mkdir(workspace);
   const reports: Array<[string, string | undefined]> = [];
-  let session: Awaited<ReturnType<PiProvider["createAgentSession"]>> | undefined;
+  let session: AgentSession | undefined;
   try {
-    session = await new PiProvider().createAgentSession({
+    session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
@@ -90,7 +91,7 @@ test("embedded Pi rejects empty and path-shaped session IDs", async () => {
   try {
     for (const sessionId of ["", "../other/session", "/global/session.jsonl", "..\\other"]) {
       await expect(
-        new PiProvider().createAgentSession({
+        piProvider().createAgentSession({
           agentWorkspaceDirectory: workspace,
           instructions: TEST_AGENT_INSTRUCTIONS,
           environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(workspace, "host") },
@@ -110,10 +111,10 @@ test("embedded Pi resolves persisted sessions only inside the owning Agent works
   await mkdir(workspace);
   await mkdir(join(otherWorkspace, ".pi-sessions"), { recursive: true });
   const reports: string[] = [];
-  let fresh: Awaited<ReturnType<PiProvider["createAgentSession"]>> | undefined;
-  let resumed: Awaited<ReturnType<PiProvider["createAgentSession"]>> | undefined;
+  let fresh: AgentSession | undefined;
+  let resumed: AgentSession | undefined;
   try {
-    fresh = await new PiProvider().createAgentSession({
+    fresh = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
@@ -135,7 +136,7 @@ test("embedded Pi resolves persisted sessions only inside the owning Agent works
       join(otherWorkspace, ".pi-sessions", "foreign.jsonl"),
       `${JSON.stringify({ type: "session", version: 3, id: "foreign", cwd: otherWorkspace, timestamp: "2026-09-08T00:00:00Z" })}\n`,
     );
-    resumed = await new PiProvider().createAgentSession({
+    resumed = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
@@ -145,7 +146,7 @@ test("embedded Pi resolves persisted sessions only inside the owning Agent works
       sessionId: "local",
       state: "resumable",
     });
-    const foreign = await new PiProvider().createAgentSession({
+    const foreign = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },
@@ -173,7 +174,7 @@ test("embedded Pi refuses a session directory linked outside its Agent workspace
     await mkdir(other);
     await symlink(other, join(cwd, ".pi-sessions"));
     await expect(
-      new PiProvider().createAgentSession({
+      piProvider().createAgentSession({
         agentWorkspaceDirectory: cwd,
         instructions: TEST_AGENT_INSTRUCTIONS,
         environment: { PI_OFFLINE: "1", PI_CODING_AGENT_DIR: join(root, "host") },

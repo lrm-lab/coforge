@@ -1,6 +1,7 @@
+import { piRuntimeHost } from "#src/code-agent/pi/host";
 import { describe, expect, test } from "bun:test";
-import { PiReplyIntents } from "#src/code-agent/pi/reply-intents";
-import type { PiSessionEvent } from "#src/code-agent/pi/session-events";
+import { PiReplyIntents } from "@lrm/coforge-anvil";
+import type { PiSessionEvent } from "@lrm/coforge-anvil";
 
 // The SDK's `toolcall_*` events name the call only through `partial.content[contentIndex]`
 // (@earendil-works/pi-ai 1.4.0 `AssistantMessageEvent`, `ToolCall`), and carry the arguments as
@@ -21,7 +22,7 @@ const fragments = ['{"command":"coforge message ', "send --target #general", ' -
 
 describe("PiReplyIntents", () => {
   test("announces a shell call's send target while its arguments stream", () => {
-    const intents = new PiReplyIntents();
+    const intents = new PiReplyIntents(piRuntimeHost);
     const calls = [{ id: "call_1", name: "bash" }];
     expect(
       read(
@@ -50,7 +51,7 @@ describe("PiReplyIntents", () => {
   });
 
   test("tells calls apart by their content index and ignores other tools", () => {
-    const intents = new PiReplyIntents();
+    const intents = new PiReplyIntents(piRuntimeHost);
     const calls = [
       { id: "call_r", name: "read" },
       { id: "call_b", name: "bash" },
@@ -62,7 +63,7 @@ describe("PiReplyIntents", () => {
   });
 
   test("announces nothing for a delta whose call the partial message does not name", () => {
-    const intents = new PiReplyIntents();
+    const intents = new PiReplyIntents(piRuntimeHost);
     expect(read(intents, delta(3, fragments.join("")))).toEqual([]);
     expect(read(intents, update({ type: "toolcall_delta", contentIndex: 0, delta: "x" }))).toEqual(
       [],
@@ -71,7 +72,7 @@ describe("PiReplyIntents", () => {
   });
 
   test("a new turn retracts the call it had announced, once", () => {
-    const intents = new PiReplyIntents();
+    const intents = new PiReplyIntents(piRuntimeHost);
     expect(read(intents, delta(0, fragments.join("")))).toEqual([
       { type: "reply-intent", id: "call_1", target: "#general" },
     ]);
@@ -82,7 +83,7 @@ describe("PiReplyIntents", () => {
   });
 
   test("a new turn forgets calls in flight", () => {
-    const intents = new PiReplyIntents();
+    const intents = new PiReplyIntents(piRuntimeHost);
     read(intents, delta(0, fragments[0]!));
     read(intents, { type: "turn_start" });
     expect(read(intents, delta(0, fragments.slice(1).join("")))).toEqual([]);

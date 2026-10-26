@@ -1,3 +1,4 @@
+import { piProvider } from "./fixtures/pi-host";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,7 +11,7 @@ import {
   type AgentRuntimeEvent,
   type AgentSession,
 } from "@lrm/coforge-anvil";
-import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
+import { CoforgeProvider } from "#src/code-agent/pi/provider";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 
@@ -60,7 +61,7 @@ test("Pi resolves native provider environment auth below stored auth and Agent k
           join(agentDir, "auth.json"),
           JSON.stringify({ openai: { type: "api_key", key: "stored-key" } }),
         );
-      const session = await new PiProvider().createAgentSession({
+      const session = await piProvider().createAgentSession({
         agentWorkspaceDirectory: workspace,
         instructions: TEST_AGENT_INSTRUCTIONS,
         environment: {
@@ -119,7 +120,7 @@ test("Pi reports a raw error event, not a classified activity, when the provider
   try {
     await writeOpenAiHost(agentDir, `${server.url}v1`);
     await rm(join(agentDir, "auth.json"));
-    const session = await new PiProvider().createAgentSession({
+    const session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       environment: { PI_CODING_AGENT_DIR: agentDir, OPENAI_API_KEY: "declared-key" },
@@ -214,7 +215,7 @@ export default function (pi) {
   } });
 }`,
     );
-    session = await new PiProvider().createAgentSession({
+    session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       ...piRuntime(agentDir),
@@ -275,7 +276,7 @@ test("embedded Pi reports extension cancellation as interrupted and can run agai
       join(agentDir, "extensions", "abort.ts"),
       `export default function (pi) { pi.on("tool_result", (event, ctx) => { if (event.toolName === "read") ctx.abort(); }); }`,
     );
-    session = await new PiProvider().createAgentSession({
+    session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       ...piRuntime(agentDir),
@@ -318,7 +319,7 @@ test("embedded Pi reports progress for content-free turn/message lifecycle frame
   });
   await writeOpenAiHost(agentDir, `${server.url}v1`);
   const events: AgentRuntimeEvent[] = [];
-  const session = await new PiProvider().createAgentSession({
+  const session = await piProvider().createAgentSession({
     agentWorkspaceDirectory: workspace,
     instructions: TEST_AGENT_INSTRUCTIONS,
     ...piRuntime(agentDir),
@@ -411,7 +412,7 @@ test("embedded Pi uses host models and resources while an Agent key overrides ho
   );
   const originalAuth = await Bun.file(authPath).text();
   const sessionIds: string[] = [];
-  const session = await new PiProvider().createAgentSession({
+  const session = await piProvider().createAgentSession({
     agentWorkspaceDirectory: workspace,
     agentId: "real-agent-id",
     instructions: TEST_AGENT_INSTRUCTIONS,
@@ -437,7 +438,7 @@ test("embedded Pi uses host models and resources while an Agent key overrides ho
     for await (const path of new Bun.Glob("**/*").scan({ cwd: workspace, dot: true }))
       expect(await Bun.file(join(workspace, path)).text()).not.toContain("agent-secret-key");
     await session.dispose();
-    const fresh = await new PiProvider().createAgentSession({
+    const fresh = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       agentId: "real-agent-id",
       instructions: TEST_AGENT_INSTRUCTIONS,
@@ -501,7 +502,7 @@ test("concurrent embedded Pi sessions keep distinct in-memory Agent keys", async
   const create = async (name: string, apiKey?: string) => {
     const workspace = join(root, name);
     await mkdir(workspace);
-    return new PiProvider().createAgentSession({
+    return piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       environment: { PI_CODING_AGENT_DIR: agentDir },
@@ -570,7 +571,7 @@ test("embedded Pi default bash preserves host prefix and composes runtime and ho
     JSON.stringify({ shellCommandPrefix: "export COFORGE_PREFIX_SENTINEL=host-prefix" }),
   );
   const events: AgentRuntimeEvent[] = [];
-  const session = await new PiProvider().createAgentSession({
+  const session = await piProvider().createAgentSession({
     agentWorkspaceDirectory: workspace,
     instructions: TEST_AGENT_INSTRUCTIONS,
     ...piRuntime(agentDir),
@@ -648,7 +649,7 @@ test("embedded Pi keeps a host extension bash override instead of installing def
     `import { Type } from "@earendil-works/pi-ai";
 export default function (pi) { pi.registerTool({ name: "bash", label: "Host bash", description: "host override", parameters: Type.Object({ command: Type.String() }), async execute() { return { content: [{ type: "text", text: "HOST_BASH_SENTINEL" }], details: {} }; } }); }`,
   );
-  const session = await new PiProvider().createAgentSession({
+  const session = await piProvider().createAgentSession({
     agentWorkspaceDirectory: workspace,
     instructions: TEST_AGENT_INSTRUCTIONS,
     ...piRuntime(agentDir),
@@ -681,7 +682,7 @@ test("embedded Pi launches despite a duplicate host skill warning", async () => 
       "---\nname: duplicate-host-skill\ndescription: duplicate warning fixture\n---\nInstructions.\n",
     );
   }
-  const session = await new PiProvider().createAgentSession({
+  const session = await piProvider().createAgentSession({
     agentWorkspaceDirectory: workspace,
     instructions: TEST_AGENT_INSTRUCTIONS,
     ...piRuntime(agentDir),
@@ -750,7 +751,7 @@ for (const phase of ["tool", "preflight"] as const) {
         : `import { Type } from "@earendil-works/pi-ai";
 export default function (pi) { pi.registerTool({ name: "controlled", label: "Controlled", description: "controlled barrier", parameters: Type.Object({}), async execute() { await fetch(${JSON.stringify(`${barrier.url}wait`)}); return { content: [{ type: "text", text: "released" }], details: {} }; } }); }`,
     );
-    const session = await new PiProvider().createAgentSession({
+    const session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       ...piRuntime(agentDir),
@@ -898,7 +899,7 @@ test("embedded Pi notifications are accepted before completion and steer the exi
       },
     }),
   );
-  const session = await new PiProvider().createAgentSession({
+  const session = await piProvider().createAgentSession({
     agentWorkspaceDirectory: workspace,
     instructions: TEST_AGENT_INSTRUCTIONS,
     environment: { PI_CODING_AGENT_DIR: agentDir },
@@ -1026,7 +1027,7 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
   const proxyUrl = String(proxy.url);
   Bun.env.COFORGE_AGENT_PROXY_URL = proxyUrl;
   Bun.env.COFORGE_AGENT_CONTEXT = "test-context";
-  const session = await new PiProvider().createAgentSession({
+  const session = await piProvider().createAgentSession({
     agentWorkspaceDirectory: workspace,
     instructions: TEST_AGENT_INSTRUCTIONS,
     environment: {
@@ -1103,7 +1104,7 @@ describe("a Pi launch its model settings cannot satisfy fails with a typed error
       }),
     );
     try {
-      await new PiProvider().createAgentSession({
+      await piProvider().createAgentSession({
         agentWorkspaceDirectory: root,
         instructions: TEST_AGENT_INSTRUCTIONS,
         environment: { PI_CODING_AGENT_DIR: agentDir },

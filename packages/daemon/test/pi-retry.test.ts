@@ -1,9 +1,9 @@
+import { piProvider } from "./fixtures/pi-host";
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
-import { PiProvider } from "#src/code-agent/pi/provider";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
 
@@ -72,7 +72,7 @@ test("embedded Pi reports a recovered retry as completed without a terminal erro
       join(agentDir, "settings.json"),
       JSON.stringify({ retry: { enabled: true, maxRetries: 1, baseDelayMs: 1 } }),
     );
-    session = await new PiProvider().createAgentSession({
+    session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: TEST_AGENT_INSTRUCTIONS,
       ...piRuntime(agentDir),

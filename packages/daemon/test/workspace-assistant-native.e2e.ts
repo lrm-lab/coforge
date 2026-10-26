@@ -1,8 +1,8 @@
+import { piProvider } from "./fixtures/pi-host";
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PiProvider } from "#src/code-agent/pi/provider";
 import { buildCoforgeAgentInstructions } from "#src/code-agent/agent-instructions";
 
 // Runs the bundled, unmodified Pi runtime against a deterministic local model endpoint.
@@ -47,7 +47,7 @@ test("platform assistant native sessions isolate members and resume only their o
     async function turn(member: string, message: string, resume = false) {
       const directory = join(root, member);
       await mkdir(directory, { recursive: true });
-      const session = await new PiProvider().createAgentSession({
+      const session = await piProvider().createAgentSession({
         agentId: member,
         agentWorkspaceDirectory: directory,
         sessionId: resume ? ids.get(member) : undefined,

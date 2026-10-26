@@ -1,9 +1,9 @@
+import { piProvider } from "./fixtures/pi-host";
 import { expect, jest, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
-import { PiProvider } from "#src/code-agent/pi/provider";
 import { activityHarness } from "./fixtures/activity-runtime";
 import { AgentStartup } from "#src/agent-runtime/agent-startup";
 
@@ -70,7 +70,7 @@ test("Pi announces each model request before its response, including after a com
         },
       }),
     );
-    session = await new PiProvider().createAgentSession({
+    session = await piProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: "Test Agent instructions.",
       environment: { PI_CODING_AGENT_DIR: agentDir, OPENAI_API_KEY: "fixture-key" },

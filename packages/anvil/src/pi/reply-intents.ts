@@ -1,7 +1,6 @@
-import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
-import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
-import { isShellToolName } from "#src/code-agent/send-command-target";
+import type { AgentRuntimeEvent } from "@coforge/agent";
+import { asRecord, nonEmptyString } from "#src/json-record";
+import type { PiSessionHost, PiReplyIntentScanner } from "./host";
 import type { PiSessionEvent } from "./session-events";
 
 /**
@@ -12,7 +11,11 @@ import type { PiSessionEvent } from "./session-events";
  * announced.
  */
 export class PiReplyIntents {
-  readonly #scanner = new ReplyIntentScanner();
+  readonly #scanner: PiReplyIntentScanner;
+
+  constructor(private readonly host: PiSessionHost) {
+    this.#scanner = host.createReplyIntentScanner();
+  }
 
   read(event: PiSessionEvent): AgentRuntimeEvent[] {
     if (event.type === "turn_start")
@@ -27,7 +30,7 @@ export class PiReplyIntents {
     const call = asRecord(message.partial?.content?.[message.contentIndex]);
     const callId = nonEmptyString(call?.id);
     const toolName = nonEmptyString(call?.name);
-    if (!callId || !toolName || !isShellToolName(toolName)) return [];
+    if (!callId || !toolName || !this.host.isShellToolName(toolName)) return [];
     const replyIntent = this.#scanner.feed({ callId, fragment: message.delta });
     return replyIntent ? [replyIntent] : [];
   }

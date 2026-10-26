@@ -18,6 +18,10 @@ import {
   discoverGrokCatalog,
   discoverAntigravityCatalog,
   CATALOG_DISCOVERY_TIMEOUT_MS,
+  discoverPiCatalog,
+  piAgentDirectory,
+  PI_CATALOG_DISCOVERY_TIMEOUT_MS,
+  type PiModelDiscovery,
 } from "@lrm/coforge-anvil";
 import { runCatalogCommand } from "./catalog-command";
 import {
@@ -35,13 +39,8 @@ import {
 import { discoverExternalCodeAgents } from "./runtime-probe";
 import { claudeStaticCatalog } from "./claude-code/catalog";
 import { discoverCodexCatalog } from "./codex/catalog";
-import {
-  discoverCoforgeCatalog,
-  discoverPiCatalog,
-  piAgentDirectory,
-  PI_CATALOG_DISCOVERY_TIMEOUT_MS,
-  type PiModelDiscovery,
-} from "./pi/catalog";
+import { discoverCoforgeCatalog } from "./pi/catalog";
+import { piRuntimeHost } from "./pi/host";
 
 export type CodeAgentInventory = {
   runtimes: RuntimeMetadata[];
@@ -92,7 +91,7 @@ const CACHEABLE_CATALOG_PROVIDERS = [
 ] as const;
 
 function piCacheKeyPaths(environment: Readonly<Record<string, string | undefined>>): string[] {
-  const agentDir = piAgentDirectory(environment);
+  const agentDir = piAgentDirectory(environment, piRuntimeHost);
   return [join(agentDir, "models.json"), join(agentDir, "auth.json")];
 }
 
@@ -215,6 +214,7 @@ export async function discoverCodeAgentCatalogs(
     discoverPiCatalog(
       cwd,
       environment,
+      piRuntimeHost,
       options.piModels,
       options.piCatalogDiscoveryTimeoutMs ?? PI_CATALOG_DISCOVERY_TIMEOUT_MS,
       options.force,

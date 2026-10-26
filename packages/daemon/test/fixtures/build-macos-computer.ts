@@ -55,8 +55,13 @@ const result = await Bun.build({
         }));
         build.onLoad({ filter: /\/code-agent\/pi\/catalog\.ts$/ }, () => ({
           loader: "ts",
-          contents: `export function discoverCoforgeCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}
-             export function discoverPiCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
+          contents: `export function discoverCoforgeCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
+        }));
+        build.onLoad({ filter: /\/anvil\/src\/pi\/catalog\.ts$/ }, () => ({
+          loader: "ts",
+          contents: `export function discoverPiCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}
+             export function piAgentDirectory(){throw new Error("Lifecycle fixture must not query provider catalogs")}
+             export const PI_CATALOG_DISCOVERY_TIMEOUT_MS = 10000;`,
         }));
       },
     },
