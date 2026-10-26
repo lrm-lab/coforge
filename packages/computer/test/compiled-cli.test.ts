@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildReleaseTree } from "../../../scripts/release/build-release";
+import { subprocessTest } from "./subprocess-test";
 
 let directory: string;
 let executable: string;
@@ -338,7 +339,7 @@ test("local test build strips terminal controls from device authorization instru
   }
 }, 15_000);
 
-test("compiled CLI writes help to stdout and exits successfully", () => {
+subprocessTest("compiled CLI writes help to stdout and exits successfully", () => {
   const result = Bun.spawnSync({ cmd: [executable, "--help"], stdout: "pipe", stderr: "pipe" });
 
   expect(result.exitCode).toBe(0);
@@ -355,7 +356,7 @@ test("compiled CLI writes help to stdout and exits successfully", () => {
   expect(result.stderr.toString()).toBe("");
 });
 
-test("compiled login help documents the stable automation options", () => {
+subprocessTest("compiled login help documents the stable automation options", () => {
   const result = Bun.spawnSync({
     cmd: [executable, "login", "--help"],
     stdout: "pipe",
@@ -371,7 +372,7 @@ test("compiled login help documents the stable automation options", () => {
   expect(result.stderr.toString()).toBe("");
 });
 
-test("compiled setup help documents JSON mode and does not offer --all", () => {
+subprocessTest("compiled setup help documents JSON mode and does not offer --all", () => {
   const result = Bun.spawnSync({
     cmd: [executable, "setup", "--help"],
     stdout: "pipe",
@@ -385,7 +386,7 @@ test("compiled setup help documents JSON mode and does not offer --all", () => {
   expect(result.stderr.toString()).toBe("");
 });
 
-test("compiled CLI writes usage errors to stderr with a stable nonzero exit code", () => {
+subprocessTest("compiled CLI writes usage errors to stderr with a stable nonzero exit code", () => {
   const result = Bun.spawnSync({
     cmd: [executable, "setup", "workspace-a", "--all"],
     stdout: "pipe",
@@ -398,58 +399,67 @@ test("compiled CLI writes usage errors to stderr with a stable nonzero exit code
   expect(result.stderr.toString()).not.toContain("Error:");
 });
 
-test("compiled login rejects the removed server override without printing its value", () => {
-  const unsafeUrl = "https://user:password@coforge.example";
-  const result = Bun.spawnSync({
-    cmd: [executable, "login", "--server", unsafeUrl],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  expect(result.exitCode).toBe(1);
-  expect(result.stdout.toString()).toBe("");
-  expect(result.stderr.toString()).toContain("unknown option '--server'");
-  expect(`${result.stdout}${result.stderr}`).not.toContain(unsafeUrl);
-  expect(`${result.stdout}${result.stderr}`).not.toContain("user");
-  expect(`${result.stdout}${result.stderr}`).not.toContain("password");
-});
-
-test("compiled setup rejects the removed server override without claiming success", () => {
-  const result = Bun.spawnSync({
-    cmd: [executable, "setup", "--server", "https://127.0.0.1:1"],
-    env: { ...process.env, XDG_CONFIG_HOME: directory },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  expect(result.exitCode).toBe(1);
-  expect(result.stderr.toString()).toContain("unknown option '--server'");
-  expect(`${result.stdout}${result.stderr}`).not.toContain("registration was created");
-});
-
-test("compiled environment mismatch blocks login, setup, start, and restart", async () => {
-  const home = join(directory, "cross-environment-home");
-  const configDirectory = join(home, ".coforge", "computer");
-  await mkdir(configDirectory, { recursive: true });
-  await writeFile(
-    join(configDirectory, "profile.json"),
-    JSON.stringify({ server_url: "https://staging.coforge.cn" }),
-  );
-
-  for (const command of ["login", "setup", "start", "restart"]) {
+subprocessTest(
+  "compiled login rejects the removed server override without printing its value",
+  () => {
+    const unsafeUrl = "https://user:password@coforge.example";
     const result = Bun.spawnSync({
-      cmd: [executable, command],
-      env: { ...process.env, HOME: home },
+      cmd: [executable, "login", "--server", unsafeUrl],
       stdout: "pipe",
       stderr: "pipe",
     });
-    expect(result.exitCode).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("BUILD_ENVIRONMENT_MISMATCH");
-  }
-  expect(await Bun.file(join(home, ".coforge", "daemon", "daemon.json")).exists()).toBe(false);
-});
 
-test("compiled JSON setup also rejects the removed server override", () => {
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toBe("");
+    expect(result.stderr.toString()).toContain("unknown option '--server'");
+    expect(`${result.stdout}${result.stderr}`).not.toContain(unsafeUrl);
+    expect(`${result.stdout}${result.stderr}`).not.toContain("user");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("password");
+  },
+);
+
+subprocessTest(
+  "compiled setup rejects the removed server override without claiming success",
+  () => {
+    const result = Bun.spawnSync({
+      cmd: [executable, "setup", "--server", "https://127.0.0.1:1"],
+      env: { ...process.env, XDG_CONFIG_HOME: directory },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("unknown option '--server'");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("registration was created");
+  },
+);
+
+subprocessTest(
+  "compiled environment mismatch blocks login, setup, start, and restart",
+  async () => {
+    const home = join(directory, "cross-environment-home");
+    const configDirectory = join(home, ".coforge", "computer");
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(
+      join(configDirectory, "profile.json"),
+      JSON.stringify({ server_url: "https://staging.coforge.cn" }),
+    );
+
+    for (const command of ["login", "setup", "start", "restart"]) {
+      const result = Bun.spawnSync({
+        cmd: [executable, command],
+        env: { ...process.env, HOME: home },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(result.exitCode).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("BUILD_ENVIRONMENT_MISMATCH");
+    }
+    expect(await Bun.file(join(home, ".coforge", "daemon", "daemon.json")).exists()).toBe(false);
+  },
+);
+
+subprocessTest("compiled JSON setup also rejects the removed server override", () => {
   const result = Bun.spawnSync({
     cmd: [executable, "setup", "--server", "https://127.0.0.1:1", "--json"],
     env: { ...process.env, XDG_CONFIG_HOME: directory },

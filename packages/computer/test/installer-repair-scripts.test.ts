@@ -9,6 +9,7 @@ import {
   serveStub,
   temporaryDirectories,
 } from "./installer-script-runner";
+import { subprocessTest } from "./subprocess-test";
 
 afterEach(cleanupInstallerFixtures);
 
@@ -77,7 +78,7 @@ for (const command of ["repair", "status", "recover"] as const) {
   });
 }
 
-test("install.sh retries repair once on installer exit 3", async () => {
+subprocessTest("install.sh retries repair once on installer exit 3", async () => {
   const directory = await mkdtemp(join(tmpdir(), "coforge-repair-retry-"));
   temporaryDirectories.push(directory);
   const log = join(directory, "arguments");

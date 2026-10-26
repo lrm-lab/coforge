@@ -9,6 +9,7 @@ import {
   serveStub,
   temporaryDirectories,
 } from "./installer-script-runner";
+import { subprocessTest } from "./subprocess-test";
 
 afterEach(cleanupInstallerFixtures);
 
@@ -69,7 +70,7 @@ exit 0
   return { baseUrl: `http://127.0.0.1:${server.port}`, log, requested };
 }
 
-test("the version pin wins over the default channel", async () => {
+subprocessTest("the version pin wins over the default channel", async () => {
   const served = await fixture();
   const child = await run(["install"], {
     ...process.env,
@@ -85,7 +86,7 @@ test("the version pin wins over the default channel", async () => {
   );
 });
 
-test("a channel pin is forwarded without a conflicting latest version", async () => {
+subprocessTest("a channel pin is forwarded without a conflicting latest version", async () => {
   const served = await fixture();
   const child = await run(["install"], {
     ...process.env,
@@ -98,7 +99,7 @@ test("a channel pin is forwarded without a conflicting latest version", async ()
   expect((await readFile(served.log, "utf8")).trim()).toBe("installer: install --channel main");
 });
 
-test("explicit repair version and channel override the environment pins", async () => {
+subprocessTest("explicit repair version and channel override the environment pins", async () => {
   const served = await fixture();
   const child = await run(["repair", "--version", "2026.10.20"], {
     ...process.env,
@@ -114,7 +115,7 @@ test("explicit repair version and channel override the environment pins", async 
   );
 });
 
-test("repair forwards native confirmation and downgrade flags", async () => {
+subprocessTest("repair forwards native confirmation and downgrade flags", async () => {
   const served = await fixture();
   const child = await run(["repair", "--yes", "--allow-downgrade"], {
     ...process.env,
@@ -128,7 +129,7 @@ test("repair forwards native confirmation and downgrade flags", async () => {
   );
 });
 
-test("--setup forwards all trailing arguments to the installed Computer", async () => {
+subprocessTest("--setup forwards all trailing arguments to the installed Computer", async () => {
   const served = await fixture();
   const child = await run(["install", "--setup", "--workspace", "demo"], {
     ...process.env,
@@ -143,7 +144,7 @@ test("--setup forwards all trailing arguments to the installed Computer", async 
   ]);
 });
 
-test("--setup requires a setup argument", async () => {
+subprocessTest("--setup requires a setup argument", async () => {
   const served = await fixture();
   const child = await run(["install", "--setup"], {
     ...process.env,
@@ -154,11 +155,13 @@ test("--setup requires a setup argument", async () => {
   expect(child.exitCode).toBe(2);
 });
 
-test("--setup runs against an existing Computer after a retryable installer failure", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "coforge-bootstrap-setup-retry-"));
-  temporaryDirectories.push(directory);
-  const log = join(directory, "arguments");
-  const installer = Buffer.from(`#!/bin/sh
+subprocessTest(
+  "--setup runs against an existing Computer after a retryable installer failure",
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "coforge-bootstrap-setup-retry-"));
+    temporaryDirectories.push(directory);
+    const log = join(directory, "arguments");
+    const installer = Buffer.from(`#!/bin/sh
 mkdir -p "$HOME/.local/bin"
 cat > "$HOME/.local/bin/coforge-computer" <<'EOF'
 #!/bin/sh
@@ -168,27 +171,28 @@ chmod 700 "$HOME/.local/bin/coforge-computer"
 printf '%s\\n' "$@" >> "${log}"
 exit 3
 `);
-  const server = serveStub({
-    fetch(request) {
-      const path = new URL(request.url).pathname;
-      if (path === "/installer/latest") return new Response("0.1.0\n");
-      if (path === installerPath) return new Response(Bun.gzipSync(installer));
-      if (path.endsWith("coforge-installer.sha256"))
-        return new Response(`${checksum(installer)}\n`);
-      return new Response("not found", { status: 404 });
-    },
-  });
-  const child = await run(["repair", "--setup", "--workspace", "demo"], {
-    ...process.env,
-    COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}`,
-    COFORGE_INSTALLER_TEST_MODE: "1",
-    COFORGE_BOOTSTRAP_LOG: log,
-  });
-  expect(child.exitCode).toBe(0);
-  expect((await readFile(log, "utf8")).trim().split("\n").slice(-1)[0]).toBe("setup: setup demo");
-});
+    const server = serveStub({
+      fetch(request) {
+        const path = new URL(request.url).pathname;
+        if (path === "/installer/latest") return new Response("0.1.0\n");
+        if (path === installerPath) return new Response(Bun.gzipSync(installer));
+        if (path.endsWith("coforge-installer.sha256"))
+          return new Response(`${checksum(installer)}\n`);
+        return new Response("not found", { status: 404 });
+      },
+    });
+    const child = await run(["repair", "--setup", "--workspace", "demo"], {
+      ...process.env,
+      COFORGE_RELEASE_FEED_URL: `http://127.0.0.1:${server.port}`,
+      COFORGE_INSTALLER_TEST_MODE: "1",
+      COFORGE_BOOTSTRAP_LOG: log,
+    });
+    expect(child.exitCode).toBe(0);
+    expect((await readFile(log, "utf8")).trim().split("\n").slice(-1)[0]).toBe("setup: setup demo");
+  },
+);
 
-test("help is forwarded and does not retry an exit-3 installer", async () => {
+subprocessTest("help is forwarded and does not retry an exit-3 installer", async () => {
   const directory = await mkdtemp(join(tmpdir(), "coforge-bootstrap-help-"));
   temporaryDirectories.push(directory);
   const log = join(directory, "arguments");

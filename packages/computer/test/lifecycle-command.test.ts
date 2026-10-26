@@ -16,6 +16,7 @@ import {
   LifecycleStatusSchema,
 } from "#src/release/installer-contract";
 import { SUPERVISOR_PROBLEM_CODE } from "#src/release/supervisor-status";
+import { subprocessTest } from "./subprocess-test";
 
 /*
  * `coforge-computer __lifecycle` is the only way the separately released installer reads a
@@ -131,18 +132,21 @@ async function lifecycle(home: string, ...args: string[]) {
   return { exitCode, json: () => JSON.parse(stdout) as unknown };
 }
 
-test("protocol answers with the lifecycle protocol and this build's version", async () => {
-  const result = await lifecycle(await freshHome(), "protocol");
+subprocessTest(
+  "protocol answers with the lifecycle protocol and this build's version",
+  async () => {
+    const result = await lifecycle(await freshHome(), "protocol");
 
-  expect(result.exitCode).toBe(0);
-  expect(LifecycleProtocolSchema.parse(result.json())).toEqual({
-    lifecycle_protocol: 1,
-    version,
-  });
-  await expectGoldenFields(result.json(), "lifecycle.protocol.json");
-});
+    expect(result.exitCode).toBe(0);
+    expect(LifecycleProtocolSchema.parse(result.json())).toEqual({
+      lifecycle_protocol: 1,
+      version,
+    });
+    await expectGoldenFields(result.json(), "lifecycle.protocol.json");
+  },
+);
 
-test("an unknown command is a usage error on stdout with exit status 2", async () => {
+subprocessTest("an unknown command is a usage error on stdout with exit status 2", async () => {
   const result = await lifecycle(await freshHome(), "explode");
 
   expect(result.exitCode).toBe(LIFECYCLE_EXIT_CODE.USAGE);
@@ -152,63 +156,72 @@ test("an unknown command is a usage error on stdout with exit status 2", async (
   });
 });
 
-test("status without a running supervisor reports the persisted bindings as unhealthy when one should be running", async () => {
-  const home = await freshHome();
-  await writeBindings(home, [
-    { workspaceId: "ws_on", enabled: true },
-    { workspaceId: "ws_off", enabled: false },
-  ]);
+subprocessTest(
+  "status without a running supervisor reports the persisted bindings as unhealthy when one should be running",
+  async () => {
+    const home = await freshHome();
+    await writeBindings(home, [
+      { workspaceId: "ws_on", enabled: true },
+      { workspaceId: "ws_off", enabled: false },
+    ]);
 
-  const result = await lifecycle(home, "status");
+    const result = await lifecycle(home, "status");
 
-  expect(result.exitCode).toBe(0);
-  const status = LifecycleStatusSchema.parse(result.json());
-  expect(status).toEqual({
-    lifecycle_protocol: 1,
-    version,
-    supervisor: { running: false },
-    bindings: [
-      { binding_id: "ws_on", enabled: true, running: false, process_id: null },
-      { binding_id: "ws_off", enabled: false, running: false, process_id: null },
-    ],
-    healthy: false,
-    problems: [
-      {
-        code: SUPERVISOR_PROBLEM_CODE.SUPERVISOR_NOT_RUNNING,
-        message: expect.stringContaining("coforge-computer start"),
-      },
-    ],
-  });
-  await expectGoldenFields(status, "lifecycle.status.absent.json");
-});
+    expect(result.exitCode).toBe(0);
+    const status = LifecycleStatusSchema.parse(result.json());
+    expect(status).toEqual({
+      lifecycle_protocol: 1,
+      version,
+      supervisor: { running: false },
+      bindings: [
+        { binding_id: "ws_on", enabled: true, running: false, process_id: null },
+        { binding_id: "ws_off", enabled: false, running: false, process_id: null },
+      ],
+      healthy: false,
+      problems: [
+        {
+          code: SUPERVISOR_PROBLEM_CODE.SUPERVISOR_NOT_RUNNING,
+          message: expect.stringContaining("coforge-computer start"),
+        },
+      ],
+    });
+    await expectGoldenFields(status, "lifecycle.status.absent.json");
+  },
+);
 
-test("status without a running supervisor is healthy when every enabled binding is parked", async () => {
-  const home = await freshHome();
-  await writeBindings(home, [{ workspaceId: "ws_parked", enabled: true }]);
-  await new WorkspaceHealthJournal(
-    workspaceHealthJournalPath(workspaceStateDirectory(stateDirectory(home), "ws_parked")),
-  ).markParked("workspace_deleted");
+subprocessTest(
+  "status without a running supervisor is healthy when every enabled binding is parked",
+  async () => {
+    const home = await freshHome();
+    await writeBindings(home, [{ workspaceId: "ws_parked", enabled: true }]);
+    await new WorkspaceHealthJournal(
+      workspaceHealthJournalPath(workspaceStateDirectory(stateDirectory(home), "ws_parked")),
+    ).markParked("workspace_deleted");
 
-  const result = await lifecycle(home, "status");
+    const result = await lifecycle(home, "status");
 
-  expect(result.exitCode).toBe(0);
-  expect(LifecycleStatusSchema.parse(result.json())).toMatchObject({
-    supervisor: { running: false },
-    healthy: true,
-    problems: [],
-  });
-});
+    expect(result.exitCode).toBe(0);
+    expect(LifecycleStatusSchema.parse(result.json())).toMatchObject({
+      supervisor: { running: false },
+      healthy: true,
+      problems: [],
+    });
+  },
+);
 
-test("status on a machine with nothing configured is healthy and lists no bindings", async () => {
-  const result = await lifecycle(await freshHome(), "status");
+subprocessTest(
+  "status on a machine with nothing configured is healthy and lists no bindings",
+  async () => {
+    const result = await lifecycle(await freshHome(), "status");
 
-  expect(result.exitCode).toBe(0);
-  expect(LifecycleStatusSchema.parse(result.json())).toMatchObject({
-    supervisor: { running: false },
-    bindings: [],
-    healthy: true,
-  });
-});
+    expect(result.exitCode).toBe(0);
+    expect(LifecycleStatusSchema.parse(result.json())).toMatchObject({
+      supervisor: { running: false },
+      bindings: [],
+      healthy: true,
+    });
+  },
+);
 
 test(
   "status reports the running supervisor's identity and version",
@@ -250,16 +263,19 @@ test.each(["pause", "hold", "release", "resume"])(
   },
 );
 
-test("protocol and status write nothing, so the installer can probe a binary that never ran", async () => {
-  const home = await freshHome();
+subprocessTest(
+  "protocol and status write nothing, so the installer can probe a binary that never ran",
+  async () => {
+    const home = await freshHome();
 
-  expect((await lifecycle(home, "protocol")).exitCode).toBe(0);
-  expect((await lifecycle(home, "status")).exitCode).toBe(0);
+    expect((await lifecycle(home, "protocol")).exitCode).toBe(0);
+    expect((await lifecycle(home, "status")).exitCode).toBe(0);
 
-  expect(await readdir(home)).toEqual([]);
-});
+    expect(await readdir(home)).toEqual([]);
+  },
+);
 
-test("help is not offered: --help is a usage error like any unknown option", async () => {
+subprocessTest("help is not offered: --help is a usage error like any unknown option", async () => {
   const result = await lifecycle(await freshHome(), "status", "--help");
 
   expect(result.exitCode).toBe(LIFECYCLE_EXIT_CODE.USAGE);

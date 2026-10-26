@@ -15,6 +15,7 @@ import {
 } from "#src/release/upgrade-runner";
 import { UpgradeFailedError } from "#src/release/upgrade-receipt";
 import { parseRemoteUpgradeOperation, type UpgradeOperation } from "#src/release/upgrade-operation";
+import { subprocessTest } from "./subprocess-test";
 
 const runner = join(import.meta.dir, "..", "src", "release", "upgrade-runner.ts");
 const temporaryDirectories: string[] = [];
@@ -270,31 +271,34 @@ test("a remote operation does not inherit stdout, while a CLI operation does", a
   expect(spawned.every((spawn) => spawn.stdin === "ignore")).toBe(true);
 });
 
-test("the default runner paths come from the home directory and name the install root and target", async () => {
-  const { HOME: _home, ...environment } = Bun.env;
-  // Asynchronous, so a slow start of the fresh Bun process does not freeze the test runner's own
-  // timer; the failure message carries what the process said instead of a bare JSON parse error.
-  const child = Bun.spawn({
-    cmd: [
-      process.execPath,
-      "-e",
-      `const { resolveUpgradeRunnerPaths } = await import(${JSON.stringify(runner)});
+subprocessTest(
+  "the default runner paths come from the home directory and name the install root and target",
+  async () => {
+    const { HOME: _home, ...environment } = Bun.env;
+    // Asynchronous, so a slow start of the fresh Bun process does not freeze the test runner's own
+    // timer; the failure message carries what the process said instead of a bare JSON parse error.
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "-e",
+        `const { resolveUpgradeRunnerPaths } = await import(${JSON.stringify(runner)});
        console.log(JSON.stringify(resolveUpgradeRunnerPaths()));`,
-    ],
-    env: { ...environment, USERPROFILE: "/not/the/home/directory", XDG_BIN_HOME: "" },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
-  const paths = JSON.parse(stdout);
-  expect(paths.installRoot).toBe(join(homedir(), ".coforge", "computer", "install"));
-  expect(paths.target).toBeString();
-});
+      ],
+      env: { ...environment, USERPROFILE: "/not/the/home/directory", XDG_BIN_HOME: "" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+    const paths = JSON.parse(stdout);
+    expect(paths.installRoot).toBe(join(homedir(), ".coforge", "computer", "install"));
+    expect(paths.target).toBeString();
+  },
+);
 
 test("the receipt directory is created private", async () => {
   const directory = await scratch();

@@ -5,30 +5,34 @@ import { join } from "node:path";
 
 import { cleanupInstallerFixtures, run, temporaryDirectories } from "./installer-script-runner";
 import { bootstrapRequests, serveFixture } from "./installer-script-fixture";
+import { subprocessTest } from "./subprocess-test";
 
 afterEach(cleanupInstallerFixtures);
 
-test("install.sh forwards repair to the fetched installer without install-only PATH work", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "coforge-repair-script-"));
-  temporaryDirectories.push(directory);
-  const log = join(directory, "arguments");
-  const fixture = await serveFixture({
-    argumentLog: log,
-    expectedCommand: "repair",
-    omitShim: true,
-  });
-  const child = await run(["repair"], {
-    ...process.env,
-    COFORGE_RELEASE_FEED_URL: fixture.baseUrl,
-    COFORGE_INSTALLER_TEST_MODE: "1",
-  });
-  expect(child.exitCode).toBe(0);
-  expect((await readFile(log, "utf8")).trim().split("\n")).toEqual(["repair"]);
-  expect(fixture.requested).toEqual(bootstrapRequests(fixture.target));
-  expect(await readdir(child.home)).toEqual([]);
-});
+subprocessTest(
+  "install.sh forwards repair to the fetched installer without install-only PATH work",
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "coforge-repair-script-"));
+    temporaryDirectories.push(directory);
+    const log = join(directory, "arguments");
+    const fixture = await serveFixture({
+      argumentLog: log,
+      expectedCommand: "repair",
+      omitShim: true,
+    });
+    const child = await run(["repair"], {
+      ...process.env,
+      COFORGE_RELEASE_FEED_URL: fixture.baseUrl,
+      COFORGE_INSTALLER_TEST_MODE: "1",
+    });
+    expect(child.exitCode).toBe(0);
+    expect((await readFile(log, "utf8")).trim().split("\n")).toEqual(["repair"]);
+    expect(fixture.requested).toEqual(bootstrapRequests(fixture.target));
+    expect(await readdir(child.home)).toEqual([]);
+  },
+);
 
-test("install.sh retries an installer exit 3 once for repair", async () => {
+subprocessTest("install.sh retries an installer exit 3 once for repair", async () => {
   const directory = await mkdtemp(join(tmpdir(), "coforge-repair-retry-"));
   temporaryDirectories.push(directory);
   const log = join(directory, "arguments");
