@@ -1,5 +1,5 @@
 import { agentEnvironment } from "#src/code-agent/environment";
-import { withoutClaudeCodeMarker } from "./launch-args";
+import { withoutClaudeCodeMarker, type ClaudeCliRunResult } from "@lrm/coforge-anvil/claude-code";
 
 /**
  * The environment the one-shot Claude Code account-usage invocation (`/usage`) runs with:
@@ -17,12 +17,6 @@ export function claudeCliEnvironment(
     TZ: "UTC",
   };
 }
-
-export type ClaudeCliRunResult = {
-  stdout: string;
-  exitCode: number;
-  timedOut: boolean;
-};
 
 /** Spawns one Claude Code CLI invocation, capturing stdout and enforcing `timeoutMs`. Used by
  * the one-shot account-usage reader (`usage.ts`); never used for the long-lived

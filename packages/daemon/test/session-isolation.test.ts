@@ -6,7 +6,7 @@ import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
+import { claudeProvider } from "./fixtures/claude-provider";
 import { CodexProvider } from "@lrm/coforge-anvil/codex";
 
 // macOS tmpdir lives under /var, a symlink. Persisted Pi sessions are keyed by
@@ -18,12 +18,11 @@ const tempRoot = realpathSync(tmpdir());
 // An authenticated catalog refresh can use the entire 5s test budget on this host.
 const TEST_AGENT_INSTRUCTIONS = "Test instructions.";
 
-for (const Provider of [ClaudeCodeProvider, CodexProvider]) {
-  test(`${Provider.name} rejects an empty resume ID instead of treating it as a fresh session`, async () => {
-    const provider = new Provider({
-      host: codexRuntimeHost,
-      command: ["/not-an-installed-provider"],
-    });
+for (const provider of [
+  claudeProvider({ command: ["/not-an-installed-provider"] }),
+  new CodexProvider({ host: codexRuntimeHost, command: ["/not-an-installed-provider"] }),
+]) {
+  test(`${provider.constructor.name} rejects an empty resume ID instead of treating it as a fresh session`, async () => {
     await expect(
       provider.createAgentSession({
         agentWorkspaceDirectory: tmpdir(),

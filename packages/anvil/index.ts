@@ -14,3 +14,5 @@ export * from "./src/catalog-command";
 export * from "./src/version-gate";
 export * from "./src/catalog-discovery";
 export * from "./src/jsonl-error";
+export * from "./src/inline-text";
+export * from "./src/subagent-type";

@@ -16,7 +16,8 @@
     "./antigravity": "./src/antigravity/index.ts",
     "./execution": "./src/execution.ts",
     "./dsh": "./src/dsh/index.ts",
-    "./codex": "./src/codex/index.ts"
+    "./codex": "./src/codex/index.ts",
+    "./claude-code": "./src/claude-code/index.ts"
   },
   "scripts": {
     "typecheck": "bun check",

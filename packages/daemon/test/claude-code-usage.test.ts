@@ -1,11 +1,12 @@
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readClaudeCodeUsage } from "#src/code-agent/claude-code/usage";
+import { readClaudeCodeUsage } from "./fixtures/claude-readers";
 import { UsageUnavailableError } from "@lrm/coforge-anvil";
 
-const fixture = new URL("./fixtures/claude-usage.ts", import.meta.url).pathname;
+const fixture = anvilRuntimeFixtures.claudeUsage;
 const scratchDirectories: string[] = [];
 const directory = async () => {
   const created = await mkdtemp(join(tmpdir(), "coforge-claude-usage-"));

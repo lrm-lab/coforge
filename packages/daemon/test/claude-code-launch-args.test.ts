@@ -1,3 +1,4 @@
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,9 +9,9 @@ import {
   claudeLaunchCommand,
   parseClaudeAutoCompactWindow,
   withDefaultAutoCompactWindow,
-} from "#src/code-agent/claude-code/launch-args";
+} from "@lrm/coforge-anvil/claude-code";
 import { claudeCliEnvironment } from "#src/code-agent/claude-code/process";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
+import { claudeProvider } from "./fixtures/claude-provider";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import { agentEnvironment } from "#src/code-agent/environment";
 
@@ -110,7 +111,7 @@ test("a launched Claude process sees no CLAUDECODE even when the host and launch
       '#!/bin/sh\nprintf "%s|%s" "${CLAUDECODE-unset}" "$*" > "$COFORGE_SEEN"\nexec "$COFORGE_BUN_EXEC" "$COFORGE_CLAUDE_FIXTURE" -- "$@"\n',
     );
     await chmod(executable, 0o755);
-    const session = await new ClaudeCodeProvider().createAgentSession({
+    const session = await claudeProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: "Test Agent instructions.",
       environment: {
@@ -118,8 +119,7 @@ test("a launched Claude process sees no CLAUDECODE even when the host and launch
         CLAUDECODE: "1",
         COFORGE_SEEN: out,
         COFORGE_BUN_EXEC: process.execPath,
-        COFORGE_CLAUDE_FIXTURE: new URL("./fixtures/claude-stream-json.ts", import.meta.url)
-          .pathname,
+        COFORGE_CLAUDE_FIXTURE: anvilRuntimeFixtures.claudeStreamJson,
       },
     });
     const seen = await readFile(out, "utf8");
@@ -210,7 +210,7 @@ async function launchedAutoCompactWindow(options: {
       '#!/bin/sh\nprintf "%s" "${CLAUDE_CODE_AUTO_COMPACT_WINDOW-unset}" > "$COFORGE_SEEN"\nexec "$COFORGE_BUN_EXEC" "$COFORGE_CLAUDE_FIXTURE" -- "$@"\n',
     );
     await chmod(executable, 0o755);
-    const session = await new ClaudeCodeProvider().createAgentSession({
+    const session = await claudeProvider().createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: "Test Agent instructions.",
       runtime: { provider: "claude-code", model: "", reasoning: "", envVars: options.envVars },
@@ -218,8 +218,7 @@ async function launchedAutoCompactWindow(options: {
         PATH: bin,
         COFORGE_SEEN: out,
         COFORGE_BUN_EXEC: process.execPath,
-        COFORGE_CLAUDE_FIXTURE: new URL("./fixtures/claude-stream-json.ts", import.meta.url)
-          .pathname,
+        COFORGE_CLAUDE_FIXTURE: anvilRuntimeFixtures.claudeStreamJson,
       },
     });
     const seen = await readFile(out, "utf8");

@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
-import { subagentTypeLabel } from "#src/code-agent/subagent-type";
+import { subagentTypeLabel } from "@lrm/coforge-anvil";
 
 type SubagentProgress = Extract<AgentRuntimeEvent, { type: "subagent-progress" }>;
 

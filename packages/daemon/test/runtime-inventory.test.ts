@@ -10,10 +10,8 @@ import {
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
 import { fileStatCacheKey, inventoryCachePath } from "#src/code-agent/runtime-inventory-cache";
-import {
-  probeClaudeCodeVersion,
-  resolveClaudeCodeExecutable,
-} from "#src/code-agent/claude-code/runtime";
+import { probeClaudeCodeVersion } from "@lrm/coforge-anvil/claude-code";
+import { resolveClaudeCodeExecutable } from "#src/code-agent/claude-code/runtime";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { CATALOG_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";

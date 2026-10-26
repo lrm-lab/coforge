@@ -5,7 +5,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
-import { withoutClaudeCodeMarker } from "#src/code-agent/claude-code/launch-args";
+import { withoutClaudeCodeMarker } from "@lrm/coforge-anvil/claude-code";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import {
   isOpenCodeVersionUnsupported,
@@ -24,10 +24,8 @@ import {
   isAntigravityVersionUnsupported,
   logAntigravityVersionUnsupported,
 } from "@lrm/coforge-anvil/antigravity";
-import {
-  probeClaudeCodeVersion,
-  resolveClaudeCodeExecutable,
-} from "#src/code-agent/claude-code/runtime";
+import { probeClaudeCodeVersion } from "@lrm/coforge-anvil/claude-code";
+import { resolveClaudeCodeExecutable } from "#src/code-agent/claude-code/runtime";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { getLogger } from "@logtape/logtape";
 import {

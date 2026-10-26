@@ -8,7 +8,7 @@ import {
   type AgentActivityDetailKind,
 } from "@lrm/coforge-sdk/internal";
 import { createAgentActivity, redactTrajectoryText } from "@lrm/coforge-anvil";
-import { collapseWhitespace } from "./agent-instructions";
+import { collapseWhitespace } from "@lrm/coforge-anvil";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 // `TOOL_ALIASES` (shared with the web tool row labels — see

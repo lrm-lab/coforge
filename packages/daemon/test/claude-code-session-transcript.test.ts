@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   findClaudeSessionTranscript,
   readClaudeSessionResumeFacts,
-} from "#src/code-agent/claude-code/session-transcript";
+} from "./fixtures/claude-readers";
 import { assistantRecord, claudeConfigFixture } from "./claude-transcript-fixtures";
 
 const fixtures: Awaited<ReturnType<typeof claudeConfigFixture>>[] = [];

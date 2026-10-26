@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CodexProvider } from "@lrm/coforge-anvil/codex";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
+import { claudeProvider } from "./fixtures/claude-provider";
 import { kiroProvider } from "./fixtures/kiro-host";
 import { CursorProvider } from "@lrm/coforge-anvil/cursor";
 import { PROCESS_TREE_EXIT_GRACE_MS, VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
@@ -22,11 +22,13 @@ const command = (name: string) => [
   process.execPath,
   name === "codex-app-server.ts"
     ? anvilRuntimeFixtures.codex
-    : new URL(`./fixtures/${name}`, import.meta.url).pathname,
+    : name === "claude-stream-json.ts"
+      ? anvilRuntimeFixtures.claudeStreamJson
+      : new URL(`./fixtures/${name}`, import.meta.url).pathname,
 ];
 const providers = [
   new CodexProvider({ host: codexRuntimeHost, command: command("codex-app-server.ts") }),
-  new ClaudeCodeProvider({ command: command("claude-stream-json.ts") }),
+  claudeProvider({ command: command("claude-stream-json.ts") }),
   kiroProvider({ command: [process.execPath, anvilRuntimeFixtures.kiro] }),
   new CursorProvider({
     host: perTurnSessionHost,

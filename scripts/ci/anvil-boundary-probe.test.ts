@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const cases = [
+  ["index.ts", "@lrm/coforge-anvil/claude-code", false],
+  ["src/neutral.ts", "#src/claude-code/provider", false],
+  ["src/execution.ts", "#src/claude-code/provider", false],
+  ["src/claude-code/provider.ts", "#src/jsonl-process", true],
   ["index.ts", "./src/grok/provider", false],
   ["index.ts", "./src/kiro/auth", false],
   ["index.ts", "@lrm/coforge-anvil/codex", false],
@@ -51,6 +55,7 @@ for (const [file, specifier, allowed] of cases) {
           "src/dsh/provider.ts",
           "src/kiro/auth.ts",
           "src/codex/provider.ts",
+          "src/claude-code/provider.ts",
           "src/contract.ts",
         ]) {
           await Bun.write(join(sourceRoot, path), "export {};");

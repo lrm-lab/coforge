@@ -1,0 +1,228 @@
+import { tmpdir } from "node:os";
+import { ClaudeCodeProvider, type ClaudeRuntimeHost } from "@lrm/coforge-anvil/claude-code";
+import { fixtureClaudeHost } from "./claude-host";
+import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
+
+export const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
+
+/** The Claude Code adapter over the stream-json fixture (`claude-stream-json.ts`), launched with
+ * the fixture's own arguments. */
+export function claudeFixtureProvider(...args: string[]): ClaudeCodeProvider {
+  return claudeFixtureProviderWithHost(fixtureClaudeHost, ...args);
+}
+
+export function claudeFixtureProviderWithHost(
+  host: ClaudeRuntimeHost,
+  ...args: string[]
+): ClaudeCodeProvider {
+  return new ClaudeCodeProvider({
+    host,
+    command: [
+      process.execPath,
+      new URL("./claude-stream-json.ts", import.meta.url).pathname,
+      ...args,
+    ],
+  });
+}
+
+/**
+ * A feed of records for the stream-json fixture, which writes every record handed to it once the
+ * fixture has seen its first input (at once with the fixture argument `feed-before-input`).
+ * Launch the fixture with `environment`, and `attach` its session before sending it any input.
+ */
+export function claudeEventFeed() {
+  const responses: Response[] = [];
+  let waiting: ((response: Response) => void) | undefined;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      responses.shift() ??
+      new Promise<Response>((resolve) => {
+        waiting = resolve;
+      }),
+  });
+  let session: AgentSession | undefined;
+  let serial = 0;
+  const markers = new Map<string, () => void>();
+  const initialInput = Promise.withResolvers<void>();
+  // The fixture answers every input it reads with a `fixture-input-observed` text block.
+  let readCount = 0;
+  const inputWaiters: Array<{ count: number; resolve: () => void }> = [];
+
+  /** Hands the records to the fixture without waiting for the session to read them. */
+  function write(...records: Record<string, unknown>[]): void {
+    const response = Response.json(records);
+    if (waiting) {
+      waiting(response);
+      waiting = undefined;
+    } else responses.push(response);
+  }
+
+  /** Writes the records and a usage marker after them, then waits until the session reports the
+   * marker, so it has read every record before it. */
+  async function writeAndObserve(records: Record<string, unknown>[]): Promise<void> {
+    const resetsAt = 1_900_000_000 + ++serial;
+    const marker = new Date(resetsAt * 1000).toISOString();
+    const observed = new Promise<void>((resolve) => {
+      markers.set(marker, resolve);
+    });
+    write(...records, {
+      type: "rate_limit_event",
+      rate_limit_info: { status: "allowed", rateLimitType: "five_hour", resetsAt },
+    });
+    await observed;
+    markers.delete(marker);
+  }
+
+  return {
+    environment: { COFORGE_CLAUDE_EVENT_FEED: server.url.href },
+    attach(next: AgentSession): void {
+      session = next;
+      next.subscribe((event) => {
+        if (event.type === "text-delta" && event.text === "fixture-input-observed") {
+          initialInput.resolve();
+          readCount += 1;
+          for (const waiter of inputWaiters.filter(({ count }) => count <= readCount))
+            waiter.resolve();
+        }
+        if (event.type === "text-delta") markers.get(event.text)?.();
+        if (event.type === "usage" && event.snapshot.primary?.resetsAt)
+          markers.get(event.snapshot.primary.resetsAt)?.();
+      });
+    },
+    /** The native session id of the attached session. */
+    async sessionId(): Promise<string> {
+      const identity = await session?.readSessionIdentity?.();
+      if (!identity) throw new Error("fixture session identity unavailable");
+      return identity.sessionId;
+    },
+    write,
+    /** Resolves once the fixture has read `count` inputs in all. A written input (`sendMessage`,
+     * `notify`) is not yet read, and the fixture's answer to it can still start a turn. */
+    async inputsRead(count: number): Promise<void> {
+      if (readCount >= count) return;
+      await new Promise<void>((resolve) => inputWaiters.push({ count, resolve }));
+    },
+    /** After the fixture has seen its first input, writes the records and waits until the
+     * attached session has read them all. */
+    async emit(...records: Record<string, unknown>[]): Promise<void> {
+      await initialInput.promise;
+      await writeAndObserve(records);
+    },
+    /** `emit` for a fixture launched with `feed-before-input`, which reads the feed before any
+     * input. */
+    async emitBeforeInput(...records: Record<string, unknown>[]): Promise<void> {
+      await writeAndObserve(records);
+    },
+    stop(): void {
+      server.stop(true);
+    },
+  };
+}
+
+/** The top-level records of a Bash command Claude Code runs in the background: tool call
+ * `toolu_<id>` starts task `task-<id>` and returns at once. */
+export function backgroundBash(id: string): Record<string, unknown>[] {
+  return [
+    {
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: `toolu_${id}`,
+            name: "Bash",
+            input: { command: "sleep 5", run_in_background: true },
+          },
+        ],
+      },
+    },
+    {
+      type: "system",
+      subtype: "task_started",
+      task_id: `task-${id}`,
+      tool_use_id: `toolu_${id}`,
+      description: "Sleep 5 seconds",
+      is_backgrounded: true,
+      task_type: "local_bash",
+    },
+    {
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: `toolu_${id}`,
+            content: `Command running in background with ID: task-${id}.`,
+          },
+        ],
+      },
+    },
+  ];
+}
+
+/** A session of the fixture fed by its own `claudeEventFeed`: `emit` hands it records and waits
+ * until the session has read them. */
+export async function controlledClaudeWithHost(
+  host: ClaudeRuntimeHost,
+  sessionId?: string,
+  onSessionId?: (id: string) => Promise<void>,
+  ...args: string[]
+) {
+  const feed = claudeEventFeed();
+  const session = await claudeFixtureProviderWithHost(host, ...args).createAgentSession({
+    agentWorkspaceDirectory: tmpdir(),
+    instructions: TEST_AGENT_INSTRUCTIONS,
+    sessionId,
+    onSessionId,
+    environment: feed.environment,
+  });
+  feed.attach(session);
+  return {
+    session,
+    sessionId: await feed.sessionId(),
+    emit: feed.emit,
+    emitBeforeInput: feed.emitBeforeInput,
+    inputsRead: feed.inputsRead,
+    write: feed.write,
+    async dispose() {
+      await session.dispose();
+      feed.stop();
+    },
+  };
+}
+
+export async function waitForEvent(
+  events: AgentRuntimeEvent[],
+  type: AgentRuntimeEvent["type"],
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (events.some((event) => event.type === type)) return;
+    await Bun.sleep(5);
+  }
+  throw new Error(`timed out waiting for ${type}`);
+}
+
+/** Holds native initialization at the request boundary until the test releases it. */
+export function startClaudeInitGate(onRequested: () => void, release: Promise<void>) {
+  return Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch() {
+      onRequested();
+      await release;
+      return new Response("ready");
+    },
+  });
+}
+
+export function controlledClaude(
+  sessionId?: string,
+  onSessionId?: (id: string) => Promise<void>,
+  ...args: string[]
+) {
+  return controlledClaudeWithHost(fixtureClaudeHost, sessionId, onSessionId, ...args);
+}

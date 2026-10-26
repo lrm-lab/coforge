@@ -37,7 +37,7 @@ import {
   writeInventoryCache,
 } from "./runtime-inventory-cache";
 import { discoverExternalCodeAgents } from "./runtime-probe";
-import { claudeStaticCatalog } from "./claude-code/catalog";
+import { claudeStaticCatalog } from "@lrm/coforge-anvil/claude-code";
 import { discoverCodexCatalog } from "@lrm/coforge-anvil/codex";
 import { codexCatalogHost } from "./codex/host";
 import { discoverCoforgeCatalog } from "./pi/catalog";

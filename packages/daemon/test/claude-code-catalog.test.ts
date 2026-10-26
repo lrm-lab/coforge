@@ -6,7 +6,7 @@ import {
   discoverCodeAgentInventory,
   loadCachedCodeAgentCatalogs,
 } from "#src/code-agent/runtime-inventory";
-import { claudeStaticCatalog } from "#src/code-agent/claude-code/catalog";
+import { claudeStaticCatalog } from "@lrm/coforge-anvil/claude-code";
 import { FULL_EFFORTS, probeFor } from "./fixtures/runtime-probe";
 
 describe("Claude Code model catalog minimum versions", () => {

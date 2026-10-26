@@ -1,3 +1,4 @@
+import { collapseWhitespace } from "@lrm/coforge-anvil";
 import {
   CHANNEL_ARGUMENT_EXAMPLES,
   OPENVIKING_ARGUMENT_EXAMPLES,
@@ -56,14 +57,6 @@ export type CoforgeAgentPromptContext = {
    * provider passes anything here today. */
   extraCriticalRules?: readonly string[];
 };
-
-/** Collapses newlines/whitespace runs to a single space and trims; used wherever user-written
- * identity text (displayName, description, name) is rendered inline so it cannot inject blank
- * lines or forge Markdown structure through whitespace alone. Exported for `agent-memory-seed.ts`,
- * which applies the same rule to the name rendered into the seeded MEMORY.md heading. */
-export function collapseWhitespace(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
 
 /** Sanitizes a value quoted inline in the identity opening: collapses newlines to spaces and
  * strips double quotes so the quoted name cannot break out of its own quotes. */

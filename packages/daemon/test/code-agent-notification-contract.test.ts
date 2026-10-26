@@ -6,17 +6,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { CodexProvider } from "@lrm/coforge-anvil/codex";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
+import { claudeProvider } from "./fixtures/claude-provider";
 
 const command = (fixture: string) => [
   process.execPath,
   fixture === "codex-app-server.ts"
     ? anvilRuntimeFixtures.codex
-    : new URL(`./fixtures/${fixture}`, import.meta.url).pathname,
+    : fixture === "claude-stream-json.ts"
+      ? anvilRuntimeFixtures.claudeStreamJson
+      : new URL(`./fixtures/${fixture}`, import.meta.url).pathname,
 ];
 const providers = [
   new CodexProvider({ host: codexRuntimeHost, command: command("codex-app-server.ts") }),
-  new ClaudeCodeProvider({ command: command("claude-stream-json.ts") }),
+  claudeProvider({ command: command("claude-stream-json.ts") }),
 ];
 
 for (const provider of providers) {

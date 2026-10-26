@@ -5,21 +5,36 @@ const root = resolve(import.meta.dir, "../..");
 const anvil = resolve(root, "packages/anvil");
 const daemon = resolve(root, "packages/daemon");
 const pi = resolve(anvil, "src/pi");
-const runtimes = ["cursor", "opencode", "kiro", "grok", "antigravity", "pi", "dsh", "codex"].map(
-  (name) => resolve(anvil, "src", name),
-);
+const runtimes = [
+  "cursor",
+  "opencode",
+  "kiro",
+  "grok",
+  "antigravity",
+  "pi",
+  "dsh",
+  "codex",
+  "claude-code",
+].map((name) => resolve(anvil, "src", name));
 const execution = ["execution", "jsonl-process", "catalog-process", "process-tree-cleanup"].map(
   (name) => resolve(anvil, "src", name),
 );
 const perTurn = resolve(anvil, "src/per-turn");
 
-function isImplementation(path: string): boolean {
+function isRuntimeImplementation(path: string): boolean {
+  return runtimes.some((directory) => path === directory || path.startsWith(directory + sep));
+}
+
+function isSharedImplementation(path: string): boolean {
   return (
-    runtimes.some((directory) => path === directory || path.startsWith(directory + sep)) ||
     execution.some((file) => path === file || path === file + ".ts") ||
     path === perTurn ||
     path.startsWith(perTurn + sep)
   );
+}
+
+function isImplementation(path: string): boolean {
+  return isRuntimeImplementation(path) || isSharedImplementation(path);
 }
 
 // Scan specifiers before transpilation so type-only imports and re-exports count too.
@@ -42,7 +57,12 @@ test("Anvil cannot import daemon orchestration or platform implementations", asy
           : specifier.startsWith("@lrm/coforge-anvil/")
             ? resolve(anvil, "src", specifier.slice("@lrm/coforge-anvil/".length))
             : undefined;
-      if (target && !isImplementation(resolve(anvil, path)) && isImplementation(target)) {
+      if (
+        target &&
+        (!isImplementation(resolve(anvil, path)) ||
+          (isSharedImplementation(resolve(anvil, path)) && isRuntimeImplementation(target))) &&
+        isImplementation(target)
+      ) {
         implementationViolations.push(path + ": " + specifier);
       }
       if (

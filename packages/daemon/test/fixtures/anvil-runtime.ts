@@ -1,5 +1,16 @@
 /** Runtime fixtures belong to Anvil; daemon integration tests locate them through this module. */
 export const anvilRuntimeFixtures = {
+  runtime404Capture: new URL(
+    "../../../anvil/test/fixtures/runtime-404-capture.json",
+    import.meta.url,
+  ).pathname,
+  claudeStreamJson: new URL("../../../anvil/test/fixtures/claude-stream-json.ts", import.meta.url)
+    .pathname,
+  claudeUsage: new URL("../../../anvil/test/fixtures/claude-usage.ts", import.meta.url).pathname,
+  claudeUsageControl: new URL(
+    "../../../anvil/test/fixtures/claude-usage-control.ts",
+    import.meta.url,
+  ).pathname,
   codex: new URL("../../../anvil/test/fixtures/codex-app-server.ts", import.meta.url).pathname,
   codexScenarios: new URL(
     "../../../anvil/test/fixtures/codex-app-server-scenarios.ts",

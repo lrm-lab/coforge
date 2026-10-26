@@ -2,7 +2,7 @@
 
 `@lrm/coforge-anvil` owns provider-neutral Agent contracts, runtime adapters and their shared execution machinery. Keep it independent of daemon orchestration and platform implementations.
 
-- The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (`/cursor`, `/opencode`, `/kiro`, `/grok`, `/antigravity`, `/pi`, `/dsh`, `/codex`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
+- The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (`/cursor`, `/opencode`, `/kiro`, `/grok`, `/antigravity`, `/pi`, `/dsh`, `/codex`, `/claude-code`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
 - Public contracts and exports belong here; daemon imports them by package name. Never import daemon modules, including through relative paths or aliases. `scripts/ci/anvil-boundary.test.ts` checks this direction.
 - OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default, read Workspace configuration, discover executables or read PATH.
 - The host supplies per-turn environment composition through `PerTurnSessionHost.buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
@@ -33,6 +33,9 @@
 | `src/opencode/` | OpenCode provider, turn protocol, version policy and catalog parsing |
 | `src/cursor/` | Cursor turn protocol, provider and model catalog parsing |
 | `src/codex/` | Codex sessions, native events, auth, usage and catalog policy through required host capabilities |
+| `src/claude-code/` | Claude sessions, native events, auth, usage, history and catalog through required host capabilities |
+| `src/inline-text.ts` | Pure whitespace normalization for inline text projections |
+| `src/subagent-type.ts` | SDK-bounded display-safe subagent type projection |
 | Other `src/` modules | Shared runtime Activity, error, JSON, stream and deadline utilities |
 
 ## Runtime instructions
@@ -43,3 +46,5 @@
 - [Antigravity adapter](src/antigravity/AGENTS.md)
 - [Pi adapter](src/pi/AGENTS.md)
 - [Codex adapter](src/codex/AGENTS.md)
+
+- [Claude Code adapter](src/claude-code/AGENTS.md)

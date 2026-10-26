@@ -1,4 +1,5 @@
-import { claudeAssistantEvents } from "#src/code-agent/claude-code/message-events";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
+import { claudeAssistantEvents } from "@lrm/coforge-anvil/claude-code";
 import { expect, test } from "bun:test";
 import {
   RUNTIME_ERROR_CLASS,
@@ -185,9 +186,7 @@ test.each(["output", "side_output", "progress", "phase_finished"] as const)(
 );
 
 test("captured native Codex and Claude 404 errors both count with their available status facts", async () => {
-  const capture = await Bun.file(
-    new URL("./fixtures/runtime-404-capture.json", import.meta.url),
-  ).json();
+  const capture = await Bun.file(anvilRuntimeFixtures.runtime404Capture).json();
   const codex = new RuntimeErrorClassFence();
   expect(codex.note(classifyRuntimeErrorText(capture.codex.record.error.message))?.attempts).toBe(
     1,

@@ -3,7 +3,8 @@ import { ensureAgentMigrationIgnoreFile } from "#src/agent-migration/ignore-file
 import { AGENT_CODE_DIRECTORY, AGENT_MEMORY_FILE } from "#src/agent-runtime/agent-workspace-path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { collapseWhitespace, stripHeadingMarkers } from "#src/code-agent/agent-instructions";
+import { collapseWhitespace } from "@lrm/coforge-anvil";
+import { stripHeadingMarkers } from "#src/code-agent/agent-instructions";
 
 const logger = getLogger(["coforge", "daemon", "agent-runtime", "agent-memory-seed"]);
 

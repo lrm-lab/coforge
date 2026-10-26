@@ -1,8 +1,9 @@
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
+import { claudeProvider } from "./fixtures/claude-provider";
 import { TEST_AGENT_INSTRUCTIONS } from "./fixtures/claude-feed";
 
 test("Claude Code starts the user's installed CLI from PATH in streaming mode", async () => {
@@ -20,7 +21,7 @@ test("Claude Code starts the user's installed CLI from PATH in streaming mode", 
   const argumentsFile = join(directory, "claude-arguments");
 
   try {
-    const session = await new ClaudeCodeProvider().createAgentSession({
+    const session = await claudeProvider().createAgentSession({
       agentWorkspaceDirectory,
       instructions: TEST_AGENT_INSTRUCTIONS,
       runtime: {
@@ -32,8 +33,7 @@ test("Claude Code starts the user's installed CLI from PATH in streaming mode", 
       environment: {
         PATH: binDirectory,
         COFORGE_BUN_EXEC: process.execPath,
-        COFORGE_CLAUDE_FIXTURE: new URL("./fixtures/claude-stream-json.ts", import.meta.url)
-          .pathname,
+        COFORGE_CLAUDE_FIXTURE: anvilRuntimeFixtures.claudeStreamJson,
         COFORGE_CLAUDE_ARGS: argumentsFile,
       },
     });

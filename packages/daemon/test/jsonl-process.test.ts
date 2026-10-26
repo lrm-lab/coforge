@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
+import { claudeProvider } from "./fixtures/claude-provider";
 import { TEST_AGENT_INSTRUCTIONS } from "./fixtures/claude-feed";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { tmpdir } from "node:os";
@@ -272,7 +272,7 @@ function killIfPresent(pid: number): void {
 }
 
 test("Claude Code startup fails when its CLI does not complete initialization", async () => {
-  const adapter = new ClaudeCodeProvider({
+  const adapter = claudeProvider({
     command: [process.execPath, anvilRuntimeFixtures.invalidJsonl],
   });
 

@@ -2,10 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  buildConstructedPanel,
-  readClaudeRecycleBriefing,
-} from "#src/code-agent/claude-code/recycle-briefing";
+import { buildConstructedPanel, readClaudeRecycleBriefing } from "./fixtures/claude-readers";
 import { claudeConfigFixture, toolResultRecord, toolUseRecord } from "./claude-transcript-fixtures";
 
 const cleanups: (() => Promise<unknown>)[] = [];

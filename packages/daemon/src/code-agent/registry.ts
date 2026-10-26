@@ -1,3 +1,5 @@
+import { claudeRuntimeHost } from "#src/code-agent/claude-code/host";
+import { claudeAuthHost } from "#src/code-agent/claude-code/auth-host";
 import { DshProvider } from "@lrm/coforge-anvil/dsh";
 import { dshRuntimeHost } from "#src/code-agent/dsh/host";
 import { piRuntimeHost } from "#src/code-agent/pi/host";
@@ -17,10 +19,10 @@ import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { KiroProvider } from "@lrm/coforge-anvil/kiro";
 import { GrokProvider } from "@lrm/coforge-anvil/grok";
 import { PiProvider } from "@lrm/coforge-anvil/pi";
-import { ClaudeCodeProvider } from "#src/code-agent/claude-code/factory";
+import { ClaudeCodeProvider } from "@lrm/coforge-anvil/claude-code";
 import { CodexProvider, CodexRuntimeAuthAdapter } from "@lrm/coforge-anvil/codex";
 import { codexRuntimeHost, createCodexAuthHost } from "#src/code-agent/codex/host";
-import { ClaudeRuntimeAuthAdapter } from "#src/code-agent/claude-code/auth";
+import { ClaudeRuntimeAuthAdapter } from "@lrm/coforge-anvil/claude-code";
 import { perTurnSessionHost } from "./per-turn-host";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
@@ -59,6 +61,7 @@ export function createRuntimeAuthAdapter(
       return new KiroRuntimeAuthAdapter(createKiroAuthHost(options.platform));
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeRuntimeAuthAdapter({
+        host: claudeAuthHost,
         command: providerExecutable(RUNTIME_PROVIDER.CLAUDE_CODE, options),
       });
     default: {
@@ -85,7 +88,7 @@ export function createCodeAgentProvider(
       });
     }
     case RUNTIME_PROVIDER.CLAUDE_CODE:
-      return new ClaudeCodeProvider();
+      return new ClaudeCodeProvider({ host: claudeRuntimeHost });
     case RUNTIME_PROVIDER.KIRO:
       return new KiroProvider({ host: kiroRuntimeHost });
     case RUNTIME_PROVIDER.CURSOR:

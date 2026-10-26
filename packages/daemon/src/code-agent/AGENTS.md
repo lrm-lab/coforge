@@ -112,6 +112,12 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   app-server use the registry-resolved executable and the same effective environment.
 - Native Codex rules live in [Anvil Codex instructions](../../../anvil/src/codex/AGENTS.md).
 
+## Claude Code
+
+- Supply session, auth, usage, reply-intent and read-only filesystem capabilities through
+  `claude-code/`. Preserve their separate environment compositions and evaluation times.
+- Native Claude rules live in [Anvil Claude instructions](../../../anvil/src/claude-code/AGENTS.md).
+
 ## Per-turn providers (Cursor, OpenCode, Antigravity)
 
 - Cursor's partial-output framing rules are in [Anvil Cursor rules](../../../anvil/src/cursor/AGENTS.md).

@@ -1,6 +1,7 @@
+import { claudeRuntimeHost } from "#src/code-agent/claude-code/host";
 import { describe, expect, test } from "bun:test";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { claudeStreamEvents, ClaudeStreamEvents } from "#src/code-agent/claude-code/stream-events";
+import { claudeStreamEvents, ClaudeStreamEvents } from "@lrm/coforge-anvil/claude-code";
 
 const timestamp = "2026-10-11T10:00:00.000Z";
 const streamEvent = (event: unknown, parentToolUseId: string | null = null) => ({
@@ -86,7 +87,7 @@ describe("ClaudeStreamEvents", () => {
   const fragments = ['{"command": "coforge message send --tar', "get #general", ' --content hi"}'];
 
   test("reports what claudeStreamEvents does, and a tool call's target as its arguments stream", () => {
-    const stream = new ClaudeStreamEvents();
+    const stream = new ClaudeStreamEvents(claudeRuntimeHost);
     expect(stream.read(streamEvent({ type: "message_start" }))).toEqual([progress]);
     expect(stream.read(streamEvent(toolStart(1, "toolu_1", "Bash")))).toEqual([progress]);
     const [first, second, third] = fragments.map((fragment) =>
@@ -100,7 +101,7 @@ describe("ClaudeStreamEvents", () => {
   });
 
   test("keys interleaved tool calls by their block index", () => {
-    const stream = new ClaudeStreamEvents();
+    const stream = new ClaudeStreamEvents(claudeRuntimeHost);
     stream.read(streamEvent({ type: "message_start" }));
     stream.read(streamEvent(toolStart(0, "toolu_a", "Read")));
     stream.read(streamEvent(toolStart(2, "toolu_b", "Bash")));
@@ -112,7 +113,7 @@ describe("ClaudeStreamEvents", () => {
   });
 
   test("a new message forgets the block indexes of the last one", () => {
-    const stream = new ClaudeStreamEvents();
+    const stream = new ClaudeStreamEvents(claudeRuntimeHost);
     stream.read(streamEvent({ type: "message_start" }));
     stream.read(streamEvent(toolStart(1, "toolu_1", "Bash")));
     stream.read(streamEvent({ type: "message_start" }));
@@ -121,7 +122,7 @@ describe("ClaudeStreamEvents", () => {
   });
 
   test("a new message retracts the announced calls whose arguments never completed", () => {
-    const stream = new ClaudeStreamEvents();
+    const stream = new ClaudeStreamEvents(claudeRuntimeHost);
     stream.read(streamEvent({ type: "message_start" }));
     stream.read(streamEvent(toolStart(0, "toolu_open", "Bash")));
     stream.read(streamEvent(toolStart(1, "toolu_done", "Bash")));
@@ -140,7 +141,7 @@ describe("ClaudeStreamEvents", () => {
   });
 
   test("a subagent's stream, a delta with no known block and a non-shell tool announce nothing", () => {
-    const stream = new ClaudeStreamEvents();
+    const stream = new ClaudeStreamEvents(claudeRuntimeHost);
     stream.read(streamEvent({ type: "message_start" }));
     stream.read(streamEvent(toolStart(1, "toolu_sub", "Bash"), "toolu_parent"));
     expect(stream.read(streamEvent(jsonDelta(1, fragments.join("")), "toolu_parent"))).toEqual([]);
@@ -150,7 +151,7 @@ describe("ClaudeStreamEvents", () => {
   });
 
   test("announces a call once, and not after its block stopped", () => {
-    const stream = new ClaudeStreamEvents();
+    const stream = new ClaudeStreamEvents(claudeRuntimeHost);
     stream.read(streamEvent({ type: "message_start" }));
     stream.read(streamEvent(toolStart(1, "toolu_1", "Bash")));
     const all = fragments.flatMap((fragment) => stream.read(streamEvent(jsonDelta(1, fragment))));
