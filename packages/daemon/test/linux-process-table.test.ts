@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bootClockMs, parseProcStat } from "#src/platform/linux-process-table";
+import { bootClockMs, parseProcStat, parseProcUptimeMs } from "#src/platform/linux-process-table";
 
 test("a /proc stat line is read after the command's last parenthesis", () => {
   // Fields 3.. after the command: state ppid pgrp session tty tpgid flags minflt cminflt majflt
@@ -29,3 +29,14 @@ test.skipIf(process.platform !== "linux")(
     expect(second - first).toBeLessThan(5_000);
   },
 );
+
+test("uptime and stat timestamps in the same kernel tick compare exactly", () => {
+  expect(parseProcUptimeMs("130.29 400.01\n")).toBe(130290);
+  expect(parseProcUptimeMs("130.29")).toBe(130290);
+  // Every centisecond is an integral process-table tick, including decimal values that
+  // become slightly smaller or larger when seconds are first converted to binary floats.
+  for (let hundredths = 0; hundredths < 100; hundredths++) {
+    const text = `130.${String(hundredths).padStart(2, "0")} 0.00\n`;
+    expect(parseProcUptimeMs(text)).toBe(130000 + hundredths * 10);
+  }
+});

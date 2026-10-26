@@ -50,6 +50,13 @@ async function readEntry(pid: number): Promise<OwnedProcessIdentity | undefined>
   }
 }
 
+/** Read the kernel's decimal centiseconds as integers so equal stat/uptime ticks stay equal. */
+export function parseProcUptimeMs(uptime: string): number {
+  const match = /^(\d+)\.(\d{2})(?:\s|$)/.exec(uptime);
+  if (!match) throw new Error("Invalid /proc/uptime");
+  return Number(match[1]) * 1_000 + Number(match[2]) * 10;
+}
+
 /**
  * Milliseconds the system has been up, suspend included: the clock `starttime` is measured on, at
  * the resolution `/proc/uptime` prints (10 ms). It reads synchronously on purpose: it stamps a turn
@@ -57,7 +64,7 @@ async function readEntry(pid: number): Promise<OwnedProcessIdentity | undefined>
  * read costs microseconds.
  */
 export function bootClockMs(): number {
-  return Number(readFileSync("/proc/uptime", "utf8").split(" ")[0]) * 1_000;
+  return parseProcUptimeMs(readFileSync("/proc/uptime", "utf8"));
 }
 
 /**
