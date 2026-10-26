@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 
+import { Favicon } from "#src/components/foundations/logo/favicon";
 import { AppToastProvider } from "#src/components/ui/toast";
 import { getLocale } from "#src/paraglide/runtime";
 
@@ -34,11 +35,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       {
-        rel: "icon",
-        href: "/favicon.svg?v=bare-mark",
-        type: "image/svg+xml",
-      },
-      {
         rel: "apple-touch-icon",
         href: "/apple-touch-icon.png",
       },
@@ -61,6 +57,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <HeadContent />
+        <Favicon />
       </head>
       <body>
         <AppToastProvider>
