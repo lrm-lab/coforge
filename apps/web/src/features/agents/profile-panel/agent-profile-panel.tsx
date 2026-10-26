@@ -66,7 +66,7 @@ import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
 import { AgentProfileSkeleton } from "./agent-profile-skeleton";
-import { AgentErrorBanner } from "./agent-error-banner";
+import { AgentProfileStatus } from "./agent-profile-status";
 import {
   resolveAgentProfileTab,
   type AgentProfileTab as ProfileTabId,
@@ -312,8 +312,9 @@ export function AgentProfilePanel({
         onClose={onClose}
         back={back}
       />
-      {diagnosticFacts && !deleted && display?.activityKind === "error" && (
-        <AgentErrorBanner
+      {diagnosticFacts && !deleted && (
+        <AgentProfileStatus
+          key={agentId}
           agent={diagnosticFacts}
           display={display}
           onActivityTab={tab === "activity"}

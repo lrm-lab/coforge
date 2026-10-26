@@ -3,8 +3,6 @@ import { useState } from "react";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { useServerFn } from "@tanstack/react-start";
-import { interruptAgentTurn } from "./agent-turn-interrupt.functions";
 
 export type AgentControlRequest = {
   agentId: string;
@@ -48,8 +46,6 @@ export function useAgentRuntimeControls({
   computerOnline?: boolean;
   computerLabel?: string;
 }) {
-  const interrupt = useServerFn(interruptAgentTurn);
-  const [interruptPending, setInterruptPending] = useState(false);
   const [restartSubmitError, setRestartSubmitError] = useState<string | null>(null);
   const [restartOpen, setRestartOpen] = useState(false);
   const [action, setAction] = useState<AgentRestartAction>("restart");
@@ -141,14 +137,6 @@ export function useAgentRuntimeControls({
     });
   }
 
-  function submitInterrupt() {
-    if (interruptPending) return;
-    setInterruptPending(true);
-    void interrupt({ data: { agentId, requestId: crypto.randomUUID() } }).finally(() =>
-      setInterruptPending(false),
-    );
-  }
-
   return {
     agentName,
     isOnline,
@@ -164,8 +152,6 @@ export function useAgentRuntimeControls({
     /** `onOpenChange(false)` convenience for the dialog host; a no-op while a Stop is in flight. */
     closeStopConfirm: () => setStopConfirmOpen(false),
     confirmStop,
-    interrupt: submitInterrupt,
-    interruptPending,
     restartOpen,
     setRestartOpen,
     /** `onOpenChange(false)` convenience for the dialog host. */

@@ -168,11 +168,12 @@ These rules apply to `src/features/agents/`.
   owner/admin (`archived-agents-group.tsx`), each opening its read-only
   profile. There is no unarchive: archiving revoked its keys, memberships and
   reminders, and a new Agent may already hold its name.
-- While the display says `error`, the profile panel shows the provider's
+- While the display says `error` (except `runtime_stalled`), the profile panel shows the provider's
   original error text (not translated or summarized) in a banner under its
   header on every tab (`agent-error-banner.tsx`), with the Activity tab's
   diagnostics copy and a way to that tab
   for whoever gets that tab. Nothing else in the panel repeats it.
+- `profile-panel/agent-profile-status.tsx` owns ordinary errors and the localized `runtime_stalled` warning, the panel's only Stop Current Turn entry (text only), with its pending state and response feedback.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's mascot picker, opened by clicking

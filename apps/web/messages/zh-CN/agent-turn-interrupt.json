@@ -1,0 +1,15 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "agent_control_stop_agent": "停止 Agent",
+  "agent_turn_stalled": "Agent 似乎卡住了",
+  "agent_turn_stalled_hint": "本轮已一段时间没有进展。消息可能需要等到本轮结束或停止后才能继续处理。",
+  "agent_turn_stop": "停止本轮",
+  "agent_turn_stop_pending": "正在停止本轮…",
+  "agent_turn_stop_interrupted": "已停止本轮。",
+  "agent_turn_stop_not_running": "没有正在运行的轮次。",
+  "agent_turn_stop_restarted": "为停止本轮，Agent 已重启；对话上下文已保留。",
+  "agent_turn_stop_upgrade": "请升级这位 Agent 的 Computer 以支持停止单轮。你仍可停止整个 Agent。",
+  "agent_turn_stop_offline": "这位 Agent 的 Computer 已离线。",
+  "agent_turn_stop_failed": "未能停止本轮。",
+  "agent_turn_stop_retry": "重试"
+}
