@@ -79,6 +79,12 @@ export function HoverPopover({
         placement="bottom start"
         offset={12}
         containerPadding={12}
+        // PreviewTrigger closes a peek instantly when another tooltip or peek replaces it, and
+        // React Aria's Popover then renders nothing while its exit state still turns to exiting.
+        // With no element to watch, that exit never ends, and the next time the trigger is
+        // brushed the Popover mounts again as exiting and unplaced: stuck at the top left of the
+        // page (task #154). Animating every close keeps the element mounted until its exit ends.
+        shouldSkipAnimation={false}
         className={cn(
           "z-50 w-80 max-w-[calc(100vw-24px)] origin-(--trigger-anchor-point) overflow-y-auto rounded-xl border border-secondary bg-primary text-primary shadow-lg outline-none",
           "motion-safe:data-[entering]:animate-in motion-safe:data-[entering]:fade-in motion-safe:data-[exiting]:animate-out motion-safe:data-[exiting]:fade-out",
