@@ -1,4 +1,3 @@
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { useQueryClient } from "@tanstack/react-query";
@@ -44,7 +43,7 @@ type Placed = { comment: AttachmentCommentView; order: number | null };
 /** A place as Raft labels it: a grey pin chip, which a jump or a remove button can carry. */
 function AnchorChip({ label, children }: { label: string; children?: ReactNode }) {
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-tertiary px-1.5 py-0.5 text-xs font-medium text-secondary">
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-quaternary px-1.5 py-0.5 text-xs font-semibold text-primary">
       <MarkerPin01 className="size-3.5 shrink-0 text-fg-quaternary" aria-hidden="true" />
       <span className="min-w-0 truncate">{label}</span>
       {children}
@@ -200,13 +199,10 @@ export function AttachmentCommentsPane({
       aria-label={m.attachment_comments_title()}
       className="flex h-full min-h-0 min-w-0 flex-col bg-primary"
     >
-      <h2 className="shrink-0 border-b border-secondary px-4 py-3 text-sm font-semibold text-primary">
-        <Tooltip title={m.attachment_comments_open({ name: fileName })}>
-          <TooltipTrigger aria-label={m.attachment_comments_open({ name: fileName })}>
-            {m.attachment_comments_title()}
-          </TooltipTrigger>
-        </Tooltip>
-      </h2>
+      <header className="shrink-0 border-b border-secondary px-4 py-3">
+        <h2 className="text-sm font-semibold text-primary">{m.attachment_comments_title()}</h2>
+        <p className="truncate text-xs text-tertiary">{fileName}</p>
+      </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-live="polite">
         {query.isPending ? (
           <p className="text-sm text-tertiary">{m.attachment_comments_loading()}</p>

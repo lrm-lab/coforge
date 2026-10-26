@@ -177,7 +177,7 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
     await page.evaluate(() => window.postMessage({ bridge: "coforge-html", type: "state", scrollX: 0, scrollY: 99999, viewportWidth: 1, viewportHeight: 1, documentWidth: 1, documentHeight: 1 }, "*"));
 
     // As in Raft, the page opens alone; showing its comments is what lets a region be marked.
-    await page.click("loc=role:button[name='Expand comments']");
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"]').innerText.includes("Click or drag to comment on an area"));
     await page.waitForTimeout(300);
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "comment-mode.png"))} }));
@@ -201,7 +201,7 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
 
     await page.reload();
     ${openPreview}
-    await page.click("loc=role:button[name='Expand comments']");
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.click("loc=role:button[name='Go to Footer note about refunds']");
     await page.waitForFunction((frame) => {
       const box = document.querySelector('[role="dialog"] [data-located]')?.getBoundingClientRect();
@@ -251,7 +251,7 @@ test("on a touch device the comments open beside the page without marking region
     await page.cdp("Emulation.setEmulatedMedia", { features: [{ name: "pointer", value: "coarse" }] });
     await page.goto(${JSON.stringify(pageUrl)});
     ${openPreview}
-    await page.click("loc=role:button[name='Expand comments']");
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea');
     const marks = await page.evaluate(() => document.querySelectorAll('[role="dialog"] .cursor-crosshair').length + (document.querySelector('[role="dialog"]').innerText.includes("Click or drag") ? 1 : 0));
     console.log("E2E_TOUCH_MARKS " + marks);

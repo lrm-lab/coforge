@@ -34,7 +34,8 @@ const proxy = sameOriginProxy(web, centrifugo);
 const suffix = String(process.pid);
 const markdownName = `guide-${suffix}.md`;
 const csvName = `data-${suffix}.csv`;
-const markdown = "# Guide\n\nOverview.\n\n## Setup\n\nInstall the tool.\n\n## Usage\n\nRun it.\n";
+// Usage sits far below Setup, so the outline has somewhere to scroll to.
+const markdown = `# Guide\n\nOverview.\n\n## Setup\n\nInstall the tool.\n\n${"More detail.\n\n".repeat(60)}## Usage\n\nRun it.\n\n${"Even more.\n\n".repeat(60)}`;
 const csv = ["id,name", ...Array.from({ length: 60 }, (_, i) => `${i + 1},row ${i + 1}`)].join(
   "\n",
 );
@@ -183,6 +184,7 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     await page.waitForSelector(${JSON.stringify(open(csvName))});
     await page.click(${JSON.stringify(open(csvName))});
     await page.waitForSelector('[role="dialog"] [data-anchor-row="60"]');
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.click("loc=role:button[name='Go to Row 45']");
     await page.waitForFunction(() => {
       const row = document.querySelector('[role="dialog"] [data-anchor-row="45"]');
@@ -196,14 +198,31 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
     await page.click(${JSON.stringify(open(markdownName))});
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(sectionBody)}, { timeout: 10000 });
     await page.click("loc=role:button[name='Go to § Setup']");
     await page.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] h2')].some((h) => h.textContent === "Setup" && h.classList.contains("ring-2")), undefined, { timeout: 5000 });
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "markdown-section.png"))} }));
     console.log("E2E_SECTION_JUMP");
+
+    // The outline lists the sections and scrolls to one.
+    const usage = await page.evaluate(() => {
+      const rect = [...document.querySelectorAll('[role="dialog"] nav[aria-label="Markdown outline"] button')].find((b) => b.textContent === "Usage").getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    await page.mouse.click(usage.x, usage.y, { label: "outline Usage" });
+    await page.waitForFunction(() => {
+      const heading = [...document.querySelectorAll('[role="dialog"] h2')].find((h) => h.textContent === "Usage");
+      const pane = heading?.closest(".overflow-auto")?.getBoundingClientRect();
+      const box = heading?.getBoundingClientRect();
+      return box && box.top >= pane.top && box.top < pane.top + 120;
+    }, undefined, { timeout: 5000 });
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "markdown-outline.png"))} }));
+    console.log("E2E_OUTLINE_JUMP");
   `);
   expect(result).toContain("E2E_CSV_ROW_JUMP");
   expect(result).toContain("E2E_SECTION_JUMP");
+  expect(result).toContain("E2E_OUTLINE_JUMP");
   const anchors = await db.attachmentComment.findMany({
     where: { message: { body: { in: [sectionBody, rowBody] } } },
     select: { anchorType: true, anchorData: true },
@@ -239,6 +258,7 @@ test("a TypeScript file labelled video/mp2t takes line comments; a real transpor
     await page.waitForSelector(${JSON.stringify(open(sourceName))});
     await page.click(${JSON.stringify(open(sourceName))});
     await page.waitForSelector('[role="dialog"] [data-anchor-line="40"]');
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.click("loc=role:button[name='Go to Line 30']");
     await page.waitForFunction(() => document.querySelector('[role="dialog"] [data-anchor-line="30"]')?.classList.contains("bg-tertiary"), undefined, { timeout: 5000 });
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "typescript-line.png"))} }));

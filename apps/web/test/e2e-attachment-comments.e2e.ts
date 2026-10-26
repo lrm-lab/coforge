@@ -140,27 +140,25 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.waitForSelector(${JSON.stringify(preview)}, { timeout: 30000 });
     console.log(await page.snapshot());
     await page.click(${JSON.stringify(preview)});
+    // A preview opens on the file alone; its comments are one icon away, as on Raft's page.
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea', { timeout: 8000 });
     await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Comment on " + name + "…" && document.body.innerText.includes("No comments yet") && document.body.innerText.includes("Comments here relate only to " + name), ${JSON.stringify(filename)});
-    await page.hover('[role="dialog"] h2 button');
-    await page.waitForSelector('[role="tooltip"]');
-    if (!(await page.evaluate(() => document.querySelector('[role="tooltip"]').textContent)).includes(${JSON.stringify(filename)})) throw new Error("Missing filename tooltip");
-    await page.click("loc=role:button[name='Collapse comments']");
+    if (!(await page.evaluate(() => document.querySelector('[role="dialog"] section header').innerText)).includes(${JSON.stringify(filename)})) throw new Error("Missing filename under the comments title");
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length === 0);
-    await page.click("loc=role:button[name='Expand comments']");
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length > 0);
     await page.keyboard.press("Escape");
     await page.goto(${JSON.stringify(pageUrl.replace("/en/", "/zh-CN/"))});
     await page.cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
     await page.waitForSelector(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
     await page.click(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
+    await page.click('[role="dialog"] button[aria-label="评论"]');
     await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "评论 " + name + "…" && document.body.innerText.includes("还没有评论") && document.body.innerText.includes("这里的评论仅关联 " + name), ${JSON.stringify(filename)});
-    await page.hover('[role="dialog"] h2 button');
-    await page.waitForSelector('[role="tooltip"]');
-    if (!(await page.evaluate(() => document.querySelector('[role="tooltip"]').textContent)).includes(${JSON.stringify(filename)})) throw new Error("Missing Chinese filename tooltip");
-    await page.click("loc=role:button[name='收起评论']");
+    await page.click('[role="dialog"] button[aria-label="评论"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length === 0);
-    await page.click("loc=role:button[name='展开评论']");
+    await page.click('[role="dialog"] button[aria-label="评论"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length > 0);
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]')?.closest('[data-entering]'));
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "desktop-zh.png"))} }));
@@ -168,6 +166,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.goto(${JSON.stringify(pageUrl)});
     await page.waitForSelector(${JSON.stringify(preview)});
     await page.click(${JSON.stringify(preview)});
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea');
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(body)});
     await page.click("loc=role:button[name='Post comment']");
@@ -175,6 +174,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.reload();
     await page.waitForSelector(${JSON.stringify(preview)});
     await page.click(${JSON.stringify(preview)});
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(body)}, { timeout: 10000 });
     console.log(await page.snapshot());
     await page.waitForFunction(() => {
@@ -187,10 +187,10 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await page.waitForSelector('button[aria-label="Back to conversations"]');
     await page.click(${JSON.stringify(preview)});
-    await page.click("loc=role:button[name='Comments']");
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.fill('[role="dialog"] textarea', "Mobile draft survives switching");
-    await page.click("loc=role:button[name='Preview']");
-    await page.click("loc=role:button[name='Comments']");
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     if (await page.evaluate(() => document.querySelector('[role="dialog"] textarea').value) !== "Mobile draft survives switching") throw new Error("Mobile draft was lost");
     await page.evaluate(() => {
       document.documentElement.classList.remove("light-mode");
@@ -225,6 +225,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.goto(${JSON.stringify(pageUrl)});
     await page.waitForSelector(${JSON.stringify(preview)});
     await page.click(${JSON.stringify(preview)});
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea:disabled', { timeout: 20000 });
     await page.waitForFunction(() => document.body.innerText.includes("This conversation is archived"), undefined, { timeout: 20000 });
     console.log(await page.snapshot());

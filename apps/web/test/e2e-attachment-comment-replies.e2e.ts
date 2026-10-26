@@ -120,6 +120,7 @@ test("a reply and a ✅ on a comment are kept, counted and shown again", async (
     await page.goto(${JSON.stringify(pageUrl)});
     await page.waitForSelector(${JSON.stringify(open)}, { timeout: 30000 });
     await page.click(${JSON.stringify(open)});
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea');
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(rootBody)});
     await page.click("loc=role:button[name='Post comment']");
@@ -139,6 +140,7 @@ test("a reply and a ✅ on a comment are kept, counted and shown again", async (
     await page.reload();
     await page.waitForSelector(${JSON.stringify(open)});
     await page.click(${JSON.stringify(open)});
+    await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] button')].some((b) => b.textContent.trim() === "1 reply"), undefined, { timeout: 10000 });
     if (await page.evaluate((body) => document.body.innerText.includes(body), ${JSON.stringify(replyBody)})) throw new Error("Replies should stay folded until opened");
     if (!(await page.evaluate(() => document.querySelector('[role="dialog"] article button[aria-pressed="true"]')?.textContent.trim() === "✅ 1"))) throw new Error("✅ was not kept");

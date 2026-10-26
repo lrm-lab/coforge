@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button as AriaButton } from "react-aria-components";
+import { m } from "#src/paraglide/messages";
 import {
   rangeLocator,
   sectionAt,
@@ -64,12 +66,50 @@ export function MarkdownPreview({ text, anchoring }: { text: string; anchoring?:
     });
     return () => anchoring.onSurface(null);
   }, [text, anchoring]);
+  // The outline lists the same h1–h3 a section comment is placed under, once they are rendered.
+  const [outline, setOutline] = useState<{ title: string; level: number }[]>([]);
+  useEffect(() => {
+    setOutline(
+      headingsIn(ref.current).map((heading) => ({
+        title: heading.textContent ?? "",
+        level: Number(heading.tagName.slice(1)),
+      })),
+    );
+  }, [text]);
   return (
-    <div
-      ref={ref}
-      className="min-h-0 flex-1 overflow-auto px-4 py-4 text-md text-primary sm:px-6 sm:py-5"
-    >
-      <MessageBody body={text} />
+    <div ref={ref} className="min-h-0 flex-1 overflow-auto bg-secondary px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mx-auto flex max-w-6xl items-start justify-center gap-12">
+        {outline.length > 0 && (
+          <nav
+            aria-label={m.attachment_preview_outline_label()}
+            className="sticky top-0 hidden w-48 shrink-0 border-l border-secondary pl-4 lg:block"
+          >
+            <p className="mb-2 text-xs font-semibold text-tertiary">
+              {m.attachment_preview_outline()}
+            </p>
+            <ul className="space-y-1.5">
+              {outline.map((entry, index) => (
+                <li key={index} style={{ paddingLeft: `${(entry.level - 1) * 0.75}rem` }}>
+                  <AriaButton
+                    className="block max-w-full cursor-pointer truncate text-left text-xs text-tertiary outline-brand hover:text-secondary focus-visible:outline-2"
+                    onPress={() =>
+                      headingsIn(ref.current)[index]?.scrollIntoView({
+                        block: "start",
+                        behavior: "smooth",
+                      })
+                    }
+                  >
+                    {entry.title}
+                  </AriaButton>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+        <article className="w-full max-w-3xl min-w-0 rounded-xl border border-secondary bg-primary px-6 py-8 text-md text-primary sm:px-10 sm:py-12">
+          <MessageBody body={text} />
+        </article>
+      </div>
       {commentButton}
     </div>
   );
@@ -82,22 +122,21 @@ const toLineAnchor = rangeAnchor("lines", "data-anchor-line");
  * on lines can be scrolled to. Rendered as React text: auto-escaped, no script surface.
  */
 export function LinesPreview({ text, anchoring }: { text: string; anchoring?: Anchoring }) {
-  const ref = useRef<HTMLPreElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const lines = useMemo(() => text.split(/\r?\n/), [text]);
   const { chunks, ensure } = useProgressiveChunks(lines.length);
   const commentButton = useSelectionComment(ref, toLineAnchor, anchoring);
   const lineTexts = useCallback(() => lines, [lines]);
   useRangeSurface(anchoring, "lines", lineTexts, ref, ensure);
   return (
-    <pre
-      ref={ref}
-      className="min-h-0 flex-1 overflow-auto px-4 py-4 font-mono text-sm break-words whitespace-pre-wrap text-primary sm:px-6 sm:py-5"
-    >
-      {chunks.map(([start, end]) => (
-        <LineRun key={start} lines={lines} start={start} end={end} />
-      ))}
+    <div ref={ref} className="min-h-0 flex-1 overflow-auto bg-secondary p-4 sm:p-6">
+      <pre className="rounded-xl border border-secondary bg-primary px-4 py-4 font-mono text-sm break-words whitespace-pre-wrap text-primary sm:px-5">
+        {chunks.map(([start, end]) => (
+          <LineRun key={start} lines={lines} start={start} end={end} />
+        ))}
+      </pre>
       {commentButton}
-    </pre>
+    </div>
   );
 }
 
