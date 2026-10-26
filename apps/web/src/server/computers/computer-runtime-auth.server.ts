@@ -1,40 +1,86 @@
 import {
   sanitizeRuntimeAuthStatus,
+  runtimeAuthAccount,
   type RuntimeAuthProvider,
   type RuntimeAuthStatus,
 } from "@lrm/coforge-anvil";
+import type { RuntimeAuthReportedState } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 
 /**
  * A Computer's newest runtime login report as stored in `computers.runtimeAuth`: one status per
- * runtime with a login flow, by provider. Every status went through `sanitizeRuntimeAuthStatus`
- * on the Computer and again here, so an account label is always short and visibly masked.
+ * provider, including providers a newer daemon supports before this server does. Storage validates
+ * the report independently of the display whitelist; reads still filter through Anvil.
  */
 export type StoredRuntimeAuth = {
   collectedAtMs: number;
-  runtimes: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>>;
+  runtimes: Record<string, RuntimeAuthReportedState>;
 };
 
-/** A report's statuses, sanitized and keyed by provider; a provider without a login flow is dropped. */
+/** Keep structurally valid states for future providers without retaining arbitrary object fields. */
 export function storedRuntimeAuth(
   collectedAtMs: number,
   statuses: readonly unknown[],
 ): StoredRuntimeAuth {
+  if (!Number.isSafeInteger(collectedAtMs) || statuses.length > 32)
+    throw new Error("invalid runtime auth status report");
   const runtimes: StoredRuntimeAuth["runtimes"] = {};
+  let skippedEntries = 0;
   for (const value of statuses) {
-    const status = sanitizeRuntimeAuthStatus(value);
-    if (status) runtimes[status.provider] = status;
+    const status = reportedState(value);
+    if (!status) {
+      skippedEntries += 1;
+      continue;
+    }
+    if (Object.hasOwn(runtimes, status.provider))
+      throw new Error("duplicate runtime auth provider");
+    runtimes[status.provider] = status;
   }
-  return { collectedAtMs, runtimes };
+  const report = { collectedAtMs, runtimes };
+  if (new TextEncoder().encode(JSON.stringify(report)).byteLength > 16_384)
+    throw new Error("runtime auth status report exceeds storage limit");
+  if (skippedEntries > 0)
+    console.warn(JSON.stringify({ event: "runtime_auth.report_entries_skipped", skippedEntries }));
+  return report;
 }
 
-/** The stored column read back, sanitized once more; anything that is not a report is nothing. */
-export function parseStoredRuntimeAuth(value: unknown): StoredRuntimeAuth | null {
+function reportedState(value: unknown): RuntimeAuthReportedState | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const { provider, state, unavailableReason } = record;
+  if (typeof provider !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(provider))
+    return undefined;
+  if (state === "logged_in") {
+    const account =
+      typeof record.account === "object" && record.account !== null ? record.account : {};
+    return { provider, state, ...runtimeAuthAccount(account) };
+  }
+  if (state === "logged_out") return { provider, state };
+  if (
+    state === "unavailable" &&
+    (unavailableReason === "not_installed" ||
+      unavailableReason === "version_unsupported" ||
+      unavailableReason === "unsupported_installation")
+  )
+    return { provider, state, unavailableReason };
+  return { provider, state: "unknown" };
+}
+
+/** Display reads recognize only currently supported providers, sanitized once more. */
+export function parseStoredRuntimeAuth(value: unknown): {
+  collectedAtMs: number;
+  runtimes: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>>;
+} | null {
   if (typeof value !== "object" || value === null) return null;
   const { collectedAtMs, runtimes } = value as { collectedAtMs?: unknown; runtimes?: unknown };
   if (!Number.isSafeInteger(collectedAtMs) || typeof runtimes !== "object" || runtimes === null)
     return null;
-  return storedRuntimeAuth(collectedAtMs as number, Object.values(runtimes));
+  const supported: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>> = {};
+  for (const entry of Object.values(runtimes)) {
+    const status = sanitizeRuntimeAuthStatus(entry);
+    if (status) supported[status.provider] = status;
+  }
+  return { collectedAtMs: collectedAtMs as number, runtimes: supported };
 }
 
 /**

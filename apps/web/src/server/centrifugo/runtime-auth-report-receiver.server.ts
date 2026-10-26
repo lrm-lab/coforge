@@ -39,11 +39,14 @@ export function createRuntimeAuthReportMethod(
       metadata.principal.computerId !== report.computerId
     )
       return { code: 403, message: "runtime auth status report is not authorized" };
+    let auth: ReturnType<typeof storedRuntimeAuth>;
     try {
-      await store.record(
-        report.computerId,
-        storedRuntimeAuth(report.collectedAtMs, report.runtimes),
-      );
+      auth = storedRuntimeAuth(report.collectedAtMs, report.runtimes);
+    } catch {
+      return { code: 400, message: "invalid runtime auth status report" };
+    }
+    try {
+      await store.record(report.computerId, auth);
       return new Uint8Array();
     } catch {
       return { code: 503, message: "runtime auth status report was not recorded" };

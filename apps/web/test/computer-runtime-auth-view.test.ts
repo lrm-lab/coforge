@@ -25,7 +25,7 @@ test("someone who may sign the runtimes in or out sees the account", () => {
 
 test("a runtime the viewer may not see brings no status", () => {
   expect(runtimeAuthView(column, { showAccount: true, visibleProviders: ["codex"] })).toEqual({
-    codex: column.runtimes.codex,
+    codex: { provider: "codex", state: "unavailable", unavailableReason: "version_unsupported" },
   });
 });
 

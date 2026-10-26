@@ -67,7 +67,7 @@ test("stores the connection's Computer's report, keyed by provider", async () =>
   ]);
 });
 
-test("sanitizes again on receipt: an unmasked label is dropped, a provider without a login flow is ignored", async () => {
+test("sanitizes again on receipt: an unmasked label is dropped, an unknown provider is retained", async () => {
   const { calls, store } = recorder();
   const method = createRuntimeAuthReportMethod(store);
 
@@ -86,6 +86,7 @@ test("sanitizes again on receipt: an unmasked label is dropped, a provider witho
   );
   expect(calls[0]?.[1].runtimes).toEqual({
     "claude-code": { provider: "claude-code", state: "logged_in" },
+    pi: { provider: "pi", state: "logged_in" },
   });
 });
 
@@ -123,4 +124,38 @@ test("a report that could not be stored answers 503", async () => {
     code: 503,
     message: "runtime auth status report was not recorded",
   });
+});
+
+test("a structurally invalid status report is refused before persistence", async () => {
+  const { calls, store } = recorder();
+  const method = createRuntimeAuthReportMethod(store);
+  for (const runtimes of [
+    [
+      { provider: "codex", state: "unknown" as const },
+      { provider: "codex", state: "logged_in" as const },
+    ],
+    Array.from({ length: 33 }, (_, i) => ({ provider: `future-${i}`, state: "unknown" as const })),
+  ]) {
+    expect(await method(report({ runtimes }), { principal: principal() })).toMatchObject({
+      code: 400,
+    });
+  }
+  expect(calls).toEqual([]);
+});
+
+test("a report with one invalid provider still records the valid runtime", async () => {
+  const { calls, store } = recorder();
+  const method = createRuntimeAuthReportMethod(store);
+  expect(
+    await method(
+      report({
+        runtimes: [
+          { provider: "bad provider", state: "unknown" },
+          { provider: "kiro", state: "logged_in" },
+        ],
+      }),
+      { principal: principal() },
+    ),
+  ).toBeInstanceOf(Uint8Array);
+  expect(calls[0]?.[1].runtimes).toEqual({ kiro: { provider: "kiro", state: "logged_in" } });
 });

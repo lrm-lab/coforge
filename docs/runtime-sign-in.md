@@ -35,6 +35,11 @@ Signing out clears the CLI's stored login for the local OS user, across workspac
 or a running agent may still provide authentication; sign-out does not terminate running agents.
 The final status is always re-read rather than inferred from the logout process's exit alone.
 
+Runtime reports retain structurally valid entries for providers the server does not yet support.
+Only currently supported, viewer-visible providers are returned to the browser; an upgrade can
+therefore reveal an already-stored provider without requiring a daemon reconnect or another probe.
+Entries discarded by older servers need one fresh report after this change.
+
 ## Verification
 
 Automated tests use fake identities and native-process fixtures, never a user's real login.

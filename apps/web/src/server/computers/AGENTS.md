@@ -57,3 +57,11 @@ These rules apply to `src/server/computers/`.
   closed reads it with `readRuntimeAuthLogin`. A stale or repeated report is accepted and dropped,
   a report for a login the Computer does not hold is a 403, and a store failure is a 503 so the
   daemon retries.
+
+- `computer-runtime-auth.server.ts` stores structurally validated status reports without a
+  provider whitelist, so a newer daemon's report survives an older Web. Provider identifiers
+  are 1–64 ASCII identifier characters, at most 32 unique entries, normalized JSON at most
+  16 KiB. Unknown fields are discarded and account labels retain Anvil's masking limits.
+  Invalid entries are skipped with one content-free warning count; duplicate providers and
+  whole-report limit violations reject the report. All display reads still filter through
+  Anvil's current providers and viewer visibility.

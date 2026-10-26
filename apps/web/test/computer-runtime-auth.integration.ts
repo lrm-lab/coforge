@@ -15,7 +15,7 @@ const store = new PrismaComputerRuntimeAuthStore(db);
 const username = `cra-${crypto.randomUUID().slice(0, 8)}`;
 let computerId: string;
 
-const stored = async () =>
+const stored = async (): Promise<unknown> =>
   parseStoredRuntimeAuth(
     (await db.computer.findUniqueOrThrow({ where: { id: computerId } })).runtimeAuth,
   );
@@ -52,4 +52,18 @@ test("the first report fills the column, a newer one replaces it, an older one i
 
 test("a Computer that does not exist records nothing", async () => {
   expect(await store.record(crypto.randomUUID(), storedRuntimeAuth(1, []))).toBe(false);
+});
+
+test("the database preserves an unknown provider while display reads still hide it", async () => {
+  const report = storedRuntimeAuth(4_000, [
+    { provider: "future-cli", state: "logged_in", account: { maskedLabel: "f***@example.com" } },
+    { provider: "kiro", state: "logged_in", account: { methodLabel: "IAM Identity Center" } },
+  ]);
+  expect(await store.record(computerId, report)).toBe(true);
+  const column = (await db.computer.findUniqueOrThrow({ where: { id: computerId } })).runtimeAuth;
+  expect(column).toEqual(report);
+  expect(await stored()).toEqual({
+    collectedAtMs: 4_000,
+    runtimes: { kiro: report.runtimes.kiro },
+  });
 });
