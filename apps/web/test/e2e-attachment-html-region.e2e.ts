@@ -35,6 +35,8 @@ const files = new LocalFileStorage(storageRoot);
 const proxy = sameOriginProxy(web, centrifugo);
 
 const suffix = String(process.pid);
+// An absolute `http` link the browser can open without leaving this machine.
+const outside = `${web}/api/jwks?from=${suffix}`;
 const htmlName = `plans-${suffix}.html`;
 // No doctype: a quirks-mode file still lays out in the frame's standards-mode document.
 const html = `<html lang="en"><head><title>Plans</title><style>
@@ -45,7 +47,7 @@ body { margin: 0; font: 16px/1.5 sans-serif; }
 #footer { box-sizing: border-box; height: 80px; margin: 0; padding: 20px; }
 </style></head><body>
 <section id="pricing"><h2>Pricing plan</h2><p>Starter costs ten dollars</p></section>
-<div id="links"><a href="javascript:document.body.prepend('PWNED-js')">js link</a><br><a href="https://example.com/">external link</a></div>
+<div id="links"><a href="javascript:document.body.prepend('PWNED-js')">js link</a><br><a href="${outside}">external link</a></div>
 <noscript><p title="</noscript><meta http-equiv=refresh content='1;url=https://example.com/'>">noscript fallback</p></noscript>
 <script>document.body.prepend("PWNED-script")</script>
 <img src="data:," onerror="document.body.prepend('PWNED-onerror')">
@@ -164,7 +166,13 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
     // Give the refreshes their second, and press both links in preview mode.
     await page.waitForTimeout(1500);
     await page.mouse.click(frame.left + 640, frame.top + 32, { label: "press javascript link" });
+    // An http link opens in a new tab, from this page, through the hotspot laid over it.
+    const popupPromise = page.waitForEvent("popup");
     await page.mouse.click(frame.left + 640, frame.top + 56, { label: "press external link" });
+    const popup = await popupPromise;
+    await popup.waitForLoadState();
+    console.log("E2E_POPUP " + (await popup.url()));
+    await popup.close();
     // A message from this page's own window claiming to be the frame's state is not believed.
     await page.evaluate(() => window.postMessage({ bridge: "coforge-html", type: "state", scrollX: 0, scrollY: 99999, viewportWidth: 1, viewportHeight: 1, documentWidth: 1, documentHeight: 1 }, "*"));
 
@@ -198,7 +206,12 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
     }, frame, { timeout: 5000 });
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "located.png"))} }));
     console.log("E2E_REGION_JUMP");
+    await page.evaluate(() => document.documentElement.classList.add("dark-mode"));
+    await page.click("loc=role:button[name='Comment']");
+    await page.waitForTimeout(300);
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "dark-comment-mode.png"))} }));
   `);
+  expect(result).toContain(`E2E_POPUP ${outside}`);
   expect(result).toContain("E2E_ESC_KEPT_DIALOG");
   expect(result).toContain("E2E_REGION_JUMP");
   const anchors = await db.attachmentComment.findMany({
@@ -223,3 +236,21 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
   for (const data of [regionData, pointData]) expect(String(data.quote)).not.toContain("PWNED");
   browserPassed = true;
 }, 120_000);
+
+test("a touch device previews the page but offers no region comments", async () => {
+  const result = await runBrowser(`
+    const task = await taskSpace(${JSON.stringify(space)});
+    const page = await task.newPage();
+    let frame;
+    await page.cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await page.cdp("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    await page.cdp("Emulation.setEmulatedMedia", { features: [{ name: "pointer", value: "coarse" }] });
+    await page.goto(${JSON.stringify(pageUrl)});
+    ${openPreview}
+    const marks = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')].filter((button) => button.textContent.trim() === "Comment").length);
+    console.log("E2E_TOUCH_MARKS " + marks);
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "touch.png"))} }));
+    await page.close();
+  `);
+  expect(result).toContain("E2E_TOUCH_MARKS 0");
+}, 60_000);

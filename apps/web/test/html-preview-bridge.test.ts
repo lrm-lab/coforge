@@ -11,6 +11,7 @@ const frame = {} as Window;
 const other = {} as Window;
 const state = {
   type: "state",
+  links: [{ href: "https://example.com/", x: 10, y: 20, w: 80, h: 18 }],
   scrollX: 0,
   scrollY: 120,
   viewportWidth: 800,
@@ -48,6 +49,8 @@ describe("the page only listens to the frame it rendered, in its current session
     expect(from(frame, { type: "render", html: "<p>" })).toBeNull();
     expect(from(frame, { ...state, scrollY: Number.NaN })).toBeNull();
     expect(from(frame, { type: "located", id: 2, box: { x: 1 } })).toBeNull();
+    expect(from(frame, { ...state, links: [{ href: 1, x: 0, y: 0, w: 1, h: 1 }] })).toBeNull();
+    expect(from(frame, { ...state, links: [{ href: "https://a.b/", x: 0 }] })).toBeNull();
     expect(acceptBridgeMessage({ source: frame, data: "ready" }, frame, session)).toBeNull();
     expect(acceptBridgeMessage({ source: frame, data: null }, null, session)).toBeNull();
   });

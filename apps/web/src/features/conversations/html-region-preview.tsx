@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { MessageSquare01 } from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
+import { MessageSquare01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useMediaQuery } from "#src/hooks/use-media-query";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -13,6 +15,7 @@ import {
   newBridgeSession,
   type BridgeState,
   type DocumentBox,
+  type FrameLink,
   type FrameMessage,
   type ParentMessage,
 } from "./html-preview-bridge";
@@ -25,6 +28,7 @@ const BRIDGE_REPLY_MS = 1_000;
 const WHEEL_STEP = [1, 16, 800] as const;
 
 type Point = { x: number; y: number };
+type View = BridgeState & { links: FrameLink[] };
 type Reply = Extract<FrameMessage, { id: number }>;
 
 /**
@@ -47,7 +51,7 @@ export function HtmlRegionPreview({
   const frame = useRef<HTMLIFrameElement>(null);
   const session = useMemo(() => newBridgeSession(), [text]);
   const srcDoc = useMemo(() => bridgeSrcDoc(session), [session]);
-  const [view, setView] = useState<BridgeState | null>(null);
+  const [view, setView] = useState<View | null>(null);
   const viewRef = useRef(view);
   viewRef.current = view;
   const replies = useRef(new Map<number, (reply: Reply | null) => void>());
@@ -187,6 +191,21 @@ export function HtmlRegionPreview({
           height: Math.max(min, box.h),
         }
       : undefined;
+  // Opened here, not in the frame, and only for `http`/`https`: the frame never navigates.
+  const [blocked, setBlocked] = useState<string | null>(null);
+  const openLink = (href: string) => {
+    let url: URL;
+    try {
+      url = new URL(href);
+    } catch {
+      return;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return;
+    const opened = window.open(url.href, "_blank");
+    if (opened) opened.opener = null;
+    else setBlocked(url.href);
+  };
+
   const dragBox = drag && {
     left: Math.min(drag.from.x, drag.to.x),
     top: Math.min(drag.from.y, drag.to.y),
@@ -284,6 +303,16 @@ export function HtmlRegionPreview({
               style={onLayer(marked)}
             />
           )}
+          {!active &&
+            view?.links.map((link, index) => (
+              <AriaButton
+                key={`${index}:${link.href}`}
+                aria-label={link.href}
+                className="pointer-events-auto absolute cursor-pointer outline-brand focus-visible:outline-2"
+                style={{ left: link.x, top: link.y, width: link.w, height: link.h }}
+                onPress={() => openLink(link.href)}
+              />
+            ))}
           {located && (
             <div
               data-located=""
@@ -292,6 +321,30 @@ export function HtmlRegionPreview({
             />
           )}
         </div>
+        {blocked && (
+          <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-lg bg-primary px-4 py-2 shadow-lg ring-1 ring-secondary">
+            <p className="min-w-0 flex-1 text-sm text-secondary">
+              {m.attachment_comments_popup_blocked()}
+            </p>
+            <Button
+              size="sm"
+              color="secondary"
+              href={blocked}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setBlocked(null)}
+            >
+              {m.attachment_comments_open_link()}
+            </Button>
+            <ButtonUtility
+              icon={XClose}
+              size="xs"
+              color="tertiary"
+              tooltip={m.controls_close()}
+              onClick={() => setBlocked(null)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

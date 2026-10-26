@@ -30,10 +30,16 @@ export type BridgeState = {
 /** A box in document coordinates (scroll included). */
 export type DocumentBox = { x: number; y: number; w: number; h: number };
 
+/** An `http`/`https` link the reader can see, as a box in the frame's viewport. */
+export type FrameLink = DocumentBox & { href: string };
+
+/** How many visible link boxes the bridge reports at most. */
+const LINKS_MAX = 300;
+
 /** What the bridge sends this page. */
 export type FrameMessage =
   | { type: "ready" }
-  | ({ type: "state" } & BridgeState)
+  | ({ type: "state"; links: FrameLink[] } & BridgeState)
   | { type: "quote"; id: number; quote: string }
   | { type: "located"; id: number; box: DocumentBox | null };
 
@@ -108,7 +114,11 @@ export function acceptBridgeMessage(
         )
       )
         return null;
+      const links = Array.isArray(data.links) ? data.links.slice(0, LINKS_MAX) : [];
+      if (!links.every((link) => isBox(link) && typeof (link as FrameLink).href === "string"))
+        return null;
       return {
+        links: links.map(({ href, x, y, w, h }: FrameLink) => ({ href, x, y, w, h })),
         type: "state",
         scrollX,
         scrollY,
@@ -144,8 +154,31 @@ function bridgeMain(bridge: string, nonce: string, epoch: number) {
   // How much text a region or a search reads at most; the stored quote is shorter still.
   const TEXT_MAX = 2000;
   const SEARCH_MAX = 200;
+  const LINKS_MAX = 300;
   const post = (message: Record<string, unknown>) =>
     window.parent.postMessage(Object.assign({ bridge, nonce, epoch }, message), "*");
+
+  // Where the visible `http`/`https` links are, for the page to lay its own hotspots over them:
+  // a link never navigates this frame, the page opens it in a new tab instead.
+  const visibleLinks = () => {
+    const links: { href: string; x: number; y: number; w: number; h: number }[] = [];
+    for (const anchor of Array.from(document.querySelectorAll("a[href]"))) {
+      let url: URL;
+      try {
+        url = new URL(anchor.getAttribute("href") || "");
+      } catch {
+        continue;
+      }
+      if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+      for (const rect of Array.from(anchor.getClientRects())) {
+        if (links.length >= LINKS_MAX) return links;
+        if (rect.width === 0 || rect.bottom < 0 || rect.right < 0) continue;
+        if (rect.top > window.innerHeight || rect.left > window.innerWidth) continue;
+        links.push({ href: url.href, x: rect.left, y: rect.top, w: rect.width, h: rect.height });
+      }
+    }
+    return links;
+  };
 
   let frame = 0;
   const sendState = () => {
@@ -154,6 +187,7 @@ function bridgeMain(bridge: string, nonce: string, epoch: number) {
     const body = document.body;
     post({
       type: "state",
+      links: visibleLinks(),
       scrollX: Math.round(window.scrollX),
       scrollY: Math.round(window.scrollY),
       viewportWidth: root.clientWidth || window.innerWidth,

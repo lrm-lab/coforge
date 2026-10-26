@@ -27,6 +27,8 @@
   "attachment_comments_region_hint": "Click or drag to comment on an area",
   "attachment_comments_region_unavailable": "Can't locate on this page — comments will have no anchor",
   "attachment_comments_preview_preparing": "Preparing the interactive preview…",
+  "attachment_comments_popup_blocked": "Your browser blocked opening a new tab",
+  "attachment_comments_open_link": "Open link",
   "attachment_comments_anchor_remove": "Comment on the whole file instead",
   "attachment_comments_anchor_lost": "Position not found",
   "attachment_comments_anchor_jump": "Go to {place}",
