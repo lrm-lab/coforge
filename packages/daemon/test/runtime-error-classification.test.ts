@@ -108,6 +108,20 @@ test("a plan that does not include the model is ModelConfigError with user_model
   });
 });
 
+const CURSOR_FREE_PLAN_FAILURE =
+  "exit code 1 | stderr: ActionRequiredError: Named models unavailable Free plans can only use Auto. " +
+  "Upgrade your plan or remove --model to use Auto.";
+
+test("Cursor's free-plan named-model failure is classified as a plan access error", () => {
+  expect(classifyRuntimeErrorText(CURSOR_FREE_PLAN_FAILURE)).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RUNTIME,
+    errorReason: "runtime_failure",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
+});
+
 test("a plan-access message naming a transient limit is not user_model_access", () => {
   const result = classifyRuntimeErrorText(
     "model is not included in your plan at the moment, try again later",
