@@ -92,8 +92,21 @@ export class PiChatTurn {
         }
         const next = { ...row, status, updatedAt: Date.now(), model: this.runtime.model() };
         await store.save(next);
-        Object.assign(row, next);
-        if (status !== "interrupted") await store.clearCheckpoint(row.id);
+        try {
+          if (status !== "interrupted") await store.clearCheckpoint(row.id);
+        } catch (error) {
+          // Terminal metadata is durable; recovery ignores a completed turn's stale checkpoint.
+          console.error(
+            JSON.stringify({
+              event: "pi_chat.checkpoint_cleanup_failed",
+              session_id: row.id,
+              error_type: error instanceof Error ? error.name : typeof error,
+            }),
+          );
+        } finally {
+          // Publish readiness only when cleanup has settled, immediately before releasing active.
+          Object.assign(row, next);
+        }
       } finally {
         settled();
         await this.runtime.dispose();
