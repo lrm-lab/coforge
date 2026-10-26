@@ -19,6 +19,8 @@ import {
   logGrokVersionUnsupported,
   isAntigravityVersionUnsupported,
   logAntigravityVersionUnsupported,
+  CATALOG_DISCOVERY_TIMEOUT_MS,
+  within,
 } from "@lrm/coforge-anvil";
 import {
   probeClaudeCodeVersion,
@@ -33,7 +35,6 @@ import {
   type ExternalCodeAgentProvider,
 } from "./runtime-executable";
 
-import { CATALOG_DISCOVERY_TIMEOUT_MS, within } from "./catalog-discovery";
 import { initializeCodex } from "./codex/catalog";
 import {
   fileStatCacheKey,

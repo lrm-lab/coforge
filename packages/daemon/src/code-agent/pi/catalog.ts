@@ -12,15 +12,15 @@ import {
   supportedReasoningEfforts,
 } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
-import { asRecord } from "@lrm/coforge-anvil";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
+  asRecord,
   CATALOG_DISCOVERY_TIMEOUT_MS,
   catalogErrorMessage,
   isModel,
   within,
-  type CatalogProgress,
-} from "#src/code-agent/catalog-discovery";
+} from "@lrm/coforge-anvil";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+import { type CatalogProgress } from "#src/code-agent/catalog-discovery";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 

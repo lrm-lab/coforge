@@ -1,15 +1,11 @@
-import { type CodeAgentModelMetadata, type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
+import { type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
 import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
-import { JsonlProcess, JsonlRequestError, withDeadline, asRecord } from "@lrm/coforge-anvil";
+import { JsonlProcess, JsonlRequestError, catalogErrorMessage, asRecord } from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
-
-/** How long each bounded wait of a catalog discovery (`within`) lasts. A discovery that waits on
- * several requests grants each its own wait. */
-export const CATALOG_DISCOVERY_TIMEOUT_MS = 5_000;
 
 export type CatalogProgress = {
   stage:
@@ -20,20 +16,6 @@ export type CatalogProgress = {
     | "get_available_models"
     | "decode_catalog";
 };
-
-// Only adapter-authored messages may be persisted; provider output is untrusted.
-export class CatalogDiscoveryError extends Error {}
-
-export function within<T>(
-  promise: Promise<T>,
-  timeoutMs: number = CATALOG_DISCOVERY_TIMEOUT_MS,
-): Promise<T> {
-  return withDeadline(
-    promise,
-    timeoutMs,
-    () => new CatalogDiscoveryError(`model catalog discovery timed out after ${timeoutMs} ms`),
-  );
-}
 
 export async function withJsonlProcess<T>(
   provider: RuntimeMetadata["provider"],
@@ -120,28 +102,4 @@ export async function withJsonlProcess<T>(
       }
     }
   }
-}
-
-export function catalogErrorMessage(error: unknown): string {
-  if (error instanceof CatalogDiscoveryError || error instanceof JsonlRequestError)
-    return error.message;
-  if (
-    error instanceof Error &&
-    [
-      "code agent process exited unexpectedly",
-      "code agent process produced invalid output",
-      "code agent process rejected a message",
-      "code agent process closed",
-      "code agent process is closed",
-      "code agent process tree did not exit",
-    ].includes(error.message)
-  )
-    return error.message;
-  return "model catalog discovery failed; untrusted error detail omitted";
-}
-
-export function isModel(
-  model: CodeAgentModelMetadata | undefined,
-): model is CodeAgentModelMetadata {
-  return model !== undefined;
 }

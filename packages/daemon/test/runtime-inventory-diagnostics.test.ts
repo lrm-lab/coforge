@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/catalog-discovery";
+import { CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { discoverCodexCatalog } from "#src/code-agent/codex/catalog";
 import {
   CATALOG_DISCOVERY_BUDGET_MS,

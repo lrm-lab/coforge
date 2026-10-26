@@ -39,3 +39,4 @@ export * from "./src/antigravity/catalog";
 export * from "./src/antigravity/usage";
 export * from "./src/antigravity/version";
 export * from "./src/antigravity/host";
+export * from "./src/catalog-discovery";

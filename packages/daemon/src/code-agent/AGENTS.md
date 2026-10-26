@@ -5,7 +5,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Provider seam
 
-- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. `runtime-inventory.ts` composes discovery; `runtime-probe.ts` probes versions; `catalog-discovery.ts` and `<provider>/catalog.ts` own catalogs.
+- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. `runtime-inventory.ts` composes discovery; `runtime-probe.ts` probes versions; `catalog-discovery.ts` composes host JSONL catalog probes; Anvil owns shared catalog deadline/error policy, and `<provider>/catalog.ts` owns each catalog.
 - The registry returns Providers, never lifecycle wrappers or forwarding adapters.
 - Higher layers consume normalized status and Activity messages and must not
   parse Claude Code, Codex, Pi, or any other provider's output.

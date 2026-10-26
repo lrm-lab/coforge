@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { CATALOG_DISCOVERY_TIMEOUT_MS } from "#src/code-agent/catalog-discovery";
-import { VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
+import { VERSION_PROBE_TIMEOUT_MS, CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 
 const FIXTURE = new URL("./fixtures/finished-probe-exit.ts", import.meta.url).pathname;
 /** Every probe here is bounded by one of these; a probe that finished must not wait it out. */

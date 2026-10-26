@@ -17,6 +17,7 @@ import {
   discoverOpenCodeCatalog,
   discoverGrokCatalog,
   discoverAntigravityCatalog,
+  CATALOG_DISCOVERY_TIMEOUT_MS,
 } from "@lrm/coforge-anvil";
 import { runCatalogCommand } from "./catalog-command";
 import {
@@ -31,7 +32,6 @@ import {
   readInventoryCache,
   writeInventoryCache,
 } from "./runtime-inventory-cache";
-import { CATALOG_DISCOVERY_TIMEOUT_MS } from "./catalog-discovery";
 import { discoverExternalCodeAgents } from "./runtime-probe";
 import { claudeStaticCatalog } from "./claude-code/catalog";
 import { discoverCodexCatalog } from "./codex/catalog";

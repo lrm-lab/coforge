@@ -17,6 +17,7 @@
 | `src/runtime-auth-status.ts` | Shared runtime auth status values |
 | `src/jsonl-process.ts` | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership |
 | `src/process-tree.ts` | Host process ownership ports |
+| `src/catalog-discovery.ts` | Catalog wait deadlines and trusted discovery error projection |
 | `src/catalog-command.ts` | Host catalog command execution port |
 | `src/per-turn/` | Shared per-turn session and process execution |
 | `src/version-gate.ts` | Shared version policy and required host version-reader port |

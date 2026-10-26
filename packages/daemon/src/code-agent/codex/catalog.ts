@@ -4,16 +4,16 @@ import {
   type CodeAgentModelCatalog,
   type CodeAgentModelMetadata,
 } from "@lrm/coforge-sdk/internal";
-import { type JsonlProcess, asRecord } from "@lrm/coforge-anvil";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { getLogger } from "@logtape/logtape";
 import {
+  type JsonlProcess,
+  asRecord,
   CatalogDiscoveryError,
   isModel,
   within,
-  withJsonlProcess,
-  type CatalogProgress,
-} from "#src/code-agent/catalog-discovery";
+} from "@lrm/coforge-anvil";
+import { COFORGE_DAEMON_VERSION } from "#src/version";
+import { getLogger } from "@logtape/logtape";
+import { withJsonlProcess, type CatalogProgress } from "#src/code-agent/catalog-discovery";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
