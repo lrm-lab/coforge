@@ -51,7 +51,8 @@ export const HostedConversationPane = memo(function HostedConversationPane({
 }) {
   const [failed, setFailed] = useState(false);
   // Only a host with a list to go back to (Activity, Search) has a back arrow over the failure,
-  // and below the width its list sits beside the pane from, no divider.
+  // in a bar shown only where the arrow is; below the width its list sits beside the pane from,
+  // no divider.
   const list = useContext(ConversationListContext);
   return (
     <section
@@ -64,7 +65,11 @@ export const HostedConversationPane = memo(function HostedConversationPane({
     >
       {failed ? (
         <>
-          {list && <ConversationBackHeader />}
+          {list && (
+            <ConversationBackHeader
+              className={LIST_BESIDE_CLASSES[list.listBesideFrom].narrowOnly}
+            />
+          )}
           <p role="alert" className="p-4 text-sm text-error-primary">
             {failedText}
           </p>

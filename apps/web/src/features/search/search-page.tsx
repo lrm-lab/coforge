@@ -27,6 +27,12 @@ import { SEARCH_QUERY_MAX_LENGTH } from "./search.schemas";
 /** Pause in typing before the query is committed to the URL and searched. */
 const COMMIT_DELAY_MS = 200;
 
+/** Focuses the search box with its text selected, ready to be typed over. */
+function selectBox(box: HTMLInputElement | null) {
+  box?.focus();
+  box?.select();
+}
+
 /**
  * The Workspace search page. The query and filters live in the URL, so a search can be shared,
  * reloaded, and returned to with Back; typing commits the query after a short pause, and never
@@ -99,16 +105,25 @@ export function SearchPage({
   }, [text, composing, onQueryChange]);
 
   // The box opens focused with its text selected, ready to be typed over; Cmd/Ctrl+K on this
-  // page does the same again.
+  // page does the same again. A preview that has taken the results' place hides the box with
+  // them, so the shortcut closes it first and the box takes focus once the results show.
+  const focusOnResults = useRef(false);
+  const onSearchFocus = useEffectEvent(() => {
+    if (preview && input.current?.getClientRects().length === 0) {
+      focusOnResults.current = true;
+      onPreviewClose();
+    } else selectBox(input.current);
+  });
   useEffect(() => {
-    const focus = () => {
-      input.current?.focus();
-      input.current?.select();
-    };
-    focus();
-    document.addEventListener(SEARCH_FOCUS_EVENT, focus);
-    return () => document.removeEventListener(SEARCH_FOCUS_EVENT, focus);
+    selectBox(input.current);
+    document.addEventListener(SEARCH_FOCUS_EVENT, onSearchFocus);
+    return () => document.removeEventListener(SEARCH_FOCUS_EVENT, onSearchFocus);
   }, []);
+  useEffect(() => {
+    if (preview || !focusOnResults.current) return;
+    focusOnResults.current = false;
+    selectBox(input.current);
+  }, [preview]);
 
   // Esc closes the preview, then leaves search for wherever it was opened from. A menu or dialog
   // takes its own Esc, so does the previewed conversation (its composer, its thread), and a

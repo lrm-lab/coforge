@@ -9,11 +9,11 @@ import { cx } from "#src/utils/cx";
 export type ListBesideFrom = "md" | "lg";
 
 /** Each width's classes, written out whole for Tailwind: the list, hidden while a conversation
- * takes its place; the back arrow, shown only then; the pane, with no divider then. */
+ * takes its place; what shows only then (the back arrow); the pane, with no divider then. */
 export const LIST_BESIDE_CLASSES = {
-  md: { list: "max-md:hidden", backButton: "md:hidden", pane: "max-md:border-l-0" },
-  lg: { list: "max-lg:hidden", backButton: "lg:hidden", pane: "max-lg:border-l-0" },
-} satisfies Record<ListBesideFrom, { list: string; backButton: string; pane: string }>;
+  md: { list: "max-md:hidden", narrowOnly: "md:hidden", pane: "max-md:border-l-0" },
+  lg: { list: "max-lg:hidden", narrowOnly: "lg:hidden", pane: "max-lg:border-l-0" },
+} satisfies Record<ListBesideFrom, { list: string; narrowOnly: string; pane: string }>;
 
 /** The conversation list's controls for the panes beside it. Its own module so a pending or empty
  * pane can show the back button without loading the directory, realtime and dialogs behind
@@ -67,7 +67,7 @@ export function ConversationListButton() {
       color="tertiary"
       aria-label={navigation.backLabel ?? m.conversation_back_to_list()}
       onClick={navigation.showList}
-      className={cx("-ml-2 shrink-0", LIST_BESIDE_CLASSES[navigation.listBesideFrom].backButton)}
+      className={cx("-ml-2 shrink-0", LIST_BESIDE_CLASSES[navigation.listBesideFrom].narrowOnly)}
     />
   );
 }
@@ -76,9 +76,20 @@ export function ConversationListButton() {
  * A conversation pane's header bar with the back button to the list, where the loaded
  * conversation's header stands, so the arrow does not move once the conversation loads.
  */
-export function ConversationBackHeader({ children }: { children?: ReactNode }) {
+export function ConversationBackHeader({
+  className,
+  children,
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 md:px-6">
+    <header
+      className={cx(
+        "flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 md:px-6",
+        className,
+      )}
+    >
       <ConversationListButton />
       {children}
     </header>
