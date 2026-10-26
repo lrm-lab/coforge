@@ -54,7 +54,7 @@ test("reads Codex account usage and converts rate-limit windows", async () => {
     health: "ok",
     officialGroups: [
       {
-        name: "codex",
+        name: "Codex",
         buckets: [
           {
             window: "primary",

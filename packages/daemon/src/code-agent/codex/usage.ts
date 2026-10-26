@@ -162,8 +162,12 @@ function toSnapshot(
 function limitLabel(limits: Record<string, unknown>): string {
   const name = label(limits.limitName);
   if (name !== undefined) return name;
-  const id = label(limits.limitId);
-  return id === "codex" || id === undefined ? "Codex" : id;
+  return providerName(label(limits.limitId)) ?? "Codex";
+}
+
+/** The default limit's id `codex` reads as the provider name, as on Raft ("Codex · 1 week"). */
+function providerName(id: string | undefined): string | undefined {
+  return id === "codex" ? "Codex" : id;
 }
 
 function label(value: unknown): string | undefined {
@@ -225,7 +229,7 @@ function officialLimit(
     officialIndividual(limits.individualLimit),
   ].filter((bucket): bucket is UsageOfficialBucket => bucket !== undefined);
   if (buckets.length === 0) return undefined;
-  const name = label(limits.limitName) ?? label(limits.limitId) ?? label(fallbackId);
+  const name = label(limits.limitName) ?? providerName(label(limits.limitId) ?? label(fallbackId));
   return { ...(name ? { name } : {}), buckets };
 }
 
