@@ -9,6 +9,7 @@ import {
 } from "@lrm/coforge-anvil";
 import { encodeRuntimeAuthLoginReport } from "@lrm/coforge-sdk/internal";
 import type {
+  KiroIdentityCenterOptions,
   RuntimeAuthIntent,
   RuntimeAuthLoginReport,
   RuntimeAuthLoginResult as LoginResult,
@@ -30,6 +31,7 @@ type Ports = {
 type Login = {
   id: string;
   provider: RuntimeAuthProvider;
+  kiroIdentityCenter?: KiroIdentityCenterOptions;
   abort: AbortController;
   prompt?: { resolve(code: string): void; reject(error: Error): void };
   prompts: number;
@@ -134,6 +136,7 @@ export class RuntimeAuthController {
     const login: Login = {
       id: intent.loginId,
       provider: intent.provider,
+      ...(intent.kiroIdentityCenter ? { kiroIdentityCenter: intent.kiroIdentityCenter } : {}),
       abort: new AbortController(),
       prompts: 0,
       secrets: new Set(),
@@ -234,17 +237,21 @@ export class RuntimeAuthController {
       case "device_code":
         if (!event.verificationUrl)
           throw new Error("Runtime authentication verification URL missing");
-        if (event.expiresAtMs <= (this.ports.now ?? Date.now)())
+        if (event.expiresAtMs !== undefined && event.expiresAtMs <= (this.ports.now ?? Date.now)())
           throw new Error("Runtime authentication device code expired");
         this.#report(login, {
           event: {
             kind: "device_code",
             verificationUrl: event.verificationUrl,
             userCode: event.userCode,
-            expiresInSeconds: Math.max(
-              1,
-              Math.ceil((event.expiresAtMs - (this.ports.now ?? Date.now)()) / 1000),
-            ),
+            ...(event.expiresAtMs !== undefined
+              ? {
+                  expiresInSeconds: Math.max(
+                    1,
+                    Math.ceil((event.expiresAtMs - (this.ports.now ?? Date.now)()) / 1000),
+                  ),
+                }
+              : {}),
           },
         });
     }
@@ -258,6 +265,7 @@ export class RuntimeAuthController {
         const value = await this.ports.createAdapter(login.provider).startLogin(
           {
             workingDirectory: this.ports.workingDirectory,
+            ...(login.kiroIdentityCenter ? { kiroIdentityCenter: login.kiroIdentityCenter } : {}),
             onSecret: (secret) => {
               if (secret && !login.terminal) login.secrets.add(secret);
             },

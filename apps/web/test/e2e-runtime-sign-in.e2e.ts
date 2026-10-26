@@ -5,13 +5,17 @@ import { RedisClient } from "bun";
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   RUNTIME_AUTH_CAPABILITY,
+  KIRO_IDENTITY_CENTER_AUTH_CAPABILITY,
   type RuntimeAuthLoginReport,
   type RuntimeAuthLogoutResult,
 } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
-import { getRuntimeAuthCapabilityLease } from "#src/server/computers/runtime-auth-capability.server";
+import {
+  getRuntimeAuthCapabilityLease,
+  getKiroIdentityCenterCapabilityLease,
+} from "#src/server/computers/runtime-auth-capability.server";
 import { userRuntimeAuth } from "#src/server/computers/runtime-auth-composition.server";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
@@ -38,7 +42,7 @@ const proxy = sameOriginProxy(web, centrifugo);
 const auth = userRuntimeAuth(db);
 const suffix = String(process.pid);
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/runtime-sign-in");
-const space = "coforge-ui runtime sign-in";
+const space = "coforge-chores task167 runtime sign-in";
 const agentName = `signout-agent-${suffix}`;
 let workspaceId = "";
 let computerId = "";
@@ -140,6 +144,7 @@ beforeAll(async () => {
         collectedAtMs: Date.now(),
         runtimes: {
           "claude-code": { provider: "claude-code", state: "logged_out" },
+          kiro: { provider: "kiro", state: "logged_out" },
           codex: {
             provider: "codex",
             state: "logged_in",
@@ -154,6 +159,7 @@ beforeAll(async () => {
   for (const [provider, displayName] of [
     ["claude-code", "Claude Code"],
     ["codex", "Codex CLI"],
+    ["kiro", "Kiro CLI"],
   ] as const)
     await db.computerRuntime.create({
       data: { workspaceId, computerId, provider, version: "1.0.0", displayName },
@@ -258,4 +264,63 @@ test("signing a runtime out names the Agents using it and shows a refusal before
   `);
   browserPassed = true;
   expect(seen.size).toBe(2);
+}, 90_000);
+
+test("Kiro enterprise form starts the shared device-code flow and explains an explicit organization refusal", async () => {
+  browserPassed = false;
+  await getComputerStatusCache().put(scope(), true);
+  await getKiroIdentityCenterCapabilityLease().record(workspaceId, computerId, [
+    KIRO_IDENTITY_CENTER_AUTH_CAPABILITY,
+  ]);
+  await step(`
+  await page.goto(${JSON.stringify(pageUrl)});
+  await page.waitForSelector('li button[aria-label^="Kiro"]',{timeout:30000});
+  await page.click('li button[aria-label^="Kiro"]');
+  await page.click("loc=role:button[name='Sign In']");
+  ${waitText("Sign in to Kiro with IAM Identity Center")}
+  ${shot("kiro-enterprise-form-en")}
+  await page.fill("loc=role:textbox[name*='Start URL']","https://example.awsapps.com/start");
+  await page.fill("loc=role:textbox[name*='AWS Region']","us-east-1");
+  await page.click("loc=role:button[name='Sign In']");
+ `);
+  const id = await currentLogin("kiro");
+  await report(id, 1, {
+    event: {
+      kind: "device_code",
+      verificationUrl: "https://device.sso.us-east-1.amazonaws.com/",
+      userCode: "ABCD-EFGH",
+    },
+  });
+  await step(`
+  ${waitText("ABCD-EFGH")}
+  ${shot("kiro-device-code")}
+ `);
+  await report(id, 2, {
+    result: { kind: "failed", reason: "rejected", detail: "kiro_device_flow_disabled" },
+  });
+  await step(`
+  ${waitText("Your organization has disabled device-code sign-in.")}
+  ${shot("kiro-device-disabled")}
+  await page.click('loc=css:button[aria-label="Close"]');
+  await page.cdp("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await page.goto(${JSON.stringify(pageUrl.replace("/en/", "/zh-CN/"))});
+  await page.waitForSelector('li button[aria-label^="Kiro"]',{timeout:30000});
+  await page.click('li button[aria-label^="Kiro"]');
+  await page.click("loc=role:button[name='登录']");
+  await page.evaluate(()=>document.documentElement.classList.add("dark-mode"));
+  ${waitText("通过 IAM Identity Center 登录 Kiro")}
+  ${shot("kiro-enterprise-form-zh-dark-mobile")}
+  await page.click('loc=css:button[aria-label="关闭"]');
+ `);
+  await db.computer.update({ where: { id: computerId }, data: { platform: "win32" } });
+  await step(`
+  await page.goto(${JSON.stringify(pageUrl.replace("/en/", "/zh-CN/"))});
+  await page.waitForSelector('li button[aria-label^="Kiro"]',{timeout:30000});
+  await page.click('li button[aria-label^="Kiro"]');
+  await page.waitForSelector('[role="dialog"]',{timeout:15000});
+  const signInVisible = await page.evaluate(() => Array.from(document.querySelectorAll('[role="dialog"] button')).some(button => button.textContent?.trim() === "登录"));
+  if (signInVisible) throw new Error("Windows must not show the enterprise login entry");
+  ${shot("kiro-windows-no-enterprise")}
+ `);
+  browserPassed = true;
 }, 90_000);

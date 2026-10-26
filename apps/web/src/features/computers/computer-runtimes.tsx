@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 import { useContext, useState, type ReactNode } from "react";
 import { OverlayTriggerStateContext } from "react-aria-components";
 import { LogIn01, LogOut01 } from "@untitledui/icons";
@@ -40,6 +41,7 @@ export function ComputerRuntimeList({
     | "name"
     | "displayName"
     | "kind"
+    | "platform"
     | "online"
     | "ownedByCurrentUser"
     | "canManageAgents"
@@ -88,7 +90,11 @@ export function ComputerRuntimeList({
                 {unsupportedText(auth.unavailableReason, runtime.displayName)}
               </p>,
             );
-          else if (signable && auth?.state !== "logged_in")
+          else if (
+            signable &&
+            auth?.state !== "logged_in" &&
+            (provider !== RUNTIME_PROVIDER.KIRO || computer.platform !== "win32")
+          )
             parts.push(
               <PopoverAction key="in" onPress={() => open("sign_in")}>
                 {(press) => (

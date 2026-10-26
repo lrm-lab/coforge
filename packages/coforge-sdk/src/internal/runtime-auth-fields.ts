@@ -7,6 +7,7 @@ export const RUNTIME_AUTH_LOGIN_ID_PATTERN = /^rtl_[A-Za-z0-9_-]{16,64}$/;
 export const RUNTIME_AUTH_PROVIDERS = [
   RUNTIME_PROVIDER.CLAUDE_CODE,
   RUNTIME_PROVIDER.CODEX,
+  RUNTIME_PROVIDER.KIRO,
 ] as const;
 export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
 export const RUNTIME_AUTH_LOGIN_FAILURE_REASONS = [

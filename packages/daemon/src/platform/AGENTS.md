@@ -16,6 +16,11 @@ Rules for OS primitives in `src/platform/`. They extend
 
 ## Processes
 
+- `process-transport.ts` supplies pipe or opt-in terminal I/O to the shared process-tree owner and its launchd runner. Provider output is never parsed here.
+- `posix-process-tree.ts` is the shared POSIX owner for direct launches and terminal children inside launchd. Terminal cleanup snapshots descendants before TERM and checks PID/start time before escalation, including children in another session. Keep turn-scoped pipe cleanup unchanged.
+- `process-table.ts` owns host process observations and their clock; process-table failure must not be treated as successful cleanup.
+- Terminal descendants reparented before the first terminate/waitForExit observation cannot be identified by that snapshot, including a setsid child whose main process already exited.
+
 - `launchd-job.ts` owns launchd user-job registration and native observations.
 - `launchd-process.ts` runs external Agent stdio and cleanup in a separate
   launchd job behind the process-tree interface. Its internal runner is

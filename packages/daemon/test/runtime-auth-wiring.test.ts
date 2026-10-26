@@ -60,7 +60,11 @@ test("the runtime reports login status after its inventory, then again on demand
   expect(order).toEqual(["inventory", "auth"]);
   expect(reports).toHaveLength(1);
   expect(reports[0]).toMatchObject({ workspaceId: "workspace-a", computerId: "computer-a" });
-  expect(reports[0]!.runtimes.map((entry) => entry.state)).toEqual(["unavailable", "unavailable"]);
+  expect(reports[0]!.runtimes.map((entry) => entry.state)).toEqual([
+    "unavailable",
+    "unavailable",
+    "unavailable",
+  ]);
 
   await runtime.refreshRuntimeAuth();
   expect(reports).toHaveLength(2);

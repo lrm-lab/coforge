@@ -57,6 +57,7 @@ The architecture invariants every change must respect are in
 | [benchmark/evolbench-collab/ops/swe-gemma/README.md](benchmark/evolbench-collab/ops/swe-gemma/README.md) | SWE Docker Task runtime and independent 20-worker evaluation pools |
 | [benchmark/harness/README.md](benchmark/harness/README.md) | Eval computer shared by the collaborative benchmarks |
 | [docs/agents/daemon-message-attention.md](docs/agents/daemon-message-attention.md) | Daemon message delivery, recovery and attention rules |
+| [docs/runtime-sign-in.md](docs/runtime-sign-in.md) | Native runtime sign-in, Kiro enterprise login, and its limits |
 | [docs/local-logging.md](docs/local-logging.md) | Computer/Daemon logging contract |
 | [docs/release/](docs/release/README.md) | Release contract: deployment, Computer distribution, installer feed, promotion, rollback |
 | [docs/design/](docs/design/README.md) | Product UI design guidance |

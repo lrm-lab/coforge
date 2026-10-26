@@ -1,4 +1,6 @@
 import { beforeAll, expect, test } from "bun:test";
+import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
+import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import { mkdtemp, readdir, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -153,3 +155,115 @@ test("stopping one Agent cleans its descendants without stopping its peer", asyn
     await rm(root, { recursive: true, force: true });
   }
 }, 15_000);
+
+for (const ignoresTerm of [false, true]) {
+  test(`native PTY job ${ignoresTerm ? "escalates an unresponsive child" : "preserves TTY, input and TERM flush"}`, async () => {
+    const root = await mkdtemp("/private/tmp/coforge-agent-test-");
+    const prefix = agentPrefix(root);
+    const owner = new LaunchdProcessOwner({
+      directory: root,
+      prefix,
+      runner: [process.execPath, `${import.meta.dir}/fixtures/launchd-agent-runner.ts`],
+    });
+    const tree = owner.spawn(
+      [
+        process.execPath,
+        "-e",
+        `
+      process.on("SIGTERM",()=>{${ignoresTerm ? "" : 'console.log("flushed");process.exit(0)'}});
+      process.on("SIGHUP",()=>{});
+      process.stdin.on("data",()=>console.log("input-received"));
+      console.log(process.stdin.isTTY ? "tty-ready" : "missing-tty");
+      setInterval(()=>{},1000);
+    `,
+      ],
+      root,
+      { PATH: Bun.env.PATH ?? "" },
+      { terminal: true },
+    );
+    try {
+      const lines = readLines(tree.child.stdout);
+      expect((await lines.next()).value?.trim()).toBe("tty-ready");
+      tree.child.stdin.write("hello\r");
+      await tree.child.stdin.flush();
+      let line = "";
+      while (!line.includes("input-received")) line = (await lines.next()).value ?? "";
+      const before = Date.now();
+      await cleanupOwnedTree(tree, tree.child);
+      if (ignoresTerm) expect(Date.now() - before).toBeGreaterThanOrEqual(5_000);
+      else {
+        expect(await tree.child.exited).toBe(0);
+        expect((await lines.next()).value?.trim()).toBe("flushed");
+      }
+      expect(() => process.kill(tree.child.pid!, 0)).toThrow();
+      expect(await relayDirectories(prefix)).toEqual([]);
+    } finally {
+      await tree.terminate(true);
+      await stopLaunchdAgents(prefix, root);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 25_000);
+}
+
+test("native PTY cleanup also kills a descendant in another session", async () => {
+  const root = await mkdtemp("/private/tmp/coforge-agent-test-");
+  const prefix = agentPrefix(root);
+  const owner = new LaunchdProcessOwner({
+    directory: root,
+    prefix,
+    runner: [process.execPath, `${import.meta.dir}/fixtures/launchd-agent-runner.ts`],
+  });
+  const tree = owner.spawn(
+    [process.execPath, `${import.meta.dir}/fixtures/launchd-pty-escape.ts`],
+    root,
+    { PATH: Bun.env.PATH ?? "" },
+    { terminal: true },
+  );
+  let escaped = 0;
+  try {
+    const first = (await readLines(tree.child.stdout).next()).value;
+    expect(first).toMatch(/^\d+\r?\n$/);
+    escaped = Number(first?.trim());
+    expect(escaped).toBeGreaterThan(0);
+    await cleanupOwnedTree(tree, tree.child);
+    expect(() => process.kill(escaped, 0)).toThrow();
+    expect(() => process.kill(tree.child.pid!, 0)).toThrow();
+    expect(await relayDirectories(prefix)).toEqual([]);
+  } finally {
+    await tree.terminate(true);
+    // This fixture's exact PID is known before cleanup starts, so a failing assertion cannot
+    // leave the intentionally detached test child behind.
+    if (escaped)
+      try {
+        process.kill(escaped, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    await stopLaunchdAgents(prefix, root);
+    await rm(root, { recursive: true, force: true });
+  }
+}, 25_000);
+
+test("terminal cleanup confirmation times out, reports failure and releases its job", async () => {
+  const root = await mkdtemp("/private/tmp/coforge-agent-test-");
+  const prefix = agentPrefix(root);
+  const tree = new LaunchdProcessOwner({
+    directory: root,
+    prefix,
+    runner: [process.execPath, `${import.meta.dir}/fixtures/launchd-unresponsive-runner.ts`],
+  }).spawn(["/bin/cat"], root, { PATH: "/usr/bin:/bin" }, { terminal: true });
+  try {
+    expect((await readLines(tree.child.stdout).next()).value).toBe("ready\n");
+    const before = Date.now();
+    await expect(tree.terminate(true)).rejects.toThrow(AgentProcessCleanupError);
+    expect(Date.now() - before).toBeGreaterThanOrEqual(5_000);
+    expect(Date.now() - before).toBeLessThan(10_000);
+    expect(await relayDirectories(prefix)).toEqual([]);
+    expect(() => process.kill(tree.child.pid!, 0)).toThrow();
+    await expect(tree.waitForExit(10)).rejects.toThrow(AgentProcessCleanupError);
+  } finally {
+    await tree.terminate(true).catch(() => {});
+    await stopLaunchdAgents(prefix, root);
+    await rm(root, { recursive: true, force: true });
+  }
+}, 20_000);

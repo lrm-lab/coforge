@@ -27,6 +27,7 @@ let clock = 1_000_000;
 let ids = 0;
 let online = true;
 let capable = true;
+let kiroCapable = true;
 let allowed = new Set<string>();
 let failIntents = false;
 
@@ -41,7 +42,10 @@ function service() {
       },
     },
     { get: async () => online },
-    { supports: async () => capable },
+    {
+      supports: async (_workspaceId, _computerId, provider) =>
+        provider === "kiro" ? kiroCapable : capable,
+    },
     () => `rtl_${String(++ids).padStart(20, "0")}`,
     () => clock,
   );
@@ -54,6 +58,7 @@ beforeEach(() => {
   ids = 0;
   online = true;
   capable = true;
+  kiroCapable = true;
   allowed = new Set(["alice", "bob"]);
   failIntents = false;
 });
@@ -369,4 +374,25 @@ test("a result frees the lock even when an earlier release failed", async () => 
     loginReport(loginId, 2, { result: { kind: "cancelled" } }),
   );
   expect(await redis.get(`coforge:computer:${computerId}:runtime-auth-lock:v1:codex`)).toBeNull();
+});
+
+test("Kiro enterprise target reaches only its intent, and old Computers cannot start it", async () => {
+  const kiroIdentityCenter = { startUrl: "https://example.awsapps.com/start", region: "us-east-1" };
+  const auth = service();
+  kiroCapable = false;
+  expect(
+    await auth.startLogin(alice, { computerId, provider: "kiro", kiroIdentityCenter }),
+  ).toEqual({ status: "needs_upgrade" });
+  expect(intents()).toEqual([]);
+  kiroCapable = true;
+  expect(
+    (await auth.startLogin(alice, { computerId, provider: "kiro", kiroIdentityCenter })).status,
+  ).toBe("started");
+  expect(intents()[0]).toMatchObject({ provider: "kiro", kiroIdentityCenter });
+  const loginId =
+    intents()[0]!.kind === "login_start"
+      ? (intents()[0] as Extract<RuntimeAuthIntent, { kind: "login_start" }>).loginId
+      : "";
+  const view = await auth.readLogin(alice, { computerId, loginId });
+  expect(view).not.toHaveProperty("kiroIdentityCenter");
 });

@@ -3,7 +3,10 @@ import { getAppRegistrationNoticeCapabilityLease } from "#src/server/apps/app-re
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
 import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
 import { getAgentTurnInterruptCapabilityLease } from "#src/server/agents/agent-turn-interrupt-capability.server";
-import { getRuntimeAuthCapabilityLease } from "#src/server/computers/runtime-auth-capability.server";
+import {
+  getRuntimeAuthCapabilityLease,
+  getKiroIdentityCenterCapabilityLease,
+} from "#src/server/computers/runtime-auth-capability.server";
 import {
   getPiChatCapabilityLease,
   getPiChatControlsLease,
@@ -20,6 +23,7 @@ export function daemonCapabilityLeases() {
     getAppRegistrationNoticeCapabilityLease(),
     getAgentTurnInterruptCapabilityLease(),
     getRuntimeAuthCapabilityLease(),
+    getKiroIdentityCenterCapabilityLease(),
     getPiChatCapabilityLease(),
     getPiChatControlsLease(),
     getPiChatFilesLease(),

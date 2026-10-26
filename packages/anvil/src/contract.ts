@@ -1,4 +1,8 @@
-import type { RuntimeAuthAccount, RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type {
+  RuntimeAuthAccount,
+  RuntimeProvider,
+  KiroIdentityCenterOptions,
+} from "@lrm/coforge-sdk/internal";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
 export type {
@@ -54,6 +58,7 @@ export type SessionResumeFacts = {
 export const RUNTIME_AUTH_PROVIDERS = [
   RUNTIME_PROVIDER.CLAUDE_CODE,
   RUNTIME_PROVIDER.CODEX,
+  RUNTIME_PROVIDER.KIRO,
 ] as const;
 export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
 
@@ -108,7 +113,7 @@ export type RuntimeAuthLoginEvent =
       kind: "device_code";
       verificationUrl?: string;
       userCode: string;
-      expiresAtMs: number;
+      expiresAtMs?: number;
     }>
   | Readonly<{ kind: "code_prompt"; message: string }>
   | Readonly<{ kind: "info"; message: string }>;
@@ -152,6 +157,7 @@ export interface RuntimeAuthAdapter {
       workingDirectory: string;
       timeoutMs?: number;
       onSecret?: RuntimeAuthSecretSink;
+      kiroIdentityCenter?: KiroIdentityCenterOptions;
     },
     interaction: RuntimeAuthLoginInteraction,
   ): Promise<RuntimeAuthLoginResult>;

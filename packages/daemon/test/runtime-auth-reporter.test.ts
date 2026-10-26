@@ -62,6 +62,7 @@ describe("the Workspace runtime's login status reporter", () => {
     expect(sent[0]!.runtimes).toEqual([
       { provider: "claude-code", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "codex", state: "logged_out" },
+      { provider: "kiro", state: "unavailable", unavailableReason: "not_installed" },
     ]);
   });
 
@@ -85,13 +86,22 @@ describe("the Workspace runtime's login status reporter", () => {
 
     await reporter.inventoryObserved([runtime("codex"), runtime("pi")] as RuntimeMetadata[]);
     expect(sent).toHaveLength(2);
+    expect(sent[1]!.runtimes.map((entry) => entry.state)).toEqual([
+      "unavailable",
+      "logged_out",
+      "unavailable",
+    ]);
 
     await reporter.inventoryObserved([
       runtime("codex"),
       runtime("claude-code"),
     ] as RuntimeMetadata[]);
     expect(sent).toHaveLength(3);
-    expect(sent[2]!.runtimes.map((entry) => entry.state)).toEqual(["logged_out", "logged_out"]);
+    expect(sent[2]!.runtimes.map((entry) => entry.state)).toEqual([
+      "logged_out",
+      "logged_out",
+      "unavailable",
+    ]);
   });
 
   test("the first inventory seen by a later discovery reports, when the first report never resolved", async () => {

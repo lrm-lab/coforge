@@ -2,7 +2,14 @@ import { chmodSync, mkdtempSync } from "node:fs";
 import { lstat, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { getLogger } from "@logtape/logtape";
-import type { Subprocess } from "bun";
+import { spawnOwnedChild } from "./process-transport";
+import { PosixProcessOwner } from "./posix-process-tree";
+import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
+import {
+  AgentProcessCleanupError,
+  PROCESS_TREE_EXIT_GRACE_MS,
+  withDeadline,
+} from "@lrm/coforge-anvil";
 import {
   assertAgentJobScope,
   LaunchdJob,
@@ -11,7 +18,12 @@ import {
   stopLaunchdJobs,
 } from "./launchd-job";
 import { ProcessChannel } from "./process-channel";
-import type { OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
+import type {
+  OwnedChildProcess,
+  OwnedProcessTree,
+  ProcessTreeSpawner,
+  ProcessTreeSpawnOptions,
+} from "@lrm/coforge-anvil";
 import { RuntimeExecutableNotFoundError } from "./runtime-executable-not-found";
 
 /** Agent relay sockets stay outside the state tree: a socket path must fit macOS's 104 bytes. */
@@ -106,6 +118,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
     command: readonly string[],
     cwd: string,
     environment: Readonly<Record<string, string>>,
+    options?: ProcessTreeSpawnOptions,
   ): OwnedProcessTree {
     const executable = command[0] && Bun.which(command[0], { cwd, PATH: environment.PATH ?? "" });
     if (!executable) throw new RuntimeExecutableNotFoundError(command[0] ?? "");
@@ -138,6 +151,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         stderr = controller;
       },
     });
+    let cleanupFailed = false;
     let closed = false;
     let connected = false;
     let cleanup: Promise<void> | undefined;
@@ -166,6 +180,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
               command: [executable, ...command.slice(1)],
               cwd,
               environment,
+              terminal: options?.terminal ?? false,
             });
           })
           .catch(fail);
@@ -178,11 +193,25 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
       ) {
         if (!closed)
           (record.type === "stdout" ? stdout : stderr).enqueue(Buffer.from(record.data, "base64"));
+      } else if (record.type === "cleanup_failed" && options?.terminal) {
+        cleanupFailed = true;
+        getLogger(["coforge", "daemon", "launchd"]).error("Terminal process cleanup failed", {
+          event: "launchd:terminal_cleanup_failed",
+        });
+        finish(1);
+        void forceStop().catch(() => {});
       } else if (record.type === "exit" && Number.isInteger(record.code)) {
         finish(Number(record.code));
       } else throw new Error("invalid Agent job response");
     });
     const fail = (_error: unknown) => {
+      if (closed) return;
+      if (options?.terminal) {
+        cleanupFailed = true;
+        getLogger(["coforge", "daemon", "launchd"]).error("Terminal process cleanup failed", {
+          event: "launchd:terminal_cleanup_failed",
+        });
+      }
       readyReject(new Error("native Agent job failed"));
       finish(1);
       void stop().catch(() => {});
@@ -245,6 +274,14 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         await rm(root, { recursive: true, force: true });
       })());
     }
+    async function forceStop() {
+      try {
+        await job.signal("SIGKILL");
+      } catch {
+        /* stop() verifies job removal and process-group exit below. */
+      }
+      await stop();
+    }
     let writes = Promise.resolve();
     const send = (record: Record<string, unknown>) => {
       writes = writes.then(async () => {
@@ -279,8 +316,28 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
           if (!closed) send({ type: "signal", signal });
         },
       },
-      terminate: async (_force) => {
-        await stop();
+      terminate: async (force) => {
+        if (!options?.terminal) return stop();
+        try {
+          if (!closed) {
+            send({ type: "signal", signal: force ? "SIGKILL" : "SIGTERM" });
+            await writes;
+          }
+          if (force)
+            await withDeadline(
+              exited,
+              PROCESS_TREE_EXIT_GRACE_MS,
+              () => new AgentProcessCleanupError(),
+            );
+        } catch (error) {
+          cleanupFailed = true;
+          getLogger(["coforge", "daemon", "launchd"]).error("Terminal process cleanup failed", {
+            event: "launchd:terminal_cleanup_failed",
+          });
+          throw error;
+        } finally {
+          if (force) await forceStop();
+        }
       },
       terminateForTurn: async (force) => {
         if (!closed) send({ type: "signal", signal: force ? "SIGKILL" : "SIGTERM" });
@@ -288,10 +345,15 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
       },
       waitForExit: async (timeoutMs) => {
         const deadline = Date.now() + timeoutMs;
-        while (!closed || (jobPid && (await processGroupExists(jobPid)))) {
+        if (cleanupFailed) throw new AgentProcessCleanupError();
+        while (!closed || (!options?.terminal && jobPid && (await processGroupExists(jobPid)))) {
           if (Date.now() >= deadline) return false;
           await Bun.sleep(20);
         }
+        // Terminal cleanup releases the loaded job only after the TERM/KILL ladder has
+        // observed its runner exit. Existing pipe/turn ownership keeps its original lifecycle.
+        if (options?.terminal) await stop();
+        if (cleanupFailed) throw new AgentProcessCleanupError();
         return true;
       },
     };
@@ -306,9 +368,17 @@ export function isAgentRelaySocket(path: string): boolean {
 /** Internal executable mode. No arguments or credentials are persisted in the plist. */
 export async function runLaunchdAgent(socketPath: string): Promise<void> {
   if (!isAgentRelaySocket(socketPath ?? "")) throw new Error("invalid Agent relay socket");
-  let child: Subprocess<"pipe", "pipe", "pipe"> | undefined;
+  let child: OwnedChildProcess | undefined;
+  let terminalTree: OwnedProcessTree | undefined;
+  let terminalCleanup: Promise<void> | undefined;
+  const cleanTerminal = () => (terminalCleanup ??= cleanupOwnedTree(terminalTree!, child!));
+  const shutdown = () => {
+    if (terminalTree) void cleanTerminal().finally(() => process.exit(1));
+    else process.exit(1);
+  };
   process.on("SIGTERM", () => {
-    if (child) child.kill("SIGTERM");
+    if (terminalTree) shutdown();
+    else if (child) child.kill("SIGTERM");
     else process.exit(0);
   });
   let input = Promise.resolve();
@@ -323,20 +393,26 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
         !record.environment ||
         typeof record.environment !== "object" ||
         Array.isArray(record.environment) ||
-        !Object.values(record.environment).every((value) => typeof value === "string")
+        !Object.values(record.environment).every((value) => typeof value === "string") ||
+        (record.terminal !== undefined && typeof record.terminal !== "boolean")
       )
         throw new Error("invalid Agent start");
-      child = Bun.spawn({
-        cmd: record.command,
-        cwd: record.cwd,
-        env: record.environment as Record<string, string>,
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-        detached: false,
-      });
+      if (record.terminal === true) {
+        terminalTree = new PosixProcessOwner().spawn(
+          record.command,
+          record.cwd,
+          record.environment as Record<string, string>,
+          { terminal: true },
+        );
+        child = terminalTree.child;
+      } else
+        child = spawnOwnedChild(
+          record.command,
+          record.cwd,
+          record.environment as Record<string, string>,
+        );
       channel.send({ type: "started", pid: child.pid });
-      const relay = async (stream: ReadableStream<Uint8Array>, type: string) => {
+      const relay = async (stream: AsyncIterable<Uint8Array>, type: string) => {
         for await (const data of stream) {
           channel.send({ type, data: Buffer.from(data).toString("base64") });
           await channel.flush();
@@ -346,6 +422,15 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
       void drained.catch(() => process.exit(1));
       void child.exited
         .then(async (code) => {
+          if (terminalTree) {
+            try {
+              await cleanTerminal();
+            } catch {
+              channel.send({ type: "cleanup_failed" });
+              await channel.flush();
+              process.exit(1);
+            }
+          }
           // A descendant can retain stdio after its parent exits; never wait forever.
           await Promise.race([drained, Bun.sleep(1000)]);
           channel.send({ type: "exit", code });
@@ -368,7 +453,12 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
       child &&
       ["SIGINT", "SIGTERM", "SIGKILL"].includes(String(record.signal))
     ) {
-      child.kill(record.signal as "SIGINT" | "SIGTERM" | "SIGKILL");
+      if (terminalTree && record.signal !== "SIGINT") {
+        void terminalTree.terminate(record.signal === "SIGKILL").catch(() => {
+          channel.send({ type: "cleanup_failed" });
+          void channel.flush().finally(shutdown);
+        });
+      } else child.kill(record.signal as "SIGINT" | "SIGTERM" | "SIGKILL");
     } else throw new Error("invalid Agent relay request");
   });
   await Bun.connect({
@@ -382,21 +472,21 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
         try {
           channel.read(data);
         } catch {
-          process.exit(1);
+          shutdown();
         }
       },
       drain() {
         try {
           channel.drain();
         } catch {
-          process.exit(1);
+          shutdown();
         }
       },
       close() {
-        process.exit(1);
+        shutdown();
       },
       error() {
-        process.exit(1);
+        shutdown();
       },
     },
   });

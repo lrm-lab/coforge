@@ -38,5 +38,11 @@
   "runtime_auth_sign_out_still": "Still signed in: the Computer's environment has an API key.",
   "runtime_auth_sign_out_timed_out": "The Computer did not answer in time. Try again.",
   "runtime_auth_sign_out_failed": "{runtime} could not be signed out. Try again.",
-  "runtime_auth_paste_hint": "Once you finish signing in, the page shows a code. Paste it here."
+  "runtime_auth_paste_hint": "Once you finish signing in, the page shows a code. Paste it here.",
+  "runtime_auth_kiro_enterprise_title": "Sign in to Kiro with IAM Identity Center",
+  "runtime_auth_kiro_start_url": "Start URL",
+  "runtime_auth_kiro_region": "AWS Region",
+  "runtime_auth_kiro_invalid_target": "Enter an HTTPS Start URL and a valid AWS Region.",
+  "runtime_auth_kiro_device_disabled": "Your organization has disabled device-code sign-in. Sign in on the Computer itself.",
+  "runtime_auth_kiro_external_idp": "This external identity provider does not support device-code sign-in. Sign in on the Computer itself."
 }

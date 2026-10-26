@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 const cases = [
   ["index.ts", "./src/grok/provider", false],
+  ["index.ts", "./src/kiro/auth", false],
+  ["src/kiro/auth.ts", "#src/contract", true],
   ["src/neutral.ts", "#src/kiro/provider", false],
   ["index.ts", "@lrm/coforge-anvil/grok", false],
   ["index.ts", "@lrm/coforge-anvil/dsh", false],
@@ -40,6 +42,8 @@ for (const [file, specifier, allowed] of cases) {
           "src/grok/provider.ts",
           "src/kiro/provider.ts",
           "src/dsh/provider.ts",
+          "src/kiro/auth.ts",
+          "src/contract.ts",
         ]) {
           await Bun.write(join(sourceRoot, path), "export {};");
         }

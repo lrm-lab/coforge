@@ -1,5 +1,7 @@
 import {
   encodeRuntimeAuthIntent,
+  runtimeAuthKiroOptions,
+  type KiroIdentityCenterOptions,
   isRuntimeAuthCode,
   type RuntimeAuthLoginEvent,
   type RuntimeAuthLoginReport,
@@ -74,7 +76,11 @@ export class RuntimeAuth {
     private readonly api: Pick<CentrifugoServerApi, "publish">,
     private readonly computerStatus: { get(scope: Scope): Promise<boolean> },
     private readonly capability: {
-      supports(workspaceId: string, computerId: string): Promise<boolean>;
+      supports(
+        workspaceId: string,
+        computerId: string,
+        provider?: RuntimeAuthProvider,
+      ): Promise<boolean>;
     },
     private readonly newLoginId: () => string,
     private readonly now: () => number = Date.now,
@@ -82,10 +88,15 @@ export class RuntimeAuth {
 
   async startLogin(
     principal: Principal,
-    input: { computerId: string; provider: RuntimeAuthProvider },
+    input: {
+      computerId: string;
+      provider: RuntimeAuthProvider;
+      kiroIdentityCenter?: KiroIdentityCenterOptions;
+    },
   ): Promise<{ status: "started"; loginId: string } | { status: "busy" | RuntimeAuthUnavailable }> {
     const scope = await this.authorize(principal, input.computerId);
-    const unavailable = await this.unavailable(scope);
+    const kiroIdentityCenter = runtimeAuthKiroOptions(input.provider, input.kiroIdentityCenter);
+    const unavailable = await this.unavailable(scope, input.provider);
     if (unavailable) return { status: unavailable };
     const loginId = this.newLoginId();
     const began = await this.store.begin(
@@ -99,6 +110,7 @@ export class RuntimeAuth {
         kind: "login_start",
         loginId,
         provider: input.provider,
+        ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
       });
     } catch {
       // The provider must not stay locked for a login whose intent never left.
@@ -162,7 +174,7 @@ export class RuntimeAuth {
     const scope = await this.authorize(principal, input.computerId);
     const existing = await this.store.readLogout(scope, input.requestId);
     if (existing) return this.ownLogoutView(principal, existing);
-    const unavailable = await this.unavailable(scope);
+    const unavailable = await this.unavailable(scope, input.provider);
     if (unavailable) return { status: unavailable };
     const { record, created } = await this.store.beginLogout(scope, {
       requestId: input.requestId,
@@ -238,10 +250,13 @@ export class RuntimeAuth {
     return scope;
   }
 
-  private async unavailable(scope: Scope): Promise<RuntimeAuthUnavailable | undefined> {
+  private async unavailable(
+    scope: Scope,
+    provider: RuntimeAuthProvider,
+  ): Promise<RuntimeAuthUnavailable | undefined> {
     const [online, supported] = await Promise.all([
       this.computerStatus.get(scope),
-      this.capability.supports(scope.workspaceId, scope.computerId),
+      this.capability.supports(scope.workspaceId, scope.computerId, provider),
     ]);
     if (!online) return "offline";
     return supported ? undefined : "needs_upgrade";
@@ -262,7 +277,12 @@ export class RuntimeAuth {
   private publishIntent(
     scope: Scope,
     intent:
-      | { kind: "login_start"; loginId: string; provider: RuntimeAuthProvider }
+      | {
+          kind: "login_start";
+          loginId: string;
+          provider: RuntimeAuthProvider;
+          kiroIdentityCenter?: KiroIdentityCenterOptions;
+        }
       | { kind: "login_code"; loginId: string; code: string }
       | { kind: "login_cancel"; loginId: string }
       | { kind: "logout"; requestId: string; provider: RuntimeAuthProvider },

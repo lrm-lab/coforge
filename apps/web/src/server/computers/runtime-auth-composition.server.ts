@@ -7,7 +7,7 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { RuntimeAuth } from "./runtime-auth.server";
 import { PrismaRuntimeAuthAuthorization } from "./runtime-auth-authorization.server";
-import { getRuntimeAuthCapabilityLease } from "./runtime-auth-capability.server";
+import { runtimeAuthCapabilitySupport } from "./runtime-auth-capability.server";
 import { RedisRuntimeAuthStore } from "./runtime-auth-store.server";
 
 let store: RedisRuntimeAuthStore | undefined;
@@ -20,7 +20,7 @@ export function userRuntimeAuth(db: PrismaClient) {
     store,
     createCentrifugoServerApi(),
     getComputerStatusCache(),
-    getRuntimeAuthCapabilityLease(),
+    runtimeAuthCapabilitySupport,
     () => `rtl_${randomBytes(24).toString("base64url")}`,
   );
 }

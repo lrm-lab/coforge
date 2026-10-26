@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { RuntimeAuthAdapter } from "@lrm/coforge-anvil";
 import {
   RUNTIME_AUTH_CAPABILITY,
+  KIRO_IDENTITY_CENTER_AUTH_CAPABILITY,
   type RuntimeAuthIntent,
   type RuntimeAuthLoginReport,
 } from "@lrm/coforge-sdk/internal";
@@ -91,6 +92,9 @@ test("the runtime advertises auth only with a registered handler and refreshes s
     await runtime.start(owner);
     await initial.promise;
     expect(readyCapabilities).toContain(RUNTIME_AUTH_CAPABILITY);
+    expect(readyCapabilities.includes(KIRO_IDENTITY_CENTER_AUTH_CAPABILITY)).toBe(
+      process.platform === "darwin" || process.platform === "linux",
+    );
     receiver!({
       protocolMajor: 1,
       ...owner,

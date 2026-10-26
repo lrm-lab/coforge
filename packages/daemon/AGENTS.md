@@ -99,6 +99,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/agent-runtime/`                 | Agent lifecycle state machine, control, native Session state, and Activity                                                                                      |
 | `src/code-agent/`                    | Remaining runtime adapters, inventory and instructions; Cursor, OpenCode, Kiro, Grok, Antigravity, Pi, contracts and shared execution live in `packages/anvil/` |
 | `src/code-agent/kiro/host.ts`        | Environment, client identity, process and usage capabilities injected into Kiro                                                                                 |
+| `src/code-agent/kiro/auth-host.ts`   | Shared process-tree auth, environment and account masking capabilities injected into Kiro                                                                       |
 | `src/code-agent/kiro/usage-host.ts`  | Read-only native Kiro authentication and usage requests; only usage JSON crosses into the adapter                                                               |
 | `src/code-agent/pi/`                 | Built-in CoForge provider/catalog/metadata and Pi host composition; native SDK Session is shared through Anvil                                                  |
 | `src/code-agent/antigravity/host.ts` | Session, command, version and live environment capabilities for Antigravity                                                                                     |

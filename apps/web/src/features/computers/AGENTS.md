@@ -56,7 +56,7 @@ These rules apply to `src/features/computers/`.
   Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the
   popover says; everyone else receives the state alone. A Computer that never
   reported shows no state.
-- Sign in and Sign out sit in a Claude Code or Codex runtime's popover for the
+- Sign in and Sign out sit in a Claude Code, Codex or Kiro runtime's popover for the
   Computer's owner and Workspace owners and admins, the server's own rule
   (`computer-runtimes.tsx`). The dialogs subscribe to the viewer's
   `runtimeauth:user:<id>` channel and then read the login or logout once, and
@@ -66,3 +66,5 @@ These rules apply to `src/features/computers/`.
   sign-in page is opened, with `noopener,noreferrer`. The browser E2E plays the
   daemon (`test/e2e-runtime-sign-in.e2e.ts`); no test signs a real runtime in or
   out.
+
+- Kiro enterprise sign-in collects the IAM Identity Center Start URL and AWS Region once, then uses the shared progress dialog. Only Computers advertising `runtime-auth:kiro-idc:v1` accept it. These inputs are not saved as account settings.

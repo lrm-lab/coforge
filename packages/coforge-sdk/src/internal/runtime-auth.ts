@@ -22,3 +22,6 @@ export const RUNTIME_AUTH_INTENT_METHOD = RPC_METHODS.daemonRuntimeAuthIntent;
 export const RUNTIME_AUTH_LOGIN_REPORT_METHOD = RPC_METHODS.daemonRuntimeAuthLoginReport;
 export const RUNTIME_AUTH_LOGOUT_REPORT_METHOD = RPC_METHODS.daemonRuntimeAuthLogoutReport;
 export const RUNTIME_AUTH_CAPABILITY = "runtime-auth:v1" as const;
+
+export * from "./runtime-auth-kiro";
+export const KIRO_IDENTITY_CENTER_AUTH_CAPABILITY = "runtime-auth:kiro-idc:v1" as const;

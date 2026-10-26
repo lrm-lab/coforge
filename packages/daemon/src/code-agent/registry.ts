@@ -12,6 +12,8 @@ import {
 } from "@lrm/coforge-anvil";
 import { CursorProvider } from "@lrm/coforge-anvil/cursor";
 import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
+import { createKiroAuthHost } from "#src/code-agent/kiro/auth-host";
+import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { KiroProvider } from "@lrm/coforge-anvil/kiro";
 import { GrokProvider } from "@lrm/coforge-anvil/grok";
 import { PiProvider } from "@lrm/coforge-anvil/pi";
@@ -54,6 +56,8 @@ export function createRuntimeAuthAdapter(
         environment: options.environment,
         platform: options.platform,
       });
+    case RUNTIME_PROVIDER.KIRO:
+      return new KiroRuntimeAuthAdapter(createKiroAuthHost(options.platform));
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeRuntimeAuthAdapter({
         command: providerExecutable(RUNTIME_PROVIDER.CLAUDE_CODE, options),

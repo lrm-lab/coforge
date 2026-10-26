@@ -16,7 +16,7 @@ export type LoginView = {
 
 /** Why a login ended without signing in, as the dialog words it. */
 export type LoginFailure =
-  | { kind: "failed"; reason: (typeof RUNTIME_AUTH_LOGIN_FAILURE_REASONS)[number] }
+  | { kind: "failed"; reason: (typeof RUNTIME_AUTH_LOGIN_FAILURE_REASONS)[number]; detail?: string }
   | { kind: "unsupported"; reason: RuntimeAuthUnsupportedReason }
   | { kind: "busy" | "offline" | "needs_upgrade" | "cancelled" | "ended" | "start_failed" };
 
@@ -73,7 +73,14 @@ function finished(result: RuntimeAuthLoginResult): LoginState {
     case "logged_in":
       return { phase: "signed_in", account: result.account };
     case "failed":
-      return { phase: "failed", failure: { kind: "failed", reason: result.reason } };
+      return {
+        phase: "failed",
+        failure: {
+          kind: "failed",
+          reason: result.reason,
+          ...(result.detail ? { detail: result.detail } : {}),
+        },
+      };
     case "unsupported":
       return { phase: "failed", failure: { kind: "unsupported", reason: result.reason } };
     case "cancelled":

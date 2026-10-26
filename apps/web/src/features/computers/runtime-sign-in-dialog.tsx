@@ -1,9 +1,19 @@
-import { useEffect, useId, useReducer, useRef, useState, type ReactNode } from "react";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
+import {
+  useEffect,
+  useLayoutEffect,
+  useId,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Heading } from "react-aria-components";
 import { useServerFn } from "@tanstack/react-start";
 import { useRouter } from "@tanstack/react-router";
 import { Copy01, LinkExternal01, XClose } from "@untitledui/icons";
-import type { RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
+import type { KiroIdentityCenterOptions, RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -26,6 +36,7 @@ import {
   type LoginState,
   type LoginView,
 } from "./runtime-auth-login-state";
+import { KiroEnterpriseSignIn } from "./kiro-enterprise-sign-in";
 import { useRuntimeAuthSignals } from "./use-runtime-auth-signals";
 
 type Target = {
@@ -45,20 +56,39 @@ const EARLY_VIEW_LIMIT = 16;
  */
 export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: () => void }) {
   const [attempt, setAttempt] = useState(0);
+  const [kiroIdentityCenter, setKiroIdentityCenter] = useState<KiroIdentityCenterOptions>();
+  const closeAction = useRef<(() => void) | undefined>(undefined);
   const router = useRouter();
   return (
-    <ModalOverlay isOpen onOpenChange={(open) => !open && onClose()}>
+    <ModalOverlay
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) {
+          if (closeAction.current) closeAction.current();
+          else onClose();
+        }
+      }}
+    >
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
         <Dialog className="overflow-hidden text-left">
-          <SignInAttempt
-            key={attempt}
-            {...target}
-            onRetry={() => setAttempt((n) => n + 1)}
-            onClose={(signedIn) => {
-              if (signedIn) void router.invalidate();
-              onClose();
-            }}
-          />
+          {target.provider === RUNTIME_PROVIDER.KIRO && !kiroIdentityCenter ? (
+            <KiroEnterpriseSignIn onStart={setKiroIdentityCenter} onClose={onClose} />
+          ) : (
+            <SignInAttempt
+              key={attempt}
+              {...target}
+              kiroIdentityCenter={kiroIdentityCenter}
+              closeAction={closeAction}
+              onRetry={() => {
+                setAttempt((n) => n + 1);
+                setKiroIdentityCenter(undefined);
+              }}
+              onClose={(signedIn) => {
+                if (signedIn) void router.invalidate();
+                onClose();
+              }}
+            />
+          )}
         </Dialog>
       </Modal>
     </ModalOverlay>
@@ -70,9 +100,16 @@ function SignInAttempt({
   computerName,
   provider,
   runtimeName,
+  kiroIdentityCenter,
+  closeAction,
   onRetry,
   onClose,
-}: Target & { onRetry: () => void; onClose: (signedIn: boolean) => void }) {
+}: Target & {
+  kiroIdentityCenter?: KiroIdentityCenterOptions;
+  closeAction: RefObject<(() => void) | undefined>;
+  onRetry: () => void;
+  onClose: (signedIn: boolean) => void;
+}) {
   const [state, dispatch] = useReducer(loginReducer, initialLoginState);
   const start = useServerFn(startRuntimeAuthLogin);
   const read = useServerFn(readRuntimeAuthLogin);
@@ -82,6 +119,20 @@ function SignInAttempt({
   const closed = useRef(false);
   const early = useRef<LoginView[]>([]);
   const began = useRef(false);
+  const attached = useRef(false);
+  useEffect(() => {
+    attached.current = true;
+    return () => {
+      attached.current = false;
+      // StrictMode reattaches before this microtask; a real navigation leaves it detached.
+      queueMicrotask(() => {
+        if (attached.current || closed.current) return;
+        closed.current = true;
+        if (loginId.current)
+          void cancel({ data: { computerId, loginId: loginId.current } }).catch(() => {});
+      });
+    };
+  }, []);
 
   // Subscribe, then read: the read covers what the channel delivered before this page knew the
   // login, and the reducer drops whatever both deliver.
@@ -109,7 +160,7 @@ function SignInAttempt({
     // second login, and only closing the dialog cancels one.
     if (began.current) return;
     began.current = true;
-    start({ data: { computerId, provider } })
+    start({ data: { computerId, provider, ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}) } })
       .then((started) => {
         if (started.status !== "started") {
           dispatch({ type: "start_refused", status: started.status });
@@ -135,6 +186,13 @@ function SignInAttempt({
       void cancel({ data: { computerId, loginId: loginId.current } }).catch(() => {});
     onClose(state.phase === "signed_in");
   };
+
+  useLayoutEffect(() => {
+    closeAction.current = close;
+    return () => {
+      closeAction.current = undefined;
+    };
+  });
 
   return (
     <>
@@ -387,6 +445,10 @@ function failureText(failure: LoginFailure, runtime: string): string {
     case "unsupported":
       return unsupportedText(failure.reason, runtime);
     case "failed":
+      if (failure.detail === "kiro_device_flow_disabled")
+        return m.runtime_auth_kiro_device_disabled();
+      if (failure.detail === "kiro_external_idp_unsupported")
+        return m.runtime_auth_kiro_external_idp();
       switch (failure.reason) {
         case "timed_out":
           return m.runtime_auth_failed_timed_out();

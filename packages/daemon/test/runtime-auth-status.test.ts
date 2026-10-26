@@ -22,7 +22,7 @@ function subject(options: {
   const reads: string[] = [];
   let now = 1_000;
   const collector = new RuntimeAuthStatusCollector({
-    installedProviders: async () => options.installed ?? ["claude-code", "codex"],
+    installedProviders: async () => options.installed ?? ["claude-code", "codex", "kiro"],
     readStatus: (provider) => {
       reads.push(provider);
       return options.read?.(provider) ?? Promise.resolve({ provider, state: "logged_out" });
@@ -56,6 +56,7 @@ describe("collecting the runtimes' login status", () => {
           { provider: "claude-code", state: "logged_out" },
           // An unmasked address never leaves the Computer.
           { provider: "codex", state: "logged_in", account: { planLabel: "pro" } },
+          { provider: "kiro", state: "logged_out" },
         ],
       },
     ]);
@@ -68,6 +69,7 @@ describe("collecting the runtimes' login status", () => {
     expect(reports[0]!.runtimes).toEqual([
       { provider: "claude-code", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "codex", state: "logged_out" },
+      { provider: "kiro", state: "unavailable", unavailableReason: "not_installed" },
     ]);
   });
 
@@ -83,6 +85,7 @@ describe("collecting the runtimes' login status", () => {
     expect(reports[0]!.runtimes).toEqual([
       { provider: "claude-code", state: "unknown" },
       { provider: "codex", state: "unknown" },
+      { provider: "kiro", state: "unknown" },
     ]);
   });
 

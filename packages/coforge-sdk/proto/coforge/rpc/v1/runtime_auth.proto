@@ -12,9 +12,15 @@ message RuntimeAuthAccount {
   optional string method_label = 3;
 }
 
+message KiroIdentityCenterOptions {
+  string start_url = 1;
+  string region = 2;
+}
+
 message RuntimeAuthLoginStart {
   string login_id = 1;
   string provider = 2;
+  optional KiroIdentityCenterOptions kiro_identity_center = 3;
 }
 
 message RuntimeAuthLoginCode {

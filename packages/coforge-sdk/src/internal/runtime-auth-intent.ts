@@ -11,11 +11,18 @@ import {
   type RuntimeAuthScope,
 } from "./runtime-auth-fields";
 
+import { runtimeAuthKiroOptions, type KiroIdentityCenterOptions } from "./runtime-auth-kiro";
+
 const INTENT_TYPE = "coforge.rpc.v1.RuntimeAuthIntent";
 
 export type RuntimeAuthIntent = RuntimeAuthScope &
   (
-    | { kind: "login_start"; loginId: string; provider: RuntimeAuthProvider }
+    | {
+        kind: "login_start";
+        loginId: string;
+        provider: RuntimeAuthProvider;
+        kiroIdentityCenter?: KiroIdentityCenterOptions;
+      }
     | { kind: "login_code"; loginId: string; code: string }
     | { kind: "login_cancel"; loginId: string }
     | { kind: "logout"; requestId: string; provider: RuntimeAuthProvider }
@@ -24,13 +31,16 @@ export type RuntimeAuthIntent = RuntimeAuthScope &
 function checkIntent(value: RuntimeAuthIntent): RuntimeAuthIntent {
   const base = scope(value);
   switch (value.kind) {
-    case "login_start":
+    case "login_start": {
+      const kiroIdentityCenter = runtimeAuthKiroOptions(value.provider, value.kiroIdentityCenter);
       return {
         ...base,
         kind: "login_start",
         loginId: loginId(value.loginId),
         provider: providerOf(value.provider),
+        ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
       };
+    }
     case "login_code":
       return {
         ...base,
@@ -60,7 +70,11 @@ export function encodeRuntimeAuthIntent(value: RuntimeAuthIntent): Uint8Array {
       case "login_start":
         return {
           case: "loginStart" as const,
-          value: { loginId: checked.loginId, provider: checked.provider },
+          value: {
+            loginId: checked.loginId,
+            provider: checked.provider,
+            kiroIdentityCenter: checked.kiroIdentityCenter,
+          },
         };
       case "login_code":
         return {

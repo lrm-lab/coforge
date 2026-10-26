@@ -39,11 +39,15 @@ export interface OwnedProcessTree {
 
 export type ProcessCommandRunner = (command: readonly string[]) => Promise<void>;
 
+/** Opt-in terminal transport; omitted callers retain separate pipes. */
+export type ProcessTreeSpawnOptions = Readonly<{ terminal?: boolean }>;
+
 export interface ProcessTreeSpawner {
   spawn(
     command: readonly string[],
     cwd: string,
     environment: Readonly<Record<string, string>>,
+    options?: ProcessTreeSpawnOptions,
   ): OwnedProcessTree;
 }
 

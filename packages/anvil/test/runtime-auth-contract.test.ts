@@ -9,7 +9,7 @@ import {
 } from "#src/contract";
 
 test("runtime auth is limited to the providers with a supported login flow", () => {
-  expect(RUNTIME_AUTH_PROVIDERS).toEqual(["claude-code", "codex"]);
+  expect(RUNTIME_AUTH_PROVIDERS).toEqual(["claude-code", "codex", "kiro"]);
   expect(isRuntimeAuthProvider("claude-code")).toBe(true);
   expect(isRuntimeAuthProvider("codex")).toBe(true);
   expect(isRuntimeAuthProvider("pi")).toBe(false);

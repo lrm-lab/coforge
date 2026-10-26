@@ -38,5 +38,11 @@
   "runtime_auth_sign_out_still": "仍是登录状态：那台 Computer 的环境里配置了 API key。",
   "runtime_auth_sign_out_timed_out": "Computer 没有及时响应，请重试。",
   "runtime_auth_sign_out_failed": "{runtime} 没能退出，请重试。",
-  "runtime_auth_paste_hint": "完成登录后，页面会显示验证码，粘贴到这里。"
+  "runtime_auth_paste_hint": "完成登录后，页面会显示验证码，粘贴到这里。",
+  "runtime_auth_kiro_enterprise_title": "通过 IAM Identity Center 登录 Kiro",
+  "runtime_auth_kiro_start_url": "Start URL",
+  "runtime_auth_kiro_region": "AWS 区域",
+  "runtime_auth_kiro_invalid_target": "请输入 HTTPS Start URL 和有效的 AWS 区域。",
+  "runtime_auth_kiro_device_disabled": "组织已禁用设备码登录，请在 Computer 上完成登录。",
+  "runtime_auth_kiro_external_idp": "此外部身份提供商不支持设备码登录，请在 Computer 上完成登录。"
 }
