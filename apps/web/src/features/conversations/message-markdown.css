@@ -99,6 +99,30 @@
   font-size: var(--text-md);
 }
 
+/* The full-screen file preview reads as a document, not a chat message: headings step up to the
+   display scale and get more room above them. Messages keep the compact scale above. */
+.markdown-preview .message-markdown h1,
+.markdown-preview .message-markdown h2,
+.markdown-preview .message-markdown h3 {
+  font-weight: 700;
+  margin: 2.5rem 0 1rem;
+}
+
+.markdown-preview .message-markdown h1 {
+  font-size: var(--text-display-sm);
+  line-height: var(--text-display-sm--line-height);
+}
+
+.markdown-preview .message-markdown h2 {
+  font-size: var(--text-display-xs);
+  line-height: var(--text-display-xs--line-height);
+}
+
+.markdown-preview .message-markdown h3 {
+  font-size: var(--text-xl);
+  line-height: var(--text-xl--line-height);
+}
+
 /* h4–h6 stay at body size and separate themselves by weight and color instead, so a long
    document does not end up with six competing sizes in a narrow column. */
 .message-markdown h4,

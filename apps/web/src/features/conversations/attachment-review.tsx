@@ -32,6 +32,9 @@ type ReviewFile = {
   previewUrl?: string;
 };
 
+// The icon bar is drawn at full text color, as on Raft; the tertiary gray reads as disabled.
+const TOOLBAR_ICON = "text-fg-primary hover:text-fg-primary";
+
 /**
  * All file types have a discussion, even when this deployment cannot preview their bytes.
  *
@@ -160,7 +163,7 @@ export function AttachmentReviewDialog({
                       tooltip={m.attachment_comments_title()}
                       aria-pressed={commentsShown}
                       className={cn(
-                        "text-fg-secondary",
+                        TOOLBAR_ICON,
                         commentsShown && "bg-brand-primary_alt text-fg-brand-primary",
                       )}
                       onClick={() => {
@@ -175,7 +178,7 @@ export function AttachmentReviewDialog({
                       size="sm"
                       color="tertiary"
                       tooltip={copyLabel}
-                      className="text-fg-secondary"
+                      className={TOOLBAR_ICON}
                       onClick={() =>
                         void copyText(text).then(
                           (copied) => copied && toast.success(m.controls_copied()),
@@ -188,7 +191,7 @@ export function AttachmentReviewDialog({
                     size="sm"
                     color="tertiary"
                     tooltip={m.attachment_preview_download({ name: file.fileName })}
-                    className="text-fg-secondary"
+                    className={TOOLBAR_ICON}
                     href={`${href}?download`}
                   />
                   <ButtonUtility
@@ -196,7 +199,7 @@ export function AttachmentReviewDialog({
                     size="sm"
                     color="tertiary"
                     tooltip={m.controls_close()}
-                    className="text-fg-secondary"
+                    className={TOOLBAR_ICON}
                     onClick={close}
                   />
                 </div>

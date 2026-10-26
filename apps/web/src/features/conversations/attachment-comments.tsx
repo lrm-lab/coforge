@@ -3,11 +3,11 @@ import { Button as AriaButton } from "react-aria-components";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { MarkerPin01, XClose } from "@untitledui/icons";
+import { MarkerPin01, MessageSquare01, Send01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { Empty, EmptyTitle, EmptyDescription } from "#src/components/ui/empty";
+import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 import { postAttachmentComment } from "./attachment-comments.functions";
 import {
@@ -217,10 +217,13 @@ export function AttachmentCommentsPane({
           </div>
         ) : comments.length === 0 ? (
           <Empty className="h-full p-4">
-            <EmptyTitle className="text-sm text-tertiary">
+            <EmptyMedia className="mb-3 text-fg-tertiary">
+              <MessageSquare01 className="size-8" aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyTitle className="text-sm text-secondary">
               {m.attachment_comments_empty()}
             </EmptyTitle>
-            <EmptyDescription>
+            <EmptyDescription className="mt-1">
               {emptyHint[0]}
               <strong>{fileName}</strong>
               {emptyHint[1]}
@@ -270,34 +273,37 @@ export function AttachmentCommentsPane({
             </AnchorChip>
           </div>
         )}
-        <TextArea
-          aria-label={m.attachment_comments_input({ name: fileName })}
-          placeholder={m.attachment_comments_input({ name: fileName })}
-          value={draft.body}
-          onChange={draft.setBody}
-          textAreaRef={draft.input}
-          maxLength={8_000}
-          rows={3}
-          isDisabled={!canComment}
-          // Read-only, not disabled, while sending: a disabled field drops focus to the page, and
-          // the dialog would no longer hear Escape.
-          isReadOnly={draft.sending}
-        />
+        <div className="relative">
+          <TextArea
+            aria-label={m.attachment_comments_input({ name: fileName })}
+            placeholder={m.attachment_comments_input({ name: fileName })}
+            value={draft.body}
+            onChange={draft.setBody}
+            textAreaRef={draft.input}
+            maxLength={8_000}
+            rows={3}
+            isDisabled={!canComment}
+            // Read-only, not disabled, while sending: a disabled field drops focus to the page, and
+            // the dialog would no longer hear Escape.
+            isReadOnly={draft.sending}
+            // Room for the send button in the corner, as in Raft.
+            textAreaClassName="pr-11"
+          />
+          <ButtonUtility
+            type="submit"
+            icon={Send01}
+            size="xs"
+            color="secondary"
+            tooltip={m.attachment_comments_post()}
+            isDisabled={!canComment || !draft.body.trim() || draft.sending}
+            className="absolute right-2 bottom-2 enabled:bg-brand-solid enabled:text-white enabled:ring-0 enabled:hover:bg-brand-solid_hover"
+          />
+        </div>
         {draft.sendFailed && (
           <p role="alert" className="text-sm text-error-primary">
             {m.attachment_comments_post_failed()}
           </p>
         )}
-        <div className="flex justify-end">
-          <Button
-            type="submit"
-            size="sm"
-            isDisabled={!canComment || !draft.body.trim()}
-            isLoading={draft.sending}
-          >
-            {m.attachment_comments_post()}
-          </Button>
-        </div>
       </form>
     </section>
   );

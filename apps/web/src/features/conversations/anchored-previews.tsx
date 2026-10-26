@@ -106,7 +106,7 @@ export function MarkdownPreview({ text, anchoring }: { text: string; anchoring?:
             </ul>
           </nav>
         )}
-        <article className="w-full max-w-3xl min-w-0 rounded-xl border border-secondary bg-primary px-6 py-8 text-md text-primary sm:px-10 sm:py-12">
+        <article className="markdown-preview w-full max-w-3xl min-w-0 rounded-xl border border-secondary bg-primary px-6 py-8 text-md text-primary sm:px-10 sm:py-12">
           <MessageBody body={text} />
         </article>
       </div>
