@@ -2,6 +2,7 @@ import type { PrismaClient, Prisma } from "#src/generated/prisma/client";
 import { ATTACHMENT_MAX_BYTES, ATTACHMENT_SESSION_SECONDS } from "./attachment.server";
 import type { FileStorage } from "#src/server/files/file-storage.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { readStoredImageDimensions } from "./attachment-image-dimensions.server";
 
 /**
  * Presigned direct-upload sessions: the Agent PUTs bytes straight to storage with a
@@ -357,7 +358,19 @@ export async function completeAttachmentUploadSession(
         "uploaded object size does not match the reserved session",
       );
     }
+    const dimensions = await readStoredImageDimensions(storage, session);
     const attachment = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Cancellation may win while optional metadata is read. Fence the transition inside
+      // this transaction so completion cannot resurrect an upload whose object was removed.
+      const completed = await tx.attachmentUploadSession.updateMany({
+        where: { id: session.id, state: "verifying" },
+        data: { state: "completed" },
+      });
+      if (completed.count === 0)
+        throw new AttachmentUploadSessionError(
+          "UPLOAD_SESSION_NOT_FOUND",
+          "upload session is no longer verifying",
+        );
       const created = await tx.attachment.create({
         data: {
           id: session.attachmentId,
@@ -369,12 +382,9 @@ export async function completeAttachmentUploadSession(
           fileName: session.fileName,
           contentType: session.contentType,
           sizeBytes: session.sizeBytes,
+          ...dimensions,
         },
         select: { id: true, fileName: true, contentType: true, sizeBytes: true },
-      });
-      await tx.attachmentUploadSession.update({
-        where: { id: session.id },
-        data: { state: "completed" },
       });
       return created;
     });

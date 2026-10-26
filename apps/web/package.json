@@ -99,6 +99,7 @@
     "hast-util-to-html": "^9.0.5",
     "highlight.js": "^11.11.1",
     "idb-keyval": "6.3.0",
+    "image-size": "2.0.2",
     "input-otp": "^1.5.0",
     "jose": "^6.2.10",
     "katex": "^0.16.22",

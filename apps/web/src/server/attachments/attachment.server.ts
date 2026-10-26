@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { readFileImageDimensions } from "./attachment-image-dimensions.server";
 import { AppError } from "#src/lib/app-error";
 import {
   getFileStorage,
@@ -82,6 +83,7 @@ export async function storeAttachment(
   const contentType = input.file.type || "application/octet-stream";
   const files = await storage();
   await files.put(objectKey, input.file, contentType);
+  const dimensions = await readFileImageDimensions(input.file, contentType);
   try {
     return await db.attachment.create({
       data: {
@@ -93,6 +95,7 @@ export async function storeAttachment(
         fileName: input.file.name || "attachment",
         contentType,
         sizeBytes: input.file.size,
+        ...dimensions,
       },
       select: { id: true, fileName: true, contentType: true, sizeBytes: true },
     });
@@ -125,6 +128,7 @@ export async function storeAgentAttachment(
   const objectKey = `workspaces/${input.workspaceId}/attachments/${id}/original`;
   const files = await storage();
   await files.put(objectKey, input.file, input.contentType);
+  const dimensions = await readFileImageDimensions(input.file, input.contentType);
   try {
     return await db.attachment.create({
       data: {
@@ -137,6 +141,7 @@ export async function storeAgentAttachment(
         fileName: input.file.name || "attachment",
         contentType: input.contentType,
         sizeBytes: input.file.size,
+        ...dimensions,
       },
       select: { id: true, fileName: true, contentType: true, sizeBytes: true },
     });

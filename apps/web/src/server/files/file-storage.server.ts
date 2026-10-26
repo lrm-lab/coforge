@@ -20,6 +20,12 @@ export interface FileStorage {
    * does not exist. Backs the direct-upload `complete` verification.
    */
   head(objectKey: string): Promise<{ sizeBytes: number; contentType: string | null } | null>;
+  /** One bounded prefix read for optional metadata. Must honor cancellation, never retry or
+   * fall back to downloading the whole object; absent backends leave metadata unknown. */
+  readPrefix?(
+    objectKey: string,
+    input: { maxBytes: number; signal: AbortSignal },
+  ): Promise<Uint8Array | null>;
   /**
    * Issues a short-lived presigned PUT for a not-yet-written object, or is absent when this
    * backend cannot support direct upload (`LocalFileStorage` has none).
@@ -191,6 +197,17 @@ export class LocalFileStorage implements FileStorage, BulkFileRemoval {
     // there is nothing authoritative to report here; direct upload is disabled for this backend
     // (no `presignPut`), so no caller depends on this value.
     return { sizeBytes: file.size, contentType: null };
+  }
+
+  async readPrefix(objectKey: string, input: { maxBytes: number; signal: AbortSignal }) {
+    input.signal.throwIfAborted();
+    if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0)
+      throw new Error("invalid prefix length");
+    const file = Bun.file(this.path(objectKey));
+    if (!(await file.exists())) return null;
+    const bytes = new Uint8Array(await file.slice(0, input.maxBytes).arrayBuffer());
+    input.signal.throwIfAborted();
+    return bytes;
   }
 }
 

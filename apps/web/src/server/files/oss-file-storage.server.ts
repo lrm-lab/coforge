@@ -156,6 +156,60 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval {
     };
   }
 
+  /** Sign on the server endpoint, preserving internal OSS routing. fetch owns cancellation
+   * through headers AND body; the SDK's streaming GET does not accept an AbortSignal. */
+  async readPrefix(objectKey: string, input: { maxBytes: number; signal: AbortSignal }) {
+    input.signal.throwIfAborted();
+    if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0)
+      throw new Error("invalid prefix length");
+    const headers = {
+      Range: `bytes=0-${input.maxBytes - 1}`,
+      "x-oss-range-behavior": "standard",
+      "Accept-Encoding": "identity",
+    };
+    const url = await this.client.signatureUrlV4("GET", 60, { headers }, objectKey, ["range"]);
+    input.signal.throwIfAborted();
+    const response = await fetch(url, {
+      headers,
+      signal: input.signal,
+      redirect: "error",
+      decompress: false,
+    });
+    if (response.status === 404) {
+      await response.body?.cancel();
+      return null;
+    }
+    const range = /^bytes 0-(\d+)\/(\d+)$/.exec(response.headers.get("content-range") ?? "");
+    const expected = range ? Number(range[1]) + 1 : 0;
+    const total = range ? Number(range[2]) : 0;
+    if (
+      response.status !== 206 ||
+      !Number.isSafeInteger(total) ||
+      expected <= 0 ||
+      expected !== Math.min(input.maxBytes, total) ||
+      !response.body
+    ) {
+      await response.body?.cancel();
+      throw new Error("storage did not return the bounded prefix");
+    }
+    const bytes = new Uint8Array(expected);
+    const reader = response.body.getReader();
+    let offset = 0;
+    try {
+      while (offset < expected) {
+        const { value, done } = await reader.read();
+        if (done) throw new Error("truncated storage prefix");
+        if (offset + value.length > expected) throw new Error("oversized storage prefix");
+        bytes.set(value, offset);
+        offset += value.length;
+      }
+      return bytes;
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+    }
+  }
+
   /**
    * V4-signs a PUT for `objectKey` that has not been written yet, guarded by
    * `x-oss-forbid-overwrite`: OSS's own no-overwrite mechanism (there is no OSS equivalent of

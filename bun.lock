@@ -99,6 +99,7 @@
         "hast-util-to-html": "^9.0.5",
         "highlight.js": "^11.11.1",
         "idb-keyval": "6.3.0",
+        "image-size": "2.0.2",
         "input-otp": "^1.5.0",
         "jose": "^6.2.10",
         "katex": "^0.16.22",
@@ -1982,6 +1983,8 @@
     "idb-keyval": ["idb-keyval@6.3.0", "", {}, "sha512-um+2dgAWmYsu615EXpWVwSmapJhON0G43t3Ka/EVaohzPQXSMqKEqeDK/oIW3Ow+BXaF2PvSc+oBTFp793A5Ow=="],
 
     "ignore": ["ignore@7.0.8", "", {}, "sha512-YYNsSlXBjMk92SKnkwvB5LOVSa6OznlFUGcsvrFgNJbJCd0M1XKeFVRc8ZByeCqz32FivYNHJVooLmdqrmvp/Q=="],
+
+    "image-size": ["image-size@2.0.2", "", { "bin": { "image-size": "bin/image-size.js" } }, "sha512-IRqXKlaXwgSMAMtpNzZa1ZAe8m+Sa1770Dhk8VkSsP9LS+iHD62Zd8FQKs8fbPiagBE7BzoFX23cxFnwshpV6w=="],
 
     "import-meta-resolve": ["import-meta-resolve@4.2.0", "", {}, "sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg=="],
 
