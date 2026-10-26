@@ -35,13 +35,6 @@ export class KiroConnection {
     }),
   ) {
     this.process = new JsonlProcess(command, cwd, environment);
-    let unsubscribe: (() => void) | undefined;
-    const readable = new ReadableStream<AnyMessage>({
-      start: (controller) => {
-        unsubscribe = this.process.onRecord((record) => controller.enqueue(record as AnyMessage));
-      },
-      cancel: () => unsubscribe?.(),
-    });
     this.connection = client({ name: "coforge-daemon" })
       .onNotification("session/update", ({ params }) => {
         if (params.update.sessionUpdate === "config_option_update") {
@@ -52,13 +45,14 @@ export class KiroConnection {
       })
       .onRequest("session/request_permission", ({ params }) => onPermission(params))
       .connect({
-        readable,
+        readable: this.process.records() as ReadableStream<AnyMessage>,
         writable: new WritableStream<AnyMessage>({
           write: (message) => this.process.send(message),
         }),
       });
-    this.process.onFailure(() => this.#close());
-    this.process.onClose(() => this.#close());
+    // The stream ends when the process does and the SDK closes the connection once it has
+    // handled everything still queued, so a response written just before an exit is not lost.
+    void this.connection.closed.then(() => this.#close());
   }
 
   async waitForConfig(

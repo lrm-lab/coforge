@@ -23,6 +23,37 @@ function agentWorkspace(name: string): string {
   return workspace;
 }
 
+test("a response written just before the process exits is delivered, not failed as an exit", async () => {
+  const output = Promise.withResolvers<void>();
+  const tree = {
+    child: {
+      pid: 1,
+      exited: Promise.resolve(0),
+      exitCode: 0,
+      stdin: { write: () => true, end: () => undefined, flush: async () => undefined },
+      stdout: {
+        async *[Symbol.asyncIterator]() {
+          await output.promise;
+          yield new TextEncoder().encode('{"id":"coforge-1","result":"late"}\n');
+        },
+      },
+      stderr: { async *[Symbol.asyncIterator]() {} },
+      kill: () => undefined,
+    },
+    terminate: async () => undefined,
+    waitForExit: async () => true,
+  } satisfies OwnedProcessTree;
+  const process = new JsonlProcess(["unused"], tmpdir(), {}, { spawn: () => tree });
+  try {
+    const response = process.request({ method: "ping" });
+    // The exit has been observed long before the final output is readable.
+    setTimeout(output.resolve, 20);
+    expect(await response).toMatchObject({ result: "late" });
+  } finally {
+    await process.dispose();
+  }
+});
+
 test("close waits for bounded split stderr diagnostics after process exit", async () => {
   const stderr = Promise.withResolvers<void>();
   const failed = Promise.withResolvers<void>();

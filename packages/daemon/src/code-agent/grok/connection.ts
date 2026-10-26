@@ -27,12 +27,16 @@ export class GrokConnection {
     onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse,
   ) {
     this.process = new JsonlProcess(command, cwd, environment);
-    let unsubscribe: (() => void) | undefined;
-    const readable = new ReadableStream<AnyMessage>({
-      start: (controller) => {
-        unsubscribe = this.process.onRecord((value) => {
-          // Extension handlers in the SDK dispatch asynchronously. Observe ordered native
-          // updates here, before a later RPC response can finalize the same turn.
+    this.connection = client({ name: "coforge-daemon" })
+      .onNotification("session/update", () => {})
+      .onNotification("_x.ai/queue/changed", record, () => {})
+      .onNotification("_x.ai/session_notification", record, () => {})
+      .onRequest("session/request_permission", ({ params }) => onPermission(params))
+      .connect({
+        // Extension handlers in the SDK dispatch asynchronously. Observe ordered native
+        // updates as they arrive, before a later RPC response can finalize the same turn. The
+        // stream ends with the process, so the SDK handles everything still queued first.
+        readable: this.process.records((value) => {
           if (
             value.method === "session/update" ||
             value.method === "_x.ai/queue/changed" ||
@@ -40,24 +44,11 @@ export class GrokConnection {
           ) {
             onUpdate(value.method, record(value.params));
           }
-          controller.enqueue(value as AnyMessage);
-        });
-      },
-      cancel: () => unsubscribe?.(),
-    });
-    this.connection = client({ name: "coforge-daemon" })
-      .onNotification("session/update", () => {})
-      .onNotification("_x.ai/queue/changed", record, () => {})
-      .onNotification("_x.ai/session_notification", record, () => {})
-      .onRequest("session/request_permission", ({ params }) => onPermission(params))
-      .connect({
-        readable,
+        }) as ReadableStream<AnyMessage>,
         writable: new WritableStream<AnyMessage>({
           write: (message) => this.process.send(message),
         }),
       });
-    this.process.onClose(() => this.connection.close());
-    this.process.onFailure(() => this.connection.close());
   }
 
   async dispose(options?: Readonly<{ cutoffAtMs?: number }>) {

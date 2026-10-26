@@ -1,6 +1,12 @@
 import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
-import { LineBuffer, cleanupOwnedTree, type ProcessTreeCleanupOptions } from "@lrm/coforge-anvil";
+import {
+  LineBuffer,
+  PROCESS_TREE_EXIT_GRACE_MS,
+  cleanupOwnedTree,
+  withDeadline,
+  type ProcessTreeCleanupOptions,
+} from "@lrm/coforge-anvil";
 
 import { getLogger } from "@logtape/logtape";
 
@@ -34,6 +40,7 @@ export class JsonlProcess {
   readonly #pending = new Map<string, PendingRequest>();
   readonly #listeners = new Set<(record: JsonRecord) => void>();
   readonly #stderrListeners = new Set<(line: string) => void>();
+  readonly #stdoutFinished: Promise<void>;
   readonly #outputFinished: Promise<void>;
   readonly #failureListeners = new Set<(error: Error) => void>();
   readonly #closeListeners = new Set<() => void>();
@@ -59,7 +66,8 @@ export class JsonlProcess {
       outcome: "ok",
     });
     this.#stderrPromise = this.#discardStderr(onStderrDiagnostic);
-    this.#outputFinished = Promise.all([this.#readStdout(), this.#stderrPromise]).then(
+    this.#stdoutFinished = this.#readStdout();
+    this.#outputFinished = Promise.all([this.#stdoutFinished, this.#stderrPromise]).then(
       () => undefined,
     );
     void this.#observeExit();
@@ -73,6 +81,41 @@ export class JsonlProcess {
   onRecord(listener: (record: JsonRecord) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /**
+   * The process's records as a stream that ends once the process is over — failed or closed. A
+   * consumer that reads the stream to its end has seen every record the process wrote, whatever
+   * it still had queued when the process ended; closing the consumer's side on the failure
+   * instead would discard that queue. `observe` sees each record synchronously, before it is
+   * queued.
+   */
+  records(observe?: (record: JsonRecord) => void): ReadableStream<JsonRecord> {
+    let stop: (() => void) | undefined;
+    return new ReadableStream<JsonRecord>({
+      start: (controller) => {
+        const offRecord = this.onRecord((record) => {
+          observe?.(record);
+          controller.enqueue(record);
+        });
+        const end = () => {
+          offRecord();
+          try {
+            controller.close();
+          } catch {
+            // The consumer already cancelled the stream.
+          }
+        };
+        const offFailure = this.onFailure(end);
+        const offClose = this.onClose(end);
+        stop = () => {
+          offRecord();
+          offFailure();
+          offClose();
+        };
+      },
+      cancel: () => stop?.(),
+    });
   }
 
   onFailure(listener: (error: Error) => void): () => void {
@@ -267,6 +310,13 @@ export class JsonlProcess {
     };
     if (expectedExit) logger.info("Code agent process exited", properties);
     else logger.error("Code agent process exited", properties);
+    // Output the process wrote before it exited can still be unread: deliver it before the exit
+    // is reported as a failure that rejects pending requests and closes the connection. A
+    // descendant that kept the pipe open must not keep the exit unreported, so the wait is bounded.
+    if (!expectedExit)
+      await withDeadline(this.#stdoutFinished, PROCESS_TREE_EXIT_GRACE_MS, () => new Error()).catch(
+        () => undefined,
+      );
     this.#fail("code agent process exited unexpectedly");
   }
 
