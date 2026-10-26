@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, hydrated, seededUuid } from "./helpers/browser-e2e";
+import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
 
 /**
  * Search on a phone, in a real browser: there is no room beside the results, so a click opens the
@@ -16,14 +16,7 @@ import { browserSession, hydrated, seededUuid } from "./helpers/browser-e2e";
  * messages are seeded deterministically and reset on every run. A screenshot of a result open
  * (`phone-open.png`) is written under `.amp/e2e/search-preview/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-preview");
 
 test("on a phone a result opens its conversation in place of the results", async () => {
@@ -61,7 +54,7 @@ test("on a phone a result opens its conversation in place of the results", async
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('${row(match.id)}') !== null && ${hydrated}`,
+      `document.querySelector('${row(match.id)}') !== null && ${pageHydrated}`,
     );
     await mkdir(artifacts, { recursive: true });
     const preview = `document.querySelector('[aria-label="Search preview"]')`;
@@ -95,7 +88,7 @@ test("on a phone a result opens its conversation in place of the results", async
     await browser(
       "wait",
       "--fn",
-      `${preview}?.querySelector('li[data-message-id="${match.id}"]') !== null && ${hydrated}`,
+      `${preview}?.querySelector('li[data-message-id="${match.id}"]') !== null && ${pageHydrated}`,
     );
     await browser("find", "role", "button", "click", "--name", "Back to results");
     await browser("wait", "--fn", resultsAlone);

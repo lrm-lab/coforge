@@ -11,7 +11,24 @@ export function seededUuid(key: string): string {
  * deleted once the stream has also ended. Server-rendered rows already satisfy the row waits,
  * and a click before hydration lands on inert HTML.
  */
-export const hydrated = `(!window.$_TSR || window.$_TSR.hydrated === true)`;
+export const pageHydrated = `(!window.$_TSR || window.$_TSR.hydrated === true)`;
+
+/**
+ * The local stack a browser E2E runs against: the Web service (`COFORGE_E2E_WEB_URL`),
+ * `agent-browser`, and PostgreSQL (`DATABASE_URL`). Anything not local is refused, so a run never
+ * seeds or resets a shared database.
+ */
+export function localBrowserE2e() {
+  const origin = Bun.env.COFORGE_E2E_WEB_URL;
+  if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
+    throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
+  const browserPath = Bun.which("agent-browser");
+  if (!browserPath) throw new Error("agent-browser is required");
+  const databaseUrl = Bun.env.DATABASE_URL;
+  if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
+    throw new Error("DATABASE_URL must target local PostgreSQL");
+  return { origin, browserPath, databaseUrl };
+}
 
 /** One agent-browser session: its commands, and a page expression read back as JSON. */
 export function browserSession(browserPath: string, session: string) {

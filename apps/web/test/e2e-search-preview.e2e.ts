@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, seededUuid } from "./helpers/browser-e2e";
+import { browserSession, localBrowserE2e, seededUuid } from "./helpers/browser-e2e";
 
 /**
  * Previewing a result beside the list. On a wide screen a single click shows the result's
@@ -19,14 +19,7 @@ import { browserSession, seededUuid } from "./helpers/browser-e2e";
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Seeds are deterministic
  * and reset on every run. Screenshots are written under `.amp/e2e/search-preview/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-preview");
 
 test("a result previews beside the list and opens on a double click", async () => {

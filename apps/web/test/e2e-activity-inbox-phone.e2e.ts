@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, hydrated } from "./helpers/browser-e2e";
+import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 import {
   inPane,
   listHidden,
@@ -28,14 +28,7 @@ import {
  * (`phone.png`) and of a conversation open (`phone-open.png`) are written under
  * `.amp/e2e/activity-inbox/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
 
 test("on a phone a row opens its conversation in place of the Activity list", async () => {
@@ -63,7 +56,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
 
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${seededRows}.length === 2 && ${hydrated}`);
+    await browser("wait", "--fn", `${seededRows}.length === 2 && ${pageHydrated}`);
     // On a phone the tabs take their own row under the title.
     expect(
       await evaluate<boolean>(
@@ -100,7 +93,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("find", "text", "E2E phone unread", "click");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
     await browser("reload");
-    await browser("wait", "--fn", `${shownInPane(newestId)} && ${hydrated}`);
+    await browser("wait", "--fn", `${shownInPane(newestId)} && ${pageHydrated}`);
     await browser("find", "role", "button", "click", "--name", "Back to Activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
@@ -121,7 +114,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
       "open",
       `${origin}${workspacePath}/activity?open=channel:${channelId}&msg=${rootId}`,
     );
-    await browser("wait", "--fn", `${inPane(rootId)} && ${hydrated}`);
+    await browser("wait", "--fn", `${inPane(rootId)} && ${pageHydrated}`);
     // The list is hidden, not removed: crossing `lg` does not remount it.
     await browser("wait", "--fn", `${listHidden} === true`);
     await browser("screenshot", join(artifacts, "phone-open.png"));

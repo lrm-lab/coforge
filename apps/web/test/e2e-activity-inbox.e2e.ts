@@ -5,7 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { personAvatarUrl } from "#src/lib/person-picture";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, hydrated, seededUuid } from "./helpers/browser-e2e";
+import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
 import {
   activeCount,
   currentRow,
@@ -35,14 +35,7 @@ import {
  * layout, with and without a conversation open, and with a Pinned section (`pinned.png`), are
  * written under `.amp/e2e/activity-inbox/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
 
 test("the Activity page lists, filters, marks Done and opens inbox items", async () => {
@@ -138,7 +131,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${seededRows}.length === 2 && ${hydrated}`);
+    await browser("wait", "--fn", `${seededRows}.length === 2 && ${pageHydrated}`);
     const rows = await evaluate<string[]>(seededRows);
     // Newest activity first: the channel's unread message was posted after the thread reply. A
     // channel's row goes by its bare name (the # is its icon); a thread's names its channel
@@ -253,7 +246,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
     await browser("wait", "--fn", `${activeCount} === ${active! - 1}`);
     await browser("reload");
-    await browser("wait", "--fn", `${seededRows}.length === 1 && ${hydrated}`);
+    await browser("wait", "--fn", `${seededRows}.length === 1 && ${pageHydrated}`);
     expect((await evaluate<string[]>(seededRows))[0]).toContain("E2E activity root");
 
     // Nothing is open until a row is clicked: opening one reads it.
@@ -310,7 +303,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
     // The open thread lives in the URL: a reload reopens it alone beside the list.
     await browser("reload");
-    await browser("wait", "--fn", `${inPane(replyId)} && ${hydrated}`);
+    await browser("wait", "--fn", `${inPane(replyId)} && ${pageHydrated}`);
     await browser("wait", "--fn", `(${currentRow})?.includes("E2E activity root") === true`);
     expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
     expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
@@ -369,7 +362,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser(
       "wait",
       "--fn",
-      `document.body.textContent.includes("E2E quiet root") && ${hydrated}`,
+      `document.body.textContent.includes("E2E quiet root") && ${pageHydrated}`,
     );
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
     await browser("find", "text", "E2E quiet root", "click");
@@ -483,7 +476,7 @@ test("a direct message with a member, and the one with themself, list with the m
     await browser(
       "wait",
       "--fn",
-      `${row("E2E activity DM hello")} !== null && ${row("E2E activity note to self")} !== null && ${hydrated}`,
+      `${row("E2E activity DM hello")} !== null && ${row("E2E activity note to self")} !== null && ${pageHydrated}`,
     );
     // The member's DM goes by their name and face, unread; the viewer's own by theirs, "(you)".
     // The title is the bare name, without an @.
@@ -515,7 +508,7 @@ test("a direct message with a member, and the one with themself, list with the m
     expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
     expect(await evaluate<string | null>(currentRow)).toContain("E2E activity DM hello");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${row("E2E activity DM hello")} !== null && ${hydrated}`);
+    await browser("wait", "--fn", `${row("E2E activity DM hello")} !== null && ${pageHydrated}`);
     expect((await evaluate<{ text: string }>(row("E2E activity DM hello"))).text).not.toContain(
       "1 new",
     );
@@ -561,7 +554,7 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     await browser(
       "wait",
       "--fn",
-      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(rowItems)}.length === 1 && ${hydrated}`,
+      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(rowItems)}.length === 1 && ${pageHydrated}`,
     );
     // The channel's own row is under Pinned, and only there; its followed thread is below.
     const [pinnedRow] = await evaluate<string[]>(rowsIn(pinnedItems));
@@ -619,7 +612,7 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     );
     expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
     await browser("reload");
-    await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1 && ${hydrated}`);
+    await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1 && ${pageHydrated}`);
     expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned hello");
     expect(await evaluate<string[]>(rowsIn(rowItems))).toEqual([
       expect.stringContaining("E2E pinned root"),
