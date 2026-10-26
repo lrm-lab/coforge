@@ -14,6 +14,7 @@
       "./messages/{locale}/conversations.json",
       "./messages/{locale}/attachment-comments.json",
       "./messages/{locale}/runtime-usage.json",
+      "./messages/{locale}/runtime-auth.json",
       "./messages/{locale}/direct-settings.json",
       "./messages/{locale}/composer.json",
       "./messages/{locale}/channel-members.json",

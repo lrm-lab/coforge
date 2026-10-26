@@ -1,0 +1,407 @@
+import { useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { Heading } from "react-aria-components";
+import { useServerFn } from "@tanstack/react-start";
+import { useRouter } from "@tanstack/react-router";
+import { Copy01, LinkExternal01, XClose } from "@untitledui/icons";
+import type { RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
+
+import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Input } from "#src/components/base/input/input";
+import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { copyText } from "#src/lib/clipboard";
+import { m } from "#src/paraglide/messages";
+import {
+  cancelRuntimeAuthLogin,
+  readRuntimeAuthLogin,
+  startRuntimeAuthLogin,
+  submitRuntimeAuthCode,
+} from "./runtime-auth.functions";
+import {
+  initialLoginState,
+  loginReducer,
+  retryable,
+  safeSignInUrl,
+  type LoginFailure,
+  type LoginState,
+  type LoginView,
+} from "./runtime-auth-login-state";
+import { useRuntimeAuthSignals } from "./use-runtime-auth-signals";
+
+type Target = {
+  computerId: string;
+  computerName: string;
+  provider: RuntimeAuthProvider;
+  runtimeName: string;
+};
+
+/** At most this many views wait for the login id the start returns; a login sends far fewer. */
+const EARLY_VIEW_LIMIT = 16;
+
+/**
+ * Signs a Computer's runtime in from the web, as on Raft: the dialog shows what the runtime's own
+ * flow asks for (a page to open, a device code, a code to paste back) until it ends. The code and
+ * the link live only in this dialog's state; closing it drops them and cancels a running login.
+ */
+export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: () => void }) {
+  const [attempt, setAttempt] = useState(0);
+  const router = useRouter();
+  return (
+    <ModalOverlay isOpen onOpenChange={(open) => !open && onClose()}>
+      <Modal className="w-[calc(100vw-2rem)] max-w-md">
+        <Dialog className="overflow-hidden text-left">
+          <SignInAttempt
+            key={attempt}
+            {...target}
+            onRetry={() => setAttempt((n) => n + 1)}
+            onClose={(signedIn) => {
+              if (signedIn) void router.invalidate();
+              onClose();
+            }}
+          />
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
+  );
+}
+
+function SignInAttempt({
+  computerId,
+  computerName,
+  provider,
+  runtimeName,
+  onRetry,
+  onClose,
+}: Target & { onRetry: () => void; onClose: (signedIn: boolean) => void }) {
+  const [state, dispatch] = useReducer(loginReducer, initialLoginState);
+  const start = useServerFn(startRuntimeAuthLogin);
+  const read = useServerFn(readRuntimeAuthLogin);
+  const cancel = useServerFn(cancelRuntimeAuthLogin);
+  const loginId = useRef<string | undefined>(undefined);
+  const subscribed = useRef(false);
+  const closed = useRef(false);
+  const early = useRef<LoginView[]>([]);
+  const began = useRef(false);
+
+  // Subscribe, then read: the read covers what the channel delivered before this page knew the
+  // login, and the reducer drops whatever both deliver.
+  const catchUp = () => {
+    const id = loginId.current;
+    if (!id || !subscribed.current) return;
+    void read({ data: { computerId, loginId: id } })
+      .then((view) => view && dispatch({ type: "view", view, now: Date.now() }))
+      .catch(() => {});
+  };
+  useRuntimeAuthSignals(computerId, {
+    onSubscribed: () => {
+      subscribed.current = true;
+      catchUp();
+    },
+    onSignal: (signal) => {
+      if (signal.type !== "runtime-auth.login.v1" || signal.provider !== provider) return;
+      if (loginId.current) dispatch({ type: "view", view: signal, now: Date.now() });
+      else if (early.current.length < EARLY_VIEW_LIMIT) early.current.push(signal);
+    },
+  });
+
+  useEffect(() => {
+    // Once per attempt, on a guard rather than cleanup: StrictMode's second run must not start a
+    // second login, and only closing the dialog cancels one.
+    if (began.current) return;
+    began.current = true;
+    start({ data: { computerId, provider } })
+      .then((started) => {
+        if (started.status !== "started") {
+          dispatch({ type: "start_refused", status: started.status });
+          return;
+        }
+        loginId.current = started.loginId;
+        if (closed.current) {
+          void cancel({ data: { computerId, loginId: started.loginId } }).catch(() => {});
+          return;
+        }
+        dispatch({ type: "started", loginId: started.loginId });
+        for (const view of early.current) dispatch({ type: "view", view, now: Date.now() });
+        early.current = [];
+        catchUp();
+      })
+      .catch(() => dispatch({ type: "start_failed" }));
+  }, []);
+
+  const running = state.phase === "starting" || state.phase === "running";
+  const close = () => {
+    closed.current = true;
+    if (running && loginId.current)
+      void cancel({ data: { computerId, loginId: loginId.current } }).catch(() => {});
+    onClose(state.phase === "signed_in");
+  };
+
+  return (
+    <>
+      <div className="flex items-start justify-between gap-4 px-6 pt-6">
+        <Heading slot="title" className="min-w-0 text-lg font-semibold text-primary">
+          {m.runtime_auth_sign_in_title({ runtime: runtimeName })}
+        </Heading>
+        <ButtonUtility
+          aria-label={m.controls_close()}
+          icon={XClose}
+          size="sm"
+          color="tertiary"
+          onClick={close}
+        />
+      </div>
+      <div className="space-y-4 px-6 pt-4 text-sm text-secondary">
+        <SignInBody
+          state={state}
+          computerId={computerId}
+          computerName={computerName}
+          runtimeName={runtimeName}
+          dispatch={dispatch}
+        />
+      </div>
+      <div className="mt-6 flex justify-end gap-3 border-t border-secondary px-6 py-4">
+        {state.phase === "signed_in" ? (
+          <Button onPress={close}>{m.runtime_auth_done()}</Button>
+        ) : (
+          <>
+            <Button color="secondary" onPress={close}>
+              {running ? m.controls_cancel() : m.controls_close()}
+            </Button>
+            {state.phase === "failed" && retryable(state.failure) && (
+              <Button onPress={onRetry}>{m.runtime_auth_try_again()}</Button>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function SignInBody({
+  state,
+  computerId,
+  computerName,
+  runtimeName,
+  dispatch,
+}: {
+  state: LoginState;
+  computerId: string;
+  computerName: string;
+  runtimeName: string;
+  dispatch: (action: Parameters<typeof loginReducer>[1]) => void;
+}): ReactNode {
+  switch (state.phase) {
+    case "starting":
+      return <p role="status">{m.runtime_auth_starting({ computer: computerName })}</p>;
+    case "signed_in": {
+      const account = [state.account?.maskedLabel, state.account?.planLabel].filter(Boolean);
+      return (
+        <div role="status">
+          <p className="text-primary">
+            {m.runtime_auth_signed_in({ runtime: runtimeName, computer: computerName })}
+          </p>
+          {account.length > 0 && <p className="text-tertiary">{account.join(" · ")}</p>}
+        </div>
+      );
+    }
+    case "failed":
+      return (
+        <p role="alert" className="text-error-primary">
+          {failureText(state.failure, runtimeName)}
+        </p>
+      );
+    case "running":
+      return (
+        <>
+          {state.link?.kind === "auth_url" && (
+            <AuthPage
+              url={state.link.url}
+              hint={
+                state.link.instructions ?? m.runtime_auth_open_page_hint({ runtime: runtimeName })
+              }
+            />
+          )}
+          {state.link?.kind === "device_code" && (
+            <DeviceCode event={state.link} expiresAtMs={state.expiresAtMs} />
+          )}
+          {state.info && <p className="text-tertiary">{state.info}</p>}
+          {state.prompt !== undefined && !state.checking && (
+            <CodeForm
+              computerId={computerId}
+              loginId={state.loginId}
+              rejected={state.rejected}
+              dispatch={dispatch}
+            />
+          )}
+          {state.checking && <p role="status">{m.runtime_auth_checking()}</p>}
+          {!state.link && !state.info && state.prompt === undefined && (
+            <p role="status">{m.runtime_auth_starting({ computer: computerName })}</p>
+          )}
+        </>
+      );
+  }
+}
+
+function AuthPage({ url, hint }: { url: string; hint: string }) {
+  const safe = safeSignInUrl(url);
+  return (
+    <>
+      <p>{hint}</p>
+      <Button
+        color="secondary"
+        iconTrailing={LinkExternal01}
+        isDisabled={!safe}
+        onPress={() => safe && window.open(safe, "_blank", "noopener,noreferrer")}
+      >
+        {m.runtime_auth_open_page()}
+      </Button>
+    </>
+  );
+}
+
+function DeviceCode({
+  event,
+  expiresAtMs,
+}: {
+  event: { verificationUrl: string; userCode: string };
+  expiresAtMs?: number;
+}) {
+  const safe = safeSignInUrl(event.verificationUrl);
+  const minutes = expiresAtMs === undefined ? 0 : Math.ceil((expiresAtMs - Date.now()) / 60_000);
+  return (
+    <>
+      <p>{m.runtime_auth_device_hint()}</p>
+      {safe && (
+        <a
+          href={safe}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block truncate font-medium text-brand-secondary underline"
+        >
+          {safe}
+        </a>
+      )}
+      <div className="flex items-center gap-2">
+        <code className="rounded-md bg-secondary px-3 py-2 font-mono text-lg font-semibold tracking-widest text-primary">
+          {event.userCode}
+        </code>
+        <ButtonUtility
+          icon={Copy01}
+          size="sm"
+          color="secondary"
+          tooltip={m.runtime_auth_copy_code()}
+          onClick={() => void copyText(event.userCode)}
+        />
+      </div>
+      {minutes > 0 && (
+        <p className="text-tertiary">{m.runtime_auth_code_expires({ minutes: String(minutes) })}</p>
+      )}
+    </>
+  );
+}
+
+function CodeForm({
+  computerId,
+  loginId,
+  rejected,
+  dispatch,
+}: {
+  computerId: string;
+  loginId: string;
+  rejected: boolean;
+  dispatch: (action: Parameters<typeof loginReducer>[1]) => void;
+}) {
+  const submit = useServerFn(submitRuntimeAuthCode);
+  const [code, setCode] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const [sending, setSending] = useState(false);
+  const error = invalid
+    ? m.runtime_auth_code_invalid()
+    : rejected
+      ? m.runtime_auth_code_rejected()
+      : undefined;
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (sending || !code.trim()) return;
+        setSending(true);
+        setInvalid(false);
+        void submit({ data: { computerId, loginId, code } })
+          .then((outcome) => {
+            if (outcome === "sent") {
+              setCode("");
+              dispatch({ type: "code_sent" });
+            } else if (outcome === "invalid_code") {
+              setInvalid(true);
+              dispatch({ type: "code_invalid" });
+            } else dispatch({ type: "ended" });
+          })
+          .catch(() => setInvalid(true))
+          .finally(() => setSending(false));
+      }}
+    >
+      <Input
+        label={m.runtime_auth_paste_label()}
+        // The label already says what to paste; the line under it speaks only when it is wrong.
+        hint={error}
+        isInvalid={Boolean(error)}
+        value={code}
+        onChange={setCode}
+        autoComplete="off"
+        spellCheck="false"
+      />
+      <Button type="submit" size="sm" isLoading={sending} isDisabled={!code.trim()}>
+        {m.runtime_auth_submit()}
+      </Button>
+    </form>
+  );
+}
+
+function failureText(failure: LoginFailure, runtime: string): string {
+  switch (failure.kind) {
+    case "offline":
+      return m.runtime_auth_failed_offline();
+    case "needs_upgrade":
+      return m.runtime_auth_failed_needs_upgrade();
+    case "busy":
+      return m.runtime_auth_failed_busy();
+    case "start_failed":
+      return m.runtime_auth_failed_start();
+    case "cancelled":
+      return m.runtime_auth_failed_cancelled();
+    case "ended":
+      return m.runtime_auth_failed_ended();
+    case "unsupported":
+      return unsupportedText(failure.reason, runtime);
+    case "failed":
+      switch (failure.reason) {
+        case "timed_out":
+          return m.runtime_auth_failed_timed_out();
+        case "rejected":
+          return m.runtime_auth_failed_rejected({ runtime });
+        case "not_logged_in":
+          return m.runtime_auth_failed_not_logged_in({ runtime });
+        case "interaction_failed":
+          return m.runtime_auth_failed_interaction({ runtime });
+        case "process_failed":
+          return m.runtime_auth_failed_process({ runtime });
+      }
+  }
+}
+
+/** Why a runtime cannot be signed in or out from here at all. */
+export function unsupportedText(
+  reason: "not_installed" | "version_unsupported" | "unsupported_installation",
+  runtime: string,
+): string {
+  switch (reason) {
+    case "not_installed":
+      return m.runtime_auth_unsupported_not_installed({ runtime });
+    case "version_unsupported":
+      return m.runtime_auth_unsupported_version({ runtime });
+    case "unsupported_installation":
+      return m.runtime_auth_unsupported_installation({ runtime });
+  }
+}

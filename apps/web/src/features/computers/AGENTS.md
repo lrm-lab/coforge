@@ -52,3 +52,13 @@ These rules apply to `src/features/computers/`.
   Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the
   popover says; everyone else receives the state alone. A Computer that never
   reported shows no state.
+- Sign in and Sign out sit in a Claude Code or Codex runtime's popover for the
+  Computer's owner and Workspace owners and admins, the server's own rule
+  (`computer-runtimes.tsx`). The dialogs subscribe to the viewer's
+  `runtimeauth:user:<id>` channel and then read the login or logout once, and
+  `runtime-auth-login-state.ts` drops whatever both deliver, so a view only
+  moves a login forward. A device code, a pasted code and a sign-in link live
+  only in the dialog's state: never in a log, a toast or a URL. Only an `https:`
+  sign-in page is opened, with `noopener,noreferrer`. The browser E2E plays the
+  daemon (`test/e2e-runtime-sign-in.e2e.ts`); no test signs a real runtime in or
+  out.
