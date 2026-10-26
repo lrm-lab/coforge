@@ -257,7 +257,7 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     // Recent orders newest first; the sort is kept by Clear all, every filter goes.
     await pick("Sort", "Recent");
     await waitFor(`${param("sort")} === "recent"`);
-    await browser("eval", `${chip("Clear all")}.click()`);
+    await browser("eval", `${chip("Clear All")}.click()`);
     await waitFor(`${param("scope")} === "" && ${param("sort")} === "recent"`);
     await waitForResults(3);
     expect(await resultIds()).toEqual([humanToday.id, agentInB.id, agentOld.id]);
@@ -268,7 +268,7 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     await waitFor(`${param("scope")} === "mentioned"`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentOld.id]);
-    await browser("eval", `${chip("Clear all")}.click()`);
+    await browser("eval", `${chip("Clear All")}.click()`);
 
     // Time: the last 7 days leave out the ten-day-old message; Today leaves out yesterday's.
     await pick("Time", "Last 7 days");
@@ -289,7 +289,7 @@ test("search filters narrow results, survive a reload, and clear together", asyn
       `${chip("Scope 1")} !== undefined && ${chip("Today")} !== undefined && ${chip("Sort: Recent")} !== undefined`,
     );
     await waitForResults(1);
-    await browser("eval", `${chip("Clear all")}.click()`);
+    await browser("eval", `${chip("Clear All")}.click()`);
 
     // Channel, then no query: the filter alone searches, and Sort waits for a query.
     await pick("Channel", "#e2e-filter-b");

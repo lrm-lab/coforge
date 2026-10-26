@@ -196,7 +196,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     const menu = await evaluate<string[]>(
       `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
     );
-    expect(menu).toEqual(["Mark as Read", "Done", "Unfollow thread"]);
+    expect(menu).toEqual(["Mark as Read", "Done", "Unfollow Thread"]);
     await browser("screenshot", join(artifacts, "row-menu.png"));
     await browser("press", "Escape");
 
@@ -331,8 +331,8 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", `${shownInPane(rootId)} && !(${profilePanel})`);
     expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
     // "View in channel" shows the channel in the pane in place of the thread, and reads it.
-    await browser("click", '[aria-label="Thread actions"]');
-    await browser("find", "role", "menuitem", "click", "--name", "View in channel");
+    await browser("click", '[aria-label="Thread Actions"]');
+    await browser("find", "role", "menuitem", "click", "--name", "View in Channel");
     await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
     expect(await evaluate<boolean>(`location.search.includes("threadRootId")`)).toBe(false);
     expect(await evaluate<string>("location.hash")).toBe("");
@@ -353,7 +353,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       `${openParam} === ${JSON.stringify(`thread:channel:${channelId}`)}`,
     );
     await browser("wait", "--fn", inPane(replyId));
-    await browser("click", '[aria-label="Close thread"]');
+    await browser("click", '[aria-label="Close Thread"]');
     await browser("wait", "--fn", `${pane} === null && ${openParam} === null`);
 
     // A thread read to the end with no mention opens at its newest reply. Activity without an

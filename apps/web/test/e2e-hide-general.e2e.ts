@@ -81,13 +81,13 @@ test("an owner hides #general from its panel and restores it from Settings → M
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${general.id}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
         () => true,
         () => false,

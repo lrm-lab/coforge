@@ -127,7 +127,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     expect(
       await browser(
         "eval",
-        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "Create task")} === undefined`,
+        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "Create Task")} === undefined`,
       ),
     ).toContain("true");
     await browser("screenshot", join(artifacts, "tasks-page.png"));
@@ -136,7 +136,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}?view=tasks`);
     await waitFor(bodyHas(channelTitle), 60_000);
     for (let attempt = 0; ; attempt += 1) {
-      await browser("eval", `${byText("button", "Create task")}?.click()`);
+      await browser("eval", `${byText("button", "Create Task")}?.click()`);
       if (
         await waitFor(dialogOpen, 5_000).then(
           () => true,
@@ -148,19 +148,19 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     }
 
     // No title at all is refused in place.
-    await browser("eval", `${byText('[role="dialog"] button', "Create task")}.click()`);
+    await browser("eval", `${byText('[role="dialog"] button', "Create Task")}.click()`);
     await waitFor(
       `document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes("at least one task title")`,
     );
     await browser("screenshot", join(artifacts, "create-empty.png"));
 
     await browser("fill", '[role="dialog"] input[aria-label="Task 1"]', created[0]!);
-    await browser("eval", `${byText('[role="dialog"] button', "Add another")}.click()`);
+    await browser("eval", `${byText('[role="dialog"] button', "Add Another")}.click()`);
     await waitFor(`document.querySelector('[role="dialog"] input[aria-label="Task 2"]') !== null`);
     await browser("fill", '[role="dialog"] input[aria-label="Task 2"]', created[1]!);
-    await waitFor(`${byText('[role="dialog"] button', "Create 2 tasks")} !== undefined`);
+    await waitFor(`${byText('[role="dialog"] button', "Create 2 Tasks")} !== undefined`);
     await browser("screenshot", join(artifacts, "create-two.png"));
-    await browser("eval", `${byText('[role="dialog"] button', "Create 2 tasks")}.click()`);
+    await browser("eval", `${byText('[role="dialog"] button', "Create 2 Tasks")}.click()`);
 
     // Both land in the channel together, the dialog closes, and the board shows them.
     await waitFor(`!(${dialogOpen})`);

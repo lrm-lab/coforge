@@ -68,7 +68,7 @@ const step = (body: string) =>
 const shot = (name: string) =>
   `await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"), undefined, { timeout: 5000 }); await page.waitForTimeout(200); await page.screenshot({ path: ${JSON.stringify(join(artifacts, `${name}.png`))} });`;
 /** The dialog's own Sign out, not the popover's that opened it. */
-const confirmSignOut = `await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Sign out").click());`;
+const confirmSignOut = `await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Sign Out").click());`;
 const waitText = (text: string) =>
   `await page.waitForFunction((text) => document.body.innerText.includes(text), ${JSON.stringify(text)}, { timeout: 15000 });`;
 
@@ -198,7 +198,7 @@ test("signing a runtime in shows the device code, takes a pasted code again, and
     await page.waitForSelector('li button[aria-label^="Claude Code"]', { timeout: 30000 });
     await page.click('li button[aria-label^="Claude Code"]');
     ${waitText("Not signed in")}
-    await page.click("loc=role:button[name='Sign in']");
+    await page.click("loc=role:button[name='Sign In']");
     ${waitText("Sign in to Claude Code")}
   `);
   const loginId = await currentLogin("claude-code");
@@ -240,7 +240,7 @@ test("signing a runtime out names the Agents using it and shows a refusal before
   await step(`
     await page.keyboard.press("Escape");
     await page.click('li button[aria-label^="Codex CLI"]');
-    await page.click("loc=role:button[name='Sign out']");
+    await page.click("loc=role:button[name='Sign Out']");
     ${waitText("Sign out of Codex CLI?")}
     ${waitText("Signout Agent keep running")}
     ${shot("sign-out-confirm")}

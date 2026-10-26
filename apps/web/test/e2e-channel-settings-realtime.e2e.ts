@@ -74,7 +74,7 @@ function tab(session: string) {
 const channelHeader = `[...document.querySelectorAll("header")].find((header) => header.querySelector("h1")?.textContent.startsWith("#"))`;
 const sidebarHas = (name: string) =>
   `[...document.querySelectorAll("a")].some((link) => link.textContent.trim() === ${JSON.stringify(name)})`;
-const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
 
 test("another open tab follows a channel's rename, description and archive live", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -119,7 +119,7 @@ test("another open tab follows a channel's rename, description and archive live"
     }
 
     // Rename and describe in the editor tab.
-    await editor.run("click", '[aria-label="Channel details and settings"]');
+    await editor.run("click", '[aria-label="Channel Details and Settings"]');
     await editor.waitFor(panelOpen);
     await editor.run("fill", '[role="dialog"] input[type="text"]', renamed);
     await editor.run("fill", '[role="dialog"] textarea', "Followed live");
@@ -135,7 +135,7 @@ test("another open tab follows a channel's rename, description and archive live"
 
     // Archive in the editor tab: the watcher's composer turns into the archived notice and the
     // row leaves its sidebar.
-    await editor.clickText("button", "Archive channel");
+    await editor.clickText("button", "Archive Channel");
     await editor.waitFor(
       `[...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Archive")`,
     );
@@ -148,7 +148,7 @@ test("another open tab follows a channel's rename, description and archive live"
     await editor.waitFor(`document.body.textContent.includes("This channel is archived.")`);
     await editor.clickText("button", "Unarchive");
     await editor.waitFor(panelOpen);
-    await editor.clickText("button", "Unarchive channel");
+    await editor.clickText("button", "Unarchive Channel");
     await watcher.waitFor(`!document.body.textContent.includes("This channel is archived.")`);
     await watcher.waitFor(sidebarHas(renamed));
   } catch (error) {

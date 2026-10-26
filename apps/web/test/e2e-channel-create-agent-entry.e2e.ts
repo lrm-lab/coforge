@@ -61,18 +61,18 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(`${byText(selector, text)} !== undefined`);
     await browser("eval", `${byText(selector, text)}.click()`);
   }
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+  const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
   const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
   const agentForm = `[...document.querySelectorAll('[role="dialog"]')].find((dialog) => dialog.querySelector('input[name="name"]'))`;
 
   async function openPanel() {
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(`${panel} !== null`, 5_000).then(
         () => true,
         () => false,
@@ -123,14 +123,14 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
     await openPanel();
 
     // "+" opens the add view, which always ends with the create entry.
-    await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
-    await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
+    await waitFor(`${panel}?.querySelector('[aria-label="Add Members"]') != null`);
+    await browser("eval", `${panel}.querySelector('[aria-label="Add Members"]').click()`);
     await waitFor(panelHas("Add Selected (0)"));
     await waitFor(panelHas("Create Agent"));
     expect(
@@ -200,8 +200,8 @@ test("the add view creates an Agent named by the search, and it joins the channe
     });
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await openPanel();
-    await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
-    await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
+    await waitFor(`${panel}?.querySelector('[aria-label="Add Members"]') != null`);
+    await browser("eval", `${panel}.querySelector('[aria-label="Add Members"]').click()`);
     await waitFor(panelHas("only a Workspace owner or admin can create Agents"));
     expect(
       await evaluate<boolean>(

@@ -76,7 +76,7 @@ test("members open a direct message with each other, and with themselves", async
     `(new URLSearchParams(location.search).get(${JSON.stringify(name)}) ?? "")`;
   /** The "Private chat" button on the Members page card of `name`. */
   const cardChat = (name: string) =>
-    `[...([...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(name)}))?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Private chat")`;
+    `[...([...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(name)}))?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Private Chat")`;
   /** Presses it once the page has hydrated (the server-rendered button does nothing before). */
   const pressCardChat = async (name: string) => {
     await waitFor(

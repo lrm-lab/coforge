@@ -173,8 +173,8 @@ test("the shortcut reopens the last search and a channel searches itself", async
 
     // A channel's "Search this channel" limits search to it and waits for a query.
     await browser("open", `${origin}${workspacePath}/channel/${channelA}`);
-    await waitFor(`document.querySelector('[aria-label="Search this channel"]') !== null`);
-    await browser("click", '[aria-label="Search this channel"]');
+    await waitFor(`document.querySelector('[aria-label="Search This Channel"]') !== null`);
+    await browser("click", '[aria-label="Search This Channel"]');
     await waitFor(
       `location.pathname === "${workspacePath}/search" && ${param("channelId")} === "${channelA}"`,
     );

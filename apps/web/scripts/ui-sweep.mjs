@@ -740,7 +740,7 @@ function buildSurfaces(ids) {
       key: "dialog-create-channel",
       url: url(""),
       prepare: async (page) => {
-        const ok = await page.clickText("Create channel");
+        const ok = await page.clickText("Create Channel");
         if (!ok) return "could not find the Create channel trigger";
       },
       postEscape: true,
@@ -749,8 +749,8 @@ function buildSurfaces(ids) {
       key: "dialog-new-agent",
       url: url("/members"),
       prepare: async (page) => {
-        const ok = await page.clickText("New agent");
-        if (!ok) return "could not find the New agent trigger";
+        const ok = await page.clickText("New Agent");
+        if (!ok) return "could not find the New Agent trigger";
       },
       postEscape: true,
     },
@@ -758,7 +758,7 @@ function buildSurfaces(ids) {
       key: "dialog-add-computer-step1",
       url: url("/computers"),
       prepare: async (page) => {
-        const ok = await page.clickText("Add computer");
+        const ok = await page.clickText("Add Computer");
         if (!ok) return "could not find the Add computer trigger";
       },
       postEscape: true,
@@ -767,7 +767,7 @@ function buildSurfaces(ids) {
       key: "dialog-add-computer-step2",
       url: url("/computers"),
       prepare: async (page) => {
-        if (!(await page.clickText("Add computer")))
+        if (!(await page.clickText("Add Computer")))
           return "could not find the Add computer trigger";
         if (!(await page.clickText("Your computer")))
           return "could not select the local computer option";
@@ -784,7 +784,7 @@ function buildSurfaces(ids) {
         if (!(await page.clickText("^Tasks", { within: '[aria-label="Chat / Tasks"]' })))
           return "could not find the channel Tasks tab";
         await sleepScript(500); // the Tasks tab is a route search-param change; let it settle
-        const ok = await page.clickText("Create task");
+        const ok = await page.clickText("Create Task");
         if (!ok) return "could not find the Create task trigger";
       },
       postEscape: true,
@@ -811,7 +811,7 @@ function buildSurfaces(ids) {
       key: "sidebar-collapsed-tooltip",
       url: url("/members"),
       prepare: async (page) => {
-        const collapsed = await page.clickText("Hide sidebar");
+        const collapsed = await page.clickText("Hide Sidebar");
         if (!collapsed) return "could not find the sidebar collapse control";
         const hovered = await page.hoverText("Show sidebar");
         if (!hovered) return "collapsed sidebar, but could not hover its expand tooltip";
@@ -983,7 +983,7 @@ async function main() {
       };
       try {
         await page.navigate(url_messages());
-        const opened = await page.clickText("Create channel");
+        const opened = await page.clickText("Create Channel");
         if (!opened) record.note = "could not find the Create channel trigger";
         await page.setViewport(1920, 900);
         await sleep(400);

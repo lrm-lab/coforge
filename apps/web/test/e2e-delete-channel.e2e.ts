@@ -97,14 +97,14 @@ test("an owner deletes a channel from its settings panel", async () => {
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
     await waitFor(sidebarHasChannel);
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
         () => true,
         () => false,
@@ -112,10 +112,10 @@ test("an owner deletes a channel from its settings panel", async () => {
       if (opened) break;
       if (attempt === 5) throw new Error("the channel settings panel never opened");
     }
-    await waitFor(`${byText("button", "Delete channel")} !== undefined`);
+    await waitFor(`${byText("button", "Delete Channel")} !== undefined`);
     await browser("screenshot", join(artifacts, "actions.png"));
 
-    await clickText("button", "Delete channel");
+    await clickText("button", "Delete Channel");
     await waitFor(`document.body.textContent.includes("permanently deleted")`);
     await browser("screenshot", join(artifacts, "confirm.png"));
 

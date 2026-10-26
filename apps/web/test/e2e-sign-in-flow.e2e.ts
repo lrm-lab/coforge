@@ -175,9 +175,9 @@ test("signing in through the hosted page, from a Workspace invite link", async (
 
     // Signed out, the invite link offers to sign in, and signing in comes back to it to join.
     await browser("open", `${origin}/en${joinPath}`);
-    await waitFor(hydrated(button("Sign in to join")));
+    await waitFor(hydrated(button("Sign In to Join")));
     await browser("screenshot", join(artifacts, "1-signed-out-invite.png"));
-    await browser("eval", `${button("Sign in to join")}.click()`);
+    await browser("eval", `${button("Sign In to Join")}.click()`);
     await waitFor(onAuthingPage);
     await browser("click", "#as-alice");
     // A first sign-in is asked for a display name, starting from the provider's own.
@@ -219,9 +219,9 @@ test("signing in through the hosted page, from a Workspace invite link", async (
     // "Use another account" signs out at Authing and comes back to the same link as the other
     // account, which has not joined yet.
     await browser("open", `${origin}/en${joinPath}`);
-    await waitFor(hydrated(button("Use another account")));
+    await waitFor(hydrated(button("Use Another Account")));
     expect(await evaluate<boolean>(`!!${button(`Open ${name}`)}`)).toBe(true);
-    await browser("eval", `${button("Use another account")}.click()`);
+    await browser("eval", `${button("Use Another Account")}.click()`);
     await waitFor(onAuthingPage);
     expect(fake.endedSessions.at(-1)).toBe("id-alice");
     await browser("click", "#as-bob");
@@ -243,7 +243,7 @@ test("signing in through the hosted page, from a Workspace invite link", async (
       joinPath,
     );
     await browser("screenshot", join(artifacts, "5-sign-in-failed.png"));
-    await browser("eval", `${button("Sign in again")}.click()`);
+    await browser("eval", `${button("Sign In Again")}.click()`);
     await waitFor(onAuthingPage);
     await browser("click", "#as-bob");
     // Bob has answered already: he is not asked again.
@@ -258,7 +258,7 @@ test("signing in through the hosted page, from a Workspace invite link", async (
     await answerNameStep("Phone Only E2E", people["phone-only"].name);
     await waitFor(onJoinPageAs("Phone Only E2E"));
     expect(await evaluate<boolean>(`!!${button(`Join ${name}`)}`)).toBe(true);
-    expect(await evaluate<boolean>(`!!${button("Sign in to join")}`)).toBe(false);
+    expect(await evaluate<boolean>(`!!${button("Sign In to Join")}`)).toBe(false);
     expect(await evaluate<boolean>(`document.body.innerText.includes("@")`)).toBe(false);
     await browser("screenshot", join(artifacts, "6-signed-in-without-email.png"));
 

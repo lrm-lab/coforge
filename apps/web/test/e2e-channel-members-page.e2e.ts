@@ -73,18 +73,18 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await waitFor(`${row} !== undefined`);
     await browser("eval", `${row}.click()`);
   }
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+  const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
   const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
   const onRoster = `${panel}?.querySelector('input[placeholder="Search members…"]') != null`;
   async function openChannel(path: string) {
     await browser("open", `${origin}${path}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(`${panel} !== null`, 5_000).then(
         () => true,
         () => false,
@@ -213,7 +213,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
       "eval",
       `document.querySelector(${JSON.stringify(`[aria-label="Remove ${outside.displayName}"]`)}).click()`,
     );
-    await waitFor(`document.body.textContent.includes("Remove member")`);
+    await waitFor(`document.body.textContent.includes("Remove Member")`);
     await browser("screenshot", join(artifacts, "remove.png"));
     expect(
       (
@@ -242,7 +242,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await waitFor(`${panel}?.querySelector('[role="tablist"]') != null && !${onRoster}`);
     await waitFor(panelHas(inside.displayName));
     await browser("screenshot", join(artifacts, "profile.png"));
-    await browser("eval", `document.querySelector('[aria-label="Back to members"]').click()`);
+    await browser("eval", `document.querySelector('[aria-label="Back to Members"]').click()`);
     await waitFor(
       `${search}?.value === ${JSON.stringify(inside.displayName)} && document.activeElement?.matches(${JSON.stringify(openProfile)})`,
     );
@@ -258,7 +258,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await waitFor(`${panel}?.querySelector('[role="tablist"]') != null`);
     await browser("eval", `${panel}.querySelector('[aria-label="Close"]').click()`);
     await waitFor(`${panel} === null`);
-    await browser("click", '[aria-label="Channel details and settings"]');
+    await browser("click", '[aria-label="Channel Details and Settings"]');
     await waitFor(`${panelHas("Preferences")} && !${onRoster}`);
 
     // A phone has no hover to reveal the actions: each row keeps them behind one menu button, so
@@ -284,7 +284,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await browser("screenshot", join(artifacts, "phone-members.png"));
     await browser("click", actions);
     await waitFor(`document.querySelector('[role="menuitem"]') !== null`);
-    await browser("find", "role", "menuitem", "click", "--name", "Make admin");
+    await browser("find", "role", "menuitem", "click", "--name", "Make Admin");
     await waitFor(
       `${badgeRight("Channel admin")} > 0 && document.querySelector('[role="menu"]') === null`,
     );

@@ -112,13 +112,13 @@ test("a member stops every Agent in a channel, then resumes them with new guidan
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
         () => true,
         () => false,
@@ -144,14 +144,14 @@ test("a member stops every Agent in a channel, then resumes them with new guidan
       true,
     );
     // "Resume all" waits for guidance.
-    const resumeDisabled = `${byText('[role="dialog"] button', "Resume all")}?.disabled`;
+    const resumeDisabled = `${byText('[role="dialog"] button', "Resume All")}?.disabled`;
     expect(await browser("eval", resumeDisabled)).toContain("true");
     const guidanceBox = 'textarea[aria-label^="Provide new guidance"]';
     await browser("click", guidanceBox);
     await browser("type", guidanceBox, "Only touch the frontend from now on.");
     await waitFor(`!(${resumeDisabled})`);
     await browser("screenshot", join(artifacts, "guidance.png"));
-    await clickText('[role="dialog"] button', "Resume all");
+    await clickText('[role="dialog"] button', "Resume All");
     await waitFor(`!document.body.textContent.includes("All Agents have been stopped.")`);
     const resumed = await db.agent.findMany({
       where: { id: { in: agentIds } },

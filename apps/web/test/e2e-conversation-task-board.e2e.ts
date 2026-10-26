@@ -143,7 +143,7 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
     await waitFor(bodyHas(openTitle), 60_000);
     await waitFor(`${byText("button", "Filter")} !== undefined`);
     expect(await eval_(`${byText("button", "Display")} !== undefined`)).toBe(true);
-    expect(await eval_(`${byText("button", "Create task")} !== undefined`)).toBe(true);
+    expect(await eval_(`${byText("button", "Create Task")} !== undefined`)).toBe(true);
     expect(await eval_(`${byText("button", "Claim")} === undefined`)).toBe(true);
     expect(
       await eval_(`${cardOf(openTitle)}.textContent.includes(${JSON.stringify(channelName)})`),
@@ -152,7 +152,7 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
     // Done shows one page of 50 within the week, then the rest on "Load more".
     await waitFor(`${cardsIn("Done")} === 50`);
     await browser("screenshot", join(artifacts, "channel-board.png"));
-    await browser("eval", `${byText("button", "Load more")}.click()`);
+    await browser("eval", `${byText("button", "Load More")}.click()`);
     await waitFor(`${cardsIn("Done")} === ${DONE_COUNT}`);
 
     // Moving the unowned To do Task to In progress claims it for the viewer.

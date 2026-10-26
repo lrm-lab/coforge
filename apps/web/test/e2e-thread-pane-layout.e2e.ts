@@ -109,7 +109,7 @@ test("the thread pane shows its title, actions, replies marker and thread compos
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", threadUrl);
-    await browser("wait", "--fn", `document.querySelector('[aria-label="Close thread"]') !== null`);
+    await browser("wait", "--fn", `document.querySelector('[aria-label="Close Thread"]') !== null`);
     const wide = await evaluate<{
       title: string;
       closeVisible: boolean;
@@ -124,7 +124,7 @@ test("the thread pane shows its title, actions, replies marker and thread compos
       const text = pane.textContent;
       return {
         title: pane.querySelector("header h2").textContent,
-        closeVisible: visible(pane.querySelector('[aria-label="Close thread"]')),
+        closeVisible: visible(pane.querySelector('[aria-label="Close Thread"]')),
         backVisible: visible(pane.querySelector('[aria-label="Back to chat"]')),
         order: [
           text.indexOf("Thread pane layout root"),
@@ -143,19 +143,19 @@ test("the thread pane shows its title, actions, replies marker and thread compos
     expect(wide.placeholder).toBe("Message thread");
     await browser("screenshot", join(artifacts, "wide.png"));
 
-    await browser("click", '[aria-label="Thread actions"]');
+    await browser("click", '[aria-label="Thread Actions"]');
     await browser("wait", "--fn", `document.querySelectorAll('[role="menuitem"]').length > 0`);
     const items = await evaluate<string[]>(
       `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
     );
-    expect(items[0]).toBe("View in channel");
+    expect(items[0]).toBe("View in Channel");
     expect(items[1]).toMatch(/^(Follow|Unfollow) thread$/);
     await browser("screenshot", join(artifacts, "actions-menu.png"));
 
-    await browser("find", "role", "menuitem", "click", "--name", "View in channel");
+    await browser("find", "role", "menuitem", "click", "--name", "View in Channel");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
     await browser("wait", "--fn", `document.getElementById("message-${rootId}") !== null`);
-    expect(await evaluate<boolean>(`!document.querySelector('[aria-label="Close thread"]')`)).toBe(
+    expect(await evaluate<boolean>(`!document.querySelector('[aria-label="Close Thread"]')`)).toBe(
       true,
     );
 
@@ -165,7 +165,7 @@ test("the thread pane shows its title, actions, replies marker and thread compos
     const phone = await evaluate<{ closeVisible: boolean; backVisible: boolean }>(`(() => {
       const visible = (element) => Boolean(element && element.getClientRects().length);
       return {
-        closeVisible: visible(document.querySelector('[aria-label="Close thread"]')),
+        closeVisible: visible(document.querySelector('[aria-label="Close Thread"]')),
         backVisible: visible(document.querySelector('[aria-label="Back to chat"]')),
       };
     })()`);

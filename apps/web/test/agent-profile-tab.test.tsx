@@ -111,10 +111,10 @@ test("a member (non-manager) sees a read-only Profile: no pencils, no Actions se
   );
   expect(markup).toContain("Builder");
   // No edit affordance anywhere in the read-only view.
-  expect(markup).not.toContain("Edit display name");
-  expect(markup).not.toContain("Edit description");
+  expect(markup).not.toContain("Edit Display Name");
+  expect(markup).not.toContain("Edit Description");
   // No Actions section for a non-manager.
-  expect(markup).not.toContain("Stop agent");
+  expect(markup).not.toContain("Stop Agent");
   expect(markup).not.toContain("Restart");
 });
 
@@ -147,10 +147,10 @@ test("a manager (owner or admin-like) sees pencils and the Actions section", () 
     />,
   );
   expect(markup).toContain("Builder");
-  expect(markup).toContain("Edit display name");
-  expect(markup).toContain("Edit description");
+  expect(markup).toContain("Edit Display Name");
+  expect(markup).toContain("Edit Description");
   // Online Agent: the Actions button reads "Stop agent".
-  expect(markup).toContain("Stop agent");
+  expect(markup).toContain("Stop Agent");
   expect(markup).toContain('data-testid="runtime-dialog-slot"');
 });
 
@@ -166,8 +166,8 @@ test("a stopped Agent's Actions section offers Start instead of Stop", () => {
       runtimeCredentialDialog={null}
     />,
   );
-  expect(markup).toContain("Start agent");
-  expect(markup).not.toContain("Stop agent");
+  expect(markup).toContain("Start Agent");
+  expect(markup).not.toContain("Stop Agent");
 });
 
 test("a viewer without visibility into the runtime's usage sees the plain Runtime badge, no usage button", () => {
@@ -381,7 +381,7 @@ test("a viewer who cannot change visibility sees plain Visibility text, no edit 
   );
   expect(markup).toContain("Visibility");
   expect(markup).toContain("Public");
-  expect(markup).not.toContain("Make private");
+  expect(markup).not.toContain("Make Private");
   expect(markup).not.toContain(m.agent_profile_edit_visibility());
 });
 
@@ -400,7 +400,7 @@ test("the creator (or owner/admin) sees the current visibility and a pencil to c
   );
   expect(markup).toContain("Private");
   expect(markup).toContain(`aria-label="${m.agent_profile_edit_visibility()}"`);
-  expect(markup).not.toContain("Make public");
+  expect(markup).not.toContain("Make Public");
 });
 
 test("a private Agent without the visibility grant shows Private text with no edit affordance", () => {
@@ -416,7 +416,7 @@ test("a private Agent without the visibility grant shows Private text with no ed
     />,
   );
   expect(markup).toContain("Private");
-  expect(markup).not.toContain("Make public");
+  expect(markup).not.toContain("Make Public");
   expect(markup).not.toContain(m.agent_profile_edit_visibility());
 });
 

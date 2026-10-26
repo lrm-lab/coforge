@@ -41,21 +41,21 @@ function installation(declares: boolean, bot: AppBotSummary | undefined, canMana
 
 test("an owner or admin sees Enable bot while the bot is off, and Bot enabled with Disable bot once granted", () => {
   const before = installation(true, off);
-  expect(before).toContain("Enable bot");
+  expect(before).toContain("Enable Bot");
   expect(before).not.toContain("Bot enabled");
-  expect(before).not.toContain("Disable bot");
+  expect(before).not.toContain("Disable Bot");
   const after = installation(true, on);
   expect(after).toContain("Bot enabled");
-  expect(after).toContain("Disable bot");
+  expect(after).toContain("Disable Bot");
   expect(after).toContain("Status: Indexing 2,341");
-  expect(after).not.toContain(">Enable bot<");
+  expect(after).not.toContain(">Enable Bot<");
 });
 
 test("a member sees the state but no control", () => {
   const markup = installation(true, off, false);
-  expect(markup).not.toContain(">Enable bot<");
+  expect(markup).not.toContain(">Enable Bot<");
   expect(markup).toContain("Ask a Workspace owner or admin to enable the bot.");
-  expect(installation(true, on, false)).not.toContain("Disable bot");
+  expect(installation(true, on, false)).not.toContain("Disable Bot");
 });
 
 test("with app-bot off, or an app that declares no bot, the installation shows nothing", () => {
@@ -135,7 +135,7 @@ test("a bot's profile names the app, shows the Bot badge and status, and hides r
   expect(markup).toContain(">Bot<");
   expect(markup).toContain("Managed by app: Acme Reviews");
   expect(markup).toContain("Indexing 2,341");
-  for (const hidden of ["Runtime", "Computer", "Model", "Restart", "Edit display name"])
+  for (const hidden of ["Runtime", "Computer", "Model", "Restart", "Edit Display Name"])
     expect(markup).not.toContain(hidden);
 });
 

@@ -104,7 +104,7 @@ test("a signed-in visitor joins a Workspace from its invite link", async () => {
     // The link's page names the Workspace and who is in it, and offers to join.
     await browser("open", `${origin}/en/join/${link.token}`);
     const joinButton = `[...document.querySelectorAll("main button")].find((button) => button.textContent.trim() === ${JSON.stringify(`Join ${name}`)})`;
-    const retryButton = `[...document.querySelectorAll("main button")].find((button) => button.textContent.trim() === "Try again")`;
+    const retryButton = `[...document.querySelectorAll("main button")].find((button) => button.textContent.trim() === "Try Again")`;
     const buttonLabels = `[...document.querySelectorAll("main button")].map((button) => button.textContent.trim())`;
     await waitFor(`Object.keys(${joinButton} ?? {}).some((key) => key.startsWith("__reactProps"))`);
     expect(await evaluate<string>(`document.querySelector("main h1")?.textContent`)).toBe(
@@ -128,8 +128,8 @@ test("a signed-in visitor joins a Workspace from its invite link", async () => {
       `document.querySelector("main [role=alert]")?.textContent === "Your session has expired. Sign in again to join."`,
     );
     expect(await evaluate<string[]>(buttonLabels)).toEqual([
-      "Sign in again",
-      "Use another account",
+      "Sign In Again",
+      "Use Another Account",
     ]);
     await browser("screenshot", join(artifacts, "join-session-ended.png"));
 
@@ -144,7 +144,7 @@ test("a signed-in visitor joins a Workspace from its invite link", async () => {
     await waitFor(
       `document.querySelector("main [role=alert]")?.textContent === "Couldn’t join. Check your connection and try again."`,
     );
-    expect(await evaluate<string[]>(buttonLabels)).toEqual(["Try again", "Use another account"]);
+    expect(await evaluate<string[]>(buttonLabels)).toEqual(["Try Again", "Use Another Account"]);
     await browser("screenshot", join(artifacts, "join-connection-lost.png"));
 
     // Joining lands in the Workspace, as a member of it and of its #general.

@@ -49,11 +49,11 @@ test("a member turns off collapsing long messages for one channel and back on", 
         setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
       ),
     ]);
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+  const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
   /** A click that lands before the page hydrates opens nothing; try again until the panel opens. */
   async function openSettings() {
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(`${panel} !== null`, 5_000).then(
         () => true,
         () => false,
@@ -72,7 +72,7 @@ test("a member turns off collapsing long messages for one channel and back on", 
   const channel = await db.conversation.create({
     data: { workspaceId, channelName: `e2e-collapse-${process.pid}`, description: "" },
   });
-  const showMore = `[...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Show more")`;
+  const showMore = `[...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Show More")`;
   try {
     const member = await db.conversationMember.create({
       data: { conversationId: channel.id, workspaceId, userId: DEV_BROWSER_USER.id },

@@ -141,7 +141,7 @@ test("the search page finds a message and opens it in its channel", async () => 
     await browser("screenshot", join(artifacts, "no-results.png"));
 
     // The no-results state offers to clear the search, which empties the box and the URL.
-    await browser("eval", `${byText("button", "Clear search")}.click()`);
+    await browser("eval", `${byText("button", "Clear Search")}.click()`);
     await waitFor(`new URLSearchParams(location.search).get("q") === null`);
     await waitFor(`document.querySelector('input[type="search"]').value === ""`);
     await waitFor(`document.activeElement?.type === "search"`);

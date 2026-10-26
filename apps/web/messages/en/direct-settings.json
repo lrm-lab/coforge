@@ -1,6 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "direct_settings_open": "Conversation settings",
+  "direct_settings_open": "Conversation Settings",
   "direct_settings_label": "Direct message",
   "direct_settings_preferences": "Preferences",
   "direct_settings_pin": "Pin conversation",

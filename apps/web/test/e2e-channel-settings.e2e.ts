@@ -63,7 +63,7 @@ test("the channel settings panel edits info, preferences, archive and membership
       ),
     ]);
   const channelHeader = `[...document.querySelectorAll("header")].find((header) => header.querySelector("h1")?.textContent.startsWith("#"))`;
-  const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+  const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`;
   const clickText = (selector: string, text: string) =>
@@ -71,7 +71,7 @@ test("the channel settings panel edits info, preferences, archive and membership
   async function openPanel() {
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
         () => true,
         () => false,
@@ -125,7 +125,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channelId}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
 
@@ -133,7 +133,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     const headerButtons = await evaluate<string[]>(
       `[...${channelHeader}.querySelectorAll("button")].map((button) => button.getAttribute("aria-label") ?? button.textContent.trim())`,
     );
-    expect(headerButtons).toContain("Channel details and settings");
+    expect(headerButtons).toContain("Channel Details and Settings");
     expect(headerButtons).not.toContain("Members");
 
     await openPanel();
@@ -142,7 +142,7 @@ test("the channel settings panel edits info, preferences, archive and membership
       `[...document.querySelectorAll('[role="dialog"] h3')].some((heading) => heading.textContent.startsWith("Members"))`,
     );
     const identity = await evaluate<{ title: string; text: string }>(`(() => {
-      const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
+      const panel = document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]');
       return { title: panel.querySelector("h2").textContent, text: panel.textContent };
     })()`);
     expect(identity.title).toBe(`#${channelName}`);
@@ -152,8 +152,8 @@ test("the channel settings panel edits info, preferences, archive and membership
       "Info",
       "Preferences",
       "Actions",
-      "Archive channel",
-      "Leave channel",
+      "Archive Channel",
+      "Leave Channel",
     ])
       expect(identity.text).toContain(label);
     await waitFor(`document.querySelector('[role="dialog"]').textContent.includes("1 human")`);
@@ -178,9 +178,9 @@ test("the channel settings panel edits info, preferences, archive and membership
     // Unsaved edits: Escape asks before closing; Discard closes and keeps the saved text.
     await browser("fill", '[role="dialog"] textarea', "Never saved");
     await browser("press", "Escape");
-    await waitFor(`${byText("h2", "Unsaved changes")} !== undefined`);
+    await waitFor(`${byText("h2", "Unsaved Changes")} !== undefined`);
     await browser("screenshot", join(artifacts, "unsaved-prompt.png"));
-    await clickText("button", "Discard changes");
+    await clickText("button", "Discard Changes");
     await waitFor(`!(${panelOpen})`);
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).description,
@@ -197,7 +197,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     expect(preferred.channelMuted).toBe(true);
 
     // Archive: confirm, the panel closes and an archived notice replaces the composer.
-    await clickText("button", "Archive channel");
+    await clickText("button", "Archive Channel");
     await waitFor(`${byText("button", "Archive")} !== undefined`);
     await clickText("button", "Archive");
     await waitFor(`document.body.textContent.includes("This channel is archived.")`);
@@ -211,14 +211,14 @@ test("the channel settings panel edits info, preferences, archive and membership
     await clickText("button", "Unarchive");
     await waitFor(panelOpen);
     const archivedPanel = await evaluate<{ leave: boolean; nameDisabled: boolean }>(`(() => {
-      const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
+      const panel = document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]');
       return {
-        leave: panel.textContent.includes("Leave channel"),
+        leave: panel.textContent.includes("Leave Channel"),
         nameDisabled: panel.querySelector('input[type="text"]').disabled,
       };
     })()`);
     expect(archivedPanel).toEqual({ leave: false, nameDisabled: true });
-    await clickText("button", "Unarchive channel");
+    await clickText("button", "Unarchive Channel");
     await waitFor(`!document.body.textContent.includes("This channel is archived.")`);
     await browser("press", "Escape");
     await waitFor(`!(${panelOpen})`);
@@ -228,12 +228,12 @@ test("the channel settings panel edits info, preferences, archive and membership
 
     // Leave: confirm, the channel turns read-only with a Join button; rejoining restores it.
     await openPanel();
-    await clickText("button", "Leave channel");
+    await clickText("button", "Leave Channel");
     await waitFor(`${byText("button", "Leave")} !== undefined`);
     await clickText("button", "Leave");
-    await waitFor(`${byText("button", "Join channel")} !== undefined`);
+    await waitFor(`${byText("button", "Join Channel")} !== undefined`);
     expect((await viewerRow()).leftAt).not.toBeNull();
-    await clickText("button", "Join channel");
+    await clickText("button", "Join Channel");
     // The button reads "Joining…" while the join is in flight; the composer returns only once the
     // page has reloaded the viewer as a member.
     await waitFor(`document.querySelector("main textarea") !== null`);
@@ -243,12 +243,12 @@ test("the channel settings panel edits info, preferences, archive and membership
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/channel/${channelId}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
     );
     await openPanel();
     const phone = await evaluate<{ panelWidth: number; viewport: number }>(`(() => {
-      const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
+      const panel = document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]');
       return { panelWidth: panel.getBoundingClientRect().width, viewport: innerWidth };
     })()`);
     expect(phone.panelWidth).toBeLessThanOrEqual(phone.viewport);

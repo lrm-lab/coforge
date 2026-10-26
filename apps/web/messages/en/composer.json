@@ -1,10 +1,10 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "conversation_send": "Send",
-  "conversation_send_as_task": "Send as task",
+  "conversation_send_as_task": "Send as Task",
   "conversation_send_as_task_description": "Also adds it to the task board",
   "conversation_send_plain_description": "Sends a plain message, not a task",
-  "conversation_send_options": "More send options",
+  "conversation_send_options": "More Send Options",
   "conversation_sending": "Sending…",
   "notification_activation_desktop_title": "Your agents keep working after you leave.",
   "notification_activation_desktop_body": "Turn on notifications so you don't miss when they finish or need you.",

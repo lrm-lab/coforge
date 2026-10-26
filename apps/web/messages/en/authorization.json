@@ -1,7 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "app_authorization_sign_in_with": "Sign in with",
-  "app_authorization_sign_out": "Sign out",
+  "app_authorization_sign_out": "Sign Out",
   "app_authorization_connect_title": "{app} wants to connect to {workspace}",
   "app_authorization_this_workspace": "your Workspace",
   "app_authorization_use_account": "Sign in to {app} with your CoForge account, in a Workspace where it is installed.",

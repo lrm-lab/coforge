@@ -169,7 +169,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea');
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(body)});
-    await page.click("loc=role:button[name='Post comment']");
+    await page.click("loc=role:button[name='Post Comment']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(body)}, { timeout: 10000 });
     await page.reload();
     await page.waitForSelector(${JSON.stringify(preview)});

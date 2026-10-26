@@ -167,7 +167,7 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     ${selectAndComment('[role="dialog"] h2 + p')}
     await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("§ Setup"));
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(sectionBody)});
-    await page.click("loc=role:button[name='Post comment']");
+    await page.click("loc=role:button[name='Post Comment']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(sectionBody)}, { timeout: 10000 });
 
     await page.keyboard.press("Escape");
@@ -177,7 +177,7 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     ${selectAndComment('[role="dialog"] [data-anchor-row="45"] [role=cell]:last-child')}
     await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("Row 45"));
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(rowBody)});
-    await page.click("loc=role:button[name='Post comment']");
+    await page.click("loc=role:button[name='Post Comment']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(rowBody)}, { timeout: 10000 });
 
     await page.reload();
@@ -251,7 +251,7 @@ test("a TypeScript file labelled video/mp2t takes line comments; a real transpor
     ${selectAndComment('[role="dialog"] [data-anchor-line="30"]')}
     await page.waitForFunction(() => document.querySelector('[role="dialog"] form')?.innerText.includes("Line 30"));
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(lineBody)});
-    await page.click("loc=role:button[name='Post comment']");
+    await page.click("loc=role:button[name='Post Comment']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(lineBody)}, { timeout: 10000 });
 
     await page.reload();

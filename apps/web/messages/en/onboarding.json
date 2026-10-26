@@ -1,6 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "onboarding_title": "Finish setting up",
+  "onboarding_title": "Finish Setting Up",
   "onboarding_progress_label": "Setup progress",
   "onboarding_progress_count": "{done} of {total}",
   "onboarding_dismiss": "Dismiss the setup checklist",
@@ -15,8 +15,8 @@
   "onboarding_github_step_title": "Connect GitHub",
   "onboarding_github_step_description": "Agents can read and write the repositories you allow, and Projects can link a repository.",
   "onboarding_github_step_connect": "Connect GitHub",
-  "onboarding_github_step_install": "Choose repositories",
+  "onboarding_github_step_install": "Choose Repositories",
   "onboarding_github_step_reauthorize": "Reauthorize",
-  "onboarding_github_step_skip": "Skip for now",
+  "onboarding_github_step_skip": "Skip for Now",
   "onboarding_github_step_error": "Could not start GitHub. Try again, or skip for now."
 }

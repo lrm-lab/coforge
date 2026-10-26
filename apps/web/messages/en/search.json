@@ -10,7 +10,7 @@
   "search_failed_title": "Search failed",
   "search_failed_description": "The search could not be completed. Try again.",
   "search_retry": "Retry",
-  "search_load_more": "Load more",
+  "search_load_more": "Load More",
   "search_load_more_failed": "Could not load more results.",
   "search_archived": "Archived",
   "search_results_count": [
@@ -23,7 +23,7 @@
       }
     }
   ],
-  "search_clear": "Clear search",
+  "search_clear": "Clear Search",
   "search_results_count_more": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
@@ -57,7 +57,7 @@
   "search_sort_named": "Sort: {order}",
   "search_sort_relevant": "Relevant",
   "search_sort_recent": "Recent",
-  "search_clear_filters": "Clear all",
+  "search_clear_filters": "Clear All",
   "search_no_matching_messages": "No matching messages",
   "search_try_different_filters": "Try a different filter set.",
   "search_entities_heading": "In this Workspace",
@@ -72,7 +72,7 @@
   "search_frequent_heading": "Frequently used",
   "search_frequent_empty": "Channels, Agents and direct messages you open from search appear here.",
   "search_frequent_failed": "Could not load your frequently used places.",
-  "search_this_channel": "Search this channel",
+  "search_this_channel": "Search This Channel",
   "search_preview": "Search preview",
   "search_preview_failed": "This conversation could not be loaded.",
   "search_back_to_results": "Back to results",

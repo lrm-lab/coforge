@@ -182,7 +182,7 @@ test("a result previews beside the list and opens on a double click", async () =
       `[...document.querySelectorAll('${PREVIEW} [role="tab"]')].find((tab) => tab.textContent.trim() === "Tasks").click()`,
     );
     await waitFor(
-      `${param("view")} === "tasks" && location.pathname === "${workspacePath}/search" && [...document.querySelectorAll('${PREVIEW} button')].some((button) => button.textContent.trim() === "Create task")`,
+      `${param("view")} === "tasks" && location.pathname === "${workspacePath}/search" && [...document.querySelectorAll('${PREVIEW} button')].some((button) => button.textContent.trim() === "Create Task")`,
     );
     await browser("screenshot", join(artifacts, "tasks.png"));
     await browser(
@@ -214,7 +214,7 @@ test("a result previews beside the list and opens on a double click", async () =
     // the conversation's own page.
     await browser(
       "eval",
-      `document.querySelector('${PREVIEW} li[data-message-id="${saved!.id}"] [aria-label^="Reply in thread"]').click()`,
+      `document.querySelector('${PREVIEW} li[data-message-id="${saved!.id}"] [aria-label^="Reply in Thread"]').click()`,
     );
     await waitFor(
       `${param("threadRootId")} === "${saved!.id}" && location.pathname === "${workspacePath}/search"`,
@@ -271,8 +271,8 @@ test("a result previews beside the list and opens on a double click", async () =
     const saveButton = (scope: string, label: string) =>
       `document.querySelector('${scope} li[data-message-id="${inB.id}"] [aria-label="${label}"]')`;
     await browser("click", row(inB.id));
-    await waitFor(`${saveButton(PREVIEW, "Save message")} !== null`);
-    await browser("eval", `${saveButton(PREVIEW, "Save message")}.click()`);
+    await waitFor(`${saveButton(PREVIEW, "Save Message")} !== null`);
+    await browser("eval", `${saveButton(PREVIEW, "Save Message")}.click()`);
     await waitFor(`${saveButton(PREVIEW, "Remove from Saved")} !== null`);
     const opensBefore = await opensOfB();
     await browser("dblclick", row(inB.id));
@@ -281,9 +281,9 @@ test("a result previews beside the list and opens on a double click", async () =
     expect(await opensOfB()).toBe(opensBefore + 1);
     await waitFor(`${saveButton("main", "Remove from Saved")} !== null`);
     await browser("eval", `${saveButton("main", "Remove from Saved")}.click()`);
-    await waitFor(`${saveButton("main", "Save message")} !== null`);
+    await waitFor(`${saveButton("main", "Save Message")} !== null`);
     await browser("back");
-    await waitFor(`${saveButton(PREVIEW, "Save message")} !== null`);
+    await waitFor(`${saveButton(PREVIEW, "Save Message")} !== null`);
 
     // A message saved elsewhere meanwhile (another tab) shows saved when Chat is opened again: each
     // visit reads the Saved list afresh.
@@ -303,7 +303,7 @@ test("a result previews beside the list and opens on a double click", async () =
     await waitFor(`location.pathname === "${workspacePath}/channel/${channelB}"`);
     await waitFor(`${saveButton("main", "Remove from Saved")} !== null`);
     await browser("eval", `${saveButton("main", "Remove from Saved")}.click()`);
-    await waitFor(`${saveButton("main", "Save message")} !== null`);
+    await waitFor(`${saveButton("main", "Save Message")} !== null`);
     await browser("back");
     await browser("back");
     await browser("back");

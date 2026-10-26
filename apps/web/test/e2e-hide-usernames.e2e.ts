@@ -257,13 +257,13 @@ test("people are shown by their names, and no screen shows a username", async ()
 
     // A channel's members page: the roster and the add view search names, not usernames.
     await browser("open", `${base}/channel/${channel.id}`);
-    await waitFor(`document.querySelector('[aria-label="Channel details and settings"]') !== null`);
-    const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+    await waitFor(`document.querySelector('[aria-label="Channel Details and Settings"]') !== null`);
+    const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
     const panelText = () => evaluate<string>(`${panel}?.innerText ?? ""`);
     const roster = `${panel}?.querySelector('input[placeholder="Search members…"]') != null`;
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
+      await browser("click", '[aria-label="Channel Details and Settings"]');
       const opened = await waitFor(`${panel} !== null`).then(
         () => true,
         () => false,
