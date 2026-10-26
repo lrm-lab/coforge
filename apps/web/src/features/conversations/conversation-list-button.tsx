@@ -12,6 +12,8 @@ export const ConversationListContext = createContext<{
    * opens the conversation even when the URL does not change (the row that is already current). */
   closeList: () => void;
   detailVisible: boolean;
+  /** The back button's name, when the list is not Chat's conversations. */
+  backLabel?: string;
 } | null>(null);
 
 export function ConversationListButton() {
@@ -22,7 +24,7 @@ export function ConversationListButton() {
       icon={ArrowLeft}
       size="sm"
       color="tertiary"
-      aria-label={m.conversation_back_to_list()}
+      aria-label={navigation.backLabel ?? m.conversation_back_to_list()}
       onClick={navigation.showList}
       className="-ml-2 shrink-0 lg:hidden"
     />

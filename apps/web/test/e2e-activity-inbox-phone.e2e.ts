@@ -19,7 +19,8 @@ import {
 /**
  * The Activity page on a phone, in a real browser: the tabs under the title; a row opening its
  * conversation full-screen in place of the list, a step in history that the header's back arrow
- * (past a thread opened in the conversation) and the back gesture return from; a thread's row
+ * (past a thread opened in the conversation, and after a reload) and the back gesture return
+ * from; a thread's row
  * opening its thread alone; and a link naming a conversation opening it full-screen, its back
  * arrow returning to the list.
  *
@@ -93,7 +94,15 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry + 2);
     await browser("find", "role", "button", "click", "--name", "Back to chat");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
-    await browser("find", "role", "button", "click", "--name", "Back to conversations");
+    await browser("find", "role", "button", "click", "--name", "Back to Activity");
+    await browser("wait", "--fn", listAlone);
+    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
+    // A reload keeps that way back: the arrow still returns to the list's entry.
+    await browser("find", "text", "E2E phone unread", "click");
+    await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
+    await browser("reload");
+    await browser("wait", "--fn", `${shownInPane(newestId)} && ${hydrated}`);
+    await browser("find", "role", "button", "click", "--name", "Back to Activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // A thread's row opens the thread alone.
@@ -117,7 +126,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     // The list is hidden, not removed: crossing `lg` does not remount it.
     await browser("wait", "--fn", `${listHidden} === true`);
     await browser("screenshot", join(artifacts, "phone-open.png"));
-    await browser("find", "role", "button", "click", "--name", "Back to conversations");
+    await browser("find", "role", "button", "click", "--name", "Back to Activity");
     await browser(
       "wait",
       "--fn",

@@ -52,7 +52,12 @@ export function ActivityConversationPane({
     hostedLandingAfterConsume(Boolean(target.threadAlone)) === "clear" ? clearLanding : undefined;
   // The list is always mounted, so nothing closes it.
   const listControls = useMemo(
-    () => ({ showList: onClose, closeList: () => {}, detailVisible: true }),
+    () => ({
+      showList: onClose,
+      closeList: () => {},
+      detailVisible: true,
+      backLabel: m.activity_back_to_list(),
+    }),
     [onClose],
   );
   // Always provided, so showing the conversation in place of the thread keeps the pane mounted.

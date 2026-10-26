@@ -1,0 +1,41 @@
+{
+  "activity_inbox_filter_label": "筛选动态",
+  "activity_inbox_filter_all": "全部",
+  "activity_inbox_filter_unread": "未读",
+  "activity_inbox_filter_mentions": "提及",
+  "activity_inbox_all_conversations": "全部会话",
+  "activity_inbox_mark_all_read": "全部已读",
+  "activity_inbox_mark_read": "标为已读",
+  "activity_inbox_done": "标记为完成",
+  "activity_inbox_menu_done": "完成",
+  "activity_inbox_menu_label": "动态条目操作",
+  "activity_inbox_action_error": "操作没有保存，请重试。",
+  "activity_inbox_active_count": "{count} 个活跃",
+  "activity_inbox_new": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 条新消息"
+      }
+    }
+  ],
+  "activity_inbox_mention_badge": "你",
+  "activity_inbox_system_sender": "系统",
+  "activity_inbox_empty_title": "动态为空",
+  "activity_inbox_empty_description": "频道、私信和已关注的讨论会一直保留在这里，直到处理完成。",
+  "activity_inbox_empty_unread_title": "没有未读会话",
+  "activity_inbox_empty_mentions_title": "暂无提及",
+  "activity_inbox_empty_mentions_description": "有人在频道、私信或讨论中 @提到你时，会显示在这里。",
+  "activity_inbox_load_error": "动态加载失败。",
+  "activity_inbox_retry": "重试",
+  "activity_inbox_loading_more": "加载更多…",
+  "activity_inbox_loading": "正在加载动态…",
+  "activity_inbox_show_all": "显示全部",
+  "activity_inbox_load_more_error": "无法加载更多动态。",
+  "activity_inbox_dismiss": "关闭",
+  "activity_conversation_pane": "选中的会话",
+  "activity_conversation_loading": "正在加载会话…",
+  "activity_back_to_list": "返回动态",
+  "activity_conversation_failed": "无法加载这个会话。"
+}

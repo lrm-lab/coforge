@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { useCallback, useMemo } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 
 import {
@@ -14,6 +14,7 @@ import {
   parseHostedConversation,
   type HostedConversationTarget,
 } from "#src/features/conversations/conversation-page-search";
+import { useListEntryHistory } from "#src/features/conversations/list-entry-history";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { ActivityInboxPending } from "#src/features/inbox/activity-inbox-pending";
 import { ActivityInboxView } from "#src/features/inbox/activity-inbox-view";
@@ -83,25 +84,16 @@ function ActivityPage() {
       }),
     [navigate],
   );
-  const router = useRouter();
   const wide = useBreakpoint("lg");
-  // The list's history entry under a conversation opened from it below `lg`, until the list shows
-  // again.
-  const listEntry = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (open === undefined) listEntry.current = undefined;
-  }, [open]);
+  const listHistory = useListEntryHistory(open);
   // The open conversation lives in the URL, so a reload or a shared link reopens it. Below `lg` it
-  // takes the list's place, so opening it from the list pushes an entry (the phone's back gesture
-  // returns to the list); any other open replaces the entry. Only the list's view carries over:
-  // the previous conversation's tab, board view, thread, Task popup and Agent profile close with
-  // it, and a thread card opens its thread alone (`thread:` in `open`), without the conversation.
+  // takes the list's place, so opening it from the list pushes an entry (`useListEntryHistory`);
+  // any other open replaces the entry. Only the list's view carries over: the previous
+  // conversation's tab, board view, thread, Task popup and Agent profile close with it, and a
+  // thread card opens its thread alone (`thread:` in `open`), without the conversation.
   const onOpen = useCallback(
     (next: HostedConversationTarget) => {
-      // The committed location, not `open` above: the rows keep this callback across opens, and a
-      // second tap before the first open renders must not push again.
-      const push = !wide && router.latestLocation.search.open === undefined;
-      if (push) listEntry.current = router.history.location.state.__TSR_index;
+      const push = !wide && listHistory.openOverList();
       void navigate({
         search: (previous) => ({
           filter: previous.filter,
@@ -113,20 +105,15 @@ function ActivityPage() {
         replace: !push,
       });
     },
-    [navigate, router, wide],
+    [navigate, wide, listHistory],
   );
   // Closing the conversation (its back arrow below `lg`, a thread's close) returns to the list,
   // closing everything the conversation had open: back to the list's entry when the conversation
-  // was opened over it (past the entries a thread or profile opened in it pushed), else by
-  // replacing the entry with the list in its current view.
+  // was opened over it, else by replacing the entry with the list in its current view.
   const onClose = useCallback(() => {
-    const index = router.history.location.state.__TSR_index;
-    if (listEntry.current !== undefined && index > listEntry.current) {
-      router.history.go(listEntry.current - index);
-      return;
-    }
+    if (listHistory.backToList()) return;
     void navigate({ search: (previous) => ({ filter: previous.filter }), replace: true });
-  }, [navigate, router]);
+  }, [navigate, listHistory]);
   // Kept by its fields, so the pane keeps its target while the list's view changes. A `thread:`
   // address shows the thread rooted at `msg` alone for as long as `open` says so, whatever else
   // the pane opens over it (a profile, a Task popup); with no root it shows the conversation.
