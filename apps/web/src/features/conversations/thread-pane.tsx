@@ -39,7 +39,7 @@ export function ThreadPane({
     return rootSlot ? (
       <>
         {rootSlot}
-        <ThreadLoadStatus load={load} onRetry={retry} />
+        <ThreadLoadStatus load={load} withRoot={false} onRetry={retry} />
       </>
     ) : (
       <ThreadRootState load={load} context={threadContext} onClose={onClose} onRetry={retry} />

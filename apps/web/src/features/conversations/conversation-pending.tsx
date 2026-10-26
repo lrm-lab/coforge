@@ -3,6 +3,7 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { COMPOSER_FRAME_CLASS } from "./composer-frame";
+import { MessageSkeleton } from "./message-skeleton";
 import { ConversationBackHeader } from "./conversation-list-button";
 
 /**
@@ -63,17 +64,10 @@ export function ConversationPending({ label = m.conversation_loading() }: { labe
         {/* The same reading column as the loaded stream, so rows do not jump sideways on load. */}
         <div
           aria-hidden="true"
-          className={`${MESSAGE_COLUMN_CLASS} space-y-8 p-4 motion-safe:animate-pulse md:p-6`}
+          className={`${MESSAGE_COLUMN_CLASS} pt-6 motion-safe:animate-pulse`}
         >
           {["w-4/5", "w-3/5", "w-2/3", "w-1/2"].map((width) => (
-            <div key={width} className="flex gap-3">
-              <Skeleton className="size-8 shrink-0 rounded-full" />
-              <div className="min-w-0 flex-1 space-y-2.5 pt-1">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className={`h-3 ${width}`} />
-                <Skeleton className="h-3 w-2/5" />
-              </div>
-            </div>
+            <MessageSkeleton key={width} width={width} />
           ))}
         </div>
       </div>
