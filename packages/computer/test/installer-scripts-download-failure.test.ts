@@ -1,14 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { run, serveStub, servers, temporaryDirectories } from "./installer-script-runner";
+import {
+  cleanupInstallerFixtures,
+  run,
+  serveStub,
+  temporaryDirectories,
+} from "./installer-script-runner";
 
-afterEach(async () => {
-  for (const server of servers.splice(0)) server.stop(true);
-  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
-});
+afterEach(cleanupInstallerFixtures);
 
 test("install.sh exits 75 when the feed answers 5xx or cannot be reached, only for the Computer's modes", async () => {
   const failing = serveStub({ fetch: () => new Response("down", { status: 500 }) });

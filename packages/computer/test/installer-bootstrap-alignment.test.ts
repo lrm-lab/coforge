@@ -1,14 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { run, serveStub, servers, temporaryDirectories } from "./installer-script-runner";
+import {
+  cleanupInstallerFixtures,
+  run,
+  serveStub,
+  temporaryDirectories,
+} from "./installer-script-runner";
 
-afterEach(async () => {
-  for (const server of servers.splice(0)) server.stop(true);
-  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
-});
+afterEach(cleanupInstallerFixtures);
 
 const target = process.platform === "darwin" ? "darwin-arm64" : "linux-x64";
 const installerPath = `/installer/0.1.0/${target}/coforge-installer.gz`;

@@ -1,15 +1,18 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 
-import { run, script, serveStub, servers, temporaryDirectories } from "./installer-script-runner";
+import {
+  cleanupInstallerFixtures,
+  run,
+  script,
+  serveStub,
+  temporaryDirectories,
+} from "./installer-script-runner";
 import { bootstrapRequests, currentTarget, serveFixture } from "./installer-script-fixture";
 
-afterEach(async () => {
-  for (const server of servers.splice(0)) server.stop(true);
-  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
-});
+afterEach(cleanupInstallerFixtures);
 
 test("install.sh prepares cross-target gzip once without executing or configuring PATH", async () => {
   const directory = await mkdtemp(join(tmpdir(), "coforge-prepare-"));

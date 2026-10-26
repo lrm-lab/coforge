@@ -1,15 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { run, servers, temporaryDirectories } from "./installer-script-runner";
+import { cleanupInstallerFixtures, run, temporaryDirectories } from "./installer-script-runner";
 import { bootstrapRequests, serveFixture } from "./installer-script-fixture";
 
-afterEach(async () => {
-  for (const server of servers.splice(0)) server.stop(true);
-  await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
-});
+afterEach(cleanupInstallerFixtures);
 
 test("install.sh forwards repair to the fetched installer without install-only PATH work", async () => {
   const directory = await mkdtemp(join(tmpdir(), "coforge-repair-script-"));
