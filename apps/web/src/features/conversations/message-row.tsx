@@ -8,7 +8,6 @@ import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria
 
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { useAppToast } from "#src/components/ui/toast";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog } from "#src/components/application/modals/modal";
@@ -50,6 +49,7 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { clockLabel } from "#src/lib/dates";
 import { gutterClockLabel } from "./gutter-clock-label";
 import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
+import { SystemMessageRow } from "./system-message-row";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
@@ -156,7 +156,7 @@ export function groupsWithPrevious(
  * their real heights inside the viewport. The resulting shift re-triggers scroll anchoring, which
  * changes which rows count as near the viewport, which lays out more of them — a feedback loop
  * that pins the main thread until the renderer is killed. */
-const ROW_CLASS = "flex flex-col";
+export const ROW_CLASS = "flex flex-col";
 
 /**
  * One history row: optional day divider, then the message with its hover actions.
@@ -429,50 +429,17 @@ export const MessageRow = memo(function MessageRow({
       document.removeEventListener("selectionchange", onSelectionChange);
     };
   }, [onQuoteSelection, readQuoteSelection]);
-  // A system message (task/membership notices, etc.) is not a person talking: it carries no
-  // avatar and no sender heading, and renders as a compact, muted line of plain text in the
-  // stream — like Slack's channel notices. It still carries the unread divider and the jump
-  // highlight, since the unread run can begin at a notice and a jump can land on one. The
-  // wrapper (`li`) is the same in both branches, so a system row costs the browser exactly what a
-  // normal one does. A run of two or more notices is folded into one summary line by
-  // `SystemMessageGroup`, which renders these rows when opened.
-  if (message.senderKind === "system") {
+  // A system notice renders as one muted line, not a person talking (`SystemMessageRow`).
+  if (message.senderKind === "system")
     return (
-      <li data-message-id={message.id} className={ROW_CLASS}>
-        {unreadStartsHere && <UnreadDivider />}
-        {dayChanged && <DayDivider value={message.createdAt} locale={dateLocale} />}
-        <div
-          id={`message-${message.id}`}
-          data-message="system"
-          data-scroll-anchor
-          className={cn(
-            "group/message flex scroll-m-6 items-baseline gap-2 px-4 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
-            highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
-          )}
-        >
-          {/* System bodies are short plain text (task/membership notices, authored with a plain
-              `@handle`, not a mention token), so they render as a single muted line rather than
-              full Markdown. One line, never wrapped: overflow becomes an ellipsis (the boss's
-              ruling on the phone — a notice is skimmable or it is noise). The span is a flex
-              item with min-w-0, so `truncate` collapses against the hover timestamp and works. */}
-          {/* The tooltip wraps the span itself: our `Tooltip` already renders RAC's
-              `TooltipTrigger` around its child, and the wrapper version put a `<button>` between
-              the flex row and this span — so the span's `min-w-0 flex-1` stopped governing the
-              row, the row grew past the container, and the whole stream scrolled sideways on a
-              phone. As a direct child the span is the flex item again, so `truncate` clips. */}
-          <Tooltip title={message.body}>
-            <span className="min-w-0 flex-1 truncate">{message.body}</span>
-          </Tooltip>
-          <time
-            dateTime={new Date(message.createdAt).toISOString()}
-            className="shrink-0 tabular-nums opacity-0 group-hover/message:opacity-100"
-          >
-            {clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
-          </time>
-        </div>
-      </li>
+      <SystemMessageRow
+        message={message}
+        unreadStartsHere={unreadStartsHere}
+        dayChanged={dayChanged}
+        highlighted={highlighted}
+        dateLocale={dateLocale}
+      />
     );
-  }
   // #544's whole-message copy (the IM-standard "Copy text", the only copy path for a collapsed,
   // unselectable body) rides the action strip on desktop and the tap action sheet on the mobile
   // shell; the sheet therefore also opens for a message with no thread and no reactions.
