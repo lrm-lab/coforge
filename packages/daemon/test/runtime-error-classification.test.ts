@@ -114,11 +114,11 @@ const CURSOR_FREE_PLAN_FAILURE =
 
 test("Cursor's free-plan named-model failure is classified as a plan access error", () => {
   expect(classifyRuntimeErrorText(CURSOR_FREE_PLAN_FAILURE)).toEqual({
-    errorClass: RUNTIME_ERROR_CLASS.RUNTIME,
-    errorReason: "runtime_failure",
-    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
-    requiredAction: "none",
-    takesAgentOffline: false,
+    errorClass: RUNTIME_ERROR_CLASS.MODEL_CONFIG,
+    errorReason: "model_config_error",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
+    requiredAction: "user_model_access",
+    takesAgentOffline: true,
   });
 });
 

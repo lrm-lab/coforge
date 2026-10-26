@@ -90,10 +90,12 @@ export type RuntimeErrorClassification = Readonly<{
 }>;
 
 /** The provider plan does not include the configured model — never a transient capacity limit.
- * Mirrored from the reference Computer's `RUNTIME_PLAN_ACCESS_PATTERNS`. */
+ * Mirrored from the reference Computer's `RUNTIME_PLAN_ACCESS_PATTERNS`, plus Cursor's own
+ * free-plan wording ("Named models unavailable Free plans can only use Auto"). */
 const RUNTIME_PLAN_ACCESS_PATTERNS = [
   /\b(?:subscription|plan|tier)\b[^\n.]{0,80}\b(?:does not|doesn't|do not|don't|not)\b[^\n.]{0,40}\b(?:include|allow|support|grant)\b[^\n.]{0,40}\b(?:access|model)\b/i,
   /\b(?:model|access)\b[^\n.]{0,80}\b(?:not|isn't|is not)\b[^\n.]{0,20}\b(?:included|available|enabled|allowed)\b[^\n.]{0,40}\b(?:subscription|plan|tier)\b/i,
+  /\bnamed models? unavailable\b[^\n]{0,40}\bfree plans?\b[^\n.]{0,40}\bonly use\b/i,
 ];
 
 /** Wording that marks an apparently plan-shaped message as a transient limit instead —
