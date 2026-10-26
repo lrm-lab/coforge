@@ -153,13 +153,16 @@ function buildRuntimeContextSection(context: CoforgeAgentPromptContext): string 
   return lines.join("\n");
 }
 
+const COMMUNICATION_STYLE = `## Communication style
+Be brief and useful for decisions/actions. Skip logs, command transcripts, task status, checklists and IDs unless requested or needed for a blocker/decision. Finish: outcome, caveat, next owner; details in a report. With people (replies, mentions, DMs, shared threads), answer first in plain full sentences; explain jargon once. A colleague without this thread should understand on first reading.`;
+
 export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext): string {
   const rawName = context.identity?.displayName || context.identity?.name;
   const who = rawName
     ? `You are "${sanitizeQuotedName(rawName)}", an AI agent in CoForge.`
     : "You are an AI agent in CoForge.";
   const guide = buildCoforgeCliGuideSections(context);
-  const sections = [who, buildRuntimeContextSection(context)];
+  const sections = [who, buildRuntimeContextSection(context), COMMUNICATION_STYLE];
   // Fence agents have no shell. The ordinary send heredoc taught copy-prone models
   // a `message` key; channel I/O is the tool examples in the Memory Agent section.
   if (context.toolProfile) {

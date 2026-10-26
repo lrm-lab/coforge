@@ -173,8 +173,8 @@ test("provider-specific rules remain available once when supplied", () => {
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
 
-test("the fixed transport guidance stays within a 3KB budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(3072);
+test("the shared standing guidance stays within a 3.5KB budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(3584);
 });
 
 test("the openviking-memory profile queries before retrieval Offers and protects tenant secrets", () => {
@@ -445,4 +445,25 @@ test("the section stays within its byte budget and counts the apps that did not 
   expect(shown).toBeLessThan(20);
   expect(section).toContain(`\n- and ${20 - shown} more: see \`coforge app list\`\n`);
   expect(appsSectionFor({ apps: apps.slice(0, 2) })).not.toContain("more: see");
+});
+
+test("shares communication style with platform assistants", () => {
+  for (const identity of [undefined, { systemKind: "workspace-assistant" as const }]) {
+    const prompt = buildCoforgeAgentInstructions({ agentWorkspaceDirectory: directory, identity });
+    const style = prompt.indexOf("## Communication style\n");
+    expect(style).toBeGreaterThan(prompt.indexOf("## Current Runtime Context\n"));
+    expect(style).toBeLessThan(prompt.indexOf("## CoForge communication\n"));
+    expect(prompt.match(/## Communication style\n/gu)).toHaveLength(1);
+    for (const rule of [
+      "decisions/actions",
+      "logs, command transcripts, task status, checklists and IDs",
+      "blocker/decision",
+      "outcome, caveat, next owner",
+      "details in a report",
+      "plain full sentences",
+      "explain jargon",
+      "first reading",
+    ])
+      expect(prompt).toContain(rule);
+  }
 });
