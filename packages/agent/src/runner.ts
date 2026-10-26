@@ -1,15 +1,10 @@
-#!/usr/bin/env bun
-
 import {
   type CreateAgentSessionRuntimeFactory,
   createAgentSessionFromServices,
-  createAgentSessionRuntime,
   createAgentSessionServices,
   createBashTool,
   defineTool,
-  getAgentDir,
   ModelRuntime,
-  runRpcMode,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import {
@@ -794,14 +789,4 @@ async function refreshPiModelCatalog(
     if (force) throw error;
     // A catalog refresh must never fail the launch.
   }
-}
-
-if (import.meta.main) {
-  const cwd = process.cwd();
-  const runtime = await createAgentSessionRuntime(createRuntime, {
-    cwd,
-    agentDir: getAgentDir(),
-    sessionManager: SessionManager.inMemory(cwd),
-  });
-  await runRpcMode(runtime);
 }

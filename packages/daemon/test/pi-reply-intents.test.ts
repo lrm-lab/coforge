@@ -1,7 +1,7 @@
 import { piRuntimeHost } from "#src/code-agent/pi/host";
 import { describe, expect, test } from "bun:test";
-import { PiReplyIntents } from "@lrm/coforge-anvil";
-import type { PiSessionEvent } from "@lrm/coforge-anvil";
+import { PiReplyIntents } from "@lrm/coforge-anvil/pi";
+import type { PiSessionEvent } from "@lrm/coforge-anvil/pi";
 
 // The SDK's `toolcall_*` events name the call only through `partial.content[contentIndex]`
 // (@earendil-works/pi-ai 1.4.0 `AssistantMessageEvent`, `ToolCall`), and carry the arguments as

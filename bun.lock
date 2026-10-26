@@ -260,7 +260,7 @@
       "name": "@coforge/agent",
       "version": "0.1.0",
       "bin": {
-        "coforge-agent": "./src/runner.ts",
+        "coforge-agent": "./src/runner-main.ts",
       },
       "dependencies": {
         "@earendil-works/pi-ai": "1.4.0",

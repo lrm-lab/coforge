@@ -1,4 +1,4 @@
-import type { PiRuntimeHost } from "@lrm/coforge-anvil";
+import type { PiRuntimeHost } from "@lrm/coforge-anvil/pi";
 import { getAgentDir } from "@coforge/agent";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";

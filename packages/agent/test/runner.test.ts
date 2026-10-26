@@ -90,7 +90,7 @@ Use this skill only for the startup test.
   );
 
   const child = Bun.spawn({
-    cmd: [process.execPath, new URL("../src/runner.ts", import.meta.url).pathname],
+    cmd: [process.execPath, new URL("../src/runner-main.ts", import.meta.url).pathname],
     cwd: workspace,
     env: {
       HOME: workspace,
@@ -155,7 +155,7 @@ test("does not become ready when a workspace skill is invalid", async () => {
 
 function spawnRunner(workspace: string): Bun.Subprocess<"pipe", "pipe", "pipe"> {
   return Bun.spawn({
-    cmd: [process.execPath, new URL("../src/runner.ts", import.meta.url).pathname],
+    cmd: [process.execPath, new URL("../src/runner-main.ts", import.meta.url).pathname],
     cwd: workspace,
     env: {
       HOME: workspace,

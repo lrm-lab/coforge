@@ -1,11 +1,8 @@
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { getCoforgeAgentDir, getCoforgeSessionDir } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import {
-  ModelProviderSettingError,
-  type CodeAgentProvider,
-  createPiAgentSession,
-} from "@lrm/coforge-anvil";
+import { ModelProviderSettingError, type CodeAgentProvider } from "@lrm/coforge-anvil";
+import { createPiAgentSession } from "@lrm/coforge-anvil/pi";
 import { evalMemoryOfferOnly } from "#src/code-agent/agent-instructions";
 import { piRuntimeHost } from "./host";
 

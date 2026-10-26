@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
+import { PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil/pi";
 import { discoverCodeAgentCatalogs } from "#src/code-agent/runtime-inventory";
 import { inventoryCachePath } from "#src/code-agent/runtime-inventory-cache";
 import { captureDaemonLogs } from "./log-capture";

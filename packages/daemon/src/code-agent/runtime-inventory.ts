@@ -18,11 +18,13 @@ import {
   discoverGrokCatalog,
   discoverAntigravityCatalog,
   CATALOG_DISCOVERY_TIMEOUT_MS,
+} from "@lrm/coforge-anvil";
+import {
   discoverPiCatalog,
   piAgentDirectory,
   PI_CATALOG_DISCOVERY_TIMEOUT_MS,
   type PiModelDiscovery,
-} from "@lrm/coforge-anvil";
+} from "@lrm/coforge-anvil/pi";
 import { runCatalogCommand } from "./catalog-command";
 import {
   externalCodeAgent,

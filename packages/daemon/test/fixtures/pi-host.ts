@@ -1,4 +1,4 @@
-import { PiProvider } from "@lrm/coforge-anvil";
+import { PiProvider } from "@lrm/coforge-anvil/pi";
 import { piRuntimeHost } from "#src/code-agent/pi/host";
 
 export function piProvider() {

@@ -5,8 +5,8 @@ import {
   OPENCODE_VERBOSE_MODELS_TIMEOUT_MS,
   PROCESS_TREE_EXIT_GRACE_MS,
   CATALOG_DISCOVERY_TIMEOUT_MS,
-  PI_CATALOG_DISCOVERY_TIMEOUT_MS,
 } from "@lrm/coforge-anvil";
+import { PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil/pi";
 
 /**
  * The longest a catalog discovery pass over spawned provider processes can run before the product

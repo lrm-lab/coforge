@@ -4,7 +4,6 @@ import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import {
   AntigravityProvider,
-  PiProvider,
   type RuntimeAuthAdapter,
   type RuntimeAuthProvider,
   type CodeAgentProvider,
@@ -13,6 +12,7 @@ import {
   KiroProvider,
   GrokProvider,
 } from "@lrm/coforge-anvil";
+import { PiProvider } from "@lrm/coforge-anvil/pi";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import { ClaudeRuntimeAuthAdapter } from "#src/code-agent/claude-code/auth";
