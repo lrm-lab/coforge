@@ -12,7 +12,8 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * built Web with development skip-auth, PostgreSQL, Redis, Centrifugo and ego-browser.
  * DATABASE_URL, COFORGE_E2E_WEB_URL, COFORGE_E2E_CENTRIFUGO_URL and COFORGE_FILE_STORAGE_DIR must
  * name that stack. Creates one channel with a Markdown, a CSV and two `.ts` files (TypeScript and an
- * MPEG transport stream, both labelled `video/mp2t`) and deletes them afterwards.
+ * MPEG transport stream, both labelled `video/mp2t`) and a log past the text preview's bound, and
+ * deletes them afterwards.
  * Screenshots: .amp/e2e/attachment-comment-anchors/. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
@@ -44,6 +45,8 @@ const source = Array.from({ length: 40 }, (_, i) => `export const value${i + 1} 
 const streamName = `clip-${suffix}.ts`;
 // Two 188-byte MPEG-TS packets: the 0x47 sync byte, a header, then binary payload with NULs.
 const stream = new Uint8Array(376).map((_, i) => (i % 188 === 0 ? 0x47 : (i * 37) % 256));
+const largeName = `big-${suffix}.log`;
+const large = "x".repeat(96 * 1024 + 1);
 const lineBody = `Line 30 needs a type ${suffix}`;
 const sectionBody = `Setup needs a version ${suffix}`;
 const rowBody = `Row 45 looks wrong ${suffix}`;
@@ -97,6 +100,7 @@ beforeAll(async () => {
       [csvName, csv, "text/csv"],
       [sourceName, source, "video/mp2t"],
       [streamName, stream, "video/mp2t"],
+      [largeName, large, "text/plain"],
     ] as const
   ).entries()) {
     const objectKey = `e2e/comment-anchors/${suffix}-${position}/original`;
@@ -243,9 +247,17 @@ test("a TypeScript file labelled video/mp2t takes line comments; a real transpor
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
     await page.click(${JSON.stringify(open(streamName))});
-    await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes("This file could not be previewed"), undefined, { timeout: 10000 });
-    if (await page.evaluate(() => !!document.querySelector('[role="dialog"] [data-anchor-line]')))
+    // Read before the dialog opens: not UTF-8, so only its discussion opens, as for any file
+    // without a preview.
+    await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes("Comments here relate only to"), undefined, { timeout: 10000 });
+    if (await page.evaluate(() => !!document.querySelector('[role="dialog"] [data-anchor-line], [role="dialog"] pre')))
       throw new Error("binary rendered as lines");
+
+    // A log past the 96 KB text bound is not read at all: its card opens the discussion.
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+    await page.click(${JSON.stringify(`button[aria-label="Comments on ${largeName}"]`)});
+    await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes("Comments here relate only to"), undefined, { timeout: 10000 });
     await page.waitForTimeout(1000);
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "transport-stream.png"))} }));
     console.log("E2E_TS_BINARY_REFUSED");

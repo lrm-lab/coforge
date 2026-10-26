@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import {
   attachmentPreviewKind,
   isFrameableDocumentUrl,
-  isTextContent,
+  previewKindFor,
+  previewText,
 } from "#src/features/conversations/attachment-preview-kind";
 
 const APP_ORIGIN = "https://app.coforge.cn";
@@ -129,35 +130,35 @@ describe("the other kinds are decided by name, then by content type", () => {
   });
 });
 
-describe("a file named as text previews only when its bytes are text", () => {
-  const utf8 = (value: string) => new TextEncoder().encode(value);
-
-  test("UTF-8 text passes, including a multi-byte character cut by the end of the checked head", () => {
-    expect(isTextContent(utf8("export const answer = 42;\n"))).toBe(true);
-    expect(isTextContent(new Uint8Array())).toBe(true);
-    // "中" is three bytes and "🚀" four: the head ends two bytes into the first, one into the second.
-    for (const [padding, character] of [
-      [2, "中"],
-      [1, "🚀"],
-    ] as const) {
-      const cut = new Uint8Array([
-        ...new Uint8Array(8 * 1024 - padding).fill(0x61),
-        ...utf8(character),
-      ]);
-      expect(isTextContent(cut)).toBe(true);
-    }
+describe("a text preview is bounded as in Raft and shows only UTF-8 text", () => {
+  const file = (fileName: string, sizeBytes: number) => ({
+    fileName,
+    contentType: "application/octet-stream",
+    sizeBytes,
   });
 
-  test("a NUL or invalid UTF-8 in the head marks the file as binary", () => {
+  test("text up to 96 KB and Markdown up to 64 KB preview; past that only the discussion opens", () => {
+    expect(previewKindFor(file("server.log", 96 * 1024), APP_ORIGIN)).toBe("text");
+    expect(previewKindFor(file("server.log", 96 * 1024 + 1), APP_ORIGIN)).toBeNull();
+    expect(previewKindFor(file("notes.md", 64 * 1024), APP_ORIGIN)).toBe("markdown");
+    expect(previewKindFor(file("notes.md", 64 * 1024 + 1), APP_ORIGIN)).toBeNull();
+    // CSV and HTML keep their larger bound; media is not a text preview at all.
+    expect(previewKindFor(file("data.csv", 2 * 1024 * 1024), APP_ORIGIN)).toBe("csv");
+    expect(previewKindFor(file("data.csv", 2 * 1024 * 1024 + 1), APP_ORIGIN)).toBeNull();
+    expect(previewKindFor(file("page.html", 1024 * 1024), APP_ORIGIN)).toBe("html");
+    expect(previewKindFor(file("clip.mp4", 40 * 1024 * 1024), APP_ORIGIN)).toBe("video");
+  });
+
+  test("the whole file must decode as UTF-8 and hold more than whitespace", () => {
+    const utf8 = (value: string) => new TextEncoder().encode(value);
+    expect(previewText(utf8("export const answer = 42;\n"))).toBe("export const answer = 42;\n");
+    expect(previewText(utf8("中文 🚀"))).toBe("中文 🚀");
+    expect(previewText(new Uint8Array())).toBeNull();
+    expect(previewText(utf8(" \n\t "))).toBeNull();
     // An MPEG transport stream: 188-byte packets opening with the 0x47 sync byte.
-    const packet = new Uint8Array(188);
-    packet.set([0x47, 0x40, 0x00, 0x10]);
-    expect(isTextContent(packet)).toBe(false);
-    expect(isTextContent(new Uint8Array([0x61, 0xff, 0x62]))).toBe(false);
-  });
-
-  test("bytes past the checked head do not count", () => {
-    const tail = new Uint8Array([...new Uint8Array(8 * 1024).fill(0x61), 0xff, 0x00]);
-    expect(isTextContent(tail)).toBe(true);
+    const packet = new Uint8Array(188).map((_, i) => (i === 0 ? 0x47 : (i * 37) % 256));
+    expect(previewText(packet)).toBeNull();
+    // One bad byte anywhere, not only near the start, rules the file out.
+    expect(previewText(new Uint8Array([...utf8("a".repeat(20_000)), 0xff]))).toBeNull();
   });
 });

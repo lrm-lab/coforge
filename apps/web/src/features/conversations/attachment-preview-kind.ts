@@ -179,7 +179,7 @@ export function attachmentPreviewKind(
   if (MARKDOWN_EXTENSIONS.has(extension)) return "markdown";
   if (HTML_EXTENSIONS.has(extension)) return "html";
   // A `.ts` file usually arrives as `video/mp2t`, the MIME table's entry for an MPEG transport
-  // stream, even when it is TypeScript; the bytes tell the two apart (`isTextContent`).
+  // stream, even when it is TypeScript; the bytes tell the two apart (`previewText`).
   if (TEXT_EXTENSIONS.has(extension)) return "text";
   if (CSV_EXTENSIONS.has(extension)) return "csv";
   const media = MEDIA_TYPES.get(extension);
@@ -191,23 +191,48 @@ export function attachmentPreviewKind(
   return null;
 }
 
-/** How much of a file `isTextContent` reads: enough to meet a binary format's header and tables. */
-const TEXT_SNIFF_BYTES = 8 * 1024;
+/**
+ * The most a text preview reads, per kind, as in Raft 1.0.53 for text and Markdown. A larger file
+ * has no preview (its discussion still opens), so neither the card nor the server offers a place
+ * in it to comment on.
+ */
+export const TEXT_PREVIEW_MAX_BYTES = {
+  markdown: 64 * 1024,
+  text: 96 * 1024,
+  csv: 2 * 1024 * 1024,
+  html: 2 * 1024 * 1024,
+} as const;
+
+type TextPreviewKind = keyof typeof TEXT_PREVIEW_MAX_BYTES;
+
+export const isTextPreviewKind = (kind: AttachmentPreviewKind | null): kind is TextPreviewKind =>
+  kind !== null && kind in TEXT_PREVIEW_MAX_BYTES;
+
+/** `attachmentPreviewKind`, with a text kind dropped when the file is past its limit. */
+export function previewKindFor(
+  file: { fileName: string; contentType: string; sizeBytes: number; previewUrl?: string },
+  applicationOrigin: string | undefined = globalThis.location?.origin,
+): AttachmentPreviewKind | null {
+  const kind = attachmentPreviewKind(
+    file.fileName,
+    file.contentType,
+    file.previewUrl,
+    applicationOrigin,
+  );
+  return isTextPreviewKind(kind) && file.sizeBytes > TEXT_PREVIEW_MAX_BYTES[kind] ? null : kind;
+}
 
 /**
- * Whether a file named as text really holds text: its first bytes are valid UTF-8 and carry no NUL.
- * A binary file under a text name (an MPEG transport stream saved as `.ts`, a mislabelled upload)
- * fails both at once. Only the head is checked, so one stray byte deep inside an older log does not
- * keep the whole file from previewing.
+ * A text preview's content, or `null` when there is nothing to show: the whole file must decode as
+ * UTF-8 (a binary file under a text name, such as an MPEG transport stream saved as `.ts`, does
+ * not) and hold more than whitespace, as in Raft.
  */
-export function isTextContent(bytes: Uint8Array): boolean {
-  const head = bytes.subarray(0, TEXT_SNIFF_BYTES);
-  if (head.includes(0)) return false;
+export function previewText(bytes: Uint8Array): string | null {
+  let text: string;
   try {
-    // `stream` lets a multi-byte character cut by the end of the head pass as incomplete.
-    new TextDecoder("utf-8", { fatal: true }).decode(head, { stream: true });
-    return true;
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    return false;
+    return null;
   }
+  return text.trim() ? text : null;
 }

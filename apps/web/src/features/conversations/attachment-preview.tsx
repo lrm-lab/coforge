@@ -2,18 +2,12 @@ import { useEffect, useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
-import {
-  isTextContent,
-  mediaMimeType,
-  type AttachmentPreviewKind,
-} from "./attachment-preview-kind";
+import { mediaMimeType, type AttachmentPreviewKind } from "./attachment-preview-kind";
 import type { Anchoring } from "./attachment-anchoring";
 import { LinesPreview, MarkdownPreview } from "./anchored-previews";
 import { CsvPreview } from "./csv-preview";
 import { HtmlRegionPreview } from "./html-region-preview";
 
-/** Text previews are for a look, and the bytes travel through the authenticated backend route. */
-const TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
 /** Media has no range requests here (see `MediaPreview`), so the whole file is held in memory;
  * past this the reader is better served by the download. */
 const MEDIA_PREVIEW_MAX_BYTES = 50 * 1024 * 1024;
@@ -100,6 +94,7 @@ export function AttachmentPreview({
   kind,
   href,
   previewUrl,
+  text,
   anchoring,
   commentsOpen,
 }: {
@@ -109,6 +104,8 @@ export function AttachmentPreview({
   href: string;
   /** The signed delivery URL; required for `pdf`, unused by the other kinds. */
   previewUrl?: string;
+  /** A text kind's content, read before the preview opens (`readPreviewText`). */
+  text?: string;
   /** Lets the reader comment on a place in a Markdown, text, CSV or HTML file. */
   anchoring?: Anchoring;
   /** Whether the comments show beside the preview (an HTML file's comment mode needs them). */
@@ -122,11 +119,13 @@ export function AttachmentPreview({
     );
   if (kind === "video" || kind === "audio")
     return <MediaPreview fileName={fileName} kind={kind} href={href} />;
+  if (text === undefined)
+    return <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />;
   return (
     <TextPreview
       fileName={fileName}
       kind={kind}
-      href={href}
+      text={text}
       anchoring={anchoring}
       commentsOpen={commentsOpen}
     />
@@ -162,45 +161,16 @@ function PdfPreview({ fileName, previewUrl }: { fileName: string; previewUrl: st
 function TextPreview({
   fileName,
   kind,
-  href,
+  text,
   anchoring,
   commentsOpen,
 }: {
   fileName: string;
   kind: "markdown" | "html" | "text" | "csv";
-  href: string;
+  text: string;
   anchoring?: Anchoring;
   commentsOpen?: boolean;
 }) {
-  const blob = useAttachmentBlob(href, TEXT_PREVIEW_MAX_BYTES);
-  // `undefined` while the bytes are read, `null` when they are not text.
-  const [text, setText] = useState<string | null | undefined>(undefined);
-  useEffect(() => {
-    if (blob.status !== "ready") {
-      setText(undefined);
-      return;
-    }
-    let active = true;
-    void blob.value.arrayBuffer().then((buffer) => {
-      if (!active) return;
-      const bytes = new Uint8Array(buffer);
-      setText(isTextContent(bytes) ? new TextDecoder().decode(bytes) : null);
-    });
-    return () => {
-      active = false;
-    };
-  }, [blob]);
-
-  if (blob.status !== "ready") return <PreviewStatus state={blob} href={href} />;
-  if (text === null)
-    return <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />;
-  if (text === undefined)
-    return (
-      <p className="p-4 text-sm text-tertiary sm:p-6">
-        {m.conversation_attachment_preview_loading()}
-      </p>
-    );
-
   if (kind === "markdown") return <MarkdownPreview text={text} anchoring={anchoring} />;
 
   // Plain text reads literally, not as Markdown and not through an iframe: the bytes are rendered

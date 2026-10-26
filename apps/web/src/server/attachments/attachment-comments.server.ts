@@ -4,7 +4,7 @@ import {
   anchorTypeForPreview,
   type AttachmentCommentAnchor,
 } from "#src/features/conversations/attachment-comment-anchors";
-import { attachmentPreviewKind } from "#src/features/conversations/attachment-preview-kind";
+import { previewKindFor } from "#src/features/conversations/attachment-preview-kind";
 import type { mapBrowserMessage } from "#src/server/conversations/conversation-history.server";
 import type { VersionedReactions } from "#src/server/conversations/reaction-write.server";
 
@@ -17,6 +17,7 @@ export type AttachmentCommentAccess = {
   attachmentId: string;
   fileName: string;
   contentType: string;
+  sizeBytes: number;
   sourceConversationId: string;
   conversationId: string | null;
   canRead: boolean;
@@ -125,11 +126,7 @@ export class AttachmentComments {
     return this.store.post(actor, { ...input, body }, (access) => {
       writable(access);
       // Only the position kind this file's preview offers; the file's content is never read here.
-      if (
-        input.anchor &&
-        input.anchor.type !==
-          anchorTypeForPreview(attachmentPreviewKind(access.fileName, access.contentType))
-      )
+      if (input.anchor && input.anchor.type !== anchorTypeForPreview(previewKindFor(access)))
         throw new AppError("INVALID_INPUT");
     });
   }

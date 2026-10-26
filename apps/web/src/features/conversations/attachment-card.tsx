@@ -7,7 +7,7 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { m } from "#src/paraglide/messages";
-import { attachmentPreviewKind } from "./attachment-preview-kind";
+import { previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
 import type { MessageView } from "./message-row";
 
@@ -33,63 +33,64 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
     return (
       <div className="relative mt-1 w-fit max-w-full">
         <AttachmentReviewDialog file={attachment}>
-          <Button
-            color="tertiary"
-            noTextPadding
-            aria-label={attachment.fileName}
-            className="grid h-auto min-h-16 min-w-16 place-items-center overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
-          >
-            {!imgLoaded && (
-              <Skeleton className="pointer-events-none absolute inset-0 rounded-lg bg-secondary/70" />
-            )}
-            <img
-              src={previewSrc}
-              onError={handlePreviewError}
-              onLoad={() => setImgLoaded(true)}
-              alt={attachment.fileName}
-              loading="lazy"
-              className="block max-h-80 max-w-full object-contain"
-            />
-          </Button>
+          {() => (
+            <Button
+              color="tertiary"
+              noTextPadding
+              aria-label={attachment.fileName}
+              className="grid h-auto min-h-16 min-w-16 place-items-center overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
+            >
+              {!imgLoaded && (
+                <Skeleton className="pointer-events-none absolute inset-0 rounded-lg bg-secondary/70" />
+              )}
+              <img
+                src={previewSrc}
+                onError={handlePreviewError}
+                onLoad={() => setImgLoaded(true)}
+                alt={attachment.fileName}
+                loading="lazy"
+                className="block max-h-80 max-w-full object-contain"
+              />
+            </Button>
+          )}
         </AttachmentReviewDialog>
       </div>
     );
   const typeLabel = fileTypeLabel(attachment.fileName, attachment.contentType);
-  const previewable = attachmentPreviewKind(
-    attachment.fileName,
-    attachment.contentType,
-    attachment.previewUrl,
-  );
+  const previewable = previewKindFor(attachment);
   return (
     <div className="group/attachment mt-1 flex w-full max-w-sm min-w-0 items-center rounded-xl bg-primary ring-1 ring-secondary ring-inset">
       <AttachmentReviewDialog file={attachment}>
-        <Button
-          color="tertiary"
-          noTextPadding
-          aria-label={
-            previewable
-              ? m.conversation_attachment_preview_open({ name: attachment.fileName })
-              : m.attachment_comments_open({ name: attachment.fileName })
-          }
-          className="h-auto min-w-0 flex-1 justify-start rounded-xl rounded-r-none p-3 hover:bg-secondary [&>span]:w-full [&>span]:min-w-0"
-        >
-          <span className="flex min-w-0 items-center gap-3 text-left">
-            <FileTypeIcon
-              fileName={attachment.fileName}
-              contentType={attachment.contentType}
-              className="size-10 shrink-0"
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-primary">
-                {attachment.fileName}
-              </span>
-              <span className="block truncate text-xs text-tertiary">
-                {typeLabel ? `${typeLabel} · ` : ""}
-                {getReadableFileSize(attachment.sizeBytes)}
+        {({ loading }) => (
+          <Button
+            color="tertiary"
+            noTextPadding
+            isLoading={loading}
+            aria-label={
+              previewable
+                ? m.conversation_attachment_preview_open({ name: attachment.fileName })
+                : m.attachment_comments_open({ name: attachment.fileName })
+            }
+            className="h-auto min-w-0 flex-1 justify-start rounded-xl rounded-r-none p-3 hover:bg-secondary [&>span]:w-full [&>span]:min-w-0"
+          >
+            <span className="flex min-w-0 items-center gap-3 text-left">
+              <FileTypeIcon
+                fileName={attachment.fileName}
+                contentType={attachment.contentType}
+                className="size-10 shrink-0"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-primary">
+                  {attachment.fileName}
+                </span>
+                <span className="block truncate text-xs text-tertiary">
+                  {typeLabel ? `${typeLabel} · ` : ""}
+                  {getReadableFileSize(attachment.sizeBytes)}
+                </span>
               </span>
             </span>
-          </span>
-        </Button>
+          </Button>
+        )}
       </AttachmentReviewDialog>
       <span className="mx-1 h-8 w-px shrink-0 bg-border-secondary" aria-hidden="true" />
       <div className="shrink-0 pr-2">

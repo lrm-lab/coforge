@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -15,7 +15,12 @@ import type { AnchorSurface, Anchoring } from "./attachment-anchoring";
 import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { AttachmentCommentsPane } from "./attachment-comments";
 import { AttachmentPreview } from "./attachment-preview";
-import { attachmentPreviewKind } from "./attachment-preview-kind";
+import {
+  TEXT_PREVIEW_MAX_BYTES,
+  isTextPreviewKind,
+  previewKindFor,
+} from "./attachment-preview-kind";
+import { readPreviewText } from "./attachment-preview-text";
 
 type ReviewFile = {
   id: string;
@@ -25,13 +30,19 @@ type ReviewFile = {
   previewUrl?: string;
 };
 
-/** All file types have a discussion, even when this deployment cannot preview their bytes. */
+/**
+ * All file types have a discussion, even when this deployment cannot preview their bytes.
+ *
+ * A text preview is read before the dialog opens, as in Raft: `children` (the card) shows
+ * `loading` meanwhile, and a file that turns out to have no preview opens its discussion alone,
+ * like any other file without one.
+ */
 export function AttachmentReviewDialog({
   file,
   children,
 }: {
   file: ReviewFile;
-  children: ReactNode;
+  children: (state: { loading: boolean }) => ReactNode;
 }) {
   const [commentsExpanded, setCommentsExpanded] = useState(true);
   const [commentsOnPhone, setCommentsOnPhone] = useState(false);
@@ -63,13 +74,41 @@ export function AttachmentReviewDialog({
     setJumpTo(null);
   }, [jumpTo, surface, commentsOnPhone]);
   const href = `/api/attachments/${file.id}`;
-  const kind = attachmentPreviewKind(file.fileName, file.contentType, file.previewUrl);
+  const available = previewKindFor(file);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  // The text a preview shows, read once per card: `null` when it turned out to have none.
+  const [text, setText] = useState<string | null | undefined>(undefined);
+  const reading = useRef<AbortController | null>(null);
+  useEffect(() => () => reading.current?.abort(), []);
+  const kind = isTextPreviewKind(available) && text === null ? null : available;
+  const onOpenChange = (next: boolean) => {
+    if (!next) {
+      setOpen(false);
+      setPendingAnchor(null);
+      return;
+    }
+    if (!isTextPreviewKind(available) || text !== undefined) return setOpen(true);
+    if (loading) return;
+    setLoading(true);
+    const controller = new AbortController();
+    reading.current = controller;
+    void readPreviewText(href, TEXT_PREVIEW_MAX_BYTES[available], controller.signal).then(
+      (value) => {
+        setText(value);
+        setLoading(false);
+        setOpen(true);
+      },
+      // Aborted: the card is gone.
+      () => {},
+    );
+  };
   const image = file.contentType.startsWith("image/") && !imageFailed;
   const canPreview = file.contentType.startsWith("image/") || kind !== null;
   const showComments = commentsOnPhone || !canPreview;
   return (
-    <DialogTrigger onOpenChange={(open) => !open && setPendingAnchor(null)}>
-      {children}
+    <DialogTrigger isOpen={open} onOpenChange={onOpenChange}>
+      {children({ loading })}
       <ModalOverlay isDismissable>
         <Modal
           className={cn(
@@ -146,6 +185,7 @@ export function AttachmentReviewDialog({
                           kind={kind}
                           href={href}
                           previewUrl={file.previewUrl}
+                          text={text ?? undefined}
                           anchoring={anchoring}
                           commentsOpen={commentsExpanded}
                         />

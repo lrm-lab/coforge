@@ -210,6 +210,7 @@ async function readAccess(
       workspaceId: true,
       fileName: true,
       contentType: true,
+      sizeBytes: true,
       conversationId: true,
       messageId: true,
       commentThread: { select: { conversationId: true } },
@@ -272,6 +273,7 @@ async function readAccess(
     attachmentId,
     fileName: attachment.fileName,
     contentType: attachment.contentType,
+    sizeBytes: attachment.sizeBytes,
     sourceConversationId: attachment.conversationId,
     conversationId: attachment.commentThread?.conversationId ?? null,
     canRead:

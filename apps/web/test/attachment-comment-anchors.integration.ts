@@ -10,7 +10,7 @@ test("each previewable kind stores its own anchor, read back on the comment", as
   const f = await attachmentCommentsFixture();
   try {
     const comments = new AttachmentComments(new PrismaAttachmentCommentStore(f.db));
-    const sibling = (fileName: string, contentType: string) =>
+    const sibling = (fileName: string, contentType: string, sizeBytes = 1) =>
       f.db.attachment.create({
         data: {
           workspaceId: f.workspace.id,
@@ -20,7 +20,7 @@ test("each previewable kind stores its own anchor, read back on the comment", as
           objectKey: `test/comments/${crypto.randomUUID()}`,
           fileName,
           contentType,
-          sizeBytes: 1,
+          sizeBytes,
         },
       });
     const markdown = await sibling("guide.md", "text/markdown");
@@ -56,6 +56,19 @@ test("each previewable kind stores its own anchor, read back on the comment", as
 
     const whole = await comments.post(f.actor, { attachmentId: csv.id, body: "Whole file" });
     expect(whole.anchor).toBeNull();
+
+    // A log past the 96 KB text preview has no lines to point at, only its whole-file discussion.
+    const large = await sibling("server.log", "text/plain", 96 * 1024 + 1);
+    await expect(
+      comments.post(f.actor, {
+        attachmentId: large.id,
+        body: "Too far down",
+        anchor: { type: "lines", data: { start: 1, end: 1 } },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(
+      (await comments.post(f.actor, { attachmentId: large.id, body: "Whole" })).anchor,
+    ).toBeNull();
   } finally {
     await f.close();
   }
