@@ -1,7 +1,10 @@
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { attachmentView } from "#src/server/attachments/attachment-view.server";
+import {
+  attachmentView,
+  ATTACHMENT_VIEW_SELECT,
+} from "#src/server/attachments/attachment-view.server";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { MESSAGE_REACTIONS_SELECT, reactionSummaries } from "./message-reactions.server";
 import {
@@ -32,7 +35,7 @@ export const browserMessageFields = {
   body: true,
   createdAt: true,
   attachments: {
-    select: { id: true, fileName: true, contentType: true, sizeBytes: true, objectKey: true },
+    select: ATTACHMENT_VIEW_SELECT,
     orderBy: { position: "asc" as const },
   },
   sender: {

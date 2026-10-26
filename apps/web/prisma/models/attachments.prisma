@@ -13,6 +13,10 @@ model Attachment {
   fileName        String
   contentType     String
   sizeBytes       Int
+  /// Intrinsic display size after EXIF orientation, absent together when unknown.
+  /// SQL enforces a positive non-null pair or two nulls.
+  imageWidth      Int?
+  imageHeight     Int?
   createdAt       DateTime     @default(now())
   workspace       Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversation    Conversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)

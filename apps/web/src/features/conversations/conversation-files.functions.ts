@@ -5,7 +5,10 @@ import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { VISIBLE_CONVERSATION_WHERE } from "#src/server/conversations/active-member.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import { attachmentView } from "#src/server/attachments/attachment-view.server";
+import {
+  attachmentView,
+  ATTACHMENT_VIEW_SELECT,
+} from "#src/server/attachments/attachment-view.server";
 import { isInlineImage } from "#src/server/attachments/attachment-response.server";
 
 export type ConversationFile = {
@@ -13,6 +16,8 @@ export type ConversationFile = {
   fileName: string;
   contentType: string;
   sizeBytes: number;
+  imageWidth?: number;
+  imageHeight?: number;
   createdAt: string;
   sender: string;
   /** True only for the raster types `/api/attachments/:id` serves inline — an SVG "image/*"
@@ -50,12 +55,8 @@ export const loadConversationFiles = createServerFn({ method: "GET" })
       orderBy: { createdAt: "desc" },
       take: 200,
       select: {
-        id: true,
-        fileName: true,
-        contentType: true,
-        sizeBytes: true,
+        ...ATTACHMENT_VIEW_SELECT,
         createdAt: true,
-        objectKey: true,
         message: { select: { id: true } },
         uploader: { select: { username: true, displayName: true } },
         uploaderAgent: { select: { displayName: true, name: true } },

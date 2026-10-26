@@ -1,12 +1,30 @@
 import { getFileDelivery, type FileDelivery } from "#src/server/files/file-delivery.server";
 import { isDeliveryInlinePreview, isInlineImage } from "./attachment-response.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import type { Prisma } from "#src/generated/prisma/client";
+
+export const ATTACHMENT_VIEW_SELECT = {
+  id: true,
+  fileName: true,
+  contentType: true,
+  sizeBytes: true,
+  objectKey: true,
+  imageWidth: true,
+  imageHeight: true,
+} satisfies Prisma.AttachmentSelect;
+
+export type AttachmentViewRow = Prisma.AttachmentGetPayload<{
+  select: typeof ATTACHMENT_VIEW_SELECT;
+}>;
 
 export type AttachmentView = {
   id: string;
   fileName: string;
   contentType: string;
   sizeBytes: number;
+  /** Intrinsic display size; both are absent until a safe inline image has a known size. */
+  imageWidth?: number;
+  imageHeight?: number;
   /** A short-lived signed CDN URL, present for an inline-eligible image and for a type that may
    * only be previewed off our own origin (a PDF) when delivery is configured. `<img src>` should
    * prefer this over `/api/attachments/:id` so the bytes never round-trip through the backend;
@@ -45,9 +63,10 @@ let signingFailureLogged = false;
  * the returned view and must never reach the client, logs, or analytics.
  */
 export function attachmentView(
-  row: { id: string; fileName: string; contentType: string; sizeBytes: number; objectKey: string },
+  row: AttachmentViewRow,
   delivery: FileDelivery | null = getFileDelivery(),
 ): AttachmentView {
+  const { imageWidth, imageHeight } = row;
   const previewUrl =
     delivery && (isInlineImage(row.contentType) || isDeliveryInlinePreview(row.contentType))
       ? signPreviewUrl(delivery, row.objectKey)
@@ -57,6 +76,15 @@ export function attachmentView(
     fileName: row.fileName,
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,
+    ...(isInlineImage(row.contentType) &&
+    imageWidth !== null &&
+    imageHeight !== null &&
+    Number.isInteger(imageWidth) &&
+    Number.isInteger(imageHeight) &&
+    imageWidth > 0 &&
+    imageHeight > 0
+      ? { imageWidth, imageHeight }
+      : {}),
     ...(previewUrl ? { previewUrl } : {}),
   };
 }

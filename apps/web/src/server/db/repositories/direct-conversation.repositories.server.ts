@@ -94,7 +94,12 @@ import {
 } from "#src/server/conversations/sender-display.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
-import { attachmentView } from "#src/server/attachments/attachment-view.server";
+import {
+  attachmentView,
+  ATTACHMENT_VIEW_SELECT,
+  type AttachmentView,
+  type AttachmentViewRow,
+} from "#src/server/attachments/attachment-view.server";
 import {
   browserMessageFields,
   mapBrowserMessage,
@@ -150,15 +155,9 @@ export type LatestSenderFields = {
 
 export type AgentMentionBinding = { type: "user" | "agent"; id: string; name: string };
 
-export type AttachmentMetadata = {
-  id: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  /** Present only on the browser-facing shape; see `attachmentView`. Never set on the
-   * Agent-facing shape (Agents keep the authenticated `/api/agent` proxy route). */
-  previewUrl?: string;
-};
+/** Signed previews belong only to browser messages. Agents keep the authenticated
+ * `/api/agent` proxy route and do not receive browser layout dimensions. */
+export type AttachmentMetadata = AttachmentView;
 
 export type DirectConversationPage = {
   messages: ({
@@ -1133,25 +1132,13 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
               uploaderId: senderUserId,
               messageId: null,
             },
-            select: {
-              id: true,
-              fileName: true,
-              contentType: true,
-              sizeBytes: true,
-              objectKey: true,
-            },
+            select: ATTACHMENT_VIEW_SELECT,
           })
         : [];
       const attachmentsById = new Map(
         availableAttachments.map((attachment) => [attachment.id, attachment]),
       );
-      const attachments: {
-        id: string;
-        fileName: string;
-        contentType: string;
-        sizeBytes: number;
-        objectKey: string;
-      }[] = [];
+      const attachments: AttachmentViewRow[] = [];
       for (const attachmentId of requestedAttachmentIds) {
         const attachment = attachmentsById.get(attachmentId);
         if (!attachment) throw new Error("attachment is not available for this message");

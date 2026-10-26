@@ -1,3 +1,4 @@
+import { ATTACHMENT_VIEW_SELECT, type AttachmentViewRow } from "./attachment-view.server";
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
@@ -19,13 +20,7 @@ export function userUploadedAttachmentWhere(userId: string): Prisma.AttachmentWh
   };
 }
 
-type ClaimedAttachment = {
-  id: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  objectKey: string;
-};
+type ClaimedAttachment = AttachmentViewRow;
 
 /**
  * The uploads a person's new message carries, in send order: each must be theirs, in this
@@ -46,7 +41,7 @@ export async function claimUploadedAttachments(
       ...userUploadedAttachmentWhere(scope.uploaderId),
       messageId: null,
     },
-    select: { id: true, fileName: true, contentType: true, sizeBytes: true, objectKey: true },
+    select: ATTACHMENT_VIEW_SELECT,
   });
   const byId = new Map(available.map((attachment) => [attachment.id, attachment]));
   return attachmentIds.map((attachmentId) => {

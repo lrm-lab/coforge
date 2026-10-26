@@ -7,6 +7,8 @@ const row = {
   fileName: "shot.png",
   contentType: "image/png",
   sizeBytes: 5,
+  imageWidth: null,
+  imageHeight: null,
   objectKey: "workspaces/w/attachments/a1/original",
 };
 
@@ -78,4 +80,39 @@ test("omits the preview URL and keeps the row usable when signing throws", () =>
     },
   });
   expect(view).toEqual({ id: "a1", fileName: "shot.png", contentType: "image/png", sizeBytes: 5 });
+});
+
+test("an inline image carries its intrinsic width and height together without exposing storage metadata", () => {
+  const view = attachmentView({ ...row, imageWidth: 640, imageHeight: 360 }, null);
+  expect(view).toEqual({
+    id: "a1",
+    fileName: "shot.png",
+    contentType: "image/png",
+    sizeBytes: 5,
+    imageWidth: 640,
+    imageHeight: 360,
+  });
+  expect(view).not.toHaveProperty("objectKey");
+});
+
+test("unknown or unusable image dimensions remain absent as a pair", () => {
+  for (const dimensions of [
+    { imageWidth: null, imageHeight: null },
+    { imageWidth: 640, imageHeight: null },
+    { imageWidth: 0, imageHeight: 360 },
+    { imageWidth: 640, imageHeight: -1 },
+  ]) {
+    const view = attachmentView({ ...row, ...dimensions }, null);
+    expect(view).not.toHaveProperty("imageWidth");
+    expect(view).not.toHaveProperty("imageHeight");
+  }
+});
+
+test("a non-inline attachment never supplies an image layout size", () => {
+  const view = attachmentView(
+    { ...row, contentType: "application/pdf", imageWidth: 640, imageHeight: 360 },
+    null,
+  );
+  expect(view).not.toHaveProperty("imageWidth");
+  expect(view).not.toHaveProperty("imageHeight");
 });

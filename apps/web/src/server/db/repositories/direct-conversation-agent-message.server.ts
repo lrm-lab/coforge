@@ -36,7 +36,7 @@ const ACTION_CARD_STATE_SELECT = {
 export const AGENT_MESSAGE_INCLUDE = {
   memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
   sender: MESSAGE_SENDER_SELECT,
-  attachments: { orderBy: { position: "asc" } },
+  attachments: { orderBy: { position: "asc" }, omit: { imageWidth: true, imageHeight: true } },
   task: TASK_METADATA_SELECT,
   actionCard: ACTION_CARD_STATE_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,

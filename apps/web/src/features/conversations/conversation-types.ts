@@ -86,6 +86,8 @@ export type DirectConversationView = {
       fileName: string;
       contentType: string;
       sizeBytes: number;
+      imageWidth?: number;
+      imageHeight?: number;
       previewUrl?: string;
     }[];
   }>;
