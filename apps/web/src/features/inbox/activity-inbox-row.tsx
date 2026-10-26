@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { BellOff01, Check, Hash01, Mail01, User01 } from "@untitledui/icons";
+import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Badge } from "#src/components/base/badges/badges";
@@ -199,14 +199,14 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
 });
 
 /**
- * A row's mark, the size of Chat's message avatar: the peer's face for a DM, with Chat's avatar
- * components; a channel's group avatar (its members' collage, as on the Chat sidebar's row);
- * otherwise a muted square with the place's glyph (`#` for a channel with no members, a person for
- * a DM thread).
+ * A row's mark, the size of Chat's message avatar: the peer's face for a DM and a thread in one,
+ * with Chat's avatar components (the row is named by that peer too); a channel's group avatar (its
+ * members' collage, as on the Chat sidebar's row); otherwise, for a channel with no members, a
+ * muted square with `#`.
  */
-function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
-  const { place, thread } = item;
-  if (!thread && place.kind === "direct")
+export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
+  const { place } = item;
+  if (place.kind === "direct")
     return place.peer.kind === "agent" ? (
       <LiveAgentAvatar
         agentId={place.peer.agentId}
@@ -227,10 +227,9 @@ function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
         <GroupAvatar members={place.members} className="avatar-group-sm" />
       </span>
     );
-  const Glyph = place.kind === "channel" ? Hash01 : User01;
   return (
     <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-tertiary">
-      <Glyph aria-hidden="true" className="size-4.5 text-fg-quaternary" />
+      <Hash01 aria-hidden="true" className="size-4.5 text-fg-quaternary" />
     </span>
   );
 }
