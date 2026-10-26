@@ -1,20 +1,25 @@
+import type {
+  UsageSnapshot,
+  AgentSession,
+  AgentSessionIdentity,
+  AgentSessionOptions,
+  AgentRuntimeEvent,
+} from "@coforge/agent";
 import {
   AGENT_RUNTIME_EVENT_TYPE,
-  type UsageSnapshot,
-  type AgentRuntimeEvent,
+  JsonlProcess,
   type CodeAgentProvider,
+  type AgentContextReport,
   InterruptTracker,
   asRecord,
   eventTime,
   nonEmptyString,
 } from "@lrm/coforge-anvil";
+import { processSpawner } from "#src/code-agent/process-host";
 
-import type { AgentSession, AgentSessionIdentity, AgentSessionOptions } from "@coforge/agent";
-import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { RUNTIME_PROVIDER, type AgentServiceTierObserved } from "@lrm/coforge-sdk/internal";
 import { readClaudeCodeUsage } from "./usage";
 import { readClaudeCodeContextReport } from "./context-report";
-import type { AgentContextReport } from "@lrm/coforge-sdk/internal";
 import { claudeLaunchCommand, claudeLaunchEnvironment } from "./launch-args";
 import { createPromptFile } from "./prompt-file";
 import { ClaudeStreamEvents } from "./stream-events";
@@ -90,6 +95,7 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
           command(sessionId, freshSessionId),
           options.agentWorkspaceDirectory,
           environment,
+          processSpawner,
         );
       process = spawn(options.sessionId, initialFreshSessionId);
       const session = new ClaudeCodeAgentSession(

@@ -1,7 +1,15 @@
 import { RUNTIME_PROVIDER, type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
+import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
 import { withoutClaudeCodeMarker } from "#src/code-agent/claude-code/launch-args";
-import { JsonlProcess } from "./jsonl-process";
+import {
+  JsonlProcess,
+  isOpenCodeVersionUnsupported,
+  logOpenCodeVersionUnsupported,
+  VERSION_PROBE_TIMEOUT_MS,
+  withDeadline,
+  type CodeAgentProbe,
+} from "@lrm/coforge-anvil";
 import {
   probeClaudeCodeVersion,
   resolveClaudeCodeExecutable,
@@ -13,14 +21,7 @@ import {
   isAntigravityVersionUnsupported,
   logAntigravityVersionUnsupported,
 } from "#src/code-agent/antigravity/version";
-import {
-  isOpenCodeVersionUnsupported,
-  logOpenCodeVersionUnsupported,
-  VERSION_PROBE_TIMEOUT_MS,
-  withDeadline,
-} from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
-import type { CodeAgentProbe } from "@lrm/coforge-anvil";
 import {
   externalCodeAgents,
   resolveExternalCodeAgentExecutable,
@@ -58,6 +59,7 @@ export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
       [executable, "app-server"],
       process.cwd(),
       agentEnvironment(undefined, env ?? Bun.env),
+      processSpawner,
     );
     try {
       await initializeCodex(child, CATALOG_DISCOVERY_TIMEOUT_MS);

@@ -1,8 +1,16 @@
 import { client, RequestError, type AnyMessage } from "@agentclientprotocol/sdk";
-import type { UsageOfficialBucket, UsageSnapshot, UsageWindow } from "@lrm/coforge-anvil";
-import { UsageUnavailableError, UsageUnsupportedError, asRecord } from "@lrm/coforge-anvil";
+import { processSpawner } from "#src/code-agent/process-host";
+import {
+  type UsageOfficialBucket,
+  type UsageSnapshot,
+  type UsageWindow,
+  UsageUnavailableError,
+  UsageUnsupportedError,
+  asRecord,
+  JsonlProcess,
+  JsonlRequestError,
+} from "@lrm/coforge-anvil";
 import { agentEnvironment } from "#src/code-agent/environment";
-import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
 
 import { maskEmail } from "#src/code-agent/mask-email";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
@@ -20,6 +28,7 @@ export async function readGrokUsage(
     [...(options.command ?? ["grok"]), "agent", "--always-approve", "--no-leader", "stdio"],
     workingDirectory,
     agentEnvironment(options.environment),
+    processSpawner,
   );
   const timeoutMs = options.timeoutMs ?? 10_000;
   let unsubscribe: (() => void) | undefined;

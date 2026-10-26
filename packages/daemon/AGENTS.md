@@ -99,6 +99,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/agent-runtime/`                 | Agent lifecycle state machine, control, native Session state, and Activity                                                         |
 | `src/code-agent/`                    | Remaining runtime adapters, inventory and instructions; Cursor, OpenCode, contracts and shared execution live in `packages/anvil/` |
 | `src/code-agent/grok/`               | Persistent Grok ACP sessions, native turn admission and background turn updates                                                    |
+| `src/code-agent/process-host.ts`     | Platform process-tree spawning for Anvil execution                                                                                 |
 | `src/code-agent/per-turn-host.ts`    | Host environment composition and platform process-tree injection for Anvil per-turn execution                                      |
 | `src/code-agent/version-probe.ts`    | Bounded version subprocess reads with the host environment for Anvil gates                                                         |
 | `src/agent-migration/`               | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                    |

@@ -1,14 +1,17 @@
-import type {
-  UsageOfficialBucket,
-  UsageOfficialGroup,
-  UsageSnapshot,
-  UsageWindow,
+import {
+  type UsageOfficialBucket,
+  type UsageOfficialGroup,
+  type UsageSnapshot,
+  type UsageWindow,
+  UsageUnavailableError,
+  UsageUnsupportedError,
+  asRecord,
+  JsonlProcess,
 } from "@lrm/coforge-anvil";
-import { UsageUnavailableError, UsageUnsupportedError, asRecord } from "@lrm/coforge-anvil";
+import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "#src/code-agent/environment";
 
 import { maskEmail } from "#src/code-agent/mask-email";
-import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
@@ -28,6 +31,7 @@ export async function readCodexUsage(
     options.command ?? ["codex", "app-server"],
     workingDirectory,
     agentEnvironment(options.environment),
+    processSpawner,
   );
   const timeoutMs = options.timeoutMs ?? 5_000;
   try {

@@ -4,10 +4,9 @@ import {
   type CodeAgentModelCatalog,
   type CodeAgentModelMetadata,
 } from "@lrm/coforge-sdk/internal";
-import type { JsonlProcess } from "#src/code-agent/jsonl-process";
+import { type JsonlProcess, asRecord } from "@lrm/coforge-anvil";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { getLogger } from "@logtape/logtape";
-import { asRecord } from "@lrm/coforge-anvil";
 import {
   CatalogDiscoveryError,
   isModel,

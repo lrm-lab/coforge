@@ -1,14 +1,12 @@
-import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "@lrm/coforge-anvil";
-import { ProcessTreeOwner } from "#src/platform/process-tree";
+import { getLogger } from "@logtape/logtape";
+import type { OwnedChildProcess, OwnedProcessTree, ProcessTreeSpawner } from "./process-tree";
+import { LineBuffer } from "./line-buffer";
 import {
-  LineBuffer,
   PROCESS_TREE_EXIT_GRACE_MS,
   cleanupOwnedTree,
-  withDeadline,
   type ProcessTreeCleanupOptions,
-} from "@lrm/coforge-anvil";
-
-import { getLogger } from "@logtape/logtape";
+} from "./process-tree-cleanup";
+import { withDeadline } from "./deadline";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "jsonl"]);
 
@@ -53,7 +51,7 @@ export class JsonlProcess {
     command: readonly string[],
     cwd: string,
     environment: Readonly<Record<string, string>>,
-    processTreeOwner: ProcessTreeSpawner = new ProcessTreeOwner(),
+    processTreeOwner: ProcessTreeSpawner,
     onStderrDiagnostic?: (diagnostic: string) => void,
   ) {
     this.#tree = processTreeOwner.spawn(command, cwd, environment);

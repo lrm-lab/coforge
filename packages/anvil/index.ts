@@ -21,3 +21,4 @@ export * from "./src/version-gate";
 export * from "./src/opencode/provider";
 export * from "./src/opencode/catalog";
 export * from "./src/opencode/version";
+export * from "./src/jsonl-process";

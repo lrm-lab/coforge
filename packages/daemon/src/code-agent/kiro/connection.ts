@@ -1,4 +1,5 @@
-import { asRecord as record } from "@lrm/coforge-anvil";
+import { asRecord as record, JsonlProcess } from "@lrm/coforge-anvil";
+import { processSpawner } from "#src/code-agent/process-host";
 import {
   client,
   type AnyMessage,
@@ -7,7 +8,6 @@ import {
   type RequestPermissionResponse,
   type SessionConfigOption,
 } from "@agentclientprotocol/sdk";
-import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 
 export const KIRO_ACP_ARGS = ["acp", "--agent-engine", "v3", "--auth-method", "cli"] as const;
@@ -34,7 +34,7 @@ export class KiroConnection {
       outcome: { outcome: "cancelled" },
     }),
   ) {
-    this.process = new JsonlProcess(command, cwd, environment);
+    this.process = new JsonlProcess(command, cwd, environment, processSpawner);
     this.connection = client({ name: "coforge-daemon" })
       .onNotification("session/update", ({ params }) => {
         if (params.update.sessionUpdate === "config_option_update") {

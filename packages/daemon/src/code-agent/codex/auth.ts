@@ -1,16 +1,18 @@
-import type {
-  RuntimeAuthAdapter,
-  RuntimeAuthLoginEvent,
-  RuntimeAuthLoginResult,
-  RuntimeAuthLogoutResult,
-  RuntimeAuthStatus,
+import {
+  type RuntimeAuthAdapter,
+  type RuntimeAuthLoginEvent,
+  type RuntimeAuthLoginResult,
+  type RuntimeAuthLogoutResult,
+  type RuntimeAuthStatus,
+  JsonlProcess,
+  asRecord,
+  runtimeAuthAccount,
 } from "@lrm/coforge-anvil";
+import { processSpawner } from "#src/code-agent/process-host";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { JsonlProcess } from "#src/code-agent/jsonl-process";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { asRecord, runtimeAuthAccount } from "@lrm/coforge-anvil";
 
 export const CODEX_LOGIN_MINIMUM_VERSION = "0.118.0";
 export const CODEX_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
@@ -139,6 +141,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
             envVars: undefined,
             extraEnv: { NO_COLOR: "1" },
           }),
+          processSpawner,
         ));
   }
 

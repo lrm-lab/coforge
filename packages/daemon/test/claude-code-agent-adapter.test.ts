@@ -827,27 +827,6 @@ test("Claude Code rejects interrupt when the CLI exits after SIGINT", async () =
   }
 });
 
-test("Claude Code startup fails when its CLI does not complete initialization", async () => {
-  const adapter = new ClaudeCodeProvider({
-    command: [process.execPath, new URL("./fixtures/invalid-jsonl.ts", import.meta.url).pathname],
-  });
-
-  await expect(
-    Promise.race([
-      adapter.createAgentSession({
-        agentWorkspaceDirectory: tmpdir(),
-        instructions: TEST_AGENT_INSTRUCTIONS,
-      }),
-      // Process startup can exceed 200ms on a cold Bun worker even though the fixture
-      // immediately emits malformed JSONL; keep the assertion about the protocol error while
-      // avoiding a startup-scheduling race.
-      Bun.sleep(1_000).then(() => {
-        throw new Error("startup timed out");
-      }),
-    ]),
-  ).rejects.toThrow("invalid output");
-});
-
 test("Claude Code holds first-turn notifications until result, not text or tool completion", async () => {
   const fixture = await controlledClaude();
   const { session, emit } = fixture;

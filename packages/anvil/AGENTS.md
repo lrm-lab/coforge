@@ -15,6 +15,7 @@
 | --- | --- |
 | `src/contract.ts` | Provider-neutral sessions, provider and auth contracts |
 | `src/runtime-auth-status.ts` | Shared runtime auth status values |
+| `src/jsonl-process.ts` | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership |
 | `src/process-tree.ts` | Host process ownership ports |
 | `src/catalog-command.ts` | Host catalog command execution port |
 | `src/per-turn/` | Shared per-turn session and process execution |

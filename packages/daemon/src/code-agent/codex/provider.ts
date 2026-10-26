@@ -5,7 +5,14 @@ import type {
   AgentSessionOptions,
   UsageSnapshot,
 } from "@coforge/agent";
-import type { CodeAgentProvider } from "@lrm/coforge-anvil";
+import { processSpawner } from "#src/code-agent/process-host";
+import {
+  type CodeAgentProvider,
+  JsonlProcess,
+  JsonlRequestError,
+  asRecord,
+  eventTime,
+} from "@lrm/coforge-anvil";
 import { CodexItemEvents } from "./item-events";
 import { rejectServerRequests } from "./server-requests";
 import { openCodexThread } from "./thread-open";
@@ -13,7 +20,6 @@ import { codexTurnOutcome } from "./turn-outcome";
 import { CodexTurnSignals } from "./turn-signals";
 import { readCodexUsage } from "./usage";
 import { agentEnvironment } from "#src/code-agent/environment";
-import { JsonlProcess, JsonlRequestError } from "#src/code-agent/jsonl-process";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import {
   RUNTIME_PROVIDER,
@@ -21,7 +27,6 @@ import {
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { asRecord, eventTime } from "@lrm/coforge-anvil";
 import {
   assertSkillsLoaded,
   codexServiceTierState,
@@ -60,6 +65,7 @@ export class CodexProvider implements CodeAgentProvider {
         extraEnv: { NO_COLOR: "1" },
         gitHooks: options.gitHooks,
       }),
+      processSpawner,
     );
     rejectServerRequests(process, options.agentId, options.runtimeId);
     try {

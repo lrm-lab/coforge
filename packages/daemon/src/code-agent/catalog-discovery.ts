@@ -1,8 +1,8 @@
 import { type CodeAgentModelMetadata, type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
+import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
-import { JsonlProcess, JsonlRequestError } from "./jsonl-process";
+import { JsonlProcess, JsonlRequestError, withDeadline, asRecord } from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
-import { withDeadline, asRecord } from "@lrm/coforge-anvil";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
@@ -54,7 +54,12 @@ export async function withJsonlProcess<T>(
     outcome: "started",
   });
   try {
-    process = new JsonlProcess(command, cwd, agentEnvironment(undefined, environment));
+    process = new JsonlProcess(
+      command,
+      cwd,
+      agentEnvironment(undefined, environment),
+      processSpawner,
+    );
     const catalog = await discover(process, progress);
     logger.info("Code Agent model catalog discovery completed", {
       event: "code_agent_catalog:discovery_completed",

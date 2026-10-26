@@ -3,11 +3,11 @@ import {
   type CodeAgentModelCatalog,
   type CodeAgentModelMetadata,
 } from "@lrm/coforge-sdk/internal";
+import { processSpawner } from "#src/code-agent/process-host";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
-import { withDeadline, asRecord, nonEmptyString } from "@lrm/coforge-anvil";
-import { JsonlProcess } from "#src/code-agent/jsonl-process";
+import { withDeadline, asRecord, nonEmptyString, JsonlProcess } from "@lrm/coforge-anvil";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.GROK]);
 
@@ -28,6 +28,7 @@ export async function discoverGrokCatalog(
       [...command, "agent", "--no-leader", "stdio"],
       cwd,
       agentEnvironment(undefined, environment),
+      processSpawner,
     );
     process = transport;
     return await withDeadline(
