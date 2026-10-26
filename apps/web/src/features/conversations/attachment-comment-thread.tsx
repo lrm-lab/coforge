@@ -8,6 +8,7 @@ import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
@@ -168,6 +169,7 @@ export function CommentThread({
   place,
   canComment,
   onReact,
+  highlighted,
 }: {
   attachmentId: string;
   root: AttachmentCommentView;
@@ -175,6 +177,8 @@ export function CommentThread({
   place?: ReactNode;
   canComment: boolean;
   onReact?: ReactTo;
+  /** Marks the comment whose place was just jumped to, as Raft greys its row. */
+  highlighted?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { query, comments: replies } = useCommentPages(
@@ -207,7 +211,12 @@ export function CommentThread({
     </Button>
   );
   return (
-    <div className="space-y-3">
+    <div
+      className={cn(
+        "-mx-2 space-y-3 rounded-lg px-2 py-1.5 transition-colors",
+        highlighted && "bg-secondary",
+      )}
+    >
       <CommentEntry
         comment={root}
         viewerId={viewerId}

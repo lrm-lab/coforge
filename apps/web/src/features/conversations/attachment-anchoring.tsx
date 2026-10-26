@@ -22,8 +22,6 @@ export type Anchoring = {
   onSurface(surface: AnchorSurface | null): void;
   /** Opens the comment box about `anchor`, or about the whole file for `null`. */
   onComment(anchor: AttachmentCommentAnchor | null): void;
-  /** Shows the comments without starting one, e.g. when the reader starts marking regions. */
-  onOpenComments(): void;
 };
 
 /** How long a jumped-to place stays marked. */

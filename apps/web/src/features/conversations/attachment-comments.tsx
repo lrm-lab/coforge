@@ -1,9 +1,10 @@
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Button as AriaButton } from "react-aria-components";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { XClose } from "@untitledui/icons";
+import { MarkerPin01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { TextArea } from "#src/components/base/textarea/textarea";
@@ -18,7 +19,7 @@ import {
   useCommentReaction,
 } from "./attachment-comment-thread";
 import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
-import type { AnchorSurface } from "./attachment-anchoring";
+import { ANCHOR_HIGHLIGHT_MS, type AnchorSurface } from "./attachment-anchoring";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
 
 /** How a comment's place reads: `§ heading`, or its lines or rows. */
@@ -40,7 +41,21 @@ const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
 type Placed = { comment: AttachmentCommentView; order: number | null };
 
-/** Where a comment points: a jump to it, or a note that the place is gone from the file. */
+/** A place as Raft labels it: a grey pin chip, which a jump or a remove button can carry. */
+function AnchorChip({ label, children }: { label: string; children?: ReactNode }) {
+  return (
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-tertiary px-1.5 py-0.5 text-xs font-medium text-secondary">
+      <MarkerPin01 className="size-3.5 shrink-0 text-fg-quaternary" aria-hidden="true" />
+      <span className="min-w-0 truncate">{label}</span>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Where a comment points: a chip that jumps to it, or a note that the place is gone from the file,
+ * then the text the place holds, quoted under a rule as Raft does.
+ */
 function AnchorPlace({
   anchor,
   found,
@@ -54,22 +69,28 @@ function AnchorPlace({
   onJump?: (anchor: AttachmentCommentAnchor) => void;
 }) {
   const place = anchorLabel(anchor);
-  if (!found)
-    return (
-      <p className="mt-1 truncate text-xs text-tertiary">
-        {known ? `${place} · ${m.attachment_comments_anchor_lost()}` : place}
-      </p>
-    );
+  const quote = anchor.data.quote;
   return (
-    <Button
-      size="xs"
-      color="link-color"
-      className="mt-1 block max-w-full truncate"
-      aria-label={m.attachment_comments_anchor_jump({ place })}
-      onClick={() => onJump?.(anchor)}
-    >
-      {place}
-    </Button>
+    <div className="mt-1 min-w-0 space-y-1.5">
+      {found ? (
+        <AriaButton
+          className="block max-w-full cursor-pointer rounded-md outline-brand focus-visible:outline-2"
+          aria-label={m.attachment_comments_anchor_jump({ place })}
+          onPress={() => onJump?.(anchor)}
+        >
+          <AnchorChip label={place} />
+        </AriaButton>
+      ) : (
+        <p className="truncate text-xs text-tertiary">
+          {known ? `${place} · ${m.attachment_comments_anchor_lost()}` : place}
+        </p>
+      )}
+      {quote && (
+        <blockquote className="line-clamp-3 border-l-2 border-secondary pl-2.5 text-xs text-tertiary">
+          {quote}
+        </blockquote>
+      )}
+    </div>
   );
 }
 
@@ -131,6 +152,15 @@ export function AttachmentCommentsPane({
   useEffect(() => {
     if (pendingAnchor || focusRequest) draft.input.current?.focus();
   }, [pendingAnchor, focusRequest, draft.input]);
+  // The comment last jumped from stays marked as long as its place is.
+  const [jumped, setJumped] = useState<string | null>(null);
+  const clearJumped = useRef(0);
+  useEffect(() => () => clearTimeout(clearJumped.current), []);
+  const jumpTo = (id: string) => {
+    setJumped(id);
+    clearTimeout(clearJumped.current);
+    clearJumped.current = window.setTimeout(() => setJumped(null), ANCHOR_HIGHLIGHT_MS);
+  };
   const disabledReason = state?.disabledReason;
   const emptyHint = m.attachment_comments_empty_hint({ name: "{name}" }).split("{name}");
   const disabledText =
@@ -144,6 +174,7 @@ export function AttachmentCommentsPane({
   const renderComment = ({ comment, order }: Placed) => (
     <CommentThread
       key={comment.id}
+      highlighted={comment.id === jumped}
       attachmentId={attachmentId}
       root={comment}
       viewerId={viewerId}
@@ -155,7 +186,10 @@ export function AttachmentCommentsPane({
             anchor={comment.anchor}
             found={order !== null}
             known={Boolean(surface)}
-            onJump={onJump}
+            onJump={(anchor) => {
+              jumpTo(comment.id);
+              onJump?.(anchor);
+            }}
           />
         )
       }
@@ -227,15 +261,17 @@ export function AttachmentCommentsPane({
       >
         {disabledText && <p className="text-sm text-tertiary">{disabledText}</p>}
         {pendingAnchor && (
-          <div className="flex min-w-0 items-center gap-1 text-sm font-medium text-brand-secondary">
-            <span className="min-w-0 flex-1 truncate">{anchorLabel(pendingAnchor)}</span>
-            <ButtonUtility
-              icon={XClose}
-              size="xs"
-              color="tertiary"
-              tooltip={m.attachment_comments_anchor_remove()}
-              onClick={() => onClearAnchor?.(pendingAnchor)}
-            />
+          <div className="flex min-w-0">
+            <AnchorChip label={anchorLabel(pendingAnchor)}>
+              <ButtonUtility
+                icon={XClose}
+                size="xs"
+                color="tertiary"
+                className="-my-1 -mr-1 shrink-0"
+                tooltip={m.attachment_comments_anchor_remove()}
+                onClick={() => onClearAnchor?.(pendingAnchor)}
+              />
+            </AnchorChip>
           </div>
         )}
         <TextArea

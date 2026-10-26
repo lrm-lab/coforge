@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { MessageSquare01, XClose } from "@untitledui/icons";
+import { XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useMediaQuery } from "#src/hooks/use-media-query";
@@ -32,9 +32,9 @@ type View = BridgeState & { links: FrameLink[] };
 type Reply = Extract<FrameMessage, { id: number }>;
 
 /**
- * An HTML file in a sandboxed frame, as in Raft 1.0.53: in `comment` mode a transparent layer over
- * the frame takes a click or a drag as a region to comment on, and a jump marks a region with a
- * box on that layer. Touch devices only preview, as Raft has it.
+ * An HTML file in a sandboxed frame, as in Raft 1.0.53: while the comments show, a transparent layer
+ * over the frame takes a click or a drag as a region to comment on, and a jump marks a region with
+ * a light fill on that layer. Touch devices only preview, as Raft has it.
  */
 export function HtmlRegionPreview({
   fileName,
@@ -45,7 +45,7 @@ export function HtmlRegionPreview({
   fileName: string;
   text: string;
   anchoring?: Anchoring;
-  /** Whether the comments are showing beside the preview; hiding them ends comment mode. */
+  /** Whether the comments are showing beside the preview, which is what comment mode is. */
   commentsOpen?: boolean;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -128,34 +128,10 @@ export function HtmlRegionPreview({
   }, [anchoring, rendered, request, post]);
 
   const coarse = useMediaQuery("(pointer: coarse)", false);
-  const canMark = Boolean(anchoring) && !coarse;
-  const [commenting, setCommenting] = useState(false);
-  const active = commenting && canMark;
-  useEffect(() => {
-    if (!commentsOpen) setCommenting(false);
-  }, [commentsOpen]);
-  // Esc leaves comment mode before the dialog sees it, which would otherwise close.
-  useEffect(() => {
-    if (!active) return;
-    const dialog = frame.current?.closest('[role="dialog"]');
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // A popover or another dialog over this one keeps its own Esc.
-      const target = event.target instanceof Element ? event.target : null;
-      if (target && target.closest('[role="dialog"]') !== dialog) return;
-      event.stopPropagation();
-      event.preventDefault();
-      setCommenting(false);
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [active]);
+  // As in Raft, showing the comments is comment mode: the one comment control does both.
+  const active = Boolean(anchoring && commentsOpen) && !coarse;
 
   const [drag, setDrag] = useState<{ from: Point; to: Point } | null>(null);
-  const [marked, setMarked] = useState<DocumentBox | null>(null);
-  useEffect(() => {
-    if (!active) setMarked(null);
-  }, [active]);
   // Held inside the layer: a captured drag can carry the pointer past its edges.
   const pointIn = (event: PointerEvent<HTMLDivElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -174,7 +150,6 @@ export function HtmlRegionPreview({
       w: Math.round(Math.abs(to.x - from.x)),
       h: Math.round(Math.abs(to.y - from.y)),
     };
-    setMarked(box);
     const reply = await request({ type: "quoteAt", id: ++nextId.current, box });
     const quote = reply?.type === "quote" ? storedText(reply.quote, ANCHOR_QUOTE_MAX) : "";
     anchoring.onComment({
@@ -223,25 +198,6 @@ export function HtmlRegionPreview({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-3 px-4 pt-3 pb-2 sm:px-6 sm:pt-4">
-        <p className="min-w-0 flex-1 text-xs text-tertiary">
-          {m.conversation_attachment_preview_html_note()}
-        </p>
-        {canMark && (
-          <Button
-            size="sm"
-            color={active ? "primary" : "secondary"}
-            iconLeading={MessageSquare01}
-            aria-pressed={active}
-            onClick={() => {
-              if (!active) anchoring?.onOpenComments();
-              setCommenting(!active);
-            }}
-          >
-            {m.attachment_comments_comment_selection()}
-          </Button>
-        )}
-      </div>
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <iframe
           ref={frame}
@@ -276,7 +232,6 @@ export function HtmlRegionPreview({
             if (!active || event.button !== 0) return;
             event.currentTarget.setPointerCapture(event.pointerId);
             const point = pointIn(event);
-            setMarked(null);
             setDrag({ from: point, to: point });
           }}
           onPointerMove={(event) => {
@@ -309,12 +264,6 @@ export function HtmlRegionPreview({
               style={dragBox}
             />
           )}
-          {!drag && marked && (
-            <div
-              className="pointer-events-none absolute rounded-xs border-2 border-brand bg-brand-solid/10"
-              style={onLayer(marked)}
-            />
-          )}
           {!active &&
             view?.links.map((link, index) => (
               <AriaButton
@@ -328,7 +277,7 @@ export function HtmlRegionPreview({
           {located && (
             <div
               data-located=""
-              className="pointer-events-none absolute rounded-xs bg-brand-solid/10 ring-2 ring-brand/50"
+              className="pointer-events-none absolute rounded-xs bg-utility-blue-100/80"
               style={onLayer(located, LOCATED_MIN)}
             />
           )}

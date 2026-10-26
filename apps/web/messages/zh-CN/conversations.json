@@ -250,7 +250,6 @@
   "conversation_attachment_preview_loading": "正在加载预览…",
   "conversation_attachment_preview_failed": "这个文件无法预览，请下载后查看。",
   "conversation_attachment_preview_too_large": "这个文件太大，无法预览，请下载后查看。",
-  "conversation_attachment_preview_html_note": "仅预览：该文件中的脚本和网络请求已被禁用。",
   "conversation_message_show_more": "展开全文",
   "conversation_message_show_less": "收起",
   "conversation_attachment_remove": "移除附件",

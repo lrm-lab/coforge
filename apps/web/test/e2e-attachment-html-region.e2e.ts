@@ -176,7 +176,8 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
     // A message from this page's own window claiming to be the frame's state is not believed.
     await page.evaluate(() => window.postMessage({ bridge: "coforge-html", type: "state", scrollX: 0, scrollY: 99999, viewportWidth: 1, viewportHeight: 1, documentWidth: 1, documentHeight: 1 }, "*"));
 
-    await page.click("loc=role:button[name='Comment']");
+    // As in Raft, the page opens alone; showing its comments is what lets a region be marked.
+    await page.click("loc=role:button[name='Expand comments']");
     await page.waitForFunction(() => document.querySelector('[role="dialog"]').innerText.includes("Click or drag to comment on an area"));
     await page.waitForTimeout(300);
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "comment-mode.png"))} }));
@@ -193,26 +194,29 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
     await page.waitForTimeout(400);
     await page.mouse.click(frame.left + 100, frame.top + frame.height - 40, { label: "comment on footer" });
     ${post(pointBody)}
+    // Esc closes the preview, as on Raft's page.
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => document.querySelector('[role="dialog"]') && !document.querySelector('[role="dialog"]').innerText.includes("Click or drag"));
-    console.log("E2E_ESC_KEPT_DIALOG");
+    await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+    console.log("E2E_ESC_CLOSED");
 
     await page.reload();
     ${openPreview}
+    await page.click("loc=role:button[name='Expand comments']");
     await page.click("loc=role:button[name='Go to Footer note about refunds']");
     await page.waitForFunction((frame) => {
       const box = document.querySelector('[role="dialog"] [data-located]')?.getBoundingClientRect();
       return box && box.width >= 14 && box.top >= frame.top && box.bottom <= frame.top + frame.height;
     }, frame, { timeout: 5000 });
+    // The comment jumped from is marked too.
+    await page.waitForFunction((body) => [...document.querySelectorAll('[role="dialog"] .bg-secondary')].some((row) => row.innerText.includes(body)), ${JSON.stringify(pointBody)});
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "located.png"))} }));
     console.log("E2E_REGION_JUMP");
     await page.evaluate(() => document.documentElement.classList.add("dark-mode"));
-    await page.click("loc=role:button[name='Comment']");
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(2500);
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "dark-comment-mode.png"))} }));
   `);
   expect(result).toContain(`E2E_POPUP ${outside}`);
-  expect(result).toContain("E2E_ESC_KEPT_DIALOG");
+  expect(result).toContain("E2E_ESC_CLOSED");
   expect(result).toContain("E2E_REGION_JUMP");
   const anchors = await db.attachmentComment.findMany({
     where: { message: { body: { in: [regionBody, pointBody] } } },
@@ -237,17 +241,19 @@ test("a dragged region and a clicked point are commented on, kept and jumped to;
   browserPassed = true;
 }, 120_000);
 
-test("a touch device previews the page but offers no region comments", async () => {
+test("on a touch device the comments open beside the page without marking regions", async () => {
   const result = await runBrowser(`
     const task = await taskSpace(${JSON.stringify(space)});
     const page = await task.newPage();
     let frame;
-    await page.cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await page.cdp("Emulation.setDeviceMetricsOverride", { width: 1366, height: 1024, deviceScaleFactor: 2, mobile: true });
     await page.cdp("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
     await page.cdp("Emulation.setEmulatedMedia", { features: [{ name: "pointer", value: "coarse" }] });
     await page.goto(${JSON.stringify(pageUrl)});
     ${openPreview}
-    const marks = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')].filter((button) => button.textContent.trim() === "Comment").length);
+    await page.click("loc=role:button[name='Expand comments']");
+    await page.waitForSelector('[role="dialog"] textarea');
+    const marks = await page.evaluate(() => document.querySelectorAll('[role="dialog"] .cursor-crosshair').length + (document.querySelector('[role="dialog"]').innerText.includes("Click or drag") ? 1 : 0));
     console.log("E2E_TOUCH_MARKS " + marks);
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "touch.png"))} }));
     await page.close();

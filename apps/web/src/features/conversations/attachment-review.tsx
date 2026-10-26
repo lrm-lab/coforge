@@ -44,7 +44,8 @@ export function AttachmentReviewDialog({
   file: ReviewFile;
   children: (state: { loading: boolean }) => ReactNode;
 }) {
-  const [commentsExpanded, setCommentsExpanded] = useState(true);
+  // An HTML file opens on its page alone: showing its comments is also what marks regions on it.
+  const [commentsExpanded, setCommentsExpanded] = useState(() => previewKindFor(file) !== "html");
   const [commentsOnPhone, setCommentsOnPhone] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [imageUrlFailed, setImageUrlFailed] = useState(false);
@@ -60,9 +61,6 @@ export function AttachmentReviewDialog({
         setFocusRequest((count) => count + 1);
         setCommentsExpanded(true);
         setCommentsOnPhone(true);
-      },
-      onOpenComments() {
-        setCommentsExpanded(true);
       },
     }),
     [],
