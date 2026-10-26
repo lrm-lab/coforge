@@ -3,9 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentRuntimeEvent, AgentSession, AgentSessionOptions } from "@coforge/agent";
-import { isGrokVersionUnsupported } from "#src/code-agent/grok/version";
-import { GrokProvider } from "#src/code-agent/grok/provider";
-import { ACP_TIMEOUT_MS } from "#src/code-agent/grok/session";
+import { isGrokVersionUnsupported } from "#src/grok/version";
+import { grokProvider } from "./fixtures/grok-host";
+import { ACP_TIMEOUT_MS } from "#src/grok/session";
 import { VERSION_PROBE_TIMEOUT_MS, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 
 const FIXTURE = new URL("./fixtures/grok-acp-fixture.ts", import.meta.url).pathname;
@@ -28,7 +28,7 @@ async function openFixtureSession(
     await rm(workspace, { recursive: true, force: true });
   };
   try {
-    const session = await new GrokProvider({
+    const session = await grokProvider({
       command: [process.execPath, FIXTURE],
       acpTimeoutMs,
     }).createAgentSession({
@@ -408,7 +408,7 @@ test(
     let session: AgentSession | undefined;
     const reports: unknown[] = [];
     try {
-      const provider = new GrokProvider({ command: [process.execPath, FIXTURE] });
+      const provider = grokProvider({ command: [process.execPath, FIXTURE] });
       const options = {
         agentWorkspaceDirectory: workspace,
         instructions: "instructions",
@@ -556,7 +556,7 @@ test(
     const log = join(workspace, "rpc.jsonl");
     let session: AgentSession | undefined;
     try {
-      const provider = new GrokProvider({ command: [process.execPath, FIXTURE] });
+      const provider = grokProvider({ command: [process.execPath, FIXTURE] });
       const options = {
         agentWorkspaceDirectory: workspace,
         instructions: "instructions",

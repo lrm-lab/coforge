@@ -1,3 +1,4 @@
+import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
@@ -11,10 +12,10 @@ import {
   CursorProvider,
   OpenCodeProvider,
   KiroProvider,
+  GrokProvider,
 } from "@lrm/coforge-anvil";
 import { perTurnSessionHost } from "./per-turn-host";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
-import { GrokProvider } from "#src/code-agent/grok/provider";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   resolveHostCodeAgentExecutable,
@@ -76,7 +77,10 @@ export function createCodeAgentProvider(
     }
     case RUNTIME_PROVIDER.GROK: {
       const executable = providerExecutable(RUNTIME_PROVIDER.GROK, options);
-      return new GrokProvider(executable ? { command: [executable] } : undefined);
+      return new GrokProvider({
+        host: grokRuntimeHost,
+        ...(executable ? { command: [executable] } : {}),
+      });
     }
     case RUNTIME_PROVIDER.ANTIGRAVITY:
       return new AntigravityProvider();

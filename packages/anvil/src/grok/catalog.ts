@@ -1,13 +1,14 @@
+import type { GrokRuntimeHost } from "./host";
 import {
   RUNTIME_PROVIDER,
   type CodeAgentModelCatalog,
   type CodeAgentModelMetadata,
+  diagnosticErrorCode,
 } from "@lrm/coforge-sdk/internal";
-import { processSpawner } from "#src/code-agent/process-host";
 import { getLogger } from "@logtape/logtape";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
-import { agentEnvironment } from "#src/code-agent/environment";
-import { withDeadline, asRecord, nonEmptyString, JsonlProcess } from "@lrm/coforge-anvil";
+import { withDeadline } from "#src/deadline";
+import { asRecord, nonEmptyString } from "#src/json-record";
+import { JsonlProcess } from "#src/jsonl-process";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.GROK]);
 
@@ -20,6 +21,7 @@ export async function discoverGrokCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  host: GrokRuntimeHost,
   timeoutMs = GROK_CATALOG_TIMEOUT_MS,
 ): Promise<CodeAgentModelCatalog | undefined> {
   let process: JsonlProcess | undefined;
@@ -27,8 +29,8 @@ export async function discoverGrokCatalog(
     const transport = new JsonlProcess(
       [...command, "agent", "--no-leader", "stdio"],
       cwd,
-      agentEnvironment(undefined, environment),
-      processSpawner,
+      host.buildCatalogEnvironment(environment),
+      host.processTreeSpawner,
     );
     process = transport;
     return await withDeadline(
@@ -42,7 +44,7 @@ export async function discoverGrokCatalog(
               fs: { readTextFile: false, writeTextFile: false },
               terminal: false,
             },
-            clientInfo: { name: "coforge-daemon-catalog", version: "0.1.0" },
+            clientInfo: host.catalogClientInfo,
             _meta: { cwd },
           },
         });

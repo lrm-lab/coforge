@@ -1,4 +1,8 @@
-import { RequestError, type RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import {
+  RequestError,
+  type RequestPermissionRequest,
+  type InitializeRequest,
+} from "@agentclientprotocol/sdk";
 import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,
@@ -6,11 +10,11 @@ import type {
   AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
-import { agentEnvironment } from "#src/code-agent/environment";
-import { withDeadline, asRecord, nonEmptyString } from "@lrm/coforge-anvil";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
+import { withDeadline } from "#src/deadline";
+import { asRecord, nonEmptyString } from "#src/json-record";
 import { GrokConnection } from "./connection";
 import { GrokTurnEvents } from "./update-events";
+import type { GrokRuntimeHost } from "./host";
 
 /** How long a production session waits for each ACP answer. */
 export const ACP_TIMEOUT_MS = 30_000;
@@ -46,8 +50,9 @@ export async function createGrokSession(
   options: AgentSessionOptions,
   command: readonly string[],
   acpTimeoutMs: number,
+  host: GrokRuntimeHost,
 ): Promise<AgentSession> {
-  const session = new GrokSession(options, command, acpTimeoutMs);
+  const session = new GrokSession(options, command, acpTimeoutMs, host);
   try {
     await session.open();
     return session;
@@ -80,6 +85,7 @@ class GrokSession implements AgentSession {
     private readonly options: AgentSessionOptions,
     command: readonly string[],
     private readonly acpTimeoutMs: number,
+    private readonly host: GrokRuntimeHost,
   ) {
     const argv = [...command, "--trust", "agent", "--no-leader", "--always-approve"];
     if (options.runtime?.model && options.runtime.model !== "default")
@@ -89,11 +95,8 @@ class GrokSession implements AgentSession {
     this.#transport = new GrokConnection(
       argv,
       options.agentWorkspaceDirectory,
-      agentEnvironment(options.environment, Bun.env, undefined, {
-        envVars: options.runtime?.envVars,
-        gitHooks: options.gitHooks,
-        extraEnv: { PWD: options.agentWorkspaceDirectory, NO_COLOR: "1" },
-      }),
+      host.buildSessionEnvironment(options),
+      host,
       (method, params) => this.#update(method, params),
       (request) => this.#permission(request),
     );
@@ -118,13 +121,12 @@ class GrokSession implements AgentSession {
 
   async open() {
     const agent = this.#transport.connection.agent;
-    const initialized = await this.#bounded(
-      agent.request("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: "coforge-daemon", version: COFORGE_DAEMON_VERSION },
-      }),
-    );
+    const request: InitializeRequest = {
+      protocolVersion: 1,
+      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      clientInfo: this.host.sessionClientInfo,
+    };
+    const initialized = await this.#bounded(agent.request("initialize", request));
     if (initialized.protocolVersion !== 1) throw new Error("Unsupported Grok ACP version");
     const canLoad = initialized.agentCapabilities?.loadSession === true;
     const methods = initialized.authMethods ?? [];
@@ -275,7 +277,7 @@ class GrokSession implements AgentSession {
     if (this.#disposed || !this.#identity) throw new Error("Grok cannot accept input");
     const id = crypto.randomUUID();
     const admitted = Promise.withResolvers<void>();
-    this.#turns.set(id, { admitted, options, updates: new GrokTurnEvents() });
+    this.#turns.set(id, { admitted, options, updates: new GrokTurnEvents(this.host) });
     void this.#transport.connection.agent
       .request("session/prompt", {
         sessionId: this.#identity.sessionId,
@@ -361,7 +363,8 @@ class GrokSession implements AgentSession {
       }
       this.#runningId = running;
       if (running && !this.#completed.has(running)) {
-        if (!this.#turns.has(running)) this.#turns.set(running, { updates: new GrokTurnEvents() });
+        if (!this.#turns.has(running))
+          this.#turns.set(running, { updates: new GrokTurnEvents(this.host) });
         this.#turns.get(running)?.admitted?.resolve();
         this.#emit({ type: "progress", source: "grok_turn_started" });
       }

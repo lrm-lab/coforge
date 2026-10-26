@@ -20,6 +20,7 @@
 | `src/catalog-command.ts` | Host catalog command execution port |
 | `src/per-turn/` | Shared per-turn session and process execution |
 | `src/version-gate.ts` | Shared version policy and required host version-reader port |
+| `src/grok/` | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities |
 | `src/kiro/` | Kiro ACP provider, native profile, events, version/catalog policy and usage parsing with explicit host ports |
 | `src/opencode/` | OpenCode provider, turn protocol, version policy and catalog parsing |
 | `src/cursor/` | Cursor turn protocol, provider and model catalog parsing |
@@ -28,3 +29,4 @@
 ## Runtime instructions
 
 - [Cursor adapter](src/cursor/AGENTS.md)
+- [Grok adapter](src/grok/AGENTS.md)

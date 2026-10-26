@@ -12,7 +12,7 @@ import {
   OpenCodeProvider,
   VERSION_PROBE_TIMEOUT_MS,
 } from "@lrm/coforge-anvil";
-import { GrokProvider } from "#src/code-agent/grok/provider";
+import { grokProvider } from "./fixtures/grok-host";
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
 import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
@@ -36,7 +36,7 @@ const providers = [
     versionReader: readVersionOutput,
     command: [process.execPath, anvilRuntimeFixtures.opencode],
   }),
-  new GrokProvider({ command: command("grok-acp-fixture.ts") }),
+  grokProvider({ command: [process.execPath, anvilRuntimeFixtures.grok] }),
   new AntigravityProvider({ command: command("antigravity-fixture.ts") }),
 ];
 

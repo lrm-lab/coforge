@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
-import { asRecord, nonEmptyString } from "@lrm/coforge-anvil";
+import { asRecord, nonEmptyString } from "#src/json-record";
 import {
   grokToolEnded,
   grokToolExitCode,
@@ -7,17 +7,21 @@ import {
   grokToolInput,
   grokToolOutputText,
 } from "./tool-call";
-import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
-import { isShellToolName } from "#src/code-agent/send-command-target";
+
+import type { GrokTurnHost, GrokReplyIntentScanner } from "./host";
 
 /** Display state belongs to a native turn, including turns started by background work. */
 export class GrokTurnEvents {
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
   #compacting = false;
-  readonly #scanner = new ReplyIntentScanner();
+  readonly #scanner: GrokReplyIntentScanner;
   readonly #deltaCalls = new Map<number, string>();
   readonly #shellCalls = new Set<string>();
+
+  constructor(private readonly host: GrokTurnHost) {
+    this.#scanner = host.createReplyIntentScanner();
+  }
 
   read(update: Readonly<Record<string, unknown>>): AgentRuntimeEvent[] {
     switch (update.sessionUpdate) {
@@ -49,7 +53,7 @@ export class GrokTurnEvents {
           (typeof index === "number" ? this.#deltaCalls.get(index) : undefined);
         const name = nonEmptyString(update.name);
         if (callId && name) {
-          if (!isShellToolName(name)) return [];
+          if (!this.host.isShellToolName(name)) return [];
           this.#shellCalls.add(callId);
           if (typeof index === "number") this.#deltaCalls.set(index, callId);
         }

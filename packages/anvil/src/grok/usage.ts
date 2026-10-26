@@ -1,18 +1,20 @@
-import { client, RequestError, type AnyMessage } from "@agentclientprotocol/sdk";
-import { processSpawner } from "#src/code-agent/process-host";
+import type { GrokRuntimeHost } from "./host";
+import {
+  type InitializeRequest,
+  client,
+  RequestError,
+  type AnyMessage,
+} from "@agentclientprotocol/sdk";
 import {
   type UsageOfficialBucket,
   type UsageSnapshot,
   type UsageWindow,
   UsageUnavailableError,
   UsageUnsupportedError,
-  asRecord,
-  JsonlProcess,
-  JsonlRequestError,
-} from "@lrm/coforge-anvil";
-import { agentEnvironment } from "#src/code-agent/environment";
+} from "#src/contract";
+import { asRecord } from "#src/json-record";
+import { JsonlProcess, JsonlRequestError } from "#src/jsonl-process";
 
-import { maskEmail } from "#src/code-agent/mask-email";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 /** Reads Grok's account billing endpoint through its ACP surface. */
@@ -23,12 +25,19 @@ export async function readGrokUsage(
     environment?: Readonly<Record<string, string>>;
     timeoutMs?: number;
   } = {},
+  host: GrokRuntimeHost,
 ): Promise<UsageSnapshot | null> {
   const process = new JsonlProcess(
-    [...(options.command ?? ["grok"]), "agent", "--always-approve", "--no-leader", "stdio"],
+    [
+      ...(options.command ?? [RUNTIME_PROVIDER.GROK]),
+      "agent",
+      "--always-approve",
+      "--no-leader",
+      "stdio",
+    ],
     workingDirectory,
-    agentEnvironment(options.environment),
-    processSpawner,
+    host.buildUsageEnvironment(options.environment),
+    host.processTreeSpawner,
   );
   const timeoutMs = options.timeoutMs ?? 10_000;
   let unsubscribe: (() => void) | undefined;
@@ -41,20 +50,18 @@ export async function readGrokUsage(
       unsubscribe = undefined;
     },
   });
-  const connection = client({ name: "coforge-daemon-usage" }).connect({
+  const connection = client({ name: host.usageClientInfo.name }).connect({
     readable,
     writable: new WritableStream<AnyMessage>({ write: (message) => process.send(message) }),
   });
   try {
-    const initialized = await bounded(
-      connection.agent.request("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: "coforge-daemon-usage", version: "0.1.0" },
-        _meta: { cwd: workingDirectory },
-      }),
-      timeoutMs,
-    );
+    const request: InitializeRequest = {
+      protocolVersion: 1,
+      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      clientInfo: host.usageClientInfo,
+      _meta: { cwd: workingDirectory },
+    };
+    const initialized = await bounded(connection.agent.request("initialize", request), timeoutMs);
     const method = initialized.authMethods?.[0]?.id;
     if (method)
       await bounded(connection.agent.request("authenticate", { methodId: method }), timeoutMs);
@@ -63,7 +70,7 @@ export async function readGrokUsage(
     try {
       const auth = await bounded(connection.agent.request("_x.ai/auth/info", {}), timeoutMs);
       const value = asRecord(auth)?.email;
-      if (typeof value === "string") email = maskEmail(value);
+      if (typeof value === "string") email = host.maskAccountLabel(value);
     } catch {
       // Billing is useful without exposing an account label.
     }

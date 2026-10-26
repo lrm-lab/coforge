@@ -1,3 +1,4 @@
+import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { join } from "node:path";
 import {
@@ -13,9 +14,9 @@ import {
   KIRO_ACP_ARGS,
   discoverCursorCatalog,
   discoverOpenCodeCatalog,
+  discoverGrokCatalog,
 } from "@lrm/coforge-anvil";
 import { runCatalogCommand } from "./catalog-command";
-import { discoverGrokCatalog } from "#src/code-agent/grok/catalog";
 import { discoverAntigravityCatalog } from "#src/code-agent/antigravity/catalog";
 import {
   externalCodeAgent,
@@ -287,7 +288,7 @@ export async function discoverCodeAgentCatalogs(
     const executable = await resolveExecutable(RUNTIME_PROVIDER.GROK);
     if (executable)
       discoveries.push(
-        discoverGrokCatalog(commands.grok ?? [executable], cwd, environment)
+        discoverGrokCatalog(commands.grok ?? [executable], cwd, environment, grokRuntimeHost)
           .catch(() => undefined)
           .then((catalog) => ({
             provider: RUNTIME_PROVIDER.GROK,

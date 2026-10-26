@@ -15,13 +15,14 @@ import {
   type CodeAgentProbe,
   isKiroVersionUnsupported,
   logKiroVersionUnsupported,
+  isGrokVersionUnsupported,
+  logGrokVersionUnsupported,
 } from "@lrm/coforge-anvil";
 import {
   probeClaudeCodeVersion,
   resolveClaudeCodeExecutable,
 } from "#src/code-agent/claude-code/runtime";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
-import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "#src/code-agent/grok/version";
 import {
   isAntigravityVersionUnsupported,
   logAntigravityVersionUnsupported,

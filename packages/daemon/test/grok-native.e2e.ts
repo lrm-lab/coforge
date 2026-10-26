@@ -1,15 +1,14 @@
 // Opt-in: COFORGE_GROK_E2E_COMMAND=/path/to/grok bun test ./test/grok-native.e2e.ts
 // Runs a real Grok CLI against a local model endpoint and an isolated GROK_HOME. No login or
 // provider credits required. Writes a repeatable report to .amp/e2e/grok-native/report.json.
+import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSession, AgentRuntimeEvent } from "@coforge/agent";
-import { GrokProvider } from "#src/code-agent/grok/provider";
-import { discoverGrokCatalog } from "#src/code-agent/grok/catalog";
-import { readGrokVersion } from "#src/code-agent/grok/version";
-import { withDeadline } from "@lrm/coforge-anvil";
+import { grokProvider, readGrokVersion } from "./fixtures/grok-host";
+import { discoverGrokCatalog, withDeadline } from "@lrm/coforge-anvil";
 
 const command = Bun.env.COFORGE_GROK_E2E_COMMAND;
 if (!command) throw new Error("Set COFORGE_GROK_E2E_COMMAND to the installed Grok executable");
@@ -197,14 +196,14 @@ test("native Grok discovers custom reasoning choices and reports compaction in a
       });
       const environment = isolatedEnvironment(home);
       version = await readGrokVersion([command!]);
-      const catalog = await discoverGrokCatalog([command!], cwd, environment);
+      const catalog = await discoverGrokCatalog([command!], cwd, environment, grokRuntimeHost);
       model = catalog?.models.find((entry) => entry.id === "coforge-fixture");
       expect(model).toMatchObject({
         reasoningEfforts: ["low", "high"],
         defaultReasoning: "high",
         recommended: true,
       });
-      session = await new GrokProvider({ command: [command!] }).createAgentSession({
+      session = await grokProvider({ command: [command!] }).createAgentSession({
         agentWorkspaceDirectory: cwd,
         instructions: "Verify the fixture protocol; use no tools unless asked.",
         runtime: { provider: "grok", model: "coforge-fixture", reasoning: "high" },
@@ -393,7 +392,7 @@ test("native ACP admits live interjections, runs a background follow-up and resu
       runtime: { provider: "grok" as const, model: "coforge-fixture", reasoning: "" },
       environment: isolatedEnvironment(home),
     };
-    const provider = new GrokProvider({ command: [command!] });
+    const provider = grokProvider({ command: [command!] });
     session = await provider.createAgentSession(options);
     session.subscribe((event) => events.push(event));
     await session.notify!("NATIVE_HISTORY_MARKER");
@@ -482,7 +481,7 @@ test("native ACP replaces a resumed session Grok reports as missing", async () =
     await mkdir(home);
     await writeFixtureConfig(home, server.port!, 1_000_000);
     // A never-created ID is Grok's definitive miss (`-32603`, `data.code: FS_NOT_FOUND`).
-    session = await new GrokProvider({ command: [command!] }).createAgentSession({
+    session = await grokProvider({ command: [command!] }).createAgentSession({
       agentWorkspaceDirectory: cwd,
       instructions: "Verify isolated native restore.",
       runtime: { provider: "grok", model: "coforge-fixture", reasoning: "" },
@@ -598,7 +597,7 @@ test("native Grok replaces its system prompt with the instructions on new and on
     await mkdir(home);
     await writeFixtureConfig(home, server.port!, 1_000_000);
     version = await readGrokVersion([command!]);
-    const provider = new GrokProvider({ command: [command!] });
+    const provider = grokProvider({ command: [command!] });
     const options = {
       agentWorkspaceDirectory: cwd,
       runtime: { provider: "grok" as const, model: "coforge-fixture", reasoning: "" },

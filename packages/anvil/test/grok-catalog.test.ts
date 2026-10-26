@@ -1,12 +1,21 @@
+import { fixtureGrokHost } from "./fixtures/grok-host";
 import { expect, test } from "bun:test";
-import { discoverGrokCatalog, GROK_CATALOG_TIMEOUT_MS } from "#src/code-agent/grok/catalog";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+import {
+  discoverGrokCatalog,
+  GROK_CATALOG_TIMEOUT_MS,
+  PROCESS_TREE_EXIT_GRACE_MS,
+} from "@lrm/coforge-anvil";
 
 test(
   "discovers the native per-model reasoning choices without creating a session",
   async () => {
     const fixture = new URL("./fixtures/grok-catalog-fixture.ts", import.meta.url).pathname;
-    const catalog = await discoverGrokCatalog([process.execPath, fixture], process.cwd(), Bun.env);
+    const catalog = await discoverGrokCatalog(
+      [process.execPath, fixture],
+      process.cwd(),
+      Bun.env,
+      fixtureGrokHost,
+    );
     expect(catalog).toEqual({
       provider: "grok",
       models: [

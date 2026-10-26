@@ -4,8 +4,10 @@ import {
   type RequestPermissionRequest,
   type RequestPermissionResponse,
 } from "@agentclientprotocol/sdk";
-import { processSpawner } from "#src/code-agent/process-host";
-import { JsonlProcess, asRecord } from "@lrm/coforge-anvil";
+import { JsonlProcess } from "#src/jsonl-process";
+import { asRecord } from "#src/json-record";
+
+import type { GrokConnectionHost } from "./host";
 
 type RecordValue = Readonly<Record<string, unknown>>;
 const record = (value: unknown): RecordValue => {
@@ -23,11 +25,12 @@ export class GrokConnection {
     command: readonly string[],
     cwd: string,
     environment: Readonly<Record<string, string>>,
+    host: GrokConnectionHost,
     onUpdate: (method: string, params: RecordValue) => void,
     onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse,
   ) {
-    this.process = new JsonlProcess(command, cwd, environment, processSpawner);
-    this.connection = client({ name: "coforge-daemon" })
+    this.process = new JsonlProcess(command, cwd, environment, host.processTreeSpawner);
+    this.connection = client({ name: host.sessionClientInfo.name })
       .onNotification("session/update", () => {})
       .onNotification("_x.ai/queue/changed", record, () => {})
       .onNotification("_x.ai/session_notification", record, () => {})

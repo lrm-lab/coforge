@@ -41,11 +41,6 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
     'a logger category and the Codex CLI executable/subcommand ("codex", "app-server")',
   "packages/daemon/src/code-agent/codex/usage.ts":
     'the Codex CLI executable/subcommand ("codex", "app-server")',
-  "packages/daemon/src/code-agent/grok/provider.ts": 'the Grok CLI executable name ("grok")',
-  "packages/daemon/src/code-agent/grok/catalog.ts": "a logger category",
-  "packages/daemon/src/code-agent/grok/usage.ts": 'the Grok CLI executable name ("grok")',
-  "packages/daemon/src/code-agent/grok/version.ts":
-    "the Grok CLI executable name in the version-gate log and error",
 };
 
 const LITERAL_PATTERN = new RegExp(
