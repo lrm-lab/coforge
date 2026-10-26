@@ -11,6 +11,7 @@ import {
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { cn } from "#src/lib/utils";
@@ -245,6 +246,7 @@ export function RuntimeUsagePopoverContent({
         return window ? [{ key, window }] : [];
       })
     : [];
+  const refreshLabel = scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh();
   const hasUsageNotes = Boolean(
     snapshot?.officialDescription || snapshot?.officialGroups?.some((group) => group.description),
   );
@@ -279,17 +281,19 @@ export function RuntimeUsagePopoverContent({
         {showUsage &&
           !signedOut && (
             // `isLoading` (React Aria's `isPending`) keeps focus on the button mid-press, where
-            // `isDisabled` would drop it (task #109). No tooltip: it would close the popover.
-            <Button
-              size="xs"
-              color="tertiary"
-              iconLeading={RefreshCw}
-              aria-label={scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
-              isLoading={scanning}
-              isDisabled={computerOnline === false}
-              className="-mt-1 shrink-0"
-              onPress={onRefresh}
-            />
+            // `isDisabled` would drop it (task #109). The tooltip repeats its name.
+            <Tooltip title={refreshLabel}>
+              <Button
+                size="xs"
+                color="tertiary"
+                iconLeading={RefreshCw}
+                aria-label={refreshLabel}
+                isLoading={scanning}
+                isDisabled={computerOnline === false}
+                className="-mt-1 shrink-0"
+                onPress={onRefresh}
+              />
+            </Tooltip>
           )}
         {onClose && (
           <ButtonUtility

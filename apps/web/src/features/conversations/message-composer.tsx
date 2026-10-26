@@ -15,6 +15,7 @@ import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
 import { AlertCircle, Plus, UploadCloud02, XClose } from "@untitledui/icons";
+import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -242,7 +243,6 @@ export function MessageComposer({
   const [asTask, setAsTask] = useState(false);
   // The edited-back Task belongs to its draft; another conversation's Send is a plain send again.
   useEffect(() => setAsTask(false), [draftKey]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   // The last quote this composer consumed. Held by id so a re-render (or an unrelated state
   // change) never re-inserts a quote the reader already has in the draft.
   const consumedQuoteIdRef = useRef<number | undefined>(undefined);
@@ -678,27 +678,22 @@ export function MessageComposer({
             )}
           </div>
         )}
-        <Button
-          color="tertiary"
-          size="xs"
-          iconLeading={Plus}
-          aria-label={m.conversation_attachment_label()}
-          isDisabled={composerDisabled}
-          onPress={() => fileInputRef.current?.click()}
-          className={cx("col-start-1", barRow, stacked && "mt-1")}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          disabled={composerDisabled}
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            event.target.value = "";
+        <FileTrigger
+          allowsMultiple
+          onSelect={(list) => {
+            const files = Array.from(list ?? []);
             if (files.length > 0) void addFiles(files);
           }}
-          className="sr-only"
-        />
+        >
+          <Button
+            color="tertiary"
+            size="xs"
+            iconLeading={Plus}
+            aria-label={m.conversation_attachment_label()}
+            isDisabled={composerDisabled}
+            className={cx("col-start-1", barRow, stacked && "mt-1")}
+          />
+        </FileTrigger>
         <ComposerSendButton
           asTask={asTask}
           taskMode={taskMode}

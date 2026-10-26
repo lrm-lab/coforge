@@ -356,13 +356,14 @@ function CreateAgentEntry({
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-primary text-fg-quaternary">
           <Plus aria-hidden="true" className="size-3.5" />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-primary">
+        {/* One line: the action, then where the new Agent goes in brackets, in the note's style. */}
+        <span className="min-w-0 flex-1 truncate text-sm">
+          <span className="font-medium text-primary">
             {name
               ? m.channel_members_create_agent_named({ name })
               : m.channel_members_create_agent()}
-          </span>
-          <span className="block truncate text-sm text-tertiary">
+          </span>{" "}
+          <span className="text-tertiary">
             {m.channel_members_create_agent_joins({ channel: channelName })}
           </span>
         </span>

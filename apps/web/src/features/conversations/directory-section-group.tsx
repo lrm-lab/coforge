@@ -66,7 +66,7 @@ export function DirectorySection({
   // button).
   const title = (
     <span className="flex w-full min-w-0 items-center gap-2">
-      <span className="min-w-0 truncate text-sm font-medium text-primary uppercase">{label}</span>
+      <span className="min-w-0 truncate text-sm font-medium text-primary">{label}</span>
       <span className="sr-only">, </span>
       <span className="shrink-0 text-sm font-normal text-quaternary tabular-nums">{count}</span>
     </span>

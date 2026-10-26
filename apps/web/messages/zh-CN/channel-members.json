@@ -41,7 +41,7 @@
   "channel_members_add_selected": "添加所选（{count}）",
   "channel_members_create_agent": "创建 Agent",
   "channel_members_create_agent_named": "创建 Agent「{name}」",
-  "channel_members_create_agent_joins": "建好后自动加入 #{channel}",
+  "channel_members_create_agent_joins": "（建好后自动加入 #{channel}）",
   "channel_members_create_agent_denied": "你可以往这个频道加成员，但只有工作区所有者或管理员能创建 Agent。请他们先创建，再回到这里添加。",
   "channel_members_create_agent_join_failed": "Agent「{name}」已创建，但没能加入 #{channel}",
   "channel_members_create_agent_join_failed_hint": "它已经存在，不要再创建一个同名的，重试加入即可。",

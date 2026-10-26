@@ -1,7 +1,7 @@
 /**
- * Left-navigation icons follow the design spec: a resting icon draws in the
- * `--color-nav-icon` token with a 2px stroke (#777D8D in light, lightened in dark), while the current item
- * is neutral and the token stays out of non-nav icon slots.
+ * Left-navigation items follow the design spec: a resting label and icon draw in the
+ * `--color-nav-fg` token (#777D8D in light, lightened in dark) with a 2px stroke, and the current
+ * item in `--color-nav-fg-current` (#101319, the sidebar ink).
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -21,25 +21,25 @@ const items = [
 const footer = <div id="footer-slot" />;
 const railProps = { activeUrl: "/chat", items, footer };
 
-test("Rail: the resting icon carries the nav-icon token and a 2px stroke", () => {
+test("Rail: the resting icon carries the nav-fg token and a 2px stroke", () => {
   const markup = renderToStaticMarkup(<SidebarRail {...railProps} />);
-  expect(markup).toContain("text-nav-icon");
+  expect(markup).toContain("text-nav-fg ");
   expect(markup).toContain("stroke-[2.4]");
 });
 
 test("Sidebar (expanded, and the mobile drawer): same token and 2px stroke on its icon", () => {
   const markup = renderToStaticMarkup(<SidebarExpanded {...railProps} />);
-  expect(markup).toContain("text-nav-icon");
+  expect(markup).toContain("text-nav-fg ");
   expect(markup).toContain("stroke-[2px]");
 });
 
-test("The current item is a neutral dark gray, never the brand violet; the resting icon never uses the old caption gray", () => {
+test("The current item draws in the current-item token, never the brand violet; the resting icon never uses the old caption gray", () => {
   const iconClasses = (
     renderToStaticMarkup(<SidebarRail {...railProps} />).match(/<svg class="([^"]+)"/g) ?? []
   ).map((hit) => hit.replace('<svg class="', "").replace('"', ""));
   expect(iconClasses).toHaveLength(2);
-  const current = iconClasses.find((cls) => cls.includes("text-primary"));
-  const resting = iconClasses.find((cls) => cls.includes("text-nav-icon"));
+  const current = iconClasses.find((cls) => cls.includes("text-nav-fg-current"));
+  const resting = iconClasses.find((cls) => cls.includes("text-nav-fg "));
   expect(current).toBeTruthy();
   expect(current).not.toContain("text-brand-secondary");
   expect(resting).toBeTruthy();
@@ -66,9 +66,9 @@ test("The collapsed rail is an icon column and each item keeps its name", () => 
   expect(visible).not.toContain(`>${chat}<`);
 });
 
-test("The token carries the spec's value in light, and a lighter one for the dark column", async () => {
+test("The resting token carries the spec's value in light, and a lighter one for the dark column", async () => {
   const css = await Bun.file(new URL("../src/styles/coforge-theme.css", import.meta.url)).text();
-  const values = [...css.matchAll(/--color-nav-icon:\s*([^;]+);/g)].map((hit) =>
+  const values = [...css.matchAll(/--color-nav-fg:\s*([^;]+);/g)].map((hit) =>
     hit[1]!.trim().toLowerCase(),
   );
   // The spec's cool grey is the light value; dark re-points it, because this one drops to

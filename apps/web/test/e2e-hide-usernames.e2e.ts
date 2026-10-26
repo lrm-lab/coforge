@@ -310,9 +310,9 @@ test("people are shown by their names, and no screen shows a username", async ()
     await browser("fill", 'input[placeholder="Search members…"]', "");
     await browser(
       "eval",
-      `[...${panel}.querySelectorAll("button")].find((button) => button.textContent.trim() === "Add member").click()`,
+      `[...${panel}.querySelectorAll("button")].find((button) => button.textContent.trim() === "Add Member").click()`,
     );
-    await waitFor(`${panel}.innerText.includes("Add selected (0)")`);
+    await waitFor(`${panel}.innerText.includes("Add Selected (0)")`);
     await waitFor(`${panel}.innerText.includes("Lindy")`);
     text = await panelText();
     check("channel add view: lists the person by label", text.includes("Lindy"));

@@ -421,7 +421,7 @@ export function DirectoryDragOverlay({
                   active.id === "group:pinned" ? "text-primary" : "text-fg-quaternary",
                 )}
               />
-              <span className="min-w-0 truncate text-sm font-medium text-primary uppercase">
+              <span className="min-w-0 truncate text-sm font-medium text-primary">
                 {active.label}
               </span>
             </span>

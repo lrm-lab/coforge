@@ -7,7 +7,7 @@ import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
-/** The send buttons are near-black (neutral-600 in dark mode, where near-black sinks into the background), not the primary button's brand violet, with white icons instead of the dimmed default. */
+/** The send buttons are near-black (neutral-600 in dark mode, where near-black sinks into the background), not the primary button's brand violet, with white icons instead of the dimmed default. With nothing to send, both halves are the library's disabled secondary button instead (design spec), as Raft's grey outlined send. */
 const SEND_BUTTON_CLASS =
   "bg-primary-solid hover:bg-primary-solid data-loading:bg-primary-solid dark:bg-secondary-solid dark:hover:bg-secondary-solid dark:data-loading:bg-secondary-solid *:data-icon:text-white hover:*:data-icon:text-white";
 
@@ -41,17 +41,20 @@ export function ComposerSendButton({
         description: m.conversation_send_as_task_description(),
         shortcut: isApplePlatform() ? "⌘⇧Enter" : "Ctrl+Shift+Enter",
       };
+  const look = isDisabled
+    ? ({ color: "secondary" } as const)
+    : ({ color: "primary", className: SEND_BUTTON_CLASS } as const);
   return (
     <div className={cx("flex items-center", className)}>
       <Tooltip title={label} isDisabled={isDisabled}>
         <Button
           type="submit"
-          color="primary"
+          color={look.color}
           size="xs"
           iconLeading={asTask ? CheckSquare : Send01}
           aria-label={label}
           className={cx(
-            SEND_BUTTON_CLASS,
+            look.className,
             taskMode && "rounded-r-none before:rounded-r-none before:border-r-0",
           )}
           isDisabled={isDisabled}
@@ -61,12 +64,12 @@ export function ComposerSendButton({
         <Dropdown.Root>
           <Tooltip title={m.conversation_send_options()} isDisabled={isDisabled}>
             <Button
-              color="primary"
+              color={look.color}
               size="xs"
               iconLeading={ChevronDown}
               aria-label={m.conversation_send_options()}
               className={cx(
-                SEND_BUTTON_CLASS,
+                look.className,
                 "-ml-px rounded-l-none before:rounded-l-none before:border-l-0",
               )}
               isDisabled={isDisabled}

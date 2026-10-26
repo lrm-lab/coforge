@@ -131,11 +131,11 @@ test("the add view creates an Agent named by the search, and it joins the channe
     // "+" opens the add view, which always ends with the create entry.
     await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
     await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
-    await waitFor(panelHas("Add selected (0)"));
+    await waitFor(panelHas("Add Selected (0)"));
     await waitFor(panelHas("Create Agent"));
     expect(
       await evaluate<boolean>(
-        panelHas(`Joins #${channel.channelName} automatically after creation`),
+        panelHas(`(joins #${channel.channelName} automatically after creation)`),
       ),
     ).toBe(true);
 

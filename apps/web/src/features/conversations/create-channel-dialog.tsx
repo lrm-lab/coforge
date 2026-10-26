@@ -113,7 +113,7 @@ export function CreateChannelDialog({
       }}
     >
       {memberPicker ? (
-        <Modal className="w-[calc(100vw-2rem)] max-w-4xl">
+        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden">
           <Dialog className="flex h-[min(36rem,calc(100dvh-4rem))] flex-col p-0 md:flex-row">
             {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
           </Dialog>
@@ -218,7 +218,7 @@ function CreateChannelForm({
       isRequired
       maxLength={32}
       pattern="[a-z0-9][a-z0-9_\-]{0,31}"
-      placeholder="engineering"
+      placeholder={m.channel_name_placeholder()}
       isDisabled={locked}
     />
   );
@@ -354,7 +354,7 @@ function CreateChannelForm({
         ) : (
           <form
             onSubmit={(event) => void submit(event)}
-            className="mt-5 flex min-h-0 flex-1 flex-col gap-4"
+            className="mt-5 flex flex-1 flex-col gap-4"
           >
             {nameField}
             {projectField}

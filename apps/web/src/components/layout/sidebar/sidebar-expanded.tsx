@@ -21,15 +21,15 @@ function ExpandedItem({ href, icon: Icon, label, current, badge }: ExpandedItemT
       className={cx(
         "group flex h-11 items-center gap-3.5 rounded-lg px-3 text-sm font-medium outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2",
         current
-          ? "bg-tertiary font-semibold text-primary"
-          : "bg-sidebar-item text-secondary hover:bg-sidebar-item-active",
+          ? "bg-tertiary font-semibold text-nav-fg-current"
+          : "bg-sidebar-item text-nav-fg hover:bg-sidebar-item-active hover:text-secondary",
       )}
     >
       <Icon
         aria-hidden="true"
         className={cx(
           "size-6 shrink-0 stroke-[2px] transition-colors duration-100 ease-linear",
-          current ? "text-primary" : "text-nav-icon group-hover:text-secondary",
+          current ? "text-nav-fg-current" : "text-nav-fg group-hover:text-secondary",
         )}
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>

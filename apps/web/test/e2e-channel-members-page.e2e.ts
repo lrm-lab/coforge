@@ -161,8 +161,8 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await waitFor(panelHas(inside.displayName));
 
     // Add member opens the add view in the same page.
-    await clickText(`[role="dialog"] button`, "Add member");
-    await waitFor(panelHas("Add selected (0)"));
+    await clickText(`[role="dialog"] button`, "Add Member");
+    await waitFor(panelHas("Add Selected (0)"));
     await browser("fill", 'input[placeholder="Name"]', outside.displayName);
     // The candidate's label also holds its avatar initial and description.
     const candidate = `[...document.querySelectorAll('[role="dialog"] label')].find((label) => label.textContent.includes(${JSON.stringify(outside.displayName)}))`;
@@ -170,9 +170,9 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // Each candidate row is valid markup: its avatar is not inside a paragraph.
     expect(await browser("eval", `${panel}.querySelectorAll("p div").length`)).toContain("0");
     await browser("eval", `${candidate}.querySelector("input").click()`);
-    await waitFor(panelHas("Add selected (1)"));
+    await waitFor(panelHas("Add Selected (1)"));
     await browser("screenshot", join(artifacts, "add.png"));
-    await clickText(`[role="dialog"] button`, "Add selected (1)");
+    await clickText(`[role="dialog"] button`, "Add Selected (1)");
     await waitFor(`${onRoster} && ${panelHas(outside.displayName)}`);
     expect(
       await db.conversationMember.findFirst({

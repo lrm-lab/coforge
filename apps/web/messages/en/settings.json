@@ -180,7 +180,7 @@
   "preferences_live_agent_activity": "Live agent activity",
   "preferences_live_agent_activity_description": "Show working agents in the chat list header, and which agents are typing or replying in chat.",
   "preferences_hide_empty_sidebar_sections": "Hide empty sidebar sections",
-  "preferences_hide_empty_sidebar_sections_description": "Hide Pinned and your own sections when empty; they come back while you drag a conversation. Channels and Direct messages stay visible so you can start a conversation.",
+  "preferences_hide_empty_sidebar_sections_description": "Hide Pinned and your own sections when empty; they come back while you drag a conversation. Channels and Direct Messages stay visible so you can start a conversation.",
   "preferences_conversations": "Conversations",
   "preferences_message_font_size": "Message font size",
   "preferences_message_font_size_description": "Adjust message text on this device, including headings, code blocks, inline code and reference chips. Buttons, labels and the sidebar keep their size.",

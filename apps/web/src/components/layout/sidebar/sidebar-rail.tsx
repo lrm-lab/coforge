@@ -44,7 +44,7 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
               aria-hidden="true"
               className={cx(
                 "size-5 stroke-[2.4] transition-colors duration-100 ease-linear",
-                current ? "text-primary" : "text-nav-icon group-hover:text-secondary",
+                current ? "text-nav-fg-current" : "text-nav-fg group-hover:text-secondary",
               )}
             />
             {badge ? <UnreadDot className="absolute top-1.5 right-1.5" /> : null}

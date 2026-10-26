@@ -34,7 +34,7 @@ function Choice({ label, selected }: { label: string; selected: boolean }) {
   );
 }
 
-const SECTION_HEADER_CLASS = "px-4 pt-1.5 pb-1 text-xs font-semibold text-tertiary uppercase";
+const SECTION_HEADER_CLASS = "px-4 pt-1.5 pb-1 text-xs font-semibold text-tertiary";
 
 function onlyKey(selection: Selection): string | undefined {
   if (selection === "all") return undefined;

@@ -1,5 +1,6 @@
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { dateTimeFormat } from "#src/lib/dates";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 /**
@@ -44,13 +45,14 @@ export function UnreadDivider() {
   );
 }
 
-/** The date rule drawn above the first message of a day. */
+/** The date rule drawn above the first message of a day: a 22px tag with a 4px radius on a rule
+ * that runs the full row and meets its border (design spec). */
 export function DayDivider({ value, locale }: { value: Date | string; locale?: string }) {
   const timeZone = useTimeZone();
   return (
-    <div className={DIVIDER_ROW_CLASS}>
+    <div className={cn(DIVIDER_ROW_CLASS, "gap-0")}>
       <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
-      <span className="shrink-0 rounded-full border border-secondary bg-primary px-3 py-1 text-md text-tertiary tabular-nums">
+      <span className="flex h-5.5 shrink-0 items-center rounded border border-secondary bg-primary px-2 text-xs text-tertiary tabular-nums">
         {dayLabel(value, locale, timeZone)}
       </span>
       <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
