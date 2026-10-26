@@ -3,10 +3,8 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { agentDirectKey } from "#src/features/conversations/direct-key";
-import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { hydrated, openBrowser, seededUuid } from "./e2e-sign-in-harness";
+import { hydrated, openBrowser } from "./e2e-sign-in-harness";
 
 /**
  * The "Finish setting up" card in the Workspace sidebar, in a real browser: it lists the steps the
@@ -15,8 +13,7 @@ import { hydrated, openBrowser, seededUuid } from "./e2e-sign-in-harness";
  * closing the card keeps it gone after a reload.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH`) + `agent-browser`.
- * It seeds its own Workspace (`e2e-onboarding`, the dev user its owner) and removes the dev user's
- * messages to their assistant there, so a rerun starts from the same card. GitHub and Computer
+ * It creates and removes its own Workspace (the dev user its owner). GitHub and Computer
  * steps depend on the deployment and the dev user, so the test reads the total from the page.
  * Screenshots go to `.amp/e2e/onboarding-checklist/`: `card.png`, `ticked.png`, `agent-dialog.png`.
  */
@@ -27,7 +24,7 @@ const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/onboarding-checklist");
-const slug = "e2e-onboarding";
+const slug = `e2e-onboarding-${process.pid}`;
 /** The page has hydrated: a click on its sidebar will do something. */
 const pageReady = hydrated('document.querySelector("aside[data-sidebar]")');
 /** The visible card: its progressbar's value and maximum, and each step row's name and state. */
@@ -45,27 +42,28 @@ const card = `(() => {
 test("the setup checklist ticks a step, runs a step's action and stays closed once closed", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate, waitFor } = openBrowser(`onboarding-checklist-${process.pid}`);
+  let workspaceId: string | undefined;
   try {
-    const workspace = await db.workspace.upsert({
-      where: { id: seededUuid("e2e-onboarding:workspace") },
-      update: { slug },
-      create: { id: seededUuid("e2e-onboarding:workspace"), name: "E2E onboarding", slug },
+    const workspace = await db.workspace.create({
+      data: {
+        name: "E2E onboarding",
+        slug,
+        members: { create: { userId: DEV_BROWSER_USER.id, role: "owner" } },
+      },
     });
-    await db.workspaceMembership.upsert({
-      where: { workspaceId_userId: { workspaceId: workspace.id, userId: DEV_BROWSER_USER.id } },
-      update: { role: "owner" },
-      create: { workspaceId: workspace.id, userId: DEV_BROWSER_USER.id, role: "owner" },
-    });
-    // Whatever the viewer said to their assistant last run is forgotten.
-    await db.message.deleteMany({
-      where: { workspaceId: workspace.id, sender: { userId: DEV_BROWSER_USER.id } },
-    });
+    workspaceId = workspace.id;
     await mkdir(artifacts, { recursive: true });
     const path = `${origin}/en/w/${slug}`;
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", path);
     await waitFor(pageReady);
+    // Workspace-open provisions a weekly-report Agent with systemKind=null. Keep it inactive in
+    // this fixture so only the ordinary Agent created below completes the first-Agent step.
+    await db.agent.updateMany({
+      where: { workspaceId: workspace.id, weeklyReportAssistant: { isNot: null } },
+      data: { deletedAt: new Date() },
+    });
     // The dismissal is stored with the member: forget one a previous run left.
     await db.workspaceMemberPreference.updateMany({
       where: { workspaceId: workspace.id, userId: DEV_BROWSER_USER.id },
@@ -74,39 +72,36 @@ test("the setup checklist ticks a step, runs a step's action and stays closed on
     await browser("open", path);
     await waitFor(`${pageReady} && ${card} !== null`);
     const first = (await evaluate<{ now: number; max: number; rows: string[] }>(card))!;
-    expect(first.rows[0]).toContain("Say hi to your assistant");
-    expect(first.rows[0]).toContain("To do");
+    expect(first.rows.map((row) => row.replace(/(?:To do|Done)$/, ""))).toEqual(
+      first.max === 3
+        ? ["Connect GitHub", "Create your first Agent", "Connect your own computer"]
+        : ["Create your first Agent", "Connect your own computer"],
+    );
+    expect(first.max).toBe(first.rows.length);
+    expect(first.rows.find((row) => row.includes("Create your first Agent"))).toContain("To do");
     expect(first.now).toBeLessThan(first.max);
     await browser("screenshot", join(artifacts, "card.png"));
 
-    // Saying hi elsewhere (here: a row, as a sent message would leave it) ticks the step.
-    const { agentId, conversationId } = await new WorkspaceAssistants(db).ensure(
-      workspace.id,
-      DEV_BROWSER_USER.id,
-    );
-    const viewer = await db.conversationMember.findFirstOrThrow({
-      where: { conversationId, userId: DEV_BROWSER_USER.id },
-    });
-    expect(
-      (await db.conversation.findUniqueOrThrow({ where: { id: conversationId } })).directKey,
-    ).toBe(agentDirectKey(DEV_BROWSER_USER.id, agentId));
-    const last = await db.message.aggregate({
-      where: { conversationId },
-      _max: { sequence: true },
-    });
-    await db.message.create({
+    // Creating an ordinary Agent elsewhere ticks the remaining Agent step.
+    await db.agent.create({
       data: {
-        conversationId,
         workspaceId: workspace.id,
-        senderMemberId: viewer.id,
-        body: "hi",
-        sequence: (last._max.sequence ?? 0) + 1,
+        ownerId: DEV_BROWSER_USER.id,
+        name: "checklist-agent",
+        displayName: "Checklist Agent",
+        runtimeConfig: {
+          runtime: "pi",
+          provider: { kind: "default" },
+          model: "",
+          modelProvider: "",
+          reasoning: "",
+        },
       },
     });
     await browser("open", path);
     await waitFor(`${pageReady} && ${card} !== null`);
     const ticked = (await evaluate<{ now: number; max: number; rows: string[] }>(card))!;
-    expect(ticked.rows[0]).toContain("Done");
+    expect(ticked.rows.find((row) => row.includes("Create your first Agent"))).toContain("Done");
     expect(ticked.now).toBe(first.now + 1);
     expect(ticked.max).toBe(first.max);
     await browser("screenshot", join(artifacts, "ticked.png"));
@@ -136,6 +131,7 @@ test("the setup checklist ticks a step, runs a step's action and stays closed on
       ).setupChecklistDismissedAt,
     ).not.toBeNull();
   } finally {
+    if (workspaceId) await db.workspace.delete({ where: { id: workspaceId } });
     await db.$disconnect();
   }
 });

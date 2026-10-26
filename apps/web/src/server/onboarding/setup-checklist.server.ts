@@ -1,6 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { agentDirectKey } from "#src/features/conversations/direct-key";
 import type { SetupStep } from "#src/features/onboarding/setup-steps";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
 
@@ -36,8 +35,6 @@ export class SetupChecklist {
     /** Whether the member closed the checklist in this Workspace; then no step is read. */
     dismissed: boolean;
     steps: SetupStep[];
-    /** The viewer's DM with their Workspace assistant, once it exists: where "say hi" goes. */
-    assistantConversationId: string | null;
     /** Which GitHub flow the connect step starts. */
     githubStatus: GitHubSetupStatus;
   }> {
@@ -53,28 +50,20 @@ export class SetupChecklist {
       return {
         dismissed: true,
         steps: [],
-        assistantConversationId: null,
         githubStatus: "disconnected",
       };
-    const [assistant, github, task, computer] = await Promise.all([
-      this.assistant(workspaceId, userId),
+    const [github, agent, computer] = await Promise.all([
       this.github(userId),
-      this.hasAgentTask(workspaceId, userId),
+      roleCan(membership.role, "createAgents") ? this.hasOwnAgent(workspaceId, userId) : undefined,
       this.hasLocalComputer(userId),
     ]);
-    const [agent, invite] = await Promise.all([
-      roleCan(membership.role, "createAgents") ? this.hasOwnAgent(workspaceId, userId) : undefined,
-      roleCan(membership.role, "manageMembers") ? this.hasTeammate(workspaceId) : undefined,
-    ]);
-    const steps: SetupStep[] = [{ id: "assistant", done: assistant.sentHi }];
+    const steps: SetupStep[] = [];
     if (github !== "unconfigured") steps.push({ id: "github", done: github === "connected" });
     if (agent !== undefined) steps.push({ id: "agent", done: agent });
-    steps.push({ id: "task", done: task }, { id: "computer", done: computer });
-    if (invite !== undefined) steps.push({ id: "invite", done: invite });
+    steps.push({ id: "computer", done: computer });
     return {
       dismissed: false,
       steps,
-      assistantConversationId: assistant.conversationId,
       githubStatus: github,
     };
   }
@@ -101,29 +90,6 @@ export class SetupChecklist {
     });
   }
 
-  /** The viewer's DM with their Workspace assistant and whether they have written in it. Looked up
-   * by its exact direct key, which the `(workspaceId, directKey)` unique index serves. */
-  private async assistant(workspaceId: string, userId: string) {
-    const session = await this.db.workspaceAssistantSession.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { agentId: true },
-    });
-    if (!session) return { sentHi: false, conversationId: null };
-    const conversation = await this.db.conversation.findUnique({
-      where: {
-        workspaceId_directKey: { workspaceId, directKey: agentDirectKey(userId, session.agentId) },
-      },
-      select: {
-        id: true,
-        messages: { where: { sender: { userId } }, select: { id: true }, take: 1 },
-      },
-    });
-    return {
-      sentHi: (conversation?.messages.length ?? 0) > 0,
-      conversationId: conversation?.id ?? null,
-    };
-  }
-
   private async github(userId: string): Promise<GitHubSetupStatus> {
     // Setup is a hint: a lookup that fails must not take the whole card down.
     return this.ports.githubStatus(userId).catch(() => "disconnected");
@@ -137,27 +103,11 @@ export class SetupChecklist {
     return agent !== null;
   }
 
-  private async hasAgentTask(workspaceId: string, userId: string) {
-    const task = await this.db.task.findFirst({
-      where: {
-        workspaceId,
-        creator: { userId },
-        owner: { agentId: { not: null } },
-      },
-      select: { messageId: true },
-    });
-    return task !== null;
-  }
-
   private async hasLocalComputer(userId: string) {
     const computer = await this.db.computer.findFirst({
       where: { ownerId: userId, kind: "local", deletedAt: null },
       select: { id: true },
     });
     return computer !== null;
-  }
-
-  private async hasTeammate(workspaceId: string) {
-    return (await this.db.workspaceMembership.count({ where: { workspaceId }, take: 2 })) > 1;
   }
 }

@@ -1,8 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { agentDirectKey } from "#src/features/conversations/direct-key";
-import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { SetupChecklist } from "#src/server/onboarding/setup-checklist.server";
 import type { GitHubSetupStatus } from "#src/server/onboarding/setup-checklist.server";
 
@@ -64,50 +62,10 @@ afterAll(async () => {
 test("a new Workspace owner has nothing done and sees every step in order", async () => {
   const { steps } = await checklist.read(workspaceId, ownerId);
   expect(steps).toEqual([
-    { id: "assistant", done: false },
     { id: "github", done: false },
     { id: "agent", done: false },
-    { id: "task", done: false },
     { id: "computer", done: false },
-    { id: "invite", done: false },
   ]);
-});
-
-test("saying hi to the assistant is done once the viewer has sent a message in their own DM", async () => {
-  const session = await new WorkspaceAssistants(db).ensure(workspaceId, ownerId);
-  expect((await steps(ownerId)).assistant).toBe(false);
-  const { assistantConversationId } = await checklist.read(workspaceId, ownerId);
-  expect(assistantConversationId).toBe(session.conversationId);
-  const viewer = await db.conversationMember.findFirstOrThrow({
-    where: { conversationId: session.conversationId, userId: ownerId },
-  });
-  const agentSide = await db.conversationMember.findFirstOrThrow({
-    where: { conversationId: session.conversationId, agentId: session.agentId },
-  });
-  // The assistant's own introduction is not the viewer saying hi.
-  await db.message.create({
-    data: {
-      conversationId: session.conversationId,
-      workspaceId,
-      senderMemberId: agentSide.id,
-      body: "Hello",
-      sequence: 1,
-    },
-  });
-  expect((await steps(ownerId)).assistant).toBe(false);
-  await db.message.create({
-    data: {
-      conversationId: session.conversationId,
-      workspaceId,
-      senderMemberId: viewer.id,
-      body: "hi",
-      sequence: 2,
-    },
-  });
-  expect((await steps(ownerId)).assistant).toBe(true);
-  expect(
-    (await db.conversation.findUniqueOrThrow({ where: { id: session.conversationId } })).directKey,
-  ).toBe(agentDirectKey(ownerId, session.agentId));
 });
 
 test("GitHub is done only when connected, and is left out when the deployment has none", async () => {
@@ -119,13 +77,7 @@ test("GitHub is done only when connected, and is left out when the deployment ha
   expect((await steps(ownerId)).github).toBe(true);
   github = "unconfigured";
   const { steps: listed } = await checklist.read(workspaceId, ownerId);
-  expect(listed.map((step) => step.id)).toEqual([
-    "assistant",
-    "agent",
-    "task",
-    "computer",
-    "invite",
-  ]);
+  expect(listed.map((step) => step.id)).toEqual(["agent", "computer"]);
 });
 
 test("a GitHub lookup that fails leaves the step undone instead of failing the checklist", async () => {
@@ -165,51 +117,6 @@ test("only an ordinary Agent the viewer owns in this Workspace counts as their f
   expect((await steps(ownerId)).agent).toBe(true);
 });
 
-test("a Task counts when the viewer created it and an Agent owns it", async () => {
-  expect((await steps(ownerId)).task).toBe(false);
-  const agent = await agentFor(ownerId);
-  const conversation = await db.conversation.create({
-    data: {
-      workspaceId,
-      channelName: `tasks-${suffix}`,
-      members: { create: [{ userId: ownerId }, { agentId: agent.id }, { userId: memberId }] },
-    },
-    include: { members: true },
-  });
-  const human = conversation.members.find((member) => member.userId === ownerId)!;
-  const other = conversation.members.find((member) => member.userId === memberId)!;
-  const bot = conversation.members.find((member) => member.agentId === agent.id)!;
-  const task = async (number: number, creator: string, owner: string | null) => {
-    const message = await db.message.create({
-      data: {
-        conversationId: conversation.id,
-        workspaceId,
-        senderMemberId: creator,
-        body: `task ${number}`,
-        sequence: number,
-      },
-    });
-    await db.task.create({
-      data: {
-        messageId: message.id,
-        conversationId: conversation.id,
-        workspaceId,
-        number,
-        title: `task ${number}`,
-        creatorMemberId: creator,
-        ownerMemberId: owner,
-      },
-    });
-  };
-  // Unowned, owned by a person, or created by someone else: none is the viewer assigning an Agent.
-  await task(1, human.id, null);
-  await task(2, human.id, other.id);
-  await task(3, other.id, bot.id);
-  expect((await steps(ownerId)).task).toBe(false);
-  await task(4, human.id, bot.id);
-  expect((await steps(ownerId)).task).toBe(true);
-});
-
 test("a local Computer the viewer owns is done; cloud, deleted and others' do not count", async () => {
   const computer = (ownerUserId: string, data: Record<string, unknown>) =>
     db.computer.create({
@@ -223,19 +130,31 @@ test("a local Computer the viewer owns is done; cloud, deleted and others' do no
   expect((await steps(ownerId)).computer).toBe(true);
 });
 
-test("inviting is offered to roles that can invite, and done with a second person", async () => {
+test("finishing the three remaining steps completes setup without assistant messages, tasks or invites", async () => {
+  github = "connected";
+  expect((await checklist.read(workspaceId, ownerId)).steps).toEqual([
+    { id: "github", done: true },
+    { id: "agent", done: true },
+    { id: "computer", done: true },
+  ]);
+});
+
+test("roles that cannot create Agents see only GitHub and Computer", async () => {
   github = "disconnected";
-  expect((await steps(ownerId)).invite).toBe(false);
   await db.workspaceMembership.create({ data: { workspaceId, userId: memberId, role: "member" } });
-  expect((await steps(ownerId)).invite).toBe(true);
-  // A plain member cannot invite, so the step (and Agent creation) is not theirs to do.
-  const { steps: plain } = await checklist.read(workspaceId, memberId);
-  expect(plain.map((step) => step.id)).toEqual(["assistant", "github", "task", "computer"]);
+  expect((await checklist.read(workspaceId, memberId)).steps.map((step) => step.id)).toEqual([
+    "github",
+    "computer",
+  ]);
   await db.workspaceMembership.update({
     where: { workspaceId_userId: { workspaceId, userId: memberId } },
     data: { role: "admin" },
   });
-  expect((await steps(memberId)).invite).toBe(true);
+  expect((await checklist.read(workspaceId, memberId)).steps.map((step) => step.id)).toEqual([
+    "github",
+    "agent",
+    "computer",
+  ]);
 });
 
 test("a viewer who is not in the Workspace is refused", async () => {

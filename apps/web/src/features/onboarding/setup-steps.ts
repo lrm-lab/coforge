@@ -1,12 +1,5 @@
 /** The steps of the Workspace sidebar's setup checklist, in the order the card lists them. */
-export const SETUP_STEP_IDS = [
-  "assistant",
-  "github",
-  "agent",
-  "task",
-  "computer",
-  "invite",
-] as const;
+export const SETUP_STEP_IDS = ["github", "agent", "computer"] as const;
 
 export type SetupStepId = (typeof SETUP_STEP_IDS)[number];
 

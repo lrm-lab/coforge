@@ -3,7 +3,7 @@ import { AgentCreateDialog, type AgentCreateComputerOption } from "./agent-creat
 import type { RuntimeCatalog } from "./agent-runtime-fields";
 import type { CreateAgentInput } from "./agent.schemas";
 
-/** The Members page dialogs the URL can open (`?setup=`, which the setup checklist links to). */
+/** The Members page dialogs the URL can open; the setup checklist links to `?setup=create-agent`. */
 export type MemberDialog = "create-agent" | "invite";
 
 /**

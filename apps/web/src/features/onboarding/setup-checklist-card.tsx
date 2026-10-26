@@ -17,12 +17,9 @@ import { useSetupStepActions } from "./use-setup-step-actions";
 type Checklist = Awaited<ReturnType<typeof loadSetupChecklist>>;
 
 const STEP_LABELS: Record<SetupStepId, () => string> = {
-  assistant: () => m.onboarding_step_assistant(),
   github: () => m.onboarding_step_github(),
   agent: () => m.onboarding_step_agent(),
-  task: () => m.onboarding_step_task(),
   computer: () => m.onboarding_step_computer(),
-  invite: () => m.onboarding_step_invite(),
 };
 
 /**
@@ -164,7 +161,7 @@ function SetupChecklistPanel({
       <Button
         color="secondary"
         size="sm"
-        className="w-full"
+        className="w-full whitespace-normal"
         isDisabled={run.isPending}
         onPress={() => run.mutate(next.id)}
       >

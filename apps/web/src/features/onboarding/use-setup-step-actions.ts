@@ -14,12 +14,6 @@ export function useSetupStepActions(workspaceSlug: string, checklist: Checklist)
   const params = { workspaceSlug };
 
   const actions: Record<SetupStepId, () => Promise<void>> = {
-    assistant: async () => {
-      const dmId = checklist.assistantConversationId;
-      await (dmId
-        ? navigate({ to: "/w/$workspaceSlug/dm/$dmId", params: { ...params, dmId } })
-        : navigate({ to: "/w/$workspaceSlug", params }));
-    },
     github: async () => {
       // A connection already made is looked at in Settings, not started again.
       if (checklist.githubStatus === "connected") {
@@ -39,14 +33,7 @@ export function useSetupStepActions(workspaceSlug: string, checklist: Checklist)
         params,
         search: { memberType: "agent", setup: "create-agent" },
       }),
-    task: () => navigate({ to: "/w/$workspaceSlug/tasks", params }),
     computer: () => navigate({ to: "/w/$workspaceSlug/computers", params }),
-    invite: () =>
-      navigate({
-        to: "/w/$workspaceSlug/members",
-        params,
-        search: { memberType: "human", setup: "invite" },
-      }),
   };
   return actions;
 }
