@@ -33,18 +33,5 @@
   "attachment_comments_open_link": "打开链接",
   "attachment_comments_anchor_remove": "改为评论整个文件",
   "attachment_comments_anchor_lost": "位置已找不到",
-  "attachment_comments_anchor_jump": "跳到{place}",
-  "attachment_comments_reply": "回复",
-  "attachment_comments_reply_count": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=other": "{count} 条回复"
-      }
-    }
-  ],
-  "attachment_comments_post_reply": "发送回复",
-  "attachment_comments_reply_failed": "回复没有发出，请重试。",
-  "attachment_comments_older_replies": "更早的回复"
+  "attachment_comments_anchor_jump": "跳到{place}"
 }

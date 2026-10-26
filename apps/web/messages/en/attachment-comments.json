@@ -33,19 +33,5 @@
   "attachment_comments_open_link": "Open link",
   "attachment_comments_anchor_remove": "Comment on the whole file instead",
   "attachment_comments_anchor_lost": "Position not found",
-  "attachment_comments_anchor_jump": "Go to {place}",
-  "attachment_comments_reply": "Reply",
-  "attachment_comments_reply_count": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=one": "{count} reply",
-        "countPlural=other": "{count} replies"
-      }
-    }
-  ],
-  "attachment_comments_post_reply": "Post reply",
-  "attachment_comments_reply_failed": "Your reply was not posted. Try again.",
-  "attachment_comments_older_replies": "Earlier replies"
+  "attachment_comments_anchor_jump": "Go to {place}"
 }

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { useQueryClient } from "@tanstack/react-query";
-import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { MarkerPin01, MessageSquare01, Send01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
@@ -12,10 +11,9 @@ import { m } from "#src/paraglide/messages";
 import { postAttachmentComment } from "./attachment-comments.functions";
 import {
   attachmentCommentsKey,
-  CommentThread,
+  CommentRow,
   useCommentDraft,
   useCommentPages,
-  useCommentReaction,
 } from "./attachment-comment-thread";
 import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { ANCHOR_HIGHLIGHT_MS, type AnchorSurface } from "./attachment-anchoring";
@@ -35,8 +33,6 @@ function anchorLabel(anchor: AttachmentCommentAnchor): string {
     ? m.attachment_comments_anchor_row({ range })
     : m.attachment_comments_anchor_rows({ range });
 }
-
-const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
 type Placed = { comment: AttachmentCommentView; order: number | null };
 
@@ -85,7 +81,7 @@ function AnchorPlace({
         </p>
       )}
       {quote && (
-        <blockquote className="line-clamp-3 border-l-2 border-secondary pl-2.5 text-xs text-tertiary">
+        <blockquote className="border-l-2 border-secondary pl-2.5 text-sm whitespace-pre-wrap text-tertiary">
           {quote}
         </blockquote>
       )}
@@ -119,11 +115,9 @@ export function AttachmentCommentsPane({
   surface?: AnchorSurface | null;
   onJump?: (anchor: AttachmentCommentAnchor) => void;
 }) {
-  const viewerId = workspaceRoute.useLoaderData({ select: ({ user }) => user.id });
   const post = useServerFn(postAttachmentComment);
   const queryClient = useQueryClient();
   const queryKey = attachmentCommentsKey(attachmentId);
-  const react = useCommentReaction(attachmentId);
   const { query, comments: all } = useCommentPages(attachmentId);
   const state = query.data?.pages[0];
   // Placed once per load of comments or new preview, not on every keystroke in the draft.
@@ -172,14 +166,10 @@ export function AttachmentCommentsPane({
           ? m.attachment_comments_read_only()
           : null;
   const renderComment = ({ comment, order }: Placed) => (
-    <CommentThread
+    <CommentRow
       key={comment.id}
       highlighted={comment.id === jumped}
-      attachmentId={attachmentId}
-      root={comment}
-      viewerId={viewerId}
-      canComment={canComment}
-      onReact={canComment ? react : undefined}
+      comment={comment}
       place={
         comment.anchor && (
           <AnchorPlace
@@ -231,7 +221,7 @@ export function AttachmentCommentsPane({
             </EmptyDescription>
           </Empty>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-2">
             {query.hasNextPage && (
               <Button
                 size="sm"
@@ -279,12 +269,14 @@ export function AttachmentCommentsPane({
             {...draft.keys}
             maxLength={8_000}
             rows={3}
+            // 14px text and placeholder and no resize handle, as in Raft.
+            size="sm"
             isDisabled={!canComment}
             // Read-only, not disabled, while sending: a disabled field drops focus to the page, and
             // the dialog would no longer hear Escape.
             isReadOnly={draft.sending}
             // Room for the send button in the corner, as in Raft.
-            textAreaClassName="pr-11"
+            textAreaClassName="resize-none pr-11"
           />
           <ButtonUtility
             type="submit"

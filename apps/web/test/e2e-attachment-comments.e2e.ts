@@ -176,6 +176,9 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.click(${JSON.stringify(preview)});
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(body)}, { timeout: 10000 });
+    // As in Raft, a comment is avatar, name, time, place and body: no reply or reaction controls.
+    const extras = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] section button')].map((b) => b.getAttribute("aria-label") || b.textContent.trim()).filter((name) => /reply|reaction/i.test(name)));
+    if (extras.length > 0) throw new Error("comment row grew controls Raft does not have: " + extras.join(", "));
     console.log(await page.snapshot());
     await page.waitForFunction(() => {
       const dialog = document.querySelector('[role="dialog"]');
