@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession, seededUuid } from "./helpers/browser-e2e";
 
 /**
  * Previewing a result beside the list. On a wide screen a single click shows the result's
@@ -13,8 +13,8 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * Chat reads it. A reply sent there lands in the conversation; a thread reply opens its thread.
  * The list stays, marking the previewed row, and the URL keeps the preview. Another click switches
  * it, Esc outside the conversation closes it, and a double click opens the conversation itself (a
- * thread reply with its thread open). A match previews its channel. On a phone a click opens the
- * conversation directly.
+ * thread reply with its thread open). A match previews its channel. The phone layout is
+ * `e2e-search-preview-phone.e2e.ts`.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Seeds are deterministic
  * and reset on every run. Screenshots are written under `.amp/e2e/search-preview/`.
@@ -29,31 +29,9 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-preview");
 
-/** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
-function seededUuid(key: string): string {
-  const hash = createHash("sha256").update(key).digest("hex");
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-}
-
 test("a result previews beside the list and opens on a double click", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const session = `search-preview-${process.pid}`;
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
+  const { browser, evaluate } = browserSession(browserPath, `search-preview-${process.pid}`);
   /** Waits for a page condition, failing with the condition and the page text after 15 s. */
   const waitFor = (condition: string) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -405,13 +383,6 @@ test("a result previews beside the list and opens on a double click", async () =
       const rect = row.getBoundingClientRect();
       return rect.top >= 48 && rect.bottom <= innerHeight;
     })()`);
-
-    // On a phone there is no room beside the list: a click opens the conversation.
-    await browser("set", "viewport", "390", "844");
-    await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}`);
-    await waitFor(`document.querySelector('${row(inA.id)}') !== null`);
-    await browser("click", row(inA.id));
-    await waitFor(`location.pathname === "${workspacePath}/channel/${channelA}"`);
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation

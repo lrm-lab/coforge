@@ -3,14 +3,12 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import { personAvatarUrl } from "#src/lib/person-picture";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession, hydrated, seededUuid } from "./helpers/browser-e2e";
 import {
   activeCount,
-  browserSession,
   currentRow,
-  hydrated,
   inPane,
   listColumnWidth,
   openParam,
@@ -19,7 +17,7 @@ import {
   pinnedItems,
   rowItems,
   seedChannel,
-  seededUuid,
+  seedDirectConversation,
   shownInPane,
   waitFor,
 } from "./helpers/activity-inbox-e2e";
@@ -426,25 +424,6 @@ test("a direct message with a member, and the one with themself, list with the m
     });
     const viewer = await db.user.findUniqueOrThrow({ where: { id: DEV_BROWSER_USER.id } });
     const viewerName = viewer.displayName?.trim() || viewer.username;
-    /** A DM between people and each member's row in it, with the viewer's Done cursor cleared. */
-    async function directConversation(key: string, otherUserId: string) {
-      const directKey = peopleDirectKey(DEV_BROWSER_USER.id, otherUserId);
-      const conversation = await db.conversation.upsert({
-        where: { workspaceId_directKey: { workspaceId, directKey } },
-        update: {},
-        create: { id: seededUuid(key), workspaceId, directKey },
-      });
-      const members = await Promise.all(
-        [...new Set([DEV_BROWSER_USER.id, otherUserId])].map((userId) =>
-          db.conversationMember.upsert({
-            where: { conversationId_userId: { conversationId: conversation.id, userId } },
-            update: { leftAt: null, hiddenAt: null, doneThroughSequence: null },
-            create: { conversationId: conversation.id, workspaceId, userId },
-          }),
-        ),
-      );
-      return { conversationId: conversation.id, members };
-    }
     /** Posts this run's copy of a seeded message as the conversation's newest. */
     async function post(conversationId: string, key: string, senderMemberId: string, body: string) {
       const id = seededUuid(key);
@@ -468,13 +447,23 @@ test("a direct message with a member, and the one with themself, list with the m
     }
     // The peer is this test's own, so their DM starts empty and unread on every run. The viewer's
     // DM with themself is theirs: only this test's note is replaced.
-    const withPeer = await directConversation("e2e-activity-inbox:dm", peer.id);
+    const withPeer = await seedDirectConversation(
+      db,
+      workspaceId,
+      "e2e-activity-inbox:dm",
+      peer.id,
+    );
     await db.message.deleteMany({ where: { conversationId: withPeer.conversationId } });
     await db.conversationMember.updateMany({
       where: { conversationId: withPeer.conversationId },
       data: { readThroughSequence: 0, unreadFromSequence: null },
     });
-    const withSelf = await directConversation("e2e-activity-inbox:self-dm", DEV_BROWSER_USER.id);
+    const withSelf = await seedDirectConversation(
+      db,
+      workspaceId,
+      "e2e-activity-inbox:self-dm",
+      DEV_BROWSER_USER.id,
+    );
     await post(
       withSelf.conversationId,
       "e2e-activity-inbox:dm-note",

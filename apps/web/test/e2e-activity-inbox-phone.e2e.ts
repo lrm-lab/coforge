@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession, hydrated } from "./helpers/browser-e2e";
 import {
-  browserSession,
-  hydrated,
   inPane,
   listHidden,
   openParam,

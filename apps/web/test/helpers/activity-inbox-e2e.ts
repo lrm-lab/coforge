@@ -1,19 +1,7 @@
-import { createHash } from "node:crypto";
+import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-
-/** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
-export function seededUuid(key: string): string {
-  const hash = createHash("sha256").update(key).digest("hex");
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-}
-
-/**
- * TanStack Start has hydrated the page: its SSR bootstrap (`$_TSR`) is marked hydrated, and
- * deleted once the stream has also ended. Server-rendered rows already satisfy the row waits,
- * and a click before hydration lands on inert HTML.
- */
-export const hydrated = `(!window.$_TSR || window.$_TSR.hydrated === true)`;
+import { seededUuid } from "./browser-e2e";
 
 /**
  * The Activity list's rows, as a selector literal for page expressions. Scoped to the list: a
@@ -67,27 +55,6 @@ export const currentRow = `[...document.querySelectorAll(${rowItems})].find((ite
 /** The open conversation as the Activity URL names it (`channel:<id>` or `dm:<id>`, prefixed
  * `thread:` for a thread shown alone). */
 export const openParam = `new URLSearchParams(location.search).get("open")`;
-
-/** One agent-browser session: its commands, and a page expression read back as JSON. */
-export function browserSession(browserPath: string, session: string) {
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
-  return { browser, evaluate };
-}
 
 /**
  * A channel shared by the viewer and the seeded peer, reset to this run's messages: the viewer's
@@ -173,4 +140,32 @@ export async function seedChannel(
     data: { memberId: viewer!.id, rootMessageId: rootId, conversationId: channelId, workspaceId },
   });
   return { channelId, viewer: viewer!, rootId, replyId, newestId };
+}
+
+/**
+ * A DM between the viewer and `otherUserId` (the viewer again for their DM with themself), its id
+ * from `key` when new, and each member's row in it, with the Done cursors cleared.
+ */
+export async function seedDirectConversation(
+  db: PrismaClient,
+  workspaceId: string,
+  key: string,
+  otherUserId: string,
+) {
+  const directKey = peopleDirectKey(DEV_BROWSER_USER.id, otherUserId);
+  const conversation = await db.conversation.upsert({
+    where: { workspaceId_directKey: { workspaceId, directKey } },
+    update: {},
+    create: { id: seededUuid(key), workspaceId, directKey },
+  });
+  const members = await Promise.all(
+    [...new Set([DEV_BROWSER_USER.id, otherUserId])].map((userId) =>
+      db.conversationMember.upsert({
+        where: { conversationId_userId: { conversationId: conversation.id, userId } },
+        update: { leftAt: null, hiddenAt: null, doneThroughSequence: null },
+        create: { conversationId: conversation.id, workspaceId, userId },
+      }),
+    ),
+  );
+  return { conversationId: conversation.id, members };
 }
