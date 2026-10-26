@@ -52,6 +52,38 @@ test(
   BUILT_SERVER_BOOT_MS + TEST_SLACK_MS,
 );
 
+// `/health` and the installers do not load the application's routes; a page does. A route module
+// that throws while it loads (a bundled entry point that runs, a missing export) answers every
+// page with a 500 and nothing else, so the build has to be asked for a page.
+test(
+  "production server renders the public pages without an error",
+  async () => {
+    const server = spawnBuiltServer({});
+    let output = "";
+    try {
+      expect((await waitForHealth(server))?.status).toBe(200);
+      for (const locale of ["en", "zh-CN"]) {
+        const response = await fetch(`http://127.0.0.1:${server.port}/${locale}`, {
+          signal: AbortSignal.timeout(5_000),
+        });
+        expect(response.status, locale).toBe(200);
+        expect(response.headers.get("content-type"), locale).toContain("text/html");
+        expect(await response.text(), locale).toContain("<html");
+      }
+    } finally {
+      server.process.kill();
+      await server.process.exited;
+      output = await server.output;
+      // The cause of a 500 is only in the server's output; show it with the failure.
+      if (output.includes("error")) console.error(output.slice(-8_192));
+    }
+    // A thrown error is printed as `error: <message>` followed by its stack frames.
+    expect(output).not.toMatch(/^error: /m);
+    expect(output).not.toMatch(/^\s+at .+:\d+:\d+\)?$/m);
+  },
+  BUILT_SERVER_BOOT_MS + TEST_SLACK_MS,
+);
+
 // Startup configuration is validated when the server starts, not when the first request loads the
 // SSR entry (Nitro loads it lazily). A bad deployment must stop the process with no request sent,
 // so the deploy's health wait fails at once instead of timing out against a listening server

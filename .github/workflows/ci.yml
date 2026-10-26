@@ -300,10 +300,11 @@ jobs:
         if: inputs.track != 'web'
         run: bun run --filter './benchmark/*' check && bun run --filter './benchmark/*' --if-present test
 
-      - name: Build package
-        # The deployment's Docker build validates and tests the actual runtime image.
+      - name: Build and smoke the package
         if: inputs.track != 'web'
-        run: mise run build:web
+        run: |
+          mise run build:web
+          mise run smoke:web
 
   windows-release:
     name: Test Windows ${{ matrix.runner == 'windows-latest' && 'x64' || 'arm64' }} executable

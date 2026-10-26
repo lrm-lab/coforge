@@ -36,8 +36,9 @@ description = "Run repository format, lint, and type checks"
 run = "bun run check"
 
 [tasks.build]
-description = "Build all buildable workspaces"
+description = "Build all buildable workspaces, then start the Web build and ask it for pages"
 run = "bun run build"
+depends_post = ["smoke:web"]
 
 [tasks."test:computer"]
 description = "Run Computer package tests"
@@ -113,6 +114,10 @@ run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run
 [tasks."check:web"]
 description = "Run Web package checks"
 run = "bun run --cwd packages/coforge-sdk generate && cd apps/web && bun run check"
+
+[tasks."smoke:web"]
+description = "Start the built Web server and request its pages (needs the Web build)"
+run = 'cd apps/web && bun test ./test/production.integration.ts'
 
 [tasks."build:web"]
 description = "Build the Web package"
