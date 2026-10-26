@@ -3,8 +3,12 @@ import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readKiroUsage } from "#src/code-agent/kiro/usage";
-import { UsageUnavailableError } from "@lrm/coforge-anvil";
+import { readKiroUsage as parseKiroUsage, UsageUnavailableError } from "@lrm/coforge-anvil";
+import { readKiroUsageResponse } from "#src/code-agent/kiro/usage-host";
+
+function readKiroUsage(options: Parameters<typeof readKiroUsageResponse>[0]) {
+  return parseKiroUsage({ timeoutMs: options?.timeoutMs }, () => readKiroUsageResponse(options));
+}
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -163,63 +167,6 @@ test("never sends credentials for expired tokens or unsupported profile identiti
   }
 });
 
-test("keeps bonuses and an active free trial without turning them into a plan-only percent", async () => {
-  const fixture = await credentials();
-  const withBonus = await readKiroUsage({
-    environment: { KIRO_DATA_DIR: fixture.directory },
-    fetch: async () =>
-      Response.json({
-        ...payload,
-        usageBreakdownList: [{ ...payload.usageBreakdownList[0], bonuses: [{}] }],
-      }),
-  });
-  expect(withBonus?.primary).toBeUndefined();
-  expect(withBonus?.creditUsage).toBeUndefined();
-  expect(withBonus?.officialGroups?.[0]?.name).toBe("CREDIT");
-  expect(withBonus?.officialGroups?.[0]?.buckets).toEqual([
-    { name: "CREDIT", description: "75 / 200 + 15" },
-    { window: "bonus", status: "parse_unavailable" },
-  ]);
-  const withTrial = await readKiroUsage({
-    environment: { KIRO_DATA_DIR: fixture.directory },
-    fetch: async () =>
-      Response.json({
-        ...payload,
-        usageBreakdownList: [
-          { ...payload.usageBreakdownList[0], freeTrialInfo: { freeTrialStatus: "ACTIVE" } },
-        ],
-      }),
-  });
-  expect(withTrial?.primary).toBeUndefined();
-  expect(withTrial?.officialGroups?.[0]?.buckets[1]).toEqual({
-    window: "freeTrial",
-    name: "freeTrial",
-    description: "ACTIVE",
-  });
-});
-
-test("does not invent quota from invalid numbers or millisecond resets", async () => {
-  const fixture = await credentials();
-  for (const changes of [
-    { currentUsageWithPrecision: -1 },
-    { usageLimitWithPrecision: 0 },
-    { currentUsageWithPrecision: 10, currentOveragesWithPrecision: 15 },
-    { currentUsageWithPrecision: 300 },
-    { nextDateReset: 1790812800000 },
-  ]) {
-    await expect(
-      readKiroUsage({
-        environment: { KIRO_DATA_DIR: fixture.directory },
-        fetch: async () =>
-          Response.json({
-            ...payload,
-            usageBreakdownList: [{ ...payload.usageBreakdownList[0], ...changes }],
-          }),
-      }),
-    ).rejects.toBeInstanceOf(UsageUnavailableError);
-  }
-});
-
 test("auth rejection is unavailable, transport failure is sanitized, and neither retries", async () => {
   const fixture = await credentials();
   for (const status of [401, 403]) {
@@ -243,4 +190,29 @@ test("auth rejection is unavailable, transport failure is sanitized, and neither
       },
     }),
   ).rejects.toThrow("Kiro usage request failed");
+});
+
+// The library port receives usage data only; credentials and native paths remain in the host.
+test("Kiro usage host returns only the raw usage response", async () => {
+  const fixture = await credentials();
+  const result = await readKiroUsageResponse({
+    environment: { KIRO_DATA_DIR: fixture.directory },
+    fetch: async () => Response.json(payload),
+  });
+  expect(result).toEqual(payload);
+  expect(JSON.stringify(result)).not.toContain("fixture-access");
+  expect(JSON.stringify(result)).not.toContain(fixture.directory);
+});
+
+test("preserves an already classified usage error from the injected requester", async () => {
+  const fixture = await credentials();
+  const unavailable = new UsageUnavailableError();
+  await expect(
+    readKiroUsage({
+      environment: { KIRO_DATA_DIR: fixture.directory },
+      fetch: async () => {
+        throw unavailable;
+      },
+    }),
+  ).rejects.toBe(unavailable);
 });

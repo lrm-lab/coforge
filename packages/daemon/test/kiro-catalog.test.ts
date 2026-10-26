@@ -1,36 +1,18 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
-import { discoverKiroCatalog } from "#src/code-agent/kiro/catalog";
+import { discoverKiroCatalog } from "@lrm/coforge-anvil";
+import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { captureDaemonLogs } from "./log-capture";
-
-test("Kiro catalog fails closed when model discovery never completes", async () => {
-  expect(
-    await discoverKiroCatalog(
-      [
-        process.execPath,
-        new URL("./fixtures/kiro-acp.ts", import.meta.url).pathname,
-        "--catalog",
-        "--missing-config",
-      ],
-      tmpdir(),
-      {},
-      30,
-    ),
-  ).toBeUndefined();
-});
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 test("catalog failure logs an error code and an honest message instead of asserting a login problem", async () => {
   const { records } = await captureDaemonLogs(async () => {
     expect(
       await discoverKiroCatalog(
-        [
-          process.execPath,
-          new URL("./fixtures/kiro-acp.ts", import.meta.url).pathname,
-          "--catalog",
-          "--missing-config",
-        ],
+        [process.execPath, anvilRuntimeFixtures.kiro, "--catalog", "--missing-config"],
         tmpdir(),
         {},
+        kiroRuntimeHost,
         30,
       ),
     ).toBeUndefined();
@@ -39,42 +21,3 @@ test("catalog failure logs an error code and an honest message instead of assert
   expect(failure?.message.join("")).toBe("Kiro v3 model discovery unavailable");
   expect(failure?.properties.error_code).toEqual(expect.any(String));
 });
-
-test.each(["", "--early-config", "--delayed-config"])(
-  "Kiro discovers native models and per-model effort %s",
-  async (flag) => {
-    const catalog = await discoverKiroCatalog(
-      [
-        process.execPath,
-        new URL("./fixtures/kiro-acp.ts", import.meta.url).pathname,
-        "--catalog",
-        flag,
-      ],
-      tmpdir(),
-      {},
-    );
-    expect(catalog).toEqual({
-      provider: "kiro",
-      models: [
-        {
-          id: "auto",
-          displayName: "Auto",
-          description: "",
-          modelProvider: "",
-          reasoningEfforts: [],
-          defaultReasoning: "",
-          recommended: true,
-        },
-        {
-          id: "model-reasoning",
-          displayName: "Reasoning",
-          description: "",
-          modelProvider: "",
-          reasoningEfforts: ["low", "high"],
-          defaultReasoning: "low",
-          recommended: false,
-        },
-      ],
-    });
-  },
-);

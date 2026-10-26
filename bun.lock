@@ -280,6 +280,7 @@
       "name": "@lrm/coforge-anvil",
       "version": "0.1.0",
       "dependencies": {
+        "@agentclientprotocol/sdk": "1.4.0",
         "@coforge/agent": "workspace:*",
         "@logtape/logtape": "2.3.2",
         "@lrm/coforge-sdk": "workspace:*",

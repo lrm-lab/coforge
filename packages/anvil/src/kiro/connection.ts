@@ -1,14 +1,15 @@
-import { asRecord as record, JsonlProcess } from "@lrm/coforge-anvil";
-import { processSpawner } from "#src/code-agent/process-host";
+import { asRecord as record } from "#src/json-record";
+import { JsonlProcess } from "#src/jsonl-process";
+import type { KiroConnectionHost } from "./host";
 import {
   client,
   type AnyMessage,
+  type InitializeRequest,
   type SessionNotification,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionConfigOption,
 } from "@agentclientprotocol/sdk";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
 
 export const KIRO_ACP_ARGS = ["acp", "--agent-engine", "v3", "--auth-method", "cli"] as const;
 
@@ -29,13 +30,14 @@ export class KiroConnection {
     command: readonly string[],
     cwd: string,
     environment: Readonly<Record<string, string>>,
+    private readonly host: KiroConnectionHost,
     onUpdate: (notification: SessionNotification) => void = () => {},
     onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse = () => ({
       outcome: { outcome: "cancelled" },
     }),
   ) {
-    this.process = new JsonlProcess(command, cwd, environment, processSpawner);
-    this.connection = client({ name: "coforge-daemon" })
+    this.process = new JsonlProcess(command, cwd, environment, host.processTreeSpawner);
+    this.connection = client({ name: host.clientInfo.name })
       .onNotification("session/update", ({ params }) => {
         if (params.update.sessionUpdate === "config_option_update") {
           this.#config.set(params.sessionId, params.update.configOptions);
@@ -97,13 +99,12 @@ export class KiroConnection {
   }
 
   async initialize() {
-    const response = await bounded(
-      this.connection.agent.request("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: {},
-        clientInfo: { name: "coforge-daemon", version: COFORGE_DAEMON_VERSION },
-      }),
-    );
+    const request: InitializeRequest = {
+      protocolVersion: 1,
+      clientCapabilities: {},
+      clientInfo: this.host.clientInfo,
+    };
+    const response = await bounded(this.connection.agent.request("initialize", request));
     if (
       response.protocolVersion !== 1 ||
       !response.agentCapabilities?.loadSession ||

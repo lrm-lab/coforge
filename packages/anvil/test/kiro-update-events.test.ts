@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
-import { kiroUpdateEvents } from "#src/code-agent/kiro/update-events";
+import { kiroUpdateEvents } from "#src/kiro/update-events";
 
 type Update = SessionNotification["update"];
 const events = (update: Record<string, unknown>) => kiroUpdateEvents(update as Update);

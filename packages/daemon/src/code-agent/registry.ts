@@ -1,20 +1,21 @@
+import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { AntigravityProvider } from "#src/code-agent/antigravity/provider";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import { ClaudeRuntimeAuthAdapter } from "#src/code-agent/claude-code/auth";
 import { CodexRuntimeAuthAdapter } from "#src/code-agent/codex/auth";
-import type {
-  RuntimeAuthAdapter,
-  RuntimeAuthProvider,
-  CodeAgentProvider,
+import {
+  type RuntimeAuthAdapter,
+  type RuntimeAuthProvider,
+  type CodeAgentProvider,
+  CursorProvider,
+  OpenCodeProvider,
+  KiroProvider,
 } from "@lrm/coforge-anvil";
-import { CursorProvider, OpenCodeProvider } from "@lrm/coforge-anvil";
 import { perTurnSessionHost } from "./per-turn-host";
 import { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
-import { KiroProvider } from "#src/code-agent/kiro/provider";
 import { GrokProvider } from "#src/code-agent/grok/provider";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   resolveHostCodeAgentExecutable,
   type ExternalCodeAgentProvider,
@@ -62,7 +63,7 @@ export function createCodeAgentProvider(
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeCodeProvider();
     case RUNTIME_PROVIDER.KIRO:
-      return new KiroProvider();
+      return new KiroProvider({ host: kiroRuntimeHost });
     case RUNTIME_PROVIDER.CURSOR:
       return new CursorProvider({ host: perTurnSessionHost });
     case RUNTIME_PROVIDER.OPENCODE: {

@@ -7,21 +7,20 @@ import type {
   AgentRuntimeEvent,
   AgentSessionIdentity,
 } from "@coforge/agent";
-import type { CodeAgentProvider } from "@lrm/coforge-anvil";
+import { AgentSessionRecoveryError, type CodeAgentProvider } from "#src/contract";
 import type {
   SessionNotification,
   SessionConfigOption,
   NewSessionRequest,
 } from "@agentclientprotocol/sdk";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { agentEnvironment } from "#src/code-agent/environment";
-import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
-import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { bounded, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";
 import { kiroUpdateEvents } from "./update-events";
 import { assertKiroVersionSupported } from "./version";
 import { STOP_REASON_FAILURE_MESSAGES } from "./stop-reasons";
+import { scrubRuntimeErrorText } from "#src/runtime-error-text";
+import type { KiroRuntimeHost, KiroProviderOptions } from "./host";
 
 /** How long a turn end waits for the steering outcome Kiro wrote before its prompt response. The
  * frames are already on the wire, so this only bounds a pathological dispatch delay. */
@@ -29,12 +28,10 @@ const STEERING_OUTCOME_WAIT_MS = 1_000;
 
 export class KiroProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.KIRO;
-  constructor(
-    private readonly options: { command?: readonly string[]; configTimeoutMs?: number } = {},
-  ) {}
+  constructor(private readonly options: KiroProviderOptions) {}
 
   readUsage(options: { workingDirectory: string; timeoutMs?: number }) {
-    return readKiroUsage({ timeoutMs: options.timeoutMs });
+    return readKiroUsage({ timeoutMs: options.timeoutMs }, this.options.host.readUsageResponse);
   }
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
@@ -42,11 +39,11 @@ export class KiroProvider implements CodeAgentProvider {
       throw new Error("Invalid Kiro session ID");
     // Runtime discovery already gates the Daemon's reported inventory; this re-check covers an
     // existing Agent whose CLI has since fallen below the baseline (or predates the gate).
-    await assertKiroVersionSupported(this.options.command ?? ["kiro-cli"]);
-    const environment = agentEnvironment(options.environment, Bun.env, undefined, {
-      envVars: options.runtime?.envVars,
-      gitHooks: options.gitHooks,
-    });
+    await assertKiroVersionSupported(
+      this.options.command ?? ["kiro-cli"],
+      this.options.host.versionReader,
+    );
+    const environment = this.options.host.buildEnvironment(options);
     const directory = resolve(options.agentWorkspaceDirectory, ".kiro/agents");
     await mkdir(directory, { recursive: true });
     if ((await realpath(directory)) !== directory)
@@ -75,6 +72,7 @@ export class KiroProvider implements CodeAgentProvider {
         [...(this.options.command ?? ["kiro-cli"]), ...KIRO_ACP_ARGS],
         options,
         environment,
+        this.options.host,
         name,
         () => rm(path, { force: true }),
         this.options.configTimeoutMs,
@@ -123,6 +121,7 @@ class KiroSession implements AgentSession {
     command: readonly string[],
     private readonly options: AgentSessionOptions,
     environment: Readonly<Record<string, string>>,
+    host: KiroRuntimeHost,
     private readonly profileName: string,
     private readonly cleanupProfile: () => Promise<void>,
     private readonly configTimeoutMs = 30_000,
@@ -131,6 +130,7 @@ class KiroSession implements AgentSession {
       command,
       options.agentWorkspaceDirectory,
       environment,
+      host,
       (notification) => this.#update(notification),
       (request) => {
         const allow =

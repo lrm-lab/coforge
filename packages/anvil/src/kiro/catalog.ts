@@ -1,15 +1,19 @@
-import { RUNTIME_PROVIDER, type CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_PROVIDER,
+  type CodeAgentModelCatalog,
+  diagnosticErrorCode,
+} from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { agentEnvironment } from "#src/code-agent/environment";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { bounded, KiroConnection, record } from "./connection";
+import type { KiroRuntimeHost } from "./host";
 
-const logger = getLogger(["coforge", "daemon", "code-agent", "kiro"]);
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.KIRO]);
 
 export async function discoverKiroCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  host: KiroRuntimeHost,
   configTimeoutMs = 30_000,
 ): Promise<CodeAgentModelCatalog | undefined> {
   let transport: KiroConnection | undefined;
@@ -17,7 +21,7 @@ export async function discoverKiroCatalog(
   // scrubbed, bounded line is kept, never the full stderr stream.
   let stderrHint: string | undefined;
   try {
-    transport = new KiroConnection(command, cwd, agentEnvironment(undefined, environment));
+    transport = new KiroConnection(command, cwd, host.buildCatalogEnvironment(environment), host);
     transport.process.onStderr((line) => {
       if (stderrHint === undefined && line.trim()) stderrHint = scrubStderrHint(line);
     });

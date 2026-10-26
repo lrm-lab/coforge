@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CodexProvider } from "#src/code-agent/codex/provider";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
-import { KiroProvider } from "#src/code-agent/kiro/provider";
+import { kiroProvider } from "./fixtures/kiro-host";
 import {
   CursorProvider,
   PROCESS_TREE_EXIT_GRACE_MS,
@@ -26,7 +26,7 @@ const command = (name: string) => [
 const providers = [
   new CodexProvider({ command: command("codex-app-server.ts") }),
   new ClaudeCodeProvider({ command: command("claude-stream-json.ts") }),
-  new KiroProvider({ command: command("kiro-acp.ts") }),
+  kiroProvider({ command: [process.execPath, anvilRuntimeFixtures.kiro] }),
   new CursorProvider({
     host: perTurnSessionHost,
     command: [process.execPath, anvilRuntimeFixtures.cursor],

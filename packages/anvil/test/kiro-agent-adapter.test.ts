@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { KiroProvider } from "#src/code-agent/kiro/provider";
+import { kiroProvider } from "./fixtures/kiro-host";
 import type { AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 
 // macOS tmpdir lives under /var, a symlink; the Kiro provider rejects a lin
@@ -17,7 +17,7 @@ test.each(["--delayed-config", "--early-config"])(
   async (flag) => {
     const cwd = await mkdtemp(join(tempRoot, "kiro-config-"));
     try {
-      const session = await new KiroProvider({ command: [...command, flag] }).createAgentSession({
+      const session = await kiroProvider({ command: [...command, flag] }).createAgentSession({
         agentWorkspaceDirectory: cwd,
         instructions: "Keep the asymmetric marker 719 in the system prompt.",
         runtime: { provider: "kiro", model: "model-reasoning", reasoning: "high" },
@@ -40,7 +40,7 @@ test.each(["--missing-config", "--invalid-model", "--closed-config"])(
     const cwd = await mkdtemp(join(tempRoot, "kiro-config-fail-"));
     try {
       await expect(
-        new KiroProvider({ command: [...command, flag], configTimeoutMs: 30 }).createAgentSession({
+        kiroProvider({ command: [...command, flag], configTimeoutMs: 30 }).createAgentSession({
           agentWorkspaceDirectory: cwd,
           instructions: "Keep the asymmetric marker 719 in the system prompt.",
           runtime: {
@@ -67,7 +67,7 @@ test("Kiro launch is rejected before any workspace side effect when the resolved
   const cwd = await mkdtemp(join(tempRoot, "kiro-version-gate-reject-"));
   try {
     await expect(
-      new KiroProvider({
+      kiroProvider({
         command: [...command, "--version-output=kiro-cli 2.16.0"],
       }).createAgentSession({
         agentWorkspaceDirectory: cwd,
@@ -91,7 +91,7 @@ test.each(["kiro-cli 2.21.2", "unexpected-output-with-no-dotted-version"])(
   async (versionOutput) => {
     const cwd = await mkdtemp(join(tempRoot, "kiro-version-gate-proceed-"));
     try {
-      const session = await new KiroProvider({
+      const session = await kiroProvider({
         command: [...command, `--version-output=${versionOutput}`],
       }).createAgentSession({
         agentWorkspaceDirectory: cwd,
@@ -109,7 +109,7 @@ test("Kiro verifies the selected native session before loading and reapplies mod
   const cwd = await mkdtemp(join(tempRoot, "kiro-resume-"));
   const reports: string[] = [];
   try {
-    const session = await new KiroProvider({ command }).createAgentSession({
+    const session = await kiroProvider({ command }).createAgentSession({
       agentWorkspaceDirectory: cwd,
       instructions: "Keep the asymmetric marker 719 in the system prompt.",
       sessionId: "sess-fixture-kiro",
@@ -129,7 +129,7 @@ test("Kiro verifies the selected native session before loading and reapplies mod
       await session.dispose();
     }
     await expect(
-      new KiroProvider({ command }).createAgentSession({
+      kiroProvider({ command }).createAgentSession({
         agentWorkspaceDirectory: cwd,
         instructions: "test",
         sessionId: "missing",
@@ -144,7 +144,7 @@ test("Kiro verifies the selected native session before loading and reapplies mod
 test("Kiro v3 injects native instructions and accepts input before its turn completes", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-adapter-"));
   const identities: string[] = [];
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
     onSessionId: async (id) => {
@@ -187,7 +187,7 @@ function waitForCompletion(session: AgentSession, events: AgentRuntimeEvent[]) {
 
 test("Kiro forwards its own scrubbed reason for a turn that ends with its private error stop reason", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-turn-error-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -215,7 +215,7 @@ test("Kiro forwards its own scrubbed reason for a turn that ends with its privat
 
 test("Kiro reports a fixed fallback for a turn that ends with its private error stop reason and no observed cause", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-turn-error-silent-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -238,7 +238,7 @@ test("Kiro reports a fixed fallback for a turn that ends with its private error 
 
 test("Kiro reports a cancellation it never asked for as a failed turn, not a silent interrupted", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-turn-cancelled-unrequested-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -260,7 +260,7 @@ test("Kiro reports a cancellation it never asked for as a failed turn, not a sil
 
 test("Kiro names the stop reason for a turn that ends before finishing (max_tokens)", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-turn-max-tokens-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -282,7 +282,7 @@ test("Kiro names the stop reason for a turn that ends before finishing (max_toke
 
 test("Kiro forwards a scrubbed session/prompt rejection reason instead of a fixed summary", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-reject-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -304,7 +304,7 @@ test("Kiro forwards a scrubbed session/prompt rejection reason instead of a fixe
 
 test("Kiro steers busy input through _session/steer instead of replacing the running turn, and normalizes ACP events", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-events-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -385,7 +385,7 @@ test("Kiro steers busy input through _session/steer instead of replacing the run
 
 test("Kiro's idle notify still sends an ordinary session/prompt, even when the text matches a steer-only fixture keyword", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-steer-idle-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -404,7 +404,7 @@ test("Kiro's idle notify still sends an ordinary session/prompt, even when the t
 
 test("Kiro's notify still accepts and surfaces notice-undelivered when _session/steer is unavailable or dropped", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-steer-fallback-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -438,7 +438,7 @@ test("Kiro's notify still accepts and surfaces notice-undelivered when _session/
 
 test("Kiro's notice-undelivered names the tracked deliveries its notice carried", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-steer-delivery-ids-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -479,7 +479,7 @@ test("Kiro's notice-undelivered names the tracked deliveries its notice carried"
  * returns the session's events up to and including that turn's `completed`. */
 async function steerOutcomeAfterTurnEnd(steer: string) {
   const cwd = await mkdtemp(join(tempRoot, "kiro-steer-outcome-order-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -530,7 +530,7 @@ test("Kiro reports a compaction-started event per in_progress update, and compac
   // single reported episode is the daemon core's job now (agent-runtime/phase-tracker.ts,
   // exercised in activity-heartbeat.test.ts), not the adapter's.
   const cwd = await mkdtemp(join(tempRoot, "kiro-compaction-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -549,7 +549,7 @@ test("Kiro reports a compaction-started event per in_progress update, and compac
 
 test("Kiro reports compaction-interrupted from CompactionUpdate.status=failed", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-compaction-failed-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -568,7 +568,7 @@ test("Kiro reports compaction-interrupted from CompactionUpdate.status=failed", 
 
 test("Kiro reports progress for content-free tool_call_update, plan, and usage updates", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-progress-"));
-  const session = await new KiroProvider({ command }).createAgentSession({
+  const session = await kiroProvider({ command }).createAgentSession({
     agentWorkspaceDirectory: cwd,
     instructions: "Keep the asymmetric marker 719 in the system prompt.",
   });
@@ -589,14 +589,14 @@ test("Kiro reports progress for content-free tool_call_update, plan, and usage u
 test("Kiro rejects protocol disconnect before admission and mismatched resume identity", async () => {
   const cwd = await mkdtemp(join(tempRoot, "kiro-failures-"));
   try {
-    const session = await new KiroProvider({ command }).createAgentSession({
+    const session = await kiroProvider({ command }).createAgentSession({
       agentWorkspaceDirectory: cwd,
       instructions: "Keep the asymmetric marker 719 in the system prompt.",
     });
     await expect(session.notify!("disconnect-before-admission")).rejects.toThrow();
     await session.dispose();
     await expect(
-      new KiroProvider({ command }).createAgentSession({
+      kiroProvider({ command }).createAgentSession({
         agentWorkspaceDirectory: cwd,
         instructions: "test",
         sessionId: "sess-fixture-kiro",

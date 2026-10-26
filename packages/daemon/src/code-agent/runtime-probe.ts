@@ -1,4 +1,8 @@
-import { RUNTIME_PROVIDER, type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_PROVIDER,
+  type RuntimeMetadata,
+  diagnosticErrorCode,
+} from "@lrm/coforge-sdk/internal";
 import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
 import { withoutClaudeCodeMarker } from "#src/code-agent/claude-code/launch-args";
@@ -9,13 +13,14 @@ import {
   VERSION_PROBE_TIMEOUT_MS,
   withDeadline,
   type CodeAgentProbe,
+  isKiroVersionUnsupported,
+  logKiroVersionUnsupported,
 } from "@lrm/coforge-anvil";
 import {
   probeClaudeCodeVersion,
   resolveClaudeCodeExecutable,
 } from "#src/code-agent/claude-code/runtime";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
-import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "#src/code-agent/kiro/version";
 import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "#src/code-agent/grok/version";
 import {
   isAntigravityVersionUnsupported,
@@ -29,7 +34,6 @@ import {
   type ExternalCodeAgentProvider,
 } from "./runtime-executable";
 
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { CATALOG_DISCOVERY_TIMEOUT_MS, within } from "./catalog-discovery";
 import { initializeCodex } from "./codex/catalog";
 import {

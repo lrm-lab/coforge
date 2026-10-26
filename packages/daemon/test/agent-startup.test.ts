@@ -1,3 +1,4 @@
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -6,9 +7,14 @@ import { join } from "node:path";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
-import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "@lrm/coforge-anvil";
-import { KiroProvider } from "#src/code-agent/kiro/provider";
-import { AgentSessionRecoveryError, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+import {
+  type AgentRuntimeEvent,
+  type AgentSession,
+  type CodeAgentProvider,
+  AgentSessionRecoveryError,
+  PROCESS_TREE_EXIT_GRACE_MS,
+} from "@lrm/coforge-anvil";
+import { kiroProvider } from "./fixtures/kiro-host";
 import {
   AGENT_STARTUP_TIMEOUT_MS,
   AgentStartup,
@@ -140,12 +146,8 @@ test("startup fails and releases the session after 120 seconds without readiness
 test(
   "Kiro's native ACP startup and empty restart both settle Starting to Idle",
   async () => {
-    const provider = new KiroProvider({
-      command: [
-        process.execPath,
-        new URL("./fixtures/kiro-acp.ts", import.meta.url).pathname,
-        "--complete-startup",
-      ],
+    const provider = kiroProvider({
+      command: [process.execPath, anvilRuntimeFixtures.kiro, "--complete-startup"],
     });
     const h = await harness(provider);
     try {

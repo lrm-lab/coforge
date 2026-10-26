@@ -1,5 +1,9 @@
 import { daemonStartupOptions } from "#src/daemon-startup-options";
-import type { LocalInboxRequest, RunnerHoldReason } from "@lrm/coforge-sdk/internal";
+import {
+  type LocalInboxRequest,
+  type RunnerHoldReason,
+  diagnosticErrorCode,
+} from "@lrm/coforge-sdk/internal";
 import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { startDaemonLocalRpcServer } from "#src/local-rpc";
 import { startAgentProxy } from "#src/agent-proxy";
@@ -14,7 +18,6 @@ import {
 } from "#src/daemon-runtime/runtime";
 import { upgradeOperationsInConfig } from "#src/daemon-runtime/upgrade-result-reporter";
 import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { DaemonConnection } from "#src/connection/daemon-connection";
@@ -82,7 +85,6 @@ export { CodexProvider } from "#src/code-agent/codex/provider";
 export { readCodexUsage } from "#src/code-agent/codex/usage";
 export { readClaudeCodeUsage } from "#src/code-agent/claude-code/usage";
 export { CoforgeProvider, PiProvider } from "#src/code-agent/pi/provider";
-export { KiroProvider } from "#src/code-agent/kiro/provider";
 export { startDaemonLocalRpcServer } from "#src/local-rpc";
 export { startAgentProxy } from "#src/agent-proxy";
 export {

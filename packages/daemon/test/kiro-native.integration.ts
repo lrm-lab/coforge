@@ -1,14 +1,14 @@
 // Opt-in: mise exec -- bun test ./packages/daemon/test/kiro-native.integration.ts
 // Requires a user-installed, authenticated Kiro v3 engine; consumes provider usage.
+import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent, AgentSession } from "@coforge/agent";
-import { KiroProvider } from "#src/code-agent/kiro/provider";
-import { discoverKiroCatalog } from "#src/code-agent/kiro/catalog";
-import { KIRO_ACP_ARGS } from "#src/code-agent/kiro/connection";
+import { kiroProvider } from "./fixtures/kiro-host";
+import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil";
 
 // macOS tmpdir lives under /var, a symlink; the Kiro provider rejects a linked
 // agent profile directory (comparing realpath to the literal resolved path).
@@ -31,10 +31,15 @@ test("native Kiro v3 instructions, permissions, recovery and busy steering", asy
       "When asked for the instruction marker, reply exactly CEDAR-951. Use tools only when requested.",
   };
   try {
-    const catalog = await discoverKiroCatalog(["kiro-cli", ...KIRO_ACP_ARGS], cwd, Bun.env);
+    const catalog = await discoverKiroCatalog(
+      ["kiro-cli", ...KIRO_ACP_ARGS],
+      cwd,
+      Bun.env,
+      kiroRuntimeHost,
+    );
     const model = catalog?.models.find((model) => model.reasoningEfforts.includes("low"));
     expect(model).toBeDefined();
-    session = await new KiroProvider().createAgentSession({
+    session = await kiroProvider().createAgentSession({
       ...options,
       runtime: { provider: "kiro", model: model!.id, reasoning: "low" },
     });
@@ -50,7 +55,7 @@ test("native Kiro v3 instructions, permissions, recovery and busy steering", asy
     expect(await Bun.file(join(cwd, "tool-marker.txt")).text()).toBe("TOOL-719");
     const identity = await session.readSessionIdentity!();
     await session.dispose();
-    session = await new KiroProvider().createAgentSession({
+    session = await kiroProvider().createAgentSession({
       ...options,
       sessionId: identity!.sessionId,
     });

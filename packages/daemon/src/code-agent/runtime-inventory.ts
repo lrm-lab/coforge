@@ -1,3 +1,4 @@
+import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { join } from "node:path";
 import {
   RUNTIME_PROVIDER,
@@ -7,8 +8,12 @@ import {
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
-import { discoverKiroCatalog } from "#src/code-agent/kiro/catalog";
-import { discoverCursorCatalog, discoverOpenCodeCatalog } from "@lrm/coforge-anvil";
+import {
+  discoverKiroCatalog,
+  KIRO_ACP_ARGS,
+  discoverCursorCatalog,
+  discoverOpenCodeCatalog,
+} from "@lrm/coforge-anvil";
 import { runCatalogCommand } from "./catalog-command";
 import { discoverGrokCatalog } from "#src/code-agent/grok/catalog";
 import { discoverAntigravityCatalog } from "#src/code-agent/antigravity/catalog";
@@ -244,9 +249,10 @@ export async function discoverCodeAgentCatalogs(
     if (executable)
       discoveries.push(
         discoverKiroCatalog(
-          commands.kiro ?? [executable, "acp", "--agent-engine", "v3", "--auth-method", "cli"],
+          commands.kiro ?? [executable, ...KIRO_ACP_ARGS],
           cwd,
           environment,
+          kiroRuntimeHost,
         )
           .catch(() => undefined)
           .then((catalog) => ({

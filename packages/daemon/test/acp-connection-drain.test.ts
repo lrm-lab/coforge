@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
-import type { OwnedProcessTree } from "@lrm/coforge-anvil";
 import { GrokConnection } from "#src/code-agent/grok/connection";
-import { KiroConnection } from "#src/code-agent/kiro/connection";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
+import type { OwnedProcessTree } from "@lrm/coforge-anvil";
 
 const modeOptions = [
   {
@@ -60,34 +59,6 @@ function exitingTree(notifications: number, result: object): OwnedProcessTree {
     waitForExit: async () => true,
   } satisfies OwnedProcessTree;
 }
-
-test.each([0, 10, 100])(
-  "Kiro: a response written after %d notifications and just before the process exits is delivered",
-  async (notifications) => {
-    const spawn = ProcessTreeOwner.prototype.spawn;
-    ProcessTreeOwner.prototype.spawn = () =>
-      exitingTree(notifications, { configOptions: modeOptions });
-    try {
-      const connection = new KiroConnection(["unused"], ".", {});
-      try {
-        const response = await connection.connection.agent.request("session/set_config_option", {
-          sessionId: "s",
-          configId: "mode",
-          value: "agent",
-        });
-        expect(response.configOptions).toHaveLength(1);
-        // Only once everything was handled does the connection report the process as gone.
-        await expect(connection.waitForConfig("s", [], "model", 1_000)).rejects.toThrow(
-          "process closed before configuration",
-        );
-      } finally {
-        await connection.dispose();
-      }
-    } finally {
-      ProcessTreeOwner.prototype.spawn = spawn;
-    }
-  },
-);
 
 test.each([0, 100])(
   "Grok: a response written after %d notifications and just before the process exits is delivered",
