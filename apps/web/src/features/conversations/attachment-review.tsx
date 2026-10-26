@@ -23,6 +23,7 @@ import {
   previewKindFor,
 } from "./attachment-preview-kind";
 import { readPreviewText } from "./attachment-preview-text";
+import { LoadingImage } from "./loading-image";
 
 type ReviewFile = {
   id: string;
@@ -58,7 +59,6 @@ export function AttachmentReviewDialog({
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [commentsOnPhone, setCommentsOnPhone] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const [imageUrlFailed, setImageUrlFailed] = useState(false);
   const [pendingAnchor, setPendingAnchor] = useState<AttachmentCommentAnchor | null>(null);
   const [surface, setSurface] = useState<AnchorSurface | null>(null);
   const [jumpTo, setJumpTo] = useState<AttachmentCommentAnchor | null>(null);
@@ -218,14 +218,14 @@ export function AttachmentReviewDialog({
                     >
                       {image ? (
                         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                          <img
-                            src={!imageUrlFailed && file.previewUrl ? file.previewUrl : href}
+                          <LoadingImage
+                            src={file.previewUrl ?? href}
+                            fallbackSrc={file.previewUrl ? href : undefined}
+                            onFailed={() => setImageFailed(true)}
                             alt={file.fileName}
-                            className="max-h-full max-w-full object-contain"
-                            onError={() => {
-                              if (file.previewUrl && !imageUrlFailed) setImageUrlFailed(true);
-                              else setImageFailed(true);
-                            }}
+                            className="flex size-full items-center justify-center"
+                            imgClassName="max-h-full max-w-full object-contain"
+                            skeletonClassName="m-auto size-[min(24rem,100%)]"
                           />
                         </div>
                       ) : kind ? (

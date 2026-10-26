@@ -8,7 +8,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
-import { useState } from "react";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 
@@ -16,6 +15,7 @@ import { previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
 import { loadConversationFiles, type ConversationFile } from "./conversation-files.functions";
 import { attachmentUrl } from "./attachment-card";
+import { LoadingImage } from "./loading-image";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -44,13 +44,6 @@ export function FileRow({
   const href = attachmentUrl(file);
   const messageId = file.messageId;
   const isImage = file.inlineImage;
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const [imgBroken, setImgBroken] = useState(false);
-  const previewSrc = !previewFailed && file.previewUrl ? file.previewUrl : href;
-  const handlePreviewError = () => {
-    if (previewFailed || !file.previewUrl) setImgBroken(true);
-    else setPreviewFailed(true);
-  };
   const download = (
     <ButtonUtility
       icon={Download01}
@@ -75,21 +68,20 @@ export function FileRow({
   const cardBody = (
     <span className="flex w-full min-w-0 items-center gap-3">
       {isImage ? (
-        imgBroken ? (
-          <FileTypeIcon
-            fileName={file.fileName}
-            contentType={file.contentType}
-            className="size-10"
-          />
-        ) : (
-          <img
-            src={previewSrc}
-            onError={handlePreviewError}
-            alt=""
-            loading="lazy"
-            className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-secondary ring-inset"
-          />
-        )
+        <LoadingImage
+          src={file.previewUrl ?? href}
+          fallbackSrc={file.previewUrl ? href : undefined}
+          alt=""
+          className="size-10 shrink-0 rounded-lg ring-1 ring-secondary ring-inset"
+          imgClassName="size-full object-cover"
+          failed={
+            <FileTypeIcon
+              fileName={file.fileName}
+              contentType={file.contentType}
+              className="size-6"
+            />
+          }
+        />
       ) : (
         <FileTypeIcon fileName={file.fileName} contentType={file.contentType} className="size-10" />
       )}

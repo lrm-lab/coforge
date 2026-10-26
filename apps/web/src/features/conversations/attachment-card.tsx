@@ -3,12 +3,12 @@ import { Download01 } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Skeleton } from "#src/components/ui/skeleton";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { m } from "#src/paraglide/messages";
 import { previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
+import { LoadingImage } from "./loading-image";
 import type { MessageView } from "./message-row";
 
 /** The authenticated backend fallback: forced downloads, and inline images once their signed
@@ -20,15 +20,7 @@ export function attachmentUrl(attachment: { id: string }) {
 
 export function AttachmentCard({ attachment }: { attachment: MessageView["attachments"][number] }) {
   const href = attachmentUrl(attachment);
-  const [previewFailed, setPreviewFailed] = useState(false);
   const [imgBroken, setImgBroken] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const previewSrc = !previewFailed && attachment.previewUrl ? attachment.previewUrl : href;
-  const handlePreviewError = () => {
-    setImgLoaded(false);
-    if (previewFailed || !attachment.previewUrl) setImgBroken(true);
-    else setPreviewFailed(true);
-  };
   if (attachment.contentType.startsWith("image/") && !imgBroken)
     return (
       <div className="relative mt-1 w-fit max-w-full">
@@ -38,18 +30,15 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
               color="tertiary"
               noTextPadding
               aria-label={attachment.fileName}
-              className="grid h-auto min-h-16 min-w-16 place-items-center overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
+              className="grid h-auto place-items-center overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
             >
-              {!imgLoaded && (
-                <Skeleton className="pointer-events-none absolute inset-0 rounded-lg bg-secondary/70" />
-              )}
-              <img
-                src={previewSrc}
-                onError={handlePreviewError}
-                onLoad={() => setImgLoaded(true)}
+              <LoadingImage
+                src={attachment.previewUrl ?? href}
+                fallbackSrc={attachment.previewUrl ? href : undefined}
+                onFailed={() => setImgBroken(true)}
                 alt={attachment.fileName}
-                loading="lazy"
-                className="block max-h-80 max-w-full object-contain"
+                className="min-h-24 min-w-24 max-w-full"
+                imgClassName="block max-h-80 max-w-full object-contain"
               />
             </Button>
           )}

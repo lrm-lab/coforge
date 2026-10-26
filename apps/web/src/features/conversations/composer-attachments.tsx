@@ -14,6 +14,7 @@ import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
+import { LoadingImage } from "./loading-image";
 
 export type PendingAttachment = {
   /** Stable key across renders and across the file's own upload lifecycle; independent of
@@ -104,10 +105,14 @@ export function AttachmentTile({
         >
           {isImage ? (
             previewUrl ? (
-              <img
+              <LoadingImage
                 src={previewUrl}
                 alt=""
-                className={cx("size-full object-cover", uploading && "opacity-60")}
+                className="size-full"
+                imgClassName={cx("size-full object-cover", uploading && "opacity-60")}
+                failed={
+                  <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
+                }
               />
             ) : (
               <span className="flex size-full items-center justify-center bg-secondary">
@@ -143,10 +148,11 @@ export function AttachmentTile({
               <>
                 {isImage && previewUrl && (
                   <div className="flex justify-center rounded-t-xl bg-secondary p-3">
-                    <img
+                    <LoadingImage
                       src={previewUrl}
                       alt=""
-                      className="max-h-56 max-w-full rounded-md object-contain"
+                      className="min-h-24 min-w-24 rounded-md"
+                      imgClassName="max-h-56 max-w-full rounded-md object-contain"
                     />
                   </div>
                 )}

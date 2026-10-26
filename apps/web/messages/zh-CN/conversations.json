@@ -103,6 +103,7 @@
   "conversation_attachment_preview_too_large": "这个文件太大，无法预览，请下载后查看。",
   "conversation_message_show_more": "展开全文",
   "conversation_message_show_less": "收起",
+  "conversation_image_failed": "图片加载失败",
   "conversation_attachment_remove": "移除附件",
   "conversation_attachment_tray": "待发送的附件",
   "conversation_attachment_uploading": "正在上传 {progress}%",

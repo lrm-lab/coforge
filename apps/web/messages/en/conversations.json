@@ -107,6 +107,7 @@
   "conversation_attachment_preview_too_large": "This file is too large to preview. Download it instead.",
   "conversation_message_show_more": "Show More",
   "conversation_message_show_less": "Collapse",
+  "conversation_image_failed": "Image failed to load",
   "conversation_attachment_remove": "Remove Attachment",
   "conversation_attachment_tray": "Attachments to send",
   "conversation_attachment_uploading": "Uploading {progress}%",
