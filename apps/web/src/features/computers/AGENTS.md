@@ -8,7 +8,7 @@ These rules apply to `src/features/computers/`.
 - Only runtimes marked in `RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN` get on-demand
   Usage scanning. The table reflects shipped adapters with a `readUsage` method,
   not whether they launch an external CLI. Pi, CoForge, Cursor, and OpenCode
-  carry no status square; for the Computer's owner every chip still opens its
+  carry no status dot; for the Computer's owner every chip still opens its
   popover for the Public switch. A supported reader's account-specific
   `unsupported` result remains visible in its popover.
 - A runtime's popover opens on a press, with a close button and Escape, as on
@@ -46,7 +46,7 @@ These rules apply to `src/features/computers/`.
 - The slot's "What's new" opens the notes the release catalog (`server/release-catalog/`) holds for
   the release on offer or being installed, in the UI's language with the other as fallback. No
   notes, or a failed read, means no link and never an error; it never holds up Upgrade.
-- A runtime chip is its name and one status square (`runtime-chip.tsx`): green
+- A runtime chip is its mark, its name and one round status dot (`runtime-chip.tsx`): green
   when signed in or its usage is fine, orange when signed out or its usage needs
   attention. The account and plan sit in the popover and come only to the
   Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the

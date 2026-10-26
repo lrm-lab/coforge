@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 import { m } from "#src/paraglide/messages";
+import { RuntimeChip } from "#src/features/computers/runtime-chip";
 import { RuntimeUsagePopoverContent } from "#src/features/computers/runtime-usage";
 import { usageWindowLabel } from "#src/features/computers/runtime-usage-windows";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
@@ -106,6 +107,19 @@ test("each runtime names its usage windows the way that runtime reports them", (
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", session)).toBe("Session");
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", week)).toBe("Weekly");
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "secondary", week)).toBe("Weekly");
+});
+
+test("a runtime chip shows the runtime's mark, its name and a round status dot", () => {
+  const chip = renderToStaticMarkup(
+    <RuntimeChip
+      runtime={{ provider: RUNTIME_PROVIDER.CLAUDE_CODE, displayName: "Claude Code" }}
+      auth={{ provider: RUNTIME_PROVIDER.CLAUDE_CODE, state: "logged_out" }}
+    />,
+  );
+  expect(chip).toContain("<img");
+  expect(chip).toContain("Claude Code");
+  expect(chip).toContain(`aria-label="${m.computer_runtime_auth_logged_out()}"`);
+  expect(chip).toContain("rounded-full");
 });
 
 test("the popover as on Raft: the plan with its OK badge, then a Refresh button", () => {
