@@ -58,7 +58,11 @@ These rules apply to `src/features/computers/`.
   reported shows no state.
 - Sign in and Sign out sit in a Claude Code, Codex or Kiro runtime's popover for the
   Computer's owner and Workspace owners and admins, the server's own rule
-  (`computer-runtimes.tsx`). The dialogs subscribe to the viewer's
+  (`computer-runtimes.tsx`). The account is the popover's last band, as on Raft:
+  the login state beside one button of the same weight signed in or out (Frank,
+  2026-10-27, task #196). It and the Public switch stay in view while the bands
+  above them scroll, so a phone never cuts an action off
+  (`test/e2e-runtime-account-band.e2e.ts`). The dialogs subscribe to the viewer's
   `runtimeauth:user:<id>` channel and then read the login or logout once, and
   `runtime-auth-login-state.ts` drops whatever both deliver, so a view only
   moves a login forward. A device code, a pasted code and a sign-in link live

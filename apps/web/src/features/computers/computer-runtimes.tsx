@@ -4,6 +4,7 @@ import { OverlayTriggerStateContext } from "react-aria-components";
 import { LogIn01, LogOut01 } from "@untitledui/icons";
 import { RUNTIME_AUTH_PROVIDERS, type RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
 
+import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { m } from "#src/paraglide/messages";
@@ -83,72 +84,73 @@ export function ComputerRuntimeList({
           const open = (kind: AuthDialog["kind"]) =>
             isAuthProvider(provider) &&
             setAuthDialog({ kind, provider, name: runtime.displayName });
-          const parts: ReactNode[] = [];
-          if (auth?.state === "unavailable" && auth.unavailableReason)
-            parts.push(
-              <p key="reason" className="text-sm text-tertiary">
-                {unsupportedText(auth.unavailableReason, runtime.displayName)}
-              </p>,
-            );
-          else if (
+          // The account is the last band, as on Raft: its state beside the one action it allows,
+          // the same button signed in or out.
+          const signIn =
             signable &&
-            auth?.state !== "logged_in" &&
-            (provider !== RUNTIME_PROVIDER.KIRO || computer.platform !== "win32")
-          )
-            parts.push(
-              <PopoverAction key="in" onPress={() => open("sign_in")}>
-                {(press) => (
-                  <Button size="sm" iconLeading={LogIn01} onPress={press}>
-                    {m.runtime_auth_sign_in()}
-                  </Button>
+            auth?.state === "logged_out" &&
+            (provider !== RUNTIME_PROVIDER.KIRO || computer.platform !== "win32");
+          const signOut = signable && auth?.state === "logged_in";
+          const account =
+            auth?.state === "unavailable" && auth.unavailableReason ? (
+              <p key="account" className="px-4 py-3 text-sm text-tertiary">
+                {unsupportedText(auth.unavailableReason, runtime.displayName)}
+              </p>
+            ) : auth?.state === "logged_in" || auth?.state === "logged_out" ? (
+              <div key="account" className="flex items-center justify-between gap-3 px-4 py-3">
+                {auth.state === "logged_in" ? (
+                  <Badge color="success" size="sm">
+                    {m.computer_runtime_auth_logged_in()}
+                  </Badge>
+                ) : (
+                  <Badge color="warning" size="sm">
+                    {m.computer_runtime_auth_logged_out()}
+                  </Badge>
                 )}
-              </PopoverAction>,
-            );
-          if (computer.ownedByCurrentUser)
-            parts.push(
-              <div key="public">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium text-secondary">
-                    {m.computer_runtime_public()}
-                  </span>
-                  {/* A disabled toggle drops focus to the page mid-press (task #116; the
-                      refresh bug #179 went down this exact path). Repeat edits are ignored
-                      in the handler instead; the error text below still reports a failed
-                      change. */}
-                  <Toggle
-                    size="sm"
-                    aria-label={m.computer_runtime_public()}
-                    isSelected={runtime.isPublic}
-                    aria-busy={updatingRuntimeIds.has(runtime.id) || undefined}
-                    onChange={(isPublic) => {
-                      if (!updatingRuntimeIds.has(runtime.id))
-                        void setRuntimePublic(runtime.id, isPublic);
-                    }}
-                  />
-                </div>
-                {runtimeVisibilityErrorIds.has(runtime.id) && (
-                  <p role="alert" className="mt-2 text-xs text-error-primary">
-                    {m.computer_runtime_visibility_error()}
-                  </p>
+                {(signIn || signOut) && (
+                  <PopoverAction onPress={() => open(signIn ? "sign_in" : "sign_out")}>
+                    {(press) => (
+                      <Button
+                        size="sm"
+                        color="secondary"
+                        iconLeading={signIn ? LogIn01 : LogOut01}
+                        onPress={press}
+                      >
+                        {signIn ? m.runtime_auth_sign_in() : m.runtime_auth_sign_out()}
+                      </Button>
+                    )}
+                  </PopoverAction>
                 )}
-              </div>,
-            );
-          // Sign out is a band of its own under a full-width rule, as on Raft.
-          if (signable && auth?.state === "logged_in")
-            parts.push(
-              <div
-                key="out"
-                className={parts.length > 0 ? "-mx-4 border-t border-secondary px-4 pt-3" : ""}
-              >
-                <PopoverAction onPress={() => open("sign_out")}>
-                  {(press) => (
-                    <Button size="sm" color="link-gray" iconLeading={LogOut01} onPress={press}>
-                      {m.runtime_auth_sign_out()}
-                    </Button>
-                  )}
-                </PopoverAction>
-              </div>,
-            );
+              </div>
+            ) : undefined;
+          const visibility = computer.ownedByCurrentUser && (
+            <div key="public" className="px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-secondary">
+                  {m.computer_runtime_public()}
+                </span>
+                {/* A disabled toggle drops focus to the page mid-press (task #116; the
+                    refresh bug #179 went down this exact path). Repeat edits are ignored
+                    in the handler instead; the error text below still reports a failed
+                    change. */}
+                <Toggle
+                  size="sm"
+                  aria-label={m.computer_runtime_public()}
+                  isSelected={runtime.isPublic}
+                  aria-busy={updatingRuntimeIds.has(runtime.id) || undefined}
+                  onChange={(isPublic) => {
+                    if (!updatingRuntimeIds.has(runtime.id))
+                      void setRuntimePublic(runtime.id, isPublic);
+                  }}
+                />
+              </div>
+              {runtimeVisibilityErrorIds.has(runtime.id) && (
+                <p role="alert" className="mt-2 text-xs text-error-primary">
+                  {m.computer_runtime_visibility_error()}
+                </p>
+              )}
+            </div>
+          );
           return (
             <li key={provider}>
               <RuntimeUsage
@@ -160,7 +162,7 @@ export function ComputerRuntimeList({
                 auth={auth}
                 triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
                 trigger={(health) => <RuntimeChip runtime={runtime} auth={auth} health={health} />}
-                footer={parts.length > 0 && <div className="space-y-3">{parts}</div>}
+                actions={(visibility || account) && [visibility, account]}
               />
             </li>
           );

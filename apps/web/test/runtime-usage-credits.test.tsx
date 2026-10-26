@@ -192,7 +192,7 @@ test("a chip names its usage dot with the popover badge's own word", () => {
   expect(chip).toContain(`aria-label="${m.computer_usage_limit_reached()}"`);
 });
 
-test("a signed-out runtime leads with its state and shows no account or usage", () => {
+test("a signed-out runtime shows no account or usage, and the caller's actions come last", () => {
   const html = renderToStaticMarkup(
     <RuntimeUsagePopoverContent
       runtime={{
@@ -206,16 +206,22 @@ test("a signed-out runtime leads with its state and shows no account or usage", 
       computerOnline
       onRefresh={() => {}}
       onClose={() => {}}
+      footer={<p>Footer band</p>}
+      actions={<p>Account band</p>}
     />,
   );
   const name = html.indexOf(">Claude Code<");
-  const state = html.indexOf(">Not signed in<");
   const version = html.indexOf(">2.1.306<");
   const visibility = html.indexOf("can see the account");
+  const footer = html.indexOf(">Footer band<");
+  const account = html.indexOf(">Account band<");
   expect(name).toBeGreaterThan(-1);
-  expect(state).toBeGreaterThan(name);
-  expect(version).toBeGreaterThan(state);
+  expect(version).toBeGreaterThan(name);
   expect(visibility).toBeGreaterThan(version);
+  expect(footer).toBeGreaterThan(visibility);
+  // The account band names the login state; the header does not repeat it.
+  expect(account).toBeGreaterThan(footer);
+  expect(html).not.toContain(">Not signed in<");
   expect(html).toContain('aria-label="Close"');
   expect(html).not.toContain('aria-label="Refresh"');
   expect(html).not.toContain(m.computer_usage_reading());
