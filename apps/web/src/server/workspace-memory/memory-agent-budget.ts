@@ -7,6 +7,8 @@ import {
   MEMORY_OFFER_BUDGET_PER_TRIGGER,
   OPENVIKING_CANDIDATE_LIMIT_MAX,
   type OpenVikingAgentCommand,
+  type OpenVikingOfferCommand,
+  type MemoryOfferPublication,
 } from "@lrm/coforge-sdk/agent";
 
 const MEMORY_READ_OPS = new Set(["fork_find", "search_context", "read", "expand"]);
@@ -22,6 +24,9 @@ export class MemoryAgentBudgetError extends Error {
 export class MemoryAgentTriggerBudget {
   #reads = 0;
   #offers = 0;
+  // A single owner relies on the shared per-trigger Offer quota being one.
+  #owner: string | undefined;
+  #attempts = new Map<string, { payload: string; pending: boolean; published: boolean }>();
 
   consume(command: OpenVikingAgentCommand): void {
     if (MEMORY_READ_OPS.has(command.op)) {
@@ -31,13 +36,45 @@ export class MemoryAgentTriggerBudget {
       this.#reads += 1;
       return;
     }
-    if (command.op === "offer") {
-      if (this.#offers >= MEMORY_OFFER_BUDGET_PER_TRIGGER)
-        throw new MemoryAgentBudgetError(
-          "memory offer budget exhausted for this triggering message",
-        );
-      this.#offers += 1;
-    }
+    if (command.op === "offer") this.acquireOffer(command);
+  }
+
+  /** Reserve before awaiting publication; settle only this request's reservation. */
+  acquireOffer(command: OpenVikingOfferCommand): (publication?: MemoryOfferPublication) => void {
+    const payload = JSON.stringify([
+      command.body,
+      [...command.citationRefs].sort(),
+      command.conversationId,
+      command.targetAgentId,
+      command.recipientRationale,
+    ]);
+    const previous = this.#attempts.get(command.operationId);
+    if (previous && previous.payload !== payload)
+      throw new MemoryAgentBudgetError("operationId already used for a different Offer");
+    if (this.#offers >= MEMORY_OFFER_BUDGET_PER_TRIGGER && this.#owner !== command.operationId)
+      throw new MemoryAgentBudgetError("memory offer budget exhausted for this triggering message");
+    if (previous?.pending)
+      throw new MemoryAgentBudgetError("memory Offer request is already pending");
+    const entry = previous ?? { payload, pending: false, published: false };
+    this.#attempts.set(command.operationId, entry);
+    this.#owner = command.operationId;
+    this.#offers = 1;
+    entry.pending = true;
+    let completed = false;
+    return (publication) => {
+      if (completed) return;
+      completed = true;
+      entry.pending = false;
+      if (publication?.phase === "published") entry.published = true;
+      if (
+        publication?.phase === "rejected_before_publish" &&
+        !entry.published &&
+        this.#owner === command.operationId
+      ) {
+        this.#offers = 0;
+        this.#owner = undefined;
+      }
+    };
   }
 
   snapshot() {

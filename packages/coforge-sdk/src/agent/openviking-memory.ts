@@ -1,5 +1,5 @@
 /**
- * Agent-facing OpenViking reads and server-owned memory control commands.
+ * Agent OpenViking reads and server-owned memory controls.
  *
  * Framework-free JSON that travels Agent → local Daemon proxy → Web gateway.
  * Tenant credentials never appear here. The Memory Agent may find, expand
@@ -7,6 +7,17 @@
  * or mutate skills or ACLs.
  */
 
+import {
+  decodeMemoryOfferPublication,
+  type OpenVikingAgentError,
+  type OpenVikingOfferResponse,
+} from "./memory-offer-publication";
+export {
+  decodeMemoryOfferPublication,
+  type MemoryOfferPublication,
+  type OpenVikingOfferResponse,
+  type OpenVikingAgentError,
+} from "./memory-offer-publication";
 import { decodeOpenVikingCitation, type OpenVikingCitation } from "./memory-citations";
 import {
   OPENVIKING_ARGUMENT_EXAMPLES,
@@ -200,26 +211,6 @@ export type OpenVikingExpandResponse = {
   duplicate: boolean;
   items: OpenVikingCitation[];
   retrieval?: OpenVikingRetrieval;
-};
-
-export type OpenVikingOfferResponse = {
-  protocol: typeof OPENVIKING_AGENT_PROTOCOL;
-  op: "offer";
-  operationId: string;
-  published: boolean;
-  duplicate: boolean;
-  messageId?: string;
-  recipientAgentId?: string;
-  citations: OpenVikingCitation[];
-};
-
-export type OpenVikingAgentError = {
-  protocol: typeof OPENVIKING_AGENT_PROTOCOL;
-  operationId?: string;
-  error: {
-    code: OpenVikingAgentErrorCode;
-    message: string;
-  };
 };
 
 export type OpenVikingAgentResponse =
@@ -659,6 +650,7 @@ export function decodeOpenVikingAgentResponse(
     op: "offer",
     operationId: offer.operationId,
     published: offer.published,
+    publication: decodeMemoryOfferPublication(offer.publication),
     duplicate: offer.duplicate,
     ...(offer.messageId === undefined ? {} : { messageId: offer.messageId }),
     ...(offer.recipientAgentId === undefined ? {} : { recipientAgentId: offer.recipientAgentId }),

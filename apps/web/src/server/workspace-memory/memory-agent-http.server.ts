@@ -72,6 +72,13 @@ export function createScopedMemoryAgentHttpCommands(
     publisher: createPrismaMemoryOfferPublisher(db),
     channels: createPrismaMemoryOfferChannels(db),
     hints: {
+      find(workspaceId, memoryAgentId, operationId) {
+        return new PrismaMemoryDispositionStore(db).findOffer(
+          workspaceId,
+          memoryAgentId,
+          operationId,
+        );
+      },
       prepare(input) {
         const seconds = Number(Bun.env.COFORGE_MEMORY_HINT_TTL_SECONDS);
         return new PrismaMemoryDispositionStore(db).prepare({

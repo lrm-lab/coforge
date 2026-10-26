@@ -8,16 +8,20 @@ import {
   OPENVIKING_AGENT_PROTOCOL,
   OPENVIKING_TOOL_PROFILE,
   type MemoryAgentToolProfile,
+  type MemoryOfferPublication,
   type OpenVikingAgentCommand,
   type OpenVikingDiagnoseResponse,
   type OpenVikingAgentResponse,
   type OpenVikingCitation,
 } from "@lrm/coforge-sdk/agent";
-import { WorkspaceMemoryScopeError } from "#src/server/db/repositories/workspace-memory-errors.server";
+import {
+  WorkspaceMemoryScopeError,
+  WorkspaceMemoryReplayConflictError,
+} from "#src/server/db/repositories/workspace-memory-errors.server";
 import { MemoryCitationUngroundedError, type MemoryCitationBindings } from "./memory-citations";
 import { RetiredFromMemoryDiscoveryError } from "./memory-discovery-eligibility";
 import { MemoryAgentBudgetError, type MemoryAgentBudgetLedger } from "./memory-agent-budget";
-import type { MemoryOffers } from "./memory-offers";
+import type { MemoryOffers, MemoryOfferResult } from "./memory-offers";
 import {
   MemoryAgentMutationError,
   MemoryReadCapabilityError,
@@ -52,6 +56,7 @@ export type MemoryAgentCommandResult =
       status: number;
       protocol: string;
       operationId?: string;
+      publication?: MemoryOfferPublication;
       code: string;
       message: string;
     };
@@ -102,31 +107,42 @@ export function createMemoryAgentCommands(deps: {
       if (!fenceAllows(fence, command)) {
         return failure(403, command.operationId, "unauthorized");
       }
+      let settle: ((publication?: MemoryOfferPublication) => void) | undefined;
+      let publishing = false;
       try {
-        // An operationId that already published an offer is an idempotent
-        // replay; it must not touch the per-trigger budget. The model invents
-        // topic-derived operationIds and re-answers answered questions — a
-        // replay hitting the budget instead of the duplicate path stalls the
-        // whole turn (client slot burns, the pending question goes unanswered).
-        const replay =
-          command.op === "offer" &&
-          (await deps.offers.isReplay(input.workspaceId, command.operationId));
-        if (!replay) {
-          deps.budgets
-            .forTrigger({
-              workspaceId: input.workspaceId,
-              agentId: input.agentId,
-              triggerMessageId: input.triggerMessageId,
-            })
-            .consume(command);
+        if (command.op === "offer") {
+          // Read the original Hint before resolving today's unanswered question.
+          const replay = await deps.offers.replay({
+            workspaceId: input.workspaceId,
+            memoryAgentId: input.agentId,
+            command,
+          });
+          if (replay) return { ok: true, response: offerResponse(command.operationId, replay) };
+          settle = deps.budgets.forTrigger(input).acquireOffer(command);
+        } else {
+          deps.budgets.forTrigger(input).consume(command);
         }
         if (command.op === "diagnose") {
           if (!deps.diagnose) throw new Error("diagnosis_unavailable");
           return { ok: true, response: await deps.diagnose({ ...input, ...command }) };
         }
-        return { ok: true, response: await handleOpenViking(deps, input, command) };
+        const response = await handleOpenViking(deps, input, command, () => {
+          publishing = true;
+        });
+        if (response.op === "offer") settle?.(response.publication);
+        return { ok: true, response };
       } catch (error) {
-        return translateError(command, error);
+        const result = translateError(command, error);
+        if (command.op !== "offer" || result.ok) return result;
+        const outcome = await deps.offers
+          .publication(input.workspaceId, input.agentId, command.operationId)
+          .catch(() => undefined);
+        // A null Hint after entering the publisher cannot prove rollback: a commit's
+        // reply may have been lost. Nor may a rejected competing request free its owner.
+        const publication =
+          outcome?.phase === "published" || (settle && !publishing) ? outcome : undefined;
+        settle?.(publication);
+        return { ...result, ...(publication ? { publication } : {}) };
       }
     },
   };
@@ -166,6 +182,7 @@ async function handleOpenViking(
   },
   input: { workspaceId: string; agentId: string },
   command: OpenVikingAgentCommand,
+  onPublishing: () => void,
 ): Promise<OpenVikingAgentResponse> {
   if (command.op === "fork_find") {
     const result = await deps.openviking.forkFind({
@@ -236,20 +253,28 @@ async function handleOpenViking(
     };
   }
   const delivery = await offerDelivery(deps, input, command);
-  const offer = await deps.offers.publish({
-    workspaceId: input.workspaceId,
-    operationId: command.operationId,
-    conversationId: delivery.conversationId,
-    targetAgentId: delivery.targetAgentId,
-    recipientRationale: delivery.recipientRationale,
-    citationRefs: command.citationRefs,
-    body: command.body,
-    memoryAgentId: input.agentId,
-  });
+  const offer = await deps.offers.publish(
+    {
+      workspaceId: input.workspaceId,
+      operationId: command.operationId,
+      conversationId: delivery.conversationId,
+      targetAgentId: delivery.targetAgentId,
+      recipientRationale: delivery.recipientRationale,
+      citationRefs: command.citationRefs,
+      body: command.body,
+      memoryAgentId: input.agentId,
+    },
+    onPublishing,
+  );
+  return offerResponse(command.operationId, offer);
+}
+
+function offerResponse(operationId: string, offer: MemoryOfferResult): OpenVikingAgentResponse {
   return {
     protocol: OPENVIKING_AGENT_PROTOCOL,
     op: "offer",
-    operationId: command.operationId,
+    operationId,
+    publication: { phase: "published", messageId: offer.offer.messageId },
     published: true,
     duplicate: offer.duplicate,
     messageId: offer.offer.messageId,
@@ -271,6 +296,11 @@ function translateError(command: OpenVikingAgentCommand, error: unknown): Memory
     return failure(400, command.operationId, "invalid", error.message);
   if (error instanceof MemoryReadCapabilityError)
     return failure(503, command.operationId, "runtime", error.message);
+  if (error instanceof WorkspaceMemoryReplayConflictError)
+    return {
+      ...failure(409, command.operationId, "invalid", error.message),
+      code: "openviking-duplicate-conflict",
+    };
   if (error instanceof MemoryAgentBudgetError)
     return failure(429, command.operationId, "budget", error.message);
   if (error instanceof RetiredFromMemoryDiscoveryError)
@@ -299,7 +329,7 @@ function failure(
   operationId: string | undefined,
   kind: "unauthorized" | "invalid" | "citation" | "budget" | "retired" | "runtime",
   message?: string,
-): MemoryAgentCommandResult {
+): Extract<MemoryAgentCommandResult, { ok: false }> {
   const codes = {
     runtime: "openviking-runtime-unavailable",
     unauthorized: "openviking-unauthorized",
@@ -341,6 +371,7 @@ export function memoryAgentResultToResponse(result: MemoryAgentCommandResult): R
       protocol: result.protocol,
       ...(result.operationId === undefined ? {} : { operationId: result.operationId }),
       error: { code: result.code, message: result.message },
+      ...(result.publication ? { publication: result.publication } : {}),
     },
     { status: result.status },
   );

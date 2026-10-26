@@ -81,3 +81,23 @@ test("ledger isolates budget by Workspace, Memory Agent, and triggering Message"
   expect(nextTrigger.consume({ ...ovFind, operationId: "f-next" })).toBeUndefined();
   expect(nextTrigger.consume({ ...offer, operationId: "o-next" })).toBeUndefined();
 });
+
+test("only the acquired request can release a rejected Offer, while unknown permits identical recovery", () => {
+  const budget = new MemoryAgentTriggerBudget();
+  const first = budget.acquireOffer(offer);
+  expect(() => budget.acquireOffer(offer)).toThrow("pending");
+  first(); // no publication outcome: keep the slot
+  expect(() => budget.acquireOffer({ ...offer, operationId: "other" })).toThrow(
+    MemoryAgentBudgetError,
+  );
+  const retry = budget.acquireOffer(offer);
+  retry({ phase: "rejected_before_publish" });
+  expect(budget.snapshot().offers).toBe(0);
+  const next = budget.acquireOffer({ ...offer, operationId: "other" });
+  first({ phase: "rejected_before_publish" }); // late/duplicate completion
+  expect(budget.snapshot().offers).toBe(1);
+  next({ phase: "published", messageId: "message" });
+  const publishedRetry = budget.acquireOffer({ ...offer, operationId: "other" });
+  publishedRetry({ phase: "rejected_before_publish" });
+  expect(budget.snapshot().offers).toBe(1);
+});

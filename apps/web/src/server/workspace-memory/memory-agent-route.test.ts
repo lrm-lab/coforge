@@ -34,6 +34,7 @@ function commands(
 ) {
   const ovRows = new Map<string, OpenVikingCitationRecord>();
   const offerRows = new Map<string, MemoryOfferRecord>();
+  const hintRows = new Map<string, import("./memory-offers").MemoryOfferHint>();
   const gatewayCalls: Array<{ operation: string }> = [];
   const citations = createMemoryCitationBindings({
     openviking: {
@@ -58,12 +59,29 @@ function commands(
       },
     },
     publisher: {
-      async publish() {
+      async publish(input) {
+        const hint = hintRows.get(`${input.workspaceId}:${input.memoryAgentId}:${input.requestId}`);
+        if (hint) {
+          hint.messageId = "offer-msg";
+          hint.deliveredAt = new Date();
+        }
         return { messageId: "offer-msg" };
       },
     },
     hints: {
-      async prepare() {
+      async find(workspaceId, memoryAgentId, operationId) {
+        return hintRows.get(`${workspaceId}:${memoryAgentId}:${operationId}`) ?? null;
+      },
+      async prepare(input) {
+        if (!hintRows.has(`${input.workspaceId}:${input.memoryAgentId}:${input.operationId}`))
+          hintRows.set(`${input.workspaceId}:${input.memoryAgentId}:${input.operationId}`, {
+            conversationId: input.conversationId,
+            targetAgentId: input.targetAgentId,
+            bodyHash: new Bun.CryptoHasher("sha256").update(input.body).digest("hex"),
+            sources: input.citations,
+            messageId: null,
+            deliveredAt: null,
+          });
         return { hint_id: "test-hint", tool: "memory_disposition" as const };
       },
     },
@@ -348,11 +366,24 @@ test("an offer replay with the same operationId skips the per-trigger budget", a
     workspaceId: "ws-a",
     agentId: "mem-1",
     triggerMessageId: "msg-2",
-    command: { ...offerCommand, body: "refined but same operationId" },
+    command: offerCommand,
   });
   expect(second.ok).toBe(true);
   if (!second.ok) throw new Error("expected replay");
   expect(second.response.duplicate).toBe(true);
+  expect(
+    await handler.handle({
+      workspaceId: "ws-a",
+      agentId: "mem-1",
+      triggerMessageId: "msg-2",
+      command: { ...offerCommand, body: "changed payload" },
+    }),
+  ).toMatchObject({
+    ok: false,
+    status: 409,
+    code: "openviking-duplicate-conflict",
+    publication: { phase: "published", messageId: "offer-msg" },
+  });
 
   // The replay consumed nothing: a fresh offer on msg-2 still passes budget.
   const third = await handler.handle({
@@ -398,4 +429,45 @@ test("a valid retrieval experiencing backend failure is not blamed on model argu
   });
   expect(result).toMatchObject({ ok: false, status: 503, code: "openviking-runtime-unavailable" });
   expect(JSON.stringify(result)).not.toContain("private runtime credential");
+});
+
+test("an unserved citation is explicitly prepublish and permits a corrected new-ID Offer on the same trigger", async () => {
+  const { handler } = commands();
+  const scope = { workspaceId: "ws-a", agentId: "mem-1", triggerMessageId: "same-trigger" };
+  const offer = {
+    protocol: OPENVIKING_AGENT_PROTOCOL,
+    op: "offer",
+    operationId: "invalid-offer",
+    conversationId: "ch-1",
+    targetAgentId: "helper-1",
+    citationRefs: ["forged"],
+    body: "Evidence",
+  };
+  expect(await handler.handle({ ...scope, command: offer })).toMatchObject({
+    ok: false,
+    status: 400,
+    publication: { phase: "rejected_before_publish" },
+  });
+  await handler.handle({
+    ...scope,
+    command: {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "fork_find",
+      operationId: "read-evidence",
+      query: "deploy",
+    },
+  });
+  expect(
+    await handler.handle({
+      ...scope,
+      command: {
+        ...offer,
+        operationId: "corrected-offer",
+        citationRefs: ["ov:viking://resources/docs/deploy.md"],
+      },
+    }),
+  ).toMatchObject({
+    ok: true,
+    response: { publication: { phase: "published", messageId: "offer-msg" } },
+  });
 });

@@ -40,6 +40,7 @@ import { API_KEY_ENV_BY_PROVIDER, configureRuntimeEnvironment } from "./runtime-
 import { classifyPiLaunchFailure, PI_MODEL_UNAVAILABLE } from "./launch-error";
 
 import { memoryFenceOpenVikingTools } from "./memory-fence-openviking-tools";
+import { AgentProxyError } from "./agent-proxy-error";
 import { MemoryAgentTurnBudget } from "./memory-agent-turn";
 export { MemoryAgentTurnBudget } from "./memory-agent-turn";
 
@@ -83,24 +84,8 @@ async function postLocalProxy(
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => undefined);
-  if (!response.ok) throw new Error(proxyFailureText(payload, response.status));
+  if (!response.ok) throw new AgentProxyError(response.status, payload);
   return payload;
-}
-
-function proxyFailureText(payload: unknown, status: number): string {
-  if (!payload || typeof payload !== "object" || !("error" in payload))
-    return `CoForge Agent proxy request failed (${status})`;
-  const error = payload.error;
-  if (typeof error === "string" && error.length > 0) return error;
-  if (error && typeof error === "object") {
-    const record = error as { code?: unknown; message?: unknown };
-    const message = typeof record.message === "string" ? record.message : "";
-    const code = typeof record.code === "string" ? record.code : "";
-    if (message && code) return `${message} (${code})`;
-    if (message) return message;
-    if (code) return code;
-  }
-  return `CoForge Agent proxy request failed (${status})`;
 }
 
 function toolResult(value: unknown): ProxyToolResult {
@@ -226,11 +211,29 @@ export function createMemoryFenceTools(
           op,
           ...coerceNumericToolParams(params as Params),
         });
-        budget.consume(command);
-        let decoded = decodeOpenVikingAgentResponse(
-          command.op,
-          await proxy.post(agentApiRoutes.proxy.openviking.path, command),
-        );
+        const settle = budget.consume(command);
+        let decoded;
+        try {
+          decoded = decodeOpenVikingAgentResponse(
+            command.op,
+            await proxy.post(agentApiRoutes.proxy.openviking.path, command),
+          );
+          settle?.(
+            decoded.op === "offer" &&
+              decoded.operationId === command.operationId &&
+              decoded.published &&
+              decoded.messageId
+              ? { phase: "published", messageId: decoded.messageId }
+              : undefined,
+          );
+        } catch (error) {
+          settle?.(
+            error instanceof AgentProxyError && error.operationId === command.operationId
+              ? error.publication
+              : undefined,
+          );
+          throw error;
+        }
         // Poll inside the native tool, avoiding a model turn for every status check.
         for (
           let poll = 0;

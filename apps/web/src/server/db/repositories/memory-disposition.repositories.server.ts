@@ -20,6 +20,22 @@ export class PrismaMemoryDispositionStore implements MemoryDispositionStore {
     ) => MemoryDispositionAuthorization,
   ) {}
 
+  /** The existing Message/Hint transaction is the publication boundary. */
+  async findOffer(workspaceId: string, memoryAgentId: string, operationId: string) {
+    const row = await this.db.memoryHintRecord.findUnique({
+      where: { workspaceId_operationId: { workspaceId, operationId }, memoryAgentId },
+      select: {
+        conversationId: true,
+        targetAgentId: true,
+        bodyHash: true,
+        sources: true,
+        messageId: true,
+        deliveredAt: true,
+      },
+    });
+    return row ? { ...row, sources: row.sources as MemoryHintSource[] } : null;
+  }
+
   async prepare(input: {
     workspaceId: string;
     operationId: string;

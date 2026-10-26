@@ -43,6 +43,9 @@ snippets are omitted with a separate discovery note. Citation identity, version 
 stay intact, Fork discovery is unchanged, and `ov_read` still returns the full document. Missing
 details in a discovery card must not be treated as absent from its source. Later progress reminders
 are compact rather than repeating the full strategy instructions on every search.
+Only an explicit `rejected_before_publish` response for the current operation frees its Offer slot.
+Published or uncertain failures retain it; an identical same-ID retry recovers the original Message.
+Changing the ID after an uncertain result remains blocked.
 Changed Offer payloads cannot reuse an operation ID within a live session, including across triggers. See [runtime instructions](AGENTS.md).
 
 Documentary queries use `ov_search_context` (embedding recall and native context assembly).

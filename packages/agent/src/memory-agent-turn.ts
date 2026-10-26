@@ -1,6 +1,7 @@
 import {
   MEMORY_OFFER_BUDGET_PER_TRIGGER,
   OPENVIKING_CANDIDATE_LIMIT_MAX,
+  type MemoryOfferPublication,
   type OpenVikingAgentCommand,
   type OpenVikingAgentResponse,
 } from "@lrm/coforge-sdk/agent";
@@ -9,7 +10,12 @@ const MEMORY_READ_OPS = new Set(["fork_find", "search_context", "read", "expand"
 
 /** Per-trigger Offer budget and read accounting for the Memory Agent fence. */
 export class MemoryAgentTurnBudget {
-  #offerPayloads = new Map<string, { payload: string; trigger: number }>();
+  #offerPayloads = new Map<
+    string,
+    { payload: string; trigger: number; pending: boolean; published: boolean }
+  >();
+  // A single owner relies on the shared per-trigger Offer quota being one.
+  #offerOperationId: string | undefined;
   #trigger = 0;
   #reads = 0;
   #offers = 0;
@@ -51,12 +57,15 @@ export class MemoryAgentTurnBudget {
     this.#trigger++;
     this.#reads = 0;
     this.#offers = 0;
+    this.#offerOperationId = undefined;
     this.#evidence.clear();
     this.#citationRefs.clear();
     this.#unchangedReads = 0;
   }
 
-  consume(command: OpenVikingAgentCommand): void {
+  consume(
+    command: OpenVikingAgentCommand,
+  ): ((publication?: MemoryOfferPublication) => void) | undefined {
     if (MEMORY_READ_OPS.has(command.op)) {
       const limit = "limit" in command ? command.limit : undefined;
       if (limit !== undefined && limit > OPENVIKING_CANDIDATE_LIMIT_MAX)
@@ -65,7 +74,13 @@ export class MemoryAgentTurnBudget {
       return;
     }
     if (command.op === "offer") {
-      const payload = JSON.stringify([command.body, [...command.citationRefs].sort()]);
+      const payload = JSON.stringify([
+        command.body,
+        [...command.citationRefs].sort(),
+        command.conversationId,
+        command.targetAgentId,
+        command.recipientRationale,
+      ]);
       const previous = this.#offerPayloads.get(command.operationId);
       if (previous !== undefined && previous.payload !== payload)
         throw new Error(
@@ -75,10 +90,38 @@ export class MemoryAgentTurnBudget {
         throw new Error(
           "operationId belongs to an earlier triggering request; use a new id to publish an Offer for this request.",
         );
-      if (this.#offers >= MEMORY_OFFER_BUDGET_PER_TRIGGER)
+      if (
+        this.#offers >= MEMORY_OFFER_BUDGET_PER_TRIGGER &&
+        this.#offerOperationId !== command.operationId
+      )
         throw new Error("memory offer budget exhausted for this triggering message");
-      this.#offerPayloads.set(command.operationId, { payload, trigger: this.#trigger });
-      this.#offers += 1;
+      if (previous?.pending) throw new Error("memory Offer request is already pending");
+      const entry = previous ?? {
+        payload,
+        trigger: this.#trigger,
+        pending: false,
+        published: false,
+      };
+      this.#offerPayloads.set(command.operationId, entry);
+      this.#offerOperationId = command.operationId;
+      this.#offers = 1;
+      entry.pending = true;
+      let completed = false;
+      return (publication) => {
+        if (completed) return;
+        completed = true;
+        entry.pending = false;
+        if (publication?.phase === "published") entry.published = true;
+        if (
+          publication?.phase === "rejected_before_publish" &&
+          !entry.published &&
+          entry.trigger === this.#trigger &&
+          this.#offerOperationId === command.operationId
+        ) {
+          this.#offers = 0;
+          this.#offerOperationId = undefined;
+        }
+      };
     }
   }
 

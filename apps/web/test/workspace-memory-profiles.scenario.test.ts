@@ -1,3 +1,4 @@
+import { fixtureMemoryOfferHints } from "./helpers/memory-offer-hints";
 /**
  * F5 deterministic Workspace Memory Profile scenarios.
  * Fake/synthetic OpenViking seams; no real runtime.
@@ -629,11 +630,7 @@ function memoryAgentCommands() {
           return { messageId: "offer-msg" };
         },
       },
-      hints: {
-        async prepare() {
-          return { hint_id: "test-hint", tool: "memory_disposition" as const };
-        },
-      },
+      hints: fixtureMemoryOfferHints,
       channels: {
         async isMemoryAgent() {
           return false;
@@ -674,9 +671,7 @@ test.skipIf(!connectionString)(
       expect(workspaceProfileToToolFence("openviking")).toBeDefined();
       expect(toolsForMemoryFence(workspaceProfileToToolFence("openviking")!)).toEqual([
         OPENVIKING_TOOL_NAMES.forkFind,
-        OPENVIKING_TOOL_NAMES.searchContext,
         OPENVIKING_TOOL_NAMES.expand,
-        OPENVIKING_TOOL_NAMES.read,
         OPENVIKING_TOOL_NAMES.offer,
         OPENVIKING_TOOL_NAMES.diagnose,
       ]);
@@ -746,11 +741,7 @@ test.skipIf(!connectionString)(
             return { messageId: "offer-msg" };
           },
         },
-        hints: {
-          async prepare() {
-            return { hint_id: "test-hint", tool: "memory_disposition" as const };
-          },
-        },
+        hints: fixtureMemoryOfferHints,
         channels: {
           async isMemoryAgent() {
             return false;

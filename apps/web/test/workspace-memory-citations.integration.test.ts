@@ -75,6 +75,9 @@ test.skipIf(!connectionString)(
           },
         },
         hints: {
+          async find() {
+            return null;
+          },
           async prepare() {
             return { hint_id: "test-hint", tool: "memory_disposition" as const };
           },
