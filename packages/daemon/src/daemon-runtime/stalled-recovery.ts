@@ -1,3 +1,5 @@
+import { processClockMs } from "#src/platform/process-tree";
+
 /**
  * How long a busy turn's provider may stay silent before a new message restarts it, as in the
  * reference client (its `RUNTIME_PROGRESS_STALE_MS`).
@@ -16,6 +18,11 @@ export const STALLED_RECOVERY_EXIT_TIMEOUT_MS = 10_000;
 export class ProviderProgress {
   #lastEventAtMs = Date.now();
   #turnStartedAtMs = this.#lastEventAtMs;
+  #turnStartedProcessClockMs: number;
+
+  constructor(private readonly processClock: () => number = processClockMs) {
+    this.#turnStartedProcessClockMs = processClock();
+  }
 
   observe(): void {
     this.#lastEventAtMs = Date.now();
@@ -26,10 +33,16 @@ export class ProviderProgress {
   noteTurnStarted(): void {
     this.#lastEventAtMs = Date.now();
     this.#turnStartedAtMs = this.#lastEventAtMs;
+    this.#turnStartedProcessClockMs = this.processClock();
   }
 
   get turnStartedAtMs(): number {
     return this.#turnStartedAtMs;
+  }
+
+  /** The turn's start on the host process clock: the turn-scoped kill fences children by it. */
+  get turnStartedProcessClockMs(): number {
+    return this.#turnStartedProcessClockMs;
   }
 
   /** When the provider last reported anything. */

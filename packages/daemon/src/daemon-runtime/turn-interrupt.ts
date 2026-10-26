@@ -31,11 +31,12 @@ export type TurnInterruptHost<Launch extends TurnInterruptLaunch> = Readonly<{
 
 /**
  * The oldest instant whose children the turn-scoped kill may take: the turn's own start, or an
- * older open tool call. Anything that started earlier is not part of this turn.
+ * older open tool call. Anything that started earlier is not part of this turn. It is on the host
+ * process clock, as stamped when the turn or call began, never converted from wall time.
  */
 export function turnInterruptCutoffAtMs(launch: TurnInterruptLaunch): number | undefined {
-  const turnStartedAtMs = launch.progress?.turnStartedAtMs;
-  const oldestToolStartedAtMs = launch.toolCalls?.oldestOpenToolStartedAtMs();
+  const turnStartedAtMs = launch.progress?.turnStartedProcessClockMs;
+  const oldestToolStartedAtMs = launch.toolCalls?.oldestOpenToolStartedProcessClockMs();
   if (turnStartedAtMs === undefined) return oldestToolStartedAtMs;
   return oldestToolStartedAtMs === undefined
     ? turnStartedAtMs

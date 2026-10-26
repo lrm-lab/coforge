@@ -8,6 +8,7 @@ import type {
   ProcessTreeSpawner,
 } from "@lrm/coforge-anvil";
 import { LaunchdProcessOwner } from "./launchd-process";
+import { bootClockMs, linuxProcessTable } from "./linux-process-table";
 import { RuntimeExecutableNotFoundError } from "./runtime-executable-not-found";
 import {
   createWindowsJobObject,
@@ -25,11 +26,13 @@ export type ProcessTreeOwnerOptions = {
 
 export type ProcessTable = Readonly<{
   list(): Promise<readonly OwnedProcessIdentity[]>;
+  /** The finest difference between two start times the table can tell apart; defaults to one second. */
+  resolutionMs?: number;
 }>;
 
 const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
 
-export const hostProcessTable: ProcessTable = {
+export const psProcessTable: ProcessTable = {
   async list() {
     if (process.platform === "win32") return [];
     const child = Bun.spawn({
@@ -46,6 +49,17 @@ export const hostProcessTable: ProcessTable = {
     return output.split("\n").flatMap(parseProcessTableLine);
   },
 };
+
+export const hostProcessTable: ProcessTable =
+  process.platform === "linux" ? linuxProcessTable : psProcessTable;
+
+/**
+ * The clock the host process table's start times and every turn-scoped cutoff are on: the boot
+ * clock on Linux, wall time elsewhere. A cutoff is stamped when its turn or tool call starts,
+ * so it is never converted later; wall-clock slew over a long turn cannot shift it against a
+ * child's start time.
+ */
+export const processClockMs: () => number = process.platform === "linux" ? bootClockMs : Date.now;
 
 function parseProcessTableLine(line: string): OwnedProcessIdentity[] {
   const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
@@ -177,7 +191,7 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
     const child = ownedChildProcess(spawned, spawned.exited);
     let turnScoped = false;
     let turnSnapshot: OwnedProcessIdentity[] | undefined;
-    // `ps` start times have one-second resolution, so the fence is compared at that resolution.
+    // Start times have the process table's resolution, so the fence is compared at that resolution.
     let turnFenceMs = 0;
     const fenced = (entry: OwnedProcessIdentity) => entry.startedAtMs >= turnFenceMs;
     const turnSurvivors = async () => {
@@ -206,7 +220,8 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
       terminateForTurn: async (force, cutoffAtMs) => {
         const processTable = this.options.processTable ?? hostProcessTable;
         turnScoped = true;
-        turnFenceMs = Math.floor(cutoffAtMs / 1_000) * 1_000;
+        const resolutionMs = processTable.resolutionMs ?? 1_000;
+        turnFenceMs = Math.floor(cutoffAtMs / resolutionMs) * resolutionMs;
         const pid = child.pid;
         if (pid === undefined) return emptyKillReport();
         if (!turnSnapshot) {

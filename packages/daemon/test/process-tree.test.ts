@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import type { OwnedProcessTreeKillReport } from "@lrm/coforge-anvil";
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import { cleanupOwnedTree } from "@lrm/coforge-anvil";
-import { hostProcessTable, ProcessTreeOwner } from "#src/platform/process-tree";
+import {
+  hostProcessTable,
+  processClockMs,
+  ProcessTreeOwner,
+  psProcessTable,
+} from "#src/platform/process-tree";
 import { RuntimeExecutableNotFoundError } from "#src/platform/runtime-executable-not-found";
 
 // Inside a CoForge Workspace on macOS these route spawn through launchd; the host must not decide.
@@ -256,16 +261,16 @@ test.skipIf(process.platform === "win32")(
       [
         "sh",
         "-c",
-        // An earlier dev server, then (after the fence) this turn's child, then ignore SIGTERM.
-        'trap "" TERM; sleep 60 & echo $!; sleep 2; sleep 60 & echo $!; while :; do sleep 1; done',
+        // An earlier dev server, then (once the test writes a line, after the fence) this turn's
+        // child, then ignore SIGTERM.
+        'trap "" TERM; sleep 60 & echo $!; read go; sleep 60 & echo $!; while :; do sleep 1; done',
       ],
       tmpdir(),
       { PATH: "/usr/bin:/bin" },
     );
     const reader = (tree.child.stdout as ReadableStream<Uint8Array>).getReader();
     const pids: number[] = [];
-    // The turn begins after the earlier child was reported and before the sleep ends.
-    let fenceAtMs: number | undefined;
+    let fenceAtMs = 0;
     let buffered = "";
     while (pids.length < 2) {
       const { value, done } = await reader.read();
@@ -274,7 +279,14 @@ test.skipIf(process.platform === "win32")(
       const lines = buffered.split("\n");
       buffered = lines.pop() ?? "";
       pids.push(...lines.map(Number));
-      fenceAtMs ??= Date.now() + 1_500;
+      if (pids.length === 1 && !fenceAtMs) {
+        // Let a whole start-time tick pass after the earlier child so it is strictly before the
+        // fence, then start this turn's child after the fence.
+        await Bun.sleep((hostProcessTable.resolutionMs ?? 1_000) + 100);
+        fenceAtMs = processClockMs();
+        tree.child.stdin.write("go\n");
+        await tree.child.stdin.flush();
+      }
     }
     const [earlier, turnChild] = pids as [number, number];
     const reports: OwnedProcessTreeKillReport[] = [];
@@ -325,7 +337,7 @@ test.skipIf(process.platform === "win32")(
     const reports: OwnedProcessTreeKillReport[] = [];
     try {
       await cleanupOwnedTree(tree, tree.child, {
-        cutoffAtMs: Date.now() - 2_000,
+        cutoffAtMs: processClockMs() - 2_000,
         onKillReport: (report) => reports.push(report),
       });
       expect(reports[0]!.killed).toContain(stubborn);
@@ -345,13 +357,36 @@ test.skipIf(process.platform === "win32")(
     const before = process.env.LC_ALL;
     process.env.LC_ALL = "zh_CN.UTF-8";
     try {
-      const own = (await hostProcessTable.list()).find((entry) => entry.pid === process.pid);
+      const own = (await psProcessTable.list()).find((entry) => entry.pid === process.pid);
       expect(own).toBeDefined();
       expect(own!.startedAtMs).toBeLessThanOrEqual(Date.now());
       expect(own!.startedAtMs).toBeGreaterThan(Date.now() - 365 * 24 * 3_600_000);
     } finally {
       if (before === undefined) delete process.env.LC_ALL;
       else process.env.LC_ALL = before;
+    }
+  },
+);
+
+test.skipIf(process.platform === "win32")(
+  "the host process table dates a process on the clock a turn cutoff is stamped on",
+  async () => {
+    const started = processClockMs();
+    const child = Bun.spawn({ cmd: ["sleep", "30"], stdin: "ignore" });
+    try {
+      const afterSpawn = processClockMs();
+      const own = (await hostProcessTable.list()).find((entry) => entry.pid === child.pid);
+      expect(own).toBeDefined();
+      const resolutionMs = hostProcessTable.resolutionMs ?? 1_000;
+      // Started between the two stamps, to within one tick of the table's resolution.
+      expect(own!.startedAtMs).toBeGreaterThanOrEqual(started - resolutionMs);
+      expect(own!.startedAtMs).toBeLessThanOrEqual(afterSpawn);
+      // A second sample of the same process reads the same start time.
+      const again = (await hostProcessTable.list()).find((entry) => entry.pid === child.pid);
+      expect(again!.startedAtMs).toBe(own!.startedAtMs);
+    } finally {
+      child.kill("SIGKILL");
+      await child.exited;
     }
   },
 );

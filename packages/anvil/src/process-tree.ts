@@ -30,6 +30,8 @@ export interface OwnedProcessTree {
    * Stops the owned main process while preserving descendants that predate the interrupted turn.
    * Implementations that cannot provide a safe process-table view may omit this capability; the
    * daemon then retains its ordinary whole-tree cleanup ladder for those legacy seams.
+   * `cutoffAtMs` is an instant on the host's own process clock, stamped by the host when the turn
+   * began; this port only carries it.
    */
   terminateForTurn?(force: boolean, cutoffAtMs: number): Promise<OwnedProcessTreeKillReport>;
   waitForExit(timeoutMs: number): Promise<boolean>;

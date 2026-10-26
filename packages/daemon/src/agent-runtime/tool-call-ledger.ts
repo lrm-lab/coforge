@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { processClockMs } from "#src/platform/process-tree";
 import {
   isActivityExitCode,
   isActivityToolOutcome,
@@ -10,6 +11,7 @@ type ToolCall = {
   name: string;
   startedAtMs: number;
   startedAtWallMs: number;
+  startedAtProcessClockMs: number;
   endedAtMs?: number;
 };
 
@@ -27,6 +29,7 @@ export class ToolCallLedger {
   constructor(
     private readonly clock: () => number = () => performance.now(),
     private readonly wallClock: () => number = Date.now,
+    private readonly processClock: () => number = processClockMs,
   ) {}
 
   observe(event: AgentRuntimeEvent): void {
@@ -36,6 +39,7 @@ export class ToolCallLedger {
         name: event.name,
         startedAtMs: this.clock(),
         startedAtWallMs: this.wallClock(),
+        startedAtProcessClockMs: this.processClock(),
       });
     } else if (event.type === "tool-end") {
       const call = this.#calls.get(event.id);
@@ -62,6 +66,11 @@ export class ToolCallLedger {
   /** The start of the oldest open call, for the stalled-turn silence clock. */
   oldestOpenToolStartedAtMs(): number | undefined {
     return this.#oldestOpenTool()?.startedAtWallMs;
+  }
+
+  /** The start of the oldest open call on the host process clock, for the turn-scoped kill. */
+  oldestOpenToolStartedProcessClockMs(): number | undefined {
+    return this.#oldestOpenTool()?.startedAtProcessClockMs;
   }
 
   #oldestOpenTool(): ToolCall | undefined {
