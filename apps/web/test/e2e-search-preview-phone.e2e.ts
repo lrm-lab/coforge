@@ -10,8 +10,10 @@ import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./hel
  * Search on a phone, in a real browser: there is no room beside the results, so a click opens the
  * result's conversation full-screen in their place, still on Search. Opening it is a step in
  * history: the header's back arrow (also after a reload), the back gesture and Cmd/Ctrl+K return
- * to the results, the query kept, Cmd/Ctrl+K with its box focused. A conversation that cannot be
- * loaded says so under the back arrow, with no empty bar above it once the results sit beside it.
+ * to the results, the query kept, Cmd/Ctrl+K with its box focused. Beside the results, closing a
+ * preview (Esc) keeps the search it was opened from, whatever search is behind it in history. A
+ * conversation that cannot be loaded says so under the back arrow, with no empty bar above it
+ * once the results sit beside it.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel and its
  * messages are seeded deterministically and reset on every run. A screenshot of a result open
@@ -104,6 +106,29 @@ test("on a phone a result opens its conversation in place of the results", async
     const box = `document.querySelector('input[type="search"]')`;
     await browser("wait", "--fn", `${resultsAlone} && document.activeElement === ${box}`);
     expect(await entry()).toBe(listEntry);
+
+    // Beside the results a preview replaces the entry, so Esc closing it keeps this search, not
+    // the earlier one behind it.
+    await browser("set", "viewport", "1024", "800");
+    await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent("earlier")}`);
+    await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}`);
+    await browser("wait", "--fn", `${resultShown} && ${pageHydrated}`);
+    const searchEntry = await entry();
+    await browser("click", row(match.id));
+    await browser(
+      "wait",
+      "--fn",
+      `${preview}?.querySelector('li[data-message-id="${match.id}"]') != null`,
+    );
+    // Esc in the conversation is its own (its composer has focus): press it from the results.
+    await evaluate(`document.querySelector('${row(match.id)}').focus() ?? true`);
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${preview} === null`);
+    expect(await evaluate<string | null>(`new URLSearchParams(location.search).get("q")`)).toBe(
+      phrase,
+    );
+    expect(await entry()).toBe(searchEntry);
+    await browser("set", "viewport", "390", "844");
 
     // A conversation that cannot be loaded says so, under its back arrow; beside the results,
     // where there is no arrow, no empty bar is left above the failure.

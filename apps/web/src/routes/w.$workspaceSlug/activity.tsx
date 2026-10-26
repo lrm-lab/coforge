@@ -67,6 +67,9 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
   component: ActivityPage,
 });
 
+/** The list's own search params: its view. A conversation's address keeps them. */
+const ACTIVITY_LIST_PARAMS = ["filter"];
+
 function ActivityPage() {
   // Only what the list and the pane's target read: the pane's own address state is read where it
   // is rendered, so a tab or Task popup change there does not re-render the list.
@@ -84,7 +87,7 @@ function ActivityPage() {
       }),
     [navigate],
   );
-  const listHistory = useListEntryHistory(ACTIVITY_LIST_BESIDE_FROM);
+  const listHistory = useListEntryHistory(ACTIVITY_LIST_BESIDE_FROM, ACTIVITY_LIST_PARAMS);
   // The open conversation lives in the URL, so a reload or a shared link reopens it. Below `lg` it
   // takes the list's place, so opening it from the list pushes an entry (`useListEntryHistory`);
   // any other open replaces the entry. Only the list's view carries over: the previous

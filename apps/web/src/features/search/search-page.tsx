@@ -7,6 +7,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { SEARCH_LIST_BESIDE_FROM, SearchPreview } from "./search-preview";
@@ -107,9 +108,10 @@ export function SearchPage({
   // The box opens focused with its text selected, ready to be typed over; Cmd/Ctrl+K on this
   // page does the same again. A preview that has taken the results' place hides the box with
   // them, so the shortcut closes it first and the box takes focus once the results show.
+  const previewBeside = useBreakpoint(SEARCH_LIST_BESIDE_FROM);
   const focusOnResults = useRef(false);
   const onSearchFocus = useEffectEvent(() => {
-    if (preview && input.current?.getClientRects().length === 0) {
+    if (preview && !previewBeside) {
       focusOnResults.current = true;
       onPreviewClose();
     } else selectBox(input.current);
@@ -119,10 +121,11 @@ export function SearchPage({
     document.addEventListener(SEARCH_FOCUS_EVENT, onSearchFocus);
     return () => document.removeEventListener(SEARCH_FOCUS_EVENT, onSearchFocus);
   }, []);
+  // Any change of preview settles the shortcut's wait: only the results showing take the focus.
   useEffect(() => {
-    if (preview || !focusOnResults.current) return;
+    const waiting = focusOnResults.current;
     focusOnResults.current = false;
-    selectBox(input.current);
+    if (waiting && !preview) selectBox(input.current);
   }, [preview]);
 
   // Esc closes the preview, then leaves search for wherever it was opened from. A menu or dialog

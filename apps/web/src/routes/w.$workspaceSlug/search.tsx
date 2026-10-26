@@ -46,6 +46,9 @@ export const Route = createFileRoute("/w/$workspaceSlug/search")({
   component: SearchRoute,
 });
 
+/** The results' own search params: the search itself. A preview's address keeps them. */
+const SEARCH_LIST_PARAMS = Object.keys(searchQuerySchema.shape);
+
 function SearchRoute() {
   const { q, senderId, scope, channelId, range, sort, defer, open, msg } = Route.useSearch();
   const { currentWorkspace, timeZone, user } = appRoute.useLoaderData();
@@ -85,7 +88,7 @@ function SearchRoute() {
     [navigate],
   );
   const preview = useMemo(() => parseHostedConversation(open, msg), [open, msg]);
-  const listHistory = useListEntryHistory(SEARCH_LIST_BESIDE_FROM);
+  const listHistory = useListEntryHistory(SEARCH_LIST_BESIDE_FROM, SEARCH_LIST_PARAMS);
   // The preview lives in the URL, so a reload or a shared link reopens it. Below `md` it takes the
   // results' place, so opening one from them pushes an entry (`useListEntryHistory`); switching it
   // replaces the entry rather than stacking history. Only the search's own fields carry over: the
