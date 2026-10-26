@@ -19,7 +19,16 @@ stay the same, but never grow. A rename is judged against the size its source pa
 Deletions and submodules are not checked.
 
 A blocked commit lists each file with its size in tokens and why: a new file, or the HEAD and
-staged sizes in bytes for one that crossed the limit or grew. Split the file into smaller ones.
+staged sizes in bytes for one that crossed the limit or grew.
+
+## Resolving a block
+
+Restructure the file; do not trim it. Shorter names, deleted comments or denser code get a file
+under the limit while leaving it as hard to work in as before. Find the file's natural seams (a
+page section, a component, a hook, a group of functions with one job, a feature's messages) and
+move each into a module of its own, as a refactor commit ahead of the change that grew the file.
+That commit moves code verbatim, so it reviews as a move. A file already over the limit that
+grew needs the same split, not a matching cut elsewhere in it.
 
 ## Files that are not checked
 

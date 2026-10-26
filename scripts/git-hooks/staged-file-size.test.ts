@@ -53,7 +53,8 @@ test("a new file of exactly 20,000 bytes passes and one byte more is blocked as 
   expect(result.stderr).toContain("5,001 tokens");
   expect(result.stderr).toContain("The limit is 5,000 tokens");
   expect(result.stderr).toContain("new file");
-  expect(result.stderr).toContain("Split each file");
+  expect(result.stderr).toContain("Do not trim bytes to fit");
+  expect(result.stderr).toContain("natural seams");
   expect(result.stderr).toContain("linguist-generated");
   expect(committedPaths()).toEqual(["README.md", "at-limit.ts"]);
 });

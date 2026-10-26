@@ -22,8 +22,8 @@ reports every violation before failing.
 
 ## Topics
 
-- [Pre-commit: file size limit](size-limit.md): the 5,000-token ratchet, the files it skips, and
-  the git operations that do not run `pre-commit`.
+- [Pre-commit: file size limit](size-limit.md): the 5,000-token ratchet, resolving a block by
+  splitting at natural seams, the files it skips, and the git operations that do not run `pre-commit`.
 - [Hard rules](hard-rules.md): where the checker runs (pre-commit, pre-push, CI), its rules, and
   the one exemption.
 - [Limits](limits.md): what the hooks, the `mise run check` gate and CI do not catch, and where

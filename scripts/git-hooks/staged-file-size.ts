@@ -38,7 +38,7 @@ function sizeViolation(file: StagedFile): SizeViolation | undefined {
 const count = (value: number) => value.toLocaleString("en-US");
 
 /** How to resolve a size violation, with the limit it enforces. */
-export const SIZE_FIX = `The limit is ${count(MAX_FILE_TOKENS)} tokens, estimated as bytes / ${BYTES_PER_TOKEN} (${count(MAX_FILE_BYTES)} bytes). Split each file into smaller ones; a file already over the limit may only stay the same size or shrink. Mark a file \`linguist-generated\` in .gitattributes only if a tool genuinely produces it (lockfile, codegen, data).`;
+export const SIZE_FIX = `The limit is ${count(MAX_FILE_TOKENS)} tokens, estimated as bytes / ${BYTES_PER_TOKEN} (${count(MAX_FILE_BYTES)} bytes). Do not trim bytes to fit (shorter names, fewer comments, denser code): find the file's natural seams (a page section, a component, a hook, a group of functions with one job, a feature's messages) and move each into a module of its own, as a refactor commit ahead of the change. A file already over the limit may stay the same size or shrink; one that grew needs the same split. Mark a file \`linguist-generated\` in .gitattributes only if a tool genuinely produces it (lockfile, codegen, data).`;
 
 /** What is wrong with a violating file: its size and why; `base` names where a rename's source
  * path was. */
