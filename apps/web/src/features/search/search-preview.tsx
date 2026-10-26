@@ -1,7 +1,10 @@
-import { useMemo, type Ref } from "react";
+import type { Ref } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 
-import { ConversationListContext } from "#src/features/conversations/conversation-list-button";
+import {
+  MountedListControls,
+  type ListBesideFrom,
+} from "#src/features/conversations/conversation-list-button";
 import {
   pickConversationPageSearch,
   type HostedConversationTarget,
@@ -9,41 +12,36 @@ import {
 import { HostedConversationPane } from "#src/features/conversations/hosted-conversation-pane";
 import { m } from "#src/paraglide/messages";
 
-import { useSearchPreview } from "./search-preview-context";
-
 const searchRoute = getRouteApi("/w/$workspaceSlug/search");
+
+/** From `md` the preview sits beside the results; below, it takes their place. */
+export const SEARCH_LIST_BESIDE_FROM: ListBesideFrom = "md";
 
 /**
  * A result's conversation beside the search results, as Chat opens it (`HostedConversationPane`);
- * below `md` in their place, its back arrow (`ConversationListButton`) closing the preview. The
+ * below `md` in their place, its back arrow (`ConversationListButton`) calling `onClose`. The
  * page's own address state comes out of the search URL, shared structurally: typing a query does
  * not re-render the conversation.
  */
 export function SearchPreview({
   target,
+  onClose,
   ref,
 }: {
   target: HostedConversationTarget;
+  onClose: () => void;
   ref?: Ref<HTMLElement>;
 }) {
   const search = searchRoute.useSearch({
     select: pickConversationPageSearch,
     structuralSharing: true,
   });
-  const { preview } = useSearchPreview();
-  // The results are always mounted, so nothing closes them.
-  const listControls = useMemo(
-    () => ({
-      showList: () => preview?.(undefined),
-      closeList: () => {},
-      detailVisible: true,
-      backLabel: m.search_back_to_results(),
-      listBesideFrom: "md" as const,
-    }),
-    [preview],
-  );
   return (
-    <ConversationListContext value={listControls}>
+    <MountedListControls
+      listBesideFrom={SEARCH_LIST_BESIDE_FROM}
+      backLabel={m.search_back_to_results()}
+      onClose={onClose}
+    >
       <HostedConversationPane
         ref={ref}
         target={target}
@@ -51,8 +49,7 @@ export function SearchPreview({
         label={m.search_preview()}
         loadingLabel={m.search_preview_loading()}
         failedText={m.search_preview_failed()}
-        standaloneBelow="md"
       />
-    </ConversationListContext>
+    </MountedListControls>
   );
 }

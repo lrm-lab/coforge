@@ -228,6 +228,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
       showList: () => setBrowsing(true),
       closeList: () => setBrowsing(false),
       detailVisible,
+      listBesideFrom: "lg" as const,
     }),
     [detailVisible],
   );

@@ -15,8 +15,8 @@ import { useListEntryHistory } from "#src/features/conversations/list-entry-hist
 import { parseScope, type SearchFilters } from "#src/features/search/search-filters";
 import { writeLastSearch } from "#src/features/search/search-memory";
 import { SearchPage } from "#src/features/search/search-page";
+import { SEARCH_LIST_BESIDE_FROM } from "#src/features/search/search-preview";
 import { searchPageSearchSchema, searchQuerySchema } from "#src/features/search/search.schemas";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -84,32 +84,34 @@ function SearchRoute() {
       }),
     [navigate],
   );
-  // The preview lives in the URL, so a reload or a shared link reopens it; switching it replaces
-  // the entry rather than stacking history. Only the search's own fields carry over: the previous
-  // conversation's tab, board view, thread, Task popup and Agent profile close with it, and a
-  // thread reply opens its thread, as Chat opens one.
   const preview = useMemo(() => parseHostedConversation(open, msg), [open, msg]);
-  const wide = useBreakpoint("md");
-  const listHistory = useListEntryHistory(open);
-  // Below `md` the preview takes the results' place, so opening one from them pushes an entry
-  // (`useListEntryHistory`) and closing it goes back to them; any other change replaces the entry.
+  const listHistory = useListEntryHistory(open, SEARCH_LIST_BESIDE_FROM);
+  // The preview lives in the URL, so a reload or a shared link reopens it. Below `md` it takes the
+  // results' place, so opening one from them pushes an entry (`useListEntryHistory`); switching it
+  // replaces the entry rather than stacking history. Only the search's own fields carry over: the
+  // previous conversation's tab, board view, thread, Task popup and Agent profile close with it,
+  // and a thread reply opens its thread, as Chat opens one.
   const onPreviewChange = useCallback(
-    (next: HostedConversationTarget | undefined) => {
-      if (!next && listHistory.backToList()) return;
-      const push = next !== undefined && !wide && listHistory.openOverList();
+    (next: HostedConversationTarget) =>
       void navigate({
         search: (previous) => ({
           ...searchQuerySchema.parse(previous),
-          open: next ? hostedConversationOpenParam(next) : undefined,
-          msg: next?.messageId,
-          threadRootId: next?.threadRootId,
+          open: hostedConversationOpenParam(next),
+          msg: next.messageId,
+          threadRootId: next.threadRootId,
         }),
-        hash: next?.threadReplyId ? messageHash(next.threadReplyId) : undefined,
-        replace: !push,
-      });
-    },
-    [navigate, wide, listHistory],
+        hash: next.threadReplyId ? messageHash(next.threadReplyId) : undefined,
+        replace: !listHistory.openOverList(),
+      }),
+    [navigate, listHistory],
   );
+  // Closing the preview (Esc, its back arrow below `md`) returns to the results, closing what the
+  // conversation had open: back to their entry when the preview was opened over them, else by
+  // replacing the entry with the search alone.
+  const onPreviewClose = useCallback(() => {
+    if (listHistory.backToList()) return;
+    void navigate({ search: (previous) => searchQuerySchema.parse(previous), replace: true });
+  }, [navigate, listHistory]);
   if (!currentWorkspace) return null;
   return (
     <SearchPage
@@ -123,6 +125,7 @@ function SearchRoute() {
       onFiltersChange={onFiltersChange}
       preview={preview}
       onPreviewChange={onPreviewChange}
+      onPreviewClose={onPreviewClose}
     />
   );
 }

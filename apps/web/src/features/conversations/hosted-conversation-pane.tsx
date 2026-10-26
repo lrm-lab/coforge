@@ -4,7 +4,11 @@ import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
-import { ConversationBackHeader, ConversationListContext } from "./conversation-list-button";
+import {
+  ConversationBackHeader,
+  ConversationListContext,
+  LIST_BESIDE_CLASSES,
+} from "./conversation-list-button";
 import { ConversationHostProvider } from "./conversation-host";
 import { ConversationPage } from "./conversation-page";
 import type { ConversationPageSearch, HostedConversationTarget } from "./conversation-page-search";
@@ -31,7 +35,6 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   label,
   loadingLabel,
   failedText,
-  standaloneBelow,
   onJumpMessageConsumed,
   ref,
 }: {
@@ -42,28 +45,26 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   loadingLabel: string;
   /** Said in place of the conversation when it fails to load. */
   failedText: string;
-  /** The width below which the pane fills the page, with no list beside it (so no divider). */
-  standaloneBelow?: "md" | "lg";
   /** Clears the host's landing id once the stream has used it. */
   onJumpMessageConsumed?: () => void;
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
-  // Only a host with a list to go back to (Activity, Search) has a back arrow over the failure.
-  const backToList = useContext(ConversationListContext) !== null;
+  // Only a host with a list to go back to (Activity, Search) has a back arrow over the failure,
+  // and below the width its list sits beside the pane from, no divider.
+  const list = useContext(ConversationListContext);
   return (
     <section
       ref={ref}
       aria-label={label}
       className={cx(
         HOSTED_CONVERSATION_PANE_CLASS,
-        standaloneBelow === "md" && "max-md:border-l-0",
-        standaloneBelow === "lg" && "max-lg:border-l-0",
+        list && LIST_BESIDE_CLASSES[list.listBesideFrom].pane,
       )}
     >
       {failed ? (
         <>
-          {backToList && <ConversationBackHeader />}
+          {list && <ConversationBackHeader />}
           <p role="alert" className="p-4 text-sm text-error-primary">
             {failedText}
           </p>

@@ -2,6 +2,9 @@ import { useEffect, useMemo } from "react";
 import { useRouter } from "@tanstack/react-router";
 
 import { browserSessionStorage } from "#src/features/browser-session-storage";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+
+import type { ListBesideFrom } from "./conversation-list-button";
 
 /** Where a page keeps the history index of its list's entry, by the page's path. */
 function listEntryKey(pathname: string) {
@@ -9,15 +12,16 @@ function listEntryKey(pathname: string) {
 }
 
 /**
- * History for a page whose conversation (`open` in its URL) takes the place of its list on a
- * narrow screen (Activity, Search): opening one from the list pushes an entry, so a phone's back
- * gesture returns to the list, and closing it goes back to the list's entry, past what the
- * conversation pushed (a thread, a profile), rather than stacking a copy of the list. The list's
- * entry is kept in session storage, so a reload keeps that way back; it is forgotten once the list
- * shows again or the app leaves the page.
+ * History for a page whose conversation (`open` in its URL) takes the place of its list below
+ * `listBesideFrom` (Activity, Search): opening one from the list there pushes an entry, so a
+ * phone's back gesture returns to the list, and closing it goes back to the list's entry, past
+ * what the conversation pushed (a thread, a profile), rather than stacking a copy of the list. The
+ * list's entry is kept in session storage, so a reload keeps that way back; it is forgotten once
+ * the list shows again or the app leaves the page.
  */
-export function useListEntryHistory(open: string | undefined) {
+export function useListEntryHistory(open: string | undefined, listBesideFrom: ListBesideFrom) {
   const router = useRouter();
+  const wide = useBreakpoint(listBesideFrom);
   useEffect(() => {
     if (open === undefined) forgetListEntry(router.latestLocation.pathname);
   }, [open, router]);
@@ -31,8 +35,10 @@ export function useListEntryHistory(open: string | undefined) {
   );
   return useMemo(
     () => ({
-      /** Whether an open goes over the list (none is open yet), keeping the list's entry if so. */
+      /** Whether an open goes over the list (a narrow screen, none open yet), keeping the list's
+       * entry if so: the open pushes an entry then, and replaces the current one otherwise. */
       openOverList() {
+        if (wide) return false;
         // The committed location: a second tap before the first open renders must not push again.
         const { pathname, search } = router.latestLocation;
         if (search.open !== undefined) return false;
@@ -52,7 +58,7 @@ export function useListEntryHistory(open: string | undefined) {
         return true;
       },
     }),
-    [router],
+    [router, wide],
   );
 }
 

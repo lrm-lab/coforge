@@ -1,7 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 
-import { ConversationListContext } from "#src/features/conversations/conversation-list-button";
+import {
+  MountedListControls,
+  type ListBesideFrom,
+} from "#src/features/conversations/conversation-list-button";
 import {
   pickConversationPageSearch,
   type HostedConversationTarget,
@@ -12,6 +15,9 @@ import { StandaloneThreadContext } from "#src/features/conversations/standalone-
 import { m } from "#src/paraglide/messages";
 
 const activityRoute = getRouteApi("/w/$workspaceSlug/activity");
+
+/** From `lg` the open conversation sits beside the list; below, it takes the list's place. */
+export const ACTIVITY_LIST_BESIDE_FROM: ListBesideFrom = "lg";
 
 /**
  * The conversation a row opened, as Chat opens it (`HostedConversationPane`), its back arrow
@@ -50,16 +56,6 @@ export function ActivityConversationPane({
   }, [navigate]);
   const onJumpMessageConsumed =
     hostedLandingAfterConsume(Boolean(target.threadAlone)) === "clear" ? clearLanding : undefined;
-  // The list is always mounted, so nothing closes it.
-  const listControls = useMemo(
-    () => ({
-      showList: onClose,
-      closeList: () => {},
-      detailVisible: true,
-      backLabel: m.activity_back_to_list(),
-    }),
-    [onClose],
-  );
   // Always provided, so showing the conversation in place of the thread keeps the pane mounted.
   const rootId = target.threadAlone ? target.messageId : undefined;
   const standaloneThread = useMemo(
@@ -67,7 +63,11 @@ export function ActivityConversationPane({
     [rootId, onClose, onViewInConversation],
   );
   return (
-    <ConversationListContext value={listControls}>
+    <MountedListControls
+      listBesideFrom={ACTIVITY_LIST_BESIDE_FROM}
+      backLabel={m.activity_back_to_list()}
+      onClose={onClose}
+    >
       <StandaloneThreadContext value={standaloneThread}>
         <HostedConversationPane
           target={target}
@@ -76,9 +76,8 @@ export function ActivityConversationPane({
           loadingLabel={m.activity_conversation_loading()}
           failedText={m.activity_conversation_failed()}
           onJumpMessageConsumed={onJumpMessageConsumed}
-          standaloneBelow="lg"
         />
       </StandaloneThreadContext>
-    </ConversationListContext>
+    </MountedListControls>
   );
 }

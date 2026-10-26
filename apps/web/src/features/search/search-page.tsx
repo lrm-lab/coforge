@@ -4,10 +4,12 @@ import { SearchLg } from "@untitledui/icons";
 
 import { Input } from "#src/components/base/input/input";
 import { PageHeader } from "#src/components/layout/page-header";
+import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
-import { SearchPreview } from "./search-preview";
+import { cx } from "#src/utils/cx";
+import { SEARCH_LIST_BESIDE_FROM, SearchPreview } from "./search-preview";
 import { SearchPreviewContext } from "./search-preview-context";
 import { SearchHome } from "./search-home";
 import { searchEntityKey } from "./search-memory";
@@ -44,6 +46,7 @@ export function SearchPage({
   onFiltersChange,
   preview,
   onPreviewChange,
+  onPreviewClose,
 }: {
   workspaceId: string;
   viewerId: string;
@@ -55,7 +58,8 @@ export function SearchPage({
   onQueryChange: (query: string) => void;
   onFiltersChange: (filters: SearchFilters) => void;
   preview: HostedConversationTarget | undefined;
-  onPreviewChange: (preview: HostedConversationTarget | undefined) => void;
+  onPreviewChange: (preview: HostedConversationTarget) => void;
+  onPreviewClose: () => void;
 }) {
   const memory = useSearchMemory(workspaceId, viewerId);
   const router = useRouter();
@@ -117,7 +121,7 @@ export function SearchPage({
     if (preview) {
       // Only the preview closes: a search box's own Esc would also clear the query.
       event.preventDefault();
-      onPreviewChange(undefined);
+      onPreviewClose();
       return;
     }
     if (target instanceof HTMLInputElement && target.value) return;
@@ -136,9 +140,12 @@ export function SearchPage({
       <main className="flex h-full min-w-0 bg-primary">
         <div
           className={
-            // Below `md` the preview takes the list's place; the list stays mounted.
+            // Below `SEARCH_LIST_BESIDE_FROM` the preview takes the list's place; the list stays mounted.
             preview
-              ? "flex w-list-column shrink-0 flex-col max-md:hidden"
+              ? cx(
+                  "flex w-list-column shrink-0 flex-col",
+                  LIST_BESIDE_CLASSES[SEARCH_LIST_BESIDE_FROM].list,
+                )
               : "flex min-w-0 flex-1 flex-col"
           }
         >
@@ -220,6 +227,7 @@ export function SearchPage({
             key={`${preview.kind}:${preview.id}`}
             ref={previewSection}
             target={preview}
+            onClose={onPreviewClose}
           />
         )}
       </main>

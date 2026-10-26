@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, type MouseEvent } from "react";
 const DOUBLE_CLICK_MS = 220;
 
 /**
- * A result link's click: with room for a preview, a single click previews and a double click
- * lets the link open for real; without room (or for a result that has no preview) a click opens.
+ * A result link's click: a single click previews and a double click lets the link open for real;
+ * a result that has no preview, or a row outside the search page, opens on a click.
  * A modified or middle click keeps the browser's own behaviour, a new tab. `onOpened` runs once
  * per open or preview, so search remembers it once.
  */

@@ -16,6 +16,7 @@ import {
 } from "#src/features/conversations/conversation-page-search";
 import { useListEntryHistory } from "#src/features/conversations/list-entry-history";
 import { PageLoadError } from "#src/features/errors/page-load-error";
+import { ACTIVITY_LIST_BESIDE_FROM } from "#src/features/inbox/activity-conversation-pane";
 import { ActivityInboxPending } from "#src/features/inbox/activity-inbox-pending";
 import { ActivityInboxView } from "#src/features/inbox/activity-inbox-view";
 import { activityInboxQuery } from "#src/features/inbox/activity-inbox-queries";
@@ -23,7 +24,6 @@ import {
   ACTIVITY_INBOX_FILTERS,
   type ActivityInboxFilter,
 } from "#src/features/inbox/activity-inbox.schemas";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 export const Route = createFileRoute("/w/$workspaceSlug/activity")({
   // Each field falls back to absent when malformed, so a stale or hand-edited address never
@@ -84,8 +84,7 @@ function ActivityPage() {
       }),
     [navigate],
   );
-  const wide = useBreakpoint("lg");
-  const listHistory = useListEntryHistory(open);
+  const listHistory = useListEntryHistory(open, ACTIVITY_LIST_BESIDE_FROM);
   // The open conversation lives in the URL, so a reload or a shared link reopens it. Below `lg` it
   // takes the list's place, so opening it from the list pushes an entry (`useListEntryHistory`);
   // any other open replaces the entry. Only the list's view carries over: the previous
@@ -93,7 +92,6 @@ function ActivityPage() {
   // thread card opens its thread alone (`thread:` in `open`), without the conversation.
   const onOpen = useCallback(
     (next: HostedConversationTarget) => {
-      const push = !wide && listHistory.openOverList();
       void navigate({
         search: (previous) => ({
           filter: previous.filter,
@@ -102,10 +100,10 @@ function ActivityPage() {
           threadRootId: next.threadRootId,
         }),
         hash: next.threadReplyId ? messageHash(next.threadReplyId) : undefined,
-        replace: !push,
+        replace: !listHistory.openOverList(),
       });
     },
-    [navigate, wide, listHistory],
+    [navigate, listHistory],
   );
   // Closing the conversation (its back arrow below `lg`, a thread's close) returns to the list,
   // closing everything the conversation had open: back to the list's entry when the conversation

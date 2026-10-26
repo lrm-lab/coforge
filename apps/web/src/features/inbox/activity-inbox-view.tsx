@@ -8,6 +8,7 @@ import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
+import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -19,7 +20,7 @@ import { ACTIVITY_INBOX_QUERY_PREFIX, activityInboxQuery } from "./activity-inbo
 import { useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
-import { ActivityConversationPane } from "./activity-conversation-pane";
+import { ACTIVITY_LIST_BESIDE_FROM, ActivityConversationPane } from "./activity-conversation-pane";
 import { openedItemKey } from "./activity-open-target";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
@@ -163,7 +164,9 @@ export function ActivityInboxView({
         "flex min-h-0 flex-col",
         // Raft's 35rem column beside the conversation at `lg`.
         // Narrower, the conversation takes the page in its place; the list stays mounted.
-        opened ? "w-list-column shrink-0 max-lg:hidden" : "min-w-0 flex-1",
+        opened
+          ? cn("w-list-column shrink-0", LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list)
+          : "min-w-0 flex-1",
       )}
     >
       <PageHeader
