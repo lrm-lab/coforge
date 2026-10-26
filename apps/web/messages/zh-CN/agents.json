@@ -57,7 +57,7 @@
   "member_person_load_error": "资料加载失败。",
   "member_person_remove": "移出 Workspace",
   "member_person_remove_confirm_title": "将 {name} 移出此 Workspace？",
-  "member_person_remove_confirm_description": "对方将无法再访问其中的频道和会话，已发送的消息会保留。",
+  "member_person_remove_confirm_description": "对方将无法再访问其中的群聊和会话，已发送的消息会保留。",
   "agent_no_search_results": "没有符合搜索条件的成员",
   "agent_search_description": "换个名称试试，或清除搜索以查看全部成员。",
   "agent_clear_search": "清除搜索",
@@ -327,11 +327,11 @@
       "declarations": ["input count", "input names", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=other": "它将退出 {count} 个频道：{names}"
+        "countPlural=other": "它将退出 {count} 个群聊：{names}"
       }
     }
   ],
-  "agent_visibility_confirm_private_no_channels": "它目前不属于任何频道。",
+  "agent_visibility_confirm_private_no_channels": "它目前不属于任何群聊。",
   "agent_visibility_confirm_private_dms": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

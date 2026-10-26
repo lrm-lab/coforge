@@ -11,7 +11,7 @@
   "apps_bot_save_first": "请先保存应用，再启用其机器人。",
   "apps_bot_error_toggle": "无法更改机器人设置。",
   "apps_bot_installation_title": "机器人",
-  "apps_bot_installation_description": "该应用带有机器人。启用后，工作区中会新增一个托管智能体，可以向它发消息、@提及并添加到频道。它以应用的身份发言，不占用席位，自身不运行任何内容；应用通过自己的密钥驱动它。",
+  "apps_bot_installation_description": "该应用带有机器人。启用后，工作区中会新增一个托管智能体，可以向它发消息、@提及并添加到群聊。它以应用的身份发言，不占用席位，自身不运行任何内容；应用通过自己的密钥驱动它。",
   "apps_bot_badge_enabled": "机器人已启用",
   "apps_bot_grant": "启用机器人",
   "apps_bot_revoke": "停用机器人",
