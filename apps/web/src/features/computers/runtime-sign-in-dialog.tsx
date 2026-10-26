@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useReducer, useRef, useState, type ReactNode } from "react";
 import { Heading } from "react-aria-components";
 import { useServerFn } from "@tanstack/react-start";
 import { useRouter } from "@tanstack/react-router";
@@ -159,12 +159,12 @@ function SignInAttempt({
           dispatch={dispatch}
         />
       </div>
-      <div className="mt-6 flex justify-end gap-3 border-t border-secondary px-6 py-4">
+      <div className="flex justify-end gap-3 px-6 pt-5 pb-5">
         {state.phase === "signed_in" ? (
           <Button onPress={close}>{m.runtime_auth_done()}</Button>
         ) : (
           <>
-            <Button color="secondary" onPress={close}>
+            <Button color="link-gray" onPress={close}>
               {running ? m.controls_cancel() : m.controls_close()}
             </Button>
             {state.phase === "failed" && retryable(state.failure) && (
@@ -213,14 +213,7 @@ function SignInBody({
     case "running":
       return (
         <>
-          {state.link?.kind === "auth_url" && (
-            <AuthPage
-              url={state.link.url}
-              hint={
-                state.link.instructions ?? m.runtime_auth_open_page_hint({ runtime: runtimeName })
-              }
-            />
-          )}
+          {state.link?.kind === "auth_url" && <AuthPage url={state.link.url} />}
           {state.link?.kind === "device_code" && (
             <DeviceCode event={state.link} expiresAtMs={state.expiresAtMs} />
           )}
@@ -242,13 +235,14 @@ function SignInBody({
   }
 }
 
-function AuthPage({ url, hint }: { url: string; hint: string }) {
+/** One sentence for every runtime, as on Raft: the runtime's own instructions are not shown. */
+function AuthPage({ url }: { url: string }) {
   const safe = safeSignInUrl(url);
   return (
     <>
-      <p>{hint}</p>
+      <p>{m.runtime_auth_open_page_hint()}</p>
       <Button
-        color="secondary"
+        size="sm"
         iconTrailing={LinkExternal01}
         isDisabled={!safe}
         onPress={() => safe && window.open(safe, "_blank", "noopener,noreferrer")}
@@ -315,6 +309,7 @@ function CodeForm({
   const [code, setCode] = useState("");
   const [invalid, setInvalid] = useState(false);
   const [sending, setSending] = useState(false);
+  const hintId = useId();
   const error = invalid
     ? m.runtime_auth_code_invalid()
     : rejected
@@ -322,7 +317,6 @@ function CodeForm({
       : undefined;
   return (
     <form
-      className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (sending || !code.trim()) return;
@@ -342,19 +336,36 @@ function CodeForm({
           .finally(() => setSending(false));
       }}
     >
-      <Input
-        label={m.runtime_auth_paste_label()}
-        // The label already says what to paste; the line under it speaks only when it is wrong.
-        hint={error}
-        isInvalid={Boolean(error)}
-        value={code}
-        onChange={setCode}
-        autoComplete="off"
-        spellCheck="false"
-      />
-      <Button type="submit" size="sm" isLoading={sending} isDisabled={!code.trim()}>
-        {m.runtime_auth_submit()}
-      </Button>
+      {/* As on Raft: Submit sits beside the field, and the line under it says where the code
+          comes from until it has to say what is wrong. */}
+      <div className="flex items-end gap-2">
+        <Input
+          className="min-w-0 flex-1"
+          label={m.runtime_auth_paste_label()}
+          aria-describedby={hintId}
+          isInvalid={Boolean(error)}
+          value={code}
+          onChange={setCode}
+          autoComplete="off"
+          spellCheck="false"
+        />
+        <Button
+          type="submit"
+          size="md"
+          color="secondary"
+          isLoading={sending}
+          isDisabled={!code.trim()}
+        >
+          {m.runtime_auth_submit()}
+        </Button>
+      </div>
+      <p
+        id={hintId}
+        role={error ? "alert" : undefined}
+        className={error ? "mt-1.5 text-xs text-error-primary" : "mt-1.5 text-xs text-tertiary"}
+      >
+        {error ?? m.runtime_auth_paste_hint()}
+      </p>
     </form>
   );
 }

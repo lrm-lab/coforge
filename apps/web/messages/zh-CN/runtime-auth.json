@@ -4,11 +4,11 @@
   "runtime_auth_sign_in_title": "登录 {runtime}",
   "runtime_auth_starting": "正在 {computer} 上启动登录…",
   "runtime_auth_open_page": "打开登录页",
-  "runtime_auth_open_page_hint": "在登录页上完成 {runtime} 的登录。",
+  "runtime_auth_open_page_hint": "打开这个链接完成登录；如果页面随后显示验证码，把它粘贴回来。",
   "runtime_auth_device_hint": "打开这个页面，输入下面的验证码：",
   "runtime_auth_copy_code": "复制验证码",
   "runtime_auth_code_expires": "验证码 {minutes} 分钟后过期。",
-  "runtime_auth_paste_label": "登录页上显示的验证码",
+  "runtime_auth_paste_label": "粘贴登录后显示的验证码",
   "runtime_auth_submit": "提交",
   "runtime_auth_checking": "正在核对验证码…",
   "runtime_auth_code_invalid": "请粘贴登录页上的完整验证码。",
@@ -37,5 +37,6 @@
   "runtime_auth_signing_out": "正在退出…",
   "runtime_auth_sign_out_still": "仍是登录状态：那台 Computer 的环境里配置了 API key。",
   "runtime_auth_sign_out_timed_out": "Computer 没有及时响应，请重试。",
-  "runtime_auth_sign_out_failed": "{runtime} 没能退出，请重试。"
+  "runtime_auth_sign_out_failed": "{runtime} 没能退出，请重试。",
+  "runtime_auth_paste_hint": "完成登录后，页面会显示验证码，粘贴到这里。"
 }

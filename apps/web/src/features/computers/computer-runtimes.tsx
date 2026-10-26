@@ -127,15 +127,21 @@ export function ComputerRuntimeList({
                 )}
               </div>,
             );
+          // Sign out is a band of its own under a full-width rule, as on Raft.
           if (signable && auth?.state === "logged_in")
             parts.push(
-              <PopoverAction key="out" onPress={() => open("sign_out")}>
-                {(press) => (
-                  <Button size="sm" color="link-gray" iconLeading={LogOut01} onPress={press}>
-                    {m.runtime_auth_sign_out()}
-                  </Button>
-                )}
-              </PopoverAction>,
+              <div
+                key="out"
+                className={parts.length > 0 ? "-mx-4 border-t border-secondary px-4 pt-3" : ""}
+              >
+                <PopoverAction onPress={() => open("sign_out")}>
+                  {(press) => (
+                    <Button size="sm" color="link-gray" iconLeading={LogOut01} onPress={press}>
+                      {m.runtime_auth_sign_out()}
+                    </Button>
+                  )}
+                </PopoverAction>
+              </div>,
             );
           return (
             <li key={provider}>

@@ -4,11 +4,11 @@
   "runtime_auth_sign_in_title": "Sign in to {runtime}",
   "runtime_auth_starting": "Starting sign-in on {computer}…",
   "runtime_auth_open_page": "Open sign-in page",
-  "runtime_auth_open_page_hint": "Finish signing in to {runtime} on that page.",
+  "runtime_auth_open_page_hint": "Open this URL and sign in; if the page then shows a code, paste it back.",
   "runtime_auth_device_hint": "Open this page and enter the code:",
   "runtime_auth_copy_code": "Copy code",
   "runtime_auth_code_expires": "The code expires in {minutes} min.",
-  "runtime_auth_paste_label": "Code from the sign-in page",
+  "runtime_auth_paste_label": "Paste the code shown after signing in",
   "runtime_auth_submit": "Submit",
   "runtime_auth_checking": "Checking the code…",
   "runtime_auth_code_invalid": "Paste the whole code from the sign-in page.",
@@ -37,5 +37,6 @@
   "runtime_auth_signing_out": "Signing out…",
   "runtime_auth_sign_out_still": "Still signed in: the Computer's environment has an API key.",
   "runtime_auth_sign_out_timed_out": "The Computer did not answer in time. Try again.",
-  "runtime_auth_sign_out_failed": "{runtime} could not be signed out. Try again."
+  "runtime_auth_sign_out_failed": "{runtime} could not be signed out. Try again.",
+  "runtime_auth_paste_hint": "Once you finish signing in, the page shows a code. Paste it here."
 }
