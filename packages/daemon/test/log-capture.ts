@@ -23,13 +23,14 @@ await configure({
  */
 export async function captureDaemonLogs<T>(
   run: (records: readonly LogRecord[]) => Promise<T>,
+  lowestLevel: "debug" | "info" = "info",
 ): Promise<{ result: T; records: LogRecord[] }> {
   const records: LogRecord[] = [];
   const result = await withConfig(
     {
       sinks: { capture: (record) => void records.push(record) },
       loggers: [
-        { category: ["coforge", "daemon"], lowestLevel: "info", sinks: ["capture"] },
+        { category: ["coforge", "daemon"], lowestLevel, sinks: ["capture"] },
         { category: ["logtape", "meta"], lowestLevel: "error", sinks: ["capture"] },
       ],
     },

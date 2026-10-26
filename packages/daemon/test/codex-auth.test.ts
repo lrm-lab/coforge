@@ -1,3 +1,4 @@
+import { captureDaemonLogs } from "./log-capture";
 import { expect, test } from "bun:test";
 import {
   CodexRuntimeAuthAdapter,
@@ -43,6 +44,74 @@ class FakeProcess implements CodexAppServerProcess {
     for (const listener of this.failures) listener(error);
   }
 }
+
+test.each(["text", "stderr"] as const)("reads successful Codex status from %s", async (stream) => {
+  for (const method of ["ChatGPT", "an API key"]) {
+    const result = await new CodexRuntimeAuthAdapter({
+      runCli: async () => ({ text: "", [stream]: `Logged in using ${method}\n`, exitCode: 0 }),
+    }).readStatus({ workingDirectory: "/fixture" });
+    expect(result).toEqual({
+      provider: "codex",
+      state: "logged_in",
+      account: { methodLabel: method },
+    });
+  }
+});
+
+test.each(["", "Logged in using workload identity", "API key configured - masked"])(
+  "accepts successful Codex status without a recognized method: %j",
+  async (stderr) => {
+    const result = await new CodexRuntimeAuthAdapter({
+      runCli: async () => ({ text: "", stderr, exitCode: 0 }),
+    }).readStatus({ workingDirectory: "/fixture" });
+    expect(result).toEqual({ provider: "codex", state: "logged_in" });
+  },
+);
+
+test.each(["text", "stderr"] as const)("reads logged-out Codex status from %s", async (stream) => {
+  const result = await new CodexRuntimeAuthAdapter({
+    runCli: async () => ({
+      text: "",
+      [stream]: "Warning: configuration notice\nNot logged in\n",
+      exitCode: 1,
+    }),
+  }).readStatus({ workingDirectory: "/fixture" });
+  expect(result).toEqual({ provider: "codex", state: "logged_out" });
+});
+
+test.each([
+  { text: "Not logged in", exitCode: 2 },
+  { text: "Not logged ineligible", exitCode: 1 },
+  { text: "Error: Not logged in", exitCode: 1 },
+  { text: "Logged in using ChatGPT", exitCode: 1 },
+  { text: "", stderr: "Error checking login status", exitCode: 1 },
+  { text: "", exitCode: -1, timedOut: true },
+])("keeps inconclusive Codex status unknown: %j", async (output) => {
+  const result = await new CodexRuntimeAuthAdapter({ runCli: async () => output }).readStatus({
+    workingDirectory: "/fixture",
+  });
+  expect(result).toEqual({ provider: "codex", state: "unknown" });
+});
+
+test("logs only the redacted last diagnostic line for unknown Codex status", async () => {
+  const { result, records } = await captureDaemonLogs(async () => {
+    return await new CodexRuntimeAuthAdapter({
+      runCli: async () => ({
+        text: "Earlier stdout diagnostic",
+        stderr:
+          "Earlier stderr diagnostic\nError: token=private-value Bearer private-bearer sk-private-key\n\n",
+        exitCode: 2,
+      }),
+    }).readStatus({ workingDirectory: "/fixture" });
+  }, "debug");
+  expect(result).toEqual({ provider: "codex", state: "unknown" });
+  expect(records).toHaveLength(1);
+  expect(records[0]!.level).toBe("debug");
+  expect(records[0]!.properties).toEqual({
+    exitCode: 2,
+    detail: "Error: token=[REDACTED] Bearer [REDACTED] [REDACTED]",
+  });
+});
 
 test("streams Codex device code and matches completion notification", async () => {
   const process = new FakeProcess();

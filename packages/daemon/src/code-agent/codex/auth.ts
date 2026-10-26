@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import {
   type RuntimeAuthAdapter,
   type RuntimeAuthLoginEvent,
@@ -7,12 +8,15 @@ import {
   JsonlProcess,
   asRecord,
   runtimeAuthAccount,
+  scrubRuntimeErrorText,
 } from "@lrm/coforge-anvil";
 import { processSpawner } from "#src/code-agent/process-host";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX, "auth"]);
 
 export const CODEX_LOGIN_MINIMUM_VERSION = "0.118.0";
 export const CODEX_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
@@ -158,17 +162,21 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       options.workingDirectory,
       options.timeoutMs ?? CODEX_LOGIN_STATUS_TIMEOUT_MS,
     );
-    const text = output.text.trim();
+    const text = `${output.text}\n${output.stderr ?? ""}`.trim();
     if (output.exitCode === 0) {
       const method = text.match(/Logged in using (ChatGPT|an API key)/iu)?.[1];
       return {
         provider: RUNTIME_PROVIDER.CODEX,
-        state: method ? "logged_in" : "unknown",
+        state: "logged_in",
         ...runtimeAuthAccount({ methodLabel: method }),
       };
     }
-    if (output.exitCode === 1 && /^Not logged in/iu.test(text))
+    if (output.exitCode === 1 && /^Not logged in\b/mu.test(text))
       return { provider: RUNTIME_PROVIDER.CODEX, state: "logged_out" };
+    logger.debug("Codex login status unknown: {detail}", {
+      exitCode: output.exitCode,
+      detail: detail(scrubRuntimeErrorText(text.split(/\r?\n/u).at(-1) ?? "")),
+    });
     return { provider: RUNTIME_PROVIDER.CODEX, state: "unknown" };
   }
 
