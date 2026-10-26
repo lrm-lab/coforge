@@ -392,8 +392,10 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
       if (!conversation.messages.some((message) => message.id === messageId))
         await loadMessageAround(messageId);
     },
+    /** Fetch the page before the oldest loaded one. A failed read rejects (TanStack resolves it by
+     * default), so the pane can offer a retry instead of a row that never loads. */
     loadOlder: async () => {
-      if (hasPreviousPage) await fetchPreviousPage();
+      if (hasPreviousPage) await fetchPreviousPage({ throwOnError: true });
     },
     /** Fetch the next page towards the live end after the window slid up into history and
      * evicted the tail, then merge anything that arrived while the tail was gone. */

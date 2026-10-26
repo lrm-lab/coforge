@@ -22,6 +22,7 @@ import { attachmentFileNameSummary } from "./attachment-file-name";
 import { useSavedMessages } from "./conversation-host";
 import { conversationOpenPosition, unreadBoundary } from "./conversation-open-position";
 import { ConversationBottomPin } from "./conversation-bottom-pin";
+import { OlderMessagesRow, type OlderLoad } from "./older-messages-row";
 import {
   captureScrollAnchor,
   restoreScrollAnchor,
@@ -191,17 +192,16 @@ export function ConversationPane({
     setFollowingLatestState(following);
     onFollowingLatestChange?.(following);
   };
-  const [loadingOlder, loadingOlderRef, setLoadingOlder] = useStateWithRef(false);
+  const [olderLoad, olderLoadRef, setOlderLoad] = useStateWithRef<OlderLoad>("idle");
   const [, loadingNewerRef, setLoadingNewer] = useStateWithRef(false);
   const historyRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLOListElement>(null);
   /** Bottom-follow intent and the pre-resize reading position, shared by scroll and layout events. */
   const [bottomPin] = useState(() => new ConversationBottomPin());
-  /** Sentinels load more history or the evicted tail when they approach the viewport. */
-  const olderSentinelRef = useRef<HTMLDivElement>(null);
+  /** The sentinel that loads the evicted tail when it approaches the viewport (the older one is
+   * `OlderMessagesRow`). */
   const newerSentinelRef = useRef<HTMLDivElement>(null);
-  /** The current `loadOlder`/`loadNewer`, so a sentinel's observer never calls a stale one. */
-  const loadOlderRef = useRef<() => Promise<void>>(async () => {});
+  /** The current `loadNewer`, so the sentinel's observer never calls a stale one. */
   const loadNewerRef = useRef<() => Promise<void>>(async () => {});
   const previousConversationIdRef = useRef<string | undefined>(undefined);
   const previousLastSequenceRef = useRef<number | undefined>(undefined);
@@ -510,24 +510,6 @@ export function ConversationPane({
     restoreScrollAnchor(historyRef.current, anchor);
   }, [newerCommit]);
 
-  // Asking for the next page when the sentinel comes into view, rather than from a scroll
-  // handler: an IntersectionObserver also fires when the pane is laid out already showing the
-  // top, which a scroll handler never sees. The margin starts the load a screenful early, so the
-  // history is usually there before the reader reaches it.
-  useEffect(() => {
-    const sentinel = olderSentinelRef.current;
-    const history = historyRef.current;
-    if (!sentinel || !history) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) void loadOlderRef.current();
-      },
-      { root: history, rootMargin: "600px 0px 0px 0px" },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [conversation.conversationId, conversation.hasOlder]);
-
   // The mirror sentinel below the newest row: once the bounded window has slid up into history and
   // evicted the tail, scrolling back to the bottom asks for the page that brings it back. It re-runs
   // on every message change so a fetch that leaves the sentinel still in view keeps going until the
@@ -645,14 +627,13 @@ export function ConversationPane({
     bottomPin.pin(historyRef.current, behavior);
   }
 
-  loadOlderRef.current = () => loadOlder();
   loadNewerRef.current = () => loadNewer();
 
   function trackReadingPosition() {
     const history = historyRef.current;
     if (!history) return;
-    // Loading older history is the top sentinel's job (see its IntersectionObserver), not this
-    // scroll handler's.
+    // Loading older history is the top sentinel's job (`OlderMessagesRow`), not this scroll
+    // handler's.
     const distance = bottomPin.scroll(history);
     if (distance === undefined) return;
     const followingLatest = distance <= 48;
@@ -672,16 +653,16 @@ export function ConversationPane({
 
   async function loadOlder() {
     const history = historyRef.current;
-    if (root || !history || !conversation.hasOlder || !onLoadOlder || loadingOlderRef.current)
-      return;
-    setLoadingOlder(true);
+    if (root || !history || !conversation.hasOlder || !onLoadOlder) return;
+    if (olderLoadRef.current === "loading") return;
+    setOlderLoad("loading");
     historyScrollAnchorRef.current = captureScrollAnchor(history);
     try {
       await onLoadOlder();
+      setOlderLoad("idle");
     } catch {
       historyScrollAnchorRef.current = undefined;
-    } finally {
-      setLoadingOlder(false);
+      setOlderLoad("failed");
     }
   }
 
@@ -861,13 +842,12 @@ export function ConversationPane({
               </div>
             )}
             {!root && conversation.hasOlder && onLoadOlder && (
-              <div
-                ref={olderSentinelRef}
-                aria-live="polite"
-                className="flex h-8 items-center justify-center px-4 pt-4 text-xs text-tertiary md:px-6"
-              >
-                {loadingOlder && m.conversation_loading_older()}
-              </div>
+              <OlderMessagesRow
+                rootRef={historyRef}
+                loadedCount={conversation.messages.length}
+                load={olderLoad}
+                onLoad={() => void loadOlder()}
+              />
             )}
             {streamState(conversation.messages.length, streamRead) === "loading" ? (
               // A window replacement is in flight (an "around" read): no messages yet, but that is not
