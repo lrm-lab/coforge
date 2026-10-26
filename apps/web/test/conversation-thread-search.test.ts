@@ -97,10 +97,10 @@ describe("conversation thread search updates", () => {
 });
 
 describe("positionJumpDecision", () => {
-  // apps/web's suite is renderToString-only (effects never run, no DOM harness), so the pane's
-  // consume rules — the ones the boss's saved-jump ruling ("land at the message's row in the
-  // stream, never in the thread") depends on — are pinned as this pure table instead of an
-  // integration test: show on first sight; a notification's hash wins (consume without
+  // The pane's consume rules — the ones the saved-jump ruling ("land at the message's row in
+  // the stream, never in the thread") depends on — are pinned as this pure table;
+  // rendered interactions are checked manually under docs/agents/ui-manual-checks.md.
+  // Show on first sight; a notification's hash wins (consume without
   // showing); never re-show a consumed id; reset when the param clears so leaving the
   // conversation and re-clicking the same saved card jumps again.
   test("first sight without a hash shows the position jump", () => {

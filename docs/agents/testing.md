@@ -23,6 +23,7 @@ UI 改动必须列出本次改动受影响的 UI，并给出测试 Todo list，�
 
 ### Manual verification Todo list
 
+- [ ] 按 [UI 手工验证场景](ui-manual-checks.md) 分区域检查已移除的组件渲染单测所覆盖的行为，并记录结果。
 - [ ] 启动 Web 应用并准备可用的开发 seed 数据。
 - [ ] 在桌面与移动 viewport 分别验证上述页面；至少覆盖 light 与 dark 主题。
 - [ ] 运行 `bun run --cwd apps/web ui:sweep`，检查各页面无明显溢出、遮挡、空白或响应式布局问题。

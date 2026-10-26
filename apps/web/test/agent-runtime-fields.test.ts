@@ -19,10 +19,9 @@ import {
 
 /**
  * `reasoningFieldState` decides whether the Reasoning field should render and what value the
- * form should submit for it. It's tested directly (rather than through a rendered
- * `AgentRuntimeFields`) because the field's visibility depends on a catalog fetched in an
- * effect, which `renderToStaticMarkup` never runs; see `agent-runtime-config-dialog.test.tsx`.
- * The Pi model-picker helpers below are tested the same way, for the same reason.
+ * form should submit for it. The pure decisions below cover catalog-dependent visibility and
+ * Pi model selection; the rendered fields are checked manually under
+ * docs/agents/ui-manual-checks.md.
  */
 
 function model(overrides: Partial<CodeAgentModelMetadata> = {}): CodeAgentModelMetadata {
