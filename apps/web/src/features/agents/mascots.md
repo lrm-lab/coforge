@@ -72,18 +72,21 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   own). Reduced motion leaves still faces and the count, with no rotation and no loop.
 - `replying-agents-line.tsx` is the line along a composer's top edge, in the main pane and in a
   thread pane, saying which Agents are about to post in that place. The UI wording is "typing"
-  ("Atlas, Ben and 2 others are typing…", `agent_replying_*`); in code it is a reply intent or
+  ("Atlas, Ben and 2 other agents are typing…", `agent_replying_*`); in code it is a reply intent or
   "replying". The source is the Agent's "about to post" signal, not its activity: `reply-intents.ts`
   holds the entries (see [reply intents](../../../../../docs/observability/reply-intent.md)), the
   line shows those for the open conversation's top level or the open thread's root, and
-  `replying-agents-summary.ts` (pure) picks the Agents the roster knows and words the names with
-  `Intl.ListFormat`. Up to three 24px mascot stickers (`AgentMascotView` in an `AvatarSticker`)
-  overlap, each acting out `working`; the sentence names everyone and carries no activity label.
-  Everyone who can read the place sees it, whether or not they can write there. It overlays the
-  history's bottom padding (`pb-6`, its own height) and shares that row with the jump group, so the
-  newest message is never covered while the pane follows it (scrolled up, it covers that strip) and the sentence truncates before the group; it renders nothing
-  (and reads no roster) while nobody is replying. An Agent's own message arriving in that place
-  ends one of its entries ([reply intents](../../../../../docs/observability/reply-intent.md)). The line eases in
+  `replying-agents-summary.ts` (pure) picks the Agents the roster knows and words the names as Raft
+  does: "Atlas, Ben and Cam" with no serial comma, "Atlas，Ben，Cam" in Chinese, and "正在输入"
+  with no ellipsis. Above the composer it is a pill, as Frank drew it: a hairline-bordered rounded
+  capsule, left-aligned, led by the first Agent's 20px moving mascot (`AgentMascotView` in an
+  `AvatarSticker`, acting out `working`); the sentence names everyone and carries no activity
+  label. Everyone who can read the place sees it, whether or not they can write there. It overlays
+  the history's bottom padding (`pb-9`, the pill and its gap) and shares that row with the jump
+  group, so the newest message is never covered while the pane follows it (scrolled up, it covers
+  that strip) and the sentence truncates before the group; it renders nothing (and reads no roster)
+  while nobody is replying. An Agent's own message arriving in that place ends one of its entries
+  ([reply intents](../../../../../docs/observability/reply-intent.md)). The pill eases in and out
   (`replying-agents-line.css`) unless motion is reduced; the sentence is a polite `role="status"`
   for screen readers, and no other state (reading, working) appears in it.
 - `ThreadReplyingLine` is the same line under a root's thread preview in the conversation's stream

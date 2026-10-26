@@ -5,8 +5,36 @@
   "agent_activity_model_wait_status_pending": "Awaiting status update",
   "agent_replying_one": "{names} is typing…",
   "agent_replying_many": "{names} are typing…",
-  "agent_replying_overflow": "{first}, {second} and {rest} others are typing…",
+  "agent_replying_overflow": [
+    {
+      "declarations": [
+        "input first",
+        "input second",
+        "input rest",
+        "local restPlural = rest: plural"
+      ],
+      "selectors": ["restPlural"],
+      "match": {
+        "restPlural=one": "{first}, {second} and {rest} other agent is typing…",
+        "restPlural=other": "{first}, {second} and {rest} other agents are typing…"
+      }
+    }
+  ],
   "agent_thread_replying_one": "{names} is replying",
   "agent_thread_replying_many": "{names} are replying",
-  "agent_thread_replying_overflow": "{first}, {second} and {rest} others are replying"
+  "agent_thread_replying_overflow": [
+    {
+      "declarations": [
+        "input first",
+        "input second",
+        "input rest",
+        "local restPlural = rest: plural"
+      ],
+      "selectors": ["restPlural"],
+      "match": {
+        "restPlural=one": "{first}, {second} and {rest} other agent is replying",
+        "restPlural=other": "{first}, {second} and {rest} other agents are replying"
+      }
+    }
+  ]
 }

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { replyingAgentsAmong, replyingNames } from "#src/features/agents/replying-agents-summary";
+import { m } from "#src/paraglide/messages";
 
 // en-GB lists "A, B and C"; en-US would add the serial comma.
 const names = (...list: string[]) => replyingNames(list, "en-GB");
@@ -12,6 +13,17 @@ test("one name is singular; two or three are plural and listed", () => {
     text: "Atlas, Ben and Cam",
     plural: true,
   });
+});
+
+test("names read as Raft writes them: no serial comma in English, full-width commas in Chinese", () => {
+  const list = (text: string) => ({ kind: "list" as const, text, plural: true });
+  expect(replyingNames(["Olivia", "Ben", "Phoenix"], "en")).toEqual(
+    list("Olivia, Ben and Phoenix"),
+  );
+  expect(replyingNames(["Olivia", "Ben", "Phoenix"], "zh-CN")).toEqual(
+    list("Olivia，Ben，Phoenix"),
+  );
+  expect(replyingNames(["Olivia", "Ben"], "zh-CN")).toEqual(list("Olivia，Ben"));
 });
 
 test("more than three name the first two and count both the rest and the whole", () => {
@@ -37,4 +49,17 @@ test("the typing Agents are the live roster's, in the order they started, by dis
   ]);
   expect(replying[0]!.mascot).toBe("blue");
   expect(replying[1]!.mascot).toBeTruthy();
+});
+
+test("the typing sentence counts the other agents in English and drops the ellipsis in Chinese", () => {
+  const overflow = { first: "Olivia", second: "Ben", rest: 2, total: 4 };
+  expect(String(m.agent_replying_overflow(overflow, { locale: "en" }))).toBe(
+    "Olivia, Ben and 2 other agents are typing…",
+  );
+  expect(String(m.agent_replying_overflow(overflow, { locale: "zh-CN" }))).toBe(
+    "Olivia，Ben 等 4 个智能体正在输入",
+  );
+  expect(String(m.agent_replying_many({ names: "Olivia，Ben" }, { locale: "zh-CN" }))).toBe(
+    "Olivia，Ben正在输入",
+  );
 });

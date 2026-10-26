@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "@tanstack/react-store";
 
 import { AvatarSticker } from "#src/features/avatars/avatar-sticker";
@@ -35,9 +35,26 @@ export function ReplyingAgentsLine({
   className?: string;
 }) {
   const replyingIds = useReplyingAgentIds(conversationId, threadRootId);
-  return replyingIds ? (
-    <ReplyingAgents replyingIds={replyingIds} sentence="typing" className={className} />
-  ) : null;
+  // The pill eases out naming the Agents it last named and unmounts when that animation ends;
+  // with reduced motion there is none, so it goes at once.
+  const [shown, setShown] = useState(replyingIds);
+  if (replyingIds && replyingIds !== shown) setShown(replyingIds);
+  const leaving = !replyingIds && shown !== "";
+  useEffect(() => {
+    if (leaving && window.matchMedia("(prefers-reduced-motion: reduce)").matches) setShown("");
+  }, [leaving]);
+  return (
+    <div className={className}>
+      {shown && (
+        <ReplyingAgents
+          replyingIds={shown}
+          sentence="typing"
+          leaving={leaving}
+          onLeft={() => setShown("")}
+        />
+      )}
+    </div>
+  );
 }
 
 /** The line under a root in the conversation's stream saying which Agents are about to reply in
@@ -79,16 +96,22 @@ const SENTENCES = {
 };
 
 /**
- * Up to three mascots overlap, moving as they do elsewhere, and one sentence names everyone. The
- * mascots are decorative; the sentence is a polite status for screen readers.
+ * One sentence names everyone. Above the composer it is a pill led by the first Agent's moving
+ * mascot, as Frank drew it; under a root up to three mascots overlap. The mascots are decorative;
+ * the sentence is a polite status for screen readers.
  */
 function ReplyingAgents({
   replyingIds,
   sentence: kind,
+  leaving = false,
+  onLeft,
   className,
 }: {
   replyingIds: string;
   sentence: keyof typeof SENTENCES;
+  leaving?: boolean;
+  /** Called when the pill's exit animation ends. */
+  onLeft?: () => void;
   className?: string;
 }) {
   const roster = useLiveAgents();
@@ -109,6 +132,25 @@ function ReplyingAgents({
       : names.plural
         ? messages.many({ names: names.text })
         : messages.one({ names: names.text });
+  if (kind === "typing")
+    return (
+      <div
+        data-leaving={leaving || undefined}
+        onAnimationEnd={(event) => {
+          if (leaving && event.target === event.currentTarget) onLeft?.();
+        }}
+        className="replying-line mb-1.5 inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-secondary bg-primary pr-3 pl-1.5 text-xs shadow-xs"
+      >
+        <span aria-hidden="true" className="flex shrink-0">
+          <AvatarSticker size="xs" className="size-5">
+            <AgentMascotView mascot={replying[0]!.mascot} activity="working" />
+          </AvatarSticker>
+        </span>
+        <p role="status" className="min-w-0 truncate text-tertiary">
+          {sentence}
+        </p>
+      </div>
+    );
   return (
     <div className={cx("replying-line flex min-h-6 items-center gap-2 px-1 text-xs", className)}>
       <span aria-hidden="true" className="flex shrink-0 items-center">

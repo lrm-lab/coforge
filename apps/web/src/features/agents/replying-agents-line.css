@@ -1,6 +1,7 @@
 /*
- * The replying line above a composer eases in rather than popping; with reduced motion it simply
- * appears. Offsets are in rem (0.25rem is 4px). The mascots animate themselves.
+ * The replying line eases in rather than popping, and the typing pill eases out the same way; with
+ * reduced motion they simply appear and go. Offsets are in rem (0.25rem is 4px). The mascots
+ * animate themselves.
  */
 @keyframes replying-line-in {
   from {
@@ -13,8 +14,19 @@
   }
 }
 
+@keyframes replying-line-out {
+  to {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .replying-line {
     animation: replying-line-in 150ms ease-out both;
+  }
+
+  .replying-line[data-leaving] {
+    animation: replying-line-out 150ms ease-in both;
   }
 }

@@ -811,7 +811,7 @@ export function ConversationPane({
           data-scroll-restoration-id={`conversation-${conversation.conversationId}${root ? `-thread-${root.id}` : ""}`}
           aria-label={root ? m.conversation_thread() : m.conversation_history()}
           onScroll={trackReadingPosition}
-          className="h-full overflow-y-auto pb-6 [scrollbar-width:thin]"
+          className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
         >
           {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. A
               thread pane is already narrow and keeps none. */}
@@ -1055,7 +1055,7 @@ export function ConversationPane({
               <ReplyingAgentsLine
                 conversationId={conversation.conversationId}
                 threadRootId={root?.id ?? null}
-                className="min-w-0 flex-1 bg-primary"
+                className="min-w-0 flex-1"
               />
               <MessageNavigationGroup
                 index={ownIndex}
