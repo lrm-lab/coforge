@@ -26,3 +26,5 @@ Agent execution `run`/`event` data out of the messaging core.
 - [Agent inbound](app-agent-events.md): an app's grant, requests and events for one Agent, and the dedicated conversation they land in.
 - [Authorization codes and consents](oauth.md): What Login with CoForge's authorization endpoint stores: hashed authorization codes and remembered consents.
 - [Release catalog](release-catalog.md): The release catalog's notes table, kept apart from every CoForge domain table.
+
+- [Attachment comment maintenance](attachment-comment-migration.md): Read-only preflight and reversible local-copy rehearsal for legacy comment threads.

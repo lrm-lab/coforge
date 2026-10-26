@@ -1,10 +1,10 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 
-export async function attachmentCommentsFixture() {
+export async function attachmentCommentsFixture(existingDb?: PrismaClient) {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const db = existingDb ?? new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const suffix = crypto.randomUUID();
   const people = await Promise.all(
     ["owner", "member", "viewer", "outsider"].map((name) =>
@@ -67,7 +67,7 @@ export async function attachmentCommentsFixture() {
       await db.message.deleteMany({ where: { workspaceId: workspace.id } });
       await db.workspace.delete({ where: { id: workspace.id } });
       await db.user.deleteMany({ where: { id: { in: people.map((user) => user.id) } } });
-      await db.$disconnect();
+      if (!existingDb) await db.$disconnect();
     },
   };
 }

@@ -13,6 +13,7 @@ These rules apply to `src/server/db/`.
 - `agent-message-lookup.repositories.server.ts` resolves an Agent's message anchor only through an ordinary target and active seat; attachment comment authority belongs to its own store.
 - `agent-message-history.repositories.server.ts` owns sequence windows and Agent read-through after callers authorize their targets.
 - `attachment-comments.repositories.server.ts` persists whole-file comment Messages and metadata; it serializes first comments under source Conversation then Attachment row locks and rechecks source authority inside the transaction.
+- `attachment-comment-migration.repositories.server.ts` is the maintenance store: inspection and dependency repositories read consistent legacy data; journal and constraint repositories own copy fingerprints and targeted integrity changes; apply/restore repositories rehearse reversible moves on an explicitly authorized local copy. Application startup and ordinary writes never call them.
 - `first-sign-in.repositories.server.ts` owns first-sign-in's User row lock and confirmed name persistence; enrollment commits with it, and resource provisioning follows the commit.
 - Paginate a list with `prisma-extension-pagination` through `paginated(db)`
   (`pagination.server.ts`), not with hand-written `take: limit + 1`:
