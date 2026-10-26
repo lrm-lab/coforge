@@ -1,20 +1,36 @@
 import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import {
+  activeCount,
+  currentRow,
+  hydrated,
+  inPane,
+  listColumnWidth,
+  listHidden,
+  openParam,
+  pane,
+  paneTabsShown,
+  pinnedItems,
+  rowItems,
+  seedChannel,
+  seededUuid,
+  shownInPane,
+  waitFor,
+} from "./helpers/activity-inbox-e2e";
 
 /**
  * The Activity page in a real browser: listing, the "N active" count, the views, the row menu and
  * Done; on a wide screen, opening a row beside a narrowed list (kept through a change of view and a
  * reload) and at the right message, a thread's row showing only the thread and leaving its channel
  * unread until "View in channel" (a profile opened from it covering it and returning to it), and
- * the thread's close returning to the list; on a phone, opening Chat from a row, and a link naming
- * a conversation opening it full-screen with a back arrow to the list; member DMs; and the Pinned
- * section.
+ * the thread's close returning to the list; on a phone, a row and a link naming a conversation
+ * opening it full-screen in place of the list, with a back arrow (and, for a row, the back
+ * gesture) to the list; member DMs; and the Pinned section.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the wide
@@ -31,72 +47,6 @@ const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
-
-/** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
-function seededUuid(key: string): string {
-  const hash = createHash("sha256").update(key).digest("hex");
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-}
-
-/**
- * TanStack Start has hydrated the page: its SSR bootstrap (`$_TSR`) is marked hydrated, and
- * deleted once the stream has also ended. Server-rendered rows already satisfy the row waits,
- * and a click before hydration lands on inert HTML.
- */
-const hydrated = `(!window.$_TSR || window.$_TSR.hydrated === true)`;
-
-/**
- * The Activity list's rows, as a selector literal for page expressions. Scoped to the list: a
- * conversation open beside it renders its messages, with the same seeded text, as list items too.
- */
-const rowItems = JSON.stringify('ol[aria-label="Activity"] > li');
-
-/** The Pinned section's rows, as a selector literal for page expressions. */
-const pinnedItems = JSON.stringify('ol[aria-label="Pinned"] > li');
-
-/** The pane beside the list that shows the conversation a row opened. */
-const pane = `document.querySelector('section[aria-label="Selected conversation"]')`;
-
-/** The list's column: its width says whether a pane is beside it. */
-const listColumnWidth = `document.querySelector("[data-activity-list]").getBoundingClientRect().width`;
-
-/** Whether the list's column is mounted but not laid out (a phone with a conversation open). */
-const listHidden = `(() => { const list = document.querySelector("[data-activity-list]"); return Boolean(list) && list.getClientRects().length === 0; })()`;
-
-/** The header's "N active", as its number, or null when it is not shown. */
-const activeCount = `(() => { const text = document.querySelector("[data-activity-active-count]")?.textContent.trim() ?? ""; const match = /^(\\d+) active$/.exec(text); return match ? Number(match[1]) : null; })()`;
-
-/** Whether message `id` is rendered inside the conversation pane (one line: a wait argument). */
-function inPane(id: string) {
-  return `(() => { const pane = ${pane}; const row = document.getElementById("message-${id}"); return Boolean(pane && row && pane.contains(row)); })()`;
-}
-
-/**
- * Whether message `id` is laid out inside the conversation pane. A thread pane stays mounted but
- * hidden once the conversation shows, and a thread's root is a row of both.
- */
-function shownInPane(id: string) {
-  return `(() => { const pane = ${pane}; return Boolean(pane) && [...pane.querySelectorAll('[id="message-${id}"]')].some((row) => row.getClientRects().length > 0); })()`;
-}
-
-/** Whether the pane lays out a conversation's Chat / Tasks / Files tabs (its header). */
-const paneTabsShown = `(() => { const pane = ${pane}; return Boolean(pane) && [...pane.querySelectorAll('[role="tablist"]')].some((tabs) => tabs.getClientRects().length > 0); })()`;
-
-/** Resolves once `observe` holds, polling what the test cannot be told about (a database row). */
-async function waitFor(observe: () => Promise<boolean>) {
-  const deadline = Date.now() + 15_000;
-  while (!(await observe())) {
-    if (Date.now() >= deadline) throw new Error("Timed out waiting for the database to change");
-    await Bun.sleep(50);
-  }
-}
-
-/** The text of the row marked as the one open in the pane, or null when none is. */
-const currentRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.querySelector("a")?.getAttribute("aria-current") === "true")?.textContent ?? null`;
-
-/** The open conversation as the Activity URL names it (`channel:<id>` or `dm:<id>`, prefixed
- * `thread:` for a thread shown alone). */
-const openParam = `new URLSearchParams(location.search).get("open")`;
 
 /** One agent-browser session: its commands, and a page expression read back as JSON. */
 function browserSession(session: string) {
@@ -117,92 +67,6 @@ function browserSession(session: string) {
     return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
   }
   return { browser, evaluate };
-}
-
-/**
- * A channel shared by the viewer and the seeded peer, reset to this run's messages: the viewer's
- * thread root (`root`), which they follow, the peer's reply in it (`reply`), then a newer top-level
- * message from the peer (`newest`). The message `mention` names mentions the viewer. Every id comes
- * from `key`, so a rerun replaces the same rows.
- */
-async function seedChannel(
-  db: PrismaClient,
-  options: {
-    workspaceId: string;
-    key: string;
-    channelName: string;
-    root: string;
-    reply: string;
-    newest: { key: string; body: string };
-    mention: "reply" | "newest";
-  },
-) {
-  const { workspaceId, key } = options;
-  const peer = await db.user.upsert({
-    where: { id: seededUuid("e2e-activity-inbox:peer") },
-    update: {},
-    create: {
-      id: seededUuid("e2e-activity-inbox:peer"),
-      username: "e2e-activity-peer",
-      displayName: "Activity Peer",
-    },
-  });
-  await db.workspaceMembership.upsert({
-    where: { workspaceId_userId: { workspaceId, userId: peer.id } },
-    update: {},
-    create: { workspaceId, userId: peer.id },
-  });
-  const channelId = seededUuid(`${key}channel`);
-  await db.conversation.upsert({
-    where: { id: channelId },
-    update: { archivedAt: null },
-    create: { id: channelId, workspaceId, channelName: options.channelName },
-  });
-  // Every run starts from the same state: no messages, follows or cursors from the last one.
-  await db.message.deleteMany({ where: { conversationId: channelId } });
-  const [viewer, other] = await Promise.all(
-    [DEV_BROWSER_USER.id, peer.id].map((userId) =>
-      db.conversationMember.upsert({
-        where: { conversationId_userId: { conversationId: channelId, userId } },
-        update: {
-          leftAt: null,
-          hiddenAt: null,
-          readThroughSequence: 0,
-          doneThroughSequence: null,
-          unreadFromSequence: null,
-        },
-        create: { conversationId: channelId, workspaceId, userId },
-      }),
-    ),
-  );
-  const rootId = seededUuid(`${key}root`);
-  const replyId = seededUuid(`${key}reply`);
-  const newestId = seededUuid(`${key}${options.newest.key}`);
-  const rows = [
-    { id: rootId, body: options.root, senderMemberId: viewer!.id, threadRootId: null },
-    { id: replyId, body: options.reply, senderMemberId: other!.id, threadRootId: rootId },
-    { id: newestId, body: options.newest.body, senderMemberId: other!.id, threadRootId: null },
-  ];
-  let sequence = 1;
-  for (const row of rows)
-    await db.message.create({
-      data: { ...row, conversationId: channelId, workspaceId, sequence: sequence++ },
-    });
-  await db.messageMention.create({
-    data: {
-      messageId: options.mention === "reply" ? replyId : newestId,
-      memberId: viewer!.id,
-      conversationId: channelId,
-      workspaceId,
-      kind: "user",
-      actorId: DEV_BROWSER_USER.id,
-      handle: DEV_BROWSER_USER.username,
-    },
-  });
-  await db.threadFollow.create({
-    data: { memberId: viewer!.id, rootMessageId: rootId, conversationId: channelId, workspaceId },
-  });
-  return { channelId, viewer: viewer!, rootId, replyId, newestId };
 }
 
 test("the Activity page lists, filters, marks Done and opens inbox items", async () => {
@@ -550,11 +414,18 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       })()`.replace(/\n\s*/g, " "),
     );
 
+    // The channel's row lists again (Done above took it off), for a phone to open.
+    await db.conversationMember.update({
+      where: { id: viewer.id },
+      data: { doneThroughSequence: null },
+    });
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${seededRows}.length === 1 && ${hydrated}`);
+    await browser("wait", "--fn", `${seededRows}.length === 2 && ${hydrated}`);
     // Opening the thread read it: its row stays, without the unread badge.
-    expect((await evaluate<string[]>(seededRows))[0]).not.toContain("1 new");
+    const threadRow = (await evaluate<string[]>(seededRows))[1];
+    expect(threadRow).toContain("E2E activity root");
+    expect(threadRow).not.toContain("1 new");
     // On a phone the tabs take their own row under the title.
     expect(
       await evaluate<boolean>(
@@ -562,14 +433,41 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       ),
     ).toBe(true);
     await browser("screenshot", join(artifacts, "phone.png"));
-    // No room beside the list on a phone: a row opens its conversation in Chat.
+    // On a phone a row opens its conversation in place of the list, still on Activity. Opening it
+    // is a step in history: the header's back arrow returns to the list by going back to it (past
+    // a thread opened and closed in the conversation), and so does the phone's back gesture.
+    const listEntry = await evaluate<number>("navigation.currentEntry.index");
+    const listAlone = `${openParam} === null && ${pane} === null && ${listHidden} === false`;
+    await browser("find", "text", "E2E activity unread", "click");
+    await browser(
+      "wait",
+      "--fn",
+      `${openParam} === ${JSON.stringify(`channel:${channelId}`)} && ${shownInPane(newestId)} && ${listHidden} === true`,
+    );
+    expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
+    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry + 1);
+    // The thread summary's name runs on into the reply's preview.
+    await evaluate(`[...${pane}.querySelectorAll("button")]
+      .find((button) => button.textContent.trim().startsWith("1 reply"))
+      .click() ?? true`);
+    await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
+    await browser("wait", "--fn", shownInPane(replyId));
+    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry + 2);
+    await browser("find", "role", "button", "click", "--name", "Back to chat");
+    await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
+    await browser("find", "role", "button", "click", "--name", "Back to conversations");
+    await browser("wait", "--fn", listAlone);
+    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
+    // A thread's row opens the thread alone.
     await browser("find", "text", "E2E activity root", "click");
     await browser(
       "wait",
       "--fn",
-      `location.pathname === ${JSON.stringify(`${workspacePath}/channel/${channelId}`)}`,
+      `${openParam} === ${JSON.stringify(`thread:channel:${channelId}`)} && ${shownInPane(replyId)} && ${listHidden} === true`,
     );
-    expect(await evaluate<string>("location.search")).toContain(`threadRootId=${rootId}`);
+    expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
+    await browser("back");
+    await browser("wait", "--fn", listAlone);
 
     // A link that names a conversation (a reload, a shared link) opens it full-screen on a phone,
     // at its message, with the list hidden; the header's back arrow returns to the list.
@@ -585,7 +483,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser(
       "wait",
       "--fn",
-      `location.pathname === ${JSON.stringify(`${workspacePath}/activity`)} && location.search === "" && ${pane} === null && ${listHidden} === false && ${seededRows}.length === 1`,
+      `location.pathname === ${JSON.stringify(`${workspacePath}/activity`)} && location.search === "" && ${pane} === null && ${listHidden} === false && ${seededRows}.length === 2`,
     );
   } finally {
     await browser("close").catch(() => undefined);

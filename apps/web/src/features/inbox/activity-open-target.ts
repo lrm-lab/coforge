@@ -6,9 +6,9 @@ import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server"
 
 /**
  * Where a card opens: its channel or direct conversation, at the message the stream lands on, and
- * for a thread its thread open, scrolled to the reply it opens at. Beside the list on a wide screen
- * a thread opens alone (`threadAlone`), without the conversation around it; on a narrow screen the
- * same place opens in Chat, the thread beside its root.
+ * for a thread its thread open, scrolled to the reply it opens at. On Activity a thread opens alone
+ * (`threadAlone`), without the conversation around it; in Chat (`activityChatLink`, a modified
+ * click) the same place opens the thread beside its root.
  *
  * A mention the viewer was notified of opens at that message, in its thread when it is a reply.
  * Any other item that mentions the viewer opens at its first mention, read or not; otherwise a

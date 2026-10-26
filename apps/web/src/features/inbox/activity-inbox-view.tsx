@@ -44,7 +44,6 @@ import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import {
@@ -69,11 +68,10 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 
 /**
  * The Activity page: the viewer's items with activity past Done, newest first, the All view's
- * pinned conversations first. The list fills the page until a row is opened; from `lg` up the row's
- * conversation (for a thread or a reply, its thread alone) then opens beside a narrowed list (kept
- * in the URL), and below `lg` a row opens it in Chat. Below `lg` a URL that names a conversation (a
- * reload, a shared link, a window narrowed with one open) shows it full-screen in place of the
- * list, with a back arrow to the list.
+ * pinned conversations first. The list fills the page until a row is opened; the row's
+ * conversation (for a thread or a reply, its thread alone) then opens, kept in the URL: from `lg` up
+ * beside a narrowed list, and below it full-screen in place of the list, with a back arrow to the
+ * list.
  */
 export function ActivityInboxView({
   filter,
@@ -125,10 +123,6 @@ export function ActivityInboxView({
     () => openedItemKey([...pinned, ...items], opened),
     [pinned, items, opened],
   );
-  // A row opens its conversation beside the list only at the width Chat pins them side by side
-  // (`lg`); narrower, the row opens Chat instead.
-  const wide = useBreakpoint("lg");
-
   const refreshList = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX }),
     [queryClient],
@@ -197,7 +191,7 @@ export function ActivityInboxView({
       actions={actions}
       viewerId={user.id}
       current={item.key === currentKey}
-      onOpen={wide ? onOpen : undefined}
+      onOpen={onOpen}
     />
   );
 
@@ -589,8 +583,8 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
   viewerId: string;
   /** This row stands for the conversation open beside the list. */
   current: boolean;
-  /** Opens the row beside the list; undefined when there is no room, so the row opens Chat. */
-  onOpen: ((target: HostedConversationTarget) => void) | undefined;
+  /** Opens the row's conversation on the page. */
+  onOpen: (target: HostedConversationTarget) => void;
 }) {
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
@@ -639,11 +633,11 @@ const ActivityInboxRow = memo(function ActivityInboxRow({
                 {...props}
                 {...link}
                 onClick={(event) => {
-                  // With room beside the list a plain click (or Enter) opens the row there, so
-                  // neither `Link` nor React Aria navigates; a modified or middle click still
-                  // opens Chat. React Aria's handler still runs: it ends a keyboard press.
+                  // A plain click (or Enter) opens the row on the page, so neither `Link` nor
+                  // React Aria navigates; a modified or middle click still opens Chat. React
+                  // Aria's handler still runs: it ends a keyboard press.
                   const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-                  if (onOpen && event.button === 0 && !modified) {
+                  if (event.button === 0 && !modified) {
                     event.preventDefault();
                     onOpen(target);
                   }
