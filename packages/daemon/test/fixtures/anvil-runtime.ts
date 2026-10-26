@@ -1,5 +1,6 @@
 /** Runtime fixtures belong to Anvil; daemon integration tests locate them through this module. */
 export const anvilRuntimeFixtures = {
+  dsh: new URL("../../../anvil/test/fixtures/dsh-acp.ts", import.meta.url).pathname,
   antigravity: new URL("../../../anvil/test/fixtures/antigravity-fixture.ts", import.meta.url)
     .pathname,
   antigravityModels: new URL(

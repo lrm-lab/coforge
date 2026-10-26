@@ -102,6 +102,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/code-agent/kiro/usage-host.ts`  | Read-only native Kiro authentication and usage requests; only usage JSON crosses into the adapter                                                               |
 | `src/code-agent/pi/`                 | Built-in CoForge provider/catalog/metadata and Pi host composition; native SDK Session is shared through Anvil                                                  |
 | `src/code-agent/antigravity/host.ts` | Session, command, version and live environment capabilities for Antigravity                                                                                     |
+| `src/code-agent/dsh/`                | DSH host environment and private launch-file lifecycle; native ACP and plugin content live in Anvil                                                             |
 | `src/code-agent/grok/host.ts`        | Host environment, client identity, reply intent and account-label policies for Grok                                                                             |
 | `src/code-agent/process-host.ts`     | Platform process-tree spawning for Anvil execution                                                                                                              |
 | `src/code-agent/per-turn-host.ts`    | Host environment composition and platform process-tree injection for Anvil per-turn execution                                                                   |
