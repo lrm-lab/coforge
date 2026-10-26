@@ -26,7 +26,6 @@ import { OlderMessagesRow, type OlderLoad } from "./older-messages-row";
 import {
   captureScrollAnchor,
   restoreScrollAnchor,
-  ROW_TOP_GAP_PX,
   type ScrollAnchor,
 } from "./conversation-scroll-anchor";
 import { newerPageCommit, positionJumpDecision } from "./conversation-thread-search";
@@ -612,12 +611,9 @@ export function ConversationPane({
     const row = history?.querySelector(`li[data-message-id="${CSS.escape(messageId)}"]`);
     if (!history || !row || history.clientHeight === 0) return;
     pendingOpenMessageIdRef.current = undefined;
+    // A row that lands at the bottom follows the latest from there (`ConversationBottomPin.open`).
     scrollTwice(() => {
-      // The row's own offset, straight from layout: every row is in normal flow and laid out at
-      // its real height, so this is exact — there is no estimate to correct later.
-      const offset =
-        row.getBoundingClientRect().top - history.getBoundingClientRect().top + history.scrollTop;
-      history.scrollTo({ top: Math.max(0, offset - ROW_TOP_GAP_PX) });
+      if (bottomPin.open(history, row)) setFollowingLatest(true);
     });
   }
 

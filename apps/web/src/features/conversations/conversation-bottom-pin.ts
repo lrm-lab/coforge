@@ -1,3 +1,5 @@
+import { ROW_TOP_GAP_PX } from "./conversation-scroll-anchor";
+
 /** How close to the bottom the pane must be for a content-resize to re-pin it (see the pinning
  * ResizeObserver). Tight on purpose: the reading position itself uses a wider tolerance. */
 export const PIN_TOLERANCE_PX = 4;
@@ -25,6 +27,28 @@ export class ConversationBottomPin {
       scrollHeight: history.scrollHeight,
       clientHeight: history.clientHeight,
     };
+  }
+
+  /**
+   * Scrolls to the row a pane opens on, its top `ROW_TOP_GAP_PX` below the top: the whole row, so
+   * its unread and day dividers show. A row the history cannot scroll that far for (it and every
+   * row after it fit in view) lands at the bottom, and that is a pin like the latest's: what fills
+   * in later (reactions, a thread's preview) must not leave the reader short of the end. Native
+   * scroll anchoring's scroll event reaches `scroll` before the resize does, so without the pin it
+   * would read as the reader moving away. Returns whether it pinned.
+   */
+  open(history: HTMLDivElement, row: Element): boolean {
+    // The row's own offset, straight from layout: every row is in normal flow and laid out at its
+    // real height, so this is exact — there is no estimate to correct later.
+    const offset =
+      row.getBoundingClientRect().top - history.getBoundingClientRect().top + history.scrollTop;
+    const top = Math.max(0, offset - ROW_TOP_GAP_PX);
+    if (top < history.scrollHeight - history.clientHeight - PIN_TOLERANCE_PX) {
+      history.scrollTo({ top });
+      return false;
+    }
+    this.pin(history, "instant");
+    return true;
   }
 
   readonly read = () => {

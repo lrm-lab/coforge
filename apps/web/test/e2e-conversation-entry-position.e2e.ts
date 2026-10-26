@@ -65,12 +65,17 @@ const modeTitles = {
   unread: "unread opens on first unread",
   "system-unread": "unread starts inside the final system notices",
   reading: "scrolling up stays put",
+  "thread-unread": "an unread last message with a thread preview stays at the bottom",
 };
 
 for (const width of [1440, 390]) {
-  for (const mode of ["read", "unread", "system-unread", "reading"] as const) {
+  for (const mode of ["read", "unread", "system-unread", "reading", "thread-unread"] as const) {
     const unread = mode === "unread" || mode === "system-unread";
     const reading = mode === "reading";
+    // Task #192: the oldest unread is the last message, a thread root whose preview (reply count
+    // and reply rows) ends the stream. Opening on it lands at the bottom, and the Task rows that
+    // fill in above it afterwards must not leave the preview's last row cut off.
+    const thread = mode === "thread-unread";
     test(`${width}px ${modeTitles[mode]} after Task rows settle, including final system notices`, async () => {
       const name = `${width}-${mode}`;
       const channel = await db.conversation.create({ data: { workspaceId, channelName: name } });
@@ -151,6 +156,27 @@ for (const width of [1440, 390]) {
             body: `📋 Entry writer converted a message to task #${sequence - 82}`,
           })),
         });
+        if (thread) {
+          const root = await db.message.create({
+            data: {
+              workspaceId,
+              conversationId: channel.id,
+              senderMemberId: writer.id,
+              sequence: 87,
+              body: "Thread root: shall we ship the release notes tonight?",
+            },
+          });
+          await db.message.createMany({
+            data: [88, 89].map((sequence) => ({
+              workspaceId,
+              conversationId: channel.id,
+              senderMemberId: writer.id,
+              sequence,
+              threadRootId: root.id,
+              body: `Thread reply ${sequence - 87}: after the staging check.`,
+            })),
+          });
+        }
         const firstNotice = await db.message.findFirstOrThrow({
           where: { conversationId: channel.id, sequence: 85 },
         });
@@ -158,7 +184,36 @@ for (const width of [1440, 390]) {
           where: { conversationId: channel.id, sequence: mode === "system-unread" ? 86 : 73 },
         });
         await browser("set", "viewport", String(width), "900");
-        await browser("open", `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`);
+        // The thread preview's rows fill in after the pane has opened on it, as a preview that
+        // arrives with the network read after the cached stream does. Chromium's scroll anchoring
+        // then moves the position part of the way, and its scroll event reaches the pane before
+        // the resize does (the order Frank's phone left the last reply row cut off in). Emulated in
+        // one task, after the open's scrolls: grow the last preview (a style, not DOM React owns)
+        // and move the position by part of the growth.
+        const lateRows = join(artifacts, "late-thread-rows.js");
+        if (thread)
+          await Bun.write(
+            lateRows,
+            `const scrollTo = Element.prototype.scrollTo;
+let armed = false;
+Element.prototype.scrollTo = function (...args) {
+  scrollTo.apply(this, args);
+  if (armed || !this.matches('[aria-label="Message history" i]')) return;
+  armed = true;
+  setTimeout(() => {
+    const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
+    if (!preview) return;
+    preview.style.paddingBottom = "136px";
+    this.scrollTop += 60;
+    window.__rowsFilledIn = true;
+  }, 400);
+};`,
+          );
+        await browser(
+          "open",
+          `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`,
+          ...(thread ? ["--init-script", lateRows] : []),
+        );
         await browser(
           "wait",
           "--fn",
@@ -193,6 +248,22 @@ for (const width of [1440, 390]) {
           "--fn",
           `document.body.textContent.toLowerCase().includes('agents keep working after you leave')`,
         );
+        // The opened thread root sits at the end: the banner shrinking the pane must not leave the
+        // preview's last row cut off, even before the Task rows fill in. Read two frames on, once:
+        // a read between a layout change and its resize callback sees a frame that never paints,
+        // and a wait would pass a pane that recovers only by chance a second later.
+        if (thread) {
+          await browser("wait", "--fn", "window.__rowsFilledIn === true");
+          await browser(
+            "eval",
+            `requestAnimationFrame(() => requestAnimationFrame(() => { window.__entryPosition = ${position}; }))`,
+          );
+          await browser("wait", "--fn", "window.__entryPosition !== undefined");
+          const settled = await evaluate<{ distance: number; back: boolean }>(
+            "window.__entryPosition",
+          );
+          expect(settled.distance).toBeLessThanOrEqual(1);
+        }
         const before = await evaluate(position);
         release();
         await browser(
