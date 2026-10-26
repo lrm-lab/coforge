@@ -167,6 +167,13 @@ function readWorkspace(value: unknown): AccessibleWorkspace {
   };
 }
 
+function isSecureOrLoopbackUrl(url: URL): boolean {
+  return (
+    url.protocol === "https:" ||
+    (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+  );
+}
+
 export function normalizeServerUrl(value: string): string {
   let url: URL;
   try {
@@ -174,7 +181,7 @@ export function normalizeServerUrl(value: string): string {
   } catch {
     throw invalidServer("server URL is invalid");
   }
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost")) {
+  if (!isSecureOrLoopbackUrl(url)) {
     throw invalidServer("server URL must use HTTPS");
   }
   if (url.search || url.hash || url.username || url.password) {
@@ -207,7 +214,7 @@ function invalidServer(message: string): CliError {
 function normalizeEndpoint(value: unknown, name: string): string {
   if (typeof value !== "string") throw new Error(`${name} is missing`);
   const url = new URL(value);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost")) {
+  if (!isSecureOrLoopbackUrl(url)) {
     throw new Error(`${name} must use HTTPS`);
   }
   if (url.username || url.password) throw new Error(`${name} must not contain credentials`);
