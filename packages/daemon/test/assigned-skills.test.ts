@@ -181,3 +181,9 @@ test.each(["directory", "marker"] as const)(
     }
   },
 );
+
+test("DSH assigned skills use its native project agents root", () => {
+  expect(assignedSkillsDirectory("dsh", "/workspace/agent")).toBe(
+    "/workspace/agent/.agents/skills",
+  );
+});

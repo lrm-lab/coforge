@@ -4,6 +4,7 @@ import {
   type AgentStopIntent,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import { runtimeProviderSelectionRefusal } from "#src/features/agents/runtime-provider-selection";
 import { AppError } from "#src/lib/app-error";
 import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
 import { assertAgentLive, assertNotAppBot } from "./active-agent.server";
@@ -19,7 +20,10 @@ import {
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
 
-const providers = new Set<unknown>(Object.values(RUNTIME_PROVIDER));
+function assertProviderSelectable(provider: unknown) {
+  const refusal = runtimeProviderSelectionRefusal(provider);
+  if (refusal) throw new AppError("INVALID_INPUT", { errorId: refusal });
+}
 
 export type AgentCreateInput = {
   name: string;
@@ -96,8 +100,7 @@ export class ManageAgents {
     const name = input.name.trim().toLowerCase();
     if (!name) throw new AppError("INVALID_INPUT", { errorId: "agent-name-required" });
     const description = input.description.trim();
-    if (!providers.has(input.provider))
-      throw new AppError("INVALID_INPUT", { errorId: "agent-provider-unsupported" });
+    assertProviderSelectable(input.provider);
     if (!input.computerId)
       throw new AppError("INVALID_INPUT", { errorId: "agent-computer-required" });
     const apiKeyInput = input.apiKey?.trim();
@@ -180,8 +183,7 @@ export class ManageAgents {
         throw new AppError("INVALID_INPUT", { errorId: "agent-computer-locked" });
       const computerId = input.computerId ?? current.computerId;
       if (!computerId) throw new AppError("INVALID_INPUT", { errorId: "agent-computer-required" });
-      if (!providers.has(input.provider))
-        throw new AppError("INVALID_INPUT", { errorId: "agent-provider-unsupported" });
+      assertProviderSelectable(input.provider);
       const apiKeyInput = input.apiKey?.trim();
       const selection = {
         provider: input.provider,

@@ -13,6 +13,7 @@ const RUNTIME_DISPLAY_NAME: Record<RuntimeProvider, string> = {
   [RUNTIME_PROVIDER.OPENCODE]: "OpenCode",
   [RUNTIME_PROVIDER.GROK]: "Grok Build",
   [RUNTIME_PROVIDER.ANTIGRAVITY]: "Antigravity CLI",
+  [RUNTIME_PROVIDER.DSH]: "DeepSeek Harness",
   [RUNTIME_PROVIDER.PI]: "Pi",
   [RUNTIME_PROVIDER.COFORGE]: "CoForge",
 };

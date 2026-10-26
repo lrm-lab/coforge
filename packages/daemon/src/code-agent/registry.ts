@@ -87,6 +87,8 @@ export function createCodeAgentProvider(
     }
     case RUNTIME_PROVIDER.ANTIGRAVITY:
       return new AntigravityProvider({ host: antigravityRuntimeHost });
+    case RUNTIME_PROVIDER.DSH:
+      throw new Error("DSH adapter is not connected yet");
     default: {
       const unreachable: never = provider;
       throw new Error(`Unhandled runtime provider: ${unreachable}`);

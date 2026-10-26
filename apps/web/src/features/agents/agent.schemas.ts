@@ -7,6 +7,7 @@ import {
   RUNTIME_PROVIDER_VALUES,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import { runtimeProviderSelectionRefusal } from "./runtime-provider-selection";
 import { AGENT_VISIBILITY, AGENT_VISIBILITY_VALUES } from "./agent-visibility";
 
 /** The Agent self-description cap, shared by the edit-form schema and the server's
@@ -71,7 +72,10 @@ const displayNameSchema = z.preprocess(
 
 const agentInputShape = {
   description: z.string().trim().max(AGENT_PROFILE_DESCRIPTION_MAX_LENGTH).default(""),
-  provider: z.enum(RUNTIME_PROVIDER_VALUES),
+  provider: z.enum(RUNTIME_PROVIDER_VALUES).superRefine((provider, context) => {
+    const refusal = runtimeProviderSelectionRefusal(provider);
+    if (refusal) context.addIssue({ code: "custom", message: refusal });
+  }),
   model: z.string().trim().max(200).optional(),
   modelProvider: z.string().trim().max(100).optional(),
   reasoning: z.string().trim().max(50).optional(),

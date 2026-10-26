@@ -125,6 +125,16 @@ export async function listAgentSkills(options: {
       locals = [local(".agents/skills")];
       if (home) globals = [personal(".gemini/config/skills")];
       break;
+    case RUNTIME_PROVIDER.DSH:
+      // dsh-skill-filesystem 0.2.1-rc.2's documented project/user roots; profile-supplied
+      // custom roots remain native configuration, as with other runtime metadata scans.
+      locals = [local(".dsh/skills"), local(".agents/skills")];
+      if (home)
+        globals = [
+          native("DSH_HOME", ".dsh", "skills"),
+          native("DSH_AGENTS_HOME", ".agents", "skills"),
+        ];
+      break;
     case RUNTIME_PROVIDER.PI:
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];
       if (home)
