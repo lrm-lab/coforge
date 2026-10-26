@@ -2,8 +2,12 @@ FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5d
 
 WORKDIR /app
 COPY package.json bun.lock tsconfig.base.json ./
+# Every `workspace:*` dependency of these manifests must be listed here. The pruned checkout has no
+# directory for one it omits, so `bun install --frozen-lockfile` fails against a lockfile that
+# already names it; `scripts/deploy/deployment.test.ts` checks the closure.
 COPY apps/web/package.json apps/web/package.json
 COPY packages/agent/package.json packages/agent/package.json
+COPY packages/anvil/package.json packages/anvil/package.json
 COPY packages/coforge/package.json packages/coforge/package.json
 COPY packages/computer/package.json packages/computer/package.json
 COPY packages/daemon/package.json packages/daemon/package.json
@@ -12,6 +16,7 @@ RUN bun install --frozen-lockfile
 
 COPY apps/web apps/web
 COPY packages/agent packages/agent
+COPY packages/anvil packages/anvil
 COPY packages/coforge-sdk packages/coforge-sdk
 # apps/web embeds these two scripts verbatim at build time (Vite `?raw` import - see
 # apps/web/src/server/install/install-script.server.ts) to serve /computer/install.sh and
