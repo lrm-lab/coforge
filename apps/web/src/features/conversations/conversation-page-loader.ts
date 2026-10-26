@@ -1,16 +1,19 @@
-import type { QueryClient } from "@tanstack/react-query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 
 import type { FinishedWindow } from "#src/features/tasks/finished-tasks";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import type { ConversationTab } from "./conversation-tabs";
+import type { ConversationWindowCursor } from "#src/lib/conversation-window";
 import {
+  aroundWindow,
   channelNamesQuery,
+  conversationAroundQuery,
   directConversationQuery,
-  ensureConversationWindow,
   publicChannelQuery,
   savedMessagesQuery,
 } from "./conversation-queries";
+import type { conversationPages, ConversationPage, PageMessage } from "./conversation-window-query";
 import { NO_SAVED } from "./saved-messages-collection";
 
 /** Which conversation a page shows, by its id: a channel or a direct conversation. */
@@ -111,4 +114,42 @@ async function readConversationPage(
   // (`finished.pending`), so the page never gives way to its loading page for them.
   if (cause === "stay") void summary.catch(() => undefined);
   else await summary;
+}
+
+/**
+ * Seed the route's infinite query and, when the URL names a message outside its first page,
+ * replace that page with the bounded around-window before the route renders. This keeps a
+ * position/thread deep link on the loader path; the browser-only hash fallback remains in
+ * `useConversationSync` because SSR has no hash to inspect.
+ */
+async function ensureConversationWindow<M extends PageMessage, T extends ConversationPage<M>>(
+  queryClient: QueryClient,
+  query: ReturnType<typeof conversationPages<M, T>>["query"],
+  targetMessageId?: string,
+): Promise<InfiniteData<T, ConversationWindowCursor>> {
+  const initial = await queryClient.ensureInfiniteQueryData(query);
+  const latest = initial.pages.at(-1);
+  if (
+    !targetMessageId ||
+    !latest ||
+    initial.pages.some((page) => page.messages.some((message) => message.id === targetMessageId))
+  )
+    return initial;
+
+  try {
+    const around = await queryClient.fetchQuery(
+      conversationAroundQuery(latest.conversationId, targetMessageId),
+    );
+    const window: InfiniteData<T, ConversationWindowCursor> = {
+      pages: [{ ...latest, ...aroundWindow(around) }],
+      pageParams: [undefined],
+    };
+    queryClient.setQueryData(query.queryKey, window);
+    return window;
+  } catch {
+    // A link can name a deleted or inaccessible message. Leave the normal client-side sync seam
+    // to render its inline missing/failed state instead of replacing the whole conversation with
+    // the route error boundary; the next effect will retry and surface the precise state.
+    return initial;
+  }
 }
