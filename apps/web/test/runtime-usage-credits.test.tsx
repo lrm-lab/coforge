@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
+import { m } from "#src/paraglide/messages";
 import { RuntimeUsagePopoverContent } from "#src/features/computers/runtime-usage";
 import { usageWindowLabel } from "#src/features/computers/runtime-usage-windows";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
@@ -43,11 +44,11 @@ function render(data: UsageReadResult) {
   );
 }
 
-test("a credit plan's header line is the label and its percentage; the amounts sit under the bar", () => {
+test("a credit plan's header line is the label and the share left; the amounts sit under the bar", () => {
   const html = render(kiroUsage({ used: 7517.29, limit: 10_000, overage: 0 }));
   const header = html.indexOf("Monthly credits");
-  // 75.17% reads as a whole used share; the exact amounts are under the bar.
-  const percent = html.indexOf("75% used");
+  // 75.17% used reads as a whole share left, as on Raft; the exact amounts are under the bar.
+  const percent = html.indexOf("25% left");
   const bar = html.indexOf('role="progressbar"');
   const amounts = html.indexOf("7,517.29 / 10,000 credits used");
   expect(header).toBeGreaterThan(-1);
@@ -60,9 +61,8 @@ test("a credit plan's header line is the label and its percentage; the amounts s
 
 test("a running scan never disables the refresh button, so its focus stays in the popover", () => {
   // The pointer that asked for the refresh is parked on the button; a disabled state drops the
-  // focus out of the popover (which reads as an outside-interaction close, task #116). The
-  // refresh runs as React Aria's isPending: presses ignored, focus kept, spinner shown; the
-  // label names the running scan.
+  // focus out of the popover. The refresh runs as React Aria's isPending: presses ignored, focus
+  // kept, spinner shown; the button's text names the running scan.
   const html = renderToStaticMarkup(
     <RuntimeUsagePopoverContent
       runtime={{ provider: RUNTIME_PROVIDER.GROK, displayName: "Grok Build", version: "1.0.52" }}
@@ -73,7 +73,7 @@ test("a running scan never disables the refresh button, so its focus stays in th
     />,
   );
   expect(html).not.toMatch(/<button[^>]*\sdisabled(?=[\s>])/);
-  expect(html).toContain('aria-label="Refreshing…"');
+  expect(html).toContain("Refreshing…");
   expect(html).toContain("data-pending");
 });
 
@@ -108,13 +108,62 @@ test("each runtime names its usage windows the way that runtime reports them", (
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "secondary", week)).toBe("Weekly");
 });
 
-test("the popover's head: Refresh is an icon button, the plan is named, and OK says nothing", () => {
+test("the popover as on Raft: the plan with its OK badge, then a Refresh button", () => {
   const html = render(kiroUsage({ used: 7517.29, limit: 10_000, overage: 0 }));
-  expect(html).toContain('aria-label="Refresh"');
-  expect(html).not.toContain(">Refresh<");
+  expect(html).toContain(">Version 2.22.0<");
   expect(html).toContain(">Kiro Power<");
   expect(html).not.toContain("Runtime account");
-  expect(html).not.toContain(">OK<");
+  expect(html.indexOf(">OK<")).toBeGreaterThan(html.indexOf(">Kiro Power<"));
+  expect(html.indexOf(">Refresh<")).toBeGreaterThan(html.indexOf("Monthly credits"));
+});
+
+test("a signed-out runtime leads with its state and shows no account or usage", () => {
+  const html = renderToStaticMarkup(
+    <RuntimeUsagePopoverContent
+      runtime={{
+        provider: RUNTIME_PROVIDER.CLAUDE_CODE,
+        displayName: "Claude Code",
+        version: "2.1.306",
+      }}
+      auth={{ provider: RUNTIME_PROVIDER.CLAUDE_CODE, state: "logged_out" }}
+      data={undefined}
+      scanning={false}
+      computerOnline
+      onRefresh={() => {}}
+      onClose={() => {}}
+    />,
+  );
+  const name = html.indexOf(">Claude Code<");
+  const state = html.indexOf(">Not signed in<");
+  const version = html.indexOf(">Version 2.1.306<");
+  const visibility = html.indexOf("can see the account");
+  expect(name).toBeGreaterThan(-1);
+  expect(state).toBeGreaterThan(name);
+  expect(version).toBeGreaterThan(state);
+  expect(visibility).toBeGreaterThan(version);
+  expect(html).toContain('aria-label="Close"');
+  expect(html).not.toContain(">Refresh<");
+  expect(html).not.toContain(m.computer_usage_reading());
+});
+
+test("a viewer without usage still sees the account their role allows", () => {
+  const html = renderToStaticMarkup(
+    <RuntimeUsagePopoverContent
+      runtime={{ provider: RUNTIME_PROVIDER.CODEX, displayName: "Codex CLI" }}
+      showUsage={false}
+      auth={{
+        provider: RUNTIME_PROVIDER.CODEX,
+        state: "logged_in",
+        account: { maskedLabel: "f***@example.com", planLabel: "pro" },
+      }}
+      scanning={false}
+      onRefresh={() => {}}
+    />,
+  );
+  expect(html).toContain(">Pro<");
+  expect(html).toContain("f***@example.com");
+  expect(html).not.toContain(">Refresh<");
+  expect(html).not.toContain(m.computer_usage_reading());
 });
 
 test("Codex's credits flag is a note on the account line when it says something", () => {
@@ -156,29 +205,21 @@ test("Codex's credits flag is a note on the account line when it says something"
   expect(none).not.toContain("credits");
 });
 
-test("the Computer page's runtime usage opens the same peek the Profile badge opens", async () => {
-  // One hover-open peek serves both entry points (task #116): the Computer page chip no longer
-  // runs the press-open variant with its close button.
+test("both runtime entry points open the popover on a press, as on Raft", async () => {
+  // This reverses the hover peek task #116 chose (0ff45a971): the Computer page and the Profile
+  // badge share RuntimeUsage, so they still open the same way.
   const content = await Bun.file(
     new URL("../src/features/computers/runtime-usage.tsx", import.meta.url).pathname,
   ).text();
-  expect(content).not.toContain("openOnPress");
-  expect(content).not.toContain("onClose");
-  expect(content).not.toContain("ReactAriaClose"); // sanity: real marker replaced below
-});
-
-test("the Computer page's chip passes no press-open flag", async () => {
-  const detail = await Bun.file(
-    new URL("../src/features/computers/computer-detail.tsx", import.meta.url).pathname,
-  ).text();
-  expect(detail).not.toContain("openOnPress");
+  expect(content).toContain("<DialogTrigger>");
+  expect(content).not.toContain("HoverPopover");
 });
 
 test("the Public toggle stays live while its update is in flight so the peek survives", async () => {
   // The update replaces the refresh bug's shape: a disabled Toggle would drop focus to the page
-  // and a hover peek closes with it (task #116). Edits repeat-guard in the handler instead.
+  // mid-press (task #116). Edits repeat-guard in the handler instead.
   const detail = await Bun.file(
-    new URL("../src/features/computers/computer-detail.tsx", import.meta.url).pathname,
+    new URL("../src/features/computers/computer-runtimes.tsx", import.meta.url).pathname,
   ).text();
   expect(detail).toMatch(/aria-busy=\{updatingRuntimeIds\.has\(runtime\.id\) \|\| undefined\}/);
   expect(detail).toMatch(

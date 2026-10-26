@@ -1,20 +1,19 @@
-import { RefreshCw01 as RefreshCw } from "@untitledui/icons";
+import { RefreshCw01 as RefreshCw, XClose } from "@untitledui/icons";
 import { useId, useState, type ReactNode } from "react";
 import { useHydrated } from "@tanstack/react-router";
+import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
+import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
 
 import {
   RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
-import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { HoverPopover } from "#src/components/ui/hover-popover";
-import { RelativeTime } from "#src/components/ui/relative-time";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { getLocale } from "#src/paraglide/runtime";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useRuntimeUsage } from "./use-runtime-usage";
 import {
@@ -22,7 +21,7 @@ import {
   officialBucketLabel,
   usageWindowLabel,
 } from "./runtime-usage-windows";
-import { USAGE_RISK_FILL_CLASS, usageRisk } from "./usage-risk";
+import { TimeMessage, UsageWindow } from "./usage-window";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 export type Runtime = {
@@ -82,7 +81,8 @@ const DEFAULT_TRIGGER_CLASS_NAME =
   "-m-1 min-w-0 rounded-lg p-1 text-left outline-none hover:bg-primary_hover data-focus-visible:ring-2 data-focus-visible:ring-brand";
 
 /**
- * One Code Agent runtime on a Computer, and the shared provider-usage popover: reads the cached
+ * One Code Agent runtime on a Computer, and the shared provider-usage popover, opened on a press
+ * with a close button as on Raft (this replaces the hover peek task #116 chose): reads the cached
  * usage on mount, refreshes it with at most one automatic scan when that read is stale or missing
  * and the Computer isn't known offline, and offers a manual Refresh for everything else. A
  * caller without the default `RuntimeIdentity` row (the Agent profile panel's Runtime badge)
@@ -99,6 +99,7 @@ export function RuntimeUsage({
   footer,
   footerLabel,
   showUsage = true,
+  auth,
 }: {
   computerId: string;
   runtime: Runtime;
@@ -115,6 +116,9 @@ export function RuntimeUsage({
   /** False when the viewer may not see this runtime's account usage: the usage is neither read nor
    * drawn, and only the runtime band and the footer remain. */
   showUsage?: boolean;
+  /** The runtime's login state on the Computer page, account fields only for those allowed them
+   * (`runtimeAuthView`). With it, the popover opens even without usage, to show that account. */
+  auth?: RuntimeAuthStatus;
 }) {
   const supportsUsage = showUsage && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
@@ -129,21 +133,8 @@ export function RuntimeUsage({
     <RuntimeIdentity runtime={runtime} health={health} />
   );
 
-  if (!supportsUsage && !footer) return resolvedTrigger;
+  if (!supportsUsage && !footer && !auth) return resolvedTrigger;
 
-  const content = () => (
-    <RuntimeUsagePopoverContent
-      runtime={runtime}
-      showUsage={supportsUsage}
-      data={usage.data}
-      scanning={usage.scanning}
-      scanFailed={usage.scanFailed}
-      computerOnline={computerOnline}
-      timeZone={timeZone}
-      onRefresh={usage.refresh}
-      footer={footer}
-    />
-  );
   // The health is named here too: the trigger's aria-label replaces the health dot's own name.
   const label = supportsUsage
     ? [
@@ -161,15 +152,35 @@ export function RuntimeUsage({
     : [runtime.displayName, footerLabel].filter(Boolean).join(" · ");
 
   return (
-    <HoverPopover
-      label={label}
-      trigger={resolvedTrigger}
-      triggerClassName={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}
-      className="max-h-[calc(100dvh-4rem)] text-sm"
-      working={usage.scanning}
-    >
-      {content()}
-    </HoverPopover>
+    <DialogTrigger>
+      <AriaButton aria-label={label} className={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}>
+        {resolvedTrigger}
+      </AriaButton>
+      <Popover
+        placement="bottom start"
+        offset={8}
+        containerPadding={12}
+        className="z-50 max-h-[calc(100dvh-4rem)] w-80 max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-secondary bg-primary text-sm text-primary shadow-lg outline-none"
+      >
+        <Dialog aria-label={label} className="outline-none">
+          {({ close }) => (
+            <RuntimeUsagePopoverContent
+              runtime={runtime}
+              showUsage={supportsUsage}
+              data={usage.data}
+              scanning={usage.scanning}
+              scanFailed={usage.scanFailed}
+              computerOnline={computerOnline}
+              timeZone={timeZone}
+              onRefresh={usage.refresh}
+              onClose={close}
+              auth={auth}
+              footer={footer}
+            />
+          )}
+        </Dialog>
+      </Popover>
+    </DialogTrigger>
   );
 }
 
@@ -224,9 +235,10 @@ function usageFailureDescription(result: UsageResultRecord | undefined) {
 
 /**
  * The popover's pure body: everything `RuntimeUsage` fetches, rendered without touching a query
- * client itself, so a test can render it directly with a plain `data` fixture. Three bands split
- * by full-width rules: the runtime (version, freshness, Refresh), its account (status, reason,
- * usage windows), and the caller's `footer`.
+ * client itself, so a test can render it directly with a plain `data` fixture. Bands split by
+ * full-width rules, as on Raft: the runtime (name, login state, version, who sees the account),
+ * its account (plan, status, usage windows), when it was read with Refresh, and the caller's
+ * `footer`.
  */
 export function RuntimeUsagePopoverContent({
   runtime,
@@ -237,6 +249,8 @@ export function RuntimeUsagePopoverContent({
   computerOnline,
   timeZone = null,
   onRefresh,
+  onClose,
+  auth,
   footer,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
@@ -249,7 +263,8 @@ export function RuntimeUsagePopoverContent({
   timeZone?: string | null;
   onRefresh: () => void;
   /** Present when the popover opened on a press: draws its close button. */
-
+  onClose?: () => void;
+  auth?: RuntimeAuthStatus;
   footer?: ReactNode;
 }) {
   const hydrated = useHydrated();
@@ -265,8 +280,11 @@ export function RuntimeUsagePopoverContent({
         : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
-  const plan = snapshot?.planType ? formatPlan(snapshot.planType) : undefined;
-  const accountLabel = snapshot?.accountLabel;
+  // A signed-out runtime has no account to show; its state leads the popover instead.
+  const signedOut = auth?.state === "logged_out";
+  const planType = snapshot?.planType ?? auth?.account?.planLabel;
+  const plan = planType ? formatPlan(planType) : undefined;
+  const accountLabel = snapshot?.accountLabel ?? auth?.account?.maskedLabel;
   // Codex reports whether credits exist and whether they are unlimited, and a balance string
   // only when that version's schema sends one. No amounts, so this stays a note, not a bar.
   const credits = snapshot?.credits?.unlimited
@@ -289,52 +307,42 @@ export function RuntimeUsagePopoverContent({
 
   return (
     <div className="divide-y divide-secondary">
-      {/* Identity row (task #109): mark, name over "version · read time", then the icon actions,
-          all centred on the two text lines so Refresh no longer hangs off the second one. Refresh
-          is an icon button with a tooltip, the same shape as the runtime field's refresh. */}
-      <div className="flex items-center gap-3 px-4 py-3">
-        <RuntimeProviderMark provider={runtime.provider} className="size-8 shrink-0" />
-        <div className="min-w-0 flex-1">
+      <div className="flex items-start gap-3 px-4 py-3">
+        <div className="min-w-0 flex-1 space-y-1">
           <h2 className="truncate font-semibold text-primary">{runtime.displayName}</h2>
-          <p className="truncate text-xs text-tertiary">
-            {runtime.version}
-            {/* RelativeTime is blank until hydration; the separator waits with it. */}
-            {hydrated && showUsage && data?.result && (
-              <>
-                {runtime.version ? " · " : ""}
-                <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
-              </>
-            )}
-          </p>
+          {signedOut && (
+            <Badge color="warning" size="sm">
+              {m.computer_runtime_auth_logged_out()}
+            </Badge>
+          )}
+          {runtime.version && (
+            <p className="truncate text-xs text-tertiary">
+              {m.computer_runtime_version({ version: runtime.version })}
+            </p>
+          )}
+          {auth && (
+            <p className="text-xs text-tertiary">{m.computer_runtime_account_visibility()}</p>
+          )}
         </div>
-        {showUsage && (
-          // Two React Aria behaviours keep the peek open across a refresh (task #109):
-          // - `isLoading` is React Aria's `isPending`: the button ignores presses but keeps focus.
-          //   `isDisabled` would drop focus to the page mid-press, and the peek follows focus out.
-          // - No Tooltip. PreviewTrigger shares React Aria's one-open-tooltip-at-a-time state, so a
-          //   tooltip opening inside the peek closes the peek. The aria-label names the button.
-          <Button
+        {onClose && (
+          <ButtonUtility
+            icon={XClose}
             size="xs"
             color="tertiary"
-            iconLeading={RefreshCw}
-            aria-label={scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
-            isLoading={scanning}
-            isDisabled={computerOnline === false}
-            className="shrink-0"
-            onPress={onRefresh}
+            tooltip={m.controls_close()}
+            className="-mt-1 -mr-1.5 shrink-0"
+            onClick={onClose}
           />
         )}
       </div>
 
-      {showUsage && (
+      {((showUsage && !signedOut) || (!signedOut && (plan || accountLabel))) && (
         <section className="px-4 py-3">
           {/* The account band leads with the plan, then the signed-in account. A credits note
               counts too: Codex can report credits with no plan and no email, and that note used
               to show under the fallback heading. The empty "Runtime account" line is omitted
-              only when the runtime names nothing and nothing is wrong. The badge speaks only
-              when something needs the reader — reauth, an error, a limit — since "OK" repeats
-              the health dot that opened this popover. */}
-          {(plan || accountLabel || accountNote || (badge && badge.color !== "success")) && (
+              only when the runtime names nothing and nothing is wrong. */}
+          {(plan || accountLabel || accountNote || badge) && (
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-medium text-primary">
@@ -342,14 +350,14 @@ export function RuntimeUsagePopoverContent({
                 </h3>
                 {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
               </div>
-              {badge && badge.color !== "success" && (
+              {badge && (
                 <Badge color={badge.color} size="sm" className="shrink-0">
                   {badge.label}
                 </Badge>
               )}
             </div>
           )}
-          {reading ? (
+          {!showUsage ? null : reading ? (
             <div aria-label={m.computer_usage_reading()} className="mt-3 space-y-3">
               <Skeleton className="h-3 w-full" />
               <Skeleton className="h-3 w-2/3" />
@@ -389,6 +397,7 @@ export function RuntimeUsagePopoverContent({
                               bucket.window === "credit" ? snapshot.creditUsage : undefined
                             }
                             timeZone={timeZone}
+                            showLeft
                           />
                         );
                       })}
@@ -440,6 +449,7 @@ export function RuntimeUsagePopoverContent({
                         window={window}
                         creditUsage={key === "primary" ? snapshot?.creditUsage : undefined}
                         timeZone={timeZone}
+                        showLeft
                       />
                     ))}
                   </div>
@@ -450,158 +460,38 @@ export function RuntimeUsagePopoverContent({
         </section>
       )}
 
+      {showUsage && !signedOut && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          {/* RelativeTime is blank until hydration, so the line waits with it. */}
+          <p className="min-w-0 truncate text-xs text-tertiary">
+            {hydrated && data?.result && (
+              <TimeMessage
+                message={(time) => m.computer_usage_updated({ time })}
+                value={data.result.collectedAt}
+                timeZone={timeZone}
+              />
+            )}
+          </p>
+          {/* `isLoading` is React Aria's `isPending`: the button ignores presses but keeps focus,
+              where `isDisabled` would drop it to the page mid-press (task #109). */}
+          <Button
+            size="sm"
+            color="secondary"
+            iconLeading={RefreshCw}
+            isLoading={scanning}
+            showTextWhileLoading
+            isDisabled={computerOnline === false}
+            className="shrink-0"
+            onPress={onRefresh}
+          >
+            {scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh()}
+          </Button>
+        </div>
+      )}
+
       {footer && <div className="px-4 py-3">{footer}</div>}
     </div>
   );
-}
-
-/** Stands in for `{time}` while a message is split around the `RelativeTime` that replaces it. */
-const TIME_SLOT = "\u0000";
-
-/**
- * A message with a live `RelativeTime` where its `{time}` goes: "resets in 5d" / "5天后重置",
- * "Updated 6m ago" / "6分钟前更新". The message decides the word order, so each locale keeps its
- * own. Callers render it only once hydrated, as `RelativeTime` is blank before that.
- */
-export function TimeMessage({
-  message,
-  value,
-  timeZone,
-}: {
-  message: (time: string) => string;
-  value: string | Date;
-  timeZone: string | null;
-}) {
-  const [before = "", after = ""] = message(TIME_SLOT).split(TIME_SLOT);
-  return (
-    <>
-      {before}
-      <RelativeTime value={value} timeZone={timeZone} plain />
-      {after}
-    </>
-  );
-}
-
-/** "63% used" / "已用 63%": the one wording for a used share, a usage window's or a context's. */
-export function usedPercentText(usedPercent: number): string {
-  return m.computer_usage_percent_used({ percent: formatPercent(usedPercent) });
-}
-
-/**
- * One usage meter row: the label, then the value and its reset on the same line, then a bar
- * coloured by `usageRisk` on the used share. The Agent context popover draws its context window
- * with the same row (`resetExpected={false}`: a context window has no reset).
- */
-export function UsageWindow({
-  label,
-  window,
-  creditUsage,
-  detail,
-  note,
-  timeZone,
-  resetExpected = true,
-}: {
-  label: string;
-  window: {
-    usedPercent?: number;
-    status?: "ok" | "limit_reached" | "parse_unavailable";
-    resetsAt?: string;
-  };
-  creditUsage?: NonNullable<UsageResultRecord["snapshot"]>["creditUsage"];
-  /** Official figure that is not a percent, shown in place of a meter. */
-  detail?: string;
-  /** Official amount kept beside a meter, such as a spend limit's used and limit strings. */
-  note?: string;
-  timeZone: string | null;
-  /** False for a meter that never resets. Otherwise a used share whose reset the provider did not
-   * report says so; a row without a share (a balance, a trial) never claims a reset. */
-  resetExpected?: boolean;
-}) {
-  // The header line is label + a short value + reset, kept on one line: a credit plan's amounts
-  // ("7,517.29 / 10,000 credits used") would squeeze the label onto two lines in the popover, so
-  // they move under the bar and the header shows the used share, like a session window (task #109).
-  const hydrated = useHydrated();
-  const resetUnknown =
-    resetExpected && window.usedPercent !== undefined && window.resetsAt === undefined;
-  const value =
-    window.usedPercent !== undefined
-      ? usedPercentText(window.usedPercent)
-      : creditUsage
-        ? creditAmounts(creditUsage)
-        : detail
-          ? detail
-          : window.status === "parse_unavailable"
-            ? m.computer_usage_badge_unavailable()
-            : window.status === "limit_reached"
-              ? m.computer_usage_limit_reached()
-              : m.computer_usage_available();
-
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3 text-xs">
-        <p className="min-w-0 truncate font-medium text-secondary">{label}</p>
-        <p className="shrink-0 text-tertiary tabular-nums">
-          <span className="font-medium text-primary">{value}</span>
-          {hydrated && window.resetsAt !== undefined && (
-            <>
-              {" · "}
-              <TimeMessage
-                message={(time) => m.computer_usage_resets({ time })}
-                value={window.resetsAt}
-                timeZone={timeZone}
-              />
-            </>
-          )}
-          {resetUnknown && ` · ${m.computer_usage_reset_unavailable()}`}
-        </p>
-      </div>
-      {window.usedPercent !== undefined && (
-        // Untitled's own ProgressBarBase draws the bar (task #109); it takes no accessible name,
-        // so the group around it carries the window's label for screen readers.
-        <div role="group" aria-label={label} className="mt-1.5">
-          <ProgressBarBase
-            value={Math.min(100, Math.max(0, window.usedPercent))}
-            className="h-1.5 rounded-full"
-            progressClassName={cn(
-              "rounded-full",
-              USAGE_RISK_FILL_CLASS[
-                usageRisk(window.usedPercent, window.status === "limit_reached")
-              ],
-            )}
-          />
-        </div>
-      )}
-      {creditUsage && (window.usedPercent !== undefined || creditUsage.overage > 0) && (
-        <p className="mt-1 text-xs tabular-nums text-tertiary">
-          {window.usedPercent !== undefined && creditAmounts(creditUsage)}
-          {window.usedPercent !== undefined && creditUsage.overage > 0 && " · "}
-          {creditUsage.overage > 0 &&
-            m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
-        </p>
-      )}
-      {note && <p className="mt-1 text-xs break-words tabular-nums text-tertiary">{note}</p>}
-    </div>
-  );
-}
-
-/** A used share as a whole percentage ("76%"): the exact credit amounts, when there are any, sit
- * under the bar, so the header does not need decimals. */
-function formatPercent(value: number) {
-  return new Intl.NumberFormat(getLocale(), { style: "percent", maximumFractionDigits: 0 }).format(
-    value / 100,
-  );
-}
-
-/** Credits as the locale writes numbers: grouped, at most two decimals ("7,517.29"). */
-function formatCredits(value: number) {
-  return new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 2 }).format(value);
-}
-
-function creditAmounts(creditUsage: { used: number; limit: number }) {
-  return m.computer_usage_credit_amounts({
-    used: formatCredits(creditUsage.used),
-    limit: formatCredits(creditUsage.limit),
-  });
 }
 
 /** A plan as a name: "pro" → "Pro"; a shouted "KIRO POWER" → "Kiro Power". */

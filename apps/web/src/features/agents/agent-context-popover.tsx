@@ -5,7 +5,7 @@ import { Disclosure, DisclosurePanel } from "react-aria-components";
 import { type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { Button } from "#src/components/base/buttons/button";
 import { cn } from "#src/lib/utils";
-import { TimeMessage, UsageWindow } from "#src/features/computers/runtime-usage";
+import { TimeMessage, UsageWindow } from "#src/features/computers/usage-window";
 import { getLocale } from "#src/paraglide/runtime";
 import { m } from "#src/paraglide/messages";
 

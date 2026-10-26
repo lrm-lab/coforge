@@ -17,7 +17,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
-import { Toggle } from "#src/components/base/toggle/toggle";
 import { formatCalendarDate, formatDateForDisplay } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -55,8 +54,7 @@ import {
   ComputerUpgradeSlot,
   type ComputerUpgradeRequest,
 } from "./computer-upgrade-slot";
-import { RuntimeUsage } from "./runtime-usage";
-import { RuntimeChip } from "./runtime-chip";
+import { ComputerRuntimeList } from "./computer-runtimes";
 import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
@@ -200,23 +198,6 @@ export function ComputerDetail({
       setRescanFailed(true);
     } finally {
       setRescanning(false);
-    }
-  };
-  const [updatingRuntimeIds, setUpdatingRuntimeIds] = useState<ReadonlySet<string>>(new Set());
-  const [runtimeVisibilityErrorIds, setRuntimeVisibilityErrorIds] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
-  const setRuntimePublic = async (runtimeId: string, isPublic: boolean) => {
-    const without = (ids: ReadonlySet<string>) =>
-      new Set([...ids].filter((id) => id !== runtimeId));
-    setUpdatingRuntimeIds((ids) => new Set(ids).add(runtimeId));
-    setRuntimeVisibilityErrorIds(without);
-    try {
-      await onSetRuntimePublic(runtimeId, isPublic);
-    } catch {
-      setRuntimeVisibilityErrorIds((ids) => new Set(ids).add(runtimeId));
-    } finally {
-      setUpdatingRuntimeIds(without);
     }
   };
   const workspaceSlug = useWorkspaceSlug();
@@ -558,62 +539,11 @@ export function ComputerDetail({
                 </p>
               )}
               {computer.runtimes.length ? (
-                <ul className="mt-2 flex flex-wrap gap-1.5">
-                  {computer.runtimes.map((runtime) => (
-                    <li key={runtime.provider}>
-                      {computer.ownedByCurrentUser ? (
-                        <RuntimeUsage
-                          computerId={computer.id}
-                          runtime={runtime}
-                          computerOnline={computer.online}
-                          timeZone={timeZone}
-                          triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
-                          trigger={(health) => (
-                            <RuntimeChip
-                              runtime={runtime}
-                              auth={computer.runtimeAuth?.[runtime.provider as RuntimeAuthProvider]}
-                              health={health}
-                              isPublic={runtime.isPublic}
-                            />
-                          )}
-                          footer={
-                            <>
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="text-sm font-medium text-secondary">
-                                  {m.computer_runtime_public()}
-                                </span>
-                                {/* A disabled toggle drops focus to the page mid-press and the
-                                    hover peek closes with it (task #116; the refresh bug #179 went
-                                    down this exact path). Repeat edits are ignored in the handler
-                                    instead; the error text below still reports a failed change. */}
-                                <Toggle
-                                  size="sm"
-                                  aria-label={m.computer_runtime_public()}
-                                  isSelected={runtime.isPublic}
-                                  aria-busy={updatingRuntimeIds.has(runtime.id) || undefined}
-                                  onChange={(isPublic) => {
-                                    if (!updatingRuntimeIds.has(runtime.id))
-                                      void setRuntimePublic(runtime.id, isPublic);
-                                  }}
-                                />
-                              </div>
-                              {runtimeVisibilityErrorIds.has(runtime.id) && (
-                                <p role="alert" className="mt-2 text-xs text-error-primary">
-                                  {m.computer_runtime_visibility_error()}
-                                </p>
-                              )}
-                            </>
-                          }
-                        />
-                      ) : (
-                        <RuntimeChip
-                          runtime={runtime}
-                          auth={computer.runtimeAuth?.[runtime.provider as RuntimeAuthProvider]}
-                        />
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <ComputerRuntimeList
+                  computer={computer}
+                  timeZone={timeZone}
+                  onSetRuntimePublic={onSetRuntimePublic}
+                />
               ) : (
                 <p className="mt-1 text-sm text-tertiary">{m.computer_no_code_agents()}</p>
               )}
@@ -1168,9 +1098,6 @@ function WorkspaceInventory({
     </DetailGroup>
   );
 }
-
-const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
-  "rounded-full outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
 
 /** The day this Computer joined the Workspace, in the viewer's zone once the page is hydrated. */
 function ComputerDate({ value, timeZone }: { value: Date | string; timeZone: string | null }) {

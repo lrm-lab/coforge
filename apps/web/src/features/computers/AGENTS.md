@@ -8,9 +8,12 @@ These rules apply to `src/features/computers/`.
 - Only runtimes marked in `RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN` get on-demand
   Usage scanning. The table reflects shipped adapters with a `readUsage` method,
   not whether they launch an external CLI. Pi, CoForge, Cursor, and OpenCode
-  render as plain, non-focusable identities without usage health dots; a
-  Computer runtime's Public switch still opens its footer controls. A supported
-  reader's account-specific `unsupported` result remains visible in its popover.
+  carry no status square; for the Computer's owner every chip still opens its
+  popover for the Public switch. A supported reader's account-specific
+  `unsupported` result remains visible in its popover.
+- A runtime's popover opens on a press, with a close button and Escape, as on
+  Raft, on the Computer page and the Agent profile alike (`runtime-usage.tsx`).
+  A quota reads as the share left.
 - A cloud Computer belongs to the account: one default, started when first
   sign-in creates the personal Workspace and again when another Workspace is
   created, and ensured once more when the Computers page opens. That start also
@@ -43,7 +46,9 @@ These rules apply to `src/features/computers/`.
 - The slot's "What's new" opens the notes the release catalog (`server/release-catalog/`) holds for
   the release on offer or being installed, in the UI's language with the other as fallback. No
   notes, or a failed read, means no link and never an error; it never holds up Upgrade.
-- A login-capable runtime's chip carries its last reported login state
-  (`runtime-chip.tsx`). The account and plan come only to the Computer's owner
-  and Workspace owners and admins (`runtimeAuthView`); everyone else receives
-  the state alone. A Computer that never reported shows no state.
+- A runtime chip is its name and one status square (`runtime-chip.tsx`): green
+  when signed in or its usage is fine, orange when signed out or its usage needs
+  attention. The account and plan sit in the popover and come only to the
+  Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the
+  popover says; everyone else receives the state alone. A Computer that never
+  reported shows no state.
