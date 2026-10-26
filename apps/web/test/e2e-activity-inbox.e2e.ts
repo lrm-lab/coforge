@@ -13,7 +13,6 @@ import {
   hydrated,
   inPane,
   listColumnWidth,
-  listHidden,
   openParam,
   pane,
   paneTabsShown,
@@ -30,15 +29,13 @@ import {
  * Done; on a wide screen, opening a row beside a narrowed list (kept through a change of view and a
  * reload) and at the right message, a thread's row showing only the thread and leaving its channel
  * unread until "View in channel" (a profile opened from it covering it and returning to it), and
- * the thread's close returning to the list; on a phone, a row and a link naming a conversation
- * opening it full-screen in place of the list, with a back arrow (and, for a row, the back
- * gesture) to the list; member DMs; and the Pinned section.
+ * the thread's close returning to the list; member DMs; and the Pinned section. The phone layout
+ * is `e2e-activity-inbox-phone.e2e.ts`.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the wide
- * layout, with and without a conversation open, with a Pinned section (`pinned.png`), and of the
- * phone layout, with and without a conversation open (`phone-open.png`), are written under
- * `.amp/e2e/activity-inbox/`.
+ * layout, with and without a conversation open, and with a Pinned section (`pinned.png`), are
+ * written under `.amp/e2e/activity-inbox/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -393,78 +390,6 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
         const paneBox = pane.getBoundingClientRect();
         return rowBox.top >= paneBox.top && rowBox.bottom <= paneBox.bottom;
       })()`.replace(/\n\s*/g, " "),
-    );
-
-    // The channel's row lists again (Done above took it off), for a phone to open.
-    await db.conversationMember.update({
-      where: { id: viewer.id },
-      data: { doneThroughSequence: null },
-    });
-    await browser("set", "viewport", "390", "844");
-    await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${seededRows}.length === 2 && ${hydrated}`);
-    // Opening the thread read it: its row stays, without the unread badge.
-    const threadRow = (await evaluate<string[]>(seededRows))[1];
-    expect(threadRow).toContain("E2E activity root");
-    expect(threadRow).not.toContain("1 new");
-    // On a phone the tabs take their own row under the title.
-    expect(
-      await evaluate<boolean>(
-        `document.querySelector('[role="tablist"]').getBoundingClientRect().top >= document.querySelector("h1").getBoundingClientRect().bottom`,
-      ),
-    ).toBe(true);
-    await browser("screenshot", join(artifacts, "phone.png"));
-    // On a phone a row opens its conversation in place of the list, still on Activity. Opening it
-    // is a step in history: the header's back arrow returns to the list by going back to it (past
-    // a thread opened and closed in the conversation), and so does the phone's back gesture.
-    const listEntry = await evaluate<number>("navigation.currentEntry.index");
-    const listAlone = `${openParam} === null && ${pane} === null && ${listHidden} === false`;
-    await browser("find", "text", "E2E activity unread", "click");
-    await browser(
-      "wait",
-      "--fn",
-      `${openParam} === ${JSON.stringify(`channel:${channelId}`)} && ${shownInPane(newestId)} && ${listHidden} === true`,
-    );
-    expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/activity`);
-    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry + 1);
-    // The thread summary's name runs on into the reply's preview.
-    await evaluate(`[...${pane}.querySelectorAll("button")]
-      .find((button) => button.textContent.trim().startsWith("1 reply"))
-      .click() ?? true`);
-    await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
-    await browser("wait", "--fn", shownInPane(replyId));
-    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry + 2);
-    await browser("find", "role", "button", "click", "--name", "Back to chat");
-    await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
-    await browser("find", "role", "button", "click", "--name", "Back to conversations");
-    await browser("wait", "--fn", listAlone);
-    expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
-    // A thread's row opens the thread alone.
-    await browser("find", "text", "E2E activity root", "click");
-    await browser(
-      "wait",
-      "--fn",
-      `${openParam} === ${JSON.stringify(`thread:channel:${channelId}`)} && ${shownInPane(replyId)} && ${listHidden} === true`,
-    );
-    expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
-    await browser("back");
-    await browser("wait", "--fn", listAlone);
-
-    // A link that names a conversation (a reload, a shared link) opens it full-screen on a phone,
-    // at its message, with the list hidden; the header's back arrow returns to the list.
-    await browser(
-      "open",
-      `${origin}${workspacePath}/activity?open=channel:${channelId}&msg=${rootId}`,
-    );
-    await browser("wait", "--fn", `${inPane(rootId)} && ${hydrated}`);
-    // The list is hidden, not removed: crossing `lg` does not remount it.
-    await browser("wait", "--fn", `${listHidden} === true`);
-    await browser("screenshot", join(artifacts, "phone-open.png"));
-    await browser("find", "role", "button", "click", "--name", "Back to conversations");
-    await browser(
-      "wait",
-      "--fn",
-      `location.pathname === ${JSON.stringify(`${workspacePath}/activity`)} && location.search === "" && ${pane} === null && ${listHidden} === false && ${seededRows}.length === 2`,
     );
   } finally {
     await browser("close").catch(() => undefined);
