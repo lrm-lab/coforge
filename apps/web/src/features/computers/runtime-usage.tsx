@@ -32,8 +32,9 @@ export type Runtime = {
   displayName: string;
 };
 
-/** "ok" only when the last read is fresh, available, and no usage window is at its limit. */
-export type UsageHealth = "ok" | "attention";
+/** `ok` only when the last read is fresh, available, and no usage window is at its limit; `label`
+ * is the popover badge's own word for it, so the dot and the badge never name it differently. */
+export type UsageHealth = { ok: boolean; label: string };
 
 function RuntimeIdentity({ runtime, health }: { runtime: Runtime; health?: UsageHealth }) {
   return (
@@ -65,12 +66,10 @@ export function UsageHealthDot({
   return (
     <span
       role="img"
-      aria-label={
-        health === "ok" ? m.computer_usage_health_ok() : m.computer_usage_health_attention()
-      }
+      aria-label={health.label}
       className={cn(
         "size-1.5 shrink-0 rounded-full",
-        health === "ok" ? "bg-success-solid" : "bg-warning-solid",
+        health.ok ? "bg-success-solid" : "bg-warning-solid",
         className,
       )}
     />
@@ -137,16 +136,7 @@ export function RuntimeUsage({
 
   // The health is named here too: the trigger's aria-label replaces the health dot's own name.
   const label = supportsUsage
-    ? [
-        runtime.displayName,
-        m.computer_usage_title(),
-        health === "ok"
-          ? m.computer_usage_health_ok()
-          : health === "attention"
-            ? m.computer_usage_health_attention()
-            : undefined,
-        footerLabel,
-      ]
+    ? [runtime.displayName, m.computer_usage_title(), health?.label, footerLabel]
         .filter(Boolean)
         .join(" · ")
     : [runtime.displayName, footerLabel].filter(Boolean).join(" · ");
@@ -188,7 +178,10 @@ function usageHealth(data: UsageReadResult | undefined): UsageHealth | undefined
   if (!data?.result) return undefined;
   const badge = usageBadge(data.result);
   if (!badge) return undefined;
-  return badge.color === "success" && data.state === "fresh" ? "ok" : "attention";
+  if (badge.color !== "success") return { ok: false, label: badge.label };
+  return data.state === "fresh"
+    ? { ok: true, label: m.computer_usage_health_ok() }
+    : { ok: false, label: m.computer_usage_health_attention() };
 }
 
 const USAGE_READER_NOT_CONNECTED = "Usage reader is not connected yet";
@@ -197,10 +190,10 @@ function usageBadge(
   result: UsageResultRecord,
 ): { color: "success" | "warning" | "error"; label: string } | undefined {
   if (result.status === "reauth")
-    return { color: "warning", label: m.computer_usage_badge_reauth() };
+    return { color: "warning", label: m.computer_runtime_auth_logged_out() };
   if (result.status === "unavailable")
-    return { color: "warning", label: m.computer_usage_badge_unavailable() };
-  if (result.status === "error") return { color: "error", label: m.computer_usage_badge_error() };
+    return { color: "warning", label: m.computer_usage_read_error() };
+  if (result.status === "error") return { color: "error", label: m.computer_usage_read_error() };
   if (result.status === "unsupported")
     return {
       color: "warning",
@@ -224,8 +217,7 @@ function usageBadge(
 function usageFailureDescription(result: UsageResultRecord | undefined) {
   const status = result?.status;
   if (status === "reauth") return m.computer_usage_reauth();
-  if (status === "unavailable") return m.computer_usage_unavailable_description();
-  if (status === "error") return m.computer_usage_error();
+  if (status === "unavailable" || status === "error") return m.computer_usage_read_failed_retry();
   if (status === "unsupported")
     return result?.message === USAGE_READER_NOT_CONNECTED
       ? m.computer_usage_not_connected()
@@ -276,7 +268,7 @@ export function RuntimeUsagePopoverContent({
     computerOnline === false
       ? m.computer_usage_offline()
       : scanFailed
-        ? m.computer_usage_no_response()
+        ? m.computer_usage_read_failed_retry()
         : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));

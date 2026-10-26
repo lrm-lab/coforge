@@ -131,6 +131,64 @@ test("the popover as on Raft: the plan with its OK badge, then a Refresh button"
   expect(html.indexOf(">Refresh<")).toBeGreaterThan(html.indexOf("Monthly credits"));
 });
 
+// Frank (2026-10-26): one state, one name, wherever the popover says it.
+const escaped = (text: string) => text.replaceAll("'", "&#x27;");
+test("a failed read is named the same whether the reader erred, gave nothing or got no answer", () => {
+  const failed = (status: "unavailable" | "error") => {
+    const data = kiroUsage({ used: 1, limit: 10, overage: 0 });
+    return render({ ...data, result: { ...data.result!, status, snapshot: undefined } });
+  };
+  for (const html of [failed("unavailable"), failed("error")]) {
+    // As on Raft: an "Error" badge, and the sentence below says what failed, once.
+    expect(html).toContain(`>${m.computer_usage_read_error()}<`);
+    expect(html).toContain(escaped(m.computer_usage_read_failed_retry()));
+    expect(html).not.toContain(`>${escaped(m.computer_usage_read_failed())}<`);
+  }
+  const silent = renderToStaticMarkup(
+    <RuntimeUsagePopoverContent
+      runtime={{ provider: RUNTIME_PROVIDER.KIRO, displayName: "Kiro" }}
+      data={undefined}
+      scanning={false}
+      scanFailed
+      computerOnline
+      onRefresh={() => {}}
+    />,
+  );
+  expect(silent).toContain(escaped(m.computer_usage_read_failed_retry()));
+});
+
+test("a quota at its limit reads Used up beside its reset, as on Raft", () => {
+  const data = kiroUsage({ used: 10_000, limit: 10_000, overage: 0 });
+  const primary = { ...data.result!.snapshot!.primary!, status: "limit_reached" as const };
+  const html = render({
+    ...data,
+    result: { ...data.result!, snapshot: { ...data.result!.snapshot!, primary } },
+  });
+  expect(html).toContain(`>${m.computer_usage_used_up()}<`);
+  expect(html).not.toContain(m.computer_usage_percent_left({ percent: "0%" }));
+  expect(html).toContain(`>${m.computer_usage_limit_reached()}<`);
+});
+
+test("a reader that needs a sign-in says Not signed in, as the chip does", () => {
+  const data = kiroUsage({ used: 1, limit: 10, overage: 0 });
+  const html = render({
+    ...data,
+    result: { ...data.result!, status: "reauth", snapshot: undefined },
+  });
+  expect(html).toContain(`>${m.computer_runtime_auth_logged_out()}<`);
+  expect(html).toContain(m.computer_usage_reauth());
+});
+
+test("a chip names its usage dot with the popover badge's own word", () => {
+  const chip = renderToStaticMarkup(
+    <RuntimeChip
+      runtime={{ provider: RUNTIME_PROVIDER.CODEX, displayName: "Codex CLI" }}
+      health={{ ok: false, label: m.computer_usage_limit_reached() }}
+    />,
+  );
+  expect(chip).toContain(`aria-label="${m.computer_usage_limit_reached()}"`);
+});
+
 test("a signed-out runtime leads with its state and shows no account or usage", () => {
   const html = renderToStaticMarkup(
     <RuntimeUsagePopoverContent

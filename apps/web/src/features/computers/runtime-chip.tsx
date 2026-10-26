@@ -46,8 +46,7 @@ function runtimeStatus(
 ): { ok: boolean; label: string } | undefined {
   if (auth?.state === "logged_out")
     return { ok: false, label: m.computer_runtime_auth_logged_out() };
-  if (health === "attention") return { ok: false, label: m.computer_usage_health_attention() };
-  if (health === "ok") return { ok: true, label: m.computer_usage_health_ok() };
+  if (health) return health;
   if (auth?.state === "logged_in") return { ok: true, label: m.computer_runtime_auth_logged_in() };
   return undefined;
 }

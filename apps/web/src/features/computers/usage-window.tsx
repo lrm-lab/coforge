@@ -82,17 +82,21 @@ export function UsageWindow({
     resetExpected && window.usedPercent !== undefined && window.resetsAt === undefined;
   const used =
     window.usedPercent === undefined ? undefined : Math.min(100, Math.max(0, window.usedPercent));
+  // A quota at its limit reads "Used up", as on Raft, not "0% left" beside a Limit reached badge.
+  const usedUp = used === 100 || window.status === "limit_reached";
   const value =
     used !== undefined
       ? showLeft
-        ? m.computer_usage_percent_left({ percent: formatPercent(100 - used) })
+        ? usedUp
+          ? m.computer_usage_used_up()
+          : m.computer_usage_percent_left({ percent: formatPercent(100 - used) })
         : usedPercentText(used)
       : creditUsage
         ? creditAmounts(creditUsage)
         : detail
           ? detail
           : window.status === "parse_unavailable"
-            ? m.computer_usage_badge_unavailable()
+            ? m.computer_usage_read_failed()
             : window.status === "limit_reached"
               ? m.computer_usage_limit_reached()
               : m.computer_usage_available();

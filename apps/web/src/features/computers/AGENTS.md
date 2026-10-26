@@ -48,7 +48,11 @@ These rules apply to `src/features/computers/`.
   notes, or a failed read, means no link and never an error; it never holds up Upgrade.
 - A runtime chip is its mark, its name and one round status dot (`runtime-chip.tsx`): green
   when signed in or its usage is fine, orange when signed out or its usage needs
-  attention. The account and plan sit in the popover and come only to the
+  attention. Each state has one name wherever it shows (the dot's label is the
+  popover badge's word): "Not signed in", "Error" over "Couldn't read usage.
+  Refresh to try again." for any failed read, "Limit reached" over a quota row
+  reading "Used up · resets …", "No usage reported" (Frank, 2026-10-26; the
+  badges are Raft's). The account and plan sit in the popover and come only to the
   Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the
   popover says; everyone else receives the state alone. A Computer that never
   reported shows no state.
