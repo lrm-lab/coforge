@@ -34,7 +34,6 @@
   "attachment_comments_anchor_remove": "改为评论整个文件",
   "attachment_comments_anchor_lost": "位置已找不到",
   "attachment_comments_anchor_jump": "跳到{place}",
-  "attachment_comments_whole_file": "整个文件",
   "attachment_comments_reply": "回复",
   "attachment_comments_reply_count": [
     {

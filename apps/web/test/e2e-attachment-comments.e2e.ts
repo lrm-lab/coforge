@@ -203,7 +203,9 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.click(${JSON.stringify(`button[aria-label="Comments on ${zipName}"]`)});
     await page.waitForSelector('[role="dialog"] textarea', { timeout: 5000 });
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(zipBody)});
-    await page.click("loc=role:button[name='Post comment']");
+    // Enter sends, as in Raft and the composer.
+    await page.click('[role="dialog"] textarea');
+    await page.keyboard.press("Enter");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(zipBody)});
     const zipSafety = await page.evaluate(({ id, contents }) => ({
       renderedBytes: document.body.innerText.includes(contents),

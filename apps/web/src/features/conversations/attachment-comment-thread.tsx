@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useInfiniteQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "#src/components/base/buttons/button";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { useAppToast } from "#src/components/ui/toast";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
-import { formatDateForDisplay } from "#src/lib/dates";
+import { clockLabel } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
@@ -17,6 +17,7 @@ import {
   postAttachmentComment,
   reactAttachmentComment,
 } from "./attachment-comments.functions";
+import { shouldSendOnEnter } from "./composer-behavior";
 import { MessageBody } from "./message-body";
 import { MessageReactionBadges } from "./message-reaction-badges";
 import { MessageReactionPicker } from "./message-reaction-picker";
@@ -52,7 +53,9 @@ export function useCommentPages(attachmentId: string, rootId?: string, enabled =
 
 /**
  * A comment or reply field's draft and sending state. `send` posts the draft; `refresh` reads the
- * lists it changes again, whether or not it was posted. The field keeps focus throughout.
+ * lists it changes again, whether or not it was posted. The field keeps focus throughout. Spread
+ * `keys` on the field: Enter sends and Shift+Enter starts a new line, as in the composer and in
+ * Raft, and an Enter that confirms an IME composition sends nothing.
  */
 export function useCommentDraft(
   canComment: boolean,
@@ -63,6 +66,8 @@ export function useCommentDraft(
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
+  const composing = useRef(false);
+  const compositionEndedAt = useRef<number | null>(null);
   async function submit() {
     if (!body.trim() || sending || !canComment) return;
     setSending(true);
@@ -80,7 +85,28 @@ export function useCommentDraft(
       input.current?.focus();
     }
   }
-  return { body, setBody, sending, sendFailed, input, submit };
+  const keys = {
+    onTextAreaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      const key = {
+        key: event.key,
+        shiftKey: event.shiftKey,
+        isComposing: event.nativeEvent.isComposing || composing.current,
+        keyCode: event.keyCode,
+      };
+      const composition = { lastCompositionEndAt: compositionEndedAt.current, now: Date.now() };
+      if (!shouldSendOnEnter(key, composition)) return;
+      event.preventDefault();
+      void submit();
+    },
+    onTextAreaCompositionStart: () => {
+      composing.current = true;
+    },
+    onTextAreaCompositionEnd: () => {
+      composing.current = false;
+      compositionEndedAt.current = Date.now();
+    },
+  };
+  return { body, setBody, sending, sendFailed, input, submit, keys };
 }
 
 /**
@@ -131,12 +157,17 @@ function CommentEntry({
     <article className="flex min-w-0 gap-2.5">
       <IdentityAvatar src={comment.senderAvatarUrl} name={comment.senderName} size="xs" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-primary">{comment.senderName}</p>
-        <time dateTime={comment.createdAt} className="text-xs text-tertiary">
-          {formatDateForDisplay(comment.createdAt, timeZone, getLocale(), timeFormat)}
-        </time>
+        <p className="flex min-w-0 items-baseline gap-1.5">
+          <span className="truncate text-sm font-semibold text-primary">{comment.senderName}</span>
+          <time
+            dateTime={comment.createdAt}
+            className="shrink-0 text-xs text-tertiary tabular-nums"
+          >
+            {clockLabel(comment.createdAt, getLocale(), timeFormat, timeZone ?? undefined)}
+          </time>
+        </p>
         {place}
-        <div className="mt-1 text-sm text-secondary">
+        <div className="message-text mt-1 text-secondary">
           <MessageBody body={comment.body} />
         </div>
         <MessageReactionBadges
@@ -268,6 +299,7 @@ export function CommentThread({
                 value={draft.body}
                 onChange={draft.setBody}
                 textAreaRef={draft.input}
+                {...draft.keys}
                 maxLength={8_000}
                 rows={2}
                 // Opening the replies is to write one.

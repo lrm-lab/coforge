@@ -95,8 +95,9 @@ function AnchorPlace({
 
 /**
  * Only mounted while its file is open. A draft survives switching preview/comments on a phone.
- * With the preview's `surface`, comments on a place that is still found come first, in document
- * order; whole-file comments and those whose place is gone follow, as in Raft.
+ * Whole-file comments, and those whose place is gone, come first; with the preview's `surface`,
+ * comments on a place that is still found follow in document order. Raft lists them this way
+ * (checked on app.raft.build, 2026-10-26).
  */
 export function AttachmentCommentsPane({
   attachmentId,
@@ -241,13 +242,8 @@ export function AttachmentCommentsPane({
                 {m.attachment_comments_older()}
               </Button>
             )}
-            {located.map(renderComment)}
-            {located.length > 0 && rest.length > 0 && (
-              <h3 className="border-t border-secondary pt-4 text-xs font-medium text-tertiary">
-                {m.attachment_comments_whole_file()}
-              </h3>
-            )}
             {rest.map(renderComment)}
+            {located.map(renderComment)}
           </div>
         )}
       </div>
@@ -280,6 +276,7 @@ export function AttachmentCommentsPane({
             value={draft.body}
             onChange={draft.setBody}
             textAreaRef={draft.input}
+            {...draft.keys}
             maxLength={8_000}
             rows={3}
             isDisabled={!canComment}

@@ -34,7 +34,6 @@
   "attachment_comments_anchor_remove": "Comment on the whole file instead",
   "attachment_comments_anchor_lost": "Position not found",
   "attachment_comments_anchor_jump": "Go to {place}",
-  "attachment_comments_whole_file": "Whole file",
   "attachment_comments_reply": "Reply",
   "attachment_comments_reply_count": [
     {
