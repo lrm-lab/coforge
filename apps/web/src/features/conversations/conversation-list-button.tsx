@@ -14,6 +14,8 @@ export const ConversationListContext = createContext<{
   detailVisible: boolean;
   /** The back button's name, when the list is not Chat's conversations. */
   backLabel?: string;
+  /** The width from which the list sits beside the detail, so the back button hides (`lg`). */
+  listBesideFrom?: "md" | "lg";
 } | null>(null);
 
 export function ConversationListButton() {
@@ -26,7 +28,9 @@ export function ConversationListButton() {
       color="tertiary"
       aria-label={navigation.backLabel ?? m.conversation_back_to_list()}
       onClick={navigation.showList}
-      className="-ml-2 shrink-0 lg:hidden"
+      className={
+        navigation.listBesideFrom === "md" ? "-ml-2 shrink-0 md:hidden" : "-ml-2 shrink-0 lg:hidden"
+      }
     />
   );
 }

@@ -6,7 +6,6 @@ import { Input } from "#src/components/base/input/input";
 import { PageHeader } from "#src/components/layout/page-header";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { SearchPreview } from "./search-preview";
 import { SearchPreviewContext } from "./search-preview-context";
@@ -30,9 +29,9 @@ const COMMIT_DELAY_MS = 200;
  * The Workspace search page. The query and filters live in the URL, so a search can be shared,
  * reloaded, and returned to with Back; typing commits the query after a short pause, and never
  * while an input method is still composing. Filters search on their own, without a query.
- * On a wide screen a click previews a result's conversation beside the list (kept in the URL), where
- * it can be replied to, and a double click opens it; on a narrow one a click opens it. Esc outside
- * the conversation closes the preview, then leaves.
+ * A click previews a result's conversation (kept in the URL), where it can be replied to: beside
+ * the list from `md` up, in its place below, with a back arrow to it; a double click opens it. Esc
+ * outside the conversation closes the preview, then leaves.
  */
 export function SearchPage({
   workspaceId,
@@ -61,12 +60,9 @@ export function SearchPage({
   const memory = useSearchMemory(workspaceId, viewerId);
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
-  // A preview needs room beside the list; below `md` a click opens the conversation instead.
-  const wide = useBreakpoint("md");
-  const showPreview = Boolean(preview && wide);
   const previewContext = useMemo(
-    () => ({ previewed: preview, preview: wide ? onPreviewChange : undefined }),
-    [preview, wide, onPreviewChange],
+    () => ({ previewed: preview, preview: onPreviewChange }),
+    [preview, onPreviewChange],
   );
   const shortcut = useSearchShortcutLabel();
   const [text, setText] = useState(query);
@@ -118,7 +114,7 @@ export function SearchPage({
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest('[role="menu"], [role="listbox"], [role="dialog"]')) return;
     if (target && previewSection.current?.contains(target)) return;
-    if (showPreview) {
+    if (preview) {
       // Only the preview closes: a search box's own Esc would also clear the query.
       event.preventDefault();
       onPreviewChange(undefined);
@@ -140,7 +136,10 @@ export function SearchPage({
       <main className="flex h-full min-w-0 bg-primary">
         <div
           className={
-            showPreview ? "flex w-list-column shrink-0 flex-col" : "flex min-w-0 flex-1 flex-col"
+            // Below `md` the preview takes the list's place; the list stays mounted.
+            preview
+              ? "flex w-list-column shrink-0 flex-col max-md:hidden"
+              : "flex min-w-0 flex-1 flex-col"
           }
         >
           <PageHeader heading={m.search_title()} />
@@ -216,7 +215,7 @@ export function SearchPage({
             />
           )}
         </div>
-        {showPreview && preview && (
+        {preview && (
           <SearchPreview
             key={`${preview.kind}:${preview.id}`}
             ref={previewSection}

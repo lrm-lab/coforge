@@ -11,10 +11,12 @@ import {
   parseHostedConversation,
   type HostedConversationTarget,
 } from "#src/features/conversations/conversation-page-search";
+import { useListEntryHistory } from "#src/features/conversations/list-entry-history";
 import { parseScope, type SearchFilters } from "#src/features/search/search-filters";
 import { writeLastSearch } from "#src/features/search/search-memory";
 import { SearchPage } from "#src/features/search/search-page";
 import { searchPageSearchSchema, searchQuerySchema } from "#src/features/search/search.schemas";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -87,8 +89,14 @@ function SearchRoute() {
   // conversation's tab, board view, thread, Task popup and Agent profile close with it, and a
   // thread reply opens its thread, as Chat opens one.
   const preview = useMemo(() => parseHostedConversation(open, msg), [open, msg]);
+  const wide = useBreakpoint("md");
+  const listHistory = useListEntryHistory(open);
+  // Below `md` the preview takes the results' place, so opening one from them pushes an entry
+  // (`useListEntryHistory`) and closing it goes back to them; any other change replaces the entry.
   const onPreviewChange = useCallback(
-    (next: HostedConversationTarget | undefined) =>
+    (next: HostedConversationTarget | undefined) => {
+      if (!next && listHistory.backToList()) return;
+      const push = next !== undefined && !wide && listHistory.openOverList();
       void navigate({
         search: (previous) => ({
           ...searchQuerySchema.parse(previous),
@@ -97,9 +105,10 @@ function SearchRoute() {
           threadRootId: next?.threadRootId,
         }),
         hash: next?.threadReplyId ? messageHash(next.threadReplyId) : undefined,
-        replace: true,
-      }),
-    [navigate],
+        replace: !push,
+      });
+    },
+    [navigate, wide, listHistory],
   );
   if (!currentWorkspace) return null;
   return (

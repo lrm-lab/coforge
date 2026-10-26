@@ -76,7 +76,7 @@ export function ActivityConversationPane({
           loadingLabel={m.activity_conversation_loading()}
           failedText={m.activity_conversation_failed()}
           onJumpMessageConsumed={onJumpMessageConsumed}
-          standaloneBelowLg
+          standaloneBelow="lg"
         />
       </StandaloneThreadContext>
     </ConversationListContext>

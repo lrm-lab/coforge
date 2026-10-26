@@ -4,12 +4,12 @@ import type { HostedConversationTarget } from "#src/features/conversations/conve
 
 /**
  * How the result rows reach the page's preview: the previewed target (to mark its row) and a way
- * to preview another. `preview` is undefined when there is no room beside the list, so rows open
- * their conversation instead.
+ * to preview another, or none (`undefined`). `preview` is undefined outside the search page, so
+ * rows open their conversation instead.
  */
 export const SearchPreviewContext = createContext<{
   previewed?: HostedConversationTarget;
-  preview?: (target: HostedConversationTarget) => void;
+  preview?: (target: HostedConversationTarget | undefined) => void;
 }>({});
 
 export function useSearchPreview() {

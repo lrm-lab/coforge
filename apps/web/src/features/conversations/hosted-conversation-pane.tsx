@@ -31,7 +31,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   label,
   loadingLabel,
   failedText,
-  standaloneBelowLg = false,
+  standaloneBelow,
   onJumpMessageConsumed,
   ref,
 }: {
@@ -42,20 +42,24 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   loadingLabel: string;
   /** Said in place of the conversation when it fails to load. */
   failedText: string;
-  /** The pane fills the page below `lg`, with no list beside it (so no divider there). */
-  standaloneBelowLg?: boolean;
+  /** The width below which the pane fills the page, with no list beside it (so no divider). */
+  standaloneBelow?: "md" | "lg";
   /** Clears the host's landing id once the stream has used it. */
   onJumpMessageConsumed?: () => void;
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
-  // Only a host with a list to go back to (Activity) has a back arrow over the failure.
+  // Only a host with a list to go back to (Activity, Search) has a back arrow over the failure.
   const backToList = useContext(ConversationListContext) !== null;
   return (
     <section
       ref={ref}
       aria-label={label}
-      className={cx(HOSTED_CONVERSATION_PANE_CLASS, standaloneBelowLg && "max-lg:border-l-0")}
+      className={cx(
+        HOSTED_CONVERSATION_PANE_CLASS,
+        standaloneBelow === "md" && "max-md:border-l-0",
+        standaloneBelow === "lg" && "max-lg:border-l-0",
+      )}
     >
       {failed ? (
         <>

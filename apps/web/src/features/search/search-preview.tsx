@@ -1,6 +1,7 @@
-import type { Ref } from "react";
+import { useMemo, type Ref } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 
+import { ConversationListContext } from "#src/features/conversations/conversation-list-button";
 import {
   pickConversationPageSearch,
   type HostedConversationTarget,
@@ -8,12 +9,15 @@ import {
 import { HostedConversationPane } from "#src/features/conversations/hosted-conversation-pane";
 import { m } from "#src/paraglide/messages";
 
+import { useSearchPreview } from "./search-preview-context";
+
 const searchRoute = getRouteApi("/w/$workspaceSlug/search");
 
 /**
- * A result's conversation beside the search results, as Chat opens it (`HostedConversationPane`).
- * The page's own address state comes out of the search URL, shared structurally: typing a query
- * does not re-render the conversation.
+ * A result's conversation beside the search results, as Chat opens it (`HostedConversationPane`);
+ * below `md` in their place, its back arrow (`ConversationListButton`) closing the preview. The
+ * page's own address state comes out of the search URL, shared structurally: typing a query does
+ * not re-render the conversation.
  */
 export function SearchPreview({
   target,
@@ -26,14 +30,29 @@ export function SearchPreview({
     select: pickConversationPageSearch,
     structuralSharing: true,
   });
+  const { preview } = useSearchPreview();
+  // The results are always mounted, so nothing closes them.
+  const listControls = useMemo(
+    () => ({
+      showList: () => preview?.(undefined),
+      closeList: () => {},
+      detailVisible: true,
+      backLabel: m.search_back_to_results(),
+      listBesideFrom: "md" as const,
+    }),
+    [preview],
+  );
   return (
-    <HostedConversationPane
-      ref={ref}
-      target={target}
-      search={search}
-      label={m.search_preview()}
-      loadingLabel={m.search_preview_loading()}
-      failedText={m.search_preview_failed()}
-    />
+    <ConversationListContext value={listControls}>
+      <HostedConversationPane
+        ref={ref}
+        target={target}
+        search={search}
+        label={m.search_preview()}
+        loadingLabel={m.search_preview_loading()}
+        failedText={m.search_preview_failed()}
+        standaloneBelow="md"
+      />
+    </ConversationListContext>
   );
 }

@@ -14,6 +14,7 @@
       "./messages/{locale}/agent-profile.json",
       "./messages/{locale}/conversations.json",
       "./messages/{locale}/activity-inbox.json",
+      "./messages/{locale}/search.json",
       "./messages/{locale}/attachment-comments.json",
       "./messages/{locale}/runtime-usage.json",
       "./messages/{locale}/runtime-auth.json",

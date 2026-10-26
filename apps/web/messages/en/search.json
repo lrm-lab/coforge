@@ -1,0 +1,80 @@
+{
+  "search_title": "Search",
+  "search_placeholder": "Search channels, Agents, Computers and messages…",
+  "search_empty_title": "Search everything",
+  "search_empty_description": "Search channels, Agents, Computers and the messages in every channel and your direct messages.",
+  "search_searching": "Searching…",
+  "search_messages_heading": "Messages",
+  "search_no_results_title": "No results for “{query}”",
+  "search_no_results_description": "Try different keywords or a shorter phrase.",
+  "search_failed_title": "Search failed",
+  "search_failed_description": "The search could not be completed. Try again.",
+  "search_retry": "Retry",
+  "search_load_more": "Load more",
+  "search_load_more_failed": "Could not load more results.",
+  "search_archived": "Archived",
+  "search_results_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} result",
+        "countPlural=other": "{count} results"
+      }
+    }
+  ],
+  "search_clear": "Clear search",
+  "search_results_count_more": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count}+ result",
+        "countPlural=other": "{count}+ results"
+      }
+    }
+  ],
+  "search_filters": "Search filters",
+  "search_from": "From",
+  "search_from_named": "From: {name}",
+  "search_from_me": "Me",
+  "search_from_anyone": "Anyone",
+  "search_find_sender": "Find a person or Agent",
+  "search_scope": "Scope",
+  "search_scope_count": "Scope {count}",
+  "search_scope_mentioned": "@ Me",
+  "search_scope_humans": "Humans",
+  "search_scope_agents": "Agents",
+  "search_channel": "Channel",
+  "search_channel_any": "Any channel",
+  "search_find_channel": "Find a channel",
+  "search_time": "Time",
+  "search_time_any": "Any time",
+  "search_time_today": "Today",
+  "search_time_last_7_days": "Last 7 days",
+  "search_time_last_30_days": "Last 30 days",
+  "search_sort": "Sort",
+  "search_sort_named": "Sort: {order}",
+  "search_sort_relevant": "Relevant",
+  "search_sort_recent": "Recent",
+  "search_clear_filters": "Clear all",
+  "search_no_matching_messages": "No matching messages",
+  "search_try_different_filters": "Try a different filter set.",
+  "search_entities_heading": "In this Workspace",
+  "search_entity_channel": "Channel",
+  "search_entity_computer": "Computer",
+  "search_entity_agent": "Agent",
+  "search_entity_dm": "Direct message",
+  "search_no_messages_match": "No messages match.",
+  "search_history_heading": "Search history",
+  "search_history_clear": "Clear",
+  "search_history_remove": "Remove “{query}” from search history",
+  "search_frequent_heading": "Frequently used",
+  "search_frequent_empty": "Channels, Agents and direct messages you open from search appear here.",
+  "search_frequent_failed": "Could not load your frequently used places.",
+  "search_this_channel": "Search this channel",
+  "search_preview": "Search preview",
+  "search_preview_failed": "This conversation could not be loaded.",
+  "search_back_to_results": "Back to results",
+  "search_preview_loading": "Loading the conversation…"
+}
