@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   RUNTIME_PROVIDER,
   type CodeAgentModelCatalog,
@@ -25,42 +25,50 @@ export async function discoverCodexCatalog(
   );
   if (live) return live;
   if (force) return undefined;
-  // Match the home inherited by the provider; CODEX_HOME is not in its allowlist.
+  const configuredHome = environment.CODEX_HOME;
   const home = environment.HOME ?? environment.USERPROFILE;
-  if (!home) return undefined;
-  try {
-    const cache = asRecord(await Bun.file(join(home, ".codex", "models_cache.json")).json());
-    if (!Array.isArray(cache?.models)) return undefined;
-    const models = cache.models
-      .map((value: unknown) => {
-        const entry = asRecord(value);
-        if (typeof entry?.slug !== "string" || !entry.slug.trim()) return undefined;
-        if (entry.visibility && entry.visibility !== "public" && entry.visibility !== "list")
-          return undefined;
-        if (entry.supported_in_api === false) return undefined;
-        return codexModel({
-          model: entry.slug,
-          displayName: entry.display_name,
-          description: entry.description,
-          defaultReasoningEffort: entry.default_reasoning_level,
-          supportedReasoningEfforts: Array.isArray(entry.supported_reasoning_levels)
-            ? entry.supported_reasoning_levels.map((level: unknown) => ({
-                reasoningEffort: asRecord(level)?.effort,
-              }))
-            : [],
-        });
-      })
-      .filter(isModel);
-    if (!models.length) return undefined;
-    logger.info("Code Agent model catalog loaded from cache", {
-      event: "code_agent_catalog:cache_loaded",
-      provider: RUNTIME_PROVIDER.CODEX,
-      model_count: models.length,
-    });
-    return { provider: RUNTIME_PROVIDER.CODEX, models };
-  } catch {
-    return undefined;
+  const root = configuredHome?.trim()
+    ? resolve(cwd, configuredHome)
+    : home
+      ? resolve(cwd, home, ".codex")
+      : undefined;
+  if (!root) return undefined;
+  for (const directory of [root, join(root, ".codex")]) {
+    try {
+      const cache = asRecord(await Bun.file(join(directory, "models_cache.json")).json());
+      if (!Array.isArray(cache?.models)) continue;
+      const models = cache.models
+        .map((value: unknown) => {
+          const entry = asRecord(value);
+          if (typeof entry?.slug !== "string" || !entry.slug.trim()) return undefined;
+          if (entry.visibility && entry.visibility !== "public" && entry.visibility !== "list")
+            return undefined;
+          if (entry.supported_in_api === false) return undefined;
+          return codexModel({
+            model: entry.slug,
+            displayName: entry.display_name,
+            description: entry.description,
+            defaultReasoningEffort: entry.default_reasoning_level,
+            supportedReasoningEfforts: Array.isArray(entry.supported_reasoning_levels)
+              ? entry.supported_reasoning_levels.map((level: unknown) => ({
+                  reasoningEffort: asRecord(level)?.effort,
+                }))
+              : [],
+          });
+        })
+        .filter(isModel);
+      if (!models.length) continue;
+      logger.info("Code Agent model catalog loaded from cache", {
+        event: "code_agent_catalog:cache_loaded",
+        provider: RUNTIME_PROVIDER.CODEX,
+        model_count: models.length,
+      });
+      return { provider: RUNTIME_PROVIDER.CODEX, models };
+    } catch {
+      // Try the other state layout without reading a different configured home.
+    }
   }
+  return undefined;
 }
 
 async function discoverCodexCatalogFromProcess(

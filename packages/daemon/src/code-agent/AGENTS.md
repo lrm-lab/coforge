@@ -94,6 +94,10 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Codex
 
+- Catalog disk fallback uses nonblank `CODEX_HOME` resolved against the probe cwd, otherwise
+  `HOME/.codex` (or `USERPROFILE/.codex`). Try `models_cache.json` at that root, then its `.codex`
+  child; never substitute another home when an explicit root has no usable cache. Live results
+  take precedence, and forced discovery never reads disk fallback.
 - `codex/provider.ts` owns retry classification: `willRetry: true` notifications stay internal
   diagnostics; numbered stderr reconnect lines become informational `runtime_reconnecting` Activity.
 - Codex Activity follows the reference Computer; MCP tool names match Claude's `mcp__<server>__<tool>`.
