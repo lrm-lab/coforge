@@ -301,7 +301,7 @@ async function provisionFamily(
             evaluatorResults: currentEvaluatorResults,
           })
         : undefined;
-    daemon = await startEvalDaemon({ workspace, env });
+    daemon = await startEvalDaemon({ workspace, env, arm });
     await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence("openviking"));
     await startAgent(workspace, workspace.taskAgentId);
     return {
