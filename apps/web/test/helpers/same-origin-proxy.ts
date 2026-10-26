@@ -5,12 +5,18 @@ type ProxySocket = { path: string; protocol?: string; upstream?: WebSocket; pend
  * for `/connection/*`, as Caddy splits them in production. Shared by the browser E2Es that need
  * realtime; `stop` ends it.
  */
-export function sameOriginProxy(upstreamOrigin: string, centrifugoOrigin: string) {
+export function sameOriginProxy(
+  upstreamOrigin: string,
+  centrifugoOrigin: string,
+  options: { afterUpstream?(url: URL): Promise<void> } = {},
+) {
   const upstream = new URL(upstreamOrigin);
   const centrifugo = new URL(centrifugoOrigin);
   const server = Bun.serve<ProxySocket>({
     hostname: "127.0.0.1",
     port: 0,
+    // A response gate owns its deadline and can deliberately hold a request idle.
+    idleTimeout: options.afterUpstream ? 0 : undefined,
     async fetch(request, server) {
       const url = new URL(request.url);
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
@@ -32,6 +38,7 @@ export function sameOriginProxy(upstreamOrigin: string, centrifugoOrigin: string
         duplex: "half",
       };
       const response = await fetch(upstream.origin + url.pathname + url.search, init);
+      if (options.afterUpstream) await options.afterUpstream(url);
       const headers = new Headers(response.headers);
       headers.delete("content-encoding");
       headers.delete("content-length");

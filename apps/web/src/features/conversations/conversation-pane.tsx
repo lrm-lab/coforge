@@ -21,9 +21,9 @@ import { getLocale } from "#src/paraglide/runtime";
 import { attachmentFileNameSummary } from "./attachment-file-name";
 import { useSavedMessages } from "./conversation-host";
 import { conversationOpenPosition, unreadBoundary } from "./conversation-open-position";
+import { ConversationBottomPin } from "./conversation-bottom-pin";
 import {
   captureScrollAnchor,
-  PIN_TOLERANCE_PX,
   restoreScrollAnchor,
   ROW_TOP_GAP_PX,
   type ScrollAnchor,
@@ -187,6 +187,7 @@ export function ConversationPane({
   );
   const [followingLatest, followingLatestRef, setFollowingLatestState] = useStateWithRef(true);
   const setFollowingLatest = (following: boolean) => {
+    if (!following) bottomPin.read();
     setFollowingLatestState(following);
     onFollowingLatestChange?.(following);
   };
@@ -194,8 +195,8 @@ export function ConversationPane({
   const [, loadingNewerRef, setLoadingNewer] = useStateWithRef(false);
   const historyRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLOListElement>(null);
-  /** Distance from the bottom before the next resize; the pinning observer's source of truth. */
-  const bottomDistanceRef = useRef(0);
+  /** Bottom-follow intent and the pre-resize reading position, shared by scroll and layout events. */
+  const [bottomPin] = useState(() => new ConversationBottomPin());
   /** Sentinels load more history or the evicted tail when they approach the viewport. */
   const olderSentinelRef = useRef<HTMLDivElement>(null);
   const newerSentinelRef = useRef<HTMLDivElement>(null);
@@ -473,14 +474,12 @@ export function ConversationPane({
       // ResizeObserver callback runs after layout, so `scrollHeight` already includes the growth:
       // judging "at the bottom" from it would refuse to re-pin in exactly the case the pin exists
       // for — an attachment at the bottom finishing and pushing the latest message out of view.
-      const wasAtBottom = bottomDistanceRef.current <= PIN_TOLERANCE_PX;
-      bottomDistanceRef.current = history.scrollHeight - history.scrollTop - history.clientHeight;
+      const wasAtBottom = bottomPin.beforeResize(history);
       // Only a reader genuinely AT the bottom is carried along, never one within the 48px "near
       // enough" tolerance the reading position uses: re-pinning from 48px fought a reader who had
       // scrolled up a little, and every deliberate scroll-up must stand.
       if (!followingLatestRef.current || !wasAtBottom) return;
       scrollToLatest("instant");
-      bottomDistanceRef.current = 0;
     });
     observer.observe(history);
     if (messageListRef.current) observer.observe(messageListRef.current);
@@ -643,10 +642,7 @@ export function ConversationPane({
   function scrollToLatest(behavior: ScrollBehavior) {
     // Going to the latest retires any open position still owed.
     pendingOpenMessageIdRef.current = undefined;
-    const history = historyRef.current;
-    if (!history) return;
-    history.scrollTo({ top: history.scrollHeight, behavior });
-    history.scrollTop = history.scrollHeight;
+    bottomPin.pin(historyRef.current, behavior);
   }
 
   loadOlderRef.current = () => loadOlder();
@@ -657,8 +653,8 @@ export function ConversationPane({
     if (!history) return;
     // Loading older history is the top sentinel's job (see its IntersectionObserver), not this
     // scroll handler's.
-    const distance = history.scrollHeight - history.scrollTop - history.clientHeight;
-    bottomDistanceRef.current = distance;
+    const distance = bottomPin.scroll(history);
+    if (distance === undefined) return;
     const followingLatest = distance <= 48;
     const wasFollowingLatest = followingLatestRef.current;
     setFollowingLatest(followingLatest);
@@ -807,6 +803,10 @@ export function ConversationPane({
           data-scroll-restoration-id={`conversation-${conversation.conversationId}${root ? `-thread-${root.id}` : ""}`}
           aria-label={root ? m.conversation_thread() : m.conversation_history()}
           onScroll={trackReadingPosition}
+          onWheel={bottomPin.read}
+          onTouchMove={bottomPin.read}
+          onPointerDown={bottomPin.read}
+          onKeyDown={bottomPin.read}
           className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
         >
           {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. A

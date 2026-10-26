@@ -57,8 +57,5 @@ export function restoreScrollAnchor(
   history.scrollTop = anchor.top + (history.scrollHeight - anchor.height);
 }
 
-/** How close to the bottom the pane must be for a content-resize to re-pin it (see the pinning
- * ResizeObserver). Tight on purpose: the reading position itself uses a wider tolerance. */
-export const PIN_TOLERANCE_PX = 4;
 /** The gap left above a row the pane scrolls to (`applyOpenPosition`). */
 export const ROW_TOP_GAP_PX = 12;
