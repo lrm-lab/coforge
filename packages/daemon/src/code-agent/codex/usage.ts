@@ -6,6 +6,7 @@ import {
   UsageUnavailableError,
   UsageUnsupportedError,
   asRecord,
+  withDeadline,
 } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { processSpawner } from "#src/code-agent/process-host";
@@ -35,7 +36,7 @@ export async function readCodexUsage(
   );
   const timeoutMs = options.timeoutMs ?? 5_000;
   try {
-    await withTimeout(
+    await withDeadline(
       process.request({
         method: "initialize",
         params: {
@@ -48,24 +49,27 @@ export async function readCodexUsage(
         },
       }),
       timeoutMs,
+      () => new UsageTimeoutError(),
     );
     await process.send({ method: "initialized", params: {} });
     // Best-effort: an app-server that predates `account/read` (or any account failure) still
     // scans, just without the account label.
     let account: Record<string, unknown> | undefined;
     try {
-      const response = await withTimeout(
+      const response = await withDeadline(
         process.request({ method: "account/read", params: {} }),
         timeoutMs,
+        () => new UsageTimeoutError(),
       );
       account = asRecord(response.result);
     } catch {
       /* The scan continues without the account. */
     }
     if (isNonSubscription(account)) throw new UsageUnsupportedError();
-    const response = await withTimeout(
+    const response = await withDeadline(
       process.request({ method: "account/rateLimits/read", params: {} }),
       timeoutMs,
+      () => new UsageTimeoutError(),
     );
     return toSnapshot(response, account);
   } catch (error) {
@@ -85,13 +89,6 @@ class UsageTimeoutError extends Error {
   constructor() {
     super("Codex usage request timed out");
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new UsageTimeoutError()), timeoutMs)),
-  ]);
 }
 
 /** An API-key or Bedrock account, or one with OpenAI auth disabled, has no plan windows — the
