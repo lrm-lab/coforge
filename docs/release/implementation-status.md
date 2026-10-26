@@ -71,7 +71,9 @@ Platform coverage and remaining acceptance gaps are explicit:
   Linux, macOS, and Windows, each x64 and arm64. `release-staging.yml` uses
   this default and its reusable CI gates execute the existing compiled release
   identity/environment-binding tests on `windows-latest` and `windows-11-arm`.
-  These are native executable smoke checks, not installer or upgrade tests.
+  These are native executable smoke checks, not installer or upgrade tests. The
+  publish jobs run on a macOS runner to sign the darwin executables (see
+  *macOS code identity*).
 - **Windows lifecycle acceptance**: clean bootstrap, installer upgrade and recovery,
   Supervisor and Workspace readiness, retained identity, and offline rollback still require
   end-to-end evidence before production promotion. External Agent process-tree
@@ -80,35 +82,29 @@ Platform coverage and remaining acceptance gaps are explicit:
   behavior have automated coverage, but the complete install, installer upgrade,
   health-identity, and rollback flow has not yet run on a macOS host. Do not treat
   source-level tests as platform release evidence.
-- **macOS code identity**: the darwin Computer executables (0.1.6, 0.1.7 and
-  0.1.9 checked) carry only Bun's ad-hoc linker signature (`Identifier=a.out`,
-  no Team ID), so their designated requirement is their own `cdhash` and changes
-  with every version. Users report having to grant macOS privacy permissions
-  (TCC) again after each upgrade, which matches TCC recognising an app by that
-  requirement. Direction: sign first with a free self-signed code-signing
-  certificate under a fixed identifier (`cn.coforge.computer`); an Apple
-  Developer ID certificate with notarization is to be proposed later. A local
-  check re-signed 0.1.7 and 0.1.9 with one such certificate: both report the
-  same requirement (`identifier "cn.coforge.computer" and certificate leaf =
-  H"…"`) and still run. A probe run as its own launchd job on macOS 27.0.1
-  (2026-10-25) showed TCC also keys a grant to the executable's real path: with
-  one self-signed certificate, a new version replaced in place at the granted
-  path read `~/Documents` without a prompt, while the same bytes at a new path,
-  or behind a symlink re-pointed to a new path, prompted again. In the probe a
-  grant carried over an upgrade only when the new version replaced the
-  executable at the same real path under the same certificate; `versions/<version>/`
-  and the `active` symlink change that path with every version. Agents run in
+- **macOS code identity**: a publish with a darwin target signs those Computer
+  executables with `codesign` on a macOS runner, using one long-lived
+  self-signed certificate and the identifier `cn.coforge.computer`. Every
+  version then has the same designated requirement, which macOS keys privacy
+  (TCC) grants to; Bun's ad-hoc `cdhash` requirement changed per build. The
+  certificate is committed under `scripts/release/darwin-signing/`, the key is
+  the `COFORGE_DARWIN_SIGNING_KEY` Environment secret (keep an offline backup),
+  and there is no hardened runtime or notarization yet. Mechanism and
+  verification: the header of `scripts/release/darwin-signing.ts`.
+- **macOS privacy grants and the executable path**: a probe run as its own
+  launchd job on macOS 27.0.1 (2026-10-25) showed TCC also keys a grant to the
+  executable's real path: with one self-signed certificate, a new version
+  replaced in place at the granted path read `~/Documents` without a prompt,
+  while the same bytes at a new path, or behind a symlink re-pointed to a new
+  path, prompted again. A grant carried over an upgrade only when the new
+  version replaced the executable at the same real path under the same
+  certificate; `versions/<version>/` and the `active` symlink change that path
+  with every version, so signing alone does not keep grants. Agents run in
   launchd jobs whose program is `coforge-computer __managed-agent`, so TCC
   attributes their privacy prompts to the Computer executable. Chosen direction
-  for 0.1.11, pending approval of its design: sign, and run the executable from
-  one fixed real path that the installer replaces atomically. Open: where the signature is
-  applied, since the darwin targets are built on Linux runners; Bun's JIT
-  entitlements ([Bun: code signing on macOS](https://bun.com/docs/bundler/executables));
-  who holds the private key and how it is rotated, since a new key costs every
-  user one more grant; and the installer's activation, rollback and repair on
-  a fixed path. Signing keys are a security change
-  ([Routine release boundary](routine-release-boundary.md)), and the concrete
-  signing and fixed-path design needs Frank's approval.
+  for 0.1.11, pending approval of its design: run the executable from one fixed
+  real path that the installer replaces atomically. Open: the installer's
+  activation, rollback and repair on a fixed path.
 - **Windows code identity**: the Windows executables are unsigned. Windows has
   no per-version privacy grants, but SmartScreen reputation and path-keyed
   firewall or Controlled Folder Access rules start over with each version.

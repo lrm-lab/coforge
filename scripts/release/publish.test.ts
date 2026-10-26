@@ -52,12 +52,11 @@ async function tempDir(prefix: string): Promise<string> {
   return directory;
 }
 
-// `windows-x64` is here for one reason: it sorts after "manifest.json", so it is what makes the
-// manifest-last upload order load-bearing. With only the POSIX targets (all of which sort before
-// `m`) `tree.files` already ends with the manifest, and reverting publish.ts to upload in plain
-// `tree.files` order passes every test in this file. Compilation is stubbed, so the extra target
-// costs nothing.
-const TEST_TARGETS = ["linux-x64", "darwin-arm64", "windows-x64"];
+// `windows-x64` sorts after "manifest.json", which is what makes the manifest-last upload order
+// load-bearing: with only POSIX targets (all sorting before `m`) `tree.files` already ends with
+// the manifest, and reverting publish.ts to upload in plain `tree.files` order passes every test
+// here. Compilation is stubbed, so the extra target costs nothing.
+const TEST_TARGETS = ["linux-x64", "linux-arm64", "windows-x64"];
 
 function fixtureArtifacts(): Record<string, { computer: Uint8Array }> {
   const artifacts: Record<string, { computer: Uint8Array }> = {};
@@ -88,10 +87,10 @@ async function fixtureTree(version: string, outputDirectory: string): Promise<Re
   return buildReleaseTree(inputs, outputDirectory);
 }
 
-/** A fake OSS origin that fails every authenticated request the same way, independent of what
- * credentials signed it - used only by the credential-leak test below, which cares whether
- * publish.ts ever prints a failure response's body/headers, not whether the SDK's own V4 signing
- * is correct (that's ali-oss's and Alibaba Cloud's problem, not this script's). */
+/** A fake OSS origin that fails every authenticated request the same way, whatever credentials
+ * signed it - used only by the credential-leak test below, which cares whether publish.ts ever
+ * prints a failure response's body/headers, not whether the SDK's own V4 signing is correct
+ * (that's ali-oss's and Alibaba Cloud's problem, not this script's). */
 function startLeakFixtureServer(body: string): { baseUrl: string } {
   const server = Bun.serve({
     port: 0,
@@ -559,10 +558,10 @@ test("rollback failure is reported instead of claiming the previous selector is 
 test("a failed publish never prints the access key, secret, or an Authorization header value", async () => {
   const version = "9.9.9-leak-check";
   const wrongSecret = "not-the-real-secret";
-  // A real OSS `SignatureDoesNotMatch` error body echoes back `StringToSign`, the supplied
-  // `Signature`/`Authorization`, and the `AccessKeyId` - exactly the kind of response this test
-  // proves publish.ts never surfaces, independent of whether the credentials that produced it
-  // were actually wrong (verifying the SDK's own V4 signing is out of scope here).
+  // A real OSS `SignatureDoesNotMatch` body echoes back `StringToSign`, the supplied
+  // `Signature`/`Authorization`, and the `AccessKeyId` - the kind of response this test proves
+  // publish.ts never surfaces, whether or not the credentials were actually wrong (the SDK's own
+  // V4 signing is out of scope here).
   const leakBody =
     `<Error><Code>SignatureDoesNotMatch</Code>` +
     `<AccessKeyId>${CREDENTIALS.accessKeyId}</AccessKeyId>` +
@@ -854,7 +853,7 @@ test("a line is numbered only against the production feed, which a dry run or sp
   const errors: string[] = [];
   console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
   try {
-    const feed = ["--feed-url", "https://releases-test.coforge.cn"];
+    const feed = ["--feed-url", "https://releases-test.coforge.cn", "--targets", "linux-x64"];
     const production = ["--production-feed-url", PRODUCTION_FEED];
     expect(await runCli(["--line", "0.1.1", ...feed])).toBe(1);
     expect(await runCli([...production.slice(0, 1), "http://releases.coforge.cn", ...feed])).toBe(
@@ -900,7 +899,8 @@ test("runCli requires --version (or --production-feed-url) and --feed-url, and r
   const errors: string[] = [];
   console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
   try {
-    expect(await runCli(["--feed-url", "https://releases-test.coforge.cn", "--dry-run"])).toBe(1);
+    const feed = ["--feed-url", "https://releases-test.coforge.cn", "--targets", "linux-x64"];
+    expect(await runCli([...feed, "--dry-run"])).toBe(1);
     expect(await runCli(["--version", "1.0.0", "--dry-run"])).toBe(1);
     expect(
       await runCli([

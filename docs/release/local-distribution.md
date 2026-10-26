@@ -75,7 +75,10 @@ verified by the installer. `schema_version` is reserved so a future payload-
 signing field could be added without breaking older installers, but signing is
 explicitly out of scope for this contract: **integrity comes from HTTPS in
 transit plus the manifest's SHA-256 checksums, not a signed envelope.** This
-mirrors how Claude Code ships updates.
+mirrors how Claude Code ships updates. The darwin executables are also
+code-signed with the Computer's own certificate so that macOS privacy grants survive
+upgrades; that operating-system signature is separate from this integrity model (see
+[Implementation status](implementation-status.md)).
 
 The top-level `photonWasm: { file, size, checksum }` manifest field is
 additive to `schema_version: 2`: an older updater that has never heard of it

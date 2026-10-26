@@ -33,9 +33,11 @@ gh workflow run release-staging.yml --repo lrm-lab/coforge -f version=0.1.5-dev.
 workflow 用 GitHub OIDC 换取阿里云 RAM 角色 `coforge-release-publisher` 的临时 STS
 凭据（`ALIBABA_CLOUD_ROLE_ARN` / `ALIBABA_CLOUD_OIDC_PROVIDER_ARN`，见
 `.github/workflows/release-staging.yml`）——该角色的信任策略只认
-`repo:lrm-lab@340480458/coforge@1412896035:environment:staging`，没有长期 AccessKey，也就不需要在这张表
-里放对应的 secret，跑 `scripts/release/publish.ts` 把 Computer/Daemon 发布到
+`repo:lrm-lab@340480458/coforge@1412896035:environment:staging`，没有长期 AccessKey，也就不需要为 OSS 放
+对应的 secret。workflow 跑 `scripts/release/publish.ts` 把 Computer 发布到
 `coforge-releases-staging` bucket（`https://releases-staging.coforge.cn`），
-默认只编译四个 POSIX target（不含 Windows，见该脚本的注释）。用
+默认编译全部六个 target。darwin 可执行文件在 macOS runner 上用 Computer 的自签名代码签名证书签名，
+私钥是 `staging` Environment 的 secret `COFORGE_DARWIN_SIGNING_KEY`（由
+`scripts/release/generate-darwin-signing-identity.ts` 一次性生成；缺了它发布会在编译前失败）。用
 `gh run watch` 或仓库 Actions 页面看进度；发布记录留在 workflow run 里，不写入本
 文档。

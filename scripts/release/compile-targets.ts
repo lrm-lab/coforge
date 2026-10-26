@@ -13,7 +13,8 @@ import { zodResolvePlugin } from "../bun-resolve-zod-plugin";
 // code signature into compiled executables (oven-sh/bun#32159). macOS 26 still ran them, but
 // macOS 27 kills them at launch with SIGKILL / OS_REASON_CODESIGNING, so every published
 // Computer built by an older Bun was dead on arrival there. compile-targets.test.ts verifies the
-// signature with `codesign --verify --strict` on macOS hosts.
+// signature with `codesign --verify --strict` on macOS hosts. A build given a signer replaces
+// Bun's ad-hoc signature with the Computer's own (darwin-signing.ts).
 const BUN_COMPILE_TARGETS = {
   "linux-x64": "bun-linux-x64",
   "linux-arm64": "bun-linux-arm64",
@@ -27,6 +28,11 @@ export type ReleaseTarget = keyof typeof BUN_COMPILE_TARGETS;
 
 export function isReleaseTarget(value: string): value is ReleaseTarget {
   return Object.hasOwn(BUN_COMPILE_TARGETS, value);
+}
+
+/** Whether the target's executable is a Mach-O one, the only kind that is signed. */
+export function isDarwinTarget(target: string): boolean {
+  return target.startsWith("darwin-");
 }
 
 /** Throws on an unsupported target instead of returning undefined, so a typo in a target name
@@ -51,6 +57,10 @@ export type CompileTargetOptions = {
   /** Directory the unified binary is written into; each target's compile call needs its
    * own directory or scratch file name to avoid two targets racing on the same output path. */
   outputDirectory: string;
+  /** Signs a `darwin-*` output in place before its bytes are read, so every checksum computed
+   * later is of the signed bytes. Never called for other targets; without it (local and test
+   * builds) the output keeps Bun's ad-hoc signature. */
+  sign?: (executable: string) => Promise<void>;
 };
 
 export type CompiledArtifacts = { computer: Uint8Array };
@@ -67,6 +77,7 @@ export async function compileTargetArtifacts(
     entrypoint: COMPUTER_ENTRYPOINT,
     bunTarget,
     outfile: join(options.outputDirectory, `${options.target}-coforge-computer`),
+    sign: isDarwinTarget(options.target) ? options.sign : undefined,
     // Bun.build()'s `env` option, verified against Bun 1.4.0, does inline a variable that is
     // actually set in the process running the build - but stays a *live runtime lookup* in the
     // compiled binary when that variable is unset at build time (the exact case the spec's
@@ -95,6 +106,7 @@ async function compileOne(options: {
   bunTarget: string;
   outfile: string;
   define: Record<string, string>;
+  sign?: (executable: string) => Promise<void>;
 }): Promise<Uint8Array> {
   const result = await Bun.build({
     entrypoints: [options.entrypoint],
@@ -123,5 +135,8 @@ async function compileOne(options: {
   // Bun appends ".exe" to a windows compile target's outfile regardless of what extension was
   // requested, so the path actually written (output.path) is read back here rather than trusting
   // the outfile this function asked for.
+  //
+  // Signing rewrites the file, so it comes before the bytes are read.
+  await options.sign?.(output.path);
   return new Uint8Array(await Bun.file(output.path).arrayBuffer());
 }

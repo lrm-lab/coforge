@@ -12,6 +12,7 @@ type Step = {
   with?: Record<string, unknown>;
 };
 type Job = {
+  "runs-on"?: string;
   if?: string;
   needs?: string | string[];
   environment?: string;
@@ -179,6 +180,23 @@ test("a job that compiles the installer holds no token, and the builds match ins
   for (const [name, job] of Object.entries(installer.jobs)) {
     const compiles = (job.steps ?? []).some((step) => /\bcargo\b|\brustup\b/.test(step.run ?? ""));
     if (compiles) expect(job.permissions?.["id-token"], name).toBeUndefined();
+  }
+});
+
+test("each Computer publication runs on macOS to sign the darwin executables, and only its publish step holds the key", () => {
+  for (const [name, workflow] of Object.entries({
+    staging: computerStaging,
+    production: computer,
+  })) {
+    const job = workflow.jobs.publish!;
+    expect(job["runs-on"], name).toBe("macos-latest");
+    const holders = job.steps!.filter((step) => "COFORGE_DARWIN_SIGNING_KEY" in (step.env ?? {}));
+    expect(holders.length, name).toBe(1);
+    expect(holders[0]!.run, name).toContain("scripts/release/publish.ts");
+    expect(holders[0]!.env!.COFORGE_DARWIN_SIGNING_KEY, name).toBe(
+      "${{ secrets.COFORGE_DARWIN_SIGNING_KEY }}",
+    );
+    expect(JSON.stringify(workflow).split("COFORGE_DARWIN_SIGNING_KEY").length - 1, name).toBe(2);
   }
 });
 

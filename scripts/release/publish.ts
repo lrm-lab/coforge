@@ -14,6 +14,8 @@
  * already exists. The feed's CDN caches `<version>/*` for 365 days, so overwriting a live version
  * would leave different bytes on different edge nodes for up to a year.
  *
+ * A darwin target is signed (darwin-signing.ts); a publish that cannot sign fails before compiling.
+ *
  * Upload happens through the official `ali-oss` SDK with V4 request signing - Alibaba Cloud is
  * retiring V1 (Authorization-header HMAC-SHA1) for buckets created after 2025-09-01, which is
  * this script's `coforge-releases-staging` bucket. Credentials come from `@alicloud/credentials`'s
@@ -37,6 +39,7 @@ import {
   type ReleaseTree,
 } from "./build-release";
 import { compileTargetArtifacts, isReleaseTarget, type ReleaseTarget } from "./compile-targets";
+import { darwinSignerFor, type DarwinSigningIdentity } from "./darwin-signing";
 import { assertInstallerCoversRelease, productInstallerProtocol } from "./installer-feed";
 import { resolvePhotonWasmBytes } from "./photon-wasm";
 import { readFeedObject } from "./public-feed";
@@ -173,9 +176,8 @@ function isMissingObject(error: unknown): boolean {
  * surfacing that text would leak exactly the material this function exists to protect. See
  * publish.test.ts's credential-leak test, which fails if this function is changed to include either.
  *
- * The class name is in because it is the one part of an SDK error that is a *kind* rather than
- * content: a transport failure reports no status at all (`HTTP unknown`), and `ResponseTimeoutError`
- * versus `ConnectionTimeoutError` is the whole diagnosis. */
+ * The class name is in because it is a *kind*, not content: a transport failure reports no status
+ * (`HTTP unknown`), and `ResponseTimeoutError` versus `ConnectionTimeoutError` is the diagnosis. */
 export function ossError(action: string, objectKey: string, error: unknown): Error {
   const { status, code, requestId, name } =
     typeof error === "object" && error !== null
@@ -207,18 +209,15 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /** Objects at or above this size are uploaded as several parts so a slow link cannot blow one
- * request's timeout on the whole multi-megabyte object. The staging feed's largest object - the
- * darwin-arm64 computer binary, ~28 MiB and the first one uploaded - exceeded ali-oss's default
- * 60 s per-request timeout when the GitHub-runner-to-OSS path slowed below ~0.5 MB/s, and the SDK
- * killed it with a `ResponseTimeoutError` (a `name`-only error, no status/code/request-id).
- * Parts use ali-oss's documented defaults (1 MiB, 5 in parallel), so each 60 s request carries
- * one megabyte rather than a whole binary. */
+ * request's timeout on the whole object. The darwin-arm64 binary (~28 MiB, uploaded first) once
+ * exceeded ali-oss's default 60 s per-request timeout below ~0.5 MB/s and died with a
+ * `ResponseTimeoutError` (name only, no status/code/request-id). Parts use ali-oss's defaults
+ * (1 MiB, 5 in parallel), so each 60 s request carries one megabyte, not a whole binary. */
 const MULTIPART_MIN_BYTES = 20 * 1024 * 1024;
-/** Whole-multipart attempts before giving up. ali-oss's own retry never fires for a response
- * timeout: its guard only retries errors carrying status -1/-2, and a `ResponseTimeoutError`
- * carries none — so a timed-out part fails the whole call no matter what `retryMax` says. The
- * outer retry below is the only thing that rescues it. Without a checkpoint, each attempt starts a
- * new multipart upload (a new uploadId) and re-sends the whole object. */
+/** Whole-multipart attempts before giving up. ali-oss's own retry only covers status -1/-2, which
+ * a `ResponseTimeoutError` lacks, so a timed-out part fails the whole call whatever `retryMax`
+ * says; the outer retry below is what rescues it. Without a checkpoint, each attempt starts a new
+ * multipart upload (a new uploadId) and re-sends the whole object. */
 const MULTIPART_ATTEMPTS = 3;
 
 /** Every other release object (the computer binary, its gzip, checksum sidecars, the manifest) is
@@ -306,9 +305,9 @@ export const PRODUCT_FEED: FeedLayout = {
   manifestKey: manifestObjectKey,
 };
 
-/** Resolves true when the object exists, false on a 404, and throws on anything else - an
- * ambiguous status (403, 5xx) must not be read as "absent", or the caller would overwrite a
- * published version on a transient error. */
+/** Resolves true when the object exists, false on a 404, and throws on anything else: an
+ * ambiguous status (403, 5xx) must not be read as "absent", or a transient error would overwrite
+ * a published version. */
 async function objectExists(client: OSS, objectKey: string): Promise<boolean> {
   try {
     await client.head(objectKey);
@@ -319,7 +318,7 @@ async function objectExists(client: OSS, objectKey: string): Promise<boolean> {
   }
 }
 
-/** The bytes of an object, or undefined when it is absent (a 404). Any other failure throws: an
+/** The bytes of an object, or undefined when absent (a 404). Any other failure throws: an
  * ambiguous status (403, 5xx) must not be read as "absent". */
 export async function readObjectIfPresent(
   client: OSS,
@@ -733,6 +732,8 @@ export type ResolvePhotonWasmFn = typeof resolvePhotonWasmBytes;
 
 export interface PublishDependencies {
   compile?: CompileFn;
+  /** Settles the darwin signing identity; defaults to the macOS host's key and certificate. */
+  resolveDarwinSigning?: () => Promise<DarwinSigningIdentity>;
   /** Assembles the version tree; defaults to `buildReleaseTree`. */
   buildTree?: typeof buildReleaseTree;
   fetchImpl?: typeof fetch;
@@ -768,14 +769,14 @@ export async function runPublish(
     throw new Error(
       "a release line numbers a staging build: pass --production-feed-url with --line",
     );
+  const sign = await darwinSignerFor(options.targets, deps.resolveDarwinSigning);
   const compile = deps.compile ?? compileTargetArtifacts;
   const resolvePhotonWasm = deps.resolvePhotonWasm ?? resolvePhotonWasmBytes;
   const log = deps.log ?? ((): void => undefined);
 
-  // Resolve credentials before compiling. In CI the credential chain exchanges a GitHub OIDC
-  // token for an STS token, and that OIDC token is only valid for minutes, while compiling six
-  // targets takes longer than that; the STS token it yields lasts the role's session (1 hour),
-  // which comfortably covers the rest of the publish. A dry run never touches the network.
+  // Resolve credentials before compiling: CI exchanges a GitHub OIDC token, valid for minutes, for
+  // an STS token that lasts the role's session (1 hour), while compiling six targets takes longer
+  // than the OIDC token. A dry run never touches the network.
   const connection: OssConnection = {
     bucket: options.bucket,
     endpoint: options.endpoint,
@@ -813,6 +814,7 @@ export async function runPublish(
         version,
         feedUrl: options.feedUrl,
         outputDirectory: join(workDirectory, "compile", target),
+        sign,
       });
     }
 

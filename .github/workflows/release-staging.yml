@@ -106,7 +106,8 @@ jobs:
   publish:
     name: Build and publish Computer
     needs: [gates, notes-check]
-    runs-on: ubuntu-latest
+    # macOS, for Apple's codesign.
+    runs-on: macos-latest
     environment: staging
     outputs:
       version: ${{ steps.publish.outputs.version }}
@@ -205,6 +206,8 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_LINE: ${{ inputs.line }}
           RELEASE_COMMIT: ${{ github.sha }}
+          # Signs the darwin executables (scripts/release/darwin-signing.ts); no other step holds it.
+          COFORGE_DARWIN_SIGNING_KEY: ${{ secrets.COFORGE_DARWIN_SIGNING_KEY }}
         run: |
           release=()
           if [ -n "$INPUT_VERSION" ]; then release+=(--version "$INPUT_VERSION"); fi
@@ -258,6 +261,7 @@ jobs:
             echo "- Version: ${RELEASE_VERSION}"
             echo "- Source commit: ${RELEASE_COMMIT}"
             echo "- Platforms: Linux, macOS, Windows (x64 and arm64)"
+            echo "- macOS executables: signed with the Computer's code-signing certificate; designated requirement verified"
             echo "- Verified: uploaded bytes, checksums, private storage access, and latest version selector"
             echo "- CDN delivery and complete install/upgrade/rollback acceptance are separate checks."
           } >> "$GITHUB_STEP_SUMMARY"

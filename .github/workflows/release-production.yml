@@ -117,7 +117,8 @@ jobs:
   publish:
     name: Build and publish Computer
     needs: candidate
-    runs-on: ubuntu-latest
+    # macOS, for Apple's codesign.
+    runs-on: macos-latest
     environment: production
     # `id-token: write` lets this job mint the GitHub OIDC token it exchanges for the Alibaba Cloud
     # STS credential of the production publisher role, whose trust policy names only this
@@ -173,6 +174,8 @@ jobs:
           ALIBABA_CLOUD_ECS_METADATA_DISABLED: "true"
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_COMMIT: ${{ inputs.commit }}
+          # Signs the darwin executables (scripts/release/darwin-signing.ts); no other step holds it.
+          COFORGE_DARWIN_SIGNING_KEY: ${{ secrets.COFORGE_DARWIN_SIGNING_KEY }}
         # Transfer acceleration, as staging: the endpoint is global, so the bucket's region is
         # passed for V4 signing.
         run: |
@@ -196,6 +199,7 @@ jobs:
             echo "- Source commit: ${INPUT_COMMIT}"
             echo "- Feed: https://releases.coforge.cn"
             echo "- Platforms: Linux, macOS, Windows (x64 and arm64)"
+            echo "- macOS executables: signed with the Computer's code-signing certificate; designated requirement verified"
             echo "- Verified: uploaded bytes, checksums, private storage access, and latest version selector"
             echo "- CDN delivery and complete install/upgrade/rollback acceptance are separate checks."
           } >> "$GITHUB_STEP_SUMMARY"

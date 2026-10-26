@@ -73,6 +73,12 @@ Do these once, in the Alibaba Cloud console of account `1085194890307801`.
    `acs:oss:*:1085194890307801:coforge-releases` and
    `acs:oss:*:1085194890307801:coforge-releases/*`, and nothing else.
    No AccessKey is created for it.
+6. **macOS signing key.** The publish job signs the Computer's darwin executables with the
+   `COFORGE_DARWIN_SIGNING_KEY` secret of the `staging` and `production`
+   Environments. Run `bun scripts/release/generate-darwin-signing-identity.ts
+   --key-out <path outside the repository>` once and follow the next steps it
+   prints (commit the certificate, load the key into both Environments, back it
+   up offline). A different key costs every user a macOS privacy grant.
 
 Verify before the first publication:
 
