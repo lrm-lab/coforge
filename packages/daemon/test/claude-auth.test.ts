@@ -521,3 +521,27 @@ test("cancelling during the version probe never starts a Claude login", async ()
     await pending;
   }
 });
+
+test("Claude status failures and malformed output log safe reasons at info", async () => {
+  const { captureDaemonLogs } = await import("./log-capture");
+  const { records } = await captureDaemonLogs(async () => {
+    const adapter = new ClaudeRuntimeAuthAdapter({
+      create: () => {
+        throw new Error("spawn token=private-value");
+      },
+    });
+    expect(await adapter.readStatus({ workingDirectory: "/fixture" })).toMatchObject({
+      state: "unknown",
+    });
+    const malformed = adapterWith(new FakeAuthProcess(), "not-json private-account-data").adapter;
+    expect(await malformed.readStatus({ workingDirectory: "/fixture" })).toMatchObject({
+      state: "unknown",
+    });
+  });
+  expect(records.map((record) => ({ level: record.level, properties: record.properties }))).toEqual(
+    [
+      { level: "info", properties: { detail: "spawn token=[REDACTED]" } },
+      { level: "info", properties: { exitCode: 0, reason: "invalid_status_output" } },
+    ],
+  );
+});

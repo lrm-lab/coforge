@@ -1,4 +1,6 @@
+import { getLogger } from "@logtape/logtape";
 import {
+  scrubRuntimeErrorText,
   normalizeRuntimeAuthCode,
   type RuntimeAuthAdapter,
   type RuntimeAuthLoginEvent,
@@ -14,6 +16,8 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
 
 import { maskEmail } from "#src/code-agent/mask-email";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CLAUDE_CODE, "auth"]);
 
 export const CLAUDE_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
 export const CLAUDE_AUTH_STATUS_TIMEOUT_MS = 20_000;
@@ -163,6 +167,9 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     try {
       output = await this.#run(["auth", "status", "--json"], options);
     } catch (error) {
+      logger.info("Claude Code login status read failed", {
+        detail: scrubRuntimeErrorText(error instanceof Error ? error.message : String(error)),
+      });
       if ((error as { code?: string }).code === "ENOENT")
         return { provider, state: "unavailable", unavailableReason: "not_installed" };
       return { provider, state: "unknown" };
@@ -173,7 +180,13 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     } catch {
       parsed = undefined;
     }
-    if (!parsed || typeof parsed.loggedIn !== "boolean") return { provider, state: "unknown" };
+    if (!parsed || typeof parsed.loggedIn !== "boolean") {
+      logger.info("Claude Code login status unknown", {
+        exitCode: output.exitCode,
+        reason: "invalid_status_output",
+      });
+      return { provider, state: "unknown" };
+    }
     if (!parsed.loggedIn) return { provider, state: "logged_out" };
     return {
       provider,

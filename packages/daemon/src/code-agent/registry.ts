@@ -40,10 +40,20 @@ function providerExecutable(
   return resolveHostCodeAgentExecutable(provider, options.environment, options.platform);
 }
 
-export function createRuntimeAuthAdapter(provider: RuntimeAuthProvider): RuntimeAuthAdapter {
+export function createRuntimeAuthAdapter(
+  provider: RuntimeAuthProvider,
+  options: CodeAgentProviderRegistryOptions = {},
+): RuntimeAuthAdapter {
   switch (provider) {
     case RUNTIME_PROVIDER.CODEX:
-      return new CodexRuntimeAuthAdapter();
+      return new CodexRuntimeAuthAdapter({
+        command: [
+          providerExecutable(RUNTIME_PROVIDER.CODEX, options) ?? RUNTIME_PROVIDER.CODEX,
+          "app-server",
+        ],
+        environment: options.environment,
+        platform: options.platform,
+      });
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeRuntimeAuthAdapter();
     default: {

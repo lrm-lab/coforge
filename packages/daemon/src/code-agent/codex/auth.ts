@@ -35,12 +35,6 @@ export interface CodexAppServerProcess {
 }
 export type CodexAppServerFactory = (cwd: string) => CodexAppServerProcess;
 
-function environment(): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(Bun.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  );
-}
-
 export type CodexCliResult = Readonly<{
   text: string;
   stderr?: string;
@@ -58,11 +52,12 @@ async function runCodexCli(
   command: readonly string[],
   cwd: string,
   timeoutMs: number,
+  env: Record<string, string>,
 ): Promise<CodexCliResult> {
   const child = Bun.spawn({
     cmd: [...command],
     cwd,
-    env: environment(),
+    env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -129,24 +124,23 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       create?: CodexAppServerFactory;
       accountReadTimeoutMs?: number;
       runCli?: CodexCliRunner;
+      environment?: Readonly<Record<string, string | undefined>>;
+      platform?: NodeJS.Platform;
     } = {},
   ) {
     this.#command = options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"];
     this.#version = options.version;
     this.#accountReadTimeoutMs = options.accountReadTimeoutMs ?? 20_000;
-    this.#runCli = options.runCli ?? runCodexCli;
+    const environment = () =>
+      agentEnvironment(undefined, options.environment ?? Bun.env, options.platform, {
+        extraEnv: { NO_COLOR: "1" },
+      });
+    this.#runCli =
+      options.runCli ??
+      ((command, cwd, timeoutMs) => runCodexCli(command, cwd, timeoutMs, environment()));
     this.#create =
       options.create ??
-      ((cwd) =>
-        new JsonlProcess(
-          this.#command,
-          cwd,
-          agentEnvironment(undefined, Bun.env, undefined, {
-            envVars: undefined,
-            extraEnv: { NO_COLOR: "1" },
-          }),
-          processSpawner,
-        ));
+      ((cwd) => new JsonlProcess(this.#command, cwd, environment(), processSpawner));
   }
 
   get activeOperationId(): string | undefined {
@@ -173,7 +167,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     }
     if (output.exitCode === 1 && /^Not logged in\b/mu.test(text))
       return { provider: RUNTIME_PROVIDER.CODEX, state: "logged_out" };
-    logger.debug("Codex login status unknown: {detail}", {
+    logger.info("Codex login status unknown: {detail}", {
       exitCode: output.exitCode,
       detail: detail(scrubRuntimeErrorText(text.split(/\r?\n/u).at(-1) ?? "")),
     });

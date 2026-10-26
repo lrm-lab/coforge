@@ -103,10 +103,10 @@ test("logs only the redacted last diagnostic line for unknown Codex status", asy
         exitCode: 2,
       }),
     }).readStatus({ workingDirectory: "/fixture" });
-  }, "debug");
+  });
   expect(result).toEqual({ provider: "codex", state: "unknown" });
   expect(records).toHaveLength(1);
-  expect(records[0]!.level).toBe("debug");
+  expect(records[0]!.level).toBe("info");
   expect(records[0]!.properties).toEqual({
     exitCode: 2,
     detail: "Error: token=[REDACTED] Bearer [REDACTED] [REDACTED]",

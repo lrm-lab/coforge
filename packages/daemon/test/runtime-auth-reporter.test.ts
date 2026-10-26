@@ -79,24 +79,24 @@ describe("the Workspace runtime's login status reporter", () => {
     expect(sent[1]!.requestId).not.toBe(sent[0]!.requestId);
   });
 
-  test("a later inventory re-reports only when the login-capable provider set changed", async () => {
+  test("every later inventory discovery re-reads authentication even with the same providers", async () => {
     const { reporter, sent } = subject();
     await reporter.inventoryReported([runtime("codex")] as RuntimeMetadata[]);
 
-    reporter.inventoryObserved([runtime("codex"), runtime("pi")] as RuntimeMetadata[]);
-    await settle();
-    expect(sent).toHaveLength(1);
-
-    reporter.inventoryObserved([runtime("codex"), runtime("claude-code")] as RuntimeMetadata[]);
-    await settle();
+    await reporter.inventoryObserved([runtime("codex"), runtime("pi")] as RuntimeMetadata[]);
     expect(sent).toHaveLength(2);
-    expect(sent[1]!.runtimes.map((entry) => entry.state)).toEqual(["logged_out", "logged_out"]);
+
+    await reporter.inventoryObserved([
+      runtime("codex"),
+      runtime("claude-code"),
+    ] as RuntimeMetadata[]);
+    expect(sent).toHaveLength(3);
+    expect(sent[2]!.runtimes.map((entry) => entry.state)).toEqual(["logged_out", "logged_out"]);
   });
 
   test("the first inventory seen by a later discovery reports, when the first report never resolved", async () => {
     const { reporter, sent } = subject();
-    reporter.inventoryObserved([runtime("codex")] as RuntimeMetadata[]);
-    await settle();
+    await reporter.inventoryObserved([runtime("codex")] as RuntimeMetadata[]);
     expect(sent).toHaveLength(1);
   });
 

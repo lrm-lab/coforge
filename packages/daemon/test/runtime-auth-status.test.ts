@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { captureDaemonLogs } from "./log-capture";
 import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil";
 
 import {
@@ -115,4 +116,26 @@ describe("collecting the runtimes' login status", () => {
     });
     await expect(collector.refresh()).resolves.toBeUndefined();
   });
+});
+
+test("read and report failures are visible at info without credentials or raw errors", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    const collector = new RuntimeAuthStatusCollector({
+      installedProviders: async () => ["codex"],
+      readStatus: async () => {
+        throw new Error("spawn ENOENT token=private-read");
+      },
+      report: async () => {
+        throw new Error("refused Bearer private-report");
+      },
+    });
+    await collector.refresh();
+  });
+  expect(records).toHaveLength(2);
+  expect(records.map((record) => record.level)).toEqual(["info", "info"]);
+  expect(records[0]!.properties).toEqual({
+    provider: "codex",
+    detail: "spawn ENOENT token=[REDACTED]",
+  });
+  expect(records[1]!.properties).toEqual({ detail: "refused Bearer [REDACTED]" });
 });

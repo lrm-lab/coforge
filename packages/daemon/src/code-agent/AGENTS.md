@@ -26,6 +26,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Runtime inventory and models
 
+- Runtime auth uses the same executable resolution and effective environment as discovery, preserving provider homes. Unknown/read/report failures log credential-redacted reasons at info; never raw process output or Error objects.
 - Inventory external CLI providers from the Daemon's effective PATH at startup
   and after reconnect. Report Pi and the built-in CoForge Agent from their
   embedded SDK and version; never scan PATH for them.

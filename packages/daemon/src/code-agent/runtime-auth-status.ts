@@ -2,6 +2,7 @@ import { getLogger } from "@logtape/logtape";
 import {
   RUNTIME_AUTH_PROVIDERS,
   sanitizeRuntimeAuthStatus,
+  scrubRuntimeErrorText,
   type RuntimeAuthProvider,
   type RuntimeAuthStatus,
   withDeadline,
@@ -78,7 +79,9 @@ export class RuntimeAuthStatusCollector {
     try {
       await report({ collectedAtMs: now(), runtimes });
     } catch (error) {
-      logger.debug("runtime auth status report failed", { error });
+      logger.info("runtime auth status report failed", {
+        detail: scrubRuntimeErrorText(error instanceof Error ? error.message : String(error)),
+      });
     }
   }
 
@@ -92,7 +95,10 @@ export class RuntimeAuthStatusCollector {
       );
       return sanitizeRuntimeAuthStatus(status, provider) ?? { provider, state: "unknown" };
     } catch (error) {
-      logger.debug("runtime auth status read failed", { provider, error });
+      logger.info("runtime auth status read failed", {
+        provider,
+        detail: scrubRuntimeErrorText(error instanceof Error ? error.message : String(error)),
+      });
       return { provider, state: "unknown" };
     }
   }
