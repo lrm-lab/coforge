@@ -2,7 +2,13 @@ import {
   AGENT_SERVICE_TIER_OBSERVED,
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
-import { asRecord, eventTime } from "@lrm/coforge-anvil";
+import {
+  AGENT_RUNTIME_EVENT_TYPE,
+  asRecord,
+  eventTime,
+  nonEmptyString,
+  type AgentRuntimeEvent,
+} from "@lrm/coforge-anvil";
 
 /**
  * The service tier a top-level `result` record reports for this launch, normalized to the SDK's
@@ -97,4 +103,46 @@ function claudeModelUsageWeight(value: Record<string, unknown>): number {
 
 function nonNegativeNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+/** Session-scoped observations preserve emission order and service-tier de-duplication. */
+export class ClaudeSessionObservations {
+  /** The last service tier reported for this session, so a repeated reading is not re-emitted. */
+  #serviceTier: AgentServiceTierObserved | undefined;
+
+  constructor(
+    /** The Agent's configured model, if any: matched against `result.modelUsage`'s
+     * keys/`canonicalModel` to select the context-window reading's window size. */
+    private readonly configuredModel?: string,
+    /** The child's auto-compact window; caps the window of context readings. */
+    private readonly autoCompactWindow?: number,
+  ) {}
+
+  *read(record: Readonly<Record<string, unknown>>): Generator<AgentRuntimeEvent> {
+    // A service-tier reading is a session fact observed at every top-level result, independent
+    // of the turn's own running/interrupting/idle state below. Emitted only when it changes, so
+    // a steady tier does not repeat every turn.
+    const serviceTier = claudeServiceTierState(record);
+    if (serviceTier !== undefined && serviceTier !== this.#serviceTier) {
+      this.#serviceTier = serviceTier;
+      // Claude's own explanation, when it gives one (`extra_usage_disabled`, ...), so a
+      // launch that did not get Fast mode can say why rather than only that it did not.
+      const reason = nonEmptyString(record.fast_mode_disabled_reason);
+      yield {
+        type: AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER,
+        state: serviceTier,
+        ...(reason ? { reason } : {}),
+      };
+    }
+    // A context-window reading is a session fact observed at every top-level
+    // result, independent of the turn's own running/interrupting/idle state below.
+    const contextUsage = claudeContextUsage(record, this.configuredModel, this.autoCompactWindow);
+    if (contextUsage)
+      yield {
+        type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
+        usedTokens: contextUsage.usedTokens,
+        windowTokens: contextUsage.windowTokens,
+        occurredAt: contextUsage.occurredAt,
+      };
+  }
 }

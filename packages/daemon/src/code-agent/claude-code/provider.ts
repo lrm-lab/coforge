@@ -9,16 +9,15 @@ import {
   InterruptTracker,
   asRecord,
   eventTime,
-  nonEmptyString,
 } from "@lrm/coforge-anvil";
 import type { JsonlProcess } from "@lrm/coforge-anvil/execution";
-import type { AgentServiceTierObserved } from "@lrm/coforge-sdk/internal";
 import type { SessionState, SessionInitialization, PendingNotice } from "./session-state";
+import { initializeClaudeSession } from "./initialize";
 import { ClaudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
-import { claudeContextUsage, claudeServiceTierState } from "./observations";
+import { ClaudeSessionObservations } from "./observations";
 import { relayTaskLifecycle, taskProgressEvent } from "./task-lifecycle";
 
 export class ClaudeCodeAgentSession implements AgentSession {
@@ -54,8 +53,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   readonly #outstandingTools = new Set<string>();
   readonly #waitingNotices: PendingNotice[] = [];
   readonly #rateLimits = new ClaudeRateLimitState();
-  /** The last service tier reported for this session, so a repeated reading is not re-emitted. */
-  #serviceTier: AgentServiceTierObserved | undefined;
+  readonly #observations: ClaudeSessionObservations;
   #interrupt = new InterruptTracker();
 
   constructor(
@@ -65,14 +63,12 @@ export class ClaudeCodeAgentSession implements AgentSession {
     private expectedSessionId?: string,
     private readonly spawnFresh?: () => { process: JsonlProcess; sessionId: string },
     initialFreshSessionId?: string,
-    /** The Agent's configured model, if any: matched against `result.modelUsage`'s
-     * keys/`canonicalModel` to select the context-window reading's window size. */
-    private readonly configuredModel?: string,
-    /** The child's auto-compact window; caps the window of context readings. */
-    private readonly autoCompactWindow?: number,
+    configuredModel?: string,
+    autoCompactWindow?: number,
   ) {
     this.#process = process;
     this.#removePrompt = removePrompt;
+    this.#observations = new ClaudeSessionObservations(configuredModel, autoCompactWindow);
     if (expectedSessionId) {
       this.#sessionId = expectedSessionId;
       this.#identity = { sessionId: expectedSessionId, state: "unknown" };
@@ -199,69 +195,13 @@ export class ClaudeCodeAgentSession implements AgentSession {
     return promise;
   }
 
-  async #initialize(process: JsonlProcess): Promise<void> {
-    const requestId = crypto.randomUUID();
-    await new Promise<void>((resolve, reject) => {
-      let unsubscribeRecord: () => void = () => undefined;
-      let unsubscribeFailure: () => void = () => undefined;
-      let unsubscribeClose: () => void = () => undefined;
-      let failure = new Error("Claude Code initialization process closed");
-      const cleanup = () => {
-        unsubscribeRecord();
-        unsubscribeFailure();
-        unsubscribeClose();
-      };
-      unsubscribeRecord = process.onRecord((record) => {
-        const response = asRecord(record.response);
-        if (record.type !== "control_response" || response?.request_id !== requestId) return;
-        cleanup();
-        if (response.subtype === "success") {
-          // SDKControlInitializeResponse advertises commands, not all loaded skills.
-          // Hidden model-invocable skills need not appear; an empty list is valid.
-          const commands = asRecord(response.response)?.commands;
-          if (
-            !Array.isArray(commands) ||
-            !commands.every((value: unknown) => {
-              const command = asRecord(value);
-              return (
-                typeof command?.name === "string" &&
-                typeof command.description === "string" &&
-                typeof command.argumentHint === "string"
-              );
-            })
-          ) {
-            reject(new Error("Claude Code initialization returned invalid commands"));
-            return;
-          }
-          this.#initialized = true;
-          resolve();
-        } else {
-          reject(new Error("Claude Code initialization was rejected"));
-        }
-      });
-      unsubscribeFailure = process.onFailure((error) => {
-        failure = error;
-        if (error.message !== "code agent process exited unexpectedly") {
-          cleanup();
-          reject(error);
-        }
-      });
-      unsubscribeClose = process.onClose(() => {
-        cleanup();
-        if (this.#process !== process && !this.#isDisposed())
-          void this.ready().then(resolve, reject);
-        else reject(failure);
-      });
-      void process
-        .send({
-          type: "control_request",
-          request_id: requestId,
-          request: { subtype: "initialize" },
-        })
-        .catch((error: unknown) => {
-          cleanup();
-          reject(error);
-        });
+  #initialize(process: JsonlProcess): Promise<void> {
+    return initializeClaudeSession(process, {
+      initialized: () => {
+        this.#initialized = true;
+      },
+      replacementReady: () =>
+        this.#process !== process && !this.#isDisposed() ? this.ready() : undefined,
     });
   }
 
@@ -456,31 +396,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
         return;
       }
       this.#reportIdentity();
-      // A service-tier reading is a session fact observed at every top-level result, independent
-      // of the turn's own running/interrupting/idle state below. Emitted only when it changes, so
-      // a steady tier does not repeat every turn.
-      const serviceTier = claudeServiceTierState(record);
-      if (serviceTier !== undefined && serviceTier !== this.#serviceTier) {
-        this.#serviceTier = serviceTier;
-        // Claude's own explanation, when it gives one (`extra_usage_disabled`, ...), so a
-        // launch that did not get Fast mode can say why rather than only that it did not.
-        const reason = nonEmptyString(record.fast_mode_disabled_reason);
-        this.#emit({
-          type: AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER,
-          state: serviceTier,
-          ...(reason ? { reason } : {}),
-        });
-      }
-      // A context-window reading is a session fact observed at every top-level
-      // result, independent of the turn's own running/interrupting/idle state below.
-      const contextUsage = claudeContextUsage(record, this.configuredModel, this.autoCompactWindow);
-      if (contextUsage)
-        this.#emit({
-          type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-          usedTokens: contextUsage.usedTokens,
-          windowTokens: contextUsage.windowTokens,
-          occurredAt: contextUsage.occurredAt,
-        });
+      for (const event of this.#observations.read(record)) this.#emit(event);
       this.#sessionReadyForNotices = true;
       this.#resultObserved = true;
       this.#setIdentity("resumable");
