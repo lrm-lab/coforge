@@ -50,6 +50,7 @@ import { clockLabel } from "#src/lib/dates";
 import { gutterClockLabel } from "./gutter-clock-label";
 import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { SystemMessageRow } from "./system-message-row";
+import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
@@ -77,15 +78,7 @@ export type MessageView = {
   body: string;
   createdAt: Date | string;
   /** Always present, possibly empty; order matches send/upload order. */
-  attachments: {
-    id: string;
-    fileName: string;
-    contentType: string;
-    sizeBytes: number;
-    /** Short-lived signed CDN URL for an inline image; see `attachmentView` on the server.
-     * Preferred over `attachmentUrl` when present so `<img>` never round-trips the backend. */
-    previewUrl?: string;
-  }[];
+  attachments: AttachmentView[];
   /** Resolved mention rows for the body's embedded `<@kind:uuid>` tokens; absent/empty for
    * DMs and pre-token history, which render as written (token-only highlight by design). */
   mentions?: {

@@ -5,6 +5,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
@@ -18,27 +19,53 @@ export function attachmentUrl(attachment: { id: string }) {
   return `/api/attachments/${attachment.id}`;
 }
 
+/** The tallest an inline image is drawn (`max-h-80`), in CSS pixels. */
+const IMAGE_MAX_HEIGHT_PX = 320;
+
+/**
+ * An image's final box while it is still loading, from the size the server read off the upload:
+ * its pixels as CSS pixels, scaled down to `IMAGE_MAX_HEIGHT_PX`. The card takes that width, capped
+ * by the row (`max-w-full`), and the frame fills it at the image's ratio. Without a size the frame
+ * stays at its minimum until the image arrives.
+ */
+function imageBox({ imageWidth: width, imageHeight: height }: MessageView["attachments"][number]) {
+  if (!width || !height) return undefined;
+  return {
+    width: `${Math.min(width, (IMAGE_MAX_HEIGHT_PX * width) / height)}px`,
+    aspectRatio: `${width} / ${height}`,
+  };
+}
+
+const IMAGE_BUTTON_CLASS =
+  "h-auto overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent";
+
 export function AttachmentCard({ attachment }: { attachment: MessageView["attachments"][number] }) {
   const href = attachmentUrl(attachment);
   const [imgBroken, setImgBroken] = useState(false);
+  const box = imageBox(attachment);
   if (attachment.contentType.startsWith("image/") && !imgBroken)
     return (
-      <div className="relative mt-1 w-fit max-w-full">
+      <div className="relative mt-1 w-fit max-w-full" style={box && { width: box.width }}>
         <AttachmentReviewDialog file={attachment}>
           {() => (
             <Button
               color="tertiary"
               noTextPadding
               aria-label={attachment.fileName}
-              className="grid h-auto place-items-center overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent"
+              className={cn(box ? "block w-full" : "grid place-items-center", IMAGE_BUTTON_CLASS)}
             >
               <LoadingImage
                 src={attachment.previewUrl ?? href}
                 fallbackSrc={attachment.previewUrl ? href : undefined}
                 onFailed={() => setImgBroken(true)}
                 alt={attachment.fileName}
-                className="min-h-24 min-w-24 max-w-full"
-                imgClassName="block max-h-80 max-w-full object-contain"
+                className={cn("min-h-24 min-w-24", box ? "w-full" : "max-w-full")}
+                style={box && { aspectRatio: box.aspectRatio }}
+                imgClassName={
+                  box
+                    ? "block size-full object-contain"
+                    : "block max-h-80 max-w-full object-contain"
+                }
               />
             </Button>
           )}

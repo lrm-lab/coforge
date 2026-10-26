@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode, type Ref } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { ImageX } from "@untitledui/icons";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { cn } from "#src/lib/utils";
@@ -18,6 +26,7 @@ export function ImageFrame({
   src,
   alt,
   className,
+  style,
   imgClassName,
   skeletonClassName,
   failed,
@@ -30,6 +39,8 @@ export function ImageFrame({
   alt: string;
   /** Sizes the frame; also carries its rounding and ring, so the three states share them. */
   className?: string;
+  /** Sizes the frame where a class cannot, e.g. to an image's known final box. */
+  style?: CSSProperties;
   imgClassName?: string;
   /** Overrides how the skeleton fills the frame (it covers it by default). */
   skeletonClassName?: string;
@@ -44,6 +55,7 @@ export function ImageFrame({
       <span
         role="img"
         aria-label={m.conversation_image_failed()}
+        style={style}
         className={cn(
           "relative flex items-center justify-center overflow-hidden bg-secondary text-fg-quaternary",
           className,
@@ -53,7 +65,7 @@ export function ImageFrame({
       </span>
     );
   return (
-    <span className={cn("relative block overflow-hidden", className)}>
+    <span style={style} className={cn("relative block overflow-hidden", className)}>
       {status === "loading" && (
         <Skeleton
           className={cn(
@@ -92,7 +104,7 @@ export function LoadingImage({
   onFailed?: () => void;
 } & Pick<
   ComponentProps<typeof ImageFrame>,
-  "alt" | "className" | "imgClassName" | "skeletonClassName" | "failed"
+  "alt" | "className" | "style" | "imgClassName" | "skeletonClassName" | "failed"
 >) {
   const [state, setState] = useState<{ src: string; fallback: boolean; status: ImageStatus }>({
     src,
