@@ -15,7 +15,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { attachmentPreviewKind } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
 import { loadConversationFiles, type ConversationFile } from "./conversation-files.functions";
-import { attachmentUrl } from "./message-row";
+import { attachmentUrl } from "./attachment-card";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
