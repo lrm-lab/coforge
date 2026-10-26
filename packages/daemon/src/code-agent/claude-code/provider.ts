@@ -9,7 +9,6 @@ import {
   AGENT_RUNTIME_EVENT_TYPE,
   JsonlProcess,
   type CodeAgentProvider,
-  type AgentContextReport,
   InterruptTracker,
   asRecord,
   eventTime,
@@ -19,7 +18,6 @@ import { processSpawner } from "#src/code-agent/process-host";
 
 import { RUNTIME_PROVIDER, type AgentServiceTierObserved } from "@lrm/coforge-sdk/internal";
 import { readClaudeCodeUsage } from "./usage";
-import { readClaudeCodeContextReport } from "./context-report";
 import { claudeLaunchCommand, claudeLaunchEnvironment } from "./launch-args";
 import { createPromptFile } from "./prompt-file";
 import { ClaudeStreamEvents } from "./stream-events";
@@ -55,19 +53,6 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
   }): Promise<UsageSnapshot | null> {
     return readClaudeCodeUsage(options.workingDirectory, {
       command: this.#command.slice(0, 1),
-      timeoutMs: options.timeoutMs,
-    });
-  }
-
-  async readContextReport(options: {
-    workingDirectory: string;
-    sessionId: string;
-    timeoutMs?: number;
-  }): Promise<AgentContextReport | undefined> {
-    return readClaudeCodeContextReport({
-      command: this.#command.slice(0, 1),
-      workingDirectory: options.workingDirectory,
-      sessionId: options.sessionId,
       timeoutMs: options.timeoutMs,
     });
   }

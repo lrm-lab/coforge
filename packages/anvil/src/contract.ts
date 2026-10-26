@@ -1,10 +1,5 @@
-import type {
-  AgentContextReport,
-  RuntimeAuthAccount,
-  RuntimeProvider,
-} from "@lrm/coforge-sdk/internal";
+import type { RuntimeAuthAccount, RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
-export type { AgentContextReport } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
 export type {
   AgentActivity,
@@ -29,18 +24,6 @@ export interface CodeAgentProvider {
     workingDirectory: string;
     timeoutMs?: number;
   }): Promise<UsageSnapshot | null>;
-  /**
-   * Reads a one-shot breakdown of the Agent's current context-window composition,
-   * against the Agent's own already-running native session — never a fresh one. `undefined` means
-   * "ran, but no report could be made of it" (the caller reports this as `unparsed`), matching
-   * `readUsage`'s own `null`-means-no-signal convention. Only the Claude Code provider implements
-   * this today; a provider with no equivalent signal never offers it.
-   */
-  readContextReport?(options: {
-    workingDirectory: string;
-    sessionId: string;
-    timeoutMs?: number;
-  }): Promise<AgentContextReport | undefined>;
   /**
    * What the native session's own record says about it, for the idle-recycle decision: its last
    * activity and the context it last carried. `undefined` (or a missing field) means the record is
@@ -225,15 +208,6 @@ export class UsageUnavailableError extends Error {
 export class UsageUnsupportedError extends Error {
   constructor() {
     super("Usage scanning is unsupported for this account");
-  }
-}
-
-/** A `readContextReport` call did not finish before its timeout; the caller reports
- * this as `timeout`, distinct from `unparsed` (ran, produced nothing parseable) or a generic
- * `error` (the CLI itself failed). */
-export class AgentContextReportTimeoutError extends Error {
-  constructor() {
-    super("Context scan timed out");
   }
 }
 

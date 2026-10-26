@@ -5,7 +5,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Provider seam
 
-- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns usage and context reports, composed from provider-internal modules. `runtime-inventory.ts` composes discovery; `runtime-probe.ts` probes versions; `catalog-discovery.ts` composes host JSONL catalog probes; Anvil owns shared catalog deadline/error policy, and `<provider>/catalog.ts` owns each catalog.
+- `CodeAgentProvider` is the sole public runtime seam: it creates one-session `AgentSession` instances and owns account usage and passive context observations, composed from provider-internal modules. `runtime-inventory.ts` composes discovery; `runtime-probe.ts` probes versions; `catalog-discovery.ts` composes host JSONL catalog probes; Anvil owns shared catalog deadline/error policy, and `<provider>/catalog.ts` owns each catalog.
 - The registry returns Providers, never lifecycle wrappers or forwarding adapters.
 - Higher layers consume normalized status and Activity messages and must not
   parse Claude Code, Codex, Pi, or any other provider's output.
@@ -142,13 +142,3 @@ Native session behavior is maintained in [Anvil Grok rules](../../../anvil/src/g
   is bounded and read-only.
 - A metadata query never launches a provider, reloads a session, copies global
   skills, or changes the established runtime environment composition.
-
-## Claude Code context report (`claude-code/context-report.ts`)
-
-- It is a one-shot `/context` read that relies on undocumented headless
-  behaviour. Run it against the Agent's own live session inside the Agent's
-  workspace directory.
-- Answer `no_session`, `unsupported`, `unparsed`, `timeout`, or `error` in
-  plain words.
-- Only the parsed structure goes on the wire; the raw Markdown never leaves the
-  Computer. Format drift is a visible `unparsed` state, never a crash.

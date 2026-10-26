@@ -192,7 +192,6 @@ These rules apply to `src/features/agents/`.
   Agent's name, for the cloud computer's owner only. The panel does not embed the desktop.
 - The Skills tab displays Global/Workspace metadata only, never skill bodies
   or a claim that a running session has loaded each entry.
-- The context popover is display-only: no toast and nothing triggers on a
-  threshold; its row and the Context item are coloured by the shared
+- The Context usage row reads passive Agent display observations only: opening a
+  runtime popover never launches a context scan. Its colour follows the shared
   `usageRisk` rule (`features/computers/usage-risk.ts`), like a usage bar.
-  Every non-available Daemon status is one short inline line with what to do.

@@ -151,21 +151,12 @@ import {
   parseUpgradeErrorCode,
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
-  type AgentContextScanRequest,
-  type AgentContextScanResponse,
-  AGENT_CONTEXT_SCAN_STATUS,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
 import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
-import {
-  agentContextReportOutcome,
-  agentContextScanFailure,
-  agentContextScanResponse,
-  type AgentContextScanOutcome,
-} from "./agent-context-scan-response";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
@@ -879,73 +870,6 @@ export class DaemonRuntime {
       return usageScanReading(snapshot, now);
     } catch (error) {
       return usageScanFailure(error, () => this.#currentObservedUsage(provider), now);
-    }
-  }
-
-  /**
-   * Answers a server-requested breakdown of one Agent's current Claude Code context-window
-   * composition. Unlike `scanUsage` (provider-wide), this is per-Agent: it resolves the
-   * Agent's own current launch and native session id from what this runtime already tracks
-   * (`#currentActivityLaunches`, `#sessionReferences` — the same references `#usageReport`
-   * reads), never trusting `request.launchId`/`request.sessionId` to run anything; those fields are
-   * only echoed back for correlation, or used to detect a request naming a launch this runtime has
-   * already superseded (`error`, without running the CLI). Check order: not running ->
-   * `no_session`; a stale launch -> `error`; the provider has no `readContextReport` ->
-   * `unsupported`; no native session id yet -> `no_session`; otherwise the CLI runs.
-   */
-  async scanAgentContext(request: AgentContextScanRequest): Promise<AgentContextScanResponse> {
-    this.#assertRunning();
-    this.#assertOwnIntent(request);
-    const answer = (outcome: AgentContextScanOutcome) =>
-      agentContextScanResponse(request, this.#connection, outcome);
-    const launch = this.#currentActivityLaunches.get(request.agentId);
-    if (!launch)
-      return answer({
-        launchId: request.launchId,
-        sessionId: request.sessionId,
-        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
-      });
-    if (request.launchId && launch.launchId !== request.launchId)
-      return answer({
-        launchId: launch.launchId,
-        sessionId: request.sessionId,
-        status: AGENT_CONTEXT_SCAN_STATUS.ERROR,
-        message: "Agent context scan targets a superseded launch",
-      });
-    const config = this.#agentProcessManager.runtime(request.agentId)?.config;
-    if (!config)
-      return answer({
-        launchId: launch.launchId,
-        sessionId: request.sessionId,
-        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
-      });
-    const codeAgentProvider = this.#createProvider(config.provider);
-    if (!codeAgentProvider.readContextReport)
-      return answer({
-        launchId: launch.launchId,
-        sessionId: request.sessionId,
-        status: AGENT_CONTEXT_SCAN_STATUS.UNSUPPORTED,
-      });
-    const sessionId = this.#sessionReferences.get(request.agentId)?.sessionId;
-    if (!sessionId)
-      return answer({
-        launchId: launch.launchId,
-        sessionId: request.sessionId,
-        status: AGENT_CONTEXT_SCAN_STATUS.NO_SESSION,
-      });
-    try {
-      const report = await codeAgentProvider.readContextReport({
-        workingDirectory: agentWorkspaceDirectory(
-          this.#connection.workspaceRoot,
-          this.#connection.workspaceId,
-          request.agentId,
-        ),
-        sessionId,
-        timeoutMs: 20_000,
-      });
-      return answer(agentContextReportOutcome(launch.launchId, sessionId, report));
-    } catch (error) {
-      return answer(agentContextScanFailure(launch.launchId, sessionId, error));
     }
   }
 

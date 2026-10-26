@@ -2,10 +2,10 @@ import { agentEnvironment } from "#src/code-agent/environment";
 import { withoutClaudeCodeMarker } from "./launch-args";
 
 /**
- * The environment every one-shot Claude Code CLI invocation (`/usage`, `/context`) runs with:
+ * The environment the one-shot Claude Code account-usage invocation (`/usage`) runs with:
  * Claude uses `USER` to locate the signed-in account in the macOS Keychain, and every such
  * invocation normalizes its own report to UTC without changing the parent or Agent environment.
- * Shared by `usage.ts` and `context-report.ts` so the two one-shot readers stay identical here.
+ * Used by the one-shot account-usage reader (`usage.ts`).
  */
 export function claudeCliEnvironment(
   overrides?: Readonly<Record<string, string>>,
@@ -24,8 +24,8 @@ export type ClaudeCliRunResult = {
   timedOut: boolean;
 };
 
-/** Spawns one Claude Code CLI invocation, capturing stdout and enforcing `timeoutMs`. Shared by
- * every one-shot reader (`usage.ts`, `context-report.ts`); never used for the long-lived
+/** Spawns one Claude Code CLI invocation, capturing stdout and enforcing `timeoutMs`. Used by
+ * the one-shot account-usage reader (`usage.ts`); never used for the long-lived
  * streaming session, which owns its own process lifecycle. */
 export async function runClaudeCli(
   cmd: readonly string[],

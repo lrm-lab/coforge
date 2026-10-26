@@ -29,10 +29,6 @@ const EXTRA_GUARDED_FILES = [
 
 /** Files still missing a declaration, with the call that owns them. */
 const KNOWN_GAPS: Readonly<Record<string, string>> = {
-  // Defines two server functions and declares the header in one; adding it to the second turns a
-  // cacheable endpoint into an uncacheable one, so it waits on the owner rather than riding along
-  // with a mechanical change.
-  "agent-context-report.functions.ts": "second function undeclared",
   // Declares it in one of nine. The other eight are connection-flow endpoints (POST handlers and
   // listing reads) whose cacheability is the owner's behavior call, not a mechanical rider.
   "github.functions.ts": "8 flow endpoints undeclared",

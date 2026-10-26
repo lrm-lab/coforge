@@ -20,7 +20,6 @@ import {
   AGENT_STATUS_METHOD,
   AGENT_SESSION_INVALIDATE_METHOD,
   AGENT_CONTEXT_USAGE_METHOD,
-  AGENT_CONTEXT_SCAN_RESULT_METHOD,
   decodeAgentActivity,
   decodeAgentSessionInvalidate,
   decodeAgentContextUsage,
@@ -28,8 +27,6 @@ import {
   decodeAgentMessageDeliveryAck,
   decodeAgentMessageDeliveryRejection,
   decodeDaemonRuntimeReadyRequest,
-  encodeAgentContextScanRequest,
-  decodeAgentContextScanResponse,
   encodeAgentMessageDelivery,
   encodeAgentStartIntent,
   encodeAgentStopIntent,
@@ -755,46 +752,6 @@ test("logs an old server's unknown-method rejection of context usage at most onc
   expect(rejections[0]?.properties).toMatchObject({
     agent_id: "agent-1",
     launch_id: "launch-1",
-    error_code: "404",
-    outcome: "failed",
-  });
-});
-
-test("logs an old server's unknown-method rejection of a context scan result at most once per connection", async () => {
-  const fake = fakeClient();
-  fake.client.rpc = async (method) => {
-    if (method === AGENT_CONTEXT_SCAN_RESULT_METHOD)
-      throw Object.assign(new Error("unknown RPC method"), { code: 404 });
-    return new Uint8Array();
-  };
-  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
-  await transport.start("secret", config);
-
-  const scanResult = (requestId: string) => ({
-    protocolMajor: 1,
-    requestId,
-    workspaceId: config.workspaceId,
-    computerId: config.computerId,
-    agentId: "agent-1",
-    provider: "claude-code" as const,
-    launchId: "launch-1",
-    sessionId: "native-session-1",
-    accepted: false,
-    status: "no_session" as const,
-  });
-  const { records } = await captureDaemonLogs(async () => {
-    await transport.sendAgentContextScanResult(scanResult("scan-1"));
-    await transport.sendAgentContextScanResult(scanResult("scan-2"));
-  });
-
-  const rejections = records.filter(
-    (record) => record.properties.event === "agent_context_scan_result:rejected",
-  );
-  expect(rejections).toHaveLength(1);
-  expect(rejections[0]?.properties).toMatchObject({
-    request_id: "scan-1",
-    agent_id: "agent-1",
-    status: "no_session",
     error_code: "404",
     outcome: "failed",
   });
@@ -2187,74 +2144,6 @@ test("rejects an agent:inbox_purge publication for another Computer", async () =
   );
 
   expect(purged).toEqual([]);
-});
-
-test("routes an agent:context_scan publication to its slot and answers through the result RPC", async () => {
-  const fake = fakeClient();
-  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
-  const scanned: string[] = [];
-  transport.onAgentContextScan(async (request) => {
-    scanned.push(request.agentId);
-    await transport.sendAgentContextScanResult({
-      ...request,
-      accepted: false,
-      status: "no_session",
-    });
-  });
-  const calls = recordRpc(fake);
-  await transport.start("secret", config);
-
-  const request = {
-    protocolMajor: 1,
-    requestId: "context-scan-1",
-    workspaceId: config.workspaceId,
-    computerId: config.computerId,
-    agentId: "agent-1",
-    provider: "claude-code" as const,
-    launchId: "launch-1",
-    sessionId: "native-session-1",
-  };
-  fake.publish(
-    `daemon:${config.workspaceId}:${config.computerId}`,
-    encodeAgentContextScanRequest(request),
-  );
-  await Promise.resolve();
-  await Promise.resolve();
-
-  expect(scanned).toEqual(["agent-1"]);
-  const resultCall = calls.find(({ method }) => method === AGENT_CONTEXT_SCAN_RESULT_METHOD);
-  expect(resultCall).toBeDefined();
-  expect(decodeAgentContextScanResponse(resultCall!.data)).toMatchObject({
-    requestId: "context-scan-1",
-    agentId: "agent-1",
-    status: "no_session",
-  });
-});
-
-test("rejects an agent:context_scan publication for a foreign Workspace", async () => {
-  const fake = fakeClient();
-  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
-  const scanned: string[] = [];
-  transport.onAgentContextScan(async (request) => {
-    scanned.push(request.agentId);
-  });
-  await transport.start("secret", config);
-
-  fake.publish(
-    `daemon:other-workspace:${config.computerId}`,
-    encodeAgentContextScanRequest({
-      protocolMajor: 1,
-      requestId: "context-scan-2",
-      workspaceId: "other-workspace",
-      computerId: config.computerId,
-      agentId: "agent-1",
-      provider: "claude-code",
-      launchId: "launch-1",
-      sessionId: "native-session-1",
-    }),
-  );
-
-  expect(scanned).toEqual([]);
 });
 
 test("consumes the Connect Proxy-bound control stream without a client subscription", async () => {

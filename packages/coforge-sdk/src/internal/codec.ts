@@ -31,8 +31,6 @@ import {
   DaemonRuntimeReadyRequestSchema,
   DaemonRuntimeUsageScanRequestSchema,
   DaemonRuntimeUsageScanResponseSchema,
-  AgentContextScanRequestSchema,
-  AgentContextScanResponseSchema,
   ComputerRestartIntentSchema,
   ComputerUpgradeIntentSchema,
   ComputerUpgradeResultSchema,
@@ -73,8 +71,6 @@ import {
   USAGE_SCAN_RESPONSE_MESSAGE_TYPE,
   MODEL_REFRESH_MESSAGE_TYPE,
   MODEL_REFRESH_RESPONSE_MESSAGE_TYPE,
-  AGENT_CONTEXT_SCAN_MESSAGE_TYPE,
-  AGENT_CONTEXT_SCAN_RESPONSE_MESSAGE_TYPE,
 } from "./index";
 import { AGENT_MESSAGE_ACK_METHOD, AGENT_MESSAGE_REJECT_METHOD } from "./index";
 import { isSeenExactSeqs } from "./freshness-decision";
@@ -433,60 +429,6 @@ export function decodeDaemonRuntimeProviderModelRefreshResponse(
     messageType: v.messageType,
   };
 }
-export const encodeAgentContextScanRequest = (v: import("./index").AgentContextScanRequest) =>
-  toBinary(
-    AgentContextScanRequestSchema,
-    create(AgentContextScanRequestSchema, { ...v, messageType: AGENT_CONTEXT_SCAN_MESSAGE_TYPE }),
-  );
-export function decodeAgentContextScanRequest(
-  bytes: Uint8Array,
-): import("./index").AgentContextScanRequest {
-  const v = fromBinary(AgentContextScanRequestSchema, bytes);
-  if (v.messageType !== AGENT_CONTEXT_SCAN_MESSAGE_TYPE)
-    throw new Error("invalid daemon runtime message type");
-  return {
-    protocolMajor: v.protocolMajor,
-    requestId: v.requestId,
-    workspaceId: v.workspaceId,
-    computerId: v.computerId,
-    agentId: v.agentId,
-    provider: v.provider as import("./index").RuntimeProvider,
-    launchId: v.launchId,
-    sessionId: v.sessionId,
-    messageType: v.messageType,
-  };
-}
-export const encodeAgentContextScanResponse = (v: import("./index").AgentContextScanResponse) =>
-  toBinary(
-    AgentContextScanResponseSchema,
-    create(AgentContextScanResponseSchema, {
-      ...v,
-      messageType: AGENT_CONTEXT_SCAN_RESPONSE_MESSAGE_TYPE,
-    }),
-  );
-export function decodeAgentContextScanResponse(
-  bytes: Uint8Array,
-): import("./index").AgentContextScanResponse {
-  const v = fromBinary(AgentContextScanResponseSchema, bytes);
-  if (v.messageType !== AGENT_CONTEXT_SCAN_RESPONSE_MESSAGE_TYPE)
-    throw new Error("invalid daemon runtime message type");
-  return {
-    protocolMajor: v.protocolMajor,
-    requestId: v.requestId,
-    workspaceId: v.workspaceId,
-    computerId: v.computerId,
-    agentId: v.agentId,
-    provider: v.provider as import("./index").RuntimeProvider,
-    launchId: v.launchId,
-    sessionId: v.sessionId,
-    accepted: v.accepted,
-    status: v.status as import("./index").AgentContextScanStatus,
-    message: v.message || undefined,
-    reportJson: v.reportJson.length ? v.reportJson : undefined,
-    messageType: v.messageType,
-  };
-}
-
 export function encodeAgentSessionReport(value: AgentSessionReport): Uint8Array {
   validateAgentSessionReport(value);
   const bytes = toBinary(AgentSessionReportSchema, create(AgentSessionReportSchema, value));

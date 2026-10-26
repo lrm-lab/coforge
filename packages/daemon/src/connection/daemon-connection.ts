@@ -92,11 +92,6 @@ import {
   encodeDaemonRuntimeUsageScanResponse,
   decodeDaemonRuntimeProviderModelRefreshRequest,
   encodeDaemonRuntimeProviderModelRefreshResponse,
-  decodeAgentContextScanRequest,
-  encodeAgentContextScanResponse,
-  AGENT_CONTEXT_SCAN_RESULT_METHOD,
-  type AgentContextScanRequest,
-  type AgentContextScanResponse,
   decodeAgentMessageDelivery,
   decodeComputerRestartIntent,
   decodeComputerUpgradeIntent,
@@ -292,9 +287,6 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #providerModelRefresh = new ListenerSlot<
     (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>
   >();
-  readonly #agentContextScan = new ListenerSlot<
-    (request: AgentContextScanRequest) => Promise<void>
-  >();
   readonly #reconnect = new ListenerSlot<() => void>();
   readonly #connectionRefused = new ListenerSlot<(reason: DaemonConnectRejectionReason) => void>();
   /** Set only while `start` waits for the first connection; rejecting it ends that `start`. */
@@ -341,9 +333,6 @@ export class DaemonConnection implements DaemonConnectionClient {
     contextUsage: AGENT_CONTEXT_USAGE_METHOD,
     serviceTier: AGENT_SERVICE_TIER_METHOD,
   });
-  /** Same one-per-connection-lifetime log suppression as
-   * `#loggedUnknownSessionInvalidateMethod`, for `agent:context_scan_result`. */
-  #loggedUnknownContextScanResultMethod = false;
   readonly #latestStatuses = new Map<string, AgentStatus>();
   readonly #restartRequestIds = new Set<string>();
   readonly #upgradeRequestIds = new Set<string>();
@@ -628,10 +617,6 @@ export class DaemonConnection implements DaemonConnectionClient {
     callback: (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>,
   ): () => void {
     return this.#providerModelRefresh.set(callback);
-  }
-
-  onAgentContextScan(callback: (request: AgentContextScanRequest) => Promise<void>): () => void {
-    return this.#agentContextScan.set(callback);
   }
 
   onReconnect(callback: () => void): () => void {
@@ -1762,12 +1747,6 @@ export class DaemonConnection implements DaemonConnectionClient {
         void this.#providerModelRefresh.current?.(refresh);
         return true;
       }) ||
-      this.#route(data, decodeAgentContextScanRequest, (scan) => {
-        if (scan.protocolMajor !== 1 || scan.workspaceId !== workspaceId || !scan.computerId)
-          return false;
-        void this.#agentContextScan.current?.(scan);
-        return true;
-      }) ||
       this.#route(data, decodeAgentActivityProbe, (probe) => {
         if (probe.protocolMajor !== 1 || !ownsDaemon(probe)) return false;
         this.#deliver(this.#agentActivityProbe, probe, "probe");
@@ -1941,32 +1920,6 @@ export class DaemonConnection implements DaemonConnectionClient {
       DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD,
       encodeDaemonRuntimeProviderModelRefreshResponse(response),
     );
-  }
-
-  async sendAgentContextScanResult(response: AgentContextScanResponse): Promise<void> {
-    await this.#rpc(
-      AGENT_CONTEXT_SCAN_RESULT_METHOD,
-      encodeAgentContextScanResponse(response),
-    ).catch((error) => {
-      const errorCode = diagnosticErrorCode(error);
-      // An old server that has never heard of this RPC rejects every attempt the same way for
-      // as long as this process talks to it; logging that fact once per connection lifetime is
-      // enough (the same convention as `agent_session:invalidate_rejected`). The scan itself
-      // already completed on the Computer; only its delivery to the server failed.
-      const unknownMethod = errorCode === "404";
-      if (unknownMethod && this.#loggedUnknownContextScanResultMethod) return;
-      if (unknownMethod) this.#loggedUnknownContextScanResultMethod = true;
-      logger.warning("Agent context scan result was not accepted", {
-        event: "agent_context_scan_result:rejected",
-        request_id: response.requestId,
-        workspace_id: response.workspaceId,
-        computer_id: response.computerId,
-        agent_id: response.agentId,
-        status: response.status,
-        error_code: errorCode,
-        outcome: "failed",
-      });
-    });
   }
 
   async ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void> {

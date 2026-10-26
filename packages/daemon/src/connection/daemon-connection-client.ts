@@ -31,8 +31,6 @@ import type {
   AgentWorkspaceDeleteRequest,
   AgentWorkspaceDeleteResult,
   ComputerUpgradeResult,
-  AgentContextScanRequest,
-  AgentContextScanResponse,
   AgentMentionDeliveryTransition,
   AgentMentionDeliveryTerminalError,
   RuntimeAuthStatusReport,
@@ -138,8 +136,6 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   sendProviderModelRefreshResult?(
     response: DaemonRuntimeProviderModelRefreshResponse,
   ): Promise<void>;
-  onAgentContextScan?(callback: (request: AgentContextScanRequest) => Promise<void>): () => void;
-  sendAgentContextScanResult?(response: AgentContextScanResponse): Promise<void>;
   sendUpgradeResult?(result: ComputerUpgradeResult): Promise<boolean>;
   sendShutdownNotice?(notice: DaemonRuntimeShutdown): Promise<void>;
   stop(): Promise<void>;

@@ -50,8 +50,6 @@ export const RPC_METHODS = {
   agentTurnInterruptResult: "agent:v1:turn_interrupt:result",
   agentActivityProbe: "agent:v1:activity:probe",
   agentInboxPurge: "agent:v1:inbox:purge",
-  agentContextScan: "agent:v1:context:scan",
-  agentContextScanResult: "agent:v1:context:scan_result",
   agentMessage: "agent:v1:message:deliver",
   agentMessageAck: "agent:v1:message:ack",
   agentMessageReject: "agent:v1:message:reject",

@@ -16,9 +16,6 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   not inventory or canonical data.
 - `model-catalog-refresh-cache.server.ts` stores the terminal result of a
   requested model probe, scoped to its request, Workspace and Computer.
-- `agent-context-cache.server.ts` stores the last validated report per Agent
-  with the usage cache's retention and freshness rules.
-  `createAgentContextScanResultMethod` validates report bytes at the boundary.
 - The connect proxy refuses a Daemon for good only with an HTTP 200
   `disconnect` in Centrifugo's terminal 4500-4999 range, using the SDK's
   `DAEMON_CONNECT_REJECTION_CODES`: `computer_unlinked` for a valid key whose

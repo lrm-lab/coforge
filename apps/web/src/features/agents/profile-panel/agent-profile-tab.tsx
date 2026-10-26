@@ -9,7 +9,7 @@ import {
   StopCircle,
   Archive,
 } from "@untitledui/icons";
-import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
@@ -29,8 +29,7 @@ import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-co
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/agent-skills";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
-import { AgentContextSection } from "#src/features/agents/agent-context-popover";
-import { useAgentContextReport } from "#src/features/agents/agent-context-report";
+import { AgentContextSection } from "#src/features/agents/agent-context-section";
 import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
@@ -146,13 +145,6 @@ function AgentProfileTabBody({
     (context || (profile.runtimeUsageVisible && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime]))
       ? profile.computer
       : undefined;
-  const supportsContextReport = runtime === RUNTIME_PROVIDER.CLAUDE_CODE;
-  // Read here, not in the card: the card mounts on every open, and the hook's
-  // one-automatic-scan guard and in-flight scan must outlive it.
-  const contextReport = useAgentContextReport(profile.id, {
-    enabled: Boolean(context && usageComputer) && supportsContextReport,
-    computerOnline: usageComputer?.online,
-  });
   const creatorName = humanLabel(profile.owner);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const profileAvatar = (
@@ -332,21 +324,7 @@ function AgentProfileTabBody({
                   footerLabel={context ? m.agent_context_title() : undefined}
                   footer={
                     context ? (
-                      <AgentContextSection
-                        usage={context}
-                        report={
-                          supportsContextReport
-                            ? {
-                                data: contextReport.data,
-                                scanning: contextReport.scanning,
-                                scanFailed: contextReport.scanFailed,
-                                onRefresh: contextReport.refresh,
-                              }
-                            : undefined
-                        }
-                        computerOnline={usageComputer.online}
-                        timeZone={timeZone}
-                      />
+                      <AgentContextSection usage={context} timeZone={timeZone} />
                     ) : undefined
                   }
                 />

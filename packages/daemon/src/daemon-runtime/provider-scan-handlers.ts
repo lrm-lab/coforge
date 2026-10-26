@@ -1,9 +1,4 @@
-import type {
-  AgentContextScanRequest,
-  AgentContextScanResponse,
-  RuntimeProvider,
-  UsageScanResponse,
-} from "@lrm/coforge-sdk/internal";
+import type { RuntimeProvider, UsageScanResponse } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { CodeAgentInventorySync } from "./code-agent-inventory-sync";
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
@@ -13,7 +8,6 @@ export type ProviderScans = {
   connection: { workspaceId: string; computerId: string };
   runtime: {
     scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse>;
-    scanAgentContext(request: AgentContextScanRequest): Promise<AgentContextScanResponse>;
   };
   /** The runtime's live transport, read when an answer is sent. */
   currentTransport: () => DaemonConnectionClient;
@@ -24,8 +18,8 @@ export type ProviderScans = {
 };
 
 /**
- * Subscribes one connection's provider scans: usage, model refresh and an Agent's context
- * window, each only for this Computer. Returns the unsubscribes for the runtime to keep.
+ * Subscribes one connection's provider scans: usage and model refresh, each only for this
+ * Computer. Returns the unsubscribes for the runtime to keep.
  */
 export function subscribeProviderScans(
   transport: DaemonConnectionClient,
@@ -48,11 +42,6 @@ export function subscribeProviderScans(
     transport.onProviderModelRefresh?.(async (request) => {
       if (scans.isStopping() || request.computerId !== connection.computerId) return;
       await scans.inventory.refreshModels(request, transport);
-    }),
-    transport.onAgentContextScan?.(async (request) => {
-      if (request.computerId !== connection.computerId) return;
-      const result = await runtime.scanAgentContext(request);
-      await scans.currentTransport().sendAgentContextScanResult?.(result);
     }),
   ];
 }

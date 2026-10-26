@@ -170,13 +170,10 @@ See [sessions.md](./sessions.md).
   (`features/agents/agent-activity-window.ts`); the browser timeline keeps the
   same number.
 
-## Skills, context, and reminders
+## Skills and reminders
 
 - `agent-skills.server.ts` authorizes the Agent owner and correlates bounded
   requests.
-- `agent-context-report.server.ts` authorizes through the Agent owner's
-  assignment (the Skills/Workspace Files rule) and resolves the launch and
-  session from the persisted session reference.
 - `agent-reminders.server.ts` is the creator's or Workspace owner/admin's
   browser read model of bounded, scheduled Reminders. Reminder lifecycle stays in
   `server/reminders/`.

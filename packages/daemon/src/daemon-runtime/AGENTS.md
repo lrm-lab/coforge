@@ -79,13 +79,6 @@ Read the [message attention and delivery rules](../../../../docs/agents/daemon-m
   without storing Task state or interpreting claims, status transitions, or
   human approval. Reviewer-isolation holds expose counts only.
 
-## Context report
-
-- `scanAgentContext` resolves the launch and native session from daemon-tracked
-  state, never from the request. It refuses a superseded launch without running
-  the CLI. See [`code-agent/AGENTS.md`](../code-agent/AGENTS.md) for the
-  report rules.
-
 ## Skills metadata
 
 - Resolve the stable Agent directory and route Skills queries and results; never parse skill files here. That belongs to `code-agent/agent-skills.ts`.

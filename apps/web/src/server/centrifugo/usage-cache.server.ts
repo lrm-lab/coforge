@@ -89,8 +89,8 @@ export type UsageReadResult = {
 };
 
 /** A result older than this no longer represents "now" closely enough to show without a note. The
- * rule is the shared scan/result one the Agent-context report applies too
- * (`SCAN_RESULT_STALE_AFTER_MS`); it keeps this name for this cache's readers. */
+ * rule is the shared scan/result interval (`SCAN_RESULT_STALE_AFTER_MS`); it keeps
+ * this name for this cache's readers. */
 export const USAGE_STALE_AFTER_MS = SCAN_RESULT_STALE_AFTER_MS;
 
 /**

@@ -1,7 +1,6 @@
 /**
- * The Redis operations a scan/result cache uses. `RedisAgentContextCache` and `RedisUsageCache` are
- * one shape: a `result` key holding the last report and a `scan` key holding a request still in
- * flight, both hanging off a scope string the cache itself owns.
+ * The Redis operations a scan/result cache uses: a `result` key holding the last report and a
+ * `scan` key holding a request still in flight, both hanging off a scope string the cache owns.
  */
 export type ScanResultRedisPort = {
   set(key: string, value: string, ex: "EX", seconds: string): Promise<unknown>;
@@ -9,8 +8,7 @@ export type ScanResultRedisPort = {
   del(...keys: string[]): Promise<number>;
 };
 
-/** Both caches answer "how much is true right now" for one viewer, so a result stops representing
- * "now" at the same age in both — the note the UI puts on a stale reading is the same note. */
+/** How old a report may be before a viewer sees it as stale. */
 export const SCAN_RESULT_STALE_AFTER_MS = 30 * 60 * 1000;
 
 /** How long a result outlives the scan that produced it, and how long a scan may stay pending
