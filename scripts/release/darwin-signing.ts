@@ -221,21 +221,38 @@ export async function signDarwinExecutable(
       keychain,
     ]);
 
-    await run(CODESIGN, [
-      "--force",
-      "--sign",
-      sha1,
-      "--keychain",
-      keychain,
-      "--identifier",
-      DARWIN_SIGNING_IDENTIFIER,
-      executable,
-    ]);
+    // `--keychain` alone finds the identity on a developer Mac but not on a GitHub macOS runner
+    // ("no identity found"): codesign there resolves it only through the user search list.
+    const searchList = await userKeychains();
+    await run(SECURITY, ["list-keychains", "-d", "user", "-s", keychain, ...searchList]);
+    try {
+      await run(CODESIGN, [
+        "--force",
+        "--sign",
+        sha1,
+        "--keychain",
+        keychain,
+        "--identifier",
+        DARWIN_SIGNING_IDENTIFIER,
+        executable,
+      ]);
+    } finally {
+      await run(SECURITY, ["list-keychains", "-d", "user", "-s", ...searchList]);
+    }
     await verifyDarwinExecutable(executable, certificatePem);
   } finally {
     await run(SECURITY, ["delete-keychain", keychain]).catch(() => undefined);
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+/** The user keychain search list, as `security list-keychains` prints it: one quoted path a line. */
+async function userKeychains(): Promise<string[]> {
+  const { stdout } = await run(SECURITY, ["list-keychains", "-d", "user"]);
+  return stdout
+    .split("\n")
+    .map((line) => line.trim().replace(/^"|"$/g, ""))
+    .filter(Boolean);
 }
 
 /** The `sign` callback a publish of `targets` compiles with, or undefined when none is a darwin
