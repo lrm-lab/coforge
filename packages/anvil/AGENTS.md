@@ -16,11 +16,12 @@
 | --- | --- |
 | `src/contract.ts` | Provider-neutral sessions, provider and auth contracts |
 | `src/runtime-auth-status.ts` | Shared runtime auth status values |
-| `src/execution.ts` | Explicit public entry for JSONL, per-turn sessions and process cleanup |
+| `src/execution.ts` | Explicit public entry for JSONL catalog execution, per-turn sessions and process cleanup |
 | `src/jsonl-error.ts` | Pure JSONL protocol/request errors, shared by neutral projections and execution |
 | `src/jsonl-process.ts` | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership |
 | `src/process-tree.ts` | Host process ownership ports, optional terminal transport and shared cleanup deadline policy |
 | `src/catalog-discovery.ts` | Catalog wait deadlines and trusted discovery error projection |
+| `src/catalog-process.ts` | JSONL catalog execution and diagnostics with required host environment and process ports |
 | `src/catalog-command.ts` | Host catalog command execution port |
 | `src/per-turn/` | Shared per-turn session and process execution |
 | `src/version-gate.ts` | Shared version policy and required host version-reader port |

@@ -4,11 +4,15 @@ import {
   type CodeAgentModelCatalog,
   type CodeAgentModelMetadata,
 } from "@lrm/coforge-sdk/internal";
-import { type JsonlProcess } from "@lrm/coforge-anvil/execution";
+import {
+  type JsonlProcess,
+  withJsonlProcess,
+  type CatalogProgress,
+} from "@lrm/coforge-anvil/execution";
 import { asRecord, CatalogDiscoveryError, isModel, within } from "@lrm/coforge-anvil";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { getLogger } from "@logtape/logtape";
-import { withJsonlProcess, type CatalogProgress } from "#src/code-agent/catalog-discovery";
+import { jsonlCatalogHost } from "#src/code-agent/catalog-host";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -104,6 +108,7 @@ async function discoverCodexCatalogFromProcess(
       return { provider: RUNTIME_PROVIDER.CODEX, models };
     },
     environment,
+    jsonlCatalogHost,
   );
 }
 

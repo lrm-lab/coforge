@@ -1,12 +1,21 @@
 import { type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
-import { processSpawner } from "#src/code-agent/process-host";
-import { agentEnvironment } from "./environment";
-import { JsonlProcess } from "@lrm/coforge-anvil/execution";
-import { JsonlRequestError, catalogErrorMessage, asRecord } from "@lrm/coforge-anvil";
+import type { ProcessTreeSpawner } from "./process-tree";
+import { JsonlProcess } from "./jsonl-process";
+import { JsonlRequestError } from "./jsonl-error";
+import { catalogErrorMessage } from "./catalog-discovery";
+import { asRecord } from "./json-record";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
+
+/** Catalog environment composition and process ownership remain explicit host capabilities. */
+export interface JsonlCatalogHost {
+  readonly processTreeSpawner: ProcessTreeSpawner;
+  buildCatalogEnvironment(
+    environment: Readonly<Record<string, string | undefined>>,
+  ): Record<string, string>;
+}
 
 export type CatalogProgress = {
   stage:
@@ -23,7 +32,8 @@ export async function withJsonlProcess<T>(
   command: readonly string[],
   cwd: string,
   discover: (process: JsonlProcess, progress: CatalogProgress) => Promise<T>,
-  environment: Readonly<Record<string, string | undefined>> = Bun.env,
+  environment: Readonly<Record<string, string | undefined>>,
+  host: JsonlCatalogHost,
 ): Promise<T | undefined> {
   const startedAt = performance.now();
   const discoveryId = crypto.randomUUID();
@@ -40,8 +50,8 @@ export async function withJsonlProcess<T>(
     process = new JsonlProcess(
       command,
       cwd,
-      agentEnvironment(undefined, environment),
-      processSpawner,
+      host.buildCatalogEnvironment(environment),
+      host.processTreeSpawner,
     );
     const catalog = await discover(process, progress);
     logger.info("Code Agent model catalog discovery completed", {

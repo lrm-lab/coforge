@@ -8,8 +8,8 @@ const pi = resolve(anvil, "src/pi");
 const runtimes = ["cursor", "opencode", "kiro", "grok", "antigravity", "pi", "dsh"].map((name) =>
   resolve(anvil, "src", name),
 );
-const execution = ["execution", "jsonl-process", "process-tree-cleanup"].map((name) =>
-  resolve(anvil, "src", name),
+const execution = ["execution", "jsonl-process", "catalog-process", "process-tree-cleanup"].map(
+  (name) => resolve(anvil, "src", name),
 );
 const perTurn = resolve(anvil, "src/per-turn");
 
