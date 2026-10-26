@@ -5,7 +5,7 @@ const root = resolve(import.meta.dir, "../..");
 const anvil = resolve(root, "packages/anvil");
 const daemon = resolve(root, "packages/daemon");
 const pi = resolve(anvil, "src/pi");
-const runtimes = ["cursor", "opencode", "kiro", "grok", "antigravity", "pi"].map((name) =>
+const runtimes = ["cursor", "opencode", "kiro", "grok", "antigravity", "pi", "dsh"].map((name) =>
   resolve(anvil, "src", name),
 );
 const execution = ["execution", "jsonl-process", "process-tree-cleanup"].map((name) =>

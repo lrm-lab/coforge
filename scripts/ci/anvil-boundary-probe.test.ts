@@ -7,6 +7,9 @@ const cases = [
   ["index.ts", "./src/grok/provider", false],
   ["src/neutral.ts", "#src/kiro/provider", false],
   ["index.ts", "@lrm/coforge-anvil/grok", false],
+  ["index.ts", "@lrm/coforge-anvil/dsh", false],
+  ["src/neutral.ts", "#src/dsh/provider", false],
+  ["src/dsh/provider.ts", "#src/jsonl-process", true],
   ["index.ts", "./src/execution", false],
   ["src/neutral.ts", "#src/jsonl-process", false],
   ["index.ts", "@lrm/coforge-anvil/execution", false],
@@ -36,6 +39,7 @@ for (const [file, specifier, allowed] of cases) {
           "src/per-turn/session.ts",
           "src/grok/provider.ts",
           "src/kiro/provider.ts",
+          "src/dsh/provider.ts",
         ]) {
           await Bun.write(join(sourceRoot, path), "export {};");
         }

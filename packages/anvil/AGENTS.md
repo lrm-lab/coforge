@@ -2,7 +2,7 @@
 
 `@lrm/coforge-anvil` owns provider-neutral Agent contracts, runtime adapters and their shared execution machinery. Keep it independent of daemon orchestration and platform implementations.
 
-- The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (`/cursor`, `/opencode`, `/kiro`, `/grok`, `/antigravity`, `/pi`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
+- The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (`/cursor`, `/opencode`, `/kiro`, `/grok`, `/antigravity`, `/pi`, `/dsh`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
 - Public contracts and exports belong here; daemon imports them by package name. Never import daemon modules, including through relative paths or aliases. `scripts/ci/anvil-boundary.test.ts` checks this direction.
 - OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default, read Workspace configuration, discover executables or read PATH.
 - The host supplies per-turn environment composition through `PerTurnSessionHost.buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
@@ -26,6 +26,7 @@
 | `src/version-gate.ts` | Shared version policy and required host version-reader port |
 | `src/pi/` | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities |
 | `src/antigravity/` | Antigravity per-turn protocol, tool events, version/catalog policy and usage parsing |
+| `src/dsh/` | DSH ACP, pinned preview version, native catalogs and literal instruction content behind host ports |
 | `src/grok/` | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities |
 | `src/kiro/` | Kiro ACP provider, native profile, events, version/catalog policy and usage parsing with explicit host ports |
 | `src/opencode/` | OpenCode provider, turn protocol, version policy and catalog parsing |
@@ -36,5 +37,6 @@
 
 - [Cursor adapter](src/cursor/AGENTS.md)
 - [Grok adapter](src/grok/AGENTS.md)
+- [DSH adapter](src/dsh/AGENTS.md)
 - [Antigravity adapter](src/antigravity/AGENTS.md)
 - [Pi adapter](src/pi/AGENTS.md)

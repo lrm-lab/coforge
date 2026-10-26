@@ -68,6 +68,7 @@ The architecture invariants every change must respect are in
 | [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md) | Mise task policy |
 | [docs/agents/git-hooks/](docs/agents/git-hooks/README.md) | Pre-commit file size limit and its ratchet, the hard rules the hook and CI enforce, the hook check in `mise run check`, and marking generated files |
 | [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the latest Raft Computer reference binary, source tree, and installer |
+| [docs/agents/dsh-acp.md](docs/agents/dsh-acp.md) | DSH preview ACP sessions, literal instruction plugin, delivery and host cleanup |
 | [docs/agents/grok-acp.md](docs/agents/grok-acp.md) | Persistent Grok ACP behavior, compatibility and native verification |
 | [docs/research/](docs/research/README.md) | Evidence-backed research reports |
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
