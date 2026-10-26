@@ -55,7 +55,9 @@ export function createRuntimeAuthAdapter(
         platform: options.platform,
       });
     case RUNTIME_PROVIDER.CLAUDE_CODE:
-      return new ClaudeRuntimeAuthAdapter();
+      return new ClaudeRuntimeAuthAdapter({
+        command: providerExecutable(RUNTIME_PROVIDER.CLAUDE_CODE, options),
+      });
     default: {
       const unreachable: never = provider;
       throw new Error(`Unhandled runtime auth provider: ${unreachable}`);

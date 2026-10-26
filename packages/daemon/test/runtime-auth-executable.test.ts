@@ -12,7 +12,7 @@ for (const provider of ["codex", "claude-code"] as const) {
     async () => {
       const home = await mkdtemp(join(tmpdir(), "coforge-auth-executable-"));
       const bin = join(home, ".local", "bin");
-      const install = join(home, "codex-install");
+      const install = join(home, `${provider}-install`);
       const emptyPath = join(home, "empty");
       try {
         await Promise.all(
@@ -21,10 +21,13 @@ for (const provider of ["codex", "claude-code"] as const) {
         const helper = join(bin, "auth-fixture-helper");
         await Bun.write(helper, "#!/bin/sh\nexit 0\n");
         await chmod(helper, 0o755);
-        const executable = join(
-          provider === "codex" ? install : bin,
-          provider === "codex" ? "codex" : "claude",
-        );
+        if (provider === "claude-code") {
+          // A bare command finds this owned decoy, never a host provider/account.
+          const decoy = join(bin, "claude");
+          await Bun.write(decoy, `#!/bin/sh\necho '{"loggedIn":false}'\n`);
+          await chmod(decoy, 0o755);
+        }
+        const executable = join(install, provider === "codex" ? "codex" : "claude");
         await Bun.write(
           executable,
           `#!/bin/sh
@@ -51,6 +54,7 @@ ${provider === "codex" ? 'echo "Logged in using ChatGPT" >&2' : 'echo \'{"logged
             CODEX_HOME: join(home, "codex-profile"),
             CLAUDE_CONFIG_DIR: join(home, "claude-profile"),
             CODEX_INSTALL_DIR: install,
+            AUTH_FIXTURE_DISCOVERY_PATH: install,
             COFORGE_AGENT_PROXY_URL: "fixture-stale-capability",
           },
           stdin: "ignore",
