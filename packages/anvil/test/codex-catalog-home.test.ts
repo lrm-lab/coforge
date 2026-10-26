@@ -1,12 +1,13 @@
+import { fixtureCodexCatalogHost } from "./fixtures/codex-host";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverCodexCatalog } from "#src/code-agent/codex/catalog";
+import { discoverCodexCatalog } from "@lrm/coforge-anvil/codex";
 import {
   SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,
   spawnedCatalogDiscoveryBudgetMs,
-} from "./catalog-discovery-budget";
+} from "./fixtures/codex-catalog-budget";
 
 const fixture = new URL("./fixtures/codex-app-server.ts", import.meta.url).href;
 const cached = (slug: string) => JSON.stringify({ models: [{ slug }] });
@@ -125,6 +126,7 @@ for (const scenario of cases) {
           ],
           cwd,
           environment,
+          fixtureCodexCatalogHost,
           SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,
           scenario.force,
         );

@@ -49,7 +49,7 @@ const result = await Bun.build({
           loader: "ts",
           contents: `export function claudeStaticCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
         }));
-        build.onLoad({ filter: /\/code-agent\/codex\/catalog\.ts$/ }, () => ({
+        build.onLoad({ filter: /\/anvil\/src\/codex\/catalog\.ts$/ }, () => ({
           loader: "ts",
           contents: `export function discoverCodexCatalog(){throw new Error("Lifecycle fixture must not query provider catalogs")}`,
         }));

@@ -1,17 +1,21 @@
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
+import { codexRuntimeHost } from "#src/code-agent/codex/host";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexProvider } from "@lrm/coforge-anvil/codex";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 
 const command = (fixture: string) => [
   process.execPath,
-  new URL(`./fixtures/${fixture}`, import.meta.url).pathname,
+  fixture === "codex-app-server.ts"
+    ? anvilRuntimeFixtures.codex
+    : new URL(`./fixtures/${fixture}`, import.meta.url).pathname,
 ];
 const providers = [
-  new CodexProvider({ command: command("codex-app-server.ts") }),
+  new CodexProvider({ host: codexRuntimeHost, command: command("codex-app-server.ts") }),
   new ClaudeCodeProvider({ command: command("claude-stream-json.ts") }),
 ];
 

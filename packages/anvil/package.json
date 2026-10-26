@@ -15,7 +15,8 @@
     "./grok": "./src/grok/index.ts",
     "./antigravity": "./src/antigravity/index.ts",
     "./execution": "./src/execution.ts",
-    "./dsh": "./src/dsh/index.ts"
+    "./dsh": "./src/dsh/index.ts",
+    "./codex": "./src/codex/index.ts"
   },
   "scripts": {
     "typecheck": "bun check",

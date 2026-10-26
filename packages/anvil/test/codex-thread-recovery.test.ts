@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CodexProvider } from "#src/code-agent/codex/provider";
+import type { CodexProvider } from "@lrm/coforge-anvil/codex";
 import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import { scenarioProvider } from "./codex-scenarios";
 

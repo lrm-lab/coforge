@@ -375,7 +375,12 @@ describe("external Code Agent inventory", () => {
 
   test("discovers Codex and Pi catalogs and reports the maintained Claude Code catalog", async () => {
     const fixture = (name: string) =>
-      [process.execPath, new URL(`./fixtures/${name}`, import.meta.url).pathname] as const;
+      [
+        process.execPath,
+        name === "codex-app-server.ts"
+          ? anvilRuntimeFixtures.codex
+          : new URL(`./fixtures/${name}`, import.meta.url).pathname,
+      ] as const;
     const inventory = await discoverCodeAgentInventory({
       probe: probeFor({
         codex: { path: "/bin/codex", version: "codex-cli 0.151.0\n" },

@@ -9,11 +9,8 @@ import {
   withDeadline,
 } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
-import { processSpawner } from "#src/code-agent/process-host";
-import { agentEnvironment } from "#src/code-agent/environment";
 
-import { maskEmail } from "#src/code-agent/mask-email";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
+import type { CodexUsageHost } from "./host";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 /** Reads Codex plan usage: talks to the app-server with the experimental API, reads the
@@ -23,16 +20,17 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 export async function readCodexUsage(
   workingDirectory: string,
   options: {
+    host: CodexUsageHost;
     command?: readonly string[];
     environment?: Readonly<Record<string, string>>;
     timeoutMs?: number;
-  } = {},
+  },
 ): Promise<UsageSnapshot | null> {
   const process = new JsonlProcess(
-    options.command ?? ["codex", "app-server"],
+    options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"],
     workingDirectory,
-    agentEnvironment(options.environment),
-    processSpawner,
+    options.host.buildUsageEnvironment(options.environment),
+    options.host.processTreeSpawner,
   );
   const timeoutMs = options.timeoutMs ?? 5_000;
   try {
@@ -40,11 +38,7 @@ export async function readCodexUsage(
       process.request({
         method: "initialize",
         params: {
-          clientInfo: {
-            name: "coforge-daemon-usage",
-            title: "CoForge Daemon Usage",
-            version: COFORGE_DAEMON_VERSION,
-          },
+          clientInfo: options.host.usageClientInfo,
           capabilities: { experimentalApi: true },
         },
       }),
@@ -71,7 +65,7 @@ export async function readCodexUsage(
       timeoutMs,
       () => new UsageTimeoutError(),
     );
-    return toSnapshot(response, account);
+    return toSnapshot(response, account, (label) => options.host.maskAccountLabel(label));
   } catch (error) {
     if (
       error instanceof UsageTimeoutError ||
@@ -101,6 +95,7 @@ function isNonSubscription(account: Record<string, unknown> | undefined): boolea
 function toSnapshot(
   response: Readonly<Record<string, unknown>>,
   account: Record<string, unknown> | undefined,
+  maskAccountLabel: CodexUsageHost["maskAccountLabel"],
 ): UsageSnapshot | null {
   const result = asRecord(response.result);
   const nestedLimits = asRecord(result?.rateLimits);
@@ -132,7 +127,7 @@ function toSnapshot(
   const accountRecord = asRecord(account?.account);
   const email =
     accountRecord?.type === "chatgpt" && typeof accountRecord.email === "string"
-      ? maskEmail(accountRecord.email)
+      ? maskAccountLabel(accountRecord.email)
       : undefined;
   return {
     provider: RUNTIME_PROVIDER.CODEX,
@@ -164,7 +159,7 @@ function limitLabel(limits: Record<string, unknown>): string {
 
 /** The default limit's id `codex` reads as the provider name, as on Raft ("Codex · 1 week"). */
 function providerName(id: string | undefined): string | undefined {
-  return id === "codex" ? "Codex" : id;
+  return id === RUNTIME_PROVIDER.CODEX ? "Codex" : id;
 }
 
 function label(value: unknown): string | undefined {

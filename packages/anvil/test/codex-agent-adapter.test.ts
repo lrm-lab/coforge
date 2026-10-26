@@ -1,9 +1,10 @@
+import { fixtureCodexHost } from "./fixtures/codex-host";
 import { expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexProvider } from "@lrm/coforge-anvil/codex";
 import { type AgentRuntimeEvent, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
@@ -12,6 +13,7 @@ test(
   "Codex fences the previous completed turn while a new start is awaiting its reply",
   async () => {
     const session = await new CodexProvider({
+      host: fixtureCodexHost,
       command: [
         process.execPath,
         new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
@@ -39,6 +41,7 @@ test(
 
 test("Codex resumes or starts fresh only for the native missing-thread error", async () => {
   const adapter = new CodexProvider({
+    host: fixtureCodexHost,
     command: [
       process.execPath,
       new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
@@ -84,6 +87,7 @@ test("Codex loads skills before running app-server behind the code-agent seam", 
     "---\nname: fixture-skill\ndescription: Fixture skill\n---\n",
   );
   const adapter = new CodexProvider({
+    host: fixtureCodexHost,
     command: [
       process.execPath,
       new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
@@ -164,38 +168,6 @@ test("Codex loads skills before running app-server behind the code-agent seam", 
     await session.dispose();
   } finally {
     await rm(agentWorkspaceDirectory, { recursive: true, force: true });
-  }
-});
-
-test("Codex starts the user's installed CLI from PATH", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "coforge-codex-installed-"));
-  const agentWorkspaceDirectory = join(directory, "workspace");
-  const binDirectory = join(directory, "bin");
-  await mkdir(agentWorkspaceDirectory);
-  await mkdir(binDirectory);
-  const executable = join(binDirectory, "codex");
-  await writeFile(
-    executable,
-    '#!/bin/sh\nprintf started > "$COFORGE_CODEX_MARKER"\nexec "$COFORGE_BUN_EXEC" "$COFORGE_CODEX_FIXTURE" "$@"\n',
-  );
-  await chmod(executable, 0o755);
-  const marker = join(directory, "codex-started");
-
-  try {
-    const session = await new CodexProvider().createAgentSession({
-      agentWorkspaceDirectory,
-      instructions: TEST_AGENT_INSTRUCTIONS,
-      environment: {
-        PATH: binDirectory,
-        COFORGE_BUN_EXEC: process.execPath,
-        COFORGE_CODEX_FIXTURE: new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
-        COFORGE_CODEX_MARKER: marker,
-      },
-    });
-    expect(await readFile(marker, "utf8")).toBe("started");
-    await session.dispose();
-  } finally {
-    await rm(directory, { recursive: true, force: true });
   }
 });
 
@@ -326,6 +298,7 @@ test("Codex propagates steering rejection without starting another turn", async 
 
 function fixtureAdapter(): CodexProvider {
   return new CodexProvider({
+    host: fixtureCodexHost,
     command: [
       process.execPath,
       new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,

@@ -1,10 +1,11 @@
+import { codexRuntimeHost } from "#src/code-agent/codex/host";
 import { piProvider } from "./fixtures/pi-host";
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexProvider } from "@lrm/coforge-anvil/codex";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
 import { kiroProvider } from "./fixtures/kiro-host";
 import { CursorProvider } from "@lrm/coforge-anvil/cursor";
@@ -19,10 +20,12 @@ import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 const command = (name: string) => [
   process.execPath,
-  new URL(`./fixtures/${name}`, import.meta.url).pathname,
+  name === "codex-app-server.ts"
+    ? anvilRuntimeFixtures.codex
+    : new URL(`./fixtures/${name}`, import.meta.url).pathname,
 ];
 const providers = [
-  new CodexProvider({ command: command("codex-app-server.ts") }),
+  new CodexProvider({ host: codexRuntimeHost, command: command("codex-app-server.ts") }),
   new ClaudeCodeProvider({ command: command("claude-stream-json.ts") }),
   kiroProvider({ command: [process.execPath, anvilRuntimeFixtures.kiro] }),
   new CursorProvider({

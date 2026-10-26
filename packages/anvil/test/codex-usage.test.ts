@@ -1,3 +1,4 @@
+import { fixtureCodexHost } from "./fixtures/codex-host";
 import { createHash } from "node:crypto";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -5,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil";
-import { readCodexUsage } from "#src/code-agent/codex/usage";
+import { readCodexUsage } from "@lrm/coforge-anvil/codex";
 
 const fixture = new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname;
 
@@ -31,6 +32,7 @@ function windowId(label: string, index: number): string {
 
 test("reads Codex account usage and converts rate-limit windows", async () => {
   const result = await readCodexUsage(await scratchDirectory(), {
+    host: fixtureCodexHost,
     command: [process.execPath, fixture, "usage"],
   });
   expect(result).toEqual({
@@ -81,7 +83,10 @@ test("returns no snapshot when Codex is not logged in or does not support the me
   const directory = await scratchDirectory();
   for (const flag of ["usage-unavailable", "usage-unsupported", "usage-auth"]) {
     expect(
-      await readCodexUsage(directory, { command: [process.execPath, fixture, flag] }),
+      await readCodexUsage(directory, {
+        host: fixtureCodexHost,
+        command: [process.execPath, fixture, flag],
+      }),
     ).toBeNull();
   }
 });
@@ -90,13 +95,17 @@ test("answers unsupported for a non-subscription account", async () => {
   const directory = await scratchDirectory();
   for (const flag of ["usage-apikey", "usage-noauth"]) {
     await expect(
-      readCodexUsage(directory, { command: [process.execPath, fixture, flag] }),
+      readCodexUsage(directory, {
+        host: fixtureCodexHost,
+        command: [process.execPath, fixture, flag],
+      }),
     ).rejects.toThrow(UsageUnsupportedError);
   }
 });
 
 test("scans an app-server that predates account/read, without the account label", async () => {
   const result = await readCodexUsage(await scratchDirectory(), {
+    host: fixtureCodexHost,
     command: [process.execPath, fixture, "usage-legacy"],
   });
   expect(result?.accountLabel).toBeUndefined();
@@ -107,6 +116,7 @@ test("scans an app-server that predates account/read, without the account label"
 
 test("reports a limit-reached window and rate_limited account health", async () => {
   const result = await readCodexUsage(await scratchDirectory(), {
+    host: fixtureCodexHost,
     command: [process.execPath, fixture, "usage-ratelimited"],
   });
   expect(result?.primary?.status).toBe("limit_reached");
@@ -117,12 +127,16 @@ test("reports a limit-reached window and rate_limited account health", async () 
 test("errors clearly when a signed-in account yields no usable window", async () => {
   const directory = await scratchDirectory();
   await expect(
-    readCodexUsage(directory, { command: [process.execPath, fixture, "usage-empty"] }),
+    readCodexUsage(directory, {
+      host: fixtureCodexHost,
+      command: [process.execPath, fixture, "usage-empty"],
+    }),
   ).rejects.toThrow(UsageUnavailableError);
 });
 
 test("keeps every limit name, an extra limit, and the schema balance, not credit amounts", async () => {
   const result = await readCodexUsage(await scratchDirectory(), {
+    host: fixtureCodexHost,
     command: [process.execPath, fixture, "usage-extra"],
   });
   expect(result?.creditUsage).toBeUndefined();
@@ -152,6 +166,7 @@ test("fails clearly when the Codex usage request times out", async () => {
   const directory = await scratchDirectory();
   await expect(
     readCodexUsage(directory, {
+      host: fixtureCodexHost,
       command: [process.execPath, fixture, "usage-timeout"],
       timeoutMs: 20,
     }),

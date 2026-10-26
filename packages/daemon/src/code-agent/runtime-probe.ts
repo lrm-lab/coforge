@@ -37,7 +37,8 @@ import {
   type ExternalCodeAgentProvider,
 } from "./runtime-executable";
 
-import { initializeCodex } from "./codex/catalog";
+import { initializeCodex } from "@lrm/coforge-anvil/codex";
+import { codexClientInfo } from "./codex/host";
 import {
   fileStatCacheKey,
   readInventoryCache,
@@ -68,7 +69,7 @@ export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
       processSpawner,
     );
     try {
-      await initializeCodex(child, CATALOG_DISCOVERY_TIMEOUT_MS);
+      await initializeCodex(child, CATALOG_DISCOVERY_TIMEOUT_MS, codexClientInfo);
     } finally {
       await child.dispose().catch(() => undefined);
     }

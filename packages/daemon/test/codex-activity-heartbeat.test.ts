@@ -1,3 +1,5 @@
+import { codexRuntimeHost } from "#src/code-agent/codex/host";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -5,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { type CodeAgentProvider, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexProvider } from "@lrm/coforge-anvil/codex";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { activityHarness } from "./fixtures/activity-runtime";
 
@@ -28,10 +30,8 @@ for (const completionOrder of ["running", "before-start-response"] as const) {
     `Codex late items cannot restart Busy or its heartbeat (${completionOrder})`,
     async () => {
       const provider = new CodexProvider({
-        command: [
-          process.execPath,
-          new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
-        ],
+        host: codexRuntimeHost,
+        command: [process.execPath, anvilRuntimeFixtures.codex],
       });
       const { runtime, session, activities } = await harness(provider);
       try {

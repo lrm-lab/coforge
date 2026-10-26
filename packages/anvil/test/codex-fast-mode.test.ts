@@ -1,9 +1,10 @@
+import { fixtureCodexHost } from "./fixtures/codex-host";
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexProvider } from "@lrm/coforge-anvil/codex";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
@@ -27,6 +28,7 @@ test("Codex asks for the Fast service tier only when the launch requests it", as
   // The fixture rejects thread/start unless `serviceTier` is exactly "fast", so a regression that
   // drops the tier fails session creation rather than passing silently.
   const adapter = new CodexProvider({
+    host: fixtureCodexHost,
     command: [
       process.execPath,
       new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
@@ -65,6 +67,7 @@ test("Codex asks for the Fast service tier only when the launch requests it", as
 test("a Codex launch that asks for nothing reports no service tier at all", async () => {
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-codex-no-fast-"));
   const adapter = new CodexProvider({
+    host: fixtureCodexHost,
     command: [
       process.execPath,
       new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,

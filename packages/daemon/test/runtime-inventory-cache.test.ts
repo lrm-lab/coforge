@@ -1,3 +1,4 @@
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -25,11 +26,7 @@ async function discover(
         spawn: () => ({ stdout: new Blob(["0.153.4"]).stream(), exited: Promise.resolve(0) }),
       },
       commands: {
-        codex: [
-          process.execPath,
-          new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
-          mode,
-        ],
+        codex: [process.execPath, anvilRuntimeFixtures.codex, mode],
       },
       piModels: async () => [],
       catalogDiscoveryTimeoutMs,

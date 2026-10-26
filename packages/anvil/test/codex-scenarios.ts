@@ -1,9 +1,11 @@
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { fixtureCodexHost } from "./fixtures/codex-host";
+import { CodexProvider } from "@lrm/coforge-anvil/codex";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 /** A provider on the scenarios fake app-server; `args` are its argv flags (`scenario=`, `log=`). */
 export function scenarioProvider(...args: string[]): CodexProvider {
   return new CodexProvider({
+    host: fixtureCodexHost,
     command: [
       process.execPath,
       new URL("./fixtures/codex-app-server-scenarios.ts", import.meta.url).pathname,

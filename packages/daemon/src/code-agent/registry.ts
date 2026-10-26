@@ -18,9 +18,9 @@ import { KiroProvider } from "@lrm/coforge-anvil/kiro";
 import { GrokProvider } from "@lrm/coforge-anvil/grok";
 import { PiProvider } from "@lrm/coforge-anvil/pi";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexProvider, CodexRuntimeAuthAdapter } from "@lrm/coforge-anvil/codex";
+import { codexRuntimeHost, createCodexAuthHost } from "#src/code-agent/codex/host";
 import { ClaudeRuntimeAuthAdapter } from "#src/code-agent/claude-code/auth";
-import { CodexRuntimeAuthAdapter } from "#src/code-agent/codex/auth";
 import { perTurnSessionHost } from "./per-turn-host";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
@@ -49,12 +49,11 @@ export function createRuntimeAuthAdapter(
   switch (provider) {
     case RUNTIME_PROVIDER.CODEX:
       return new CodexRuntimeAuthAdapter({
+        host: createCodexAuthHost(options),
         command: [
           providerExecutable(RUNTIME_PROVIDER.CODEX, options) ?? RUNTIME_PROVIDER.CODEX,
           "app-server",
         ],
-        environment: options.environment,
-        platform: options.platform,
       });
     case RUNTIME_PROVIDER.KIRO:
       return new KiroRuntimeAuthAdapter(createKiroAuthHost(options.platform));
@@ -80,7 +79,10 @@ export function createCodeAgentProvider(
       return new PiProvider({ host: piRuntimeHost });
     case RUNTIME_PROVIDER.CODEX: {
       const executable = providerExecutable(RUNTIME_PROVIDER.CODEX, options);
-      return new CodexProvider(executable ? { command: [executable, "app-server"] } : undefined);
+      return new CodexProvider({
+        host: codexRuntimeHost,
+        ...(executable ? { command: [executable, "app-server"] } : {}),
+      });
     }
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeCodeProvider();

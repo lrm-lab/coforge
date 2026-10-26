@@ -1,5 +1,5 @@
 import { appendFileSync } from "node:fs";
-import { readLines } from "./read-lines";
+import { readLines } from "../../../../scripts/test/read-lines";
 
 // A small fake `codex app-server` for protocol scenarios. Scenarios are chosen by argv flags
 // (`scenario=<name>`, repeatable) or, per turn, by the turn input text. `log=<path>` appends every

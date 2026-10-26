@@ -1,10 +1,11 @@
-import { captureDaemonLogs } from "./log-capture";
+import { fixtureCodexAuthHost } from "./fixtures/codex-host";
+import { captureDaemonLogs } from "./fixtures/log-capture";
 import { expect, test } from "bun:test";
 import {
   CodexRuntimeAuthAdapter,
   type CodexAppServerProcess,
   type CodexCliRunner,
-} from "#src/code-agent/codex/auth";
+} from "@lrm/coforge-anvil/codex";
 
 class FakeProcess implements CodexAppServerProcess {
   readonly records = new Set<(record: Readonly<Record<string, unknown>>) => void>();
@@ -48,6 +49,7 @@ class FakeProcess implements CodexAppServerProcess {
 test.each(["text", "stderr"] as const)("reads successful Codex status from %s", async (stream) => {
   for (const method of ["ChatGPT", "an API key"]) {
     const result = await new CodexRuntimeAuthAdapter({
+      host: fixtureCodexAuthHost,
       runCli: async () => ({ text: "", [stream]: `Logged in using ${method}\n`, exitCode: 0 }),
     }).readStatus({ workingDirectory: "/fixture" });
     expect(result).toEqual({
@@ -62,6 +64,7 @@ test.each(["", "Logged in using workload identity", "API key configured - masked
   "accepts successful Codex status without a recognized method: %j",
   async (stderr) => {
     const result = await new CodexRuntimeAuthAdapter({
+      host: fixtureCodexAuthHost,
       runCli: async () => ({ text: "", stderr, exitCode: 0 }),
     }).readStatus({ workingDirectory: "/fixture" });
     expect(result).toEqual({ provider: "codex", state: "logged_in" });
@@ -70,6 +73,7 @@ test.each(["", "Logged in using workload identity", "API key configured - masked
 
 test.each(["text", "stderr"] as const)("reads logged-out Codex status from %s", async (stream) => {
   const result = await new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     runCli: async () => ({
       text: "",
       [stream]: "Warning: configuration notice\nNot logged in\n",
@@ -87,7 +91,10 @@ test.each([
   { text: "", stderr: "Error checking login status", exitCode: 1 },
   { text: "", exitCode: -1, timedOut: true },
 ])("keeps inconclusive Codex status unknown: %j", async (output) => {
-  const result = await new CodexRuntimeAuthAdapter({ runCli: async () => output }).readStatus({
+  const result = await new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    runCli: async () => output,
+  }).readStatus({
     workingDirectory: "/fixture",
   });
   expect(result).toEqual({ provider: "codex", state: "unknown" });
@@ -96,6 +103,7 @@ test.each([
 test("logs only the redacted last diagnostic line for unknown Codex status", async () => {
   const { result, records } = await captureDaemonLogs(async () => {
     return await new CodexRuntimeAuthAdapter({
+      host: fixtureCodexAuthHost,
       runCli: async () => ({
         text: "Earlier stdout diagnostic",
         stderr:
@@ -115,7 +123,10 @@ test("logs only the redacted last diagnostic line for unknown Codex status", asy
 
 test("streams Codex device code and matches completion notification", async () => {
   const process = new FakeProcess();
-  const adapter = new CodexRuntimeAuthAdapter({ create: () => process });
+  const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  });
   const events: unknown[] = [];
   const login = adapter.startLogin(
     { workingDirectory: "/tmp", timeoutMs: 1000 },
@@ -136,6 +147,7 @@ test("streams Codex device code and matches completion notification", async () =
 
 test("enforces the minimum Codex version", async () => {
   const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     version: "0.117.9",
     create: () => new FakeProcess(),
   });
@@ -147,7 +159,10 @@ test("enforces the minimum Codex version", async () => {
 test("reports an empty account as not logged in", async () => {
   const process = new FakeProcess();
   process.account = undefined;
-  const adapter = new CodexRuntimeAuthAdapter({ create: () => process });
+  const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  });
   const login = adapter.startLogin(
     { workingDirectory: "/tmp", timeoutMs: 1000 },
     { onEvent() {}, prompt: async () => "" },
@@ -162,7 +177,10 @@ test("reports an empty account as not logged in", async () => {
 
 test("ignores an early completion for a different login id and waits for the matching one", async () => {
   const process = new FakeProcess();
-  const adapter = new CodexRuntimeAuthAdapter({ create: () => process });
+  const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  });
   const login = adapter.startLogin(
     { workingDirectory: "/tmp", timeoutMs: 20 },
     { onEvent() {}, prompt: async () => "" },
@@ -174,7 +192,10 @@ test("ignores an early completion for a different login id and waits for the mat
 
 test("rejects a duplicate while a login is active", async () => {
   const process = new FakeProcess();
-  const adapter = new CodexRuntimeAuthAdapter({ create: () => process });
+  const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  });
   const first = adapter.startLogin(
     { workingDirectory: "/tmp", timeoutMs: 20 },
     { onEvent() {}, prompt: async () => "" },
@@ -187,7 +208,10 @@ test("rejects a duplicate while a login is active", async () => {
 
 test("returns cancelled when the interaction signal aborts", async () => {
   const process = new FakeProcess();
-  const adapter = new CodexRuntimeAuthAdapter({ create: () => process });
+  const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  });
   const controller = new AbortController();
   const login = adapter.startLogin(
     { workingDirectory: "/tmp", timeoutMs: 1000 },
@@ -210,7 +234,7 @@ test("does not emit device code when a matching completion arrived before start 
   };
   const events: unknown[] = [];
   await expect(
-    new CodexRuntimeAuthAdapter({ create: () => process }).startLogin(
+    new CodexRuntimeAuthAdapter({ host: fixtureCodexAuthHost, create: () => process }).startLogin(
       { workingDirectory: "/tmp" },
       { onEvent: (event) => events.push(event), prompt: async () => "" },
     ),
@@ -221,7 +245,10 @@ test("does not emit device code when a matching completion arrived before start 
 test("classifies an exited app-server with its exit code", async () => {
   const process = new FakeProcess();
   process.exitCode = 7;
-  const adapter = new CodexRuntimeAuthAdapter({ create: () => process });
+  const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  });
   const login = adapter.startLogin(
     { workingDirectory: "/tmp", timeoutMs: 1000 },
     { onEvent() {}, prompt: async () => "" },
@@ -236,7 +263,10 @@ test("classifies an exited app-server with its exit code", async () => {
 
 test("classifies a failing event sink as interaction_failed", async () => {
   const process = new FakeProcess();
-  const login = new CodexRuntimeAuthAdapter({ create: () => process }).startLogin(
+  const login = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  }).startLogin(
     { workingDirectory: "/tmp" },
     {
       onEvent: () => {
@@ -250,7 +280,10 @@ test("classifies a failing event sink as interaction_failed", async () => {
 
 test("returns timed_out when device login exceeds its deadline", async () => {
   const process = new FakeProcess();
-  const login = new CodexRuntimeAuthAdapter({ create: () => process }).startLogin(
+  const login = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+  }).startLogin(
     { workingDirectory: "/tmp", timeoutMs: 1 },
     { onEvent() {}, prompt: async () => "" },
   );
@@ -262,7 +295,11 @@ test("keeps a successful login when account/read times out", async () => {
   const original = process.request.bind(process);
   process.request = async (command) =>
     command.method === "account/read" ? await new Promise<never>(() => {}) : original(command);
-  const adapter = new CodexRuntimeAuthAdapter({ create: () => process, accountReadTimeoutMs: 1 });
+  const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
+    create: () => process,
+    accountReadTimeoutMs: 1,
+  });
   const login = adapter.startLogin(
     { workingDirectory: "/tmp", timeoutMs: 1000 },
     { onEvent() {}, prompt: async () => "" },
@@ -283,7 +320,9 @@ test("runs codex logout and confirms the account is logged out", async () => {
       ? { exitCode: 0, text: "Logged out" }
       : { exitCode: 1, text: "Not logged in" };
   };
-  const result = await new CodexRuntimeAuthAdapter({ runCli }).logout({ workingDirectory: "/tmp" });
+  const result = await new CodexRuntimeAuthAdapter({ host: fixtureCodexAuthHost, runCli }).logout({
+    workingDirectory: "/tmp",
+  });
   expect(result).toMatchObject({ status: "logged_out", authStatus: { state: "logged_out" } });
   expect(commands).toEqual([
     ["codex", "logout"],
@@ -293,6 +332,7 @@ test("runs codex logout and confirms the account is logged out", async () => {
 
 test("reports a failed logout process", async () => {
   const result = await new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     runCli: async () => ({ exitCode: 1, text: "logout failed" }),
   }).logout({ workingDirectory: "/tmp" });
   expect(result).toMatchObject({ status: "failed", reason: "process_failed" });
@@ -300,6 +340,7 @@ test("reports a failed logout process", async () => {
 
 test("confirms logged out even when logout exits unsuccessfully", async () => {
   const result = await new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     runCli: async (command) =>
       command.includes("status")
         ? { exitCode: 1, text: "Not logged in" }
@@ -310,6 +351,7 @@ test("confirms logged out even when logout exits unsuccessfully", async () => {
 
 test("treats successful logout with unknown status as logged out", async () => {
   const result = await new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     runCli: async (command) =>
       command.includes("status") ? { exitCode: 2, text: "unexpected" } : { exitCode: 0, text: "" },
   }).logout({ workingDirectory: "/tmp" });
@@ -318,6 +360,7 @@ test("treats successful logout with unknown status as logged out", async () => {
 
 test("classifies logout timeout and rejected command", async () => {
   const timedOut = await new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     runCli: async (command) =>
       command.includes("status")
         ? { exitCode: 2, text: "unknown" }
@@ -325,6 +368,7 @@ test("classifies logout timeout and rejected command", async () => {
   }).logout({ workingDirectory: "/tmp" });
   expect(timedOut).toMatchObject({ status: "failed", reason: "timed_out" });
   const rejected = await new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     runCli: async (command) =>
       command.includes("status")
         ? { exitCode: 2, text: "unknown" }
@@ -340,6 +384,7 @@ test("classifies logout timeout and rejected command", async () => {
 test("uses separate login and logout version floors", async () => {
   let logoutRan = false;
   const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     version: "0.100.0",
     runCli: async (command) => {
       logoutRan ||= command.includes("logout");
@@ -360,6 +405,7 @@ test("uses separate login and logout version floors", async () => {
 test("an already-cancelled login never starts a Codex app-server", async () => {
   let spawned = 0;
   const adapter = new CodexRuntimeAuthAdapter({
+    host: fixtureCodexAuthHost,
     create: () => {
       spawned++;
       return new FakeProcess();

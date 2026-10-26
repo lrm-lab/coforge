@@ -10,11 +10,8 @@ import {
   scrubRuntimeErrorText,
 } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
-import { processSpawner } from "#src/code-agent/process-host";
-import { maskEmail } from "#src/code-agent/mask-email";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { agentEnvironment } from "#src/code-agent/environment";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
+import type { CodexAuthHost } from "./host";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX, "auth"]);
 
@@ -48,38 +45,6 @@ export type CodexCliRunner = (
   timeoutMs: number,
 ) => Promise<CodexCliResult>;
 
-async function runCodexCli(
-  command: readonly string[],
-  cwd: string,
-  timeoutMs: number,
-  env: Record<string, string>,
-): Promise<CodexCliResult> {
-  const child = Bun.spawn({
-    cmd: [...command],
-    cwd,
-    env,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  let handle: ReturnType<typeof setTimeout> | undefined;
-  const result = await Promise.race([
-    Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]).then(([text, stderr, exitCode]) => ({ text, stderr, exitCode })),
-    new Promise<CodexCliResult>((resolve) => {
-      handle = setTimeout(() => {
-        child.kill();
-        resolve({ text: "", stderr: "", exitCode: -1, timedOut: true });
-      }, timeoutMs);
-    }),
-  ]);
-  if (handle) clearTimeout(handle);
-  return result;
-}
-
 function versionAtLeast(
   version: string | undefined,
   minimumVersion = CODEX_LOGIN_MINIMUM_VERSION,
@@ -111,36 +76,36 @@ function detail(value: unknown): string | undefined {
 export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
   readonly provider = RUNTIME_PROVIDER.CODEX;
   readonly #command: readonly string[];
+  readonly #host: CodexAuthHost;
   readonly #version: string | undefined;
   readonly #create: CodexAppServerFactory;
   readonly #accountReadTimeoutMs: number;
   readonly #runCli: CodexCliRunner;
   #active?: { id: string; process: CodexAppServerProcess; cancelled: boolean };
 
-  constructor(
-    options: {
-      command?: readonly string[];
-      version?: string;
-      create?: CodexAppServerFactory;
-      accountReadTimeoutMs?: number;
-      runCli?: CodexCliRunner;
-      environment?: Readonly<Record<string, string | undefined>>;
-      platform?: NodeJS.Platform;
-    } = {},
-  ) {
+  constructor(options: {
+    host: CodexAuthHost;
+    command?: readonly string[];
+    version?: string;
+    create?: CodexAppServerFactory;
+    accountReadTimeoutMs?: number;
+    runCli?: CodexCliRunner;
+  }) {
+    this.#host = options.host;
     this.#command = options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"];
     this.#version = options.version;
     this.#accountReadTimeoutMs = options.accountReadTimeoutMs ?? 20_000;
-    const environment = () =>
-      agentEnvironment(undefined, options.environment ?? Bun.env, options.platform, {
-        extraEnv: { NO_COLOR: "1" },
-      });
     this.#runCli =
-      options.runCli ??
-      ((command, cwd, timeoutMs) => runCodexCli(command, cwd, timeoutMs, environment()));
+      options.runCli ?? ((command, cwd, timeoutMs) => this.#host.runCli(command, cwd, timeoutMs));
     this.#create =
       options.create ??
-      ((cwd) => new JsonlProcess(this.#command, cwd, environment(), processSpawner));
+      ((cwd) =>
+        new JsonlProcess(
+          this.#command,
+          cwd,
+          this.#host.buildAuthEnvironment(),
+          this.#host.processTreeSpawner,
+        ));
   }
 
   get activeOperationId(): string | undefined {
@@ -222,11 +187,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       await process.request({
         method: "initialize",
         params: {
-          clientInfo: {
-            name: "coforge_daemon",
-            title: "CoForge Daemon",
-            version: COFORGE_DAEMON_VERSION,
-          },
+          clientInfo: this.#host.clientInfo,
           capabilities: { experimentalApi: true },
         },
       });
@@ -317,7 +278,9 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
           state: "logged_in",
           ...runtimeAuthAccount({
             maskedLabel:
-              typeof accountRecord?.email === "string" ? maskEmail(accountRecord.email) : undefined,
+              typeof accountRecord?.email === "string"
+                ? this.#host.maskAccountLabel(accountRecord.email)
+                : undefined,
             planLabel: accountRecord?.planType,
             methodLabel: accountRecord?.type,
           }),

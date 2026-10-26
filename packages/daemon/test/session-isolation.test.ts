@@ -1,3 +1,4 @@
+import { codexRuntimeHost } from "#src/code-agent/codex/host";
 import type { AgentSession } from "@lrm/coforge-anvil";
 import { piProvider } from "./fixtures/pi-host";
 import { expect, test } from "bun:test";
@@ -6,7 +7,7 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaudeCodeProvider } from "#src/code-agent/claude-code/provider";
-import { CodexProvider } from "#src/code-agent/codex/provider";
+import { CodexProvider } from "@lrm/coforge-anvil/codex";
 
 // macOS tmpdir lives under /var, a symlink. Persisted Pi sessions are keyed by
 // the realpath of the workspace, so a literal /var/folders path here would
@@ -19,7 +20,10 @@ const TEST_AGENT_INSTRUCTIONS = "Test instructions.";
 
 for (const Provider of [ClaudeCodeProvider, CodexProvider]) {
   test(`${Provider.name} rejects an empty resume ID instead of treating it as a fresh session`, async () => {
-    const provider = new Provider({ command: ["/not-an-installed-provider"] });
+    const provider = new Provider({
+      host: codexRuntimeHost,
+      command: ["/not-an-installed-provider"],
+    });
     await expect(
       provider.createAgentSession({
         agentWorkspaceDirectory: tmpdir(),

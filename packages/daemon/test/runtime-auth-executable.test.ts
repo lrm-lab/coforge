@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CODEX_LOGIN_STATUS_TIMEOUT_MS } from "#src/code-agent/codex/auth";
+import { CODEX_LOGIN_STATUS_TIMEOUT_MS } from "@lrm/coforge-anvil/codex";
 
 // The probe runs with an owned HOME and empty PATH, so even the broken adapter cannot read
 // a real account. The Codex installer directory is outside the enriched search path too.

@@ -2,7 +2,7 @@ import { handleCodexMetadata } from "./codex-metadata";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { appliedServiceTier, hasExpectedThreadConfig } from "./codex-models";
-import { readLines } from "./read-lines";
+import { readLines } from "../../../../scripts/test/read-lines";
 
 const expectedSkill = process.argv
   .find((argument) => argument.startsWith("expected-skill="))

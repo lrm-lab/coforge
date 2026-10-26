@@ -37,10 +37,6 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
     "the RuntimeProvider vocabulary module itself",
   "packages/daemon/src/code-agent/runtime-executable.ts":
     'the provider-to-executable table and installer paths; the CLIs are literally named "codex", "opencode" and "grok"',
-  "packages/daemon/src/code-agent/codex/provider.ts":
-    'a logger category and the Codex CLI executable/subcommand ("codex", "app-server")',
-  "packages/daemon/src/code-agent/codex/usage.ts":
-    'the Codex CLI executable/subcommand ("codex", "app-server")',
 };
 
 const LITERAL_PATTERN = new RegExp(

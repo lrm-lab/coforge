@@ -1,7 +1,9 @@
-import { readCodexUsage } from "#src/code-agent/codex/usage";
+import { fixtureCodexHost } from "./codex-host";
+import { readCodexUsage } from "@lrm/coforge-anvil/codex";
 
 const fixture = new URL("./codex-app-server.ts", import.meta.url).pathname;
 const outcome = await readCodexUsage(process.cwd(), {
+  host: fixtureCodexHost,
   command: [process.execPath, fixture, process.argv[2]!],
   timeoutMs: 30_000,
 }).then(

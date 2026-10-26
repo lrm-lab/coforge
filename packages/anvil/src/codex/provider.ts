@@ -5,7 +5,6 @@ import type {
   AgentSessionOptions,
   UsageSnapshot,
 } from "@coforge/agent";
-import { processSpawner } from "#src/code-agent/process-host";
 import { type CodeAgentProvider, JsonlRequestError, asRecord, eventTime } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
@@ -14,8 +13,7 @@ import { openCodexThread } from "./thread-open";
 import { codexTurnOutcome } from "./turn-outcome";
 import { CodexTurnSignals } from "./turn-signals";
 import { readCodexUsage } from "./usage";
-import { agentEnvironment } from "#src/code-agent/environment";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
+import type { CodexRuntimeHost } from "./host";
 import {
   RUNTIME_PROVIDER,
   utf8Encoder,
@@ -29,14 +27,16 @@ import {
   type CodexSessionState,
 } from "./provider-support";
 
-const logger = getLogger(["coforge", "daemon", "code-agent", "codex"]);
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
 
 export class CodexProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CODEX;
   readonly #command: readonly string[];
+  readonly #host: CodexRuntimeHost;
 
-  constructor(options: { command?: readonly string[] } = {}) {
-    this.#command = options.command ?? ["codex", "app-server"];
+  constructor(options: { host: CodexRuntimeHost; command?: readonly string[] }) {
+    this.#host = options.host;
+    this.#command = options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"];
   }
 
   async readUsage(options: {
@@ -44,6 +44,7 @@ export class CodexProvider implements CodeAgentProvider {
     timeoutMs?: number;
   }): Promise<UsageSnapshot | null> {
     return readCodexUsage(options.workingDirectory, {
+      host: this.#host,
       command: this.#command,
       timeoutMs: options.timeoutMs,
     });
@@ -55,23 +56,15 @@ export class CodexProvider implements CodeAgentProvider {
     const process = new JsonlProcess(
       this.#command,
       options.agentWorkspaceDirectory,
-      agentEnvironment(options.environment, Bun.env, undefined, {
-        envVars: options.runtime?.envVars,
-        extraEnv: { NO_COLOR: "1" },
-        gitHooks: options.gitHooks,
-      }),
-      processSpawner,
+      this.#host.buildSessionEnvironment(options),
+      this.#host.processTreeSpawner,
     );
     rejectServerRequests(process, options.agentId, options.runtimeId);
     try {
       await process.request({
         method: "initialize",
         params: {
-          clientInfo: {
-            name: "coforge_daemon",
-            title: "CoForge Daemon",
-            version: COFORGE_DAEMON_VERSION,
-          },
+          clientInfo: this.#host.clientInfo,
           capabilities: { experimentalApi: false },
         },
       });

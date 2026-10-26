@@ -10,9 +10,8 @@ import {
   type CatalogProgress,
 } from "@lrm/coforge-anvil/execution";
 import { asRecord, CatalogDiscoveryError, isModel, within } from "@lrm/coforge-anvil";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
+import type { CodexCatalogHost, CodexClientInfo } from "./host";
 import { getLogger } from "@logtape/logtape";
-import { jsonlCatalogHost } from "#src/code-agent/catalog-host";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -20,13 +19,18 @@ export async function discoverCodexCatalog(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  host: CodexCatalogHost,
   /** Each bounded wait: the `initialize` reply, then each `model/list` page. */
   timeoutMs: number,
   force = false,
 ): Promise<CodeAgentModelCatalog | undefined> {
-  const live = await discoverCodexCatalogFromProcess(command, cwd, environment, timeoutMs).catch(
-    () => undefined,
-  );
+  const live = await discoverCodexCatalogFromProcess(
+    command,
+    cwd,
+    environment,
+    host,
+    timeoutMs,
+  ).catch(() => undefined);
   if (live) return live;
   if (force) return undefined;
   const configuredHome = environment.CODEX_HOME;
@@ -39,7 +43,7 @@ export async function discoverCodexCatalog(
   if (!root) return undefined;
   for (const directory of [root, join(root, ".codex")]) {
     try {
-      const cache = asRecord(await Bun.file(join(directory, "models_cache.json")).json());
+      const cache = asRecord(await host.readJsonFile(join(directory, "models_cache.json")));
       if (!Array.isArray(cache?.models)) continue;
       const models = cache.models
         .map((value: unknown) => {
@@ -79,6 +83,7 @@ async function discoverCodexCatalogFromProcess(
   command: readonly string[],
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
+  host: CodexCatalogHost,
   timeoutMs: number,
 ): Promise<CodeAgentModelCatalog | undefined> {
   return withJsonlProcess(
@@ -86,7 +91,7 @@ async function discoverCodexCatalogFromProcess(
     command,
     cwd,
     async (process, progress) => {
-      await initializeCodex(process, timeoutMs, progress);
+      await initializeCodex(process, timeoutMs, host.clientInfo, progress);
       const models: CodeAgentModelMetadata[] = [];
       let cursor: string | undefined;
       do {
@@ -108,7 +113,7 @@ async function discoverCodexCatalogFromProcess(
       return { provider: RUNTIME_PROVIDER.CODEX, models };
     },
     environment,
-    jsonlCatalogHost,
+    host,
   );
 }
 
@@ -116,6 +121,7 @@ async function discoverCodexCatalogFromProcess(
 export async function initializeCodex(
   process: JsonlProcess,
   timeoutMs: number,
+  clientInfo: CodexClientInfo,
   progress?: CatalogProgress,
 ): Promise<void> {
   if (progress) progress.stage = "initialize";
@@ -123,11 +129,7 @@ export async function initializeCodex(
     process.request({
       method: "initialize",
       params: {
-        clientInfo: {
-          name: "coforge_daemon",
-          title: "CoForge Daemon",
-          version: COFORGE_DAEMON_VERSION,
-        },
+        clientInfo,
         capabilities: { experimentalApi: false },
       },
     }),

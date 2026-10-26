@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { codexTurnOutcome } from "#src/code-agent/codex/turn-outcome";
+import { codexTurnOutcome } from "@lrm/coforge-anvil/codex";
 
 describe("codexTurnOutcome", () => {
   test("a completed or interrupted turn carries no failure", () => {

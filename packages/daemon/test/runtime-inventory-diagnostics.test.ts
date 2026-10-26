@@ -1,6 +1,8 @@
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
+import { codexCatalogHost } from "#src/code-agent/codex/host";
 import { expect, test } from "bun:test";
 import { CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
-import { discoverCodexCatalog } from "#src/code-agent/codex/catalog";
+import { discoverCodexCatalog } from "@lrm/coforge-anvil/codex";
 import {
   CATALOG_DISCOVERY_BUDGET_MS,
   SHORT_CATALOG_DISCOVERY_TIMEOUT_MS,
@@ -15,9 +17,10 @@ import { captureDaemonLogs } from "./log-capture";
 async function captureDiscovery(mode: string, timeoutMs = CATALOG_DISCOVERY_TIMEOUT_MS) {
   const { records } = await captureDaemonLogs(async () => {
     const catalog = await discoverCodexCatalog(
-      [process.execPath, new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname, mode],
+      [process.execPath, anvilRuntimeFixtures.codex, mode],
       process.cwd(),
       { PATH: Bun.env.PATH },
+      codexCatalogHost,
       timeoutMs,
     );
     expect(catalog).toBeUndefined();

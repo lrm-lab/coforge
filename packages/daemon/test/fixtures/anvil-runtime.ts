@@ -1,5 +1,10 @@
 /** Runtime fixtures belong to Anvil; daemon integration tests locate them through this module. */
 export const anvilRuntimeFixtures = {
+  codex: new URL("../../../anvil/test/fixtures/codex-app-server.ts", import.meta.url).pathname,
+  codexScenarios: new URL(
+    "../../../anvil/test/fixtures/codex-app-server-scenarios.ts",
+    import.meta.url,
+  ).pathname,
   dsh: new URL("../../../anvil/test/fixtures/dsh-acp.ts", import.meta.url).pathname,
   antigravity: new URL("../../../anvil/test/fixtures/antigravity-fixture.ts", import.meta.url)
     .pathname,

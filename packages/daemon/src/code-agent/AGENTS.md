@@ -107,19 +107,10 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## Codex
 
-- Catalog disk fallback uses nonblank `CODEX_HOME` resolved against the probe cwd, otherwise
-  `HOME/.codex` (or `USERPROFILE/.codex`). Try `models_cache.json` at that root, then its `.codex`
-  child; never substitute another home when an explicit root has no usable cache. Live results
-  take precedence, and forced discovery never reads disk fallback.
-- `codex/provider.ts` owns retry classification: `willRetry: true` notifications stay internal
-  diagnostics; numbered stderr reconnect lines become informational `runtime_reconnecting` Activity.
-- Codex Activity follows the reference Computer; MCP tool names match Claude's `mcp__<server>__<tool>`.
-- Every app-server request is answered -32601 (`server-requests.ts`), from process start.
-- Resume recovery (`thread-open.ts`): archived -> `thread/unarchive` once, then resume, else a fresh
-  thread reported as replaced; active writer -> `session_in_use`; the missing-rollout match stays
-  exact. An unnamed thread is named `CoForge · <agent name>`, best effort.
-- `turn-signals.ts`: a completed turn with no evidence and a `systemError` status are errors
-  (`codex_zero_evidence_turn_completed`); warnings, waiting and blank answers are logged only.
+- Supply session, catalog, usage and auth host capabilities through `codex/host.ts`.
+  Keep their environment composition and client identities distinct; auth CLI and
+  app-server use the registry-resolved executable and the same effective environment.
+- Native Codex rules live in [Anvil Codex instructions](../../../anvil/src/codex/AGENTS.md).
 
 ## Per-turn providers (Cursor, OpenCode, Antigravity)
 

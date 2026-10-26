@@ -38,7 +38,8 @@ import {
 } from "./runtime-inventory-cache";
 import { discoverExternalCodeAgents } from "./runtime-probe";
 import { claudeStaticCatalog } from "./claude-code/catalog";
-import { discoverCodexCatalog } from "./codex/catalog";
+import { discoverCodexCatalog } from "@lrm/coforge-anvil/codex";
+import { codexCatalogHost } from "./codex/host";
 import { discoverCoforgeCatalog } from "./pi/catalog";
 import { piRuntimeHost } from "./pi/host";
 import { DshCatalogDiscovery } from "./dsh/catalog";
@@ -267,6 +268,7 @@ export async function discoverCodeAgentCatalogs(
           commands.codex ?? [executable, "app-server"],
           cwd,
           environment,
+          codexCatalogHost,
           options.catalogDiscoveryTimeoutMs ?? CATALOG_DISCOVERY_TIMEOUT_MS,
           options.force,
         ).then((catalog) => ({
