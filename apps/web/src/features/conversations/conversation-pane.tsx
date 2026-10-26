@@ -52,6 +52,7 @@ import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ReplyingAgentsLine } from "#src/features/agents/replying-agents-line";
+import { NotificationActivationBanner } from "#src/features/notifications/notification-activation-banner";
 
 export function ConversationPane({
   conversation,
@@ -752,18 +753,13 @@ export function ConversationPane({
     flashMessageRow(messageId);
   }
 
-  // The Saved view's `?message=<uuid>` jump (#127 follow-up): position-only by design. The
-  // hash deep-link path above auto-promotes to the thread pane (`openThreadFromHash`), which
-  // a saved card must never trigger — the ruling is "land at the message's row in the
-  // stream, never in the thread". The wrapper owns the router read (this pane stays free of
-  // router hooks so the thread-root tests can render it standalone); this consumes the param
-  // exactly once — load the window around the anchor + scroll through the same `showMessage`
-  // machinery (its pending-ref pass scrolls after the window swap, so an old reply lands
-  // correctly) — and strips the param one-shot, like a hash, so a later sidebar navigation
-  // can't inherit a foreign message id. A notification's hash wins outright: two landing
-  // mechanisms never run together — the rules themselves are the pure `positionJumpDecision`
-  // table (conversation-thread-search.ts), pinned by unit tests for a pane this suite only
-  // renders server-side.
+  // The Saved view's `?message=<uuid>` jump (#127 follow-up) is position-only: it lands at the
+  // message's row in the stream, never in its thread (the hash path above opens the thread). The
+  // wrapper owns the router read, so this pane stays free of router hooks and the thread-root
+  // tests can render it standalone. It is consumed once — the window around the anchor loads and
+  // `showMessage` scrolls to it — then stripped like a hash, so a later navigation cannot inherit
+  // it. A notification's hash wins outright; the rules are the pure `positionJumpDecision` table
+  // (conversation-thread-search.ts), pinned by unit tests.
   const attemptedJumpRef = useRef<string | undefined>(undefined);
   const showMessageRef = useRef(showMessage);
   showMessageRef.current = showMessage;
@@ -1071,6 +1067,7 @@ export function ConversationPane({
       </div>
 
       <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
+        {!readOnlyNotice && !root && <NotificationActivationBanner />}
         {readOnlyNotice ?? (
           <MessageComposer
             conversationId={conversation.conversationId}

@@ -5,5 +5,16 @@
   "conversation_send_as_task_description": "同时加入本会话的任务看板",
   "conversation_send_plain_description": "只发消息，不加入任务看板",
   "conversation_send_options": "更多发送方式",
-  "conversation_sending": "发送中…"
+  "conversation_sending": "发送中…",
+  "notification_activation_desktop_title": "你离开后，Agent 仍会继续工作。",
+  "notification_activation_desktop_body": "打开通知，它们完成或需要你时就不会错过。",
+  "notification_activation_mobile_title": "你离开后，Agent 仍会继续工作。",
+  "notification_activation_mobile_body": "完成或需要你时通知你。",
+  "notification_activation_enable": "打开通知",
+  "notification_activation_enabling": "正在打开…",
+  "notification_activation_dismiss": "关闭",
+  "notification_activation_hidden": "已暂时隐藏，随时可以在{settings}里打开",
+  "notification_activation_settings": "设置 › 通知",
+  "notification_activation_error_unavailable": "通知暂时不可用，请到设置里重试。",
+  "notification_activation_error_generic": "未能打开通知，请重试。"
 }

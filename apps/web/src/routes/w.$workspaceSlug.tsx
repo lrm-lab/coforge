@@ -22,6 +22,7 @@ import { BrowserRealtimeProvider } from "#src/features/realtime/browser-realtime
 import { getBrowserRealtimeConnectionToken } from "#src/features/realtime/realtime.functions";
 import { BrowserPushLifecycle } from "#src/features/notifications/browser-push-lifecycle";
 import { InPageNotifications } from "#src/features/notifications/in-page-notifications";
+import { NotificationActivationContext } from "#src/features/notifications/notification-activation-banner";
 import { getBrowserNotificationSettings } from "#src/features/notifications/notifications.functions";
 import { listAgents } from "#src/features/agents/agents.functions";
 import { WorkspaceAgentsProvider } from "#src/features/agents/workspace-agents-realtime";
@@ -159,28 +160,38 @@ function AppLayout() {
                     workspaceId={currentWorkspace.id}
                   />
                   <ComputerUpgradeWatcher />
-                  <AppShell
-                    user={{
-                      id: user.id,
-                      name: user.name,
-                      email: user.email,
-                      avatarUrl: user.avatarUrl,
+                  <NotificationActivationContext
+                    value={{
+                      publicKey: notifications.publicKey,
+                      workspaceSlug: currentWorkspace.slug,
                     }}
-                    workspaces={workspaces}
-                    currentWorkspace={currentWorkspace}
-                    recordsPreview={recordsPreview}
-                    onSelectWorkspace={async (slug) => {
-                      await navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug: slug } });
-                    }}
-                    onCreateWorkspace={createAndOpen}
-                    /** Like FirstWorkspacePage's link: a full browser navigation so the server route
-                     * can clear the session cookie and send the browser to Authing. `?returnTo`
-                     * carries this page back across the sign-out (the root route hands it to
-                     * `/login`) once the switch-account return step is in. */
-                    onSignOut={() => void signOut()}
                   >
-                    <Outlet />
-                  </AppShell>
+                    <AppShell
+                      user={{
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        avatarUrl: user.avatarUrl,
+                      }}
+                      workspaces={workspaces}
+                      currentWorkspace={currentWorkspace}
+                      recordsPreview={recordsPreview}
+                      onSelectWorkspace={async (slug) => {
+                        await navigate({
+                          to: "/w/$workspaceSlug",
+                          params: { workspaceSlug: slug },
+                        });
+                      }}
+                      onCreateWorkspace={createAndOpen}
+                      /** Like FirstWorkspacePage's link: a full browser navigation so the server route
+                       * can clear the session cookie and send the browser to Authing. `?returnTo`
+                       * carries this page back across the sign-out (the root route hands it to
+                       * `/login`) once the switch-account return step is in. */
+                      onSignOut={() => void signOut()}
+                    >
+                      <Outlet />
+                    </AppShell>
+                  </NotificationActivationContext>
                 </PanelTabOrderProvider>
               </WorkspaceAgentsProvider>
             </WorkspacePresenceProvider>

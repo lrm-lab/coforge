@@ -1,0 +1,31 @@
+/*
+ * After Dismiss, the hidden-for-now line runs a 3-second bar down to nothing, then goes (its
+ * `animationend`). With reduced motion the bar stands still at full width but still times the line.
+ */
+@keyframes notification-activation-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.notification-activation-progress {
+  animation: notification-activation-progress 3s linear forwards;
+}
+
+@keyframes notification-activation-hold {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notification-activation-progress {
+    animation-name: notification-activation-hold;
+  }
+}

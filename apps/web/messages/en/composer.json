@@ -5,5 +5,16 @@
   "conversation_send_as_task_description": "Also adds it to the task board",
   "conversation_send_plain_description": "Sends a plain message, not a task",
   "conversation_send_options": "More send options",
-  "conversation_sending": "Sending…"
+  "conversation_sending": "Sending…",
+  "notification_activation_desktop_title": "Your agents keep working after you leave.",
+  "notification_activation_desktop_body": "Turn on notifications so you don't miss when they finish or need you.",
+  "notification_activation_mobile_title": "Agents keep working after you leave.",
+  "notification_activation_mobile_body": "Get notified when they finish or need you.",
+  "notification_activation_enable": "Enable Notifications",
+  "notification_activation_enabling": "Enabling…",
+  "notification_activation_dismiss": "Dismiss",
+  "notification_activation_hidden": "Hidden for now — turn on anytime in {settings}",
+  "notification_activation_settings": "Settings › Notifications",
+  "notification_activation_error_unavailable": "Notifications aren't available right now. Try again in Settings.",
+  "notification_activation_error_generic": "Couldn't enable notifications. Try again."
 }
