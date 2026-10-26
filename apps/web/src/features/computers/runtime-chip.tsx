@@ -4,7 +4,7 @@ import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import type { UsageHealth } from "./runtime-usage";
+import type { UsageHealth } from "./runtime-usage-status";
 
 /**
  * One runtime on a Computer's detail: its mark, its name and one status dot. The dot is

@@ -4,7 +4,7 @@ import { ChevronDown } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { DayDivider, UnreadDivider } from "./message-row";
+import { DayDivider, UnreadDivider } from "./message-dividers";
 import {
   summarizeSystemGroup,
   type SystemGroupSummary,
