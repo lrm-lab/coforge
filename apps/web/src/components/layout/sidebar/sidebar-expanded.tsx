@@ -2,9 +2,11 @@ import type { FC, ReactNode } from "react";
 import { LayoutLeft } from "@untitledui/icons";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { MobileNavigationHeader } from "#src/components/layout/sidebar/mobile-header";
 import { writeSidebarExpanded } from "#src/features/settings/sidebar-expanded";
+import { SidebarToggleTooltip } from "#src/features/settings/sidebar-shortcut";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -67,14 +69,16 @@ function SidebarExpandedPanel({
         <CoForgeMark className="h-6" />
         <span className="text-lg font-bold text-primary">CoForge</span>
         {onCollapse && (
-          <ButtonUtility
-            icon={LayoutLeft}
-            size="sm"
-            color="tertiary"
-            aria-label={m.navigation_collapse_sidebar()}
-            onClick={onCollapse}
-            className="-mr-1.5 ml-auto"
-          />
+          <Tooltip title={<SidebarToggleTooltip label={m.navigation_collapse_sidebar()} />}>
+            <ButtonUtility
+              icon={LayoutLeft}
+              size="sm"
+              color="tertiary"
+              aria-label={m.navigation_collapse_sidebar()}
+              onClick={onCollapse}
+              className="-mr-1.5 ml-auto"
+            />
+          </Tooltip>
         )}
       </div>
       {subheader && <div className="shrink-0 px-2 pt-1">{subheader}</div>}

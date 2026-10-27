@@ -20,6 +20,11 @@ export function readSidebarExpanded(): boolean {
   return readDeviceFlag(STORAGE_KEY);
 }
 
+/** Whether the page shows the full sidebar now: the class, which the boot script set from storage. */
+export function isSidebarExpanded(): boolean {
+  return !document.documentElement.classList.contains(COLLAPSED_CLASS);
+}
+
 export function writeSidebarExpanded(expanded: boolean) {
   writeDeviceFlag(STORAGE_KEY, expanded);
   document.documentElement.classList.toggle(COLLAPSED_CLASS, !expanded);

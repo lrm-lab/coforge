@@ -33,6 +33,7 @@ import { getPanelTabOrders } from "#src/features/panel-tabs/panel-tabs.functions
 import { PanelTabOrderProvider } from "#src/features/panel-tabs/panel-tab-order-context";
 import { useLastLocationMemory } from "#src/features/workspaces/use-last-location-memory";
 import { useSearchShortcut } from "#src/features/search/search-shortcut";
+import { useSidebarShortcut } from "#src/features/settings/sidebar-shortcut";
 import { markShownWorkspace, shownWorkspace } from "#src/features/workspaces/shown-workspace";
 import { LeaveDeletedWorkspace } from "#src/features/workspaces/leave-deleted-workspace";
 import { getStartPage } from "#src/features/workspaces/last-location.functions";
@@ -130,6 +131,7 @@ function AppLayout() {
   }, [queryClient, currentWorkspace.slug]);
   useLastLocationMemory();
   useSearchShortcut(currentWorkspace.id, user.id);
+  useSidebarShortcut();
   const getRealtimeToken = useServerFn(getBrowserRealtimeConnectionToken);
   const getConnectionToken = useCallback(() => getRealtimeToken(), [getRealtimeToken]);
   const navigate = useNavigate();

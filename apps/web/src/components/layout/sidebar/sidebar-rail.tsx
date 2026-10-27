@@ -6,6 +6,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { writeSidebarExpanded } from "#src/features/settings/sidebar-expanded";
+import { SidebarToggleTooltip } from "#src/features/settings/sidebar-shortcut";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -75,15 +76,18 @@ export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRail
     >
       <div className="flex w-full flex-col items-center gap-3">
         <div className="mt-2 flex h-12 shrink-0 items-center justify-center">
-          <ButtonUtility
-            icon={LayoutLeft}
-            size="sm"
-            color="tertiary"
-            tooltip={m.navigation_expand_sidebar()}
-            tooltipPlacement="right"
-            aria-label={m.navigation_expand_sidebar()}
-            onClick={() => writeSidebarExpanded(true)}
-          />
+          <Tooltip
+            title={<SidebarToggleTooltip label={m.navigation_expand_sidebar()} />}
+            placement="right"
+          >
+            <ButtonUtility
+              icon={LayoutLeft}
+              size="sm"
+              color="tertiary"
+              aria-label={m.navigation_expand_sidebar()}
+              onClick={() => writeSidebarExpanded(true)}
+            />
+          </Tooltip>
         </div>
         <div className="flex h-10 shrink-0 items-center justify-center">{subheader}</div>
         <ul className="flex w-full flex-col gap-1">
