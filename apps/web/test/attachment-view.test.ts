@@ -121,7 +121,7 @@ test("a non-inline attachment never supplies an image layout size", () => {
 });
 
 const TIER = {
-  thumbnailUrl: "image/auto-orient,1/resize,m_lfit,w_1600,h_640,limit_1/format,webp/quality,q_80",
+  thumbnailUrl: "image/auto-orient,1/resize,m_lfit,w_832,h_576,limit_1/format,webp/quality,q_80",
   iconUrl: "image/auto-orient,1/resize,m_fill,w_80,h_80,limit_1/format,webp/quality,q_80",
   largeUrl: "image/auto-orient,1/resize,m_lfit,w_2048,h_2048,limit_1/format,webp/quality,q_85",
 };

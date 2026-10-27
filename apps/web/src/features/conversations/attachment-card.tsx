@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Download01 } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
@@ -11,8 +11,9 @@ import { previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
 import { LoadingImage } from "./loading-image";
 import {
-  MESSAGE_IMAGE_MAX_HEIGHT_PX,
-  MESSAGE_IMAGE_MAX_WIDTH_PX,
+  MESSAGE_GALLERY_MAX_WIDTH_PX,
+  galleryRows,
+  singleImageBox,
 } from "#src/lib/attachment-image-box";
 import type { MessageView } from "./message-row";
 
@@ -23,63 +24,115 @@ export function attachmentUrl(attachment: { id: string }) {
   return `/api/attachments/${attachment.id}`;
 }
 
-/**
- * An image's final box while it is still loading, from the size the server read off the upload:
- * its pixels as CSS pixels, scaled down into the message box (`attachment-image-box.ts`, which the
- * server sizes the thumbnail to). The card takes that width, capped
- * by the row (`max-w-full`), and the frame fills it at the image's ratio. Without a size the frame
- * stays at its minimum until the image arrives.
- */
-function imageBox({ imageWidth: width, imageHeight: height }: MessageView["attachments"][number]) {
-  if (!width || !height) return undefined;
-  return {
-    width: `${Math.min(width, MESSAGE_IMAGE_MAX_WIDTH_PX, (MESSAGE_IMAGE_MAX_HEIGHT_PX * width) / height)}px`,
-    aspectRatio: `${width} / ${height}`,
-  };
+type Attachment = MessageView["attachments"][number];
+
+const isImage = (attachment: Attachment) => attachment.contentType.startsWith("image/");
+
+/** The image a message shows first: its thumbnail, else the original, else the backend route. */
+function ImageThumbnail({
+  attachment,
+  className,
+  style,
+  imgClassName,
+  onFailed,
+}: {
+  attachment: Attachment;
+  className?: string;
+  style?: CSSProperties;
+  imgClassName: string;
+  onFailed?: () => void;
+}) {
+  const href = attachmentUrl(attachment);
+  return (
+    <AttachmentReviewDialog file={attachment}>
+      {() => (
+        <Button
+          color="tertiary"
+          noTextPadding
+          aria-label={attachment.fileName}
+          className={cn(
+            "block h-auto overflow-hidden border border-secondary bg-tertiary p-0 hover:bg-tertiary [&>span]:block [&>span]:size-full",
+            className,
+          )}
+          style={style}
+        >
+          <LoadingImage
+            src={attachment.thumbnailUrl ?? attachment.previewUrl ?? href}
+            fallbackSrc={attachment.thumbnailUrl || attachment.previewUrl ? href : undefined}
+            onFailed={onFailed}
+            alt={attachment.fileName}
+            className="size-full"
+            imgClassName={cn("block size-full", imgClassName)}
+          />
+        </Button>
+      )}
+    </AttachmentReviewDialog>
+  );
 }
 
-const IMAGE_BUTTON_CLASS =
-  "h-auto overflow-hidden rounded-lg p-0 ring-1 ring-secondary ring-inset hover:bg-transparent";
-
-export function AttachmentCard({ attachment }: { attachment: MessageView["attachments"][number] }) {
-  const href = attachmentUrl(attachment);
-  const [imgBroken, setImgBroken] = useState(false);
-  const box = imageBox(attachment);
-  if (attachment.contentType.startsWith("image/") && !imgBroken)
-    return (
-      <div
-        className="relative mt-1 w-fit"
-        style={{
-          maxWidth: `min(100%, ${MESSAGE_IMAGE_MAX_WIDTH_PX}px)`,
-          ...(box && { width: box.width }),
-        }}
-      >
-        <AttachmentReviewDialog file={attachment}>
-          {() => (
-            <Button
-              color="tertiary"
-              noTextPadding
-              aria-label={attachment.fileName}
-              className={cn(box ? "block w-full" : "grid place-items-center", IMAGE_BUTTON_CLASS)}
+/**
+ * A message's attachments: its images first, laid out as Raft does (`attachment-image-box.ts`), a
+ * lone one at its own shape and several in a grid, then a card for each other file. A lone image
+ * that cannot be loaded falls back to its file card.
+ */
+export function MessageAttachments({ attachments }: { attachments: readonly Attachment[] }) {
+  const [broken, setBroken] = useState(false);
+  const images = attachments.filter(isImage);
+  const files = attachments.filter((attachment) => !isImage(attachment));
+  const lone = images.length === 1 ? images[0]! : undefined;
+  if (lone && broken) files.unshift(lone);
+  const rows = images.length > 1 ? galleryRows(images) : [];
+  return (
+    <>
+      {lone && !broken && (
+        <div className="mt-1 flex">
+          <ImageThumbnail
+            attachment={lone}
+            className="max-w-full rounded-[10px]"
+            style={singleImageBox(lone)}
+            imgClassName="object-contain"
+            onFailed={() => setBroken(true)}
+          />
+        </div>
+      )}
+      {rows.length > 0 && (
+        <div
+          className="@container mt-1 flex w-full flex-col gap-1"
+          style={{ maxWidth: `min(${MESSAGE_GALLERY_MAX_WIDTH_PX}px, 100%)` }}
+        >
+          {rows.map((row) => (
+            <div
+              key={row.indexes.join()}
+              className={cn(
+                "grid gap-1",
+                row.indexes.length === 1 ? "grid-cols-1" : "grid-cols-2",
+                row.indexes.length === 3
+                  ? "auto-rows-[7rem] @min-[360px]:auto-rows-[8rem]"
+                  : "auto-rows-[8rem] @min-[360px]:auto-rows-[9rem]",
+              )}
             >
-              <LoadingImage
-                src={attachment.thumbnailUrl ?? attachment.previewUrl ?? href}
-                fallbackSrc={attachment.thumbnailUrl || attachment.previewUrl ? href : undefined}
-                onFailed={() => setImgBroken(true)}
-                alt={attachment.fileName}
-                className={cn("min-h-24 min-w-24", box ? "w-full" : "max-w-full")}
-                style={box && { aspectRatio: box.aspectRatio }}
-                imgClassName={
-                  box
-                    ? "block size-full object-contain"
-                    : "block max-h-80 max-w-full object-contain"
-                }
-              />
-            </Button>
-          )}
-        </AttachmentReviewDialog>
-      </div>
-    );
+              {row.indexes.map((index, cell) => (
+                <ImageThumbnail
+                  key={images[index]!.id}
+                  attachment={images[index]!}
+                  className="size-full rounded-lg"
+                  imgClassName={row.fit[cell] === "cover" ? "object-cover" : "object-contain"}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      {files.map((attachment) => (
+        <AttachmentCard key={attachment.id} attachment={attachment} />
+      ))}
+    </>
+  );
+}
+
+/** One non-image file: its type, name and size, opening its preview, with a Download button. */
+function AttachmentCard({ attachment }: { attachment: Attachment }) {
+  const href = attachmentUrl(attachment);
   const typeLabel = fileTypeLabel(attachment.fileName, attachment.contentType);
   const previewable = previewKindFor(attachment);
   return (

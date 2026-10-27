@@ -25,7 +25,7 @@ import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
-import { AttachmentCard } from "./attachment-card";
+import { MessageAttachments } from "./attachment-card";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import { useIsMessageSaved } from "./conversation-host";
@@ -640,9 +640,7 @@ export const MessageRow = memo(function MessageRow({
               )}
             </div>
           )}
-          {message.attachments.map((attachment) => (
-            <AttachmentCard key={attachment.id} attachment={attachment} />
-          ))}
+          <MessageAttachments attachments={message.attachments} />
           <MessageReactionBadges
             reactions={message.reactions}
             viewerId={viewerId}
