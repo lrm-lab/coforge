@@ -4,9 +4,9 @@ import { galleryRows, imageShape, singleImageBox } from "#src/lib/attachment-ima
 
 const size = (imageWidth: number, imageHeight: number) => ({ imageWidth, imageHeight });
 
-test("a lone image keeps its ratio within 416×288 and is never enlarged", () => {
+test("a lone image keeps its ratio within 360×288 and is never enlarged", () => {
   expect(singleImageBox(size(4032, 3024))).toEqual({
-    width: "min(384px, 100%)",
+    width: "min(360px, 100%)",
     aspectRatio: "4032 / 3024",
   });
   expect(singleImageBox(size(1170, 7956))).toEqual({
@@ -14,7 +14,7 @@ test("a lone image keeps its ratio within 416×288 and is never enlarged", () =>
     aspectRatio: "1170 / 7956",
   });
   expect(singleImageBox(size(300, 200)).width).toBe("min(300px, 100%)");
-  expect(singleImageBox(size(2000, 100)).width).toBe("min(416px, 100%)");
+  expect(singleImageBox(size(2000, 100)).width).toBe("min(360px, 100%)");
 });
 
 test("a lone image without a known size gets a 176-wide 4:3 box", () => {

@@ -9,7 +9,7 @@ import { png } from "./helpers/test-png";
 
 /**
  * A message's images laid out as Raft does (task #212, `attachment-image-box.ts`): a lone image at
- * its own shape within 416×288, a 176×132 box when its size is unknown, and several in a grid at
+ * its own shape within 360×288, a 176×132 box when its size is unknown, and several in a grid at
  * most 360 wide whose wide images take a row of their own. Run with `mise run test:e2e:web
  * e2e-message-image-gallery`. Screenshots and measured boxes live in
  * .amp/e2e/message-image-gallery/. The suite removes its own Workspace and writer.
@@ -140,8 +140,8 @@ test("lone images keep their shape; several share a grid with wide ones on a row
   await browser("screenshot", "--full", join(artifacts, "1440.png"));
   await Bun.write(join(artifacts, "1440.json"), JSON.stringify(box, null, 2));
 
-  // A lone image: within 416×288 at its ratio; its border is inside that box.
-  expect(box["landscape.png"]).toMatchObject({ width: 384, height: 288 });
+  // A lone image: within 360×288 at its ratio; its border is inside that box.
+  expect(box["landscape.png"]).toMatchObject({ width: 360, height: 270 });
   // 43px wide at 300:2000 is 286.7 tall: the width is whole pixels, the height follows.
   expect(box["long.png"]!.height).toBeGreaterThanOrEqual(286);
   expect(box["long.png"]!.height).toBeLessThanOrEqual(288);

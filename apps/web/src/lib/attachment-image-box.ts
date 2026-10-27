@@ -2,11 +2,11 @@
  * The boxes an attachment image is shown in, in CSS pixels, and how a message lays several out.
  * The message and the Files list draw them; the server sizes each image variant to twice its
  * largest box, for 2x screens (task #212). The message layout follows Raft's: a lone image keeps
- * its own shape within 416×288, never enlarged; several share a grid at most 360 wide. Opened, an
+ * its own shape within 360×288, never enlarged; several share a grid at most 360 wide. Opened, an
  * image shows its 2048 tier, not the original Raft shows: a phone photo of several MB then costs a
  * few hundred KB, and Download still gives the original.
  */
-export const MESSAGE_IMAGE_MAX_WIDTH_PX = 416;
+export const MESSAGE_IMAGE_MAX_WIDTH_PX = 360;
 export const MESSAGE_IMAGE_MAX_HEIGHT_PX = 288;
 /** A lone image whose size the server could not read: a 4:3 box. */
 export const MESSAGE_IMAGE_FALLBACK_WIDTH_PX = 176;
@@ -30,7 +30,7 @@ export function imageShape(image: ImageSize): "wide" | "tall" | "normal" {
   return ratio >= 2.2 ? "wide" : ratio <= 0.55 ? "tall" : "normal";
 }
 
-/** A lone image's box: its own ratio scaled into 416×288, or the 4:3 fallback. */
+/** A lone image's box: its own ratio scaled into 360×288, or the 4:3 fallback. */
 export function singleImageBox(image: ImageSize) {
   const size = sizeOf(image);
   if (!size)

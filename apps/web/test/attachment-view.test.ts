@@ -121,7 +121,7 @@ test("a non-inline attachment never supplies an image layout size", () => {
 });
 
 const TIER = {
-  thumbnailUrl: "image/auto-orient,1/resize,m_lfit,w_832,h_576,limit_1/format,webp/quality,q_80",
+  thumbnailUrl: "image/auto-orient,1/resize,m_lfit,w_720,h_576,limit_1/format,webp/quality,q_80",
   iconUrl: "image/auto-orient,1/resize,m_fill,w_80,h_80,limit_1/format,webp/quality,q_80",
   largeUrl: "image/auto-orient,1/resize,m_lfit,w_2048,h_2048,limit_1/format,webp/quality,q_85",
 };
@@ -136,7 +136,7 @@ test("an image OSS can resize gets three WebP tiers on its one signature", () =>
     iconUrl: `${signed}&x-oss-process=${TIER.iconUrl}`,
     largeUrl: `${signed}&x-oss-process=${TIER.largeUrl}`,
   };
-  // Twice the message's 416×288 box, twice the Files row's 40px square, 2048 for the lightbox,
+  // Twice the message's 360×288 box, twice the Files row's 40px square, 2048 for the lightbox,
   // each in one fixed order so a picture in a tier is one CDN cache entry (task #212).
   for (const type of ["image/png", "image/jpeg", "image/webp"])
     expect(view(type)).toMatchObject({ previewUrl: signed, ...tiers });
