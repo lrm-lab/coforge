@@ -41,3 +41,17 @@ fn lifecycle_codes() {
     assert_eq!(codes.exit_codes["USAGE"], 2);
     assert_eq!(codes.error_codes["USAGE"], "LIFECYCLE_USAGE");
 }
+
+#[test]
+fn the_service_definition_is_read() {
+    let definition: LifecycleServiceDefinition = golden("lifecycle.service-definition.json");
+    assert_eq!(definition.lifecycle_protocol, LIFECYCLE_PROTOCOL);
+    assert_eq!(definition.manager, "launchd");
+    assert!(definition.contents.starts_with("<?xml"));
+    let protocol: LifecycleProtocol = golden("lifecycle.protocol.json");
+    assert!(
+        protocol
+            .commands
+            .is_some_and(|commands| commands.iter().any(|name| name == "service-definition"))
+    );
+}

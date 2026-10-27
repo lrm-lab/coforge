@@ -17,6 +17,18 @@ pub struct LifecycleProtocol {
     pub commands: Option<Vec<String>>,
 }
 
+/// `coforge-computer __lifecycle service-definition`: the definition of the supervisor service
+/// the Computer registers with its manager, for the installer to register before it starts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LifecycleServiceDefinition {
+    pub lifecycle_protocol: u32,
+    pub version: String,
+    /// `launchd`, `systemd-user`, or `windows-task`.
+    pub manager: String,
+    /// The plist, unit, or task XML, as text.
+    pub contents: String,
+}
+
 /// `coforge-computer __lifecycle status`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LifecycleStatus {

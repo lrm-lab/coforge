@@ -102,16 +102,23 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/contract/machine.rs`: the machine mutation lock, service names, and paths.
 - `src/clock.rs`: the clock and sleep port the bounded waits run through (virtual in tests).
 - `src/service.rs`: OS service control of the Computer supervisor: state (not installed, stopped,
-  running with the manager's pid), stop (waits until the manager has dropped it), start (waits
-  for a process). One backend per manager in `src/service/` behind the `CommandRunner` port.
+  running with the manager's pid), stop (waits until the manager has dropped it), install (registers
+  the service definition the Computer reports, without starting it), start (waits for a process).
+  One backend per manager in `src/service/` behind the `CommandRunner` port.
+- `src/service/definition.rs`: what the backends share to register a definition: the manager
+  check, the atomic owner-only write, and the UTF-16 temporary file `schtasks` reads.
 - `src/service/port.rs`: the `CommandRunner` port and `SystemRunner`, which runs a manager tool
   with a bound and kills it at the deadline.
 - `src/service/error.rs`: `ServiceError`, each failure worded with what to run next.
-- `src/service/launchd.rs`: the macOS backend, `launchctl` in the `gui/<uid>` domain.
-- `src/service/systemd.rs`: the Linux backend, `systemctl --user`. `ProcessCgroup` (`OwnCgroup` reads
+- `src/service/launchd.rs`: the macOS backend, `launchctl` in the `gui/<uid>` domain; install writes
+  the plist. Install tests in `src/service/launchd/install_tests.rs`.
+- `src/service/systemd.rs`: the Linux backend, `systemctl --user`; install writes the unit under
+  the home directory, then `daemon-reload` and `enable`. Install tests in
+  `src/service/systemd/install_tests.rs`. `ProcessCgroup` (`OwnCgroup` reads
   `/proc/self/cgroup`) tells whether the caller runs inside the unit; other backends answer no.
 - `src/service/windows_task.rs`: the Windows backend, the scheduled task through `schtasks` and
-  `Get-ScheduledTask`.
+  `Get-ScheduledTask`; install is `schtasks /Create /XML /F`. Install tests in
+  `src/service/windows_task/install_tests.rs`.
 - `src/service/fakes.rs`: a scripted `CommandRunner` for the backend tests.
 - `src/processes.rs`: the processes of the installed product executable: identity (pid, start
   time, executable), enumeration, and the SIGTERM, SIGKILL, verify-dead escalation after the
@@ -124,15 +131,21 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/processes/signals.rs`: SIGTERM and SIGKILL to one pid (Unix).
 - `src/processes/fakes.rs`: a process table that plays out exits, kills, zombies, and pid reuse
   on the virtual clock.
-- `src/lifecycle.rs`: the `ComputerLifecycle` port (protocol and status answers of a Computer
-  executable) and `Lifecycle`, which runs `coforge-computer __lifecycle` bounded and reads its
+- `src/lifecycle.rs`: the `ComputerLifecycle` port (protocol, status, and service-definition
+  answers of a Computer executable; `supports_service_definition` reads `protocol`'s `commands`) and `Lifecycle`, which runs `coforge-computer __lifecycle` bounded and reads its
   versioned JSON. Tests in `src/lifecycle/tests.rs`.
 - `src/switch.rs`: the switch of the active version, shared by upgrade and recovery: `Ports` (every
   port a transaction touches), `Target`, `Plan`, and `ActiveSwitch` (stop the supervisor and its
-  processes, activate, restart, probe). It decides nothing about what to switch to.
+  processes, activate, register the activated executable's service definition, restart, probe). It
+  decides nothing about what to switch to.
   `refusal_inside_service` refuses both operations when the caller runs inside the running service.
 - `src/upgrade.rs`: the upgrade transaction (lock, journal, receipt, prepare, switch, roll back).
-  Tests in `src/upgrade/tests.rs` (scripted lifecycle and service, real files and loopback feed).
+  Tests in `src/upgrade/tests.rs` (scripted lifecycle and service, real files and loopback feed);
+  the service definition across upgrade, rollback, and recovery in
+  `src/upgrade/tests/service_definition.rs`.
+- `src/upgrade/preparation.rs`: everything an upgrade checks before its first change (the active
+  version's health, supervisor management and readable service definition, the candidate); a
+  failure is a refusal with nothing changed.
 - `src/upgrade/fakes.rs`: test doubles and fixture for the upgrade and recovery tests: scripted
   lifecycle and service, and an install root with versions `0.1.0` and `0.2.0` served by a
   loopback feed.

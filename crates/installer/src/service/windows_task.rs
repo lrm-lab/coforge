@@ -3,12 +3,13 @@
 //! Ported from `WindowsUserDaemonHost` (packages/daemon/src/daemon-host/windows-task.ts): `/End`
 //! stops the task's process, `/Run` starts it.
 //!
-//! The Computer also re-registers the task from XML before every run (`/Create /XML /F`); the
-//! installer does not. The XML is built from the executable, socket, and state paths and the
-//! daemon connection endpoint, which only the Computer knows, and it does not change between
-//! versions: its action runs `install/active/coforge-computer.exe`, and the `active` junction is
-//! what an upgrade moves. A task that is missing is [`ServiceError::NotInstalled`], and
-//! `coforge-computer start` registers it again.
+//! The Computer re-registers the task from XML before every run (`/Create /XML /F`).
+//! [`install`](SupervisorService::install) does the same with the XML the Computer reports
+//! (`__lifecycle service-definition`), which only it can build from its executable, socket, and
+//! state paths and the daemon connection endpoint, and without the `/Run`: the next `start` runs
+//! it. The XML goes to a unique temporary file as UTF-16 LE with a byte-order mark, which
+//! `schtasks` requires, and the file is removed whether or not the registration succeeded. A
+//! task that is missing is [`ServiceError::NotInstalled`] until then.
 //!
 //! The Computer's stop gives the daemon no grace on Windows, and neither does this: `/End`
 //! terminates the task's process outright (the task XML sets `AllowHardTerminate`), so there is
@@ -27,14 +28,17 @@
 //! Computer it launched keeps running, and Task Scheduler exposes no process id. Whether the
 //! product's processes are gone is [`crate::processes`], not this module.
 
+use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{
     Attempt, CommandLine, CommandRunner, ServiceError, ServiceState, StartOutcome, StopOutcome,
-    SupervisorService, execute,
+    SupervisorService,
+    definition::{self, TemporaryDefinition},
+    execute,
 };
 use crate::clock::{Clock, poll_until};
-use crate::contract::CoordinatorService;
+use crate::contract::{CoordinatorService, LifecycleServiceDefinition};
 
 const COMMAND_BOUND: Duration = Duration::from_secs(30);
 const STOP_WAIT: Duration = Duration::from_secs(15);
@@ -51,6 +55,8 @@ pub struct WindowsTask<'a> {
     task: String,
     powershell: String,
     schtasks: String,
+    /// Where the task XML is written for `schtasks /Create`.
+    temporary_directory: PathBuf,
 }
 
 impl<'a> WindowsTask<'a> {
@@ -87,7 +93,15 @@ impl<'a> WindowsTask<'a> {
             task: task.clone(),
             powershell: format!(r"{system32}\WindowsPowerShell\v1.0\powershell.exe"),
             schtasks: format!(r"{system32}\schtasks.exe"),
+            temporary_directory: std::env::temp_dir(),
         })
+    }
+
+    /// Writes the task XML into `directory` instead of the system temporary directory.
+    #[cfg(test)]
+    fn with_temporary_directory(mut self, directory: PathBuf) -> Self {
+        self.temporary_directory = directory;
+        self
     }
 
     fn schtasks(&self, verb: &str) -> Result<Attempt, ServiceError> {
@@ -194,6 +208,25 @@ impl SupervisorService for WindowsTask<'_> {
         }
     }
 
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
+        definition::require_manager("windows-task", definition)?;
+        let xml = TemporaryDefinition::utf16(&self.temporary_directory, &definition.contents)?;
+        let path = xml.path().to_string_lossy();
+        let create = execute(
+            self.runner,
+            CommandLine::new(
+                &self.schtasks,
+                ["/Create", "/TN", &self.task, "/XML", &path, "/F"],
+            ),
+            COMMAND_BOUND,
+        )?;
+        if create.succeeded() {
+            Ok(())
+        } else {
+            Err(self.refused(&create))
+        }
+    }
+
     fn start(&self) -> Result<StartOutcome, ServiceError> {
         match self.read()? {
             None => {
@@ -273,5 +306,7 @@ fn describe(state: Option<TaskState>) -> String {
     }
 }
 
+#[cfg(test)]
+mod install_tests;
 #[cfg(test)]
 mod tests;

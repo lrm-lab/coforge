@@ -16,7 +16,7 @@ pub use installation::{
 };
 pub use lifecycle::{
     LIFECYCLE_PROTOCOL, LifecycleBinding, LifecycleCodes, LifecycleError, LifecycleProblem,
-    LifecycleProtocol, LifecycleStatus, SupervisorState,
+    LifecycleProtocol, LifecycleServiceDefinition, LifecycleStatus, SupervisorState,
 };
 pub use machine::{
     CoordinatorService, MachineMutationLock, PathCase, Paths, ServiceIdentities,

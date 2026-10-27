@@ -26,6 +26,13 @@ pub enum ServiceError {
     ToolMissing { program: String },
     /// A file the service manager's state depends on could not be read.
     FileUnreadable { path: String, detail: String },
+    /// The Computer reported a service definition for another manager than this machine's.
+    DefinitionForOtherManager {
+        expected: &'static str,
+        found: String,
+    },
+    /// A service definition could not be written where the manager reads it.
+    DefinitionNotWritten { path: String, detail: String },
     /// The manager's tool ran and refused.
     CommandFailed {
         command: String,
@@ -107,6 +114,18 @@ impl fmt::Display for ServiceError {
             Self::FileUnreadable { path, detail } => write!(
                 formatter,
                 "{path} could not be read: {} Check that this user can read it with `ls -l \"{path}\"`.",
+                sentence(detail)
+            ),
+            Self::DefinitionForOtherManager { expected, found } => write!(
+                formatter,
+                "The Computer reported a `{found}` service definition, but this machine's \
+                 service manager is `{expected}`. Run `coforge-computer upgrade` again, or \
+                 `coforge-computer recover` if an upgrade was left unfinished."
+            ),
+            Self::DefinitionNotWritten { path, detail } => write!(
+                formatter,
+                "The service definition {path} could not be written: {} Check that this user \
+                 can write there with `ls -ld \"{path}\"`.",
                 sentence(detail)
             ),
             Self::CommandFailed {

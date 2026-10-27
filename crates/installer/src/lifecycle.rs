@@ -1,10 +1,12 @@
 //! The installer's one way of asking a Computer about itself: `coforge-computer __lifecycle
-//! protocol|status` (packages/computer/src/release/lifecycle-command.ts). Every call prints one
+//! protocol|status|service-definition` (packages/computer/src/release/lifecycle-command.ts). Every call prints one
 //! versioned JSON object; this module runs it bounded and reads that object, never human text.
 //!
 //! `protocol` answers without contacting anything, so it also probes a candidate executable that
 //! has never run. `status` asks the running supervisor, or reads its persisted state when none
-//! runs.
+//! runs. `service-definition` prints the service definition the Computer registers with the
+//! service manager; only a Computer whose `protocol` lists that command answers it
+//! ([`supports_service_definition`]).
 
 use std::fmt;
 use std::path::Path;
@@ -12,13 +14,20 @@ use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 
-use crate::contract::{LIFECYCLE_PROTOCOL, LifecycleError, LifecycleProtocol, LifecycleStatus};
+use crate::contract::{
+    LIFECYCLE_PROTOCOL, LifecycleError, LifecycleProtocol, LifecycleServiceDefinition,
+    LifecycleStatus,
+};
 use crate::service::{CommandLine, CommandRunner, RunError};
 
 /// `protocol` reads nothing; this only covers starting a large executable.
 const PROTOCOL_BOUND: Duration = Duration::from_secs(20);
 /// `status` asks a supervisor that may be busy.
 const STATUS_BOUND: Duration = Duration::from_secs(30);
+/// `service-definition` renders text from paths and settings, as `protocol` does.
+const SERVICE_DEFINITION_BOUND: Duration = Duration::from_secs(10);
+/// The `commands` entry of `protocol` for `service-definition`.
+const SERVICE_DEFINITION_COMMAND: &str = "service-definition";
 
 #[derive(Debug)]
 pub enum LifecycleFailure {
@@ -71,6 +80,23 @@ pub trait ComputerLifecycle {
 
     /// `__lifecycle status`: the running supervisor's answer, or its persisted state.
     fn status(&self, executable: &Path) -> Result<LifecycleStatus, LifecycleFailure>;
+
+    /// `__lifecycle service-definition`: the service definition the executable registers with the
+    /// service manager. Ask only an executable that [`supports_service_definition`].
+    fn service_definition(
+        &self,
+        executable: &Path,
+    ) -> Result<LifecycleServiceDefinition, LifecycleFailure>;
+}
+
+/// Whether a Computer answers `__lifecycle service-definition`: its `protocol` lists the command.
+/// A Computer that predates it reports no `commands`.
+pub fn supports_service_definition(protocol: &LifecycleProtocol) -> bool {
+    protocol.commands.as_deref().is_some_and(|commands| {
+        commands
+            .iter()
+            .any(|name| name == SERVICE_DEFINITION_COMMAND)
+    })
 }
 
 pub struct Lifecycle<'a> {
@@ -145,6 +171,17 @@ impl ComputerLifecycle for Lifecycle<'_> {
 
     fn status(&self, executable: &Path) -> Result<LifecycleStatus, LifecycleFailure> {
         self.call(executable, "status", STATUS_BOUND)
+    }
+
+    fn service_definition(
+        &self,
+        executable: &Path,
+    ) -> Result<LifecycleServiceDefinition, LifecycleFailure> {
+        self.call(
+            executable,
+            SERVICE_DEFINITION_COMMAND,
+            SERVICE_DEFINITION_BOUND,
+        )
     }
 }
 

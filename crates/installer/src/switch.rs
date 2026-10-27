@@ -1,6 +1,7 @@
 //! The switch of the active version: stop the supervisor when it runs, make a target version
-//! active, restart the supervisor, and probe that it reports the target. The upgrade and recovery
-//! both switch through [`ActiveSwitch`], so they stop, activate, restart, and probe the same way.
+//! active, register its service definition, restart the supervisor, and probe that it reports the
+//! target. The upgrade and recovery both switch through [`ActiveSwitch`], so they stop, activate,
+//! register, restart, and probe the same way.
 //!
 //! The switch makes no decision about what to switch to: `upgrade.rs` decides what to install and
 //! roll back to, and `recover.rs` decides what the journal asks for. Its one refusal is that a
@@ -14,7 +15,7 @@ use std::time::Duration;
 use crate::active;
 use crate::clock::{Clock, poll_until};
 use crate::contract::{ACTIVE_STATE_SCHEMA_VERSION, ActiveState, DeadProcessIdentity};
-use crate::lifecycle::ComputerLifecycle;
+use crate::lifecycle::{ComputerLifecycle, supports_service_definition};
 use crate::prepare::ReleaseSource;
 use crate::processes::{
     Escalation, ProcessTable, ProductExecutable, VerifiedCaller, collect, dead_process_identity,
@@ -109,6 +110,7 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
         self.say(&format!("Switching the active executable to {version}"));
         self.activate(target)?;
         if plan.supervisor_running {
+            self.install_service_definition(version)?;
             self.say(&format!("Starting Computer supervisor {version}"));
             self.ports
                 .service
@@ -127,6 +129,29 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
             self.say(&format!("Activated executable {version} confirmed"));
         }
         Ok(())
+    }
+
+    /// Registers the service definition of the executable that now runs, so that the start that
+    /// follows never depends on a definition an earlier registration left on disk (a plist can
+    /// vanish while its job stays loaded). A Computer that predates `service-definition` is left
+    /// to start from what it installed itself.
+    fn install_service_definition(&mut self, version: &str) -> Result<(), String> {
+        let lifecycle = self.ports.lifecycle;
+        let executable = self.ports.store.running_computer_path(version);
+        let protocol = lifecycle
+            .protocol(&executable)
+            .map_err(|error| error.to_string())?;
+        if !supports_service_definition(&protocol) {
+            return Ok(());
+        }
+        self.say("Installing the Computer supervisor service definition");
+        let definition = lifecycle
+            .service_definition(&executable)
+            .map_err(|error| error.to_string())?;
+        self.ports
+            .service
+            .install(&definition)
+            .map_err(|error| error.to_string())
     }
 
     /// Collects the processes of `executables` (the caller spared), stops the service, ends what

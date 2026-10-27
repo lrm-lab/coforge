@@ -97,7 +97,7 @@ fn pids(receipt: &UpgradeReceipt) -> Vec<u32> {
 
 /// The lifecycle answers of an upgrade from a running [`OLD`] supervisor to [`NEW`].
 fn script_running_upgrade(fixture: &Fixture, lifecycle: &FakeLifecycle) {
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocols(lifecycle);
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(running(OLD, "old-id"))]);
     lifecycle.answers_status(
         &fixture.computer(NEW),
@@ -442,7 +442,7 @@ fn an_unhealthy_installed_version_is_refused_before_anything_stops() {
     table.spawn(100, 1, &fixture.canonical_computer(OLD));
     let service = FakeService::new(ServiceState::Running { pid: Some(100) });
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     lifecycle.answers_status(
         &fixture.computer(OLD),
         vec![Some(unhealthy(
@@ -478,7 +478,7 @@ fn a_foreground_supervisor_is_refused_with_the_existing_wording_before_any_chang
     table.spawn(100, 1, &fixture.canonical_computer(OLD));
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(running(OLD, "old-id"))]);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
@@ -506,7 +506,7 @@ fn a_candidate_that_never_reports_is_rolled_back_to_the_previous_version() {
     table.spawn(100, 1, &fixture.canonical_computer(OLD));
     let service = FakeService::new(ServiceState::Running { pid: Some(100) });
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocols(&lifecycle);
     lifecycle.answers_status(
         &fixture.computer(OLD),
         vec![
@@ -548,7 +548,7 @@ fn a_failed_rollback_keeps_the_journal_and_refuses_the_next_upgrade() {
     table.spawn(100, 1, &fixture.canonical_computer(OLD));
     let service = FakeService::new(ServiceState::Running { pid: Some(100) });
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocols(&lifecycle);
     // The previous version reports healthy once, then answers nothing.
     lifecycle.answers_status(
         &fixture.computer(OLD),
@@ -675,7 +675,7 @@ fn inside_the_supervisor_service_with_it_running_the_upgrade_is_refused_before_a
     table.spawn(100, 1, &fixture.canonical_computer(OLD));
     let service = FakeService::new(ServiceState::Running { pid: Some(100) }).inside_unit();
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocol(&lifecycle, NEW);
     lifecycle.answers_status(&fixture.computer(OLD), vec![Some(running(OLD, "old-id"))]);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
@@ -757,7 +757,7 @@ fn an_older_version_moves_back_when_the_flag_is_given() {
     table.spawn(100, 1, &fixture.canonical_computer(NEW));
     let service = FakeService::new(ServiceState::Running { pid: Some(100) });
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(OLD), vec![Some(protocol(OLD))]);
+    fixture.answers_protocols(&lifecycle);
     lifecycle.answers_status(&fixture.computer(NEW), vec![Some(running(NEW, "new-id"))]);
     lifecycle.answers_status(
         &fixture.computer(OLD),
@@ -815,3 +815,8 @@ fn the_same_version_is_never_gated_even_without_semver_precedence() {
 /// The POSIX layout: processes run from `current/`, which activation replaces in place.
 #[cfg(unix)]
 mod current_layout;
+
+/// The switch registers the service definition before it starts the supervisor; the rollback
+/// scripts lean on the single `current/` executable.
+#[cfg(unix)]
+mod service_definition;

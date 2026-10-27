@@ -76,7 +76,7 @@ fn a_rolled_back_upgrade_restores_current_and_keeps_both_stored_versions() {
     table.spawn(100, 1, &fixture.canonical_current());
     let service = FakeService::new(ServiceState::Running { pid: Some(100) });
     let lifecycle = FakeLifecycle::default();
-    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    fixture.answers_protocols(&lifecycle);
     lifecycle.answers_status(
         &fixture.computer(OLD),
         vec![

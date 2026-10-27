@@ -3,8 +3,9 @@
 //! Ported from `LaunchdDaemonHost` (packages/daemon/src/daemon-host/launchd.ts) and `LaunchdJob`
 //! (packages/daemon/src/platform/launchd-job.ts). launchd has one notion of "there": a job is
 //! loaded into the domain or it is not. Stopping is `bootout`, which unloads the job; starting an
-//! unloaded job is `bootstrap` of the plist the Computer installed under
-//! `~/Library/LaunchAgents/`; starting a loaded job that has no process is `kickstart`.
+//! unloaded job is `bootstrap` of the plist under `~/Library/LaunchAgents/`, which
+//! [`install`](SupervisorService::install) writes from the Computer's definition (nothing else:
+//! the next `start` bootstraps it); starting a loaded job that has no process is `kickstart`.
 //!
 //! `bootout` returns once launchd has been asked, not once it has finished: `print` keeps
 //! answering for the outgoing instance through launchd's SIGTERM, then SIGKILL after 5 s, ladder.
@@ -30,10 +31,10 @@ use std::time::Duration;
 
 use super::{
     Attempt, CommandLine, CommandRunner, ServiceError, ServiceState, StartOutcome, StopOutcome,
-    SupervisorService, execute,
+    SupervisorService, definition, execute,
 };
 use crate::clock::{Clock, poll_until};
-use crate::contract::CoordinatorService;
+use crate::contract::{CoordinatorService, LifecycleServiceDefinition};
 
 const LAUNCHCTL: &str = "/bin/launchctl";
 
@@ -337,6 +338,11 @@ impl SupervisorService for Launchd<'_> {
         }
     }
 
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
+        definition::require_manager("launchd", definition)?;
+        definition::write_private(&self.plist, &definition.contents)
+    }
+
     fn start(&self) -> Result<StartOutcome, ServiceError> {
         let mut observed = self.observe()?;
         if matches!(&observed, Observed::Loaded(job) if job.is_tearing_down()) {
@@ -461,5 +467,7 @@ fn describe(job: &Job) -> String {
     }
 }
 
+#[cfg(test)]
+mod install_tests;
 #[cfg(test)]
 mod tests;

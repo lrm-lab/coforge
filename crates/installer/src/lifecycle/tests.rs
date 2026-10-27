@@ -78,6 +78,44 @@ fn the_protocol_names_the_version_of_the_executable() {
 
 #[cfg(unix)]
 #[test]
+fn the_service_definition_of_a_computer_is_read() {
+    if !isolated("the_service_definition_of_a_computer_is_read") {
+        return;
+    }
+    let scratch = Scratch::new("lifecycle-service-definition");
+    let computer = computer(
+        &scratch,
+        "service-definition",
+        &golden("lifecycle.service-definition.json"),
+        0,
+    );
+    let definition = Lifecycle::new(&SystemRunner)
+        .service_definition(&computer)
+        .unwrap();
+    assert_eq!(definition.manager, "launchd");
+    assert!(definition.contents.contains("cn.coforge.computer.daemon"));
+}
+
+#[test]
+fn only_a_protocol_listing_the_command_supports_the_service_definition() {
+    let protocol = |commands: Option<&[&str]>| LifecycleProtocol {
+        lifecycle_protocol: LIFECYCLE_PROTOCOL,
+        version: "0.2.0".to_owned(),
+        commands: commands.map(|names| names.iter().map(|name| (*name).to_owned()).collect()),
+    };
+    assert!(supports_service_definition(&protocol(Some(&[
+        "protocol",
+        "status",
+        "service-definition"
+    ]))));
+    assert!(!supports_service_definition(&protocol(None)));
+    assert!(!supports_service_definition(&protocol(Some(&[
+        "protocol", "status"
+    ]))));
+}
+
+#[cfg(unix)]
+#[test]
 fn a_failed_call_carries_the_computers_own_message() {
     if !isolated("a_failed_call_carries_the_computers_own_message") {
         return;

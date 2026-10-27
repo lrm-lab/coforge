@@ -46,15 +46,24 @@ In order, with the machine mutation lock held throughout:
 - downloads and verifies the target version, and checks it with
   `coforge-computer __lifecycle protocol`;
 - requires the running version's `__lifecycle status` to be healthy before anything
-  changes, and refuses a foreground externally supervised Computer;
+  changes, and refuses a foreground externally supervised Computer. A running version whose
+  `__lifecycle protocol` lists `service-definition` among its `commands` must also print that
+  definition, or the upgrade is refused with nothing changed: the rollback needs it;
 - writes the recovery journal, then collects the product's processes (the caller
   excluded), stops the service through launchd, systemd `--user`, or Task
   Scheduler, and ends any survivor (SIGTERM, then SIGKILL, then verify it is
   dead). Their identities go into the receipt as `deadProcessIdentities`;
-- activates the target, starts the service, and waits up to 60 s for the
-  supervisor to report the target version under a new supervisor id. Workspace
-  health is not part of this check;
-- on failure rolls back to the previous version and records
+- activates the target, registers the service definition the activated executable prints
+  with `__lifecycle service-definition` (a launchd plist written to
+  `~/Library/LaunchAgents/`, a systemd user unit written to `~/.config/systemd/user/` and
+  enabled, or a Task Scheduler task created from the XML), starts the service, and waits up
+  to 60 s for the supervisor to report the target version under a new supervisor id. The
+  definition is written before every start, so a plist that vanished while the job stayed
+  loaded cannot strand the upgrade or its rollback. A Computer that does not list
+  `service-definition` is started from the definition it installed itself, as before.
+  Workspace health is not part of this check;
+- on failure rolls back to the previous version, registering its service definition the same
+  way, and records
   `UPGRADE_ROLLED_BACK` (exit 1). If the rollback cannot be verified, the
   operation ends unresolved with the journal kept (exit 3).
 
@@ -87,7 +96,8 @@ server-triggered upgrade (`__remote-upgrade`) never does, so it refuses a downgr
 by design.
 
 `coforge-computer recover` runs `coforge-installer recover`, which settles an
-unfinished upgrade from the journal. While the journal exists, every other
+unfinished upgrade from the journal, registering the definition of the version it restores or
+keeps before it starts the service. While the journal exists, every other
 installer operation exits 3 without a receipt and names `coforge-computer recover`.
 
 ## Daemon settlement

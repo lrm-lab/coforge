@@ -7,8 +7,10 @@
 //! (`packages/daemon/src/daemon-host/`): [`Launchd`] (macOS), [`SystemdUser`] (Linux), and
 //! [`WindowsTask`] (Windows). Each runs its manager's tool through a [`CommandRunner`] and waits
 //! through a [`Clock`], so the tests script both. The names come from the shared contract
-//! (`contract/service-identities.json`); the installer never writes a plist, unit, or task
-//! definition: the Computer installs the service, the installer controls it.
+//! (`contract/service-identities.json`). The Computer authors the service definition (a plist,
+//! unit, or task XML; `__lifecycle service-definition`); the installer registers that text with
+//! the manager before it starts the service ([`SupervisorService::install`]), so a definition
+//! that vanished while the service stayed loaded cannot strand an upgrade.
 //!
 //! What "stopped" means is the manager's word, not the process's: the manager has dropped the
 //! service (launchd), reports it inactive (systemd), or the task has no running instance
@@ -18,9 +20,10 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::clock::Clock;
-use crate::contract::CoordinatorService;
+use crate::contract::{CoordinatorService, LifecycleServiceDefinition};
 use crate::paths::Platform;
 
+mod definition;
 mod error;
 mod launchd;
 mod port;
@@ -81,9 +84,13 @@ pub trait SupervisorService {
     /// that is not installed or not running is not an error: [`StopOutcome::before`] says so.
     fn stop(&self) -> Result<StopOutcome, ServiceError>;
 
+    /// Registers `definition` with the manager without starting the service, replacing any
+    /// earlier registration. The definition must be for this backend's manager.
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError>;
+
     /// Starts the service and waits, bounded, until the manager reports it running. Already
     /// running is not an error. A service that is not installed is [`ServiceError::NotInstalled`]:
-    /// the installer cannot author one.
+    /// [`SupervisorService::install`] registers one first.
     fn start(&self) -> Result<StartOutcome, ServiceError>;
 }
 
@@ -98,8 +105,8 @@ pub fn coordinator_service() -> CoordinatorService {
     }
 }
 
-/// The backend for `platform`. `home` is the user's home directory (the launchd plist lives under
-/// it) and `uid` the user's id ([`current_uid`]), which only macOS uses. Windows finds its tools
+/// The backend for `platform`. `home` is the user's home directory (the launchd plist and the
+/// systemd unit live under it) and `uid` the user's id ([`current_uid`]), which only macOS uses. Windows finds its tools
 /// under `%SystemRoot%`, never through `PATH`.
 pub fn for_platform<'a>(
     platform: Platform,
@@ -117,7 +124,7 @@ pub fn for_platform<'a>(
             })?;
             Box::new(Launchd::new(runner, clock, &names, home, uid)?)
         }
-        Platform::Linux => Box::new(SystemdUser::new(runner, clock, &names, &OwnCgroup)?),
+        Platform::Linux => Box::new(SystemdUser::new(runner, clock, &names, &OwnCgroup, home)?),
         Platform::Windows => {
             let system_root =
                 std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_owned());

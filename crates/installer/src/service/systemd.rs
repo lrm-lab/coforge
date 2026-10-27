@@ -5,18 +5,23 @@
 //! state is still read back: stopped is `inactive` or `failed`, started is `active` with a main
 //! process. A start is preceded by `reset-failed`, as the Computer's own `restart` does.
 //!
+//! [`install`](SupervisorService::install) is the Computer's own registration
+//! (`SystemdUserDaemonHost.ensureStarted`) without its start: the unit file under
+//! `~/.config/systemd/user/`, `daemon-reload`, `enable`.
+//!
 //! `systemctl --user` needs this user's session bus, which a `su` or `sudo` shell never has. That
 //! failure (2026-09-20) reads like nothing else, so it has its own error with the way out.
 
 use std::io;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{
     Attempt, CommandLine, CommandRunner, ServiceError, ServiceState, StartOutcome, StopOutcome,
-    SupervisorService, execute,
+    SupervisorService, definition, execute,
 };
 use crate::clock::{Clock, poll_until};
-use crate::contract::CoordinatorService;
+use crate::contract::{CoordinatorService, LifecycleServiceDefinition};
 
 const SYSTEMCTL: &str = "systemctl";
 
@@ -71,14 +76,18 @@ pub struct SystemdUser<'a> {
     clock: &'a dyn Clock,
     cgroup: &'a dyn ProcessCgroup,
     unit: String,
+    /// `<home>/.config/systemd/user/<unit>`.
+    unit_file: PathBuf,
 }
 
 impl<'a> SystemdUser<'a> {
+    /// The Coordinator's user unit for the user whose home directory is `home`.
     pub fn new(
         runner: &'a dyn CommandRunner,
         clock: &'a dyn Clock,
         service: &CoordinatorService,
         cgroup: &'a dyn ProcessCgroup,
+        home: &Path,
     ) -> Result<Self, ServiceError> {
         let unit = &service.systemd_user_unit;
         if !is_valid_unit_name(unit) {
@@ -92,6 +101,7 @@ impl<'a> SystemdUser<'a> {
             clock,
             cgroup,
             unit: unit.clone(),
+            unit_file: home.join(".config").join("systemd").join("user").join(unit),
         })
     }
 
@@ -229,6 +239,24 @@ impl SupervisorService for SystemdUser<'_> {
         }
     }
 
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
+        definition::require_manager("systemd-user", definition)?;
+        definition::write_private(&self.unit_file, &definition.contents)?;
+        let reload = execute(
+            self.runner,
+            CommandLine::new(SYSTEMCTL, ["--user", "daemon-reload"]),
+            COMMAND_BOUND,
+        )?;
+        if !reload.succeeded() {
+            return Err(self.refused(&reload));
+        }
+        let enable = self.systemctl("enable", COMMAND_BOUND)?;
+        if !enable.succeeded() {
+            return Err(self.refused(&enable));
+        }
+        Ok(())
+    }
+
     fn start(&self) -> Result<StartOutcome, ServiceError> {
         let unit = self.read()?;
         if unit.load_state == "not-found" {
@@ -346,5 +374,7 @@ fn is_valid_unit_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | ':' | '-'))
 }
 
+#[cfg(test)]
+mod install_tests;
 #[cfg(test)]
 mod tests;

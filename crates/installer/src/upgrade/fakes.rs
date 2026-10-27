@@ -12,7 +12,8 @@ use crate::active::activate;
 use crate::clock::Clock;
 use crate::contract::{
     ACTIVE_STATE_SCHEMA_VERSION, ActiveState, LIFECYCLE_PROTOCOL, LifecycleBinding,
-    LifecycleProblem, LifecycleProtocol, LifecycleStatus, SupervisorState,
+    LifecycleProblem, LifecycleProtocol, LifecycleServiceDefinition, LifecycleStatus,
+    SupervisorState,
 };
 use crate::feed::Feed;
 use crate::lifecycle::{ComputerLifecycle, LifecycleFailure};
@@ -58,6 +59,7 @@ impl<T: Clone> Script<T> {
 pub(crate) struct FakeLifecycle {
     protocols: RefCell<BTreeMap<PathBuf, Script<LifecycleProtocol>>>,
     statuses: RefCell<BTreeMap<PathBuf, Script<LifecycleStatus>>>,
+    definitions: RefCell<BTreeMap<PathBuf, Script<LifecycleServiceDefinition>>>,
 }
 
 impl FakeLifecycle {
@@ -76,6 +78,18 @@ impl FakeLifecycle {
     /// Replaces the answers the executable at `executable` gives to `status`.
     pub(crate) fn answers_status(&self, executable: &Path, answers: Vec<Option<LifecycleStatus>>) {
         self.statuses.borrow_mut().insert(
+            executable.to_path_buf(),
+            Script(answers.into_iter().collect()),
+        );
+    }
+
+    /// Replaces the answers the executable at `executable` gives to `service-definition`.
+    pub(crate) fn answers_service_definition(
+        &self,
+        executable: &Path,
+        answers: Vec<Option<LifecycleServiceDefinition>>,
+    ) {
+        self.definitions.borrow_mut().insert(
             executable.to_path_buf(),
             Script(answers.into_iter().collect()),
         );
@@ -105,6 +119,17 @@ impl ComputerLifecycle for FakeLifecycle {
             .and_then(Script::next)
             .ok_or_else(|| scripted_failure(executable, "status"))
     }
+
+    fn service_definition(
+        &self,
+        executable: &Path,
+    ) -> Result<LifecycleServiceDefinition, LifecycleFailure> {
+        self.definitions
+            .borrow_mut()
+            .get_mut(executable)
+            .and_then(Script::next)
+            .ok_or_else(|| scripted_failure(executable, "service-definition"))
+    }
 }
 
 pub(crate) fn protocol(version: &str) -> LifecycleProtocol {
@@ -112,6 +137,28 @@ pub(crate) fn protocol(version: &str) -> LifecycleProtocol {
         lifecycle_protocol: LIFECYCLE_PROTOCOL,
         version: version.to_owned(),
         commands: None,
+    }
+}
+
+/// The protocol answer of a Computer that reports `service-definition` among its commands.
+pub(crate) fn protocol_with_service_definition(version: &str) -> LifecycleProtocol {
+    LifecycleProtocol {
+        commands: Some(
+            ["protocol", "status", "service-definition"]
+                .map(str::to_owned)
+                .to_vec(),
+        ),
+        ..protocol(version)
+    }
+}
+
+/// The service definition `version` reports, for the systemd backend the fake service stands for.
+pub(crate) fn service_definition(version: &str) -> LifecycleServiceDefinition {
+    LifecycleServiceDefinition {
+        lifecycle_protocol: LIFECYCLE_PROTOCOL,
+        version: version.to_owned(),
+        manager: "systemd-user".to_owned(),
+        contents: format!("[Service]\n# definition of {version}\n"),
     }
 }
 
@@ -182,6 +229,9 @@ pub(crate) struct FakeService {
     calls: RefCell<Vec<&'static str>>,
     next_pid: Cell<u32>,
     inside: Cell<bool>,
+    /// Whether the manager holds a definition; `start` of a service without one is refused.
+    registered: Cell<bool>,
+    installed: RefCell<Vec<LifecycleServiceDefinition>>,
 }
 
 impl FakeService {
@@ -191,7 +241,21 @@ impl FakeService {
             calls: RefCell::new(Vec::new()),
             next_pid: Cell::new(9000),
             inside: Cell::new(false),
+            registered: Cell::new(true),
+            installed: RefCell::new(Vec::new()),
         }
+    }
+
+    /// The manager has the service loaded or known but its definition is gone: `start` is refused
+    /// as not installed until a definition is installed. Not a call: it is not recorded.
+    pub(crate) fn without_definition(self) -> Self {
+        self.registered.set(false);
+        self
+    }
+
+    /// The definitions installed so far, in order.
+    pub(crate) fn installed(&self) -> Vec<LifecycleServiceDefinition> {
+        self.installed.borrow().clone()
     }
 
     /// The caller runs inside this service's unit. Not a call: it is not recorded.
@@ -226,8 +290,20 @@ impl SupervisorService for FakeService {
         Ok(StopOutcome { before })
     }
 
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
+        self.calls.borrow_mut().push("install");
+        self.installed.borrow_mut().push(definition.clone());
+        self.registered.set(true);
+        Ok(())
+    }
+
     fn start(&self) -> Result<StartOutcome, ServiceError> {
         self.calls.borrow_mut().push("start");
+        if !self.registered.get() {
+            return Err(ServiceError::NotInstalled {
+                service: self.display_name(),
+            });
+        }
         let pid = self.next_pid.get();
         self.next_pid.set(pid + 1);
         self.state.set(ServiceState::Running { pid: Some(pid) });
@@ -338,6 +414,33 @@ impl Fixture {
             self.store.running_computer_path(version),
         ] {
             lifecycle.answers_protocol(&executable, vec![Some(protocol(version))]);
+        }
+    }
+
+    /// [`Fixture::answers_protocol`] for both [`OLD`] and [`NEW`]: an upgrade between them probes
+    /// the active version's executable as well as the candidate's.
+    pub(crate) fn answers_protocols(&self, lifecycle: &FakeLifecycle) {
+        for version in [OLD, NEW] {
+            self.answers_protocol(lifecycle, version);
+        }
+    }
+
+    /// The executable that runs once `version` is active.
+    pub(crate) fn running_computer(&self, version: &str) -> PathBuf {
+        self.store.running_computer_path(version)
+    }
+
+    /// Scripts a `version` Computer that lists `service-definition` among its commands and prints
+    /// [`service_definition`] for `version`, from the store's copy and from the executable that
+    /// runs once it is active.
+    pub(crate) fn reports_service_definition(&self, lifecycle: &FakeLifecycle, version: &str) {
+        for executable in [self.computer(version), self.running_computer(version)] {
+            lifecycle.answers_protocol(
+                &executable,
+                vec![Some(protocol_with_service_definition(version))],
+            );
+            lifecycle
+                .answers_service_definition(&executable, vec![Some(service_definition(version))]);
         }
     }
 

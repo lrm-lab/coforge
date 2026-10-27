@@ -1,12 +1,13 @@
 //! Everything an upgrade checks and installs before its first change: the active version is
-//! intact and healthy, its supervisor is service-managed, and the candidate verifies. A failure
-//! here is a [`Refusal`]: nothing was changed.
+//! intact and healthy, its supervisor is service-managed and its service definition readable, and
+//! the candidate verifies. A failure here is a [`Refusal`]: nothing was changed.
 
 use super::{
     INTEGRITY_CODE, Installed, Prepared, Refusal, Run, downgrade_refusal, refuse, unhealthy_message,
 };
 use crate::active::read_active;
 use crate::contract::{ActiveState, RuntimeState};
+use crate::lifecycle::supports_service_definition;
 use crate::prepare::prepare_version;
 use crate::service::{ServiceError, ServiceState};
 use crate::switch::refusal_inside_service;
@@ -71,11 +72,12 @@ impl Run<'_, '_> {
             None => None,
             Some(active) => Some(self.inspect(active)?),
         };
-        if from
+        if let Some(installed) = from
             .as_ref()
-            .is_some_and(|installed| installed.supervisor_running)
+            .filter(|installed| installed.supervisor_running)
         {
             self.require_managed_supervisor()?;
+            self.require_readable_service_definition(&installed.version)?;
         }
         Ok(Prepared { from, to })
     }
@@ -123,5 +125,24 @@ impl Run<'_, '_> {
             }
             Ok(_) => Ok(()),
         }
+    }
+
+    /// The rollback registers the active version's service definition again, so a Computer that
+    /// reports one must be able to say it now, before anything stops. A Computer that predates
+    /// the command has none to read.
+    fn require_readable_service_definition(&self, version: &str) -> Result<(), Refusal> {
+        let executable = self.ports.store.computer_path(version);
+        let protocol = self
+            .ports
+            .lifecycle
+            .protocol(&executable)
+            .map_err(|error| refuse(error.to_string()))?;
+        if supports_service_definition(&protocol) {
+            self.ports
+                .lifecycle
+                .service_definition(&executable)
+                .map_err(|error| refuse(error.to_string()))?;
+        }
+        Ok(())
     }
 }

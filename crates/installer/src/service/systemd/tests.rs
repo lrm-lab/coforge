@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::Duration;
 
 use super::*;
@@ -39,6 +40,10 @@ fn waiting_to_restart() -> Step {
     ok(SHOW, &shown("loaded", "activating", "auto-restart", 0))
 }
 
+fn home() -> &'static Path {
+    Path::new("/home/example")
+}
+
 struct Scenario {
     runner: ScriptedRunner,
     clock: VirtualClock,
@@ -70,8 +75,8 @@ fn a_caller_whose_cgroup_names_the_unit_is_inside_it_under_cgroup_v1_and_v2() {
     ));
     let names = coordinator_service();
 
-    let inside_v2 = SystemdUser::new(&runner, &clock, &names, &v2).unwrap();
-    let inside_v1 = SystemdUser::new(&runner, &clock, &names, &v1).unwrap();
+    let inside_v2 = SystemdUser::new(&runner, &clock, &names, &v2, home()).unwrap();
+    let inside_v1 = SystemdUser::new(&runner, &clock, &names, &v1, home()).unwrap();
 
     assert!(inside_v2.caller_is_inside_unit().unwrap());
     assert!(inside_v1.caller_is_inside_unit().unwrap());
@@ -85,8 +90,8 @@ fn a_caller_outside_the_unit_is_not_inside_it_even_when_the_name_is_a_prefix() {
     let prefix = FixedCgroup(Some(OTHER_CGROUP_V2));
     let elsewhere = FixedCgroup(Some("0::/user.slice/user-501.slice/session-3.scope\n"));
 
-    let prefix = SystemdUser::new(&runner, &clock, &names, &prefix).unwrap();
-    let elsewhere = SystemdUser::new(&runner, &clock, &names, &elsewhere).unwrap();
+    let prefix = SystemdUser::new(&runner, &clock, &names, &prefix, home()).unwrap();
+    let elsewhere = SystemdUser::new(&runner, &clock, &names, &elsewhere, home()).unwrap();
 
     assert!(!prefix.caller_is_inside_unit().unwrap());
     assert!(!elsewhere.caller_is_inside_unit().unwrap());
@@ -98,7 +103,7 @@ fn a_cgroup_listing_that_cannot_be_read_is_an_error_not_an_outside_caller() {
     let clock = VirtualClock::new();
     let names = coordinator_service();
     let unreadable = FixedCgroup(None);
-    let systemd = SystemdUser::new(&runner, &clock, &names, &unreadable).unwrap();
+    let systemd = SystemdUser::new(&runner, &clock, &names, &unreadable, home()).unwrap();
 
     assert!(matches!(
         systemd.caller_is_inside_unit(),
@@ -120,6 +125,7 @@ impl Scenario {
             &self.clock,
             &coordinator_service(),
             &OwnCgroup,
+            home(),
         )
         .unwrap()
     }
@@ -475,7 +481,13 @@ fn a_unit_name_the_contract_cannot_have_is_refused() {
     ] {
         let mut names = coordinator_service();
         names.systemd_user_unit = bad.to_owned();
-        let refused = SystemdUser::new(&scenario.runner, &scenario.clock, &names, &OwnCgroup);
+        let refused = SystemdUser::new(
+            &scenario.runner,
+            &scenario.clock,
+            &names,
+            &OwnCgroup,
+            home(),
+        );
         assert!(
             matches!(refused, Err(ServiceError::InvalidIdentity { .. })),
             "{bad:?}"
