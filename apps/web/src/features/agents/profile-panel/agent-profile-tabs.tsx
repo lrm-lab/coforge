@@ -4,6 +4,7 @@ import {
   Bell01 as Bell,
   Folder,
   Grid01,
+  MessageChatCircle,
   UserCircle as UserRound,
 } from "@untitledui/icons";
 
@@ -14,6 +15,7 @@ import { visibleAgentProfileTabs, type AgentProfileTab } from "./profile-panel-s
 
 const TABS = {
   profile: { label: m.agent_profile_tab, icon: UserRound },
+  chat: { label: m.agent_chat_tab, icon: MessageChatCircle },
   reminders: { label: m.agent_reminders_tab, icon: Bell },
   activity: { label: m.agent_activity_tab, icon: ActivityIcon },
   workspace: { label: m.agent_workspace_tab, icon: Folder },
@@ -21,8 +23,15 @@ const TABS = {
 };
 
 /** The tabs this viewer may see, in their saved order; the first one is the panel's default. */
-export function useAgentProfileTabOrder(canSeeManagerTabs: boolean, canSeeApps: boolean) {
-  return usePanelTabOrder("agentProfile", visibleAgentProfileTabs(canSeeManagerTabs, canSeeApps));
+export function useAgentProfileTabOrder(
+  canSeeManagerTabs: boolean,
+  canSeeApps: boolean,
+  canSeeChat: boolean,
+) {
+  return usePanelTabOrder(
+    "agentProfile",
+    visibleAgentProfileTabs(canSeeManagerTabs, canSeeApps, canSeeChat),
+  );
 }
 
 /**

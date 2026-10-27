@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { agentPeerDirectKey } from "#src/features/conversations/direct-key";
+import { APP_BOT_KIND } from "#src/features/agents/agent-system-kind";
+import { listAgentChannels } from "#src/server/agents/agent-channel-memberships.server";
 import { listAgentPeerCards } from "#src/server/agents/agent-peer-conversations.server";
 import {
   AGENT_DM_LIMIT_NOTICE,
@@ -9,8 +11,9 @@ import {
   agentDmIsLimited,
 } from "#src/server/conversations/agent-dm-limits.server";
 
-// What a member sees of the conversations between Agents: previews, never bodies, and nothing
-// about a private peer they may not see.
+// What a member sees of an Agent's Chat tab: the last message of each conversation between Agents
+// (cut short), the channels it is in, nothing about a private peer they may not see, and only to
+// the Agent's managers (anyone who can see an app's bot).
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -53,6 +56,24 @@ const converse = async (
 const cards = (agent: string, userId = viewerId, now?: Date) =>
   listAgentPeerCards(db, { workspaceId, agentId: agents[agent]!.id, userId, now });
 
+const make = (name: string, ownerId: string, visibility: string, systemKind?: string) =>
+  db.agent
+    .create({
+      data: {
+        workspaceId,
+        ownerId,
+        name: `${name}-${suffix}`,
+        displayName: name,
+        visibility,
+        systemKind,
+        runtimeConfig: {},
+      },
+      select: { id: true, name: true },
+    })
+    .then((agent) => (agents[name] = agent));
+const channels = (agent: string, userId = viewerId) =>
+  listAgentChannels(db, { workspaceId, agentId: agents[agent]!.id, userId });
+
 beforeAll(async () => {
   const users = await Promise.all(
     ["viewer", "stranger", "keeper"].map((name) =>
@@ -69,23 +90,10 @@ beforeAll(async () => {
       },
     })
   ).id;
-  const make = (name: string, ownerId: string, visibility: string) =>
-    db.agent
-      .create({
-        data: {
-          workspaceId,
-          ownerId,
-          name: `${name}-${suffix}`,
-          displayName: name,
-          visibility,
-          runtimeConfig: {},
-        },
-        select: { id: true, name: true },
-      })
-      .then((agent) => (agents[name] = agent));
   await make("ada", viewerId, "public");
   await make("bob", viewerId, "public");
   await make("cleo", users[2]!.id, "private");
+  await make("bot", viewerId, "public", APP_BOT_KIND);
 });
 
 afterAll(async () => {
@@ -94,7 +102,7 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-test("a card previews the last spoken message, says who spoke, and cuts the body short", async () => {
+test("a card carries the last spoken message's body and says when it was written", async () => {
   const long = "x".repeat(200);
   await converse("ada", "bob", [
     { from: "ada", body: "hello" },
@@ -102,13 +110,9 @@ test("a card previews the last spoken message, says who spoke, and cuts the body
   ]);
   const [card, ...rest] = await cards("ada");
   expect(rest).toEqual([]);
-  expect(card).toMatchObject({ lastFromPeer: true, limited: false });
+  expect(card).toMatchObject({ limited: false, message: { body: long, mentions: [] } });
   expect(card!.peer).toMatchObject({ agentId: agents.bob!.id, name: agents.bob!.name });
-  expect(Array.from(card!.preview)).toHaveLength(120);
-  expect(Object.keys(card!)).not.toContain("body");
-  expect(card!.preview).not.toContain("<@");
-  // The same conversation from the other seat: the last word is not the peer's.
-  expect((await cards("bob"))[0]).toMatchObject({ lastFromPeer: false });
+  expect(card!.at).toBeInstanceOf(Date);
 });
 
 test("a conversation with a private peer the member cannot see is left out", async () => {
@@ -116,6 +120,10 @@ test("a conversation with a private peer the member cannot see is left out", asy
   expect((await cards("ada")).map((card) => card.peer.agentId)).toEqual([agents.bob!.id]);
   // Its creator sees it; a private Agent's own card is refused to anyone else.
   const keeper = await db.user.findFirstOrThrow({ where: { username: `keeper-${suffix}` } });
+  await db.workspaceMembership.updateMany({
+    where: { workspaceId, userId: keeper.id },
+    data: { role: "admin" },
+  });
   expect(await cards("ada", keeper.id)).toHaveLength(2);
   await expect(cards("cleo", strangerId)).rejects.toMatchObject({ code: "AGENT_NOT_VISIBLE" });
 });
@@ -197,5 +205,102 @@ test("a mention in the previewed message reads as the Agent's handle, not as a t
     },
   });
   const card = (await cards("ada")).find((c) => c.peer.agentId === agents.bob!.id)!;
-  expect(card.preview).toBe(`thanks @${agents.ada!.name}`);
+  expect(card.message).toMatchObject({
+    body: `thanks <@agent:${agents.ada!.id}>`,
+    mentions: [{ kind: "agent", actorId: agents.ada!.id, handle: agents.ada!.name }],
+  });
+});
+
+test("the body is cut to a bounded length without leaving half a mention token", async () => {
+  const conversation = await db.conversation.findFirstOrThrow({
+    where: { workspaceId, directKey: agentPeerDirectKey(agents.ada!.id, agents.bob!.id) },
+    include: { members: true },
+  });
+  const sender = conversation.members.find((member) => member.agentId === agents.bob!.id)!;
+  const say = async (body: string) => {
+    const last = await db.message.findFirstOrThrow({
+      where: { conversationId: conversation.id },
+      orderBy: { sequence: "desc" },
+    });
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: conversation.id,
+        sequence: last.sequence + 1,
+        senderMemberId: sender.id,
+        body,
+      },
+    });
+  };
+  const lastBody = async () =>
+    (await cards("ada")).find((c) => c.peer.agentId === agents.bob!.id)!.message!.body;
+  await say("z".repeat(700));
+  expect(await lastBody()).toBe("z".repeat(600));
+  await say(`${"y".repeat(590)}<@agent:${agents.ada!.id}>`);
+  expect(await lastBody()).toBe("y".repeat(590));
+});
+
+test("a conversation with no message yet is listed after those with one, by creation time", async () => {
+  const quiet = await db.user.create({
+    data: { displayName: "quiet", username: `quiet-${suffix}` },
+  });
+  await db.workspaceMembership.create({
+    data: { workspaceId, userId: quiet.id, role: "admin" },
+  });
+  await make("dora", quiet.id, "public");
+  await make("eli", quiet.id, "public");
+  await converse("dora", "ada", []);
+  await converse("eli", "ada", []);
+  const list = await cards("ada", quiet.id);
+  const withMessage = list.filter((card) => card.message);
+  expect(list.slice(0, withMessage.length)).toEqual(withMessage);
+  const empty = list.filter((card) => !card.message);
+  expect(empty.map((card) => card.peer.name)).toEqual([`eli-${suffix}`, `dora-${suffix}`]);
+  expect(empty.every((card) => card.at instanceof Date)).toBe(true);
+});
+
+test("only the Agent's creator, a Workspace owner/admin or, for an app's bot, anyone may read", async () => {
+  // A plain member who does not own the Agent is refused, even for a public Agent.
+  await expect(cards("ada", strangerId)).rejects.toMatchObject({ code: "AGENT_NOT_VISIBLE" });
+  await expect(channels("ada", strangerId)).rejects.toMatchObject({ code: "AGENT_NOT_VISIBLE" });
+  await expect(channels("ada", viewerId)).resolves.toEqual([]);
+  // An app's bot answers any member who can see it.
+  await expect(cards("bot", strangerId)).resolves.toEqual([]);
+  await expect(channels("bot", strangerId)).resolves.toEqual([]);
+  const missing = { workspaceId, agentId: crypto.randomUUID(), userId: viewerId };
+  await expect(listAgentChannels(db, missing)).rejects.toMatchObject({
+    code: "AGENT_NOT_VISIBLE",
+  });
+});
+
+test("channels lists the open channels the Agent is an active member of, by name, with its mute", async () => {
+  const channel = (name: string, extra: { archivedAt?: Date; description?: string } = {}) =>
+    db.conversation.create({ data: { workspaceId, channelName: `${name}-${suffix}`, ...extra } });
+  const [beta, alpha, gone, left, hidden, outside] = await Promise.all([
+    channel("beta", { description: "Second." }),
+    channel("alpha"),
+    channel("gone", { archivedAt: new Date() }),
+    channel("left"),
+    db.conversation.create({
+      data: { workspaceId, channelName: `hidden-${suffix}`, hiddenFromWorkspaceAt: new Date() },
+    }),
+    channel("outside"),
+  ]);
+  const join = (conversationId: string, extra: { channelMuted?: boolean; leftAt?: Date } = {}) =>
+    db.conversationMember.create({
+      data: { conversationId, workspaceId, agentId: agents.ada!.id, ...extra },
+    });
+  await join(beta!.id);
+  await join(alpha!.id, { channelMuted: true });
+  await join(gone!.id);
+  await join(left!.id, { leftAt: new Date() });
+  await join(hidden!.id);
+  // Bob's membership says nothing about Ada's.
+  await db.conversationMember.create({
+    data: { conversationId: outside!.id, workspaceId, agentId: agents.bob!.id },
+  });
+  expect(await channels("ada")).toEqual([
+    { id: alpha!.id, name: `alpha-${suffix}`, description: "", muted: true },
+    { id: beta!.id, name: `beta-${suffix}`, description: "Second.", muted: false },
+  ]);
 });

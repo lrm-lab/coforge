@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { arrangeTabs, isTabOrder } from "#src/features/panel-tabs/panel-tab-order";
 import {
   agentIdFromProfileParam,
   agentProfileSearchWithoutThread,
@@ -76,23 +77,42 @@ describe("agentProfileSearchWithoutThread", () => {
 });
 
 describe("visibleAgentProfileTabs", () => {
-  test("shows Activity, Reminders and Workspace to the Agent's managers, Profile and Apps to everyone", () => {
-    expect(visibleAgentProfileTabs(false, true)).toEqual(["profile", "apps"]);
-    expect(visibleAgentProfileTabs(true, true)).toEqual([
+  test("shows Activity, Chat, Reminders and Workspace to the Agent's managers, Profile and Apps to everyone", () => {
+    expect(visibleAgentProfileTabs(false, true, false)).toEqual(["profile", "apps"]);
+    expect(visibleAgentProfileTabs(true, true, true)).toEqual([
       "profile",
       "activity",
+      "chat",
       "reminders",
       "workspace",
       "apps",
     ]);
   });
 
-  test("an archived Agent shows Profile alone", () => {
-    expect(visibleAgentProfileTabs(false, false)).toEqual(["profile"]);
+  test("an app's bot shows Profile and Chat to everyone who opens it", () => {
+    expect(visibleAgentProfileTabs(false, false, true)).toEqual(["profile", "chat"]);
   });
 
-  test("opens on Profile, then lists Activity, Reminders, Workspace and Apps by default", () => {
-    expect(visibleAgentProfileTabs(true, true)).toEqual([...AGENT_PROFILE_TABS]);
+  test("an archived Agent shows Profile alone", () => {
+    expect(visibleAgentProfileTabs(false, false, false)).toEqual(["profile"]);
+  });
+
+  test("opens on Profile, then lists Activity, Chat, Reminders, Workspace and Apps by default", () => {
+    expect(visibleAgentProfileTabs(true, true, true)).toEqual([...AGENT_PROFILE_TABS]);
+  });
+
+  test("a saved order that predates Chat gets it in its default place among the rest", () => {
+    const saved = ["apps", "profile", "activity"] as const;
+    expect(arrangeTabs(visibleAgentProfileTabs(true, true, true), saved)).toEqual([
+      "apps",
+      "profile",
+      "activity",
+      "chat",
+      "reminders",
+      "workspace",
+    ]);
+    expect(isTabOrder("agentProfile", saved)).toBeTrue();
+    expect(isTabOrder("agentProfile", ["chat", "profile"])).toBeTrue();
   });
 });
 

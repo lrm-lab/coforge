@@ -33,7 +33,6 @@ import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
 import { AppBotProfile } from "./app-bot-profile";
-import { AgentPeerDmsSection } from "./agent-peer-dms-section";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
@@ -350,14 +349,6 @@ function AgentProfileTabBody({
           />
         </div>
       </section>
-
-      {!profile.deletedAt && (
-        <AgentPeerDmsSection
-          agentId={profile.id}
-          agentName={profile.displayName || profile.name}
-          timeZone={timeZone}
-        />
-      )}
 
       {archive}
 

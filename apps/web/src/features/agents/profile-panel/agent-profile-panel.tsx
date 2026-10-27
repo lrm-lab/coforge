@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
@@ -14,12 +14,6 @@ import {
 } from "#src/features/agents/workspace-agents-realtime";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { AgentReminders } from "#src/features/agents/agent-reminders";
-import { listAgentReminders } from "#src/features/agents/agent-reminders.functions";
-import { getAgentSkills } from "#src/features/agents/agent-skills.functions";
-import {
-  listAgentWorkspaceFiles,
-  readAgentWorkspaceFile,
-} from "#src/features/agents/agent-workspace-files.functions";
 import { useAgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
@@ -65,6 +59,8 @@ import { profileRuntimeSelection, profileUpdateInput } from "./agent-profile-run
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
+import { AgentChatTab } from "./agent-chat-tab";
+import { useAgentPanelLoaders } from "./agent-profile-loaders";
 import { AgentProfileSkeleton } from "./agent-profile-skeleton";
 import { AgentProfileStatus } from "./agent-profile-status";
 import {
@@ -148,9 +144,11 @@ export function AgentProfilePanel({
     offerComputerPicker && computersQuery.isSuccess
       ? setupComputerOptions(computersQuery.data ?? [], profile?.isWeeklyReportAssistant)
       : undefined;
+  // An app's bot has no manager tabs, but its Chat is every viewer's.
   const tabOrder = useAgentProfileTabOrder(
     canManage,
     Boolean(profile) && !deleted && !profile?.appBot,
+    Boolean(profile) && !deleted && (canManage || Boolean(profile?.appBot)),
   );
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
@@ -161,27 +159,8 @@ export function AgentProfilePanel({
     if (loaded && !requestedTab) onTabChange(tab);
   }, [loaded, requestedTab, tab, onTabChange]);
 
-  const loadReminders = useServerFn(listAgentReminders);
-  const onLoadReminders = useCallback(
-    (cursor?: { id: string }) =>
-      loadReminders({ data: { agentId, ...(cursor ? { cursor } : {}) } }),
-    [agentId, loadReminders],
-  );
-
-  const loadSkills = useServerFn(getAgentSkills);
-  const onLoadSkills = useCallback(() => loadSkills({ data: agentId }), [agentId, loadSkills]);
-
-  const listWorkspaceFiles = useServerFn(listAgentWorkspaceFiles);
-  const onListWorkspaceDir = useCallback(
-    (dirPath: string, includeHidden: boolean) =>
-      listWorkspaceFiles({ data: { agentId, dirPath, includeHidden } }),
-    [agentId, listWorkspaceFiles],
-  );
-  const readWorkspaceFile = useServerFn(readAgentWorkspaceFile);
-  const onReadWorkspaceFile = useCallback(
-    (path: string) => readWorkspaceFile({ data: { agentId, path } }),
-    [agentId, readWorkspaceFile],
-  );
+  const { onLoadReminders, onLoadSkills, onListWorkspaceDir, onReadWorkspaceFile } =
+    useAgentPanelLoaders(agentId);
 
   // Owner-only env, for the Runtime config dialog.
   const queryClient = useQueryClient();
@@ -341,6 +320,8 @@ export function AgentProfilePanel({
           <AgentProfileSkeleton />
         ) : tab === "activity" ? (
           <AgentActivityTab agent={diagnosticFacts} display={display} timeZone={timeZone} />
+        ) : tab === "chat" ? (
+          <AgentChatTab agentId={agentId} timeZone={timeZone} />
         ) : tab === "reminders" ? (
           <div className="px-5 pb-5">
             <AgentReminders

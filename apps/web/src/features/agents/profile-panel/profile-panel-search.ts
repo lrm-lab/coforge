@@ -20,6 +20,7 @@ const PROFILE_PATTERN = new RegExp(
 export const AGENT_PROFILE_TABS = [
   "profile",
   "activity",
+  "chat",
   "reminders",
   "workspace",
   "apps",
@@ -68,17 +69,20 @@ function idFromProfileParam(profile: string | undefined, prefix: string): string
   return UUID_PATTERN.test(id) ? id : undefined;
 }
 
-/** The panel offers Profile, Reminders, Activity, Workspace and Apps. Reminders, Activity and
- * Workspace are for the Agent's creator and a Workspace owner/admin (`canSeeManagerTabs`). Apps
- * is every viewer's, read-only to those who may not change it, but not an archived Agent's
- * (`canSeeApps`). Returned in default order. */
+/** The panel offers Profile, Activity, Chat, Reminders, Workspace and Apps. Activity, Reminders
+ * and Workspace are for the Agent's creator and a Workspace owner/admin (`canSeeManagerTabs`).
+ * Chat is theirs too, and also every viewer's of an app's bot (`canSeeChat`, which the caller
+ * answers). Apps is every viewer's, read-only to those who may not change it, but not an archived
+ * Agent's (`canSeeApps`). Returned in default order. */
 export function visibleAgentProfileTabs(
   canSeeManagerTabs: boolean,
   canSeeApps: boolean,
+  canSeeChat: boolean,
 ): AgentProfileTab[] {
   const visible = {
     profile: true,
     activity: canSeeManagerTabs,
+    chat: canSeeChat,
     reminders: canSeeManagerTabs,
     workspace: canSeeManagerTabs,
     apps: canSeeApps,

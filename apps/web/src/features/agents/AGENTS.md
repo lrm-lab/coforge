@@ -133,9 +133,9 @@ These rules apply to `src/features/agents/`.
   Runtime management stays in the profile panel. `cloud-agent-create-dialog.tsx`, opened from the DM picker, asks only for a display name, waits for cloud readiness, and opens the created private Agent's DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
 - Who sees what on an Agent, as Raft does: Message (profile header, Members
   card, DM picker, search) follows the server's `canMessage` (any member a
-  public Agent, only its creator a private one); the Activity, Reminders and
-  Workspace tabs follow `canManageAgent` (its creator or a Workspace
-  owner/admin), and so do the Activity reads behind the tab and the Agent card:
+  public Agent, only its creator a private one); the Activity, Chat, Reminders and Workspace tabs
+  follow `canManageAgent` (its creator or a Workspace owner/admin; an app's bot shows Profile and
+  Chat, Chat to every viewer), and so do the Activity reads behind the tab and the Agent card:
   the server answers no one else and the browser does not ask;
   Start, Stop and Restart are any member's; Full reset is owner/admin only
   (`AgentControl.execute`).

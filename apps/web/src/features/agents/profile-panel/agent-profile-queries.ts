@@ -3,6 +3,7 @@ import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 
 import { getAgentEnvironment, getAgentProfile } from "#src/features/agents/agents.functions";
+import { getAgentChannels } from "#src/features/agents/agent-channels.functions";
 import { getAgentPeerConversations } from "#src/features/agents/agent-peer-conversations.functions";
 
 const agentProfileKey = (agentId: string) => ["agent-profile", agentId] as const;
@@ -19,11 +20,20 @@ export function agentProfileQuery(agentId: string | undefined) {
   });
 }
 
-/** The Profile tab's AGENT DMS cards: previews of the Agent's conversations with other Agents. */
+/** The Chat tab's Agent DMs cards: the last message of each of the Agent's conversations with other Agents. */
 export function agentPeerConversationsQuery(agentId: string) {
   return queryOptions({
     queryKey: ["agent-peer-conversations", agentId] as const,
     queryFn: async () => getAgentPeerConversations({ data: agentId }),
+    staleTime: 15_000,
+  });
+}
+
+/** The Chat tab's Channels rows: the open channels the Agent is an active member of. */
+export function agentChannelsQuery(agentId: string) {
+  return queryOptions({
+    queryKey: ["agent-channels", agentId] as const,
+    queryFn: async () => getAgentChannels({ data: agentId }),
     staleTime: 15_000,
   });
 }
