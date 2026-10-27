@@ -278,18 +278,19 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       );
     },
     async activateRuntime(computerId, version) {
-      if (!/^[A-Za-z0-9.+-]{1,100}$/.test(version) || version === "." || version.startsWith("-") || version.includes("..")) {
+      if (
+        !/^[A-Za-z0-9.+-]{1,100}$/.test(version) ||
+        version === "." ||
+        version.startsWith("-") ||
+        version.includes("..")
+      ) {
         throw new Error("invalid runtime version");
       }
       const containerId = firstId(
         await run(spawn, dockerTaskFindArgs(computerId), "docker ps failed"),
       );
       if (!containerId) throw new Error("cloud computer task is not running");
-      await run(
-        spawn,
-        dockerActivateRuntimeArgs(containerId, version),
-        "docker exec failed",
-      );
+      await run(spawn, dockerActivateRuntimeArgs(containerId, version), "docker exec failed");
       await run(spawn, dockerServiceRestartArgs(computerId), "docker service update failed");
     },
     async desktopEndpoint(computerId) {
