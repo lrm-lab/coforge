@@ -2,23 +2,24 @@ import { expect, test } from "bun:test";
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
 /**
- * Browser E2E (task #181): the notification banner above the composer keeps its text readable. Its
- * buttons sit beside the body only while the body keeps 280px; in a narrower pane (beside an open thread, a phone, or the
- * 440–550px panes checked here) they take their own row under it, so the text is never squeezed
- * into a narrow column. Opt-in like the other browser E2Es (it reuses the replying fixture's
- * channel and thread); see `helpers/agent-replying-fixture.ts`. Screenshots are written under
- * `.amp/e2e/notification-banner/`.
+ * Browser E2E (tasks #181, #231): the notification banner above the composer is one line, the bell,
+ * one sentence and its Dismiss and Enable buttons, and keeps its text readable. The buttons sit
+ * beside the sentence only while it fits on its line whole; in a narrower pane (beside an open
+ * thread, a phone, or the 440–550px panes checked here) they take their own row under it, so the
+ * text is never squeezed into a narrow column. Opt-in like the other browser E2Es (it reuses the
+ * replying fixture's channel and thread); see `helpers/agent-replying-fixture.ts`. Screenshots are
+ * written under `.amp/e2e/notification-banner/`.
  */
 const fx = setupAgentReplying({ artifactsName: "notification-banner" });
 const { suffix, browser, evaluate, until } = fx;
 
-/** Where the banner's Enable button sits against its body text, how wide that text is and how tall
- * the button is (32px, as on Raft); and in the message column
- * that holds it and the composer, whether the two line up, the column's side room, and the room it
- * had before task #181's follow-up (10% of the pane, at most 104px). */
+/** Where the banner's Enable button sits against its sentence, how wide and how many lines the
+ * sentence is, and how tall the button is (32px); and in the message column that holds the banner
+ * and the composer, whether the two line up, the column's side room, and the room it had before
+ * task #181's follow-up (10% of the pane, at most 104px). */
 const layout = `(() => {
   const enable = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable Notifications");
-  const body = enable?.closest(".rounded-xl")?.querySelector(".basis-70");
+  const body = enable?.closest(".rounded-xl")?.querySelector("[class*=basis-]");
   if (!enable || !body) return null;
   const e = enable.getBoundingClientRect();
   const b = body.getBoundingClientRect();
@@ -31,6 +32,7 @@ const layout = `(() => {
     below: e.top >= b.bottom,
     bodyWidth: Math.round(b.width),
     buttonHeight: Math.round(e.height),
+    bodyLines: Math.round(b.height / parseFloat(getComputedStyle(body).lineHeight)),
     cardWidth: Math.round(c.width),
     alignedWithComposer: Math.abs(c.left - f.left) < 1 && Math.abs(c.right - f.right) < 1,
     room: Math.round(parseFloat(getComputedStyle(column).paddingLeft)),
@@ -43,6 +45,7 @@ type Layout = {
   below: boolean;
   bodyWidth: number;
   buttonHeight: number;
+  bodyLines: number;
   cardWidth: number;
   alignedWithComposer: boolean;
   room: number;
@@ -58,7 +61,7 @@ test("the banner's buttons move under its text when the pane narrows", async () 
   await until(bannerShown);
   const wide = await evaluate<Layout>(layout);
   expect(wide).toMatchObject({ beside: true, below: false, buttonHeight: 32 });
-  expect(wide!.bodyWidth).toBeGreaterThanOrEqual(280);
+  expect(wide!.bodyLines).toBe(1);
   expect(wide!.alignedWithComposer).toBe(true);
   await fx.screenshot("wide.png");
 
@@ -72,7 +75,7 @@ test("the banner's buttons move under its text when the pane narrows", async () 
   await fx.screenshot("desktop-1280.png");
   await browser("set", "viewport", "1440", "900");
 
-  // A conversation pane of these widths leaves the body under 280px beside the buttons, so they
+  // A conversation pane of these widths has no room for the sentence beside the buttons, so they
   // wrap. The column gives up its side room (all of it at 440 and 460px), so the banner and the
   // composer keep nearly the whole pane, as on Raft, and still line up.
   for (const pane of [440, 460, 550]) {

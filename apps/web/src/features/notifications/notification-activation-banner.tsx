@@ -145,9 +145,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
     <>
       <Button
         size="xs"
-        color="tertiary"
-        // Raft's Dismiss is in the body's ink, not the borderless button's grey.
-        className="text-primary hover:text-primary"
+        color="secondary"
         onPress={() => {
           writeDismissed();
           setError(null);
@@ -157,38 +155,37 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
       >
         {m.notification_activation_dismiss()}
       </Button>
-      <Button size="xs" color="secondary" isDisabled={enabling} onPress={() => void enable()}>
+      <Button size="xs" color="primary" isDisabled={enabling} onPress={() => void enable()}>
         {enabling ? m.notification_activation_enabling() : m.notification_activation_enable()}
       </Button>
     </>
   );
   return (
-    // The text keeps room to read: the buttons sit beside the body, level with its last line, only
-    // while the body still has 280px; with less (a phone, the pane beside an open thread, or a
-    // longer translation) they wrap onto their own row, right-aligned, as they do under an error.
+    // One line: the bell, one sentence, and the two buttons as a pair, secondary and primary, on
+    // the right. The buttons stay beside the sentence only while it fits on its line whole; with
+    // less room (a phone, the pane beside an open thread, or a longer translation) they wrap onto
+    // their own row, right-aligned, as they do under an error, so the sentence is never squeezed.
     <div ref={ref} className="mx-4 mt-2 md:mx-6">
-      <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-xl border border-utility-blue-200 bg-utility-blue-50 px-3 py-2.5 text-sm">
-        <BellRinging01 aria-hidden="true" className="mt-0.5 size-4 text-fg-primary" />
-        <p className="font-semibold text-primary">
-          <span className="md:hidden">{m.notification_activation_mobile_title()}</span>
-          <span className="max-md:hidden">{m.notification_activation_desktop_title()}</span>
-        </p>
-        <div className="col-start-2 flex flex-wrap items-end justify-end gap-2">
-          <div className={cx("min-w-0 grow basis-70 text-primary", error && "basis-full")}>
-            <p>
-              <span className="md:hidden">{m.notification_activation_mobile_body()}</span>
-              <span className="max-md:hidden">{m.notification_activation_desktop_body()}</span>
-            </p>
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 rounded-xl border border-utility-blue-200 bg-utility-blue-50 px-3 py-2 text-sm">
+        <div
+          className={cx(
+            "flex min-w-0 grow basis-auto items-start gap-2 text-primary",
+            error && "basis-full",
+          )}
+        >
+          <BellRinging01 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-primary" />
+          <div className="min-w-0">
+            <p>{m.notification_activation_message()}</p>
             {error && (
-              <p role="alert" className="mt-1 font-semibold text-primary">
+              <p role="alert" className="mt-1 font-semibold">
                 {error === "unavailable"
                   ? m.notification_activation_error_unavailable()
                   : m.notification_activation_error_generic()}
               </p>
             )}
           </div>
-          <div className="flex flex-wrap justify-end gap-2">{actions}</div>
         </div>
+        <div className="flex gap-2">{actions}</div>
       </div>
     </div>
   );
