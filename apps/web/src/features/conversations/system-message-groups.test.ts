@@ -43,6 +43,10 @@ describe("system message kind", () => {
   test("anything else is a plain system message", () => {
     expect(systemMessageKind("@frank-an joined the channel.")).toBe("system");
     expect(systemMessageKind("👋 Welcome to #general")).toBe("system");
+    expect(systemMessageKind("Frank An made @lead the coordinator of #team (replacing @old)")).toBe(
+      "system",
+    );
+    expect(systemMessageKind("Frank An removed @old as coordinator of #team")).toBe("system");
     expect(systemMessageKind("")).toBe("system");
   });
 });

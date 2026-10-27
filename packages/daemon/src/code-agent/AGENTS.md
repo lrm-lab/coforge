@@ -89,7 +89,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   and passes them through the required `AgentSessionOptions.instructions`.
 - Keep transport guidance minimal: identity, `Current Runtime Context`,
   communication, on-demand context recovery, safety, and help. The fixed
-  prompt budget is 3.5KB (3584 bytes) excluding dynamic identity data; the shared communication style fits without removing delivery or authority rules. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping;
+  prompt budget is 3712 bytes excluding dynamic identity data, raised from 3584 because a coordinator's scope and "Agent reports are not human authorization" live only here once the coordinator-change notice became one line; the shared communication style fits without removing delivery or authority rules. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping;
   only before a long task does the Agent note where it is in
   `notes/active-context.md` (not MEMORY.md) so it can resume.
   An inbox notice lists targets — `check --target` those and reply; do not

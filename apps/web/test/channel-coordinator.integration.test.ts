@@ -10,6 +10,19 @@ import {
   decodeAgentWorkspaceResetRequest,
 } from "@lrm/coforge-sdk/internal";
 import { pendingOpStore } from "./helpers/agent-control-store";
+import { coordinatorChangeNotice } from "#src/server/conversations/channel-coordination.server";
+
+test("a coordinator notice is one sentence naming who changed it", () => {
+  expect(coordinatorChangeNotice("team", "Frank An", undefined, "lead")).toBe(
+    "Frank An made @lead the coordinator of #team",
+  );
+  expect(coordinatorChangeNotice("team", "Frank An", "old", "lead")).toBe(
+    "Frank An made @lead the coordinator of #team (replacing @old)",
+  );
+  expect(coordinatorChangeNotice("team", "Frank An", "old", undefined)).toBe(
+    "Frank An removed @old as coordinator of #team",
+  );
+});
 
 /** Real channel settings, delivery/read boundaries and restart recovery against scratch PostgreSQL. */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -103,8 +116,9 @@ test.skipIf(!connectionString)(
       expect(recovery.resumeMessages).toHaveLength(1);
       const notice = recovery.resumeMessages[0]!;
       expect(notice.latestSenderKind).toBe("system");
-      expect(notice.body).toContain("@coforge-lead is no longer coordinator");
-      expect(notice.body).toContain("Continue your own assigned or claimed work");
+      expect(notice.body).toEndWith(
+        "Coordinator test removed @coforge-lead as coordinator of #team",
+      );
       expect(notice.body).toStartWith("[CoForge current channel role: member; coordinator=none]");
       expect(recovery.unreadSummary["#team"]).toBe(1);
       expect(
@@ -314,8 +328,8 @@ for (const action of ["start", "restart", "reset-session", "full-reset"] as cons
         expect(starts[0]!.resumeMessages?.[0]?.body).toStartWith(
           "[CoForge current channel role: member; coordinator=none]",
         );
-        expect(starts[0]!.resumeMessages?.[0]?.body).toContain(
-          "@coforge-lead is no longer coordinator",
+        expect(starts[0]!.resumeMessages?.[0]?.body).toEndWith(
+          "Coordinator test removed @coforge-lead as coordinator of #team",
         );
         expect(starts[0]!.sessionId).toBe(
           action === "start" || action === "restart" ? "old-coordinator-session" : undefined,

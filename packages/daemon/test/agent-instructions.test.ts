@@ -173,8 +173,8 @@ test("provider-specific rules remain available once when supplied", () => {
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
 
-test("the shared standing guidance stays within a 3.5KB budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(3584);
+test("the shared standing guidance stays within a 3712-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(3712);
 });
 
 test("the openviking-memory profile queries before retrieval Offers and protects tenant secrets", () => {

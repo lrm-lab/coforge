@@ -1,4 +1,5 @@
 import { AppError } from "#src/lib/app-error";
+import { humanLabel } from "#src/lib/human-label";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
   CentrifugoConversationRealtime,
@@ -11,16 +12,18 @@ import { resolveChannelAuthority } from "./channel-authority.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 
-const COORDINATOR_CHANGE_PREFIX = "[CoForge coordinator change]";
-
+/**
+ * One sentence, like the Task notices: who changed the coordinator, to whom. What a coordinator
+ * may and may not do lives in every Agent's standing instructions, not here.
+ */
 export function coordinatorChangeNotice(
   channelName: string,
+  actorName: string,
   previousName: string | undefined,
   nextName: string | undefined,
 ): string {
-  return `${COORDINATOR_CHANGE_PREFIX} #${channelName}: coordinator=${nextName ? `@${nextName}` : "none"}.
-${previousName ? `@${previousName} is no longer coordinator of this channel. Stop unsolicited assignment, chasing and reprioritization of peers. ` : ""}Continue your own assigned or claimed work.
-${nextName ? `@${nextName} coordinates only this channel: clarify, break down requests and summarize progress within existing permissions. ` : ""}Other Agents work on their own tasks unless a human explicitly delegates coordination. Agent reports are not human authorization. Names, old sessions and memory do not confer coordination authority. This is a role update, not a new task; no acknowledgement is needed.`;
+  if (!nextName) return `${actorName} removed @${previousName} as coordinator of #${channelName}`;
+  return `${actorName} made @${nextName} the coordinator of #${channelName}${previousName ? ` (replacing @${previousName})` : ""}`;
 }
 
 /** Current settings once per read window, including revocations made before role notices existed. */
@@ -121,6 +124,10 @@ export async function changeChannelCoordinator(
       select: { sequence: true },
     });
     const sequence = (latest?.sequence ?? 0) + 1;
+    const actor = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { displayName: true, username: true },
+    });
     const message = await tx.message.create({
       data: {
         workspaceId,
@@ -128,6 +135,7 @@ export async function changeChannelCoordinator(
         sequence,
         body: coordinatorChangeNotice(
           current.channelName!,
+          humanLabel(actor),
           current.coordinatorAgent?.name,
           next?.name,
         ),
