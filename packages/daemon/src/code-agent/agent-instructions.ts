@@ -235,7 +235,7 @@ Default: a top-level message gets a top-level reply, a thread message a reply in
 Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. Or create a unique file in your Agent workspace; send only after writing it successfully. If preparation fails, stop; never send existing file contents.
 ${CLI_CHANNEL_MESSAGE_EXAMPLE}
 
-Targets: \`'@handle'\` DM, \`'#channel'\` channel; add \`:12345678\` for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices are not requests.`,
+Targets: \`'@handle'\` DM, \`'#channel'\` channel; add \`:12345678\` for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices are not requests; do not reply.`,
     messages: `## Read and send
 Notices list targets, not bodies. Run \`coforge message check --target '<target>'\` for each. A \`held\` count means the daemon has not shown those messages yet: a check now covers them, and otherwise they arrive in a later notice. \`│\` continues prior body; not a new message. Do not announce the notice or read MEMORY.md first. Older/thread context: \`coforge message search\` then \`read --around\`.
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend automatically. Do not poll for new messages.`,
