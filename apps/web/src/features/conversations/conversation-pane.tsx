@@ -19,7 +19,7 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 import { useSavedMessages } from "./conversation-host";
-import { conversationOpenPosition, unreadBoundary } from "./conversation-open-position";
+import { conversationOpenPosition } from "./conversation-open-position";
 import { ConversationBottomPin } from "./conversation-bottom-pin";
 import { OlderMessagesRow, type OlderLoad } from "./older-messages-row";
 import {
@@ -51,6 +51,7 @@ import { MessageNavigationGroup } from "./message-navigation-group";
 import { useOwnMessagesIndex } from "./own-messages-menu";
 import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
+import { useConversationOpenBoundary } from "./use-conversation-open-boundary";
 import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
@@ -237,19 +238,13 @@ export function ConversationPane({
   const newerStartedFollowingRef = useRef(false);
   const [newerCommit, setNewerCommit] = useState(0);
   const appliedNewerCommitRef = useRef(0);
-  // The initial-position decision is made once per conversation open: with unread messages,
-  // Slack's default lands on the first one and draws the divider; otherwise at the latest.
-  // Consumed by the mount effect below (open positioning) and by the divider snapshot, and
-  // never re-read on later updates.
-  const firstUnread = useMemo(
-    () => unreadBoundary(conversation.messages, conversation.readThroughSequence),
-    [conversation.conversationId, root?.id],
+  // The initial position and divider are captured once per conversation or thread open.
+  const { firstUnread, openBoundary } = useConversationOpenBoundary(
+    conversation.messages,
+    conversation.readThroughSequence,
+    conversation.conversationId,
+    root?.id,
   );
-  // The divider is frozen at the boundary seen at open, so the mark-read effect (which
-  // advances the cursor server-side) never makes it jump or vanish mid-visit. Captured once,
-  // by the first render's state initializer: a ref written during render could be left set by
-  // a render React then discards, showing a divider for a conversation never opened.
-  const [openBoundary] = useState(firstUnread);
   const lastSequence = conversation.messages.at(-1)?.sequence;
   const firstSequence = conversation.messages[0]?.sequence;
   // Handles that recently sent a message here, most-recent first: the mention completion popup
