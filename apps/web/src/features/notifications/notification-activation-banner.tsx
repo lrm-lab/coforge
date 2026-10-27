@@ -114,7 +114,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
       <div
         ref={ref}
         role="status"
-        className="relative mx-4 mt-2 flex items-start gap-2 overflow-hidden rounded-xl md:mx-6 border border-utility-blue-200 bg-utility-blue-50 px-3 py-2.5 pb-3 text-sm text-primary"
+        className="relative mx-4 mt-2 flex items-start gap-2 overflow-hidden rounded-xl md:mx-6 border border-secondary bg-primary px-3 py-2.5 pb-3 text-sm text-primary shadow-lg"
       >
         <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-primary" />
         <p className="min-w-0 font-semibold">
@@ -131,7 +131,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
         </p>
         <div
           aria-hidden="true"
-          className="notification-activation-progress absolute inset-x-0 bottom-0 h-1 bg-fg-primary"
+          className="notification-activation-progress absolute inset-x-0 bottom-0 h-1 bg-brand-solid"
           onAnimationEnd={() => {
             returnFocus();
             setConfirming(false);
@@ -144,10 +144,8 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
   const actions = (
     <>
       <Button
-        size="xs"
-        color="tertiary"
-        // Raft's Dismiss is in the body's ink, not the borderless button's grey.
-        className="text-primary hover:text-primary"
+        size="sm"
+        color="link-gray"
         onPress={() => {
           writeDismissed();
           setError(null);
@@ -157,7 +155,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
       >
         {m.notification_activation_dismiss()}
       </Button>
-      <Button size="xs" color="secondary" isDisabled={enabling} onPress={() => void enable()}>
+      <Button size="sm" color="link-color" isDisabled={enabling} onPress={() => void enable()}>
         {enabling ? m.notification_activation_enabling() : m.notification_activation_enable()}
       </Button>
     </>
@@ -167,7 +165,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
     // while the body still has 280px; with less (a phone, the pane beside an open thread, or a
     // longer translation) they wrap onto their own row, right-aligned, as they do under an error.
     <div ref={ref} className="mx-4 mt-2 md:mx-6">
-      <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-xl border border-utility-blue-200 bg-utility-blue-50 px-3 py-2.5 text-sm">
+      <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-xl border border-secondary bg-primary px-3 py-2.5 text-sm shadow-lg">
         <BellRinging01 aria-hidden="true" className="mt-0.5 size-4 text-fg-primary" />
         <p className="font-semibold text-primary">
           <span className="md:hidden">{m.notification_activation_mobile_title()}</span>
@@ -187,7 +185,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
               </p>
             )}
           </div>
-          <div className="flex flex-wrap justify-end gap-2">{actions}</div>
+          <div className="flex flex-wrap justify-end gap-3">{actions}</div>
         </div>
       </div>
     </div>

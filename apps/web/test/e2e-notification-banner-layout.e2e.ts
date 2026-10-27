@@ -2,27 +2,41 @@ import { expect, test } from "bun:test";
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
 /**
- * Browser E2E (task #181): the notification banner above the composer keeps its text readable. Its
- * buttons sit beside the body only while the body keeps 280px; in a narrower pane (beside an open
- * thread, a phone, or the 440–550px panes checked here) they take their own row under it, so the
- * text is never squeezed into a narrow column. Opt-in like the other browser E2Es (it reuses the
- * replying fixture's channel and thread); see `helpers/agent-replying-fixture.ts`. Screenshots are
- * written under `.amp/e2e/notification-banner/`.
+ * Browser E2E (tasks #181, #231): the notification banner above the composer is the design's white
+ * card, with no close button of its own, and keeps its text readable. Its buttons sit beside the
+ * body only while the body keeps 280px; in a narrower pane (beside an open thread, a phone, or the
+ * 440–550px panes checked here) they take their own row under it, so the text is never squeezed
+ * into a narrow column. Opt-in like the other browser E2Es (it reuses the replying fixture's
+ * channel and thread); see `helpers/agent-replying-fixture.ts`. Screenshots are written under
+ * `.amp/e2e/notification-banner/`.
  */
 const fx = setupAgentReplying({ artifactsName: "notification-banner" });
 const { suffix, browser, evaluate, until } = fx;
 
-/** Where the banner's Enable button sits against its body text, how wide that text is and how tall
- * the button is (32px, as on Raft). */
+/** Where the banner's Enable button sits against its body text, how wide that text is, whether the
+ * card is white and how many buttons it has (Dismiss and Enable only). */
 const layout = `(() => {
   const enable = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable Notifications");
   const body = enable?.closest(".rounded-xl")?.querySelector(".basis-70");
   if (!enable || !body) return null;
   const e = enable.getBoundingClientRect();
   const b = body.getBoundingClientRect();
-  return { beside: e.left >= b.right, below: e.top >= b.bottom, bodyWidth: Math.round(b.width), buttonHeight: Math.round(e.height) };
+  const card = enable.closest(".rounded-xl");
+  return {
+    beside: e.left >= b.right,
+    below: e.top >= b.bottom,
+    bodyWidth: Math.round(b.width),
+    white: getComputedStyle(card).backgroundColor === "rgb(255, 255, 255)",
+    buttons: card.querySelectorAll("button").length,
+  };
 })()`;
-type Layout = { beside: boolean; below: boolean; bodyWidth: number; buttonHeight: number } | null;
+type Layout = {
+  beside: boolean;
+  below: boolean;
+  bodyWidth: number;
+  white: boolean;
+  buttons: number;
+} | null;
 const bannerShown = `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Enable Notifications")`;
 
 test("the banner's buttons move under its text when the pane narrows", async () => {
@@ -31,7 +45,7 @@ test("the banner's buttons move under its text when the pane narrows", async () 
   await fx.untilText(`Thread root ${suffix}`);
   await until(bannerShown);
   const wide = await evaluate<Layout>(layout);
-  expect(wide).toMatchObject({ beside: true, below: false, buttonHeight: 32 });
+  expect(wide).toMatchObject({ beside: true, below: false, white: true, buttons: 2 });
   expect(wide!.bodyWidth).toBeGreaterThanOrEqual(280);
   await fx.screenshot("wide.png");
 
