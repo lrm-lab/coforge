@@ -1,12 +1,16 @@
+import { trajectorySessionWrite } from "./task-file-trace";
+import type { EpisodeEnrichment } from "./enrichment";
 import { PrismaWorkspaceMemoryAdmissionStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-admission.repositories.server";
 import { PrismaWorkspaceMemoryProfileStore } from "../../../apps/web/src/server/db/repositories/workspace-memory-profile.repositories.server";
 import {
   createOpenVikingTypedSessionExtract,
   type OpenVikingEvaluatorResult,
+  type OpenVikingOutcomeEvaluatorResult,
 } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 import {
   createAdmissionDispatcher,
   type AdmissionDispatcher,
+  type TurnEnrichment,
 } from "../../../apps/web/src/server/workspace-memory/dispatch";
 import {
   detectAdmittedPublicChannelSegments,
@@ -41,10 +45,27 @@ export function createEvalDispatcher(input: {
   return createAdmissionDispatcher({
     admission,
     sinks: {
-      openviking: createOpenVikingAdmittedDeliverySink({
-        sessions,
-        owner: "evol-sink",
-      }),
+      openviking: {
+        async deliver(delivery) {
+          const enrichment = delivery.turnEnrichment as EpisodeEnrichment | undefined;
+          const observations = delivery.turns.some(
+            (turn) => turn.messageId === enrichment?.trailingAnchorMessageId,
+          )
+            ? enrichment?.trailingObservations
+            : undefined;
+          if (!observations?.length)
+            return createOpenVikingAdmittedDeliverySink({ sessions, owner: "evol-sink" }).deliver(
+              delivery,
+            );
+          const result = await sessions.writeCommitAndExtract({
+            owner: "evol-sink",
+            write: trajectorySessionWrite(delivery),
+          });
+          return result.ok
+            ? { outcome: "delivered" }
+            : { outcome: "retryable_failure", sanitizedError: result.sanitizedError };
+        },
+      },
     },
   });
 }
@@ -91,6 +112,10 @@ export async function drainEpisodeToMemory(input: {
   workspace: EvalWorkspace;
   dispatcher: AdmissionDispatcher;
   channelName: string;
+  /** Tool calls and delivery facts per channel message id (ADR-0047); omitted keeps the old write. */
+  turnEnrichment?: ReadonlyMap<string, TurnEnrichment>;
+  /** The graded verdict for this episode, with the judge report when the grader gave one. */
+  outcomeEvaluatorResults?: readonly OpenVikingOutcomeEvaluatorResult[];
 }): Promise<number> {
   const profiles = new PrismaWorkspaceMemoryProfileStore(input.workspace.db);
   const profile = await profiles.get(input.workspace.workspaceId);
@@ -111,10 +136,24 @@ export async function drainEpisodeToMemory(input: {
   });
   let drained = 0;
   for (const segment of detected) {
-    let outcome = await input.dispatcher.dispatch({ profile, detected: segment });
+    let outcome = await input.dispatcher.dispatch({
+      profile,
+      detected: segment,
+      ...(input.turnEnrichment ? { turnEnrichment: input.turnEnrichment } : {}),
+      ...(input.outcomeEvaluatorResults?.length
+        ? { outcomeEvaluatorResults: input.outcomeEvaluatorResults }
+        : {}),
+    });
     for (let attempt = 1; outcome.outcome === "retryable_failure" && attempt <= 2; attempt += 1) {
       console.log(`drain retry ${attempt}`);
-      outcome = await input.dispatcher.dispatch({ profile, detected: segment });
+      outcome = await input.dispatcher.dispatch({
+        profile,
+        detected: segment,
+        ...(input.turnEnrichment ? { turnEnrichment: input.turnEnrichment } : {}),
+        ...(input.outcomeEvaluatorResults?.length
+          ? { outcomeEvaluatorResults: input.outcomeEvaluatorResults }
+          : {}),
+      });
     }
     if (outcome.outcome !== "dispatched" && outcome.outcome !== "replayed") {
       const detail = outcome.outcome === "skipped" ? outcome.reason : outcome.sanitizedError;

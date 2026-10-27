@@ -11,7 +11,7 @@ import {
   type MemoryOfferPublication,
 } from "@lrm/coforge-sdk/agent";
 
-const MEMORY_READ_OPS = new Set(["fork_find", "search_context", "read", "expand"]);
+const MEMORY_READ_OPS = new Set(["fork_find", "experience_find", "search_context", "read", "expand"]);
 
 export class MemoryAgentBudgetError extends Error {
   constructor(message: string) {

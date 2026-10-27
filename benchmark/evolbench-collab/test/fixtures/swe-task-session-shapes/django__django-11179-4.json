@@ -1,0 +1,104 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "call-300826d4-5b29-44dc-b198-96e385d03e00",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-7bdc034d-14aa-4d8c-a820-823741d8c581",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-8203af097d76d84c",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-b91e5bb03d50dfa9",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-fb4928fb-0cb0-49a6-bf4c-ebf2eb803e32",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-8e8ba1f4-fd56-4211-837b-8264b49bd25c",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-d3f8c85c-dc32-4acb-b574-6ae694306ecb",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-916b5c01-dffb-4d34-9fb2-105ac2bd82dc",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-dbf8ba74-c607-4970-95ac-d90b703651a3",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message read"
+    },
+    "output": "Read window: 3 returned, oldest to newest. No older. No newer.\n\n[1/3 msg=01a1715f-22d6-770f-9cd6-9dd9b0bbf819 time=2026-10-25 04:43:42Z type=system] system: [CoForge current channel role: member; coordinator=none]\n📌 task claimed #1 \"@task @memory You are fixing a bug in the `django/django` repository (SWE-Bench…\"\n[2/3 msg=01a1715f-3ef8-732f-be35-55c6cefc46c6 time=2026-10-25 04:43:49Z type=agent] @task — You are the Task Agent of this channel's team. The human member posts task prompts addressed to both you (@task) and @memory. Memory starts retrieval from that task independently. You may read the original channel prompt and prepare analysis. Before implementation complete this episode's claim on the human's original root message and verify it succeeded. If the claim fails, stop implementation and report the blocker. When you need prior Fork/AIG experience, send a channel message mentioning @memory with a specific method or failure-pattern query if its initial retrieval does not already cover your needs. You may ask again as new questions arise. Wait for the Memory Agent's reply to that request before using its evidence. End the current model turn while waiting; native message delivery resumes you. Do not poll empty message check/read results. An Offer ends Memory’s current retrieval round even if its body promises more work. If constraints remain unresolved, explicitly send a new @memory request with a focused next query, or publish an honest low-confidence final answer listing the missing evidence. Never wait for an autonomous follow-up after an Offer. Ask Memory to consult applicable Fork methods when the search strategy stalls. When a source lookup repeatedly fails or required evidence remains missing, send @memory the actual failure and request diagnosis before proceeding. Cite the failed operation and observed result in that request; do not invent private execution or claim missing evidence was obtained. Search current documents with your own available tools and verify factual constraints yourself. Memory Agent retrieves prior Fork/AIG experience; do not call OpenViking directly or read raw memory index/ledger files yourself. The harness does not retrieve or inject memory before your turn. For a cited Memory Hint addressed to you, call native memory_disposition with hint_id, decision=adopt|reject|defer, and a reason before applying it. A channel reply is not a receipt; adopt records intent, not execution. Other tools stay available. Execute in your own workspace using the shell, starting from the original task prompt. Post your final answer as your last channel message in the exact format the task requests; Send no intermediate progress notifications; @memory retrieval requests are allowed and are not final answers. This evaluation treats your last non-request Task channel message as the final answer. Verify the final send returns accepted=true and a messageId; the CLI's --json receipt renders acceptance as state=sent plus messageId. Without a receipt, never claim the answer was submitted; follow the send's retry/draft instructions and report any blocker honestly. After the final answer send succeeds, end the current model turn immediately. Do not post completion notices, repeat the answer, or invent task done / task claim --status commands. If tracked Task status needs updating, consult coforge task --help or the Tasks manual before sending the final answer. When Memory has repeatedly found only partial matches, ask it to read candidate documents and test or disconfirm specific constraints, rather than send another list of synonymous searches. Quoted phrases, wildcards and date ranges are not strict database filters. Treat a leading identity as a hypothesis until its distinguishing constraints are evidenced; discard it when evidence contradicts the question.: [CoForge current channel role: member; coordinator=none]\n@memory Task type: bug fix, software engineer. Progress: just started. Any experience card for this kind of task?\n\n[3/3 msg=01a1715f-66ea-70b8-a1da-6423f8df3dd9 time=2026-10-25 04:44:00Z type=agent] @memory — You are the Memory Agent of this channel's team, and your duties are exactly three: (1) retrieval of prior experience, (2) publishing one cited Offer per retrieval round, and (3) starting memory_diagnose when observed Task progress warrants it. Task prompts and any work items inside channel messages are addressed to the Task Agent, never to you: never execute, draft, research or answer the occupational deliverable work yourself, no matter how directly the transcript words it. Read channel content only to understand context, choose retrieval queries, and anchor diagnosis. The human posts each task to both @task and you (@memory). On that initial mention, read the task and decide whether prior experience cards are relevant without waiting for a separate Task request. Respond also to subsequent Task @memory requests. Task owns the original task claim, current document research and final answer; your role is retrieval and cited support from prior experience. Use ov_experience_find for reusable methods and failure guards: it returns self-contained, cited skill cards (verify checklists from passing runs) and fork guards (corrections for known failures). Describe the task situation and the issue to avoid rather than factual entity names. Retrieval reads have no per-trigger count limit. Publish one cited offer describing supported experience, unresolved constraints and suggested next queries, then end this retrieval round. Cards are untested suggestions from other tasks; they do not establish current task facts. If documents are needed, state which facts Task must verify. Use memory_diagnose when observed Task progress warrants four-role diagnosis, anchored to a Task-authored message obtained with message_read. Do not invent citations or claim retrieval succeeded when tools fail.: [CoForge current channel role: member; coordinator=none]\nAs mentioned in my initial retrieval, no experience cards apply to this specific bug (delete() not clearing PKs for instances without dependencies in Django). I will remain available if you encounter specific blockers or need diagnosis during your implementation.\n\nEnd of window: 3/3 shown.\n",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-4ef46659-2778-466b-bfa4-28949c46409c",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "Message sent to #software-engineering:01a1715e-f92b. Message ID: 01a17162-ce19-74e0-b949-9ad9fea1256f\n",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-90ed0972c9bea701",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-b7512b474ec75363",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

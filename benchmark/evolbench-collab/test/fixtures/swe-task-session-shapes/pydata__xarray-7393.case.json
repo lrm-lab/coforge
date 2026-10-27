@@ -1,0 +1,17 @@
+{
+  "episode": "pydata__xarray-7393",
+  "sessionId": "adef34f4-1809-49dc-b662-f9bf0a8b8fc3",
+  "source_sha256": "38e6418e574603b48c3830bb6d92aca6f9cfea776065ce47483982b05a97d2ca",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 2,
+  "tail_tools": 3,
+  "parts": [
+    "pydata__xarray-7393-0.json",
+    "pydata__xarray-7393-1.json",
+    "pydata__xarray-7393-2.json",
+    "pydata__xarray-7393-3.json",
+    "pydata__xarray-7393-4.json",
+    "pydata__xarray-7393-5.json"
+  ]
+}

@@ -27,6 +27,7 @@ import {
   MemoryReadCapabilityError,
   type OpenVikingMemoryReads,
 } from "#src/server/openviking/openviking-memory-reads";
+import { clearNoCardAllowance, recordMemoryRetrieval } from "./no-card-allowance";
 import { DEFAULT_OFFER_RATIONALE, MemoryOfferTargetError } from "./explicit-memory-answer";
 
 export const MEMORY_AGENT_TRIGGER_HEADER = "x-coforge-trigger-message-id";
@@ -130,6 +131,7 @@ export function createMemoryAgentCommands(deps: {
           publishing = true;
         });
         if (response.op === "offer") settle?.(response.publication);
+        trackRetrieval(input, command, response);
         return { ok: true, response };
       } catch (error) {
         const result = translateError(command, error);
@@ -146,6 +148,19 @@ export function createMemoryAgentCommands(deps: {
       }
     },
   };
+}
+
+/** Keeps the "nothing citable" fallback in step with what this Memory Agent's retrieval returned. */
+function trackRetrieval(
+  input: { workspaceId: string; agentId: string },
+  command: OpenVikingAgentCommand,
+  response: OpenVikingAgentResponse,
+): void {
+  if (command.op === "offer") return clearNoCardAllowance(input.workspaceId, input.agentId);
+  const finds = ["experience_find", "fork_find", "search_context"];
+  if (!finds.includes(command.op)) return;
+  const items = (response as { items?: unknown }).items;
+  if (Array.isArray(items)) recordMemoryRetrieval(input.workspaceId, input.agentId, items.length);
 }
 
 async function offerDelivery(
@@ -184,6 +199,26 @@ async function handleOpenViking(
   command: OpenVikingAgentCommand,
   onPublishing: () => void,
 ): Promise<OpenVikingAgentResponse> {
+  if (command.op === "experience_find") {
+    const result = await deps.openviking.experienceFind({
+      workspaceId: input.workspaceId,
+      agentId: input.agentId,
+      operationId: command.operationId,
+      query: command.query,
+      ...(command.kind === undefined ? {} : { kind: command.kind }),
+      ...(command.deliverable === undefined ? {} : { deliverable: command.deliverable }),
+      ...(command.occupation === undefined ? {} : { occupation: command.occupation }),
+      ...(command.issueKind === undefined ? {} : { issueKind: command.issueKind }),
+      ...(command.limit === undefined ? {} : { limit: command.limit }),
+    });
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "experience_find",
+      operationId: command.operationId,
+      duplicate: false,
+      ...result,
+    };
+  }
   if (command.op === "fork_find") {
     const result = await deps.openviking.forkFind({
       workspaceId: input.workspaceId,

@@ -206,3 +206,45 @@ class BufferedTransportTests(unittest.TestCase):
             self.assertEqual(sum(x['event']=='request_completed' for x in events),2)
             self.assertEqual(sum(x['event']=='retry' for x in events),1)
             self.assertNotIn('private-test-key',json.dumps(events))
+
+
+class GroupRoutingTests(unittest.TestCase):
+    def test_groups_split_evenly_rewrite_model_and_retry_error_envelope(self):
+        seen = {'a': [], 'b': []}
+        flaky = {'n': 0}
+        def upstream_for(label):
+            class Upstream(BaseHTTPRequestHandler):
+                def log_message(self, *args): pass
+                def do_POST(self):
+                    payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                    seen[label].append(payload)
+                    envelope = label == 'a' and flaky['n'] == 0
+                    if envelope: flaky['n'] += 1
+                    body = json.dumps({'error': {'message': 'Provider returned error'}} if envelope else {'choices': [{'message': {'content': 'ok'}}]}).encode()
+                    self.send_response(200)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+            server = ThreadingHTTPServer(('127.0.0.1', 0), Upstream)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            return server
+        up_a, up_b = upstream_for('a'), upstream_for('b')
+        with tempfile.TemporaryDirectory() as temporary:
+            def endpoint(name, group, server, **extra):
+                return {'name': name, 'group': group, 'capacity': 4, 'key': 'k', 'url': f'http://127.0.0.1:{server.server_port}/chat/completions', **extra}
+            pool = LlmPool([endpoint('or', 'a', up_a, model='google/gemma-4-31b-it', extra_body={'provider': {'only': ['CoreWeave']}}),
+                            endpoint('len1', 'b', up_b, model='gemma-4-31B-it'), endpoint('len2', 'b', up_b, model='gemma-4-31B-it')],
+                           Path(temporary), sleep=lambda _: None, proxy='')
+            try:
+                for _ in range(10):
+                    status, _, blob = pool.complete(b'{"model":"google/gemma-4-31b-it"}', 'task')
+                    self.assertEqual(status, 200)
+                    self.assertEqual(json.loads(blob)['choices'][0]['message']['content'], 'ok')
+                # The error envelope on the first group-a attempt was retried, not returned.
+                self.assertEqual(pool.snapshot()['retries'], 1)
+                self.assertEqual(len(seen['b']), 5)
+                self.assertEqual(len(seen['a']), 6)  # 5 successes + 1 failed envelope
+                self.assertTrue(all(p['model'] == 'google/gemma-4-31b-it' and p['provider'] == {'only': ['CoreWeave']} for p in seen['a']))
+                self.assertTrue(all(p['model'] == 'gemma-4-31B-it' and 'provider' not in p for p in seen['b']))
+            finally:
+                up_a.shutdown(); up_a.server_close(); up_b.shutdown(); up_b.server_close()

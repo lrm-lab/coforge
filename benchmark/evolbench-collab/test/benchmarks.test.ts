@@ -33,19 +33,33 @@ test("Task role gates implementation on the current claim and verifies final sub
 
 test("termination reasons preserve channel budgets and identify terminal blockers", () => {
   expect(episodeTerminationReason("deadline", true)).toBe("deadline");
-  expect(episodeTerminationReason("quiet_no_offer", false)).toBe("quiet_no_offer");
+  expect(episodeTerminationReason("quiet_no_offer", false)).toBe(
+    "quiet_no_offer",
+  );
   expect(episodeTerminationReason("final_settled", true)).toBe("final_settled");
   expect(
-    episodeTerminationReason("deadline", true, { taskFailed: true, memoryFailed: false }),
+    episodeTerminationReason("deadline", true, {
+      taskFailed: true,
+      memoryFailed: false,
+    }),
   ).toBe("runtime_failed");
   expect(
-    episodeTerminationReason("quiet_no_offer", false, { taskFailed: false, memoryFailed: true }),
+    episodeTerminationReason("quiet_no_offer", false, {
+      taskFailed: false,
+      memoryFailed: true,
+    }),
   ).toBe("runtime_failed");
   expect(
-    episodeTerminationReason("deadline", true, { taskFailed: false, memoryFailed: true }),
+    episodeTerminationReason("deadline", true, {
+      taskFailed: false,
+      memoryFailed: true,
+    }),
   ).toBe("deadline");
   expect(
-    episodeTerminationReason("final_settled", true, { taskFailed: true, memoryFailed: true }),
+    episodeTerminationReason("final_settled", true, {
+      taskFailed: true,
+      memoryFailed: true,
+    }),
   ).toBe("final_settled");
 });
 
@@ -68,7 +82,11 @@ test("runtime diagnostics wait for terminal settlement and reset per episode", (
   expect(diagnostics.snapshot().taskFailed).toBe(true);
   diagnostics.observe("task", { type: "progress" }, 120);
   expect(diagnostics.snapshot().taskFailed).toBe(false);
-  diagnostics.observe("task", { type: "tool-end", id: "ok", isError: false }, 130);
+  diagnostics.observe(
+    "task",
+    { type: "tool-end", id: "ok", isError: false },
+    130,
+  );
   expect(diagnostics.snapshot().lastProgressAt).toBe(130);
   diagnostics.observe("memory", { type: "completed", status: "failed" }, 140);
   expect(diagnostics.snapshot().memoryFailed).toBe(true);
@@ -99,9 +117,13 @@ describe("benchmark registry", () => {
   });
 
   test("agentstream function_calling uses the call-list contract", () => {
-    expect(reminderForEpisode("agentstream", "function_calling")).toContain("Python-call list");
+    expect(reminderForEpisode("agentstream", "function_calling")).toContain(
+      "Python-call list",
+    );
     expect(reminderForEpisode("agentstream", "code")).toContain("code");
-    expect(reminderForEpisode("evoagentbench", "code_implementation")).toContain("fenced");
+    expect(
+      reminderForEpisode("evoagentbench", "code_implementation"),
+    ).toContain("fenced");
   });
 
   test("unknown benchmarks fall back to the generic reminder", () => {
@@ -109,7 +131,10 @@ describe("benchmark registry", () => {
   });
 
   test("only EvoAgentBench SWE uses the source patch submission contract", () => {
-    const reminder = reminderForEpisode("evoagentbench", "software_engineering");
+    const reminder = reminderForEpisode(
+      "evoagentbench",
+      "software_engineering",
+    );
     for (const term of [
       "path specified by the task",
       "nonempty",
@@ -125,9 +150,9 @@ describe("benchmark registry", () => {
       expect(reminder).toContain(term);
     }
     expect(reminder).not.toContain("complete final code");
-    expect(reminderForEpisode("evoagentbench", "code_implementation")).toContain(
-      "complete final code",
-    );
+    expect(
+      reminderForEpisode("evoagentbench", "code_implementation"),
+    ).toContain("complete final code");
     expect(reminderForEpisode("agentstream", "software_engineering")).toContain(
       "complete final code",
     );
@@ -155,6 +180,91 @@ describe("episodePrompt", () => {
     expect(prompt.startsWith("@task @memory Summarize the notes.")).toBe(true);
     expect(prompt).toContain("Channel note:");
   });
+
+  test("observer mode addresses Task only and asks Memory to publish what it consulted", () => {
+    const prompt = episodePrompt(
+      {
+        benchmark: "evoagentbench",
+        episodeId: "e",
+        taskId: "t",
+        familyId: "f",
+        domain: "knowledge_work",
+        split: "train",
+        role: "qa",
+        order: 1,
+        prompt: "Write the contract.",
+        grader: { kind: "x" },
+        stageFiles: [],
+      },
+      reminderForEpisode("evoagentbench", "knowledge_work"),
+      null,
+      true,
+    );
+    expect(prompt.startsWith("@task Write the contract.")).toBe(true);
+    expect(prompt).not.toContain("@memory");
+    expect(prompt).toContain("Memory Agent:");
+    expect(prompt).toContain("send_channel_message");
+    expect(prompt).toContain("memory_offer");
+  });
+});
+
+describe("episodePrompt parallel start", () => {
+  const episode = {
+    domain: "knowledge_work",
+    prompt: "Write the contract.",
+    grader: { kind: "x" },
+    stageFiles: [],
+  } as never;
+  test("both agents are mentioned and Task is not forced to wait for Memory", () => {
+    const prompt = episodePrompt(episode, "R", null, true, {
+      parallel: true,
+      deliveryRules: true,
+    });
+    expect(prompt.startsWith("@task @memory Write the contract.")).toBe(true);
+    expect(prompt).not.toContain("do NOT write any deliverable");
+    expect(prompt).not.toContain("sleep 20");
+    expect(prompt).not.toContain("coforge message read");
+    expect(prompt).toContain("memory_disposition");
+    expect(prompt).toContain("Delivery rules:");
+    expect(prompt).not.toContain("you observe this channel");
+  });
+  test("Task is told when, how and what to ask Memory", () => {
+    const prompt = episodePrompt(episode, "R", null, true, { parallel: true });
+    // the literal @memory survives (only the task text is rewritten to "Memory Agent")
+    expect(prompt).toContain("a body that starts with @memory");
+    expect(prompt).toContain(
+      "`coforge message send --target '<this channel>'`",
+    );
+    // how: task type + progress + question
+    expect(prompt).toContain("(1) task type");
+    expect(prompt).toContain("(2) progress");
+    expect(prompt).toContain("(3) the question");
+    // when: opening, before drafting, when unsure, before delivery; capped
+    expect(prompt).toContain("A. first, before reading the inputs");
+    expect(prompt).toContain(
+      "B. right before you start writing the deliverable",
+    );
+    expect(prompt).toContain("C. whenever you are unsure or stuck");
+    expect(prompt).toContain("D. before you deliver, as a self-check");
+    expect(prompt).toContain("at most 4 asks in total");
+    // not a blocking wait
+    expect(prompt).toContain("Keep working while you wait");
+  });
+  test("an @memory in the task text is still rewritten to Memory Agent", () => {
+    const withMention = {
+      ...(episode as object),
+      prompt: "Ask @memory nothing.",
+    } as never;
+    const prompt = episodePrompt(withMention, "R", null, true, {
+      parallel: true,
+    });
+    expect(prompt).toContain("Ask Memory Agent nothing.");
+  });
+  test("without the flags nothing changes", () => {
+    const prompt = episodePrompt(episode, "R", null, true);
+    expect(prompt.startsWith("@task Write the contract.")).toBe(true);
+    expect(prompt).not.toContain("Delivery rules:");
+  });
 });
 
 describe("classifyMechanism", () => {
@@ -175,9 +285,15 @@ describe("classifyMechanism", () => {
   });
 
   test("answer without recall is no_offer; leak dominates; timeout keeps the answer", () => {
-    expect(classifyMechanism({ ...base, offerMessageId: null })).toBe("no_offer");
-    expect(classifyMechanism({ ...base, memoryLeakMessageIds: ["m"] })).toBe("leak");
-    expect(classifyMechanism({ ...base, citationCount: 0 })).toBe("uncited_offer");
+    expect(classifyMechanism({ ...base, offerMessageId: null })).toBe(
+      "no_offer",
+    );
+    expect(classifyMechanism({ ...base, memoryLeakMessageIds: ["m"] })).toBe(
+      "leak",
+    );
+    expect(classifyMechanism({ ...base, citationCount: 0 })).toBe(
+      "uncited_offer",
+    );
     expect(classifyMechanism({ ...base, timedOut: true })).toBe("timeout");
     expect(classifyMechanism({ ...base, finalOutput: null })).toBe("no_reply");
   });
@@ -209,7 +325,12 @@ describe("summarizeArm", () => {
     };
     const summary = summarizeArm("warm", [
       row,
-      { ...row, episode_id: "e2", mechanism: "no_offer", recall_state: "empty" },
+      {
+        ...row,
+        episode_id: "e2",
+        mechanism: "no_offer",
+        recall_state: "empty",
+      },
     ]);
     expect(summary.episodes).toBe(2);
     expect(summary.families).toBe(1);

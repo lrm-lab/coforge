@@ -1,5 +1,9 @@
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import {
+  EXPERIENCE_CARD_KINDS,
+  EXPERIENCE_DELIVERABLE_KINDS,
+  EXPERIENCE_ISSUE_KINDS,
+  dropInvalidExperienceFilters,
   OPENVIKING_GRAPH_RELATIONS,
   OPENVIKING_TOOL_NAMES,
   type OpenVikingAgentCommand,
@@ -15,6 +19,21 @@ type OpenVikingFenceTool = (
   op: OpenVikingAgentCommand["op"],
   parameters: Parameters<typeof Type.Object>[0],
 ) => FenceTool;
+
+/** A model-invented filter value must not cost a round: drop it before the schema check and search without it. */
+function withFilterTolerance(tool: FenceTool): FenceTool {
+  const inner = (tool as unknown as { prepareArguments?: (args: unknown) => unknown })
+    .prepareArguments;
+  return {
+    ...tool,
+    prepareArguments: (args: unknown) => {
+      const prepared = inner ? inner(args) : args;
+      return prepared && typeof prepared === "object"
+        ? dropInvalidExperienceFilters(prepared as Record<string, unknown>)
+        : prepared;
+    },
+  } as FenceTool;
+}
 
 /** OpenViking tool schemas for the Memory fence. Split out so runner.ts stays within the size ratchet. */
 export function memoryFenceOpenVikingTools(
@@ -80,10 +99,54 @@ export function memoryFenceOpenVikingTools(
         ),
       },
     ),
+    [OPENVIKING_TOOL_NAMES.experienceFind]: withFilterTolerance(
+      openvikingTool(
+        OPENVIKING_TOOL_NAMES.experienceFind,
+        "Find experience cards",
+        "Find frozen experience cards from earlier tasks. A skill_card is a successful method whose steps include verify checks (what to check, how, and when it is violated). A fork is a guard: a corrective branch for a known failure, linked to the verify step it violates. Describe the task situation and the issue to avoid in the query; set deliverable when the output file type is known (pdf, docx, xlsx, pptx, av, text), occupation when you can infer it from the task, and issueKind for the failure type to avoid. If the deliverable filter matches nothing it is dropped and the result says relaxed. Each result is a self-contained cited card; cards are untested suggestions from other tasks, not evidence for the current task's facts. Use verify steps as a pre-submission checklist for Task.",
+        "experience_find",
+        {
+          operationId: Type.String({
+            description:
+              "Required. Client-invented idempotency handle matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$. Example: exp-1. Use a fresh id for each new logical operation or changed arguments.",
+          }),
+          query: Type.String({
+            description:
+              "Required. Task situation and issue to avoid. Example: quarterly financial report pdf missing sections.",
+          }),
+          kind: Type.Optional(
+            Type.Union(
+              EXPERIENCE_CARD_KINDS.map((value) => Type.Literal(value)),
+              { description: "Optional. Omit to get both kinds." },
+            ),
+          ),
+          deliverable: Type.Optional(
+            Type.Union(
+              EXPERIENCE_DELIVERABLE_KINDS.map((value) => Type.Literal(value)),
+              { description: "Optional hard filter on the output file type." },
+            ),
+          ),
+          occupation: Type.Optional(
+            Type.String({
+              description: "Optional soft boost. GDPVal occupation label inferred from the task.",
+            }),
+          ),
+          issueKind: Type.Optional(
+            Type.Union(
+              EXPERIENCE_ISSUE_KINDS.map((value) => Type.Literal(value)),
+              {
+                description: `Optional soft boost on the failure type to avoid. Allowed values: ${EXPERIENCE_ISSUE_KINDS.join(", ")}; omit it if none fits.`,
+              },
+            ),
+          ),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+        },
+      ),
+    ),
     [OPENVIKING_TOOL_NAMES.searchContext]: openvikingTool(
       OPENVIKING_TOOL_NAMES.searchContext,
       "OpenViking search context",
-      "Retrieve documentary evidence with local embedding recall and native hierarchical context assembly within the shared token budget. Use entity clues or paraphrased factual questions here, then ov_read promising cited sources to verify missing constraints. Use ov_fork_find for methods and failure-pattern experience.",
+      "Retrieve documentary evidence with local embedding recall and native hierarchical context assembly within the shared token budget. Use entity clues or paraphrased factual questions here, then ov_read promising cited sources to verify missing constraints. Use ov_experience_find for methods and failure-pattern experience.",
       "search_context",
       {
         operationId: Type.String({
@@ -133,7 +196,7 @@ export function memoryFenceOpenVikingTools(
     [OPENVIKING_TOOL_NAMES.offer]: openvikingTool(
       OPENVIKING_TOOL_NAMES.offer,
       "Publish Memory Offer",
-      "Publish one visible, cited Memory Offer. Partial findings and explicit unresolved constraints are valid; do not wait to solve the whole Task. This is the only visible answer to an explicit @memory question. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient. This completes the retrieval round: include unresolved constraints and suggested next queries; do not promise autonomous continued searching.",
+      "Publish one visible, cited Memory Offer. Partial findings and explicit unresolved constraints are valid; do not wait to solve the whole Task. This is the visible answer to an explicit @memory question; when your retrieval returned no citable card, one plain send_channel_message saying no card applies is allowed instead. citationRefs are citation ids already returned in this workspace. The server binds the channel and recipient. This completes the retrieval round: include unresolved constraints and suggested next queries; do not promise autonomous continued searching.",
       "offer",
       {
         operationId: Type.String({

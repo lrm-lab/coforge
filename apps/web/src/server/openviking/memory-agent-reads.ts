@@ -7,6 +7,7 @@ import { lookupAggregatedRoute } from "./catalog/aggregated-catalog";
 
 export const MEMORY_AGENT_READ_OPERATIONS = [
   "fork_find",
+  "experience_find",
   "search_context",
   "read",
   "expand",
@@ -46,6 +47,7 @@ export type OpenVikingCatalogReadTransport = {
 const MEMORY_AGENT_READ_ROUTES = {
   expand: requireMemoryReadRoute("POST", "/api/v1/search/expand"),
   fork_find: requireMemoryReadRoute("POST", "/api/v1/search/find"),
+  experience_find: requireMemoryReadRoute("POST", "/api/v1/experience/find"),
   search_context: requireMemoryReadRoute("POST", "/api/v1/search/search"),
   read: requireMemoryReadRoute("GET", "/api/v1/content/read"),
 } as const;

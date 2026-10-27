@@ -4,7 +4,15 @@ import {
   isExplicitMemoryDiagnosis,
   fifoOldestUnansweredQuestion,
   isExplicitMemoryQuestion,
+  pickObserverOfferTarget,
+  explicitMemoryQuestionRequiresOffer,
 } from "./explicit-memory-answer";
+import {
+  clearNoCardAllowance,
+  markNoCardAnswered,
+  noCardAnsweredThrough,
+  recordMemoryRetrieval,
+} from "./no-card-allowance";
 
 test("an explicit @memory question is a token, not a substring", () => {
   expect(isExplicitMemoryQuestion("@memory When did Caroline go?")).toBe(true);
@@ -29,7 +37,10 @@ test("a later question may still be answered after an earlier offer", () => {
   const earlier = new Date("2026-09-22T09:00:00.000Z");
   const laterQuestion = new Date("2026-09-22T09:05:00.000Z");
   expect(
-    channelSendNeedsMemoryOffer({ latestQuestionAt: laterQuestion, latestOfferAt: earlier }),
+    channelSendNeedsMemoryOffer({
+      latestQuestionAt: laterQuestion,
+      latestOfferAt: earlier,
+    }),
   ).toBe(true);
   expect(
     channelSendNeedsMemoryOffer({
@@ -37,7 +48,12 @@ test("a later question may still be answered after an earlier offer", () => {
       latestOfferAt: laterQuestion,
     }),
   ).toBe(false);
-  expect(channelSendNeedsMemoryOffer({ latestQuestionAt: null, latestOfferAt: null })).toBe(false);
+  expect(
+    channelSendNeedsMemoryOffer({
+      latestQuestionAt: null,
+      latestOfferAt: null,
+    }),
+  ).toBe(false);
 });
 
 test("FIFO binding answers the oldest unanswered question under a backlog", () => {
@@ -50,18 +66,22 @@ test("FIFO binding answers the oldest unanswered question under a backlog", () =
   expect(fifoOldestUnansweredQuestion([q2, q3], [])?.id).toBe("q2");
 
   // One offer after q1 only: q1 is answered, the next oldest (q2) binds.
-  expect(fifoOldestUnansweredQuestion([q1, q2, q3], [t("2026-09-23T02:40:30.000Z")])?.id).toBe(
-    "q2",
-  );
+  expect(
+    fifoOldestUnansweredQuestion([q1, q2, q3], [t("2026-09-23T02:40:30.000Z")])
+      ?.id,
+  ).toBe("q2");
 
   // Backlog cascade guard: an offer after BOTH q1 and q2 still answers only
   // one question — the oldest unanswered one before it.
-  expect(fifoOldestUnansweredQuestion([q1, q2, q3], [t("2026-09-23T02:42:30.000Z")])?.id).toBe(
-    "q2",
-  );
+  expect(
+    fifoOldestUnansweredQuestion([q1, q2, q3], [t("2026-09-23T02:42:30.000Z")])
+      ?.id,
+  ).toBe("q2");
 
   // Orphan offers (before every question, or duplicate within one gap) answer nothing.
-  expect(fifoOldestUnansweredQuestion([q1, q2], [t("2026-09-23T02:30:00.000Z")])?.id).toBe("q1");
+  expect(
+    fifoOldestUnansweredQuestion([q1, q2], [t("2026-09-23T02:30:00.000Z")])?.id,
+  ).toBe("q1");
   expect(
     fifoOldestUnansweredQuestion(
       [q1, q2],
@@ -81,9 +101,207 @@ test("FIFO binding answers the oldest unanswered question under a backlog", () =
 
 test("diagnosis requires explicit intent addressed to the designated memory identity", () => {
   const id = "40892ec7-004d-4a0c-89bf-ed4e2e79ab0e";
-  expect(isExplicitMemoryDiagnosis("@memory diagnose search failure", id)).toBe(true);
-  expect(isExplicitMemoryDiagnosis(`<@agent:${id}> diagnose search failure`, id)).toBe(true);
-  expect(isExplicitMemoryDiagnosis("@memory retrieve search history", id)).toBe(false);
-  expect(isExplicitMemoryDiagnosis("@memory something looks wrong", id)).toBe(false);
-  expect(isExplicitMemoryDiagnosis("<@agent:another> diagnose failure", id)).toBe(false);
+  expect(isExplicitMemoryDiagnosis("@memory diagnose search failure", id)).toBe(
+    true,
+  );
+  expect(
+    isExplicitMemoryDiagnosis(`<@agent:${id}> diagnose search failure`, id),
+  ).toBe(true);
+  expect(isExplicitMemoryDiagnosis("@memory retrieve search history", id)).toBe(
+    false,
+  );
+  expect(isExplicitMemoryDiagnosis("@memory something looks wrong", id)).toBe(
+    false,
+  );
+  expect(
+    isExplicitMemoryDiagnosis("<@agent:another> diagnose failure", id),
+  ).toBe(false);
+});
+
+test("observer mode: an Offer goes to the Agent the latest message addressed, never to Memory itself", () => {
+  const mem = "mem-1";
+  expect(pickObserverOfferTarget(null, mem, "peer")).toBeNull();
+  expect(
+    pickObserverOfferTarget(
+      {
+        conversationId: "c1",
+        mentionedAgentIds: [mem, "task-1"],
+        senderAgentId: null,
+      },
+      mem,
+      null,
+    ),
+  ).toEqual({ conversationId: "c1", targetAgentId: "task-1" });
+  expect(
+    pickObserverOfferTarget(
+      { conversationId: "c1", mentionedAgentIds: [], senderAgentId: "task-2" },
+      mem,
+      null,
+    ),
+  ).toEqual({ conversationId: "c1", targetAgentId: "task-2" });
+  expect(
+    pickObserverOfferTarget(
+      { conversationId: "c1", mentionedAgentIds: [], senderAgentId: null },
+      mem,
+      "peer",
+    ),
+  ).toEqual({ conversationId: "c1", targetAgentId: "peer" });
+  expect(
+    pickObserverOfferTarget(
+      { conversationId: "c1", mentionedAgentIds: [mem], senderAgentId: mem },
+      mem,
+      null,
+    ),
+  ).toBeNull();
+});
+
+test("no-card allowance lets one plain Memory message through an unanswered @memory question", async () => {
+  const input = {
+    workspaceId: "ws-q",
+    agentId: "mem-q",
+    conversationId: "c-q",
+  };
+  const db = {
+    message: {
+      findMany: async () => [
+        {
+          body: "@task @memory write it",
+          createdAt: new Date("2026-10-24T05:00:00.000Z"),
+          conversationId: "c-q",
+          sender: { agentId: null },
+        },
+      ],
+    },
+    memoryOfferRecord: { findMany: async () => [] },
+  } as never;
+  const designated = async () => true;
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  // Unanswered question, nothing retrieved yet: a plain message is still refused.
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  // Retrieval came back empty: the plain "no applicable card" message may pass...
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 0);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  // ...and after it was sent the rule is back in force.
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  // A retrieval with hits never grants the allowance.
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 3);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  // The allowance expires.
+  recordMemoryRetrieval(
+    input.workspaceId,
+    input.agentId,
+    0,
+    Date.now() - 11 * 60_000,
+  );
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+});
+
+test("retrieval with items but none applicable: the second plain message passes once", async () => {
+  const input = {
+    workspaceId: "ws-r",
+    agentId: "mem-r",
+    conversationId: "c-r",
+  };
+  const db = {
+    message: {
+      findMany: async () => [
+        {
+          body: "@task @memory write it",
+          createdAt: new Date("2026-10-24T05:00:00.000Z"),
+          conversationId: "c-r",
+          sender: { agentId: null },
+        },
+      ],
+    },
+    memoryOfferRecord: { findMany: async () => [] },
+  } as never;
+  const designated = async () => true;
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 4);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  // After that message went out the rule is back (counters reset)...
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  // ...and a new retrieval starts a new count.
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 2);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  // No retrieval at all never grants anything.
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+});
+
+test("an allowed no-card message answers the questions asked so far; a newer question needs an Offer again", async () => {
+  const input = {
+    workspaceId: "ws-a",
+    agentId: "mem-a",
+    conversationId: "c-a",
+  };
+  let askedAt = new Date("2026-10-24T05:00:00.000Z");
+  const db = {
+    message: {
+      findMany: async () => [
+        {
+          body: "@task @memory write it",
+          createdAt: askedAt,
+          conversationId: "c-a",
+          sender: { agentId: null },
+        },
+      ],
+    },
+    memoryOfferRecord: { findMany: async () => [] },
+  } as never;
+  const designated = async () => true;
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  recordMemoryRetrieval(input.workspaceId, input.agentId, 0);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  markNoCardAnswered(input.workspaceId, input.agentId);
+  clearNoCardAllowance(input.workspaceId, input.agentId);
+  // Later plain messages (a failed-diagnosis notice) are no longer refused for that question...
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    false,
+  );
+  // ...but a question asked after it is a new obligation.
+  askedAt = new Date(Date.now() + 1000);
+  expect(await explicitMemoryQuestionRequiresOffer(db, input, designated)).toBe(
+    true,
+  );
+  // marking without an allowance changes nothing
+  markNoCardAnswered("ws-a", "never-allowed");
+  expect(noCardAnsweredThrough("ws-a", "never-allowed")).toBe(0);
 });

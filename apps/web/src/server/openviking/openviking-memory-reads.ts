@@ -32,7 +32,23 @@ export type OpenVikingMemoryQueryResult = {
   retrievalWarning?: "partial_document_context";
 };
 
+export type OpenVikingExperienceFindResult = {
+  items: OpenVikingCitation[];
+  relaxed: boolean;
+};
+
 export type OpenVikingMemoryReads = {
+  experienceFind(input: {
+    workspaceId: string;
+    agentId: string;
+    operationId: string;
+    query: string;
+    kind?: string;
+    deliverable?: string;
+    occupation?: string;
+    issueKind?: string;
+    limit?: number;
+  }): Promise<OpenVikingExperienceFindResult>;
   expand(input: {
     workspaceId: string;
     agentId: string;
@@ -97,6 +113,36 @@ export function createOpenVikingMemoryReads(deps: {
         publicHits(payload, input.workspaceId),
       );
       return { items, ...navigation(lexical, items) };
+    },
+    async experienceFind(input) {
+      const payload = await deps.client.invoke({
+        workspaceId: input.workspaceId,
+        agentId: input.agentId,
+        operation: "experience_find",
+        body: {
+          query: input.query,
+          limit: input.limit ?? OPENVIKING_CANDIDATE_LIMIT_MAX,
+          ...(input.kind === undefined ? {} : { kind: input.kind }),
+          ...(input.deliverable === undefined ? {} : { deliverable: input.deliverable }),
+          ...(input.occupation === undefined ? {} : { occupation: input.occupation }),
+          ...(input.issueKind === undefined ? {} : { issue_kind: input.issueKind }),
+        },
+      });
+      const envelope =
+        payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const result =
+        envelope.result && typeof envelope.result === "object"
+          ? (envelope.result as Record<string, unknown>)
+          : envelope;
+      const cards = Array.isArray(result.cards) ? (result.cards as Record<string, unknown>[]) : [];
+      const accountId = wrapperAccountId(payload);
+      const hits = cards.map((card) => cardHit(card, input.workspaceId, accountId));
+      const items = await deps.citations.bindOpenVikingHits(
+        input.workspaceId,
+        input.operationId,
+        hits,
+      );
+      return { items, relaxed: result.relaxed === true };
     },
     async expand(input) {
       await deps.citations.resolveOfferCitations(input.workspaceId, [`ov:${input.uri}`]);
@@ -188,6 +234,52 @@ export function createOpenVikingMemoryReads(deps: {
       if (!citation) throw new MemoryCitationUngroundedError();
       return { citation, content: hit.content };
     },
+  };
+}
+
+export const EXPERIENCE_CARD_URI_PREFIX = "viking://resources/causal/cards/";
+
+/** A card is served as one self-contained L2 citation; the excerpt is the whole card. */
+export function cardHit(
+  card: Record<string, unknown>,
+  workspaceId: string,
+  accountId: string | undefined,
+): Record<string, unknown> {
+  const id = typeof card.card_id === "string" ? card.card_id : "";
+  const gamma = (card.gamma ?? {}) as Record<string, unknown>;
+  const steps = Array.isArray(card.steps) ? (card.steps as Record<string, unknown>[]) : [];
+  const lines = [
+    `kind: ${String(card.kind)}`,
+    `trigger (${[gamma.deliverable, gamma.occupation, gamma.issue_kind]
+      .filter((v) => typeof v === "string")
+      .join(", ")}): ${String(gamma.abstract_text ?? "")}`,
+    `boundary: ${String(card.boundary ?? "")}`,
+    ...(card.violates && typeof card.violates === "object"
+      ? [
+          `violates: skill_card ${String((card.violates as Record<string, unknown>).card_id)} step ${String((card.violates as Record<string, unknown>).step_id)}`,
+        ]
+      : []),
+    ...(typeof card.diagnosis_report_id === "string"
+      ? [`repair_group: ${card.diagnosis_report_id}`]
+      : []),
+    ...steps.map((step, i) =>
+      step.step_kind === "verify"
+        ? `${i + 1}. [verify:${String(step.issue_kind)}] ${String(step.statement)} | check: ${String(step.check_how)} | violated when: ${String(step.violation_sign)}`
+        : `${i + 1}. [${String(step.step_kind)}] ${String(step.statement)}`,
+    ),
+  ];
+  const uri = `${EXPERIENCE_CARD_URI_PREFIX}${id}`;
+  const excerpt = lines.join("\n");
+  return {
+    workspaceId,
+    ...(accountId === undefined ? {} : { accountId }),
+    uri,
+    kind: "experience_card",
+    title: `${String(card.kind)}: ${String(gamma.abstract_text ?? "").slice(0, 80)}`,
+    excerpt,
+    matchedLevel: "L2",
+    contentHash: contentSha256(`${uri}\n${id}`),
+    citationId: `ov:${uri}`,
   };
 }
 

@@ -49,5 +49,5 @@ Changing the ID after an uncertain result remains blocked.
 Changed Offer payloads cannot reuse an operation ID within a live session, including across triggers. See [runtime instructions](AGENTS.md).
 
 Documentary queries use `ov_search_context` (embedding recall and native context assembly).
-Method/experience queries use `ov_fork_find`, fixed to the causal Fork namespace; follow
-served relations with `ov_expand`. `ov_find` is not exposed to fenced agents.
+Method/experience queries use `ov_experience_find` (self-contained, cited skill cards and fork
+guards). `ov_fork_find`/`ov_expand` remain in the SDK but are not on the Memory Agent fence. `ov_find` is not exposed to fenced agents.

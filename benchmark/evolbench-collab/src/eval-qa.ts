@@ -1,4 +1,9 @@
 import type { MemoryDispositionRecord } from "@lrm/coforge-sdk/agent";
+import {
+  IR_DOCS_NOTE,
+  MEMORY_PARALLEL_NOTE_IR,
+  irTaskDocsPrompt,
+} from "./ir-notes";
 import { RedisClient } from "bun";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { PublicChannels } from "../../../apps/web/src/server/conversations/public-channels.server";
@@ -15,22 +20,94 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+const MEMORY_OBSERVER_NOTE = [
+  "Memory Agent: you observe this channel. Consult prior experience with ov_experience_find.",
+  "If a card applies, publish ONE cited Offer to Task with memory_offer (citationRefs = the citation ids",
+  "ov_experience_find returned for the cards you rely on); Task records a disposition on it.",
+  "If nothing applies, publish one short channel message with send_channel_message saying so.",
+  "Do not invent evidence.",
+].join(" ");
+
+/** Memory and Task are woken by the same message (both @-mentioned) and work in parallel. Task does not wait
+ * passively for a Hint: it asks Memory for experience at fixed points and says where it stands, so Memory can
+ * match the question to the right card. Nothing forces Task to stop and wait; an answer is used when it arrives.
+ * The literal @memory must stay out of the replace() in episodePrompt, so these notes are appended after it. */
+export const MEMORY_PARALLEL_NOTE = [
+  "Memory Agent and Task Agent start together on this message.",
+  "Memory Agent: retrieve now with ov_experience_find, then publish ONE cited Offer to Task with memory_offer",
+  "(citationRefs = the citation ids ov_experience_find returned for the cards you rely on). If ov_experience_find",
+  "returns no card, publish one short send_channel_message saying no card applies. Do not invent evidence.",
+  "Answer every later @memory question from Task the same way, using the task type and progress it states.",
+  "Task Agent: ask Memory Agent for prior experience yourself, do not wait for a Hint to show up.",
+  "Ask by sending a channel message to the channel this task came from, e.g.",
+  "`coforge message send --target '<this channel>'` with a body that starts with @memory and has three parts:",
+  "(1) task type: deliverable format and occupation, e.g. 'docx contract, paralegal';",
+  "(2) progress: what is already done and what you do next;",
+  "(3) the question: which experience cards, verify checks or known pitfalls apply, with citations.",
+  "Ask at these moments, one short message each, at most 4 asks in total, never the same question twice:",
+  "A. first, before reading the inputs in depth ('@memory Task type: ... Progress: just started. Any experience card for this kind of task?');",
+  "B. right before you start writing the deliverable ('Progress: inputs read, about to draft <outline>. Which checks or pitfalls apply?');",
+  "C. whenever you are unsure or stuck on a requirement, a format or a tool error ('Stuck on: <one sentence>. Any card on this?');",
+  "D. before you deliver, as a self-check ('Progress: draft saved as <file>. Which pre-submission checks apply to this deliverable?').",
+  "Keep working while you wait; read the reply with `coforge message check`. When a Memory Hint arrives,",
+  "call memory_disposition (adopt, reject or defer, with a reason) before applying it.",
+].join(" ");
+
+/** Delivery rules that mirror what the 8745 scorer can actually see (found by the warm-log analysis). */
+export const DELIVERY_RULES_NOTE = [
+  "Delivery rules: save every final deliverable directly in the working directory using only these extensions:",
+  "pdf docx xlsx pptx csv txt md json png jpg (never only mp4, yaml, zip, tsx or ipynb).",
+  "Never save over a provided reference file's name. Keep each file under 2 MB (downscale or compress embedded images).",
+  "If pip says externally-managed-environment, use `python3 -m venv` or `pip install --break-system-packages`.",
+  "Before you finish, open or render each deliverable and check page count, columns, placeholders and numbers;",
+  "never use random or invented data and never leave placeholder images.",
+].join(" ");
+
 export function episodePrompt(
   episode: ManifestEpisode,
   reminder: string,
   envNote?: string | null,
+  memoryObserver = false,
+  options: {
+    parallel?: boolean;
+    deliveryRules?: boolean;
+    taskDocTools?: boolean;
+  } = {},
 ): string {
   const note = envNote
     ? `\n\n${envNote
         .replaceAll("%TASK_ID%", episode.taskId)
         .replaceAll("%EPISODE_ID%", episode.episodeId)}`
     : "";
-  const prompt =
+  const stripped =
     episode.domain === "information_retrieval"
-      ? episode.prompt.split("## How to call search in this environment")[0]!.trimEnd()
+      ? episode.prompt
+          .split("## How to call search in this environment")[0]!
+          .trimEnd()
       : episode.prompt;
-  const body = `${prompt}${note}\n\n${reminder}`.replace(/@memory\b/g, "Memory Agent");
-  return `@task @memory ${body}`;
+  const prompt =
+    episode.domain === "information_retrieval" && options.taskDocTools
+      ? irTaskDocsPrompt(stripped)
+      : stripped;
+  const parallel = options.parallel === true;
+  const ir = episode.domain === "information_retrieval";
+  const docsNote = ir && options.taskDocTools ? `\n\n${IR_DOCS_NOTE}` : "";
+  const observerNote = parallel
+    ? `\n\n${ir ? MEMORY_PARALLEL_NOTE_IR : MEMORY_PARALLEL_NOTE}`
+    : memoryObserver
+      ? `\n\n${MEMORY_OBSERVER_NOTE}`
+      : "";
+  const rules = options.deliveryRules ? `\n\n${DELIVERY_RULES_NOTE}` : "";
+  const task = `${prompt}${note}\n\n${reminder}`.replace(
+    /@memory\b/g,
+    "Memory Agent",
+  );
+  const body = `${task}${docsNote}${rules}${observerNote}`;
+  // An explicit @memory question can only be answered by a cited Offer, which an empty
+  // corpus cannot give; observer mode leaves Memory to publish an ordinary channel message.
+  return memoryObserver && !parallel
+    ? `@task ${body}`
+    : `@task @memory ${body}`;
 }
 
 export async function postEpisodePrompt(input: {
@@ -39,8 +116,22 @@ export async function postEpisodePrompt(input: {
   episode: ManifestEpisode;
   reminder: string;
   envNote?: string | null;
+  memoryObserver?: boolean;
+  memoryParallel?: boolean;
+  deliveryRules?: boolean;
+  taskDocTools?: boolean;
 }): Promise<{ triggerId: string; createdAt: Date }> {
-  const body = episodePrompt(input.episode, input.reminder, input.envNote);
+  const body = episodePrompt(
+    input.episode,
+    input.reminder,
+    input.envNote,
+    input.memoryObserver,
+    {
+      parallel: input.memoryParallel,
+      deliveryRules: input.deliveryRules,
+      taskDocTools: input.taskDocTools,
+    },
+  );
   if (input.redisUrl) {
     const redis = new RedisClient(input.redisUrl);
     try {
@@ -56,14 +147,18 @@ export async function postEpisodePrompt(input: {
         body,
       });
       const triggerId = (sent as { id?: string }).id;
-      if (!triggerId) throw new Error("channel send did not return a message id");
+      if (!triggerId)
+        throw new Error("channel send did not return a message id");
       return { triggerId, createdAt: sent.createdAt };
     } finally {
       redis.close();
     }
   }
   const member = await input.workspace.db.conversationMember.findFirst({
-    where: { conversationId: input.workspace.channelId, userId: input.workspace.evalUserId },
+    where: {
+      conversationId: input.workspace.channelId,
+      userId: input.workspace.evalUserId,
+    },
   });
   if (!member) throw new Error("eval user is not a channel member");
   const latest = await input.workspace.db.message.findFirst({
@@ -110,7 +205,10 @@ export function episodeTerminationReason(
   hasOffer: boolean,
   runtime?: { taskFailed: boolean; memoryFailed: boolean },
 ): EpisodeTerminationReason {
-  if (exit !== "final_settled" && (runtime?.taskFailed || (!hasOffer && runtime?.memoryFailed)))
+  if (
+    exit !== "final_settled" &&
+    (runtime?.taskFailed || (!hasOffer && runtime?.memoryFailed))
+  )
     return "runtime_failed";
   return exit;
 }
@@ -131,7 +229,11 @@ export function createEpisodeRuntimeDiagnostics() {
       failed.task = failed.memory = false;
       running.task = running.memory = options.awaitInitialTurns ?? false;
     },
-    observe(role: "task" | "memory", event: AgentRuntimeEvent, observedAt = Date.now()) {
+    observe(
+      role: "task" | "memory",
+      event: AgentRuntimeEvent,
+      observedAt = Date.now(),
+    ) {
       if (event.type === "error") {
         runtimeErrorCount += 1;
         lastRuntimeErrorAt = observedAt;
@@ -190,6 +292,10 @@ export async function runEpisode(input: {
     episode: input.episode,
     reminder: input.reminder,
     envNote: input.env.envNote,
+    memoryObserver: input.env.memoryObserver,
+    memoryParallel: input.env.memoryParallel,
+    deliveryRules: input.env.deliveryRules,
+    taskDocTools: input.env.taskDocTools,
   });
   const deadline = Date.now() + input.episodeTimeoutMs;
   const abortQuietMs = input.env.abortQuietMs;
@@ -207,18 +313,26 @@ export async function runEpisode(input: {
     memoryHintIds: [] as string[],
     memoryReplyMessageIds: [] as string[],
   };
-  const finish = (exit: Exclude<EpisodeTerminationReason, "runtime_failed">): EpisodeResult => {
+  const finish = (
+    exit: Exclude<EpisodeTerminationReason, "runtime_failed">,
+  ): EpisodeResult => {
     const runtime = input.runtimeDiagnostics?.snapshot();
     return {
       ...snapshot,
       timedOut: exit !== "final_settled",
       elapsedMs: Date.now() - startedAt,
-      terminationReason: episodeTerminationReason(exit, snapshot.offerMessageId !== null, runtime),
+      terminationReason: episodeTerminationReason(
+        exit,
+        snapshot.offerMessageId !== null,
+        runtime,
+      ),
       runtimeErrorCount: runtime?.runtimeErrorCount ?? 0,
       ...(runtime?.lastRuntimeErrorAt === undefined
         ? {}
         : { lastRuntimeErrorAt: runtime.lastRuntimeErrorAt }),
-      ...(runtime?.lastProgressAt === undefined ? {} : { lastProgressAt: runtime.lastProgressAt }),
+      ...(runtime?.lastProgressAt === undefined
+        ? {}
+        : { lastProgressAt: runtime.lastProgressAt }),
     };
   };
   while (Date.now() < deadline) {
@@ -272,7 +386,8 @@ export async function runEpisode(input: {
         !finalIrAnswer &&
         message.mentions.some(
           (mention) =>
-            mention.kind === "agent" && mention.actorId === input.workspace.memoryAgentId,
+            mention.kind === "agent" &&
+            mention.actorId === input.workspace.memoryAgentId,
         )
       );
     });
@@ -288,11 +403,15 @@ export async function runEpisode(input: {
       finalOutput: answers.at(-1)?.body ?? null,
       offerMessageId: offers[0]?.messageId ?? null,
       citationCount: new Set(
-        offers.flatMap((offer) => offer.citations.map((citation) => citation.citationId)),
+        offers.flatMap((offer) =>
+          offer.citations.map((citation) => citation.citationId),
+        ),
       ).size,
       taskMessageCount: taskMessages.length,
       memoryLeakMessageIds: [],
-      memoryReplyMessageIds: memoryMessages.map((row) => row.id).filter((id) => !offerIds.has(id)),
+      memoryReplyMessageIds: memoryMessages
+        .map((row) => row.id)
+        .filter((id) => !offerIds.has(id)),
       timedOut: false,
       memoryRequestCount: requests.length,
       memoryRequestMessageIds: [...requestIds],
@@ -312,13 +431,20 @@ export async function runEpisode(input: {
     };
     const lastTaskAt = taskMessages.at(-1)?.createdAt?.getTime() ?? 0;
     const lastAnswer = answers.at(-1);
-    const answerIndex = taskMessages.findIndex((message) => message.id === lastAnswer?.id);
+    const answerIndex = taskMessages.findIndex(
+      (message) => message.id === lastAnswer?.id,
+    );
     const answerHasNoLaterRequest =
       answerIndex >= 0 &&
-      !taskMessages.slice(answerIndex + 1).some((message) => requestIds.has(message.id));
+      !taskMessages
+        .slice(answerIndex + 1)
+        .some((message) => requestIds.has(message.id));
     const runtime = input.runtimeDiagnostics?.snapshot();
     const lastMemoryAt = memoryMessages.at(-1)?.createdAt.getTime() ?? 0;
-    const lastHintAt = Math.max(0, ...hints.map((hint) => hint.deliveredAt?.getTime() ?? 0));
+    const lastHintAt = Math.max(
+      0,
+      ...hints.map((hint) => hint.deliveredAt?.getTime() ?? 0),
+    );
     const lastInteractionAt = Math.max(
       lastTaskAt,
       lastMemoryAt,
@@ -341,7 +467,13 @@ export async function runEpisode(input: {
     // An @memory request is work in progress, not a candidate final answer.
     const progressAt = input.runtimeDiagnostics?.snapshot().lastProgressAt ?? 0;
     if (
-      Date.now() - Math.max(posted.createdAt.getTime(), lastTaskAt, lastMemoryAt, progressAt) >=
+      Date.now() -
+        Math.max(
+          posted.createdAt.getTime(),
+          lastTaskAt,
+          lastMemoryAt,
+          progressAt,
+        ) >=
       abortQuietMs
     ) {
       return finish("quiet_no_offer");

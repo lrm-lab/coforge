@@ -2,6 +2,11 @@
  * P4 port extension: one-sink admitted-segment dispatch.
  * Consumes the P3 ledger shape without editing the frozen C1 DTO or P3 adapters.
  */
+import type {
+  OpenVikingMessageDelivery,
+  OpenVikingOutcomeEvaluatorResult,
+  OpenVikingToolExchange,
+} from "../openviking/typed-session-extract.server";
 import {
   canAdmitSegment,
   decodeAdmittedPublicChannelSegment,
@@ -72,11 +77,20 @@ export class AdmissionReplayConflictError extends Error {
   }
 }
 
+/** What the sink may add to one channel message beyond its body (cycles 006 and 007). */
+export type TurnEnrichment = {
+  toolExchanges?: readonly OpenVikingToolExchange[];
+  deliveries?: readonly OpenVikingMessageDelivery[];
+};
+
 export type AdmissionSinkDelivery = {
   segment: AdmittedPublicChannelSegment;
   operationId: string;
   turns: readonly AdmissionTurn[];
   offerMessageIds?: ReadonlySet<string>;
+  /** Per channel message id; absent for product sweeps that cannot read agent sessions. */
+  turnEnrichment?: ReadonlyMap<string, TurnEnrichment>;
+  outcomeEvaluatorResults?: readonly OpenVikingOutcomeEvaluatorResult[];
 };
 
 export type AdmissionSinkResult =
@@ -110,6 +124,8 @@ export type AdmissionDispatcher = {
     admitted?: AdmittedPublicChannelSegment;
     sinkProfile?: DispatchSinkProfile;
     offerMessageIds?: ReadonlySet<string>;
+    turnEnrichment?: ReadonlyMap<string, TurnEnrichment>;
+    outcomeEvaluatorResults?: readonly OpenVikingOutcomeEvaluatorResult[];
   }): Promise<DispatchOutcome>;
 };
 
@@ -168,6 +184,10 @@ export function createAdmissionDispatcher(deps: {
           operationId: consumed.dispatch.operationId,
           turns: input.detected.turns,
           ...(input.offerMessageIds ? { offerMessageIds: input.offerMessageIds } : {}),
+          ...(input.turnEnrichment ? { turnEnrichment: input.turnEnrichment } : {}),
+          ...(input.outcomeEvaluatorResults
+            ? { outcomeEvaluatorResults: input.outcomeEvaluatorResults }
+            : {}),
         });
         if (result.outcome === "delivered") {
           await deps.admission.markDispatchState({

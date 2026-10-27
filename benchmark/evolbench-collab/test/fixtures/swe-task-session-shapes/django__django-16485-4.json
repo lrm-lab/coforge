@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "call-ec18bd4f-fef2-4b6f-91f2-b3ec5a58fa6a",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-84fcb7abf268f1af",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

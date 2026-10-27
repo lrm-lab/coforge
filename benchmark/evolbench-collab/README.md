@@ -72,6 +72,8 @@ bun src/run.ts
 `COFORGE_EVAL_EPISODE_TIMEOUT_MS` / `COFORGE_EVAL_SETTLE_MS`（缺省走基准注册表默认）、
 `COFORGE_EVAL_EPISODE_CLOSURE=0` 关闭 episode 间 reset-session、`COFORGE_EVAL_SEED`。
 
+`COFORGE_EVAL_TASK_TRACE_FROM_FILE=1`（默认关闭）仅对 SWE 的 Task 启用按 docker runtime 身份核验的本地会话导出；需同时开启轨迹 AO 记录。完整活动分支保留压缩前工具；未发布尾部以独立 runtime observation 入库，无结果的调用只记录为完成状态未知。KW/IR 与关闭开关时沿用原导出路径。离线检查运行 `bun scripts/test/isolated-test-run.ts bun benchmark/evolbench-collab/scripts/p1-phase1.ts <SWE实验目录>`，仅写分析产物与脱敏形态 fixture。
+
 输出：`result/<evaluationId>-attempts.jsonl`（每 episode 追加落盘，崩溃安全）+
 `<evaluationId>-summary.txt`。attempts 行含 `final_output / recall_state / recall_citations /
 mechanism / task_message_count / memory_leak_count`，python grader 只读它们认识的列。

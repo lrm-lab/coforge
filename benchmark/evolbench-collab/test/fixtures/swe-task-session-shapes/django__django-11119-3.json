@@ -1,0 +1,10 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a398fc2e53529ddf",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

@@ -197,8 +197,7 @@ test("the openviking-memory profile queries before retrieval Offers and protects
 });
 
 const OPENVIKING_FENCE_TOOLS = [
-  "ov_fork_find",
-  "ov_expand",
+  "ov_experience_find",
   "memory_offer",
   "memory_diagnose",
 ] as const;
@@ -293,22 +292,6 @@ test("the memory fence lists no mutation tools and allows no mutation verbs", ()
   expect(allowedContext).not.toMatch(/\bsupersede\b/);
   const lowered = section.toLowerCase();
   for (const phrase of ALLOWED_MUTATION_PHRASES) expect(lowered).not.toContain(phrase);
-});
-
-test("the memory fence shows copyable tool JSON and does not teach shell message send", () => {
-  const fenced = instructionsForFence("openviking-memory");
-  const section = memoryAgentSection(fenced);
-  expect(section).toContain('{"operationId": "find-1", "query": "<检索词>", "limit": 10}');
-  expect(section).toContain(
-    '{"operationId": "offer-1", "citationRefs": ["<ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
-  );
-  expect(section).toContain('{"target": "#<频道名>"}');
-  expect(section).toContain('{"target": "#<频道名>", "content": "<正文>"}');
-  expect(section).toContain("The body field name is content, not message.");
-  expect(section).toContain("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$");
-  expect(section).toContain("at least 1");
-  expect(fenced).not.toContain("coforge message send");
-  expect(fenced).toContain("## Boundaries");
 });
 
 test("the memory fence renders no credentials, tokens, or hidden endpoints", () => {

@@ -4,13 +4,21 @@
  * The channel and recipient are bound here when the model omits them.
  */
 
+import {
+  hasNoCardAllowance,
+  noCardAnsweredThrough,
+  refusalBecomesNoCardAllowance,
+} from "./no-card-allowance";
 import type { PrismaClient } from "#src/generated/prisma/client";
 
 const EXPLICIT_MEMORY_QUESTION = /(?:^|\s)@memory\b/;
 
 export const DEFAULT_OFFER_RATIONALE = "answers the explicit @memory question";
 
-export function isExplicitMemoryQuestion(body: string, memoryAgentId?: string): boolean {
+export function isExplicitMemoryQuestion(
+  body: string,
+  memoryAgentId?: string,
+): boolean {
   if (EXPLICIT_MEMORY_QUESTION.test(body)) return true;
   return (
     memoryAgentId !== undefined &&
@@ -20,10 +28,15 @@ export function isExplicitMemoryQuestion(body: string, memoryAgentId?: string): 
 }
 
 /** The stored identity token also works after the workspace Memory Agent is renamed. */
-export function isExplicitMemoryDiagnosis(body: string, memoryAgentId: string): boolean {
+export function isExplicitMemoryDiagnosis(
+  body: string,
+  memoryAgentId: string,
+): boolean {
   return (
     /(?:^|\s)@memory\s+diagnose\b/i.test(body) ||
-    new RegExp(`(?:^|\\s)<@agent:${memoryAgentId}>\\s+diagnose\\b`, "i").test(body)
+    new RegExp(`(?:^|\\s)<@agent:${memoryAgentId}>\\s+diagnose\\b`, "i").test(
+      body,
+    )
   );
 }
 
@@ -55,7 +68,17 @@ export async function explicitMemoryQuestionRequiresOffer(
     [input.conversationId],
     input.agentId,
   );
-  return question !== null;
+  if (question === null) return false;
+  // A "no applicable card" message already answered this question.
+  if (
+    noCardAnsweredThrough(input.workspaceId, input.agentId) >=
+    question.createdAt.getTime()
+  )
+    return false;
+  // Nothing citable came back from this Memory Agent's own retrieval: one plain "no applicable card" message may pass.
+  if (hasNoCardAllowance(input.workspaceId, input.agentId)) return false;
+  // Items came back but the Memory Agent insists none applies (second plain message): let it say so once.
+  return !refusalBecomesNoCardAllowance(input.workspaceId, input.agentId);
 }
 
 export async function resolveUnansweredMemoryOfferTarget(
@@ -72,16 +95,22 @@ export async function resolveUnansweredMemoryOfferTarget(
     },
     select: { conversationId: true },
   });
-  const conversationIds = memberships.map((membership) => membership.conversationId);
+  const conversationIds = memberships.map(
+    (membership) => membership.conversationId,
+  );
   const question = await oldestUnansweredExplicitMemoryQuestion(
     db,
     workspaceId,
     conversationIds,
     memoryAgentId,
   );
-  if (!question) return null;
+  if (!question)
+    return observerOfferTarget(db, workspaceId, conversationIds, memoryAgentId);
   if (question.senderAgentId)
-    return { conversationId: question.conversationId, targetAgentId: question.senderAgentId };
+    return {
+      conversationId: question.conversationId,
+      targetAgentId: question.senderAgentId,
+    };
   const peer = await db.conversationMember.findFirst({
     where: {
       workspaceId,
@@ -93,7 +122,93 @@ export async function resolveUnansweredMemoryOfferTarget(
     select: { agentId: true },
   });
   if (!peer?.agentId) return null;
-  return { conversationId: question.conversationId, targetAgentId: peer.agentId };
+  return {
+    conversationId: question.conversationId,
+    targetAgentId: peer.agentId,
+  };
+}
+
+/**
+ * Observer mode: nobody @-mentions the Memory Agent, so there is no explicit question to bind an
+ * Offer to. The Offer then goes to the Agent the latest non-memory message addressed (its first
+ * agent mention), else the first other Agent in that channel.
+ */
+export function pickObserverOfferTarget(
+  latest: {
+    conversationId: string;
+    mentionedAgentIds: readonly string[];
+    senderAgentId: string | null;
+  } | null,
+  memoryAgentId: string,
+  peerAgentId: string | null,
+): { conversationId: string; targetAgentId: string } | null {
+  if (!latest) return null;
+  const mentioned = latest.mentionedAgentIds.find((id) => id !== memoryAgentId);
+  const target =
+    mentioned ??
+    (latest.senderAgentId && latest.senderAgentId !== memoryAgentId
+      ? latest.senderAgentId
+      : null) ??
+    peerAgentId;
+  return target
+    ? { conversationId: latest.conversationId, targetAgentId: target }
+    : null;
+}
+
+async function observerOfferTarget(
+  db: PrismaClient,
+  workspaceId: string,
+  conversationIds: string[],
+  memoryAgentId: string,
+): Promise<{ conversationId: string; targetAgentId: string } | null> {
+  if (conversationIds.length === 0) return null;
+  const row = await db.message.findFirst({
+    where: {
+      workspaceId,
+      conversationId: { in: conversationIds },
+      sender: {
+        OR: [
+          { userId: { not: null } },
+          { agentId: { not: null, notIn: [memoryAgentId] } },
+        ],
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      conversationId: true,
+      sender: { select: { agentId: true } },
+      mentions: { select: { kind: true, actorId: true } },
+    },
+  });
+  if (!row) return null;
+  const mentionedAgentIds = row.mentions
+    .filter((mention) => mention.kind === "agent" && mention.actorId)
+    .map((mention) => mention.actorId as string);
+  const senderAgentId = row.sender?.agentId ?? null;
+  let peerAgentId: string | null = null;
+  if (!mentionedAgentIds.some((id) => id !== memoryAgentId) && !senderAgentId) {
+    peerAgentId =
+      (
+        await db.conversationMember.findFirst({
+          where: {
+            workspaceId,
+            conversationId: row.conversationId,
+            leftAt: null,
+            AND: [
+              { agentId: { not: null } },
+              { NOT: { agentId: memoryAgentId } },
+            ],
+          },
+          orderBy: { id: "asc" },
+          select: { agentId: true },
+        })
+      )?.agentId ?? null;
+  }
+  return pickObserverOfferTarget(
+    { conversationId: row.conversationId, mentionedAgentIds, senderAgentId },
+    memoryAgentId,
+    peerAgentId,
+  );
 }
 
 /**
@@ -109,7 +224,10 @@ export function fifoOldestUnansweredQuestion<T extends { createdAt: Date }>(
 ): T | null {
   let next = 0;
   for (const offer of offerTimesAsc) {
-    if (next < questions.length && questions[next].createdAt.getTime() < offer.getTime()) {
+    if (
+      next < questions.length &&
+      questions[next].createdAt.getTime() < offer.getTime()
+    ) {
       next += 1;
     }
   }
@@ -121,15 +239,25 @@ async function oldestUnansweredExplicitMemoryQuestion(
   workspaceId: string,
   conversationIds: string[],
   memoryAgentId: string,
-): Promise<{ conversationId: string; createdAt: Date; senderAgentId: string | null } | null> {
+): Promise<{
+  conversationId: string;
+  createdAt: Date;
+  senderAgentId: string | null;
+} | null> {
   if (conversationIds.length === 0) return null;
   const rows = await db.message.findMany({
     where: {
       workspaceId,
       conversationId: { in: conversationIds },
-      OR: [{ body: { contains: "@memory" } }, { body: { contains: `<@agent:${memoryAgentId}>` } }],
+      OR: [
+        { body: { contains: "@memory" } },
+        { body: { contains: `<@agent:${memoryAgentId}>` } },
+      ],
       sender: {
-        OR: [{ userId: { not: null } }, { agentId: { not: null, notIn: [memoryAgentId] } }],
+        OR: [
+          { userId: { not: null } },
+          { agentId: { not: null, notIn: [memoryAgentId] } },
+        ],
       },
     },
     orderBy: { createdAt: "desc" },
@@ -148,7 +276,9 @@ async function oldestUnansweredExplicitMemoryQuestion(
       createdAt: row.createdAt,
       senderAgentId: row.sender?.agentId ?? null,
     }))
-    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+    .sort(
+      (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+    );
   if (questions.length === 0) return null;
   const offers = (
     await db.memoryOfferRecord.findMany({

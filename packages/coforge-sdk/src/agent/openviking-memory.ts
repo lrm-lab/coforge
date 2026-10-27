@@ -20,6 +20,18 @@ export {
 } from "./memory-offer-publication";
 import { decodeOpenVikingCitation, type OpenVikingCitation } from "./memory-citations";
 import {
+  decodeExperienceFindFields,
+  decodeExperienceRelaxed,
+  type OpenVikingExperienceFindCommand,
+  type OpenVikingExperienceFindResponse,
+} from "./openviking-experience-find";
+import {
+  decodeRetrieval,
+  OPENVIKING_GRAPH_RELATIONS,
+  type OpenVikingGraphRelation,
+  type OpenVikingRetrieval,
+} from "./openviking-retrieval";
+import {
   OPENVIKING_ARGUMENT_EXAMPLES,
   OPENVIKING_REQUIRED_FIELDS,
 } from "./openviking-memory-examples";
@@ -29,6 +41,9 @@ export {
   OPENVIKING_ARGUMENT_EXAMPLES,
   OPENVIKING_REQUIRED_FIELDS,
 } from "./openviking-memory-examples";
+
+export * from "./openviking-experience-find";
+export * from "./openviking-retrieval";
 
 export const OPENVIKING_AGENT_PROTOCOL = "coforge.openviking.agent.v1" as const;
 
@@ -40,6 +55,7 @@ export const OPENVIKING_CANDIDATE_LIMIT_MAX = 10 as const;
 
 export const OPENVIKING_AGENT_OPERATIONS = [
   "fork_find",
+  "experience_find",
   "search_context",
   "read",
   "expand",
@@ -51,6 +67,7 @@ export type OpenVikingAgentOperation = (typeof OPENVIKING_AGENT_OPERATIONS)[numb
 
 export const OPENVIKING_AGENT_READ_OPERATIONS = [
   "fork_find",
+  "experience_find",
   "search_context",
   "read",
   "expand",
@@ -60,6 +77,7 @@ export type OpenVikingAgentReadOperation = (typeof OPENVIKING_AGENT_READ_OPERATI
 /** Native tool names on the fenced OpenViking Memory Agent profile (plus channel message I/O). */
 export const OPENVIKING_TOOL_NAMES = {
   forkFind: "ov_fork_find",
+  experienceFind: "ov_experience_find",
   searchContext: "ov_search_context",
   read: "ov_read",
   expand: "ov_expand",
@@ -102,19 +120,6 @@ export type OpenVikingReadCommand = {
   uri: string;
 };
 
-export const OPENVIKING_GRAPH_RELATIONS = [
-  "incoming",
-  "outgoing",
-  "source",
-  "target",
-  "forks",
-  "anchor",
-  "branch_steps",
-  "next",
-  "previous",
-  "observed_block",
-] as const;
-export type OpenVikingGraphRelation = (typeof OPENVIKING_GRAPH_RELATIONS)[number];
 export type OpenVikingExpandCommand = {
   protocol: typeof OPENVIKING_AGENT_PROTOCOL;
   op: "expand";
@@ -156,26 +161,12 @@ export type OpenVikingDiagnoseResponse = {
 
 export type OpenVikingAgentCommand =
   | OpenVikingForkFindCommand
+  | OpenVikingExperienceFindCommand
   | OpenVikingSearchContextCommand
   | OpenVikingReadCommand
   | OpenVikingExpandCommand
   | OpenVikingOfferCommand
   | OpenVikingDiagnoseCommand;
-
-export type OpenVikingRetrieval = {
-  mode: "bm25";
-  chainRef: string;
-  step: number;
-  remainingHops: number;
-  exhausted: boolean;
-  nodes: Array<{
-    uri: string;
-    kind: string;
-    status?: string;
-    sourceRef?: string;
-    relations: OpenVikingGraphRelation[];
-  }>;
-};
 
 export type OpenVikingForkFindResponse = {
   protocol: typeof OPENVIKING_AGENT_PROTOCOL;
@@ -215,6 +206,7 @@ export type OpenVikingExpandResponse = {
 
 export type OpenVikingAgentResponse =
   | OpenVikingForkFindResponse
+  | OpenVikingExperienceFindResponse
   | OpenVikingSearchContextResponse
   | OpenVikingReadResponse
   | OpenVikingExpandResponse
@@ -384,6 +376,20 @@ export function decodeOpenVikingAgentCommand(value: unknown): OpenVikingAgentCom
     };
   }
 
+  if (command.op === "experience_find") {
+    if (typeof command.query !== "string" || command.query.trim() === "")
+      throw new Error("invalid openviking experience_find query");
+    const limit = optionalCandidateLimit(command.limit, "openviking experience_find");
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "experience_find",
+      operationId,
+      query: command.query,
+      ...decodeExperienceFindFields(command),
+      ...(limit === undefined ? {} : { limit }),
+    };
+  }
+
   if (command.op === "search_context") {
     if (typeof command.query !== "string" || command.query.trim() === "")
       throw new Error("invalid openviking search_context query");
@@ -501,54 +507,6 @@ function decodeOpenVikingCitationList(
   return value.map(decodeOpenVikingCitation);
 }
 
-function decodeRetrieval(value: unknown): OpenVikingRetrieval | undefined {
-  if (value === undefined) return undefined;
-  const row = value as Partial<OpenVikingRetrieval> | null;
-  if (
-    !row ||
-    row.mode !== "bm25" ||
-    typeof row.chainRef !== "string" ||
-    !row.chainRef.trim() ||
-    row.chainRef.length > 256 ||
-    !Number.isInteger(row.step) ||
-    row.step! < 0 ||
-    !Number.isInteger(row.remainingHops) ||
-    row.remainingHops! < 0 ||
-    typeof row.exhausted !== "boolean" ||
-    !Array.isArray(row.nodes)
-  )
-    throw new Error("invalid BM25 retrieval navigation");
-  const nodes = row.nodes.map((node) => {
-    if (
-      !node ||
-      typeof node.uri !== "string" ||
-      typeof node.kind !== "string" ||
-      (node.status !== undefined && typeof node.status !== "string") ||
-      (node.sourceRef !== undefined && typeof node.sourceRef !== "string") ||
-      !Array.isArray(node.relations) ||
-      node.relations.some(
-        (relation) => !(OPENVIKING_GRAPH_RELATIONS as readonly unknown[]).includes(relation),
-      )
-    )
-      throw new Error("invalid graph navigation node");
-    return {
-      uri: node.uri,
-      kind: node.kind,
-      ...(node.status === undefined ? {} : { status: node.status }),
-      ...(node.sourceRef === undefined ? {} : { sourceRef: node.sourceRef }),
-      relations: [...node.relations],
-    };
-  });
-  return {
-    mode: "bm25",
-    chainRef: row.chainRef,
-    step: row.step!,
-    remainingHops: row.remainingHops!,
-    exhausted: row.exhausted,
-    nodes,
-  };
-}
-
 export function decodeOpenVikingAgentResponse(
   op: OpenVikingAgentOperation,
   value: unknown,
@@ -572,6 +530,17 @@ export function decodeOpenVikingAgentResponse(
       ...(response.retrieval === undefined
         ? {}
         : { retrieval: decodeRetrieval(response.retrieval) }),
+    };
+  }
+
+  if (response.op === "experience_find") {
+    return {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "experience_find",
+      operationId: response.operationId,
+      duplicate: response.duplicate,
+      items: decodeOpenVikingCitationList(response.items, "openviking experience_find"),
+      relaxed: decodeExperienceRelaxed(response.relaxed),
     };
   }
 

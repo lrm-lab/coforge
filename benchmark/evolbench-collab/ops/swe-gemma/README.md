@@ -119,3 +119,14 @@ are written from the same completed job snapshot.
 
 `four_role_results.py` owns final stage aggregation and atomic snapshots for both
 `pipeline.py` (live group chats) and `replay_four_roles.py` (saved trajectories).
+
+## Mixed OpenRouter + Lenovo pool (kw evaluation)
+
+`llm_pool.py --openrouter-capacity N` adds an OpenRouter member (`google/gemma-4-31b-it`, routed
+with `provider.only=[CoreWeave]`, `allow_fallbacks=false`) next to the Lenovo members and splits
+requests evenly between the two groups; a saturated or tripped group spills to the other one.
+Per-endpoint model ids are rewritten, so callers may send either `gemma-4-31B-it` or
+`google/gemma-4-31b-it`. A 200 response that only carries a provider error envelope is retried.
+`--lenovo-endpoints lenovo-gemma` limits the Lenovo side (the two dedicated services answered
+405 on 2026-10-23), `--listen a,b` binds several addresses to one pool (loopback for agents plus
+the Docker bridge gateway for OpenViking).

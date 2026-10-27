@@ -371,3 +371,52 @@ test("context retrieval faults are not confused with no hits; partial evidence i
   expect(result.retrievalWarning).toBe("partial_document_context");
   expect(JSON.stringify(result)).not.toContain("internal diagnostic");
 });
+
+test("experienceFind sends slot filters and serves each card as one L2 citation", async () => {
+  const { reads, calls, ovRows } = harness({
+    status: "ok",
+    accountId: "acct-a",
+    result: {
+      relaxed: true,
+      cards: [
+        {
+          card_id: "c".repeat(64),
+          kind: "skill_card",
+          boundary: "pdf reports only",
+          gamma: { deliverable: "pdf", issue_kind: "missing_section", abstract_text: "pdf report" },
+          steps: [
+            { step_id: "s1", step_kind: "produce", statement: "write the report" },
+            {
+              step_id: "s2",
+              step_kind: "verify",
+              issue_kind: "missing_section",
+              statement: "check sections",
+              check_how: "compare to the required list",
+              violation_sign: "a section is absent",
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const found = await reads.experienceFind({
+    workspaceId: "ws-a",
+    agentId: "mem-1",
+    operationId: "exp-1",
+    query: "pdf report",
+    deliverable: "pdf",
+    issueKind: "missing_section",
+  });
+  expect(found.relaxed).toBe(true);
+  expect(found.items[0]).toMatchObject({
+    uri: `viking://resources/causal/cards/${"c".repeat(64)}`,
+    matchedLevel: "L2",
+    accountId: "acct-a",
+  });
+  expect(found.items[0]?.excerpt).toContain("check: compare to the required list");
+  expect(calls[0]).toMatchObject({
+    operation: "experience_find",
+    body: { query: "pdf report", deliverable: "pdf", issue_kind: "missing_section" },
+  });
+  expect(ovRows.size).toBe(1);
+});

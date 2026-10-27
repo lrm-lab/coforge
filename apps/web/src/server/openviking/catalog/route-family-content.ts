@@ -173,6 +173,7 @@ export const CONTENT_FAMILY_ROUTES: readonly ContentFamilyRoutePolicy[] = [
   // POST /api/v1/content/reindex is owned by the G3.3 ops family.
   readRoute("POST", "/api/v1/search/expand", "search", { allowedActors: SHARED_READERS }),
   readRoute("POST", "/api/v1/search/find", "search", { allowedActors: SHARED_READERS }),
+  readRoute("POST", "/api/v1/experience/find", "search", { allowedActors: SHARED_READERS }),
   readRoute("POST", "/api/v1/search/search", "search", { allowedActors: SHARED_READERS }),
   route("POST", "/api/v1/search/recall", "search", "denied", {
     controlNote:

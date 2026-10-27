@@ -1,0 +1,56 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-b2b2b3e388cd4df7",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-734a1287-dd44-468e-a6a3-86afa6ce2526",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a04e9b7bd763926f",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "Message sent to #software-engineering:01a171c2-dd86. Message ID: 01a171c5-f96f-74a5-8407-b92aa8423f13\n",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-90399e32-0889-4f9d-9c73-4b8fac86345b",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-bb7f378cd1bc224d",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-6ea32735-e471-49bd-aeef-e6800d6893a5",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

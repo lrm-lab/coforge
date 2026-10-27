@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { readKnowledgeAccountCreatedAt, validateKnowledgeReady } from "./knowledge";
 import {
   drainEvaluatorResults,
+  shouldDrainEpisode,
   loadSharedDrainAccount,
   stageEpisodeFiles,
   warmReuseAccountId,
@@ -10,6 +11,9 @@ import { workspaceProfileToToolFence } from "../../../packages/coforge-sdk/src/a
 import { EVAL_FLAG, evalOptedIn, loadEvalEnv } from "./env";
 import { startAgent, startEvalDaemon, type EvalDaemon } from "./eval-daemon";
 import { runEpisode, type EpisodeResult } from "./eval-qa";
+import { evaluatorResultFromVerdict } from "./enrichment";
+import { episodeEnrichment } from "./episode-enrichment";
+import { verifyWithSidecar } from "./sidecar";
 import { createEvalDispatcher, drainEpisodeToMemory } from "./ingest";
 import type { OpenVikingEvaluatorResult } from "../../../apps/web/src/server/openviking/typed-session-extract.server";
 import { episodesForArm, groupFamilies, loadManifest } from "./manifest";
@@ -54,7 +58,11 @@ const knowledgePath = Bun.env.COFORGE_EVAL_KNOWLEDGE_READY;
 const frozenKnowledge = knowledgePath
   ? validateKnowledgeReady(await Bun.file(knowledgePath).json())
   : null;
-if (manifest.some((episode) => episode.domain === "information_retrieval") && !frozenKnowledge) {
+if (
+  manifest.some((episode) => episode.domain === "information_retrieval") &&
+  !frozenKnowledge &&
+  !env.taskDocTools
+) {
   throw new Error(
     "IR requires COFORGE_EVAL_KNOWLEDGE_READY; direct BM25/GMS evaluation is disabled",
   );
@@ -84,9 +92,7 @@ Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE ??= "/tmp/pcm-eval-ov-keys.json";
 const runtime = createEvalRuntime(env.ovUrl);
 const rootKey = await readSecretRootKey(env.ovConfPath);
 const root = rootIdentity(rootKey);
-// Parallel-sedimentation protocol: cold episodes each run on their own empty
-// disposable account (no train-time retrieval), then drain their transcript
-// into ONE shared corpus account read by the later warm test phase.
+// Cold episodes use empty disposable accounts, then drain into the shared corpus for warm retrieval.
 const drainAccount = await loadSharedDrainAccount(env.drainAccountFile);
 const db = connectEvalDb(env.databaseUrl);
 const writer = await createAttemptWriter(
@@ -293,7 +299,7 @@ async function provisionFamily(
             evaluatorResults: currentEvaluatorResults,
           })
         : undefined;
-    daemon = await startEvalDaemon({ workspace, env });
+    daemon = await startEvalDaemon({ workspace, env, arm });
     await startAgent(workspace, workspace.memoryAgentId, workspaceProfileToToolFence("openviking"));
     await startAgent(workspace, workspace.taskAgentId);
     return {
@@ -345,7 +351,9 @@ async function executeEpisode(
     ...episode,
     prompt: episode.prompt.replaceAll("{workspace_dir}", provisioned.agentWorkspaceDir),
   };
-  const reminder = reminderForEpisode(episode.benchmark || benchmark, episode.domain);
+  const reminder = reminderForEpisode(episode.benchmark || benchmark, episode.domain, {
+    taskDocTools: env.taskDocTools,
+  });
   const result = await runEpisode({
     workspace: provisioned.workspace,
     env,
@@ -356,37 +364,14 @@ async function executeEpisode(
     runtimeDiagnostics: provisioned.daemon.runtimeDiagnostics,
   });
   const mechanism = classifyMechanism(result);
-  let sidecarVerification: AttemptRow["sidecar_verification"] | undefined;
-  if (env.verifySidecarUrl) {
-    try {
-      const response = await fetch(new URL("/verify", env.verifySidecarUrl), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ episode_id: episode.episodeId }),
-      });
-      const verdict = (await response.json()) as {
-        episode_id?: string;
-        reward?: number;
-        graded?: boolean;
-        error?: string;
-      };
-      sidecarVerification = {
-        episode_id: episode.episodeId,
-        reward: Number(verdict.reward ?? 0),
-        graded: Boolean(verdict.graded),
-        error: verdict.error ?? null,
-      };
-      console.log(
-        sanitizeDiagnostic(
-          `${arm} ${episode.episodeId} sidecar reward=${sidecarVerification.reward} graded=${sidecarVerification.graded}`,
-        ),
-      );
-    } catch (error) {
-      console.warn(
-        sanitizeDiagnostic(`sidecar verify failed for ${episode.episodeId}: ${String(error)}`),
-      );
-    }
-  }
+  const sidecar = await verifyWithSidecar({
+    sidecarUrl: env.verifySidecarUrl,
+    registerWorkspaceDir: env.verifyRegisterWorkspace ? provisioned.agentWorkspaceDir : undefined,
+    episodeId: episode.episodeId,
+    arm,
+    finalOutput: result.finalOutput,
+  });
+  const { verification: sidecarVerification, verdict: sidecarVerdict } = sidecar;
   const row = attemptRow({
     arm,
     family,
@@ -447,10 +432,27 @@ async function executeEpisode(
   if (sidecarVerification) row.sidecar_verification = sidecarVerification;
   episodeEvaluatorResults = drainEvaluatorResults(drainOutcomeMode, row.status, episode.episodeId);
   const coldDrain = arm === "cold" ? provisioned.drainDispatcher : undefined;
-  if ((arm === "warm" && !frozenKnowledge) || coldDrain) {
+  if (shouldDrainEpisode(arm, frozenKnowledge, coldDrain)) {
+    const outcomeEvaluatorResults = sidecarVerdict
+      ? evaluatorResultFromVerdict({
+          episodeId: episode.episodeId,
+          verdict: sidecarVerdict,
+          passReward: env.outcomePassReward,
+        })
+      : [];
+    const turnEnrichment = env.recordTrajectoryAos
+      ? await episodeEnrichment(
+          provisioned.workspace,
+          provisioned.daemon.workspaceRoot,
+          episode.domain === "software_engineering" &&
+            Bun.env.COFORGE_EVAL_TASK_TRACE_FROM_FILE === "1",
+        )
+      : undefined;
     const drained = await drainEpisodeToMemory({
       workspace: provisioned.workspace,
       dispatcher: coldDrain ?? provisioned.dispatcher,
+      ...(turnEnrichment ? { turnEnrichment } : {}),
+      ...(outcomeEvaluatorResults.length ? { outcomeEvaluatorResults } : {}),
       channelName:
         family.familyId
           .toLowerCase()

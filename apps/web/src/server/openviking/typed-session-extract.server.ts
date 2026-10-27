@@ -37,6 +37,34 @@ export type OpenVikingAdmittedSessionMessage = {
   sourceMessageIds: readonly string[];
   peerId?: string;
   derived?: boolean;
+  /** Tool calls the sending agent made before this message (cycle 006 D-002). */
+  toolExchanges?: readonly OpenVikingToolExchange[];
+  /** Per-receiver delivery facts for this message (cycle 007 D-004). */
+  deliveries?: readonly OpenVikingMessageDelivery[];
+};
+
+export type OpenVikingToolExchange = {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  output: string;
+  isError: boolean;
+};
+
+export type OpenVikingMessageDelivery = {
+  participantId: string;
+  notified: boolean;
+  read: boolean;
+};
+
+/** An evaluator verdict for the whole session (ADR-0045/0047); `feedback` is the judge report. */
+export type OpenVikingOutcomeEvaluatorResult = {
+  bindingId: string;
+  signalKind: "evaluator" | "test" | "acceptance";
+  signal: "pass" | "fail";
+  evidenceRef: string;
+  reward?: number;
+  feedback?: string;
 };
 
 export type OpenVikingAdmittedSessionWrite = {
@@ -44,6 +72,7 @@ export type OpenVikingAdmittedSessionWrite = {
   workspaceId: string;
   tags: readonly string[];
   messages: readonly OpenVikingAdmittedSessionMessage[];
+  outcomeEvaluatorResults?: readonly OpenVikingOutcomeEvaluatorResult[];
 };
 
 /** One explicit external evaluator signal for the commit (outcome-evidence-v1). */
@@ -155,7 +184,12 @@ export function createOpenVikingTypedSessionExtract(deps: {
         body: {
           keep_recent_count: 0,
           aig_question: aigQuestion(input.write.messages, segmentId),
-          ...evaluatorResultsBody(deps.evaluatorResults?.(input.write)),
+          ...(input.write.outcomeEvaluatorResults?.length
+            ? {
+                outcome_evaluator_results:
+                  input.write.outcomeEvaluatorResults.map(evaluatorResultPayload),
+              }
+            : evaluatorResultsBody(deps.evaluatorResults?.(input.write))),
         },
       });
       if (!committed.ok) return committed;
@@ -285,10 +319,52 @@ function sessionMessageList(json: unknown): readonly unknown[] {
   return Array.isArray(messages) ? messages : [];
 }
 
+function evaluatorResultPayload(result: OpenVikingOutcomeEvaluatorResult) {
+  return {
+    binding_id: result.bindingId,
+    signal_kind: result.signalKind,
+    signal: result.signal,
+    evidence_ref: result.evidenceRef,
+    ...(result.reward !== undefined ? { reward: result.reward } : {}),
+    ...(result.feedback ? { feedback: result.feedback } : {}),
+  };
+}
+
+function toolInputObject(input: unknown): Record<string, unknown> {
+  return input && typeof input === "object" && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : { value: input ?? null };
+}
+
 function messagePayload(message: OpenVikingAdmittedSessionMessage) {
+  const tools = message.toolExchanges ?? [];
   return {
     role: message.role,
     content: message.content,
+    ...(tools.length > 0
+      ? {
+          parts: [
+            ...tools.map((tool) => ({
+              type: "tool",
+              tool_id: tool.toolCallId,
+              tool_name: tool.toolName,
+              tool_input: toolInputObject(tool.input),
+              tool_output: tool.output,
+              tool_status: tool.isError ? "error" : "completed",
+            })),
+            { type: "text", text: message.content },
+          ],
+        }
+      : {}),
+    ...(message.deliveries?.length
+      ? {
+          deliveries: message.deliveries.map((item) => ({
+            participant_id: item.participantId,
+            notified: item.notified,
+            read: item.read,
+          })),
+        }
+      : {}),
     created_at: message.createdAt,
     source_message_ids: [...message.sourceMessageIds],
     ...(message.peerId ? { peer_id: message.peerId } : {}),

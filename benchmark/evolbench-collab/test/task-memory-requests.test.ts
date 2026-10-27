@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { reminderForEpisode } from "../src/benchmarks";
-import { runEpisode, episodePrompt, createEpisodeRuntimeDiagnostics } from "../src/eval-qa";
+import {
+  runEpisode,
+  episodePrompt,
+  createEpisodeRuntimeDiagnostics,
+} from "../src/eval-qa";
 import type { EvalWorkspace } from "../src/workspace";
 import type { EvalEnv } from "../src/env";
 import type { ManifestEpisode } from "../src/types";
@@ -53,7 +57,9 @@ function fixture(
           return { id: "trigger", createdAt: start };
         },
         async findMany(input: { where: { sender: { agentId: string } } }) {
-          return input.where.sender.agentId === "task" ? messages : memoryMessages;
+          return input.where.sender.agentId === "task"
+            ? messages
+            : memoryMessages;
         },
       },
       memoryOfferRecord: {
@@ -71,7 +77,12 @@ function fixture(
       },
     },
   } as unknown as EvalWorkspace;
-  const env = { redisUrl: "", abortQuietMs: 0, pollMs: 1, envNote: null } as EvalEnv;
+  const env = {
+    redisUrl: "",
+    abortQuietMs: 0,
+    pollMs: 1,
+    envNote: null,
+  } as EvalEnv;
   return {
     workspace,
     env,
@@ -83,7 +94,14 @@ function fixture(
 }
 test("a Task answer may finish without an unsolicited memory preflight", async () => {
   const result = await runEpisode(
-    fixture([{ id: "answer", body: "Exact Answer: bird", createdAt: new Date(), mentions: [] }]),
+    fixture([
+      {
+        id: "answer",
+        body: "Exact Answer: bird",
+        createdAt: new Date(),
+        mentions: [],
+      },
+    ]),
   );
   expect(result.finalOutput).toBe("Exact Answer: bird");
   expect(result.terminationReason).toBe("final_settled");
@@ -135,7 +153,12 @@ test("multiple offers and ordinary Memory clarification are recorded without fal
           createdAt: now,
           mentions: [{ kind: "agent", actorId: "memory" }],
         },
-        { id: "answer", body: "Exact Answer: 2041", createdAt: now, mentions: [] },
+        {
+          id: "answer",
+          body: "Exact Answer: 2041",
+          createdAt: now,
+          mentions: [],
+        },
       ],
       [
         { id: "offer-1", createdAt: now },
@@ -183,10 +206,18 @@ test("an IR final answer can mention Memory in its explanation", async () => {
 
 test("a Task answer cannot settle while the initially mentioned Memory is running", async () => {
   const input = fixture([
-    { id: "answer", body: "Exact Answer: bird", createdAt: new Date(), mentions: [] },
+    {
+      id: "answer",
+      body: "Exact Answer: bird",
+      createdAt: new Date(),
+      mentions: [],
+    },
   ]);
   const diagnostics = createEpisodeRuntimeDiagnostics();
-  const result = await runEpisode({ ...input, runtimeDiagnostics: diagnostics });
+  const result = await runEpisode({
+    ...input,
+    runtimeDiagnostics: diagnostics,
+  });
   expect(result.terminationReason).not.toBe("final_settled");
   expect(result.finalOutput).toBe("Exact Answer: bird");
 });
@@ -194,7 +225,14 @@ test("a Task answer cannot settle while the initially mentioned Memory is runnin
 test("a late Memory reply gives Task another settlement window", async () => {
   const now = Date.now();
   const input = fixture(
-    [{ id: "answer", body: "Exact Answer: bird", createdAt: new Date(now - 1000), mentions: [] }],
+    [
+      {
+        id: "answer",
+        body: "Exact Answer: bird",
+        createdAt: new Date(now - 1000),
+        mentions: [],
+      },
+    ],
     [{ id: "late-offer", createdAt: new Date(now) }],
   );
   const result = await runEpisode({ ...input, settleMs: 1000 });
@@ -203,7 +241,12 @@ test("a late Memory reply gives Task another settlement window", async () => {
 
 test("a settled Task answer waits for Memory's batched but unread channel updates", async () => {
   const input = fixture([
-    { id: "answer", body: "Exact Answer: bird", createdAt: new Date(), mentions: [] },
+    {
+      id: "answer",
+      body: "Exact Answer: bird",
+      createdAt: new Date(),
+      mentions: [],
+    },
   ]);
   input.workspace.db.$queryRaw = (async () => [
     { count: 1 },
@@ -215,7 +258,8 @@ test("a settled Task answer waits for Memory's batched but unread channel update
 
 test("a trailing completion notice cannot overwrite the IR answer", async () => {
   const now = new Date();
-  const answer = "Explanation: cited evidence.\nExact Answer: bird\nConfidence: 90%";
+  const answer =
+    "Explanation: cited evidence.\nExact Answer: bird\nConfidence: 90%";
   const result = await runEpisode(
     fixture([
       { id: "answer", body: answer, createdAt: now, mentions: [] },
@@ -229,4 +273,64 @@ test("a trailing completion notice cannot overwrite the IR answer", async () => 
   );
   expect(result.finalOutput).toBe(answer);
   expect(result.terminationReason).toBe("final_settled");
+});
+
+test("IR par protocol: Task searches documents itself, Memory only offers experience, asks carry question type and progress", () => {
+  const reminder = reminderForEpisode(
+    "evoagentbench",
+    "information_retrieval",
+    { taskDocTools: true },
+  );
+  expect(reminder).toContain("ov_find");
+  expect(reminder).toContain("Memory Agent never searches documents");
+  expect(reminder).toContain("Exact Answer:");
+  expect(reminder).not.toContain("Memory Agent performs retrieval");
+  const text = episodePrompt(episode, reminder, null, true, {
+    parallel: true,
+    deliveryRules: false,
+    taskDocTools: true,
+  });
+  expect(text.startsWith("@task @memory Question: find the bird.")).toBe(true);
+  expect(text).not.toContain("ir_search.py");
+  expect(text).not.toContain("hidden-answer");
+  expect(text).toContain("[12345]");
+  expect(text).toContain("you never search documents");
+  expect(text).toContain("none of the returned cards applies");
+  expect(text).toContain("a body that starts with @memory");
+  expect(text).toContain("(1) question type");
+  expect(text).toContain("A. first, before your first search");
+  expect(text).toContain("C. when you have a leading candidate");
+  expect(text).toContain("at most 4 asks in total");
+  expect(text).not.toContain("Delivery rules:");
+  expect(text).not.toContain("deliverable format and occupation");
+});
+
+test("without the doc-tools flag IR keeps the legacy Memory-retrieval reminder", () => {
+  expect(
+    reminderForEpisode("evoagentbench", "information_retrieval"),
+  ).toContain("@memory");
+  const text = episodePrompt(episode, "R", null, true, { parallel: true });
+  expect(text).not.toContain("[12345]");
+});
+
+test("the official 'only use the search tool' rules are replaced when the Task uses document tools", () => {
+  const official = {
+    ...episode,
+    prompt: [
+      "Intro.",
+      '## CRITICAL RULES\n- You MUST ONLY use the "search" tool. Do NOT use any other tools (no exec).',
+      "## Response Format\nExact Answer: {x}",
+      "## Question\n\nfind the bird.",
+      "## How to call search in this environment\npython3 x/ir_search.py q",
+    ].join("\n\n"),
+  };
+  const text = episodePrompt(official, "R", null, false, {
+    taskDocTools: true,
+  });
+  expect(text).not.toContain("MUST ONLY use");
+  expect(text).not.toContain("ir_search.py");
+  expect(text).toContain("ov_find and ov_read");
+  expect(text).toContain("## Response Format");
+  expect(text).toContain("find the bird.");
+  expect(episodePrompt(official, "R", null, false)).toContain("MUST ONLY use");
 });

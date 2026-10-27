@@ -1,0 +1,28 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "call-ea7aae32-56e2-4b94-ac14-95f4a0d86e48",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": true
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-906a55f8bb24377d",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "Message sent to #software-engineering:01a17172-9a41. Message ID: 01a1717c-b7ef-77af-9912-03b0b407596b\n",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-8356df478231c9db",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

@@ -1,0 +1,60 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "call-0f93cdb1-8005-4816-8cd3-a45df2477945",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-a49bc511cff5e878",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-ba8279669ace921a",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "chatcmpl-tool-ac61426076c86847",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-64a8f81a-3c7a-42c3-980d-08306d7c3bf7",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-3c405461-1979-412d-b4c8-2118037393e5",
+    "toolName": "bash",
+    "input": {
+      "command": "coforge message send"
+    },
+    "output": "Message sent to #software-engineering:01a171b6-1e6d. Message ID: 01a171ba-fb3f-74d7-bb4b-385e6db5a13e\n",
+    "isError": false
+  },
+  {
+    "kind": "tool",
+    "toolCallId": "call-2154f013-bf98-4951-9885-f4f3160c1f16",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

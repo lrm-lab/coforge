@@ -1,0 +1,18 @@
+{
+  "episode": "sympy__sympy-22080",
+  "sessionId": "7319bd47-8380-4755-8659-7db4157bbac6",
+  "source_sha256": "a045fa770c20e35d2487e896cacfe8deab7e4bf71f882ebb067566ffd3ff651d",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 2,
+  "tail_tools": 2,
+  "parts": [
+    "sympy__sympy-22080-0.json",
+    "sympy__sympy-22080-1.json",
+    "sympy__sympy-22080-2.json",
+    "sympy__sympy-22080-3.json",
+    "sympy__sympy-22080-4.json",
+    "sympy__sympy-22080-5.json",
+    "sympy__sympy-22080-6.json"
+  ]
+}

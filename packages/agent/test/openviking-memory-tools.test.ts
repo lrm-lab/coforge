@@ -22,6 +22,16 @@ const MUTATION_TOOL_NAMES = [
   "network",
 ];
 
+// ov_fork_find / ov_expand are no longer on the Memory Agent fence; their tool code (read budget,
+// served-relation feedback) stays supported and is exercised through an explicit tool list.
+const LEGACY_FORK_FENCE = [
+  OPENVIKING_TOOL_NAMES.forkFind,
+  OPENVIKING_TOOL_NAMES.experienceFind,
+  OPENVIKING_TOOL_NAMES.expand,
+  OPENVIKING_TOOL_NAMES.offer,
+  OPENVIKING_TOOL_NAMES.diagnose,
+] as const;
+
 const CHANNEL_MESSAGE_TOOLS = ["message_check", "message_read", "send_channel_message"] as const;
 
 test("strict eval Memory exposes reads and server-owned controls but no ordinary send", () => {
@@ -32,8 +42,7 @@ test("strict eval Memory exposes reads and server-owned controls but no ordinary
     { memoryOfferOnly: true },
   );
   expect(tools.map((tool) => tool.name)).toEqual([
-    "ov_fork_find",
-    "ov_expand",
+    "ov_experience_find",
     "memory_offer",
     "memory_diagnose",
     "message_check",
@@ -99,8 +108,7 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
     (tool) => tool.name,
   );
   expect(names).toEqual([
-    OPENVIKING_TOOL_NAMES.forkFind,
-    OPENVIKING_TOOL_NAMES.expand,
+    OPENVIKING_TOOL_NAMES.experienceFind,
     OPENVIKING_TOOL_NAMES.offer,
     OPENVIKING_TOOL_NAMES.diagnose,
     ...CHANNEL_MESSAGE_TOOLS,
@@ -112,7 +120,9 @@ test("the openviking-memory fence exposes reads, scoped diagnosis, offers, and c
 test("native memory tools forward more than three reads in one trigger", async () => {
   const proxy = fakeProxy();
   const budget = new MemoryAgentTurnBudget();
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy, {
+    toolNames: LEGACY_FORK_FENCE,
+  });
   for (let index = 0; index < 20; index++) {
     await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
       operationId: `find-${index}`,
@@ -142,7 +152,12 @@ test("a second Memory Offer is rejected", () => {
 
 test("the factory rejects a candidate limit above ten before calling the proxy", async () => {
   const proxy = fakeProxy();
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    proxy,
+    { toolNames: LEGACY_FORK_FENCE },
+  );
   await expect(
     executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
       operationId: "too-many",
@@ -182,7 +197,12 @@ test("reset restores reads and offers for the next triggering message", () => {
 
 test("ov_* tools post the frozen openviking proxy path and never a mutation verb", async () => {
   const proxy = fakeProxy();
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    proxy,
+    { toolNames: LEGACY_FORK_FENCE },
+  );
   await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
     operationId: "find-1",
     query: "deploy rollback",
@@ -223,7 +243,9 @@ test("openviking-memory Fork reads are counted without a per-trigger cap", () =>
 test("empty ov_fork_find arguments return an example error and do not spend the read budget", async () => {
   const budget = new MemoryAgentTurnBudget();
   const proxy = fakeProxy();
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy);
+  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, budget, proxy, {
+    toolNames: LEGACY_FORK_FENCE,
+  });
   const find = tools.find((tool) => tool.name === OPENVIKING_TOOL_NAMES.forkFind);
   expect(typeof find?.prepareArguments).toBe("function");
   expect(() => find?.prepareArguments?.({})).toThrow(/missing operationId, query/);
@@ -259,15 +281,16 @@ test("send_channel_message accepts message only as an alias of a missing content
   expect(proxy.calls[0]?.body).not.toHaveProperty("message");
 });
 
-test("Memory exposes Fork/AIG retrieval and diagnosis through its fence", () => {
+test("Memory exposes experience-card retrieval and diagnosis, not the Fork chain tools, through its fence", () => {
   const tools = createMemoryFenceTools(
     OPENVIKING_TOOL_PROFILE,
     new MemoryAgentTurnBudget(),
     fakeProxy(),
   );
   const names = tools.map((tool) => tool.name);
-  expect(names).toContain("ov_fork_find");
-  expect(names).toContain("ov_expand");
+  expect(names).toContain("ov_experience_find");
+  expect(names).not.toContain("ov_fork_find");
+  expect(names).not.toContain("ov_expand");
   expect(names).toContain("memory_diagnose");
   expect(names).not.toContain("ov_find");
   expect(names).not.toContain("ov_search_context");
@@ -361,7 +384,12 @@ test("unchanged retrieval nudges a partial Offer without blocking further reads"
       ],
     };
   });
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    proxy,
+    { toolNames: LEGACY_FORK_FENCE },
+  );
   let result: Awaited<ReturnType<typeof executeTool>>;
   for (let index = 0; index < 3; index++) {
     result = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
@@ -444,7 +472,12 @@ test("changing search snippets for the same source prompts a strategy pivot with
       ],
     };
   });
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    proxy,
+    { toolNames: LEGACY_FORK_FENCE },
+  );
   let result;
   for (let i = 0; i < 4; i++)
     result = await executeTool(tools, OPENVIKING_TOOL_NAMES.forkFind, {
@@ -511,7 +544,12 @@ test("Fork discovery supplies an executable served-relation example before a met
       ],
     },
   }));
-  const tools = createMemoryFenceTools(OPENVIKING_TOOL_PROFILE, new MemoryAgentTurnBudget(), proxy);
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    proxy,
+    { toolNames: LEGACY_FORK_FENCE },
+  );
   const result = await executeTool(tools, "ov_fork_find", {
     operationId: "find-method",
     query: "constraint intersection",
@@ -525,4 +563,19 @@ test("Fork discovery supplies an executable served-relation example before a met
   expect(guidance).toContain('"relation":"branch_steps"');
   expect(guidance).toContain(uri);
   expect(proxy.calls).toHaveLength(1);
+});
+
+test("ov_experience_find prepares arguments without an out-of-vocabulary issueKind or deliverable", () => {
+  const tools = createMemoryFenceTools(new MemoryAgentTurnBudget(), fakeProxy());
+  const find = tools.find((tool) => tool.name === "ov_experience_find") as unknown as {
+    prepareArguments: (args: unknown) => Record<string, unknown>;
+  };
+  expect(
+    find.prepareArguments({
+      operationId: "exp-1",
+      query: "excel report",
+      issueKind: "calculation_error",
+      deliverable: "xlsx",
+    }),
+  ).toEqual({ operationId: "exp-1", query: "excel report", deliverable: "xlsx" });
 });

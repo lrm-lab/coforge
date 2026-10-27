@@ -369,3 +369,33 @@ test("a retryable OV sink failure keeps the admitted segment for later replay", 
   });
   expect(attempts).toBe(2);
 });
+
+test("enrichment adds tool exchanges, deliveries and the evaluator verdict without touching other fields", () => {
+  const delivery = deliveryFrom();
+  const enriched = admittedSessionWriteFromDelivery({
+    ...delivery,
+    turnEnrichment: new Map([
+      [
+        "m-live",
+        {
+          toolExchanges: [
+            { toolCallId: "c1", toolName: "bash", input: { command: "ls" }, output: "a", isError: false },
+          ],
+          deliveries: [{ participantId: "coforge__task", notified: true, read: true }],
+        },
+      ],
+    ]),
+    outcomeEvaluatorResults: [
+      { bindingId: "b", signalKind: "evaluator", signal: "fail", evidenceRef: "e", reward: 0.2, feedback: "KEY FINDINGS" },
+    ],
+  });
+  expect(enriched.messages[0]).toMatchObject({
+    content: "standup note",
+    toolExchanges: [{ toolCallId: "c1" }],
+    deliveries: [{ participantId: "coforge__task" }],
+  });
+  expect(enriched.outcomeEvaluatorResults?.[0]?.feedback).toBe("KEY FINDINGS");
+  const plain = admittedSessionWriteFromDelivery(delivery);
+  expect(plain.messages[0]).not.toHaveProperty("toolExchanges");
+  expect(plain).not.toHaveProperty("outcomeEvaluatorResults");
+});

@@ -191,7 +191,7 @@ import {
   type TrackedMentionDelivery,
 } from "./mention-delivery-tracker";
 import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
-import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { attentionCursorStores } from "./attention-cursor-stores";
 import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { reminderDueItemId } from "#src/agent-app-inbox/registry";
@@ -657,7 +657,7 @@ export class DaemonRuntime {
         // The consumed cursor outlives the process. What an Agent has already reviewed decides
         // the next hold, the `seenUpToSeq` a fresh send inherits, and whether a top-level send
         // under a thread-read parent needs confirming.
-        consumedSeqs: new AgentConsumedSeqStore(),
+        ...attentionCursorStores(),
       },
     );
     this.agentRequests = new AgentRequestForwarder({

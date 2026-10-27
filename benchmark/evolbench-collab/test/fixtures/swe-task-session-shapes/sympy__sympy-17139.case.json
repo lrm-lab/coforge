@@ -1,0 +1,14 @@
+{
+  "episode": "sympy__sympy-17139",
+  "sessionId": "94c930f5-e350-4102-8257-9da82f3fb5a0",
+  "source_sha256": "315d3e8407ba4f93ef5ca72768d94d14fa7934a03d7fb2340d601f8453156687",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 1,
+  "tail_tools": 1,
+  "parts": [
+    "sympy__sympy-17139-0.json",
+    "sympy__sympy-17139-1.json",
+    "sympy__sympy-17139-2.json"
+  ]
+}

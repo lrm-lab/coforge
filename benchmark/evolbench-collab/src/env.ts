@@ -28,8 +28,25 @@ export type EvalEnv = {
   /** Appended to every episode prompt after %TASK_ID%/%EPISODE_ID%/%%SIDECAR%%
    * substitution — used for env-sidecar wiring (SkillLearnBench, ...). */
   envNote: string | null;
-  /** Env sidecar that can verify an episode (POST /verify {episode_id}). */
+  /** Env sidecar that can verify an episode (POST /verify {episode_id}). Its verdict may carry
+   * an optional `feedback` (the judge report), which is committed with the session. */
   verifySidecarUrl: string | null;
+  /** Register each episode's task-Agent workspace with the sidecar (`POST /env`) before
+   * `/verify`, for scorers that read the deliverables themselves (the kw official evaluator). */
+  verifyRegisterWorkspace: boolean;
+  /** Reward at or above which a graded verdict is committed as `pass`. */
+  outcomePassReward: number;
+  /** Opt-in: write each agent's tool calls and delivery facts into the OpenViking ledger
+   * (ADR-0047). Off by default so existing runs stay byte-comparable. */
+  recordTrajectoryAos: boolean;
+  /** Address Task only and ask Memory to publish an ordinary message, so its tool calls have an
+   * anchor message (ADR-0047 D-002) even when no cited Offer is possible. */
+  memoryObserver: boolean;
+  memoryParallel: boolean;
+  deliveryRules: boolean;
+  /** The Task Agent searches the document corpus itself (ov_find/ov_read against a separate corpus OpenViking
+   * instance); the Memory Agent only offers experience. Set with COFORGE_EVAL_OV_BASE_URL/_ACCOUNT_ID/_ACCOUNT_KEY. */
+  taskDocTools: boolean;
   /** Shard filter for order-independent episode streams: "N:k" keeps episodes
    * whose zero-based manifest index satisfies index % N === k. */
   episodeMod: string | null;
@@ -99,6 +116,13 @@ export function loadEvalEnv(env: Record<string, string | undefined> = Bun.env): 
     episodeClosure: (env.COFORGE_EVAL_EPISODE_CLOSURE ?? "1") !== "0",
     envNote: env.COFORGE_EVAL_ENV_NOTE?.trim() || null,
     verifySidecarUrl: env.COFORGE_EVAL_VERIFY_SIDECAR?.trim() || null,
+    verifyRegisterWorkspace: (env.COFORGE_EVAL_VERIFY_REGISTER_WORKSPACE ?? "0") === "1",
+    outcomePassReward: Number(env.COFORGE_EVAL_OUTCOME_PASS_REWARD ?? "0.6"),
+    memoryObserver: (env.COFORGE_EVAL_MEMORY_OBSERVER ?? "0") === "1",
+    memoryParallel: (env.COFORGE_EVAL_MEMORY_PARALLEL ?? "0") === "1",
+    deliveryRules: (env.COFORGE_EVAL_DELIVERY_RULES ?? "0") === "1",
+    taskDocTools: (env.COFORGE_EVAL_TASK_DOC_TOOLS ?? "0") === "1",
+    recordTrajectoryAos: (env.COFORGE_EVAL_TRAJECTORY_AOS ?? "0") === "1",
     episodeMod: env.COFORGE_EVAL_EPISODE_MOD?.trim() || null,
     abortQuietMs: Number(env.COFORGE_EVAL_ABORT_QUIET_MS ?? "600000"),
     resultDir: env.COFORGE_EVAL_RESULT_DIR ?? new URL("../result", import.meta.url).pathname,

@@ -26,6 +26,15 @@ const IR_REMINDER = [
   "preserving the answer format requested by the task. Cite the retrieved sources supporting it.",
 ].join(" ");
 
+/** Par protocol for information_retrieval: the Task Agent searches the corpus itself (ov_find / ov_read); the Memory
+ * Agent only offers experience (fork / skill cards) about how to search and verify. */
+const IR_TASK_DOCS_REMINDER = [
+  "Channel note: search the document corpus yourself with ov_find and verify sources with ov_read;",
+  "Memory Agent never searches documents. Ask Memory Agent (@memory) only for experience about how to search and verify.",
+  "Post the answer as your final channel message with Explanation:, Exact Answer: and Confidence: fields,",
+  "preserving the answer format requested by the task, and cite supporting documents as [docid].",
+].join(" ");
+
 const SWE_REMINDER = [
   "Channel note: produce a nonempty source-only patch.diff at the path specified by the task;",
   "exclude test edits and reproduction artifacts. Check that patch against the task's clean base",
@@ -85,9 +94,14 @@ export function profileFor(benchmark: string): BenchmarkProfile {
 
 /** AgentStream's function_calling domain wants the call-list contract rather
  * than the code-block one. */
-export function reminderForEpisode(benchmark: string, domain: string): string {
+export function reminderForEpisode(
+  benchmark: string,
+  domain: string,
+  options: { taskDocTools?: boolean } = {},
+): string {
   const profile = profileFor(benchmark);
-  if (benchmark === "evoagentbench" && domain === "information_retrieval") return IR_REMINDER;
+  if (benchmark === "evoagentbench" && domain === "information_retrieval")
+    return options.taskDocTools ? IR_TASK_DOCS_REMINDER : IR_REMINDER;
   if (benchmark === "evoagentbench" && domain === "software_engineering") return SWE_REMINDER;
   if (benchmark === "evoagentbench" && domain === "knowledge_work") return GENERIC_REMINDER;
   if (benchmark === "agentstream" && domain === "function_calling") return CALL_LIST_REMINDER;

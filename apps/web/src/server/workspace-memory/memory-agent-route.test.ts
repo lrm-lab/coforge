@@ -14,6 +14,7 @@ import { createMemoryAgentBudgetLedger } from "./memory-agent-budget";
 import { createMemoryOffers } from "./memory-offers";
 import { createOpenVikingMemoryReads } from "#src/server/openviking/openviking-memory-reads";
 import { createMemoryAgentCommands } from "./memory-agent-route";
+import { clearNoCardAllowance, hasNoCardAllowance } from "./no-card-allowance";
 
 const ovHit = {
   uri: "viking://resources/docs/deploy.md",
@@ -470,4 +471,35 @@ test("an unserved citation is explicitly prepublish and permits a corrected new-
     ok: true,
     response: { publication: { phase: "published", messageId: "offer-msg" } },
   });
+});
+
+test("an empty retrieval grants the no-card allowance; a retrieval with hits or an Offer clears it", async () => {
+  const { handler } = commands();
+  const base = { workspaceId: "ws-nc", agentId: "mem-nc", triggerMessageId: "msg-1" };
+  clearNoCardAllowance("ws-nc", "mem-nc");
+  // The test gateway returns no experience cards, only a document hit for the other finds.
+  const empty = await handler.handle({
+    ...base,
+    command: {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "experience_find",
+      operationId: "exp-empty",
+      query: "contract",
+    },
+  });
+  expect(empty.ok).toBe(true);
+  expect(hasNoCardAllowance("ws-nc", "mem-nc")).toBe(true);
+  expect(hasNoCardAllowance("ws-nc", "someone-else")).toBe(false);
+
+  const hit = await handler.handle({
+    ...base,
+    command: {
+      protocol: OPENVIKING_AGENT_PROTOCOL,
+      op: "fork_find",
+      operationId: "fork-hit",
+      query: "deploy",
+    },
+  });
+  expect(hit.ok).toBe(true);
+  expect(hasNoCardAllowance("ws-nc", "mem-nc")).toBe(false);
 });

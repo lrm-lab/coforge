@@ -1,0 +1,14 @@
+{
+  "episode": "astropy__astropy-7336",
+  "sessionId": "b4ae992a-58ac-497b-b984-e1deff5ffa1d",
+  "source_sha256": "51307f8a9fa9afcf19eece245131c310b3b24aa5a3a0e628d83e107e09d27836",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 2,
+  "tail_tools": 10,
+  "parts": [
+    "astropy__astropy-7336-0.json",
+    "astropy__astropy-7336-1.json",
+    "astropy__astropy-7336-2.json"
+  ]
+}

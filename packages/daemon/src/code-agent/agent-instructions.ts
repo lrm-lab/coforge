@@ -12,6 +12,7 @@ import {
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 import { MEMORY_AGENT_RETRIEVAL_GUIDANCE } from "./memory-agent-guidance";
+import { taskDocToolsSection } from "./task-doc-instructions";
 
 /** Set only by the collaboration evaluation's daemon assembly. */
 export const EVAL_MEMORY_OFFER_ONLY = "COFORGE_EVAL_MEMORY_OFFER_ONLY";
@@ -169,6 +170,8 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
     );
   } else {
     sections.push(...Object.values(guide));
+    const documents = taskDocToolsSection();
+    if (documents) sections.push(documents);
     const apps = buildAppsSection(context.identity?.apps ?? []);
     if (apps) sections.push(apps);
     if (context.identity?.systemKind === "workspace-assistant")
@@ -211,8 +214,7 @@ ${offerOnly ? "- For retrieval questions, strict evaluation order: check/read â†
 
 Copy the arguments JSON below exactly, replacing angle-bracket placeholders. Put every argument in the arguments JSON. An empty object is invalid. ${OPENVIKING_OPERATION_ID_RULE}
 
-ov_fork_find: ${OPENVIKING_ARGUMENT_EXAMPLES.fork_find}
-ov_expand: ${OPENVIKING_ARGUMENT_EXAMPLES.expand}
+ov_experience_find: ${OPENVIKING_ARGUMENT_EXAMPLES.experience_find}
 memory_diagnose: ${OPENVIKING_ARGUMENT_EXAMPLES.diagnose}
 memory_offer: ${OPENVIKING_ARGUMENT_EXAMPLES.offer}
 citationRefs is an array of citation ids already returned in this workspace (at least 1). For every new request/new findings use a fresh operationId (include the triggering message id and a suffix); reuse an id only for the identical logical operation retry.

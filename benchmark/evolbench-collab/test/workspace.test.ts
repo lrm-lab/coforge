@@ -81,8 +81,9 @@ test("failed identity provisioning releases the frozen account and owned rows", 
   expect(bound).toBe(false);
   expect(deleted).toEqual(["workspace", "computer", "owner"]);
   expect(descriptions[0]).not.toContain("ov_search_context");
-  expect(descriptions[0]).toContain("ov_fork_find");
-  expect(descriptions[0]).toContain("ov_expand");
+  expect(descriptions[0]).toContain("ov_experience_find");
+  expect(descriptions[0]).not.toContain("ov_fork_find");
+  expect(descriptions[0]).not.toContain("ov_expand");
   expect(descriptions[0]).toContain("memory_diagnose");
   expect(descriptions[0]).not.toContain("ov_find");
   expect(descriptions[0]).not.toContain("do not use embedding");

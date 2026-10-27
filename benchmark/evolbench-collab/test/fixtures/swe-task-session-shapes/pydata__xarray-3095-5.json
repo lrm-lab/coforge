@@ -1,0 +1,10 @@
+[
+  {
+    "kind": "tool",
+    "toolCallId": "call-d7419f4d-08c3-4b03-b47d-2fb1e3c569a5",
+    "toolName": "bash",
+    "input": {},
+    "output": "[training output omitted]",
+    "isError": false
+  }
+]

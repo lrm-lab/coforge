@@ -942,9 +942,10 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
       };
       return Response.json({
         protocol: "coforge.openviking.agent.v1",
-        op: "fork_find",
+        op: "experience_find",
         operationId: body.operationId ?? "memory",
         duplicate: false,
+        relaxed: false,
         items: [
           {
             kind: "openviking",
@@ -968,7 +969,7 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
       id,
       type: "function",
       function: {
-        name: "ov_fork_find",
+        name: "ov_experience_find",
         arguments: JSON.stringify({
           operationId: `${opBase}${index}`,
           query: "caroline group",
@@ -1035,9 +1036,7 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
     await turnCompleted.promise;
     // New notifications can continue retrieval in the same native session.
     expect(proxyRequests).toHaveLength(5);
-    // The whole conversation replays in every request, so inspect the tool
-    // result for the post-notify read specifically: it must be the proxy's
-    // citation payload, not another client-side budget rejection.
+    // The post-notify read must return the proxy citation, not a budget rejection.
     const replay = JSON.parse(modelRequests[3] ?? "{}") as {
       messages?: Array<{ role?: string; tool_call_id?: string; content?: unknown }>;
     };

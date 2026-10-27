@@ -4,12 +4,14 @@ import type { OpenVikingAgentOperation } from "./openviking-memory";
 export const OPENVIKING_ARGUMENT_EXAMPLES: Record<OpenVikingAgentOperation, string> = {
   diagnose: '{"operationId":"diagnose-1","messageId":"<求助消息 id>"}',
   fork_find: '{"operationId": "find-1", "query": "<检索词>", "limit": 10}',
+  experience_find:
+    '{"operationId": "exp-1", "query": "<任务情境与要避免的问题>", "deliverable": "pdf", "occupation": "<职业>", "issueKind": "missing_section", "kind": "skill_card", "limit": 5}',
   search_context: '{"operationId": "search-1", "query": "<检索词>", "limit": 10}',
   read: '{"operationId": "read-1", "uri": "<document uri>"}',
   expand:
     '{"operationId": "hop-1", "chainRef": "<ov_fork_find chainRef>", "uri": "<served node uri>", "relation": "anchor", "limit": 5}',
   offer:
-    '{"operationId": "offer-1", "citationRefs": ["<ov_fork_find/ov_expand 返回的 citation id>"], "body": "<给 @task 的正文>"}',
+    '{"operationId": "offer-1", "citationRefs": ["<ov_experience_find 返回的 citation id>"], "body": "<给 @task 的正文>"}',
 };
 
 /** Channel fence tools. Not OpenViking commands; kept beside the examples models copy. */
@@ -21,6 +23,7 @@ export const CHANNEL_ARGUMENT_EXAMPLES = {
 export const OPENVIKING_REQUIRED_FIELDS: Record<OpenVikingAgentOperation, readonly string[]> = {
   diagnose: ["operationId", "messageId"],
   fork_find: ["operationId", "query"],
+  experience_find: ["operationId", "query"],
   search_context: ["operationId", "query"],
   read: ["operationId", "uri"],
   expand: ["operationId", "chainRef", "uri", "relation"],

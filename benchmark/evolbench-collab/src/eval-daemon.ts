@@ -1,4 +1,5 @@
 import { waitForAgentStart } from "./agent-start-wait";
+import { guardWarmMemoryWrites } from "./memory-readonly";
 import { MentionDeliveryReports } from "../../../apps/web/src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "../../../apps/web/src/server/db/repositories/mention-delivery.repositories.server";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -87,6 +88,7 @@ async function encryptApiKey(agentId: string, providerId: string, apiKeyInput: s
 export async function startEvalDaemon(input: {
   workspace: EvalWorkspace;
   env: EvalEnv;
+  arm: "warm" | "cold";
 }): Promise<EvalDaemon> {
   // Use the production Memory toolset, including its normal channel reply tool.
   delete Bun.env[EVAL_MEMORY_OFFER_ONLY];
@@ -192,8 +194,11 @@ export async function startEvalDaemon(input: {
       issueAgentContext: (agentId, context) => runtimeApi().issueAgentContext(agentId, context),
       agentTask: (context, request, agentApiKey) =>
         runtimeApi().agentTask(context, request, agentApiKey),
-      agentOpenviking: (context, request, agentApiKey) =>
-        runtimeApi().agentRequests.agentOpenviking(context, request, agentApiKey),
+      agentOpenviking: guardWarmMemoryWrites(
+        (context, request, agentApiKey) =>
+          runtimeApi().agentRequests.agentOpenviking(context, request, agentApiKey),
+        input.arm,
+      ),
       agentMemoryDisposition: (context, request, agentApiKey) =>
         runtimeApi().agentRequests.agentMemoryDisposition(context, request, agentApiKey),
       memoryFence: (agentId) => runtimeApi().memoryFence(agentId),

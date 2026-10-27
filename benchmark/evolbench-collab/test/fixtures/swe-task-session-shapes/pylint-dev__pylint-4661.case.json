@@ -1,0 +1,14 @@
+{
+  "episode": "pylint-dev__pylint-4661",
+  "sessionId": "f9a8f4f4-f21d-4ccc-bfe4-74e27a9def69",
+  "source_sha256": "0a5f66f2eac2ad2655afece3b7d9ce45c76f11192845c59002ce128fbad9467f",
+  "termination": "final_settled",
+  "final_complete": true,
+  "sends": 1,
+  "tail_tools": 11,
+  "parts": [
+    "pylint-dev__pylint-4661-0.json",
+    "pylint-dev__pylint-4661-1.json",
+    "pylint-dev__pylint-4661-2.json"
+  ]
+}
