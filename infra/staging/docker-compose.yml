@@ -329,8 +329,7 @@ services:
     restart: unless-stopped
 
 # The flagd flag definitions staging Web reads (docs/feature-flags.md). Inline, so they ship and
-# roll back with this file. app-agent-manifest: Agents in Frank's Workspace see apps' Agent
-# manifests, for PiResearch at research.coforge.cn.
+# roll back with this file. app-agent-manifest: Agents in every Workspace see apps' Agent manifests.
 configs:
   coforge_feature_flags:
     content: |
@@ -340,8 +339,7 @@ configs:
           "app-agent-manifest": {
             "state": "ENABLED",
             "variants": { "on": true, "off": false },
-            "defaultVariant": "off",
-            "targeting": { "if": [{ "in": [{ "var": "workspaceSlug" }, ["default"]] }, "on", "off"] }
+            "defaultVariant": "on"
           }
         }
       }

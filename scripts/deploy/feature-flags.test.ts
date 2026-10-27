@@ -8,34 +8,31 @@ type FlagDefinitions = {
       state: string;
       variants: Record<string, boolean>;
       defaultVariant: string;
-      targeting?: unknown;
     }
   >;
 };
 
 const FLAGS_PATH = "/etc/coforge/feature-flags.json";
 
-describe("feature flags in the deployed Compose files", () => {
-  test("staging Web reads its flag definitions from a config inlined in its Compose file", async () => {
-    const compose = await readCompose("staging");
-    const web = compose.services.web;
-    expect(web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBe(FLAGS_PATH);
-    expect(web?.configs).toContainEqual({ source: "coforge_feature_flags", target: FLAGS_PATH });
-    const content = compose.configs?.coforge_feature_flags?.content;
-    expect(typeof content).toBe("string");
-    const definitions = JSON.parse(content as string) as FlagDefinitions;
-    expect(Object.keys(definitions.flags)).toEqual(["app-agent-manifest"]);
-    expect(definitions.flags["app-agent-manifest"]).toEqual({
-      state: "ENABLED",
-      variants: { on: true, off: false },
-      defaultVariant: "off",
-      targeting: { if: [{ in: [{ var: "workspaceSlug" }, ["default"]] }, "on", "off"] },
-    });
-  });
+/** On for every Workspace: Agents see an app's Agent manifest as soon as it is granted. */
+const APP_AGENT_MANIFEST_ON = {
+  state: "ENABLED",
+  variants: { on: true, off: false },
+  defaultVariant: "on",
+};
 
-  test("production turns no flag on", async () => {
-    const compose = await readCompose("production");
-    expect(compose.services.web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBeUndefined();
-    expect(compose.configs).toBeUndefined();
-  });
+describe("feature flags in the deployed Compose files", () => {
+  for (const environment of ["staging", "production"] as const) {
+    test(`${environment} Web reads its flag definitions from a config inlined in its Compose file`, async () => {
+      const compose = await readCompose(environment);
+      const web = compose.services.web;
+      expect(web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBe(FLAGS_PATH);
+      expect(web?.configs).toContainEqual({ source: "coforge_feature_flags", target: FLAGS_PATH });
+      const content = compose.configs?.coforge_feature_flags?.content;
+      expect(typeof content).toBe("string");
+      const definitions = JSON.parse(content as string) as FlagDefinitions;
+      expect(Object.keys(definitions.flags)).toEqual(["app-agent-manifest"]);
+      expect(definitions.flags["app-agent-manifest"]).toEqual(APP_AGENT_MANIFEST_ON);
+    });
+  }
 });
