@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { configuredGitHub } from "#src/server/integrations/github-config.server";
-import type { RepositorySelection } from "#src/server/integrations/github-connection.server";
+import type { RepositorySelection } from "#src/server/integrations/github-repository-shapes.server";
 import { gitObjectIdSchema } from "#src/lib/git-object-id";
 import { linkedRepositoryOf } from "#src/server/projects/project-files.server";
 import { AppError, isAppErrorCode } from "#src/lib/app-error";

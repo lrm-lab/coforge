@@ -2,10 +2,21 @@
 
 These rules apply to `src/server/integrations/`.
 
-- `GitHubConnection` owns authorization attempts, encrypted user credentials,
-  refresh serialization, installation and repository access, on-demand Agent
-  owner user credentials, and disconnect. Do not read or refresh GitHub tokens
-  elsewhere.
+- `GitHubConnection` is the entry point: authorization attempts, installation
+  and repository access, on-demand Agent owner user credentials, and
+  disconnect. It composes the modules below; callers use it, not them.
+  - `github-user-tokens.server.ts` (`GitHubUserTokens`) is the only code that
+    reads, refreshes, rewrites, or clears a User's stored tokens, serialized per
+    User. Do not read or refresh GitHub tokens elsewhere.
+  - `github-sealed-values.server.ts` seals and opens encrypted credentials.
+  - `github-api.server.ts` (`GitHubApi`) is the HTTP transport to GitHub and
+    owns the failure-reason mapping; `github-installation-cache.server.ts`
+    reads and caches the User's App installations.
+  - `github-repository-browser.server.ts` serves the repository reads. It gets
+    tokens only through the connection's `withToken`.
+  - `github-account-shapes.server.ts` and `github-repository-shapes.server.ts`
+    hold the response schemas, GraphQL queries, and mapping for the account and
+    repository sides.
 - A GitHub connection never creates a login identity and never confers
   Workspace authority. Callers enforce Workspace scope before using it.
 - Only `repositoryOverview` performs full installation verification. The
