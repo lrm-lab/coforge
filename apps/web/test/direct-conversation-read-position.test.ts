@@ -9,6 +9,7 @@ import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-
  * conversation does not have. */
 
 test("an unanchored canonical read advances across a missing sequence", async () => {
+  const events: object[] = [];
   const updates: object[] = [];
   const db = {
     agent: { findMany: async () => [] },
@@ -45,12 +46,114 @@ test("an unanchored canonical read advances across a missing sequence", async ()
     }
   }
 
-  await new TestConversationRepository(db).readMessagesPage("workspace-1", "agent-1", "@alice", {
-    unread: true,
-  });
+  await new TestConversationRepository(
+    db,
+    {},
+    {
+      agentReadChanged: async (event: object) => {
+        events.push(event);
+      },
+    },
+  ).readMessagesPage("workspace-1", "agent-1", "@alice", { unread: true });
 
   expect(updates).toHaveLength(1);
   expect(updates[0]).toMatchObject({ data: { agentReadThroughSequence: 3 } });
+  expect(events).toEqual([
+    {
+      workspaceId: "workspace-1",
+      conversationId: "conversation-1",
+      agentId: "agent-1",
+      readThroughSequence: 3,
+    },
+  ]);
+});
+
+test("an Agent peer read does not publish a User-Agent DM event", async () => {
+  const events: object[] = [];
+  const db = {
+    agent: {
+      findMany: async () => [
+        {
+          id: "peer-1",
+          name: "peer",
+          ownerId: "owner-1",
+          visibility: "public",
+          systemKind: null,
+        },
+      ],
+      findFirst: async () => ({ ownerId: "owner-1", role: "member", systemKind: null }),
+    },
+    user: { findUnique: async () => null },
+    conversation: { findMany: async () => [], findUnique: async () => ({ id: "conversation-1" }) },
+    workspaceMembership: { findUnique: async () => null },
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 1 }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    message: {
+      findMany: async () => [
+        {
+          id: "message-3",
+          sequence: 3,
+          body: "pending",
+          createdAt: new Date(0),
+          sender: { agentId: "peer-1", agent: { name: "peer", description: "" }, user: null },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        },
+      ],
+    },
+  } as unknown as PrismaClient;
+  await new PrismaDirectConversationRepository(
+    db,
+    {},
+    {
+      agentReadChanged: async (event: object) => {
+        events.push(event);
+      },
+    },
+  ).readMessagesPage("workspace-1", "agent-1", "@peer~agent", { unread: true });
+  expect(events).toEqual([]);
+});
+
+test("an app event session read does not publish a User-Agent DM event", async () => {
+  const events: object[] = [];
+  const db = {
+    appAgentEvent: { findFirst: async () => ({ conversationId: "app-conversation-1" }) },
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 1 }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    message: {
+      findMany: async () => [
+        {
+          id: "message-3",
+          sequence: 3,
+          body: "pending",
+          createdAt: new Date(0),
+          sender: { agentId: null, agent: null, user: { username: "app", description: "" } },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        },
+      ],
+    },
+  } as unknown as PrismaClient;
+  await new PrismaDirectConversationRepository(
+    db,
+    {},
+    {
+      agentReadChanged: async (event: object) => {
+        events.push(event);
+      },
+    },
+  ).readMessagesPage("workspace-1", "agent-1", "@app.demo", { unread: true });
+  expect(events).toEqual([]);
 });
 
 test("publishes an Agent read position only after the database advances", async () => {
