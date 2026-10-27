@@ -52,7 +52,7 @@ EdgeScript：域名边界本身就是 fail-closed 的，一个域名请求另一
    | `releases.coforge.cn` | `/installer/latest`（目录） | `0`, Force Revalidation | `99` | `no-cache, must-revalidate` |
    | `releases.coforge.cn` | `json`（文件后缀名） | `0`, Force Revalidation | `99` | `no-cache, must-revalidate` |
    | `releases.coforge.cn` | `/`（目录） | `31536000` seconds | `80` | `public, max-age=31536000, immutable` |
-   | `files.coforge.cn` | `/`（目录） | `0` | `80` | `private, no-store` |
+   | `files.coforge.cn` | `/`（目录） | `86400` seconds | `80` | `private, max-age=1800` |
    | `images.coforge.cn` | `/`（目录） | `31536000` seconds | `80` | `public, max-age=31536000, immutable` |
 
    `json` 后缀规则覆盖所有 manifest，包括 `<version>/manifest.json` 与
@@ -63,6 +63,12 @@ EdgeScript：域名边界本身就是 fail-closed 的，一个域名请求另一
 
    POP TTL 与 outgoing response header 是两个配置：前者控制 CDN cache，后者控制 client；
    两者都必须设置和验收。
+
+   `files` 的 object key 不可变，签名 URL 在 10 分钟窗口内稳定，所以 POP 可以缓存 1 天，
+   浏览器按签名有效期缓存 30 分钟；`private` 不让共享缓存保存。client 头用 Modify
+   Outgoing Response Header 的 `Add Cache-Control`，OSS origin 不返回该头。
+   2026-10-27 生产与 staging 同时改为此配置，同一签名 URL 第二次请求返回
+   `X-Cache: HIT`、`X-Swift-CacheTime: 86400`。
 4. 不在 `files.coforge.cn` 配置会忽略 CDN signing 参数的 Ignore Parameters 或 custom
    cache key。CDN 先验签，再用去掉鉴权材料后的规范化 path 作为 cache 身份。
 5. 三个域名都新增全域 Modify Outgoing Request Headers `Delete Cookie` 与 Modify

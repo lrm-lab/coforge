@@ -62,5 +62,10 @@ backend 现在为 `files-staging.coforge.cn` 签发 Type A 签名 URL
 `FILE_DELIVERY_TTL_SECONDS = 1800`，不是环境变量；console 的鉴权URL有效时长必须维持
 默认值 1800 秒。
 
+同一 key 的签名在 600 秒窗口内相同（`FILE_DELIVERY_URL_WINDOW_SECONDS`），浏览器和 CDN
+都能复用。2026-10-27 起 `/` 目录 POP TTL 为 86400 秒，Modify Outgoing Response Header
+添加 `Cache-Control: private, max-age=1800`；实测同一签名 URL 重复请求为
+`X-Cache: HIT`，未签名请求仍是 `403`。
+
 CDN real-time log delivery 与 OSS access logging 两项 staging 均**未启用**，属于已知
 缺口：出事时没有取证能力。

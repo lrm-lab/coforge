@@ -26,7 +26,7 @@ PASS 才能切 DNS：
 - 两个 private origin 的三个已知 exact-key anonymous GET 都返回 `403`；
 - unsigned `files.coforge.cn` 返回 `403`；signed 附件、public release、public
   `channels.json` 都返回 `200` 且 SHA-256 与源 bytes 相同；
-- 附件响应为 `private, no-store`，immutable release 至少缓存 30 天，
+- 附件响应为 `private, max-age=1800`，immutable release 至少缓存 30 天，
   `channels.json` 要求 revalidate；
 - 四个跨域名探针都返回非 redirect `4xx`：files-through-releases、
   release-through-files，以及 profile image 域名上线后的 files-through-images
