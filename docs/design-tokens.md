@@ -30,19 +30,19 @@
 
 `coforge-theme.css` 覆盖的 `--color-brand-*`（色相约 254°，紫色）：
 
-| 档位 | 取值      | 说明                                   |
-| ---- | --------- | -------------------------------------- |
-| 50   | `#f8f5ff` |                                        |
-| 100  | `#efe8ff` |                                        |
-| 200  | `#ded1ff` |                                        |
-| 300  | `#c9b3ff` |                                        |
+| 档位 | 取值      | 说明                                  |
+| ---- | --------- | ------------------------------------- |
+| 50   | `#f8f5ff` |                                       |
+| 100  | `#efe8ff` |                                       |
+| 200  | `#ded1ff` |                                       |
+| 300  | `#c9b3ff` |                                       |
 | 400  | `#a993ff` | 旧版暗色主按钮色，现用于强调/焦点环等 |
-| 500  | `#8f6ff2` |                                        |
-| 600  | `#5d36dc` | 品牌主色，`bg-brand-solid` 的取值      |
-| 700  | `#4c2ab8` |                                        |
-| 800  | `#3d2295` |                                        |
-| 900  | `#332073` |                                        |
-| 950  | `#21134d` |                                        |
+| 500  | `#8f6ff2` |                                       |
+| 600  | `#5d36dc` | 品牌主色，`bg-brand-solid` 的取值     |
+| 700  | `#4c2ab8` |                                       |
+| 800  | `#3d2295` |                                       |
+| 900  | `#332073` |                                       |
+| 950  | `#21134d` |                                       |
 
 Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token 指向哪一档**（见 §1）。`coforge-theme.css` 延续这个
 机制，仅在 `.dark-mode` 下把 `--color-border-brand`、`--color-focus-ring` 指向 `--color-brand-400`
@@ -60,27 +60,28 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 
 定义在 `coforge-theme.css` 的 `@theme` 块，随 `.dark-mode` 切换：
 
-| Token                     | 亮色                                     | 暗色                                    | 用途                     |
-| ------------------------- | ----------------------------------------- | ---------------------------------------- | ------------------------ |
-| `--color-sidebar`          | `#f8f7fe`                                 | `#141720`                                | 侧边栏底色（`bg-sidebar`）|
-| `--color-sidebar-fg`       | `#101319`                                 | `#f4f6fb`                                | 侧边栏默认文字            |
-| `--color-sidebar-accent`   | `#ebeaf7`                                 | `#3a3160`                                | 侧边栏选中/hover 底色；rail 与展开行共用一个高亮（暗色旧值 `#2b2544` 对渐变只有 1.15:1，等于看不见） |
-| `--color-sidebar-accent-fg`| `#5d36dc`                                 | `#c5bafe`                                | 侧边栏选中态文字/图标     |
-| `--color-sidebar-item`     | `#f7f6ff`                                 | `transparent`                            | 展开侧栏导航行的静止底色。暗色侧栏背景是渐变，不透明底色在列顶比背景暗、列底比背景亮（对两端分别 1.02:1 / 1.06:1），一列行就成了硬边色块；框架自己的 `NavItemBase` 静止态也是透明，只有 hover / 当前项有底色 |
-| `--color-sidebar-item-active` | `#f3f1ff`                              | `var(--color-sidebar-accent)`            | 同一行的 hover 底色。当前项不用它，用 `bg-tertiary`（Frank 2026-10-26 确认沿用现在页面上的颜色） |
-| `--sidebar-gradient`（非 `@theme`，仅供 `style` 使用）| `linear-gradient(180deg,#f6f5fe 0%,#faf9ff 100%)` | `linear-gradient(155deg,#21183b 0%,#171421 52%,#141720 100%)` | 侧边栏渐变背景，Tailwind 颜色工具类无法表达渐变，App Shell 通过内联 style 读取 |
-| `--color-terminal`         | `#171b23`                                 | `#171b23`（明暗一致）                    | 终端/命令块底色           |
-| `--color-terminal-fg`      | `#f4f6fb`                                 | `#f4f6fb`（明暗一致）                    | 终端/命令块文字           |
-| `--color-nav-fg`           | `#777d8d`                                 | `#a4a9b8`                                | 左导航静止态的文字和图标（展开侧栏和窄栏都用），设计稿值。暗色沿用同一色相但提亮（亮色值放到暗色上只有 4.4:1、发闷，提亮后 7.6:1）；亮色在侧栏底上约 3.8:1，满足图标 3:1 |
-| `--color-nav-fg-current`   | `var(--color-sidebar-fg)`（`#101319`）    | `var(--color-sidebar-fg)`（`#f4f6fb`）   | 左导航当前项的文字和图标，设计稿值 `#101319`，即侧栏前景色 |
-| `--color-chat-selected-bg` / `--color-chat-selected-border` | `#f4f6fa` / `#e0e5f1` | `var(--color-sidebar-accent)` / `#4c4081` | 聊天列表选中行那张卡的底色与描边（圆角 12px 在行组件里）。亮色值是设计稿给的近白卡；这两个值原先明暗一致，暗色下就是一张白卡配浅灰字，现在指向侧栏那套选中紫，选中会话与当前导航项是同一种高亮语言 |
-| `--color-message-hover`   | `#f7f8fb`                                 | `var(--color-bg-primary_hover)`          | 消息行 hover / 键盘聚焦的底色（圆角 8px 在行组件里），不透明，值由设计指定；原先是 `border-secondary` 的 50%，白底合成约 `#F0F2F8`，设计认为偏深 |
-| `--color-avatar-1…6`       | `#7556b9` `#d18a38` `#b65757` `#5268b7` `#497665` `#ba5937` | 同亮色 | 无头像时的占位底色（设计稿用真实头像图，未定义专门配色）|
-| `--color-avatar-deleted`   | `#afbccb`                                 | `#778393`                                | 已删除 Agent 的头像底色，取值与离线圆点一致但语义独立 |
-| `--color-avatar-outline`   | `#ffffff`                                 | `#ffffff`（明暗一致）                    | 群头像里真人照片的白色贴纸边，与吉祥物美术自带的白边一致 |
-| `--color-online`           | `#1bb618`                                 | `#42c83f`                                | 在线/成功圆点             |
-| `--color-offline`          | `#afbccb`                                 | `#778393`                                | 离线圆点                  |
-| `--color-image-frame` / `--color-image-frame-border` | `oklch(0.9642 0 0)` / `oklch(0.1813 0.005 17.62 / 0.149)` | `oklch(0.3161 0.0052 106.7)` / `oklch(0.9843 0.004 106.47 / 0.102)` | 消息图片框的灰底和 1px 细边框，取 Raft 实际值（task #212）；圆角单张 10px、多图格子 8px，在组件里 |
+| Token                                                       | 亮色                                                        | 暗色                                                                | 用途                                                                                                                                                                                                         |
+| ----------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--color-sidebar`                                           | `#f8f7fe`                                                   | `#141720`                                                           | 侧边栏底色（`bg-sidebar`）                                                                                                                                                                                   |
+| `--color-sidebar-fg`                                        | `#101319`                                                   | `#f4f6fb`                                                           | 侧边栏默认文字                                                                                                                                                                                               |
+| `--color-sidebar-accent`                                    | `#ebeaf7`                                                   | `#3a3160`                                                           | 侧边栏选中/hover 底色；rail 与展开行共用一个高亮（暗色旧值 `#2b2544` 对渐变只有 1.15:1，等于看不见）                                                                                                         |
+| `--color-sidebar-accent-fg`                                 | `#5d36dc`                                                   | `#c5bafe`                                                           | 侧边栏选中态文字/图标                                                                                                                                                                                        |
+| `--color-sidebar-item`                                      | `#f7f6ff`                                                   | `transparent`                                                       | 展开侧栏导航行的静止底色。暗色侧栏背景是渐变，不透明底色在列顶比背景暗、列底比背景亮（对两端分别 1.02:1 / 1.06:1），一列行就成了硬边色块；框架自己的 `NavItemBase` 静止态也是透明，只有 hover / 当前项有底色 |
+| `--color-sidebar-item-active`                               | `#f3f1ff`                                                   | `var(--color-sidebar-accent)`                                       | 同一行的 hover 底色。当前项不用它，用 `--color-nav-bg-current`                                                                                                                                               |
+| `--sidebar-gradient`（非 `@theme`，仅供 `style` 使用）      | `linear-gradient(180deg,#f6f5fe 0%,#faf9ff 100%)`           | `linear-gradient(155deg,#21183b 0%,#171421 52%,#141720 100%)`       | 侧边栏渐变背景，Tailwind 颜色工具类无法表达渐变，App Shell 通过内联 style 读取                                                                                                                               |
+| `--color-terminal`                                          | `#171b23`                                                   | `#171b23`（明暗一致）                                               | 终端/命令块底色                                                                                                                                                                                              |
+| `--color-terminal-fg`                                       | `#f4f6fb`                                                   | `#f4f6fb`（明暗一致）                                               | 终端/命令块文字                                                                                                                                                                                              |
+| `--color-nav-fg`                                            | `#777d8d`                                                   | `#a4a9b8`                                                           | 左导航静止态的文字和图标（展开侧栏和窄栏都用），设计稿值。暗色沿用同一色相但提亮（亮色值放到暗色上只有 4.4:1、发闷，提亮后 7.6:1）；亮色在侧栏底上约 3.8:1，满足图标 3:1                                     |
+| `--color-nav-fg-current`                                    | `var(--color-sidebar-fg)`（`#101319`）                      | `var(--color-sidebar-fg)`（`#f4f6fb`）                              | 左导航当前项的文字和图标，设计稿值 `#101319`，即侧栏前景色                                                                                                                                                   |
+| `--color-nav-bg-current`                                    | `#efeff7`                                                   | `var(--color-bg-tertiary)`                                          | 左导航当前项的底色（展开侧栏和窄栏都用），需求方给的值（task #222）。原先直接用 `bg-tertiary`，那个变量全站还有别处在用，所以单独开一个；暗色等需求方确认前保持原来的灰                                      |
+| `--color-chat-selected-bg` / `--color-chat-selected-border` | `#f4f6fa` / `#e0e5f1`                                       | `var(--color-sidebar-accent)` / `#4c4081`                           | 聊天列表选中行那张卡的底色与描边（圆角 12px 在行组件里）。亮色值是设计稿给的近白卡；这两个值原先明暗一致，暗色下就是一张白卡配浅灰字，现在指向侧栏那套选中紫，选中会话与当前导航项是同一种高亮语言           |
+| `--color-message-hover`                                     | `#f7f8fb`                                                   | `var(--color-bg-primary_hover)`                                     | 消息行 hover / 键盘聚焦的底色（圆角 8px 在行组件里），不透明，值由设计指定；原先是 `border-secondary` 的 50%，白底合成约 `#F0F2F8`，设计认为偏深                                                             |
+| `--color-avatar-1…6`                                        | `#7556b9` `#d18a38` `#b65757` `#5268b7` `#497665` `#ba5937` | 同亮色                                                              | 无头像时的占位底色（设计稿用真实头像图，未定义专门配色）                                                                                                                                                     |
+| `--color-avatar-deleted`                                    | `#afbccb`                                                   | `#778393`                                                           | 已删除 Agent 的头像底色，取值与离线圆点一致但语义独立                                                                                                                                                        |
+| `--color-avatar-outline`                                    | `#ffffff`                                                   | `#ffffff`（明暗一致）                                               | 群头像里真人照片的白色贴纸边，与吉祥物美术自带的白边一致                                                                                                                                                     |
+| `--color-online`                                            | `#1bb618`                                                   | `#42c83f`                                                           | 在线/成功圆点                                                                                                                                                                                                |
+| `--color-offline`                                           | `#afbccb`                                                   | `#778393`                                                           | 离线圆点                                                                                                                                                                                                     |
+| `--color-image-frame` / `--color-image-frame-border`        | `oklch(0.9642 0 0)` / `oklch(0.1813 0.005 17.62 / 0.149)`   | `oklch(0.3161 0.0052 106.7)` / `oklch(0.9843 0.004 106.47 / 0.102)` | 消息图片框的灰底和 1px 细边框，取 Raft 实际值（task #212）；圆角单张 10px、多图格子 8px，在组件里                                                                                                            |
 
 ## 4. 落地页的隔离 token
 
@@ -103,7 +104,7 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 - `--font-body` / `--font-display`：Inter Variable（`@fontsource-variable/inter`）→ Noto Sans SC Variable
   （`@fontsource-variable/noto-sans-sc`）→ `"Microsoft YaHei"`、`"Noto Sans CJK SC"`。
 - `--font-mono`：JetBrains Mono Variable（`@fontsource-variable/jetbrains-mono`）。
-落地页用的也是这套栈（`font-display`），不再单独加载展示字体。
+  落地页用的也是这套栈（`font-display`），不再单独加载展示字体。
 
 ## 6. 维护约定
 

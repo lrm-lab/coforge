@@ -37,7 +37,7 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
           <span
             className={cx(
               "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear",
-              current ? "bg-tertiary" : "group-hover:bg-sidebar-accent",
+              current ? "bg-nav-bg-current" : "group-hover:bg-sidebar-accent",
             )}
           >
             <Icon
