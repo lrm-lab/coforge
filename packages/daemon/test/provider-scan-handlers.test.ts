@@ -106,3 +106,48 @@ test("an auth-report failure answers error rather than a successful usage-only r
     },
   ]);
 });
+
+test("an effort read is answered only for this Computer while it is running", async () => {
+  let receive!: Parameters<NonNullable<DaemonConnectionClient["onCommandCodeEffortRead"]>>[0];
+  const seen: string[] = [];
+  let stopping = false;
+  const transport = {
+    onCommandCodeEffortRead: (handler: typeof receive) => {
+      receive = handler;
+      return () => {};
+    },
+  } as unknown as DaemonConnectionClient;
+  subscribeProviderScans(transport, {
+    connection: { workspaceId: "workspace-a", computerId: "computer-a" },
+    runtime: {
+      scanUsage: async () => ({
+        protocolMajor: 1,
+        requestId: "unused",
+        accepted: false,
+        status: "unknown",
+      }),
+    },
+    currentTransport: () => transport,
+    isStopping: () => stopping,
+    runtimeAuth: { usageScanned: async () => undefined },
+    inventory: {
+      refreshModels: async () => undefined,
+      readCommandCodeEfforts: async (request) => {
+        seen.push(request.modelId);
+      },
+    },
+  });
+  const request = {
+    protocolMajor: 1,
+    requestId: "effort-1",
+    workspaceId: "workspace-a",
+    computerId: "computer-a",
+    modelId: "native-model",
+  };
+  await receive({ ...request, computerId: "computer-b", modelId: "other-computer" });
+  stopping = true;
+  await receive({ ...request, modelId: "while-stopping" });
+  stopping = false;
+  await receive(request);
+  expect(seen).toEqual(["native-model"]);
+});

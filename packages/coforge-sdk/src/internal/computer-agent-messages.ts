@@ -140,6 +140,26 @@ export type DaemonRuntimeProviderModelRefreshResponse = DaemonRuntimeProviderMod
   message?: string;
   catalogs?: CodeAgentModelCatalog[];
 };
+/** Server -> daemon. Read one Command Code model's effort choices after the user selects it. */
+export type DaemonRuntimeCommandCodeEffortReadRequest = {
+  protocolMajor: number;
+  requestId: string;
+  workspaceId: string;
+  computerId: string;
+  modelId: string;
+  messageType?: DaemonRuntimeMessageType;
+};
+/** Daemon -> server. `status` is `ready` or `failed`. `efforts` never includes `default`. */
+export type DaemonRuntimeCommandCodeEffortReadResponse = {
+  protocolMajor: number;
+  requestId: string;
+  workspaceId: string;
+  computerId: string;
+  accepted: boolean;
+  status: string;
+  efforts: string[];
+  messageType?: DaemonRuntimeMessageType;
+};
 export type AgentStartIntent = {
   protocolMajor: number;
   requestId: string;

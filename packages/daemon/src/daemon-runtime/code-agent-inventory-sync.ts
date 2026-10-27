@@ -1,9 +1,12 @@
 import {
+  RUNTIME_PROVIDER,
   WORKSPACE_PROTOCOL_MAJOR,
   type CodeAgentModelCatalog,
+  type DaemonRuntimeCommandCodeEffortReadRequest,
   type DaemonRuntimeProviderModelRefreshRequest,
   type RuntimeMetadata,
 } from "@lrm/coforge-sdk/internal";
+import { readHostCommandCodeEfforts } from "#src/code-agent/command-code/effort-read";
 import { discoverPiModels } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -33,6 +36,8 @@ export type CodeAgentDiscovery = {
     runtimes: RuntimeMetadata[],
     options?: { force: boolean },
   ): Promise<CodeAgentModelCatalog[]>;
+  /** This Computer's probe-cache directory. Absent only for test discoveries. */
+  stateDirectory?: string;
 };
 
 export function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
@@ -45,6 +50,7 @@ export function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDisc
     runtimes: () => discoverCodeAgentRuntimes(host),
     cachedCatalogs: (runtimes) => loadCachedCodeAgentCatalogs(runtimes, host),
     catalogs: (runtimes, options) => discoverCodeAgentCatalogs(runtimes, { ...host, ...options }),
+    stateDirectory,
   };
 }
 
@@ -62,6 +68,9 @@ export class CodeAgentInventorySync {
   readonly #runtimeAuth: RuntimeAuthReporter | undefined;
   /** Serializes on-demand model-catalog refreshes (one CLI-spawning discovery at a time). */
   #modelRefreshChain: Promise<void> = Promise.resolve();
+  /** Serializes Command Code effort reads so two forms do not spawn two processes at once. */
+  #effortChain: Promise<void> = Promise.resolve();
+  #runtimeVersions = new Map<RuntimeMetadata["provider"], string>();
 
   constructor(
     discovery: CodeAgentDiscovery,
@@ -86,6 +95,9 @@ export class CodeAgentInventorySync {
     const scope = this.#scope(requestId);
     try {
       const runtimes = await this.#discovery.runtimes();
+      this.#runtimeVersions = new Map(
+        runtimes.map((runtime) => [runtime.provider, runtime.version]),
+      );
       const { catalogs, needsRefresh } = await this.#discovery.cachedCatalogs(runtimes);
       if (!this.#isLive(transport)) return { runtimes, needsCatalogRefresh: false };
       await this.#sendInventory(transport, requestId, runtimes, catalogs);
@@ -125,6 +137,82 @@ export class CodeAgentInventorySync {
       .catch(() => {})
       .then(() => this.#refreshProviderModels(request, transport));
     return this.#modelRefreshChain;
+  }
+
+  /** Answers one Command Code effort read after every read that arrived before it. */
+  readCommandCodeEfforts(
+    request: DaemonRuntimeCommandCodeEffortReadRequest,
+    transport: DaemonConnectionClient,
+  ): Promise<void> {
+    this.#effortChain = this.#effortChain
+      .catch(() => {})
+      .then(() => this.#answerEffortRead(request, transport));
+    return this.#effortChain;
+  }
+
+  async #answerEffortRead(
+    request: DaemonRuntimeCommandCodeEffortReadRequest,
+    transport: DaemonConnectionClient,
+  ): Promise<void> {
+    const scope = {
+      request_id: request.requestId,
+      workspace_id: this.#owner.workspaceId,
+      computer_id: this.#owner.computerId,
+    };
+    const directory = this.#discovery.stateDirectory;
+    let result: Awaited<ReturnType<typeof readHostCommandCodeEfforts>>;
+    try {
+      result = directory
+        ? await readHostCommandCodeEfforts(
+            directory,
+            request.modelId,
+            this.#runtimeVersions.get(RUNTIME_PROVIDER.COMMAND_CODE),
+          )
+        : { status: "failed", code: "unavailable" };
+    } catch (error) {
+      logger.warning("Command Code effort read failed", {
+        event: "command_code_effort:read_failed",
+        ...scope,
+        error_code: diagnosticErrorCode(error),
+        outcome: "failed",
+      });
+      if (!this.#isLive(transport)) return;
+      await transport.sendCommandCodeEffortReadResult?.({
+        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
+        requestId: request.requestId,
+        workspaceId: this.#owner.workspaceId,
+        computerId: this.#owner.computerId,
+        accepted: false,
+        status: "failed",
+        efforts: [],
+      });
+      return;
+    }
+    if (!this.#isLive(transport)) return;
+    if (result.status === "failed") {
+      logger.warning("Command Code effort read failed", {
+        event: "command_code_effort:read_failed",
+        ...scope,
+        error_code: result.code,
+        outcome: "failed",
+      });
+    } else {
+      logger.info("Command Code effort read completed", {
+        event: "command_code_effort:read_completed",
+        ...scope,
+        effort_count: result.efforts.length,
+        outcome: "ok",
+      });
+    }
+    await transport.sendCommandCodeEffortReadResult?.({
+      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
+      requestId: request.requestId,
+      workspaceId: this.#owner.workspaceId,
+      computerId: this.#owner.computerId,
+      accepted: result.status === "ready",
+      status: result.status,
+      efforts: result.status === "ready" ? result.efforts : [],
+    });
   }
 
   /**

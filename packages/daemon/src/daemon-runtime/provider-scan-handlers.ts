@@ -1,4 +1,8 @@
-import type { RuntimeProvider, UsageScanResponse } from "@lrm/coforge-sdk/internal";
+import type {
+  DaemonRuntimeCommandCodeEffortReadRequest,
+  RuntimeProvider,
+  UsageScanResponse,
+} from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { CodeAgentInventorySync } from "./code-agent-inventory-sync";
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
@@ -14,12 +18,17 @@ export type ProviderScans = {
   isStopping: () => boolean;
   /** Re-reads authentication before the answered scan reaches the browser. */
   runtimeAuth: Pick<RuntimeAuthReporter, "usageScanned">;
-  inventory: Pick<CodeAgentInventorySync, "refreshModels">;
+  inventory: Pick<CodeAgentInventorySync, "refreshModels"> & {
+    readCommandCodeEfforts?(
+      request: DaemonRuntimeCommandCodeEffortReadRequest,
+      transport: DaemonConnectionClient,
+    ): Promise<void>;
+  };
 };
 
 /**
- * Subscribes one connection's provider scans: usage and model refresh, each only for this
- * Computer. Returns the unsubscribes for the runtime to keep.
+ * Subscribes one connection's provider scans: usage, model refresh, and one Command Code
+ * effort read, each only for this Computer. Returns the unsubscribes for the runtime to keep.
  */
 export function subscribeProviderScans(
   transport: DaemonConnectionClient,
@@ -52,6 +61,10 @@ export function subscribeProviderScans(
     transport.onProviderModelRefresh?.(async (request) => {
       if (scans.isStopping() || request.computerId !== connection.computerId) return;
       await scans.inventory.refreshModels(request, transport);
+    }),
+    transport.onCommandCodeEffortRead?.(async (request) => {
+      if (scans.isStopping() || request.computerId !== connection.computerId) return;
+      await scans.inventory.readCommandCodeEfforts?.(request, transport);
     }),
   ];
 }

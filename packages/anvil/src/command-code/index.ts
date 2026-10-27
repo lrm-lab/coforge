@@ -1,4 +1,10 @@
 export { discoverCommandCodeCatalog, COMMAND_CODE_CATALOG_TIMEOUT_MS } from "./catalog";
+export {
+  commandCodeEffortValues,
+  readCommandCodeReasoningEfforts,
+  type CommandCodeEffortFailureCode,
+  type CommandCodeEffortRead,
+} from "./efforts";
 export { CommandCodeProvider } from "./provider";
 export { CommandCodeTurnEvents } from "./update-events";
 export {

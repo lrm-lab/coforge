@@ -41,6 +41,8 @@ import type {
   DaemonRuntimeUsageScanResponse,
   DaemonRuntimeProviderModelRefreshRequest,
   DaemonRuntimeProviderModelRefreshResponse,
+  DaemonRuntimeCommandCodeEffortReadRequest,
+  DaemonRuntimeCommandCodeEffortReadResponse,
   AgentActivity,
   AgentStatus,
   AgentStartIntent,
@@ -135,6 +137,12 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   ): () => void;
   sendProviderModelRefreshResult?(
     response: DaemonRuntimeProviderModelRefreshResponse,
+  ): Promise<void>;
+  onCommandCodeEffortRead?(
+    callback: (request: DaemonRuntimeCommandCodeEffortReadRequest) => Promise<void>,
+  ): () => void;
+  sendCommandCodeEffortReadResult?(
+    response: DaemonRuntimeCommandCodeEffortReadResponse,
   ): Promise<void>;
   sendUpgradeResult?(result: ComputerUpgradeResult): Promise<boolean>;
   sendShutdownNotice?(notice: DaemonRuntimeShutdown): Promise<void>;

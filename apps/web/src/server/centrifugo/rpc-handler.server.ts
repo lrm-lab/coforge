@@ -12,6 +12,7 @@ import {
   RequestAuthenticationError,
 } from "#src/server/errors/request-error-handler.server";
 import { getComputerStatusCache, type ComputerStatusCache } from "./computer-status.server";
+import { requireDaemonPrincipal } from "./daemon-rpc-principal.server";
 import { WorkspaceQueryError, WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { decodeWorkspaceGetRequest, decodeWorkspaceListRequest } from "@lrm/coforge-sdk/internal";
 import {
@@ -1138,20 +1139,6 @@ const errors = {
   unknown: { code: 404, message: "unknown RPC method" },
   failed: { code: 500, message: "RPC method failed" },
 } as const;
-
-/** A daemon RPC must come from the Computer it claims to speak for; the 403 to return if not. */
-function requireDaemonPrincipal(
-  metadata: CentrifugoRpcMetadata,
-  claim: { workspaceId: string; computerId: string },
-) {
-  if (
-    !metadata.principal.userId ||
-    metadata.principal.workspaceId !== claim.workspaceId ||
-    metadata.principal.computerId !== claim.computerId
-  )
-    return { code: 403, message: "daemon runtime identity is not authorized" };
-  return undefined;
-}
 
 function response(body: unknown) {
   return new Response(JSON.stringify(body), {

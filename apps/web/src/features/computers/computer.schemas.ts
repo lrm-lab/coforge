@@ -66,6 +66,9 @@ const runtimeInput = z.object({
 });
 
 export const computerIdInputSchema = z.object({ computerId: z.string().min(1) });
+export const readCommandCodeEffortsInputSchema = computerIdInputSchema.extend({
+  modelId: z.string().trim().min(1).max(300),
+});
 export const restartComputerInputSchema = z.object({
   computerId: z.string().min(1),
   requestId: z.uuid(),

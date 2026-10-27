@@ -153,6 +153,31 @@ message DaemonRuntimeProviderModelRefreshResponse {
   string message_type = 9;
 }
 
+// Server -> daemon, on the daemon control channel: read one Command Code model's effort choices.
+// Catalog discovery does not carry them. `model_id` is the model the user just selected.
+message DaemonRuntimeCommandCodeEffortReadRequest {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string model_id = 5;
+  string message_type = 6;
+}
+
+// Daemon -> server RPC, method daemon:v1:provider:effort_read_result. `status` is `ready` or
+// `failed`. `efforts` omits the CLI's `default` (that choice is an empty string on the form).
+// An empty `efforts` list with `ready` means the model has no effort control. `failed` does not.
+message DaemonRuntimeCommandCodeEffortReadResponse {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  bool accepted = 5;
+  string status = 6;
+  repeated string efforts = 7;
+  string message_type = 8;
+}
+
 message CodeAgentModelCatalog {
   string provider = 1;
   repeated CodeAgentModelMetadata models = 2;

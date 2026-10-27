@@ -137,6 +137,7 @@ for await (const line of console) {
       reply({ sessionId, configOptions: configOptions() });
       break;
     case "session/set_config_option":
+      if (Bun.env.COMMAND_CODE_FIXTURE_HOLD_SET === "1") break;
       applyConfig(request.params?.configId, request.params?.value);
       reply({ configOptions: configOptions() });
       break;

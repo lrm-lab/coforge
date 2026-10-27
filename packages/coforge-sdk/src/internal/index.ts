@@ -13,6 +13,8 @@ export const DAEMON_RUNTIME_USAGE_SCAN_METHOD = RPC_METHODS.daemonUsageScan;
 export const DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD = RPC_METHODS.daemonUsageScanResult;
 export const DAEMON_RUNTIME_MODEL_REFRESH_METHOD = RPC_METHODS.daemonModelRefresh;
 export const DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD = RPC_METHODS.daemonModelRefreshResult;
+export const DAEMON_RUNTIME_EFFORT_READ_METHOD = RPC_METHODS.daemonEffortRead;
+export const DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD = RPC_METHODS.daemonEffortReadResult;
 export const COMPUTER_RESTART_METHOD = RPC_METHODS.computerRestart;
 export const COMPUTER_RESTART_MESSAGE_TYPE = "coforge.rpc.v1.ComputerRestartIntent" as const;
 export const COMPUTER_UPGRADE_METHOD = RPC_METHODS.computerUpgrade;
@@ -41,13 +43,19 @@ export const MODEL_REFRESH_MESSAGE_TYPE =
   "coforge.rpc.v1.DaemonRuntimeProviderModelRefreshRequest" as const;
 export const MODEL_REFRESH_RESPONSE_MESSAGE_TYPE =
   "coforge.rpc.v1.DaemonRuntimeProviderModelRefreshResponse" as const;
+export const COMMAND_CODE_EFFORT_READ_MESSAGE_TYPE =
+  "coforge.rpc.v1.DaemonRuntimeCommandCodeEffortReadRequest" as const;
+export const COMMAND_CODE_EFFORT_READ_RESPONSE_MESSAGE_TYPE =
+  "coforge.rpc.v1.DaemonRuntimeCommandCodeEffortReadResponse" as const;
 export type DaemonRuntimeMessageType =
   | typeof AGENT_START_MESSAGE_TYPE
   | typeof AGENT_STOP_MESSAGE_TYPE
   | typeof USAGE_SCAN_MESSAGE_TYPE
   | typeof USAGE_SCAN_RESPONSE_MESSAGE_TYPE
   | typeof MODEL_REFRESH_MESSAGE_TYPE
-  | typeof MODEL_REFRESH_RESPONSE_MESSAGE_TYPE;
+  | typeof MODEL_REFRESH_RESPONSE_MESSAGE_TYPE
+  | typeof COMMAND_CODE_EFFORT_READ_MESSAGE_TYPE
+  | typeof COMMAND_CODE_EFFORT_READ_RESPONSE_MESSAGE_TYPE;
 export const AGENT_MESSAGE_METHOD = RPC_METHODS.agentMessage;
 export const AGENT_MESSAGE_ACK_METHOD = RPC_METHODS.agentMessageAck;
 export const AGENT_MESSAGE_REJECT_METHOD = RPC_METHODS.agentMessageReject;
@@ -128,6 +136,12 @@ export const COMPUTER_CLI_COMMANDS = [
 ] as const;
 export type ComputerCliCommand = (typeof COMPUTER_CLI_COMMANDS)[number];
 export * from "./computer-agent-messages";
+export {
+  decodeDaemonRuntimeCommandCodeEffortReadRequest,
+  decodeDaemonRuntimeCommandCodeEffortReadResponse,
+  encodeDaemonRuntimeCommandCodeEffortReadRequest,
+  encodeDaemonRuntimeCommandCodeEffortReadResponse,
+} from "./command-code-effort-codec";
 export { ACTIVITY_SUBAGENT_TYPE_MAX, parseActivityEntries } from "./activity-entries";
 export {
   HELD_CONTEXT_LIMIT,

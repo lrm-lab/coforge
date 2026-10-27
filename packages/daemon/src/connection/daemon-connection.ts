@@ -26,6 +26,7 @@ import {
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { ListenerSlot } from "./listener-slot";
+import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
 import { DaemonQueries } from "./daemon-queries";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
@@ -88,10 +89,6 @@ import {
   decodeAgentActivityProbe,
   decodeAgentInboxPurge,
   type ComputerUpgradeResult,
-  decodeDaemonRuntimeUsageScanRequest,
-  encodeDaemonRuntimeUsageScanResponse,
-  decodeDaemonRuntimeProviderModelRefreshRequest,
-  encodeDaemonRuntimeProviderModelRefreshResponse,
   decodeAgentMessageDelivery,
   decodeComputerRestartIntent,
   decodeComputerUpgradeIntent,
@@ -118,8 +115,6 @@ import {
   type DaemonRuntimeShutdown,
   DAEMON_CONNECTION_STATUS_METHOD,
   DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
-  DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD,
-  DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD,
   AGENT_MESSAGE_ACK_METHOD,
   AGENT_MESSAGE_REJECT_METHOD,
   AGENT_STATUS_METHOD,
@@ -129,6 +124,8 @@ import {
   type DaemonRuntimeUsageScanResponse,
   type DaemonRuntimeProviderModelRefreshRequest,
   type DaemonRuntimeProviderModelRefreshResponse,
+  type DaemonRuntimeCommandCodeEffortReadRequest,
+  type DaemonRuntimeCommandCodeEffortReadResponse,
   type AgentActivity,
   type AgentStatus,
   type AgentStartIntent,
@@ -281,12 +278,9 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
   readonly #queries = new DaemonQueries((method, bytes) => this.#rpc(method, bytes));
-  readonly #usageScan = new ListenerSlot<
-    (request: DaemonRuntimeUsageScanRequest) => Promise<void>
-  >();
-  readonly #providerModelRefresh = new ListenerSlot<
-    (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>
-  >();
+  readonly #providerPublications = new DaemonProviderPublications((method, bytes) =>
+    this.#rpc(method, bytes),
+  );
   readonly #reconnect = new ListenerSlot<() => void>();
   readonly #connectionRefused = new ListenerSlot<(reason: DaemonConnectRejectionReason) => void>();
   /** Set only while `start` waits for the first connection; rejecting it ends that `start`. */
@@ -610,13 +604,19 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly sendPiChatFrame = this.#queries.piChat.sendResult;
 
   onUsageScan(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void {
-    return this.#usageScan.set(callback);
+    return this.#providerPublications.onUsageScan(callback);
   }
 
   onProviderModelRefresh(
     callback: (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>,
   ): () => void {
-    return this.#providerModelRefresh.set(callback);
+    return this.#providerPublications.onProviderModelRefresh(callback);
+  }
+
+  onCommandCodeEffortRead(
+    callback: (request: DaemonRuntimeCommandCodeEffortReadRequest) => Promise<void>,
+  ): () => void {
+    return this.#providerPublications.onCommandCodeEffortRead(callback);
   }
 
   onReconnect(callback: () => void): () => void {
@@ -1731,22 +1731,7 @@ export class DaemonConnection implements DaemonConnectionClient {
         if (request.workspaceId === workspaceId) this.#deliver(this.#agentWorkspaceReset, request);
         return true;
       }) ||
-      this.#route(data, decodeDaemonRuntimeUsageScanRequest, (usage) => {
-        if (usage.protocolMajor !== 1 || usage.workspaceId !== workspaceId || !usage.computerId)
-          return false;
-        void this.#usageScan.current?.(usage);
-        return true;
-      }) ||
-      this.#route(data, decodeDaemonRuntimeProviderModelRefreshRequest, (refresh) => {
-        if (
-          refresh.protocolMajor !== 1 ||
-          refresh.workspaceId !== workspaceId ||
-          !refresh.computerId
-        )
-          return false;
-        void this.#providerModelRefresh.current?.(refresh);
-        return true;
-      }) ||
+      this.#providerPublications.route(data, workspaceId) ||
       this.#route(data, decodeAgentActivityProbe, (probe) => {
         if (probe.protocolMajor !== 1 || !ownsDaemon(probe)) return false;
         this.#deliver(this.#agentActivityProbe, probe, "probe");
@@ -1906,20 +1891,24 @@ export class DaemonConnection implements DaemonConnectionClient {
     }
   }
 
-  async sendUsageScanResult(response: DaemonRuntimeUsageScanResponse): Promise<void> {
-    await this.#rpc(
-      DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD,
-      encodeDaemonRuntimeUsageScanResponse(response),
-    );
+  sendUsageScanResult(response: DaemonRuntimeUsageScanResponse): Promise<void> {
+    return this.#providerPublications.sendUsageScanResult(response).then(() => undefined);
   }
 
-  async sendProviderModelRefreshResult(
+  sendProviderModelRefreshResult(
     response: DaemonRuntimeProviderModelRefreshResponse,
   ): Promise<void> {
-    await this.#rpc(
-      DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD,
-      encodeDaemonRuntimeProviderModelRefreshResponse(response),
-    );
+    return this.#providerPublications
+      .sendProviderModelRefreshResult(response)
+      .then(() => undefined);
+  }
+
+  sendCommandCodeEffortReadResult(
+    response: DaemonRuntimeCommandCodeEffortReadResponse,
+  ): Promise<void> {
+    return this.#providerPublications
+      .sendCommandCodeEffortReadResult(response)
+      .then(() => undefined);
   }
 
   async ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void> {
