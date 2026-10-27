@@ -41,6 +41,7 @@ import type { ChannelSuggestion } from "./reference-completion";
 import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
 import { outboxContinuesRun } from "./conversation-pane-layout";
 import { useMessageExpansion } from "./use-message-expansion";
+import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 import { optimisticSavedEntry } from "./saved-messages-collection";
 import { composerDraftKey } from "./composer-draft";
 import { OutboxMessageRow } from "./outbox-message-row";
@@ -254,24 +255,7 @@ export function ConversationPane({
   // Handles that recently sent a message here, most-recent first: the mention completion popup
   // ranks these candidates ahead of alphabetical order within a match tier. Deduplicated by
   // handle so the same person's older messages don't push their own recent one down.
-  const recentHandles = useMemo(() => {
-    const handles: string[] = [];
-    const seen = new Set<string>();
-    for (const message of [...conversation.messages].sort(
-      (left, right) => right.sequence - left.sequence,
-    )) {
-      if (message.senderKind === "system") continue;
-      // The projection's own handle, not the displayed name: `senderName` is a display name now,
-      // and `filterMentionables` matches recency against `Mentionable.handle`.
-      const handle = message.senderHandle;
-      if (!handle) continue;
-      const key = handle.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      handles.push(handle);
-    }
-    return handles;
-  }, [conversation.messages]);
+  const recentHandles = useRecentConversationHandles(conversation.messages);
   const isOwn = (message: { senderMemberId?: string | null }) =>
     isViewerMessage(message, conversation.senderMemberId);
   // Only derived from the loaded page when no indexed own-message source is wired up.
