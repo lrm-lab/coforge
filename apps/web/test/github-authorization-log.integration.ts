@@ -122,6 +122,59 @@ test("a GitHub user that cannot be read after the exchange is logged as a user f
   }
 });
 
+test("a GitHub account another person has connected is refused as taken, and says so in the log", async () => {
+  const [owner, other] = await Promise.all(
+    [1, 2].map(() =>
+      db.user.create({
+        data: {
+          displayName: `github-${crypto.randomUUID()}`,
+          username: `github-${crypto.randomUUID()}`,
+        },
+      }),
+    ),
+  );
+  let githubUserId = Math.floor(Math.random() * 1_000_000_000) + 1;
+  const connection = new GitHubConnection(db, config, async (url) => {
+    if (url === "https://github.com/login/oauth/access_token")
+      return Response.json({
+        access_token: "ghu_private_token",
+        refresh_token: "ghr_private_token",
+        expires_in: 28800,
+        refresh_token_expires_in: 15897600,
+        token_type: "bearer",
+      });
+    if (url.startsWith("https://api.github.com/user/installations"))
+      return Response.json({ total_count: 0, installations: [] });
+    return Response.json({ id: githubUserId, login: "shared-octo" });
+  });
+  const connect = async (userId: string) => {
+    const { url } = await connection.begin(userId);
+    const state = new URL(url).searchParams.get("state")!;
+    return connection.complete(userId, state, state, "code");
+  };
+  try {
+    expect(await connect(owner!.id)).toBe(true);
+    const logged = await warningsDuring(async () => {
+      expect(await connect(other!.id)).toBe("account_taken");
+    });
+    expect(logged).toEqual([
+      { event: "github.authorization_failed", stage: "owner", reason: "github_account_taken" },
+    ]);
+    expect(await db.gitHubConnection.findUnique({ where: { userId: other!.id } })).toBeNull();
+
+    // Reauthorizing a connection must come back as the same GitHub account. Another person's
+    // account is the wrong one first: the fix is to pick the connected account, not to free it.
+    githubUserId += 1;
+    expect(await connect(other!.id)).toBe(true);
+    githubUserId -= 1;
+    const { url } = await connection.begin(other!.id, "reauthorize");
+    const state = new URL(url).searchParams.get("state")!;
+    expect(await connection.complete(other!.id, state, state, "code")).toBe("wrong_account");
+  } finally {
+    await db.user.deleteMany({ where: { id: { in: [owner!.id, other!.id] } } });
+  }
+});
+
 /**
  * A user whose GitHub connection completed at `now()` and whose token has since expired, so the next
  * credential read refreshes it through `refresh` (GitHub's answer to the refresh exchange).

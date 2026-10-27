@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import type { GitHubAuthorizationResult } from "#src/features/integrations/github-callback";
 import { GitHubApi, GitHubUnauthorized, failureReason, type Http } from "./github-api.server";
 import {
   pageSchema,
@@ -106,8 +107,13 @@ export class GitHubConnection {
     return { url: url.toString(), state };
   }
 
-  async complete(userId: string, browserState: string, state: string, code: string) {
-    // Every `return failed(...)` below logs the stage and a short reason; see `authorizationFailed`.
+  async complete(
+    userId: string,
+    browserState: string,
+    state: string,
+    code: string,
+  ): Promise<GitHubAuthorizationResult> {
+    // Every `authorizationFailed(...)` below logs the stage and a short reason.
     if (!state || state.length > 256) return authorizationFailed("state", "state_invalid");
     if (!browserState) return authorizationFailed("state", "browser_state_missing");
     if (state !== browserState) return authorizationFailed("state", "browser_state_mismatch");
@@ -156,13 +162,6 @@ export class GitHubConnection {
         return authorizationFailed(stage, failureReason(error));
       }
       const { tokens, user } = authorized;
-      const existing = await tx.gitHubConnection.findUnique({
-        where: {
-          clientId_githubUserId: { clientId: this.config.clientId, githubUserId: String(user.id) },
-        },
-      });
-      if (existing && existing.userId !== userId)
-        return authorizationFailed("owner", "github_account_taken");
       const storedAuthorization = JSON.parse(await this.sealed.open(userId, "oauth", verifier)) as {
         expectedGithubUserId?: string;
       };
@@ -171,6 +170,15 @@ export class GitHubConnection {
         storedAuthorization.expectedGithubUserId !== String(user.id)
       )
         return "wrong_account" as const;
+      const existing = await tx.gitHubConnection.findUnique({
+        where: {
+          clientId_githubUserId: { clientId: this.config.clientId, githubUserId: String(user.id) },
+        },
+      });
+      if (existing && existing.userId !== userId) {
+        authorizationFailed("owner", "github_account_taken");
+        return "account_taken" as const;
+      }
       const data = {
         clientId: this.config.clientId,
         githubUserId: String(user.id),

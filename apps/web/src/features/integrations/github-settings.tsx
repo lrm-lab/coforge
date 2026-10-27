@@ -13,14 +13,15 @@ import {
   startGitHubInstallation,
   startGitHubReauthorization,
 } from "./github.functions";
+import type { GitHubCallbackFailure } from "./github-callback";
 
-export function GitHubSettings({
-  callbackError,
-  wrongAccount,
-}: {
-  callbackError: boolean;
-  wrongAccount: boolean;
-}) {
+const callbackFailureMessage = {
+  error: m.github_callback_error,
+  wrong_account: m.github_wrong_account,
+  account_taken: m.github_account_taken,
+} satisfies Record<GitHubCallbackFailure, () => string>;
+
+export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCallbackFailure }) {
   const [connection, setConnection] = useState<Awaited<ReturnType<typeof getGitHubConnection>>>();
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -208,9 +209,9 @@ export function GitHubSettings({
           )}
         </div>
       </section>
-      {callbackError && (
+      {callbackFailure && (
         <p role="alert" className="text-error-primary">
-          {wrongAccount ? m.github_wrong_account() : m.github_callback_error()}
+          {callbackFailureMessage[callbackFailure]()}
         </p>
       )}
       {error && (

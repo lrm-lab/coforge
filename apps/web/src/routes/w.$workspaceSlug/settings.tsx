@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { SettingsContent } from "#src/components/settings-content";
+import { GITHUB_CALLBACK_FAILURES } from "#src/features/integrations/github-callback";
 import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
@@ -65,7 +66,10 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
   // switch triggers and so a settings link can open a specific section.
   validateSearch: z.object({
     section: z.enum(SETTINGS_SECTIONS).optional().catch(undefined),
-    github: z.enum(["connected", "error", "wrong_account"]).optional().catch(undefined),
+    github: z
+      .enum(["connected", ...GITHUB_CALLBACK_FAILURES])
+      .optional()
+      .catch(undefined),
     // Settings → Account shows the platform avatar picker instead of the profile.
     avatar: z.literal("choose").optional().catch(undefined),
     ...APPS_SETTINGS_SEARCH,
@@ -336,8 +340,7 @@ function SettingsPage() {
 
   return (
     <SettingsContent
-      githubCallbackError={github === "error" || github === "wrong_account"}
-      githubWrongAccount={github === "wrong_account"}
+      githubCallbackFailure={github === "connected" ? undefined : github}
       section={section}
       onSectionChange={(next) => void navigate({ search: { section: next }, replace: true })}
       profile={profile}

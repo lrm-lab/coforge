@@ -52,6 +52,7 @@ import { WORKSPACE_NAME_MAX_LENGTH } from "#src/features/workspaces/workspace.sc
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { IMAGE_MAX_BYTES, IMAGE_UPLOAD_TYPES } from "#src/lib/image-upload";
 import { GitHubSettings } from "#src/features/integrations/github-settings";
+import type { GitHubCallbackFailure } from "#src/features/integrations/github-callback";
 import { AppsSettings } from "#src/features/apps/apps-settings";
 import { ServerConnectionSettings } from "#src/features/settings/server-connection-settings";
 import {
@@ -89,8 +90,7 @@ type Theme = "system" | "light" | "dark";
 interface SettingsContentProps {
   /** Controlled section; falls back to internal state when omitted (tests, previews). */
   section?: SettingsSection;
-  githubCallbackError?: boolean;
-  githubWrongAccount?: boolean;
+  githubCallbackFailure?: GitHubCallbackFailure;
   onSectionChange?: (section: SettingsSection) => void;
   profile: {
     id: string;
@@ -291,10 +291,7 @@ export function SettingsContent(props: SettingsContentProps) {
             ) : section === "server-connection" ? (
               <ServerConnectionSettings />
             ) : section === "integrations" ? (
-              <GitHubSettings
-                callbackError={props.githubCallbackError ?? false}
-                wrongAccount={props.githubWrongAccount ?? false}
-              />
+              <GitHubSettings callbackFailure={props.githubCallbackFailure} />
             ) : (
               <NotificationSettings {...props} />
             )}

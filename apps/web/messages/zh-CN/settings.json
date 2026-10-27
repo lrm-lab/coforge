@@ -107,6 +107,7 @@
   "github_error": "GitHub 请求未能完成。请重试，或检查账号授权和仓库访问权限。",
   "github_callback_error": "GitHub 授权已取消或未能通过验证，请重新连接。",
   "github_wrong_account": "这是另一个 GitHub 账号，请使用当前已连接的账号重新授权。",
+  "github_account_taken": "这个 GitHub 账号已连接到另一个 CoForge 账号。请先在那个账号中断开连接，再回到这里连接。",
   "github_pending_installation": "GitHub 已连接，但 CoForge App 还需要获得个人账号或组织的访问权限。",
   "github_installations": "账号与组织",
   "github_no_installations": "没有可访问的安装。请为仓库安装 App，或请组织管理员批准访问。",

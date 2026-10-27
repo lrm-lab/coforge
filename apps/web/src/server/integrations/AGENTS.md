@@ -4,7 +4,8 @@ These rules apply to `src/server/integrations/`.
 
 - `GitHubConnection` is the entry point: authorization attempts, installation
   and repository access, on-demand Agent owner user credentials, and
-  disconnect. It composes the modules below; callers use it, not them.
+  disconnect. It composes the modules below; callers use it, not them,
+  apart from the shape types (`RepositorySelection`).
   - `github-user-tokens.server.ts` (`GitHubUserTokens`) is the only code that
     reads, refreshes, rewrites, or clears a User's stored tokens, serialized per
     User. Do not read or refresh GitHub tokens elsewhere.

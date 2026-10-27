@@ -107,6 +107,7 @@
   "github_error": "GitHub could not complete this request. Retry, or check your authorization and repository access.",
   "github_callback_error": "GitHub authorization was cancelled or could not be verified. Try connecting again.",
   "github_wrong_account": "This is a different GitHub account. Re-authenticate with the connected account.",
+  "github_account_taken": "This GitHub account is already connected to another CoForge account. Disconnect it there first, then connect it here.",
   "github_pending_installation": "GitHub is connected, but the CoForge App still needs access to an account or organization.",
   "github_installations": "Accounts and organizations",
   "github_no_installations": "No accessible installations. Install the App for your repositories, or ask your organization owner to approve access.",

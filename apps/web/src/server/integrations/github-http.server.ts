@@ -7,6 +7,10 @@ import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { configuredGitHub, readGitHubConfig } from "./github-config.server";
 import { applyGitHubWebhookEvent, verifyGitHubWebhookSignature } from "./github-webhook.server";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
+import type {
+  GitHubAuthorizationResult,
+  GitHubCallbackFailure,
+} from "#src/features/integrations/github-callback";
 
 export const GITHUB_STATE_COOKIE = "__Host-coforge-github-state";
 export const GITHUB_INSTALL_STATE_COOKIE = "__Host-coforge-github-install-state";
@@ -60,12 +64,12 @@ function returnPlace(cookieHeader: string) {
  * opened (the connection is the User's, so any of theirs shows it); the app root when neither is
  * known.
  */
-function returnLocation(cookieHeader: string, github?: "connected" | "wrong_account" | "error") {
+function returnLocation(cookieHeader: string, github?: "connected" | GitHubCallbackFailure) {
   const place = returnPlace(cookieHeader);
   const slug = place.slug || readPreferredWorkspaceSlug(cookieHeader);
   if (!slug || !isValidWorkspaceSlug(slug)) return "/";
   // The flow's own Workspace and a good outcome; a failure is explained in Settings.
-  if (place.slug && place.home && github !== "wrong_account" && github !== "error")
+  if (place.slug && place.home && (github === undefined || github === "connected"))
     return workspacePath(slug);
   return workspacePath(slug, `/settings?section=integrations${github ? `&github=${github}` : ""}`);
 }
@@ -94,7 +98,7 @@ export async function githubCallbackHandler({ request }: { request: Request }) {
     return new Response(null, { status: 303, headers });
   }
   headers.set("set-cookie", githubStateCookie(""));
-  let connected: boolean | "wrong_account" = false;
+  let connected: GitHubAuthorizationResult = false;
   try {
     const github = await configuredGitHub();
     const cookie = cookieValue(cookieHeader, GITHUB_STATE_COOKIE);
@@ -130,10 +134,7 @@ export async function githubCallbackHandler({ request }: { request: Request }) {
   }
   headers.set(
     "location",
-    returnLocation(
-      cookieHeader,
-      connected === true ? "connected" : connected === "wrong_account" ? "wrong_account" : "error",
-    ),
+    returnLocation(cookieHeader, connected === true ? "connected" : connected || "error"),
   );
   headers.append("set-cookie", githubReturnCookie(""));
   return new Response(null, { status: 303, headers });
