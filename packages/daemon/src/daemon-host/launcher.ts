@@ -32,9 +32,13 @@ export type DaemonStarted = { lifecycleUnderWay?: boolean };
 /** The per-user service definition a platform manager registers for the Coordinator, exactly as the
  * host writes it: a launchd plist, a systemd user unit, or Task Scheduler XML (UTF-16 on disk). */
 export type DaemonServiceDefinition = {
-  manager: "launchd" | "systemd-user" | "windows-task";
+  manager: DaemonServiceManager;
   contents: string;
 };
+
+/** The platform service managers a Coordinator service definition is written for. */
+export const DAEMON_SERVICE_MANAGERS = ["launchd", "systemd-user", "windows-task"] as const;
+export type DaemonServiceManager = (typeof DAEMON_SERVICE_MANAGERS)[number];
 
 export interface DaemonLauncher {
   preflight?(): Promise<void>;

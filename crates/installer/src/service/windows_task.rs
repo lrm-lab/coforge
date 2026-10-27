@@ -28,7 +28,6 @@
 //! Computer it launched keeps running, and Task Scheduler exposes no process id. Whether the
 //! product's processes are gone is [`crate::processes`], not this module.
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{
@@ -55,8 +54,6 @@ pub struct WindowsTask<'a> {
     task: String,
     powershell: String,
     schtasks: String,
-    /// Where the task XML is written for `schtasks /Create`.
-    temporary_directory: PathBuf,
 }
 
 impl<'a> WindowsTask<'a> {
@@ -93,15 +90,7 @@ impl<'a> WindowsTask<'a> {
             task: task.clone(),
             powershell: format!(r"{system32}\WindowsPowerShell\v1.0\powershell.exe"),
             schtasks: format!(r"{system32}\schtasks.exe"),
-            temporary_directory: std::env::temp_dir(),
         })
-    }
-
-    /// Writes the task XML into `directory` instead of the system temporary directory.
-    #[cfg(test)]
-    fn with_temporary_directory(mut self, directory: PathBuf) -> Self {
-        self.temporary_directory = directory;
-        self
     }
 
     fn schtasks(&self, verb: &str) -> Result<Attempt, ServiceError> {
@@ -210,7 +199,7 @@ impl SupervisorService for WindowsTask<'_> {
 
     fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
         definition::require_manager("windows-task", definition)?;
-        let xml = TemporaryDefinition::utf16(&self.temporary_directory, &definition.contents)?;
+        let xml = TemporaryDefinition::utf16(&std::env::temp_dir(), &definition.contents)?;
         let path = xml.path().to_string_lossy();
         let create = execute(
             self.runner,

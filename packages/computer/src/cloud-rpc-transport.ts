@@ -176,13 +176,20 @@ export function daemonConnectionEndpoint(serverUrl: string): string {
   return centrifugoWebSocketEndpoint(serverUrl);
 }
 
+/** An E2E run's override `name`, honored only where the environment allows E2E device auth. */
+export function e2eOverride(
+  env: Record<string, string | undefined>,
+  name: "COFORGE_E2E_DAEMON_CONNECTION_ENDPOINT" | "COFORGE_E2E_DAEMON_EXECUTABLE",
+): string | undefined {
+  return env.COFORGE_E2E_ALLOW_DEVICE_AUTH === "1" ? env[name] : undefined;
+}
+
 export function resolveDaemonConnectionEndpoint(
   serverUrl: string,
   env = process.env.COFORGE_E2E_ALLOW_DEVICE_AUTH === "1" ? Bun.env : {},
 ): string {
-  const override =
-    env.COFORGE_E2E_ALLOW_DEVICE_AUTH === "1"
-      ? env.COFORGE_E2E_DAEMON_CONNECTION_ENDPOINT
-      : undefined;
-  return override ?? daemonConnectionEndpoint(serverUrl);
+  return (
+    e2eOverride(env, "COFORGE_E2E_DAEMON_CONNECTION_ENDPOINT") ??
+    daemonConnectionEndpoint(serverUrl)
+  );
 }

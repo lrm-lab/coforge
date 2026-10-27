@@ -20,6 +20,7 @@ use crate::lifecycle::{ComputerLifecycle, LifecycleFailure};
 use crate::lock::MachineMutationLock;
 use crate::prepare::prepare_version;
 use crate::processes::ProcessTable;
+use crate::service::fakes::definition;
 use crate::service::{
     ServiceError, ServiceState, StartOutcome, StopOutcome, SupervisorService, coordinator_service,
 };
@@ -155,10 +156,11 @@ pub(crate) fn protocol_with_service_definition(version: &str) -> LifecycleProtoc
 /// The service definition `version` reports, for the systemd backend the fake service stands for.
 pub(crate) fn service_definition(version: &str) -> LifecycleServiceDefinition {
     LifecycleServiceDefinition {
-        lifecycle_protocol: LIFECYCLE_PROTOCOL,
         version: version.to_owned(),
-        manager: "systemd-user".to_owned(),
-        contents: format!("[Service]\n# definition of {version}\n"),
+        ..definition(
+            "systemd-user",
+            &format!("[Service]\n# definition of {version}\n"),
+        )
     }
 }
 
@@ -409,10 +411,7 @@ impl Fixture {
     /// Scripts `version`'s protocol answer for the two executables that may be probed for it: the
     /// store's copy (the candidate, before it is activated) and the one that runs once it is.
     pub(crate) fn answers_protocol(&self, lifecycle: &FakeLifecycle, version: &str) {
-        for executable in [
-            self.computer(version),
-            self.store.running_computer_path(version),
-        ] {
+        for executable in [self.computer(version), self.running_computer(version)] {
             lifecycle.answers_protocol(&executable, vec![Some(protocol(version))]);
         }
     }

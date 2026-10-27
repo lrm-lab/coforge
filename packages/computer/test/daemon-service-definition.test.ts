@@ -9,6 +9,7 @@ import {
 import { runLifecycleCommand } from "#src/release/lifecycle-command";
 import { LifecycleServiceDefinitionSchema } from "#src/release/installer-contract";
 import { resolveServiceDefinition } from "#src/daemon-service/daemon-host";
+import { SERVICE_MANAGER_BY_PLATFORM } from "./service-manager";
 
 /*
  * The service definition the installer writes before it starts the supervisor service is rendered
@@ -19,8 +20,6 @@ import { resolveServiceDefinition } from "#src/daemon-service/daemon-host";
 
 const SERVER_URL = "https://coforge.test";
 const ENDPOINT = "wss://coforge.test/connection/websocket";
-
-const MANAGER = { darwin: "launchd", linux: "systemd-user", win32: "windows-task" } as const;
 
 const MACHINES = {
   darwin: {
@@ -145,6 +144,6 @@ test.each(["darwin", "linux", "win32"] as const)(
       manager: definition.manager,
       contents: definition.contents,
     });
-    expect(printed.manager).toBe(MANAGER[platform]);
+    expect(printed.manager).toBe(SERVICE_MANAGER_BY_PLATFORM[platform]);
   },
 );

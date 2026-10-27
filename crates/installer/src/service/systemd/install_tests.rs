@@ -4,28 +4,11 @@ use std::path::Path;
 use super::*;
 use crate::clock::VirtualClock;
 use crate::service::coordinator_service;
-use crate::service::fakes::{ScriptedRunner, Step, exits, ok};
+use crate::service::fakes::{FixedCgroup, ScriptedRunner, Step, definition, exits, ok};
 use crate::test_support::Scratch;
 
 const RELOAD: &str = "systemctl --user daemon-reload";
 const ENABLE: &str = "systemctl --user enable coforge-daemon.service";
-
-struct NoCgroup;
-
-impl ProcessCgroup for NoCgroup {
-    fn read(&self) -> io::Result<String> {
-        Ok(String::new())
-    }
-}
-
-fn definition(manager: &str, contents: &str) -> LifecycleServiceDefinition {
-    LifecycleServiceDefinition {
-        lifecycle_protocol: 1,
-        version: "0.2.0".to_owned(),
-        manager: manager.to_owned(),
-        contents: contents.to_owned(),
-    }
-}
 
 fn unit_in(home: &Path) -> std::path::PathBuf {
     home.join(".config/systemd/user/coforge-daemon.service")
@@ -40,9 +23,15 @@ fn install(
 ) -> (Result<(), ServiceError>, Vec<String>) {
     let runner = ScriptedRunner::new(script);
     let clock = VirtualClock::new();
-    let result = SystemdUser::new(&runner, &clock, &coordinator_service(), &NoCgroup, home)
-        .unwrap()
-        .install(definition);
+    let result = SystemdUser::new(
+        &runner,
+        &clock,
+        &coordinator_service(),
+        &FixedCgroup(Some("")),
+        home,
+    )
+    .unwrap()
+    .install(definition);
     (result, runner.ran())
 }
 

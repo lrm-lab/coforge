@@ -96,6 +96,7 @@ export {
   windowsTaskUserId,
 } from "#src/daemon-host/index";
 export {
+  DAEMON_SERVICE_MANAGERS,
   DaemonCommandRejectedError,
   LocalDaemonLauncher,
   resolveDaemonExecutablePath,
@@ -130,6 +131,7 @@ export type { ProcessLock } from "#src/platform/process-lock";
 export type {
   DaemonLauncher,
   DaemonServiceDefinition,
+  DaemonServiceManager,
   DaemonStarted,
   DaemonCommandRunner,
   DaemonWorkspaceConfig,

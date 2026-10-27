@@ -5,7 +5,29 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use super::{CommandLine, CommandOutput, CommandRunner, RunError};
+use super::{CommandLine, CommandOutput, CommandRunner, ProcessCgroup, RunError};
+use crate::contract::{LIFECYCLE_PROTOCOL, LifecycleServiceDefinition};
+
+/// The service definition a Computer of version 0.2.0 reports for `manager`, with `contents`.
+pub(crate) fn definition(manager: &str, contents: &str) -> LifecycleServiceDefinition {
+    LifecycleServiceDefinition {
+        lifecycle_protocol: LIFECYCLE_PROTOCOL,
+        version: "0.2.0".to_owned(),
+        manager: manager.to_owned(),
+        contents: contents.to_owned(),
+    }
+}
+
+/// A cgroup listing that the test chooses; `None` is a file that cannot be read.
+pub(crate) struct FixedCgroup(pub(crate) Option<&'static str>);
+
+impl ProcessCgroup for FixedCgroup {
+    fn read(&self) -> std::io::Result<String> {
+        self.0
+            .map(str::to_owned)
+            .ok_or_else(|| std::io::Error::other("no /proc"))
+    }
+}
 
 /// One expected command and what it answers.
 pub(crate) struct Step {

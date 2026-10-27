@@ -1,3 +1,4 @@
+import { DAEMON_SERVICE_MANAGERS } from "@lrm/coforge-daemon";
 import { UPGRADE_ERROR_CODE_PATTERN } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
 
@@ -81,7 +82,7 @@ export const LifecycleServiceDefinitionSchema = z
   .looseObject({
     lifecycle_protocol: lifecycleProtocol,
     version: z.string(),
-    manager: z.enum(["launchd", "systemd-user", "windows-task"]),
+    manager: z.enum(DAEMON_SERVICE_MANAGERS),
     contents: z.string(),
   })
   .meta({ title: "__lifecycle service-definition" });

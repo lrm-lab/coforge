@@ -1,11 +1,15 @@
 #[cfg(unix)]
 use std::fs;
+use std::path::Path;
 #[cfg(unix)]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use super::*;
 use crate::service::SystemRunner;
 use crate::test_support::Scratch;
+use crate::upgrade::fakes::{
+    FakeLifecycle, protocol, protocol_with_service_definition, service_definition,
+};
 
 #[cfg(unix)]
 fn golden(name: &str) -> String {
@@ -97,21 +101,25 @@ fn the_service_definition_of_a_computer_is_read() {
 }
 
 #[test]
-fn only_a_protocol_listing_the_command_supports_the_service_definition() {
-    let protocol = |commands: Option<&[&str]>| LifecycleProtocol {
-        lifecycle_protocol: LIFECYCLE_PROTOCOL,
-        version: "0.2.0".to_owned(),
-        commands: commands.map(|names| names.iter().map(|name| (*name).to_owned()).collect()),
+fn only_a_protocol_listing_the_command_gets_its_service_definition_asked() {
+    let computer = Path::new("/install/current/coforge-computer");
+    let reported = |protocol: Option<LifecycleProtocol>| {
+        let lifecycle = FakeLifecycle::default();
+        lifecycle.answers_protocol(computer, vec![protocol]);
+        lifecycle.answers_service_definition(computer, vec![Some(service_definition("0.2.0"))]);
+        reported_service_definition(&lifecycle, computer)
     };
-    assert!(supports_service_definition(&protocol(Some(&[
-        "protocol",
-        "status",
-        "service-definition"
-    ]))));
-    assert!(!supports_service_definition(&protocol(None)));
-    assert!(!supports_service_definition(&protocol(Some(&[
-        "protocol", "status"
-    ]))));
+    assert_eq!(
+        reported(Some(protocol_with_service_definition("0.2.0"))).unwrap(),
+        Some(service_definition("0.2.0"))
+    );
+    assert_eq!(reported(Some(protocol("0.2.0"))).unwrap(), None);
+    let without = LifecycleProtocol {
+        commands: Some(vec!["protocol".to_owned(), "status".to_owned()]),
+        ..protocol("0.2.0")
+    };
+    assert_eq!(reported(Some(without)).unwrap(), None);
+    assert!(reported(None).is_err());
 }
 
 #[cfg(unix)]

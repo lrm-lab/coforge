@@ -8,7 +8,9 @@ import {
   workspaceHealthJournalPath,
   workspaceStateDirectory,
 } from "@lrm/coforge-daemon";
+import { runLifecycleCommand } from "#src/release/lifecycle-command";
 import {
+  LIFECYCLE_COMMANDS,
   LIFECYCLE_ERROR_CODE,
   LIFECYCLE_EXIT_CODE,
   LifecycleErrorSchema,
@@ -17,6 +19,7 @@ import {
   LifecycleStatusSchema,
 } from "#src/release/installer-contract";
 import { SUPERVISOR_PROBLEM_CODE } from "#src/release/supervisor-status";
+import { SERVICE_MANAGER_BY_PLATFORM } from "./service-manager";
 import { subprocessTest } from "./subprocess-test";
 
 /*
@@ -275,8 +278,9 @@ subprocessTest(
     expect(result.exitCode).toBe(0);
     const definition = LifecycleServiceDefinitionSchema.parse(result.json());
     expect(definition).toMatchObject({ lifecycle_protocol: 1, version });
-    const managers = { darwin: "launchd", linux: "systemd-user", win32: "windows-task" } as const;
-    expect(definition.manager).toBe(managers[process.platform as keyof typeof managers]);
+    expect(definition.manager).toBe(
+      SERVICE_MANAGER_BY_PLATFORM[process.platform as keyof typeof SERVICE_MANAGER_BY_PLATFORM],
+    );
     // The service starts the active executable, not the binary that rendered the text.
     expect(definition.contents).toContain(join(home, ".coforge", "computer", "install", "active"));
     expect(definition.contents).not.toContain(executable);
@@ -304,4 +308,23 @@ subprocessTest("help is not offered: --help is a usage error like any unknown op
   expect(LifecycleErrorSchema.parse(result.json())).toMatchObject({
     code: LIFECYCLE_ERROR_CODE.USAGE,
   });
+});
+
+test("every command protocol advertises is answered, and an unlisted one is a usage error", async () => {
+  const run = async (name: string) => {
+    const lines: string[] = [];
+    const exitCode = await runLifecycleCommand([name], {
+      reader: {
+        status: async () => ({ supervisor: { running: false }, bindings: [], problems: [] }),
+      },
+      serviceDefinition: () => ({ manager: "launchd", contents: "<plist/>" }),
+      write: (line) => lines.push(line),
+    });
+    return { exitCode, lines };
+  };
+  const advertised = JSON.parse((await run("protocol")).lines[0]!).commands as string[];
+
+  expect(advertised).toEqual([...LIFECYCLE_COMMANDS]);
+  for (const name of LIFECYCLE_COMMANDS) expect((await run(name)).exitCode).toBe(0);
+  expect((await run("explode")).exitCode).toBe(LIFECYCLE_EXIT_CODE.USAGE);
 });

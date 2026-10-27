@@ -15,7 +15,7 @@ use std::time::Duration;
 use crate::active;
 use crate::clock::{Clock, poll_until};
 use crate::contract::{ACTIVE_STATE_SCHEMA_VERSION, ActiveState, DeadProcessIdentity};
-use crate::lifecycle::{ComputerLifecycle, supports_service_definition};
+use crate::lifecycle::{ComputerLifecycle, reported_service_definition};
 use crate::prepare::ReleaseSource;
 use crate::processes::{
     Escalation, ProcessTable, ProductExecutable, VerifiedCaller, collect, dead_process_identity,
@@ -136,18 +136,13 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
     /// vanish while its job stays loaded). A Computer that predates `service-definition` is left
     /// to start from what it installed itself.
     fn install_service_definition(&mut self, version: &str) -> Result<(), String> {
-        let lifecycle = self.ports.lifecycle;
         let executable = self.ports.store.running_computer_path(version);
-        let protocol = lifecycle
-            .protocol(&executable)
-            .map_err(|error| error.to_string())?;
-        if !supports_service_definition(&protocol) {
+        let Some(definition) = reported_service_definition(self.ports.lifecycle, &executable)
+            .map_err(|error| error.to_string())?
+        else {
             return Ok(());
-        }
+        };
         self.say("Installing the Computer supervisor service definition");
-        let definition = lifecycle
-            .service_definition(&executable)
-            .map_err(|error| error.to_string())?;
         self.ports
             .service
             .install(&definition)

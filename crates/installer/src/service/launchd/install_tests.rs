@@ -4,17 +4,8 @@ use std::path::PathBuf;
 use super::*;
 use crate::clock::VirtualClock;
 use crate::service::coordinator_service;
-use crate::service::fakes::ScriptedRunner;
+use crate::service::fakes::{ScriptedRunner, definition};
 use crate::test_support::Scratch;
-
-fn definition(manager: &str, contents: &str) -> LifecycleServiceDefinition {
-    LifecycleServiceDefinition {
-        lifecycle_protocol: 1,
-        version: "0.2.0".to_owned(),
-        manager: manager.to_owned(),
-        contents: contents.to_owned(),
-    }
-}
 
 fn plist_in(home: &Scratch) -> PathBuf {
     home.path()

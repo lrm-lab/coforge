@@ -7,7 +7,7 @@ use super::{
 };
 use crate::active::read_active;
 use crate::contract::{ActiveState, RuntimeState};
-use crate::lifecycle::supports_service_definition;
+use crate::lifecycle::reported_service_definition;
 use crate::prepare::prepare_version;
 use crate::service::{ServiceError, ServiceState};
 use crate::switch::refusal_inside_service;
@@ -131,18 +131,11 @@ impl Run<'_, '_> {
     /// reports one must be able to say it now, before anything stops. A Computer that predates
     /// the command has none to read.
     fn require_readable_service_definition(&self, version: &str) -> Result<(), Refusal> {
-        let executable = self.ports.store.computer_path(version);
-        let protocol = self
-            .ports
-            .lifecycle
-            .protocol(&executable)
-            .map_err(|error| refuse(error.to_string()))?;
-        if supports_service_definition(&protocol) {
-            self.ports
-                .lifecycle
-                .service_definition(&executable)
-                .map_err(|error| refuse(error.to_string()))?;
-        }
-        Ok(())
+        reported_service_definition(
+            self.ports.lifecycle,
+            &self.ports.store.computer_path(version),
+        )
+        .map(|_| ())
+        .map_err(|error| refuse(error.to_string()))
     }
 }

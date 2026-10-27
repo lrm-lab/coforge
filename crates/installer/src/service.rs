@@ -106,8 +106,8 @@ pub fn coordinator_service() -> CoordinatorService {
 }
 
 /// The backend for `platform`. `home` is the user's home directory (the launchd plist and the
-/// systemd unit live under it) and `uid` the user's id ([`current_uid`]), which only macOS uses. Windows finds its tools
-/// under `%SystemRoot%`, never through `PATH`.
+/// systemd unit live under it) and `uid` the user's id ([`current_uid`]), which only macOS uses.
+/// Windows finds its tools under `%SystemRoot%`, never through `PATH`.
 pub fn for_platform<'a>(
     platform: Platform,
     home: &Path,

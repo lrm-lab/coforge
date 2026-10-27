@@ -132,8 +132,9 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/processes/fakes.rs`: a process table that plays out exits, kills, zombies, and pid reuse
   on the virtual clock.
 - `src/lifecycle.rs`: the `ComputerLifecycle` port (protocol, status, and service-definition
-  answers of a Computer executable; `supports_service_definition` reads `protocol`'s `commands`) and `Lifecycle`, which runs `coforge-computer __lifecycle` bounded and reads its
-  versioned JSON. Tests in `src/lifecycle/tests.rs`.
+  answers of a Computer executable), `reported_service_definition` (asks for the definition only
+  when `protocol`'s `commands` lists it), and `Lifecycle`, which runs `coforge-computer
+  __lifecycle` bounded and reads its versioned JSON. Tests in `src/lifecycle/tests.rs`.
 - `src/switch.rs`: the switch of the active version, shared by upgrade and recovery: `Ports` (every
   port a transaction touches), `Target`, `Plan`, and `ActiveSwitch` (stop the supervisor and its
   processes, activate, register the activated executable's service definition, restart, probe). It

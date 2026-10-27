@@ -7,7 +7,7 @@ import {
   type DaemonServiceDefinition,
 } from "@lrm/coforge-daemon";
 
-import { resolveDaemonConnectionEndpoint } from "#src/cloud-rpc-transport";
+import { e2eOverride, resolveDaemonConnectionEndpoint } from "#src/cloud-rpc-transport";
 import {
   resolveComputerStateDirectory,
   resolveDaemonSocketPath,
@@ -36,12 +36,11 @@ export function daemonExecutablePathFor(
   installDirectory: string,
   environment: PathEnvironment = process.env,
 ): string {
-  // An E2E run points the service at a stand-in; only an environment that allows E2E device auth
-  // may (`resolveDaemonConnectionEndpoint` applies the same gate to the connection endpoint).
-  return environment.COFORGE_E2E_ALLOW_DEVICE_AUTH === "1" &&
-    environment.COFORGE_E2E_DAEMON_EXECUTABLE
-    ? environment.COFORGE_E2E_DAEMON_EXECUTABLE
-    : resolveDaemonExecutablePath({ installRoot: installDirectory, platform });
+  // An E2E run points the service at a stand-in (`e2eOverride` applies the gate).
+  return (
+    e2eOverride(environment, "COFORGE_E2E_DAEMON_EXECUTABLE") ||
+    resolveDaemonExecutablePath({ installRoot: installDirectory, platform })
+  );
 }
 
 /** The platform host (launchd, systemd user, or Windows task) of the Coordinator service, built
@@ -70,7 +69,7 @@ export function createDaemonLauncher(
  * directories, executable, socket and connection endpoint, rendered by the host itself. Reads
  * only; registers nothing. */
 export function resolveServiceDefinition(
-  machine: DaemonHostMachine & { platform: SupportedPlatform; serverUrl?: string },
+  machine: DaemonHostMachine & { platform: SupportedPlatform; serverUrl: string },
 ): DaemonServiceDefinition {
   const { platform } = machine;
   const stateDirectory = resolveComputerStateDirectory({
@@ -86,12 +85,16 @@ export function resolveServiceDefinition(
     platform,
     installDirectory,
     stateDirectory,
-    machine.serverUrl ?? COFORGE_SERVER_URL,
+    machine.serverUrl,
     machine,
   ).serviceDefinition();
 }
 
 /** The service definition for the machine this process runs on. */
 export function currentServiceDefinition(): DaemonServiceDefinition {
-  return resolveServiceDefinition({ ...currentMachine(), platform: currentComputerPlatform().os });
+  return resolveServiceDefinition({
+    ...currentMachine(),
+    platform: currentComputerPlatform().os,
+    serverUrl: COFORGE_SERVER_URL,
+  });
 }

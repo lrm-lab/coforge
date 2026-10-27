@@ -1,12 +1,13 @@
 //! The installer's one way of asking a Computer about itself: `coforge-computer __lifecycle
-//! protocol|status|service-definition` (packages/computer/src/release/lifecycle-command.ts). Every call prints one
-//! versioned JSON object; this module runs it bounded and reads that object, never human text.
+//! protocol|status|service-definition` (packages/computer/src/release/lifecycle-command.ts).
+//! Every call prints one versioned JSON object; this module runs it bounded and reads that
+//! object, never human text.
 //!
 //! `protocol` answers without contacting anything, so it also probes a candidate executable that
 //! has never run. `status` asks the running supervisor, or reads its persisted state when none
 //! runs. `service-definition` prints the service definition the Computer registers with the
-//! service manager; only a Computer whose `protocol` lists that command answers it
-//! ([`supports_service_definition`]).
+//! service manager; only a Computer whose `protocol` lists that command answers it, which
+//! [`reported_service_definition`] checks before it asks.
 
 use std::fmt;
 use std::path::Path;
@@ -82,16 +83,30 @@ pub trait ComputerLifecycle {
     fn status(&self, executable: &Path) -> Result<LifecycleStatus, LifecycleFailure>;
 
     /// `__lifecycle service-definition`: the service definition the executable registers with the
-    /// service manager. Ask only an executable that [`supports_service_definition`].
+    /// service manager. Ask only an executable whose `protocol` lists the command: use
+    /// [`reported_service_definition`].
     fn service_definition(
         &self,
         executable: &Path,
     ) -> Result<LifecycleServiceDefinition, LifecycleFailure>;
 }
 
+/// The service definition the Computer at `executable` reports, or `None` when it predates
+/// `__lifecycle service-definition` (its `protocol` lists no such command).
+pub fn reported_service_definition(
+    lifecycle: &dyn ComputerLifecycle,
+    executable: &Path,
+) -> Result<Option<LifecycleServiceDefinition>, LifecycleFailure> {
+    if supports_service_definition(&lifecycle.protocol(executable)?) {
+        lifecycle.service_definition(executable).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
 /// Whether a Computer answers `__lifecycle service-definition`: its `protocol` lists the command.
 /// A Computer that predates it reports no `commands`.
-pub fn supports_service_definition(protocol: &LifecycleProtocol) -> bool {
+fn supports_service_definition(protocol: &LifecycleProtocol) -> bool {
     protocol.commands.as_deref().is_some_and(|commands| {
         commands
             .iter()

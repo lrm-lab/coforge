@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::clock::VirtualClock;
-use crate::service::fakes::{ScriptedRunner, Step, cannot_run, exits, ok};
+use crate::service::fakes::{FixedCgroup, ScriptedRunner, Step, cannot_run, exits, ok};
 use crate::service::{
     RunError, ServiceState, StartOutcome, SupervisorService, coordinator_service,
 };
@@ -47,17 +47,6 @@ fn home() -> &'static Path {
 struct Scenario {
     runner: ScriptedRunner,
     clock: VirtualClock,
-}
-
-/// A cgroup listing that the test chooses; `None` is a file that cannot be read.
-struct FixedCgroup(Option<&'static str>);
-
-impl ProcessCgroup for FixedCgroup {
-    fn read(&self) -> std::io::Result<String> {
-        self.0
-            .map(str::to_owned)
-            .ok_or_else(|| std::io::Error::other("no /proc"))
-    }
 }
 
 const UNIT_CGROUP_V2: &str =
