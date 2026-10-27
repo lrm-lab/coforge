@@ -49,7 +49,7 @@ function InputOTPSlot({
       data-active={isActive}
       aria-invalid={props["aria-invalid"]}
       className={cn(
-        "relative flex size-9 items-center justify-center rounded-lg bg-primary text-sm font-medium text-tertiary shadow-xs ring-1 ring-secondary transition-[box-shadow,background-color] ring-inset aria-invalid:text-error-primary aria-invalid:ring-error data-[active=true]:ring-2 data-[active=true]:ring-brand data-[active=true]:outline-2 data-[active=true]:outline-offset-2 data-[active=true]:outline-brand",
+        "relative flex size-9 items-center justify-center rounded-lg bg-primary text-sm font-medium text-tertiary shadow-xs ring-1 ring-secondary transition-[box-shadow,background-color] ring-inset aria-invalid:text-error-primary aria-invalid:ring-error data-[active=true]:ring-2 data-[active=true]:ring-border-input-focus data-[active=true]:outline-2 data-[active=true]:outline-offset-2 data-[active=true]:outline-border-input-focus",
         char && "text-primary ring-2 ring-brand",
         className,
       )}
