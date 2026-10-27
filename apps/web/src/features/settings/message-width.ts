@@ -7,10 +7,14 @@ const FULL_WIDTH_CLASS = "message-full-width";
 
 /** The main message stream's side room: at most 6.5rem on each side, which with the
  *  rows' own gutter puts the avatars where the design mockup has them, and 10% of the pane when
- *  the pane is narrower than the mockup, so the room never grows with a wide
- *  screen. The history and the composer below it share this one class list so they always line
- *  up; full-width messages drop the room. Below `md` the rows' own gutter is enough. */
-export const MESSAGE_COLUMN_CLASS = "md:px-[min(6.5rem,10%)] [.message-full-width_&]:px-0";
+ *  the pane is narrower than the mockup, so the room never grows with a wide screen. A narrow
+ *  pane (beside an open thread, say) gives the room up, as Raft keeps only its gutter: below
+ *  about 44rem (698px) it is 37.5% of the pane less 12rem instead, none up to 32rem; an ordinary
+ *  desktop window's pane (760px at 1280px) is wider and keeps the 10%. The history,
+ *  the notification banner and the composer below it share this one class list so they always
+ *  line up; full-width messages drop the room. Below `md` the rows' own gutter is enough. */
+export const MESSAGE_COLUMN_CLASS =
+  "md:px-[clamp(0px,37.5%_-_12rem,min(6.5rem,10%))] [.message-full-width_&]:px-0";
 
 /** The boot half of the same rule: `__root.tsx` runs this before paint so SSR markup never depends
  * on the class. Built by `bootFragment` from the key, the stored value and the class above, so the
