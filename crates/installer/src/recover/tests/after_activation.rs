@@ -46,7 +46,8 @@ fn an_upgrade_killed_after_activation_restores_a_new_version_that_is_broken() {
     table.spawn(200, 2, &fixture.canonical_computer(NEW));
     let service = FakeService::new(ServiceState::Stopped);
     let lifecycle = FakeLifecycle::default();
-    fixture.answers_protocol(&lifecycle, OLD);
+    // Both switches probe the executable they start: on Windows each version runs from its own.
+    fixture.answers_protocols(&lifecycle);
     // The new supervisor never comes up; the previous one does.
     lifecycle.answers_status(&fixture.computer(NEW), vec![Some(stopped(NEW))]);
     lifecycle.answers_status(
