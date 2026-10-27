@@ -17,12 +17,17 @@ class FixtureChild implements OwnedChildProcess {
   readonly exitCode = 0;
   readonly stdin = { write: () => true, end: () => {}, flush: async () => {} };
   readonly exited: Promise<number>;
+  #resolveExit?: (code: number) => void;
   readonly stdout: AsyncIterable<Uint8Array>;
   readonly stderr: AsyncIterable<Uint8Array> = (async function* () {})();
   killed = false;
 
   constructor(output: string, exitCode = 0, pending = false) {
-    this.exited = pending ? new Promise(() => {}) : Promise.resolve(exitCode);
+    this.exited = pending
+      ? new Promise((resolve) => {
+          this.#resolveExit = resolve;
+        })
+      : Promise.resolve(exitCode);
     this.stdout = (async function* () {
       if (output) yield new TextEncoder().encode(output);
     })();
@@ -30,6 +35,7 @@ class FixtureChild implements OwnedChildProcess {
 
   kill() {
     this.killed = true;
+    this.#resolveExit?.(137);
   }
 }
 
@@ -52,29 +58,40 @@ class FixtureTree implements OwnedProcessTree {
 }
 
 function spawner(
-  tree: FixtureTree,
+  trees: FixtureTree | readonly FixtureTree[],
   calls: { command?: readonly string[]; cwd?: string; env?: Record<string, string> },
 ): ProcessTreeSpawner {
+  const queue = Array.isArray(trees) ? [...trees] : [trees];
   return {
     spawn(command, cwd, environment) {
       calls.command = command;
       calls.cwd = cwd;
       calls.env = { ...environment };
+      const tree = queue.shift();
+      if (!tree) throw new Error("unexpected extra Kiro process");
       return tree;
     },
   };
 }
 
 test("runs the official usage slash command in the requested workspace", async () => {
+  const whoami = new FixtureTree('{"account":{"accountType":"IamIdentityCenter"}}', 1);
   const tree = new FixtureTree(USAGE);
   const calls: { command?: readonly string[]; cwd?: string; env?: Record<string, string> } = {};
+  const commands: string[][] = [];
+  const spawn = spawner([whoami, tree], calls);
   const removed: string[] = [];
   await expect(
     readKiroUsageResponse({
       workingDirectory: "/tmp/kiro-project",
       timeoutMs: 1000,
       environment: { PATH: "/fixture" },
-      spawn: spawner(tree, calls),
+      spawn: {
+        spawn(command, cwd, environment, options) {
+          commands.push([...command]);
+          return spawn.spawn(command, cwd, environment, options);
+        },
+      },
       resolveExecutable: () => "/opt/homebrew/bin/kiro-cli",
       tempDirectory: {
         create: async () => "/tmp/empty-kiro-usage",
@@ -84,6 +101,10 @@ test("runs the official usage slash command in the requested workspace", async (
       },
     }),
   ).resolves.toBe(USAGE);
+  expect(commands).toEqual([
+    [commands[0]![0]!, "whoami", "--format", "json"],
+    [commands[1]![0]!, "chat", "--no-interactive", "/usage"],
+  ]);
   expect(calls.command).toEqual([
     "/opt/homebrew/bin/kiro-cli",
     "chat",
@@ -99,12 +120,13 @@ test("runs the official usage slash command in the requested workspace", async (
 });
 
 test("cleans up the owned process tree when the usage command times out", async () => {
+  const whoami = new FixtureTree('{"account":{"accountType":"IamIdentityCenter"}}');
   const tree = new FixtureTree("", 0, true);
   await expect(
     readKiroUsageResponse({
       workingDirectory: "/tmp/kiro-project",
-      timeoutMs: 1,
-      spawn: spawner(tree, {}),
+      timeoutMs: 20,
+      spawn: spawner([whoami, tree], {}),
     }),
   ).rejects.toBeInstanceOf(UsageUnavailableError);
   expect(tree.terminated).toBe(true);
@@ -112,12 +134,13 @@ test("cleans up the owned process tree when the usage command times out", async 
 });
 
 test("rejects a non-zero native command without exposing its output", async () => {
+  const whoami = new FixtureTree('{"account":{"accountType":"IamIdentityCenter"}}');
   const tree = new FixtureTree("fixture-secret", 1);
   await expect(
     readKiroUsageResponse({
       workingDirectory: "/tmp/kiro-project",
       timeoutMs: 1000,
-      spawn: spawner(tree, {}),
+      spawn: spawner([whoami, tree], {}),
     }),
   ).rejects.toBeInstanceOf(UsageUnavailableError);
 });
@@ -134,6 +157,44 @@ test("classifies an unavailable executable as unavailable usage", async () => {
       },
     }),
   ).rejects.toBeInstanceOf(UsageUnavailableError);
+});
+
+test("does not start chat usage when whoami reports a null account", async () => {
+  const whoami = new FixtureTree('{"account":null}', 1);
+  const calls: string[][] = [];
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1000,
+      spawn: {
+        spawn(command) {
+          calls.push([...command]);
+          return spawner(whoami, {}).spawn(command, "/tmp", {});
+        },
+      },
+    }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+  expect(calls[0]?.slice(1)).toEqual(["whoami", "--format", "json"]);
+});
+
+test("stops usage immediately when the native output starts device login", async () => {
+  const whoami = new FixtureTree('{"account":{"accountType":"IamIdentityCenter"}}');
+  const tree = new FixtureTree(
+    "Confirm the following code in the browser\nCode: XXXX-XXXX\nOpen this URL: https://view.awsapps.com/start/#/device?user_code=XXXX-XXXX",
+    0,
+    true,
+  );
+  const startedAt = performance.now();
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1000,
+      spawn: spawner([whoami, tree], {}),
+    }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+  expect(performance.now() - startedAt).toBeLessThan(100);
+  expect(tree.terminated).toBe(true);
+  expect(tree.child.killed).toBe(true);
 });
 
 test("keeps Kiro usage unavailable instead of turning it into a sign-in state", () => {

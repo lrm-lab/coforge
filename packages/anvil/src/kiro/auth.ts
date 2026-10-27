@@ -7,10 +7,10 @@ import {
   type RuntimeAuthLogoutResult,
   type RuntimeAuthStatus,
 } from "#src/contract";
-import { asRecord } from "#src/json-record";
 import { runtimeAuthAccount } from "#src/runtime-auth-status";
 import { withDeadline } from "#src/deadline";
 import { KiroAuthFailure, KiroEnterpriseLoginTranscript } from "./auth-transcript";
+import { parseKiroWhoami } from "./whoami";
 
 export const KIRO_LOGIN_TIMEOUT_MS = 16 * 60 * 1000;
 export const KIRO_AUTH_PROBE_TIMEOUT_MS = 20_000;
@@ -24,20 +24,6 @@ export interface KiroAuthHost {
   readonly enterpriseLoginSupported: boolean;
   spawn(args: readonly string[], cwd: string, terminal: boolean): KiroAuthProcess;
   maskAccountLabel(value: string): string | undefined;
-}
-
-/** The native CLI prints a JSON object followed by a human-readable Profile section. */
-function identity(text: string): Record<string, unknown> | undefined {
-  const s = text.trimStart();
-  if (!s.startsWith("{")) return undefined;
-  for (let end = s.indexOf("}"); end >= 0; end = s.indexOf("}", end + 1)) {
-    try {
-      return asRecord(JSON.parse(s.slice(0, end + 1)));
-    } catch {
-      /* A nested object's closing brace is not the end of the identity. */
-    }
-  }
-  return undefined;
 }
 
 /** Native Kiro login policy; all processes, environments and account masking come from the host. */
@@ -57,7 +43,7 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();
     try {
-      const [text, code] = await withDeadline(
+      const [text] = await withDeadline(
         Promise.race([
           Promise.all([new Response(child.output).text(), child.exited]),
           stopped.promise,
@@ -65,24 +51,11 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
         timeoutMs,
         () => new KiroAuthFailure("timed_out"),
       );
-      const data = identity(text);
-      if (data && "account" in data) {
-        if (data.account === null)
-          return { status: { provider: this.provider, state: "logged_out" } };
-        return {
-          data,
-          status: {
-            provider: this.provider,
-            state: "logged_in",
-            ...runtimeAuthAccount({
-              maskedLabel:
-                typeof data.email === "string" ? this.host.maskAccountLabel(data.email) : undefined,
-            }),
-          },
-        };
-      }
-      if (code !== 0) return { status: { provider: this.provider, state: "unknown" } };
-      if (!data || typeof data.accountType !== "string")
+      const parsed = parseKiroWhoami(text);
+      const data = parsed.data;
+      if (parsed.state === "logged_out")
+        return { status: { provider: this.provider, state: "logged_out" } };
+      if (parsed.state !== "logged_in" || !data)
         return { status: { provider: this.provider, state: "unknown" } };
       return {
         data,

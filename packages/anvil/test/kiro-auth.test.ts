@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { KiroRuntimeAuthAdapter, type KiroAuthHost, type KiroAuthProcess } from "#src/kiro/auth";
+import { parseKiroWhoami } from "#src/kiro/whoami";
 import type { RuntimeAuthLoginEvent } from "#src/contract";
 const target = { startUrl: "https://example.awsapps.com/start", region: "us-east-1" };
 const identity =
@@ -110,7 +111,10 @@ test("Kiro IDC answers only its two prefilled prompts and verifies the resulting
   });
   expect(result).toMatchObject({
     status: "logged_in",
-    authStatus: { provider: "kiro", account: { maskedLabel: "a***@example.com" } },
+    authStatus: {
+      provider: "kiro",
+      account: { maskedLabel: "a***@example.com", methodLabel: "IAM Identity Center" },
+    },
   });
   expect(x.login.closed).toBe(true);
 });
@@ -231,6 +235,20 @@ test("Kiro logout accepts whoami's explicit null account response", async () => 
   });
 });
 
+test("the shared Kiro whoami parser ignores exit code and keeps account structure", () => {
+  expect(parseKiroWhoami('{"account":null}')).toEqual({
+    state: "logged_out",
+    data: { account: null },
+  });
+  expect(parseKiroWhoami('{"account":{"email":"a@example.com"}}')).toMatchObject({
+    state: "logged_in",
+  });
+  expect(parseKiroWhoami('{"accountType":"IamIdentityCenter"}')).toMatchObject({
+    state: "logged_in",
+  });
+  expect(parseKiroWhoami("Not logged in")).toEqual({ state: "unknown" });
+});
+
 for (const [exitCode, account, state] of [
   [0, null, "logged_out"],
   [1, null, "logged_out"],
@@ -254,6 +272,24 @@ for (const [exitCode, account, state] of [
       state,
     });
   });
+
+test("Kiro unknown whoami output stays unknown even with a zero exit code", async () => {
+  const probe = child();
+  const adapter = new KiroRuntimeAuthAdapter({
+    enterpriseLoginSupported: true,
+    maskAccountLabel: () => undefined,
+    spawn() {
+      probe.send('{"profile":"unrecognized"}\n');
+      probe.end(0);
+      return probe.process;
+    },
+  });
+
+  await expect(adapter.readStatus({ workingDirectory: "/test" })).resolves.toMatchObject({
+    provider: "kiro",
+    state: "unknown",
+  });
+});
 
 for (const missingExecutable of [true, false]) {
   test(`Kiro host failure classifies ${missingExecutable ? "missing executable" : "missing cwd"} correctly`, async () => {
