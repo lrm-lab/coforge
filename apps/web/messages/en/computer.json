@@ -195,6 +195,7 @@
   "computer_upgrade_failed_evidence": "The Computer came back without evidence of the new version",
   "computer_upgrade_failed_unknown": "The upgrade did not complete",
   "computer_new_version": "New version {version}",
+  "computer_new_version_tooltip": "New Version {version}",
   "computer_cloud_image_update_dialog_title": "Update {name} to {version}?",
   "computer_cloud_image_update_body": "The container image is replaced. The named disk volume is kept, so files and workspace bindings stay. Agents reconnect after a short restart.",
   "computer_cloud_image_update_lost_title": "These will not survive the update",

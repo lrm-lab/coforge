@@ -45,7 +45,7 @@
       }
     }
   ],
-  "channel_settings_members_more": "{count} more members",
+  "channel_settings_members_more": "{count} More Members",
   "channel_settings_add_members": "Add Members",
   "channel_settings_info": "Info",
   "channel_settings_info_description": "Name and description are shown across the Workspace.",

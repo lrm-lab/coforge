@@ -419,7 +419,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           <ButtonUtility
             size="xs"
             type="button"
-            tooltip="Apply link"
+            tooltip="Apply Link"
             icon={Check}
             onMouseDown={(event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault()}
             onClick={() => {

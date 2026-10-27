@@ -177,7 +177,7 @@ test("the empty search page offers recent searches and frequently used places", 
     // One entry can be removed, then the rest cleared; the frequently used places stay.
     await openHome();
     await waitFor(`document.querySelectorAll("[data-search-history]").length === 2`);
-    await browser("click", `[aria-label="Remove “e2e-home-b” from search history"]`);
+    await browser("click", `[aria-label="Remove “e2e-home-b” from Search History"]`);
     await waitFor(`document.querySelectorAll("[data-search-history]").length === 1`);
     await browser(
       "eval",

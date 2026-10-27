@@ -84,7 +84,7 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
       </p>
       {total > 0 && (
         <div className="mt-auto flex justify-end pt-1">
-          <Tooltip title={m.member_created_agents()} arrow>
+          <Tooltip title={m.member_created_agents_tooltip()} arrow>
             <TooltipTrigger className="flex cursor-default items-center -space-x-1.5 rounded-full outline-focus-ring focus-visible:outline-2">
               <span className="sr-only">{m.member_created_agents_count({ count: total })}</span>
               {items.map((agent) => (

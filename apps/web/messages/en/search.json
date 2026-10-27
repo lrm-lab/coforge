@@ -68,7 +68,7 @@
   "search_no_messages_match": "No messages match.",
   "search_history_heading": "Search history",
   "search_history_clear": "Clear",
-  "search_history_remove": "Remove “{query}” from search history",
+  "search_history_remove": "Remove “{query}” from Search History",
   "search_frequent_heading": "Frequently used",
   "search_frequent_empty": "Channels, Agents and direct messages you open from search appear here.",
   "search_frequent_failed": "Could not load your frequently used places.",

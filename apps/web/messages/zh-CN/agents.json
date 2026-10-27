@@ -35,6 +35,7 @@
   "member_created_by": "创建者",
   "member_created_on": "创建时间",
   "member_created_agents": "创建过的智能体",
+  "member_created_agents_tooltip": "创建过的智能体",
   "member_created_agents_count": "创建了 {count} 个智能体",
   "member_invite_humans": "邀请协作者",
   "member_online": "在线",

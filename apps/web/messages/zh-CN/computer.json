@@ -196,6 +196,7 @@
   "computer_upgrade_failed_evidence": "电脑重新上线，但没有新版本的证据",
   "computer_upgrade_failed_unknown": "升级未完成",
   "computer_new_version": "新版本 {version}",
+  "computer_new_version_tooltip": "新版本 {version}",
   "computer_cloud_image_update_dialog_title": "将 {name} 更新到 {version}？",
   "computer_cloud_image_update_body": "会替换容器镜像，并保留命名数据卷。磁盘上的文件和工作区绑定会留下。Agent 在短暂重启后重新上线。",
   "computer_cloud_image_update_lost_title": "升级时会丢掉",

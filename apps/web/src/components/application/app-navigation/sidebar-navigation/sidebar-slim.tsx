@@ -154,7 +154,7 @@ export const SidebarNavigationSlim = ({ activeUrl, items, footerItems = [], hide
                                 <p className="text-sm text-tertiary">olivia@untitledui.com</p>
                             </div>
                             <div className="absolute -top-1 right-0">
-                                <ButtonUtility size="xs" color="tertiary" tooltip="Log out" icon={DotsVertical} />
+                                <ButtonUtility size="xs" color="tertiary" tooltip="Log Out" icon={DotsVertical} />
                             </div>
                         </div>
                     </div>

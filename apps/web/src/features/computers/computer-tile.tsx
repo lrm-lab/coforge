@@ -84,7 +84,7 @@ export function ComputerTile({
         </ProgressBar>
       ) : (
         updateAvailableVersion && (
-          <Tooltip title={m.computer_new_version({ version: updateAvailableVersion })}>
+          <Tooltip title={m.computer_new_version_tooltip({ version: updateAvailableVersion })}>
             <TooltipTrigger className={cn("absolute rounded-full", dims.badgeOffset)}>
               <span
                 aria-hidden="true"

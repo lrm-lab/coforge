@@ -87,7 +87,7 @@
   "apps_field_agent_manifest_hint": "Optional. A public https JSON file that tells Agents how to use the app. Left empty, Agents look for /.well-known/coforge-agent-manifest.json on the homepage's origin.",
   "apps_redirect_uri_label": "Redirect URI {number}",
   "apps_add_redirect_uri": "Add Redirect URI",
-  "apps_remove_redirect_uri": "Remove redirect URI {number}",
+  "apps_remove_redirect_uri": "Remove Redirect URI {number}",
   "apps_field_scopes": "Scopes",
   "apps_scope_group_identity": "Identity",
   "apps_scope_fixed": "Always included",
