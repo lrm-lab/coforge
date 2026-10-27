@@ -36,6 +36,25 @@ test("parses the official non-interactive usage output and marks a full plan", a
   });
 });
 
+test("reads the same plan when the CLI adds notes under the credits line, as Linux 2.34.2 does", async () => {
+  // Raw `kiro-cli chat --no-interactive "/usage"` from kiro-cli 2.34.2 on Linux (task #216).
+  const linux = `Estimated Usage | resets on 2026-11-01 | KIRO POWER
+Credits (10000.00 of 10000 covered in plan), 100.0%
+Overages: Disabled
+Your plan is managed by your organization's administrator.`;
+  const mac = await readKiroUsage({ workingDirectory: "/tmp/fixture" }, async () => USAGE);
+  await expect(
+    readKiroUsage({ workingDirectory: "/tmp/fixture" }, async () => linux),
+  ).resolves.toEqual(mac);
+  await expect(
+    readKiroUsage(
+      { workingDirectory: "/tmp/fixture" },
+      async () =>
+        "Estimated Usage | resets on 2026-11-01 | KIRO POWER\nCredits (2500 of 10000 covered in plan), 25.0%",
+    ),
+  ).resolves.toMatchObject({ primary: { usedPercent: 25, status: "ok" } });
+});
+
 test("does not infer usage from a malformed or unsupported official response", async () => {
   for (const output of [
     undefined,

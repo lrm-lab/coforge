@@ -19,25 +19,25 @@ export async function readKiroUsage(
   return parseKiroUsageText(response);
 }
 
+/**
+ * The plan is the first two lines: the reset header, then the credits. The CLI may add notes under
+ * them, such as "Overages: Disabled" (2.34.2 on Linux) or the managed-plan sentence. This parser
+ * reads none of them; `overage` stays 0, and a plan used past its limit is refused below.
+ */
 export function parseKiroUsageText(output: string): UsageSnapshot {
-  const lines = Bun.stripANSI(output)
+  const [headerLine, creditsLine] = Bun.stripANSI(output)
     .split(/\r?\n/gu)
     .map((line) => line.trim())
     .filter(Boolean);
-  if (lines.length < 2 || lines.length > 3) throw new UsageUnavailableError();
+  if (!headerLine || !creditsLine) throw new UsageUnavailableError();
   const header = /^Estimated Usage \| resets on (\d{4}-\d{2}-\d{2}) \| ([^|\r\n]{1,80})$/u.exec(
-    lines[0]!,
+    headerLine,
   );
   const credits =
     /^Credits \(([\d,]+(?:\.\d+)?) of ([\d,]+(?:\.\d+)?) covered in plan\), (\d+(?:\.\d+)?)%$/u.exec(
-      lines[1]!,
+      creditsLine,
     );
-  if (
-    !header ||
-    !credits ||
-    (lines[2] && lines[2] !== "Your plan is managed by your organization's administrator.")
-  )
-    throw new UsageUnavailableError();
+  if (!header || !credits) throw new UsageUnavailableError();
   const resetsAt = resetDate(header[1]!);
   const used = number(credits[1]!);
   const limit = number(credits[2]!);
