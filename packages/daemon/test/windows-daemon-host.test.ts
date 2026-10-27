@@ -47,69 +47,65 @@ test("windowsDaemonTaskXml wraps a connection endpoint in cmd.exe", () => {
   expect(xml).toContain("__daemon --socket C:\\daemon.sock");
 });
 
-test("ensureStarted creates the daemon host via schtasks /XML then /Run", async () => {
+const startConfig = {
+  workspaceId: "w",
+  computerId: "computer",
+  workspaceRoot: "/w",
+  daemonApiKey: "secret",
+};
+
+test("ensureStarted hands an unregistered task to the registrar and never creates it itself", async () => {
   const commands: string[][] = [];
-  const written: { path: string; content: string }[] = [];
+  let registrations = 0;
   const task = new WindowsUserDaemonHost({
     executablePath: "C:\\Coforge\\coforge-computer.exe",
     socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
     stateDirectory: "C:\\Users\\alice\\.coforge\\daemon",
     userId: "DESKTOP\\alice",
     timeoutMilliseconds: 20,
-    writeTaskXml: async (path, content) => {
-      written.push({ path, content });
+    registrar: {
+      async registerAndStart() {
+        registrations += 1;
+      },
     },
     run: async (command) => {
       commands.push(command);
       return 1;
     },
   });
-  await expect(
-    task.ensureStarted({
-      workspaceId: "w",
-      computerId: "computer",
-      workspaceRoot: "/w",
-      daemonApiKey: "secret",
-    }),
-  ).rejects.toThrow("Run `coforge-computer foreground` under an external supervisor");
-  expect(written).toHaveLength(1);
-  expect(written[0]!.content).toContain("<LogonTrigger>");
-  expect(written[0]!.content).toContain("<RunLevel>LeastPrivilege</RunLevel>");
-  expect(commands[0]!.slice(0, 5)).toEqual([
-    "schtasks.exe",
-    "/Create",
-    "/TN",
-    "CoForge Daemon",
-    "/XML",
-  ]);
-  expect(commands[0]![5]).toBe(written[0]!.path);
-  expect(commands[0]!).toContain("/F");
-  expect(commands).toHaveLength(1);
+  await expect(task.ensureStarted(startConfig)).rejects.toThrow(
+    "did not accept the local handshake",
+  );
+  expect(registrations).toBe(1);
+  expect(commands).toEqual([["schtasks.exe", "/Query", "/TN", "CoForge Daemon"]]);
 });
 
-test("ensureStarted runs the task when XML Create succeeds", async () => {
+test("ensureStarted runs a registered task without registering it again", async () => {
   const commands: string[][] = [];
+  let registrations = 0;
   const task = new WindowsUserDaemonHost({
     executablePath: "C:\\Coforge\\coforge-computer.exe",
     socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
     userId: "DESKTOP\\alice",
     timeoutMilliseconds: 20,
-    writeTaskXml: async () => {},
+    registrar: {
+      async registerAndStart() {
+        registrations += 1;
+      },
+    },
     run: async (command) => {
       commands.push(command);
       return command[1] === "/Run" ? 1 : 0;
     },
   });
-  await expect(
-    task.ensureStarted({
-      workspaceId: "w",
-      computerId: "computer",
-      workspaceRoot: "/w",
-      daemonApiKey: "secret",
-    }),
-  ).rejects.toThrow("Run `coforge-computer foreground` under an external supervisor");
-  expect(commands[0]![1]).toBe("/Create");
-  expect(commands[1]).toEqual(["schtasks.exe", "/Run", "/TN", "CoForge Daemon"]);
+  await expect(task.ensureStarted(startConfig)).rejects.toThrow(
+    "Run `coforge-computer foreground` under an external supervisor",
+  );
+  expect(registrations).toBe(0);
+  expect(commands).toEqual([
+    ["schtasks.exe", "/Query", "/TN", "CoForge Daemon"],
+    ["schtasks.exe", "/Run", "/TN", "CoForge Daemon"],
+  ]);
 });
 
 test("Windows one-shot upgrade XML uses a locale-independent start boundary", () => {

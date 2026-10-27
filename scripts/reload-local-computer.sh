@@ -163,6 +163,10 @@ if [ ! -x "$active_bin" ]; then
 fi
 
 if [ "$run_setup" -eq 1 ]; then
+  # The Computer no longer registers its service; the installer built above does. Without this,
+  # setup would fetch the installer from the fixture's baked feed instead of using this checkout's.
+  echo "==> Registering and starting the Computer supervisor service"
+  "$installer_bin" start
   echo "==> Running Computer setup for workspace '$setup_slug'"
   "$active_bin" setup --workspace "$setup_slug" --json
 fi

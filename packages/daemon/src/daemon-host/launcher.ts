@@ -30,18 +30,28 @@ import type { WorkspaceCloudConnectionReport } from "#src/supervisor/workspace-s
 export type DaemonStarted = { lifecycleUnderWay?: boolean };
 
 /** The per-user service definition a platform manager registers for the Coordinator, exactly as the
- * host writes it: a launchd plist, a systemd user unit, or Task Scheduler XML (UTF-16 on disk). */
+ * host renders it: a launchd plist, a systemd user unit, or Task Scheduler XML (UTF-16 on disk). */
 export type DaemonServiceDefinition = {
   manager: DaemonServiceManager;
   contents: string;
-  /** Where the host writes the file, for a manager that keeps one on disk (launchd, systemd
-   * user); absent for Task Scheduler, which registers the XML without a file of its own. */
+  /** Where the manager keeps the file on disk (launchd, systemd user); absent for Task
+   * Scheduler, which registers the XML without a file of its own. */
   path?: string;
 };
 
 /** The platform service managers a Coordinator service definition is written for. */
 export const DAEMON_SERVICE_MANAGERS = ["launchd", "systemd-user", "windows-task"] as const;
 export type DaemonServiceManager = (typeof DAEMON_SERVICE_MANAGERS)[number];
+
+/**
+ * Registers the Coordinator service with the platform manager and starts it. The hosts ask it
+ * when the manager does not know the service; they never write a service definition or register
+ * one themselves. The Computer implements it by running the installer's `start`, which resolves
+ * once the manager reports the service running and rejects with the reason it could not.
+ */
+export interface CoordinatorServiceRegistrar {
+  registerAndStart(): Promise<void>;
+}
 
 export interface DaemonLauncher {
   preflight?(): Promise<void>;

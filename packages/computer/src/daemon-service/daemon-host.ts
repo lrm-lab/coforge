@@ -4,6 +4,7 @@ import {
   createDaemonHost,
   resolveComputerInstallDirectory,
   resolveDaemonExecutablePath,
+  type CoordinatorServiceRegistrar,
   type DaemonServiceDefinition,
 } from "@lrm/coforge-daemon";
 
@@ -14,6 +15,7 @@ import {
   type PathEnvironment,
 } from "#src/paths";
 import { currentComputerPlatform, type SupportedPlatform } from "#src/platform";
+import { createCoordinatorServiceRegistrar } from "#src/release/coordinator-service-registrar";
 import { COFORGE_SERVER_URL } from "#src/release-channel";
 
 /** The user and process facts a daemon host reads from the machine it runs on. */
@@ -45,13 +47,18 @@ export function daemonExecutablePathFor(
 }
 
 /** The platform host (launchd, systemd user, or Windows task) of the Coordinator service, built
- * from the install and state directories and the server this Computer talks to. */
+ * from the install and state directories and the server this Computer talks to. A service the
+ * platform manager does not know is registered and started by `registrar`, which by default runs
+ * the installer's `start` against `installDirectory`. */
 export function createDaemonLauncher(
   platform: SupportedPlatform,
   installDirectory: string,
   stateDirectory: string,
   serverUrl: string,
   machine: DaemonHostMachine = currentMachine(),
+  registrar: CoordinatorServiceRegistrar = createCoordinatorServiceRegistrar({
+    installRoot: installDirectory,
+  }),
 ) {
   return createDaemonHost({
     platform,
@@ -63,12 +70,13 @@ export function createDaemonLauncher(
     homeDirectory: machine.homeDirectory,
     uid: machine.uid,
     userId: machine.windowsUserId,
+    registrar,
   });
 }
 
-/** The service definition this Computer's own daemon host would write on `machine`: the same
+/** The service definition this Computer's own daemon host renders on `machine`: the same
  * directories, executable, socket and connection endpoint, rendered by the host itself. Reads
- * only; registers nothing. */
+ * only; the installer registers it. */
 export function resolveServiceDefinition(
   machine: DaemonHostMachine & { platform: SupportedPlatform; serverUrl: string },
 ): DaemonServiceDefinition {

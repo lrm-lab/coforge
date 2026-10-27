@@ -21,6 +21,7 @@ import type { z } from "zod";
 import { UpdateError } from "#src/updater";
 import { InstallationDownloadError, runInstallationSource } from "./installation-source";
 import { InstallerManifestSchema } from "./installer-contract";
+import { CHECKSUM_DIRECTORY, cachedInstaller, sha256OfFile, usedAtOfCopy } from "./installer-cache";
 
 /** The same ceilings as the install scripts and the installer crate: a manifest is at most 1 MiB;
  * neither the compressed nor the expanded installer may be recorded above 512 MiB. */
@@ -29,8 +30,6 @@ const MAX_BINARY_BYTES = 512 * 1024 * 1024;
 
 /** How many cached installers other than the current one are kept, most recently used first. */
 const KEEP_OTHER_INSTALLERS = 2;
-const CHECKSUM_DIRECTORY = /^[0-9a-f]{64}$/;
-const INSTALLER_FILES = ["coforge-installer", "coforge-installer.exe"];
 /** A run writes its expansion to `.download-<uuid>` next to the final name. */
 const PARTIAL_PREFIX = ".download-";
 /** How long a partial file, or a directory holding nothing verified, may sit unchanged before it
@@ -55,7 +54,9 @@ export type InstallerLaunchOptions = {
   retryDelaysMs?: readonly number[];
 };
 
-export type VerifiedInstaller = { path: string; version: string };
+/** A verified installer on disk. `version` is the feed's version it was fetched as, and absent for
+ * a cached copy used while the feed was unreachable: nothing on disk records it. */
+export type VerifiedInstaller = { path: string; version?: string };
 
 type InstallerEntry = z.infer<typeof InstallerManifestSchema>["platforms"][string]["installer"];
 
@@ -78,15 +79,6 @@ type InstallerEntry = z.infer<typeof InstallerManifestSchema>["platforms"][strin
 export async function obtainInstaller(options: InstallerLaunchOptions): Promise<VerifiedInstaller> {
   const baseUrl = `${options.feedUrl.replace(/\/+$/, "")}/installer`;
   const delays = options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
-  const version = await runSource(delays, {
-    baseUrl,
-    target: options.target,
-    selection: "latest",
-    quietHeader: true,
-  });
-  if (version === "latest" || !isValidReleaseVersion(version)) {
-    throw feedInvalid("installer/latest does not name a valid version");
-  }
   const work = await mkdtemp(join(tmpdir(), "coforge-installer-download-"));
   try {
     const prepare = (phase: "manifest" | "installer") =>
@@ -98,8 +90,33 @@ export async function obtainInstaller(options: InstallerLaunchOptions): Promise<
         quietHeader: true,
         phase,
       });
-    await prepare("manifest");
-    const entry = await readInstallerEntry(work, version, options.target);
+    let version: string;
+    let entry: InstallerEntry;
+    try {
+      version = await runSource(delays, {
+        baseUrl,
+        target: options.target,
+        selection: "latest",
+        quietHeader: true,
+      });
+      if (version === "latest" || !isValidReleaseVersion(version)) {
+        throw feedInvalid("installer/latest does not name a valid version");
+      }
+      await prepare("manifest");
+      entry = await readInstallerEntry(work, version, options.target);
+    } catch (error) {
+      // Only an unreachable feed falls back to a copy already on this machine.
+      const cached =
+        error instanceof UpdateError && error.code === "UPDATE_DOWNLOAD_FAILED"
+          ? await cachedInstaller(options.installRoot, options.target)
+          : undefined;
+      if (!cached) throw error;
+      logger.warn("The release feed is unreachable; using the cached installer", {
+        path: cached.path,
+        message: thrownMessage(error),
+      });
+      return cached;
+    }
     const cache = cacheLocation(options.installRoot, entry);
     const cached = await inspectCachedCopy(cache, entry);
     if (cached === "damaged") {
@@ -356,16 +373,6 @@ async function removeStalePartials(directory: string, now: number): Promise<void
   }
 }
 
-/** When the copy in a checksum-named `directory` was last used, or `undefined` if the directory
- * holds no installer file. Its bytes are not hashed here. */
-async function usedAtOfCopy(directory: string): Promise<number | undefined> {
-  for (const name of INSTALLER_FILES) {
-    const info = await lstat(join(directory, name)).catch(() => undefined);
-    if (info?.isFile()) return info.mtimeMs;
-  }
-  return undefined;
-}
-
 /** Checks the downloaded gzip against its recorded identity. Nothing of it is expanded before it
  * passes, so unverified bytes never reach the decompressor. */
 async function verifyDownload(gzipPath: string, entry: InstallerEntry): Promise<void> {
@@ -422,10 +429,4 @@ async function writeAll(output: FileHandle, bytes: Uint8Array): Promise<void> {
   while (offset < bytes.byteLength) {
     offset += (await output.write(bytes, offset)).bytesWritten;
   }
-}
-
-async function sha256OfFile(path: string): Promise<string> {
-  const hasher = new Bun.CryptoHasher("sha256");
-  for await (const chunk of Bun.file(path).stream()) hasher.update(chunk);
-  return hasher.digest("hex");
 }

@@ -1,9 +1,14 @@
 import { expect, test } from "bun:test";
+import { acceptingConnect } from "./accepting-connect";
+import { recordingRegistrar } from "./recording-registrar";
 import { rejection } from "./rejection";
 import { systemdUserUnit, SystemdUserDaemonHost } from "@lrm/coforge-daemon";
 
 const ok = { code: 0, stdout: "", stderr: "" };
 const failed = (stderr: string, code = 1) => ({ code, stdout: "", stderr });
+const show = ["systemctl", "--user", "show", "--property=LoadState", "--value"];
+const loadState = (state: string) => ({ code: 0, stdout: `${state}\n`, stderr: "" });
+const isLoadStateQuery = (command: string[]) => command[2] === "show";
 
 test("systemd user unit dispatches the daemon through the unified executable", () => {
   const unit = systemdUserUnit(
@@ -18,17 +23,19 @@ test("systemd user unit dispatches the daemon through the unified executable", (
   );
 });
 
-test("systemd user service is installed and started without a system service", async () => {
+test("a registered unit is started through systemd without the registrar or any unit write", async () => {
   const commands: string[][] = [];
+  const registrar = recordingRegistrar();
   const service = new SystemdUserDaemonHost({
     serverUrl: "https://coforge.test",
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-daemon",
     socketPath: "/run/user/501/coforge/daemon.sock",
-    writeFile: async () => {},
+    registrar,
     run: async (command) => {
       commands.push(command);
-      return command.includes("start") ? failed("Job for coforge-daemon.service failed.") : ok;
+      if (isLoadStateQuery(command)) return loadState("loaded");
+      return failed("Job for coforge-daemon.service failed.");
     },
   });
   await expect(
@@ -39,11 +46,45 @@ test("systemd user service is installed and started without a system service", a
       daemonApiKey: "secret",
     }),
   ).rejects.toThrow("`systemctl --user start coforge-daemon.service` failed (1)");
-  expect(commands.slice(0, 3)).toEqual([
-    ["systemctl", "--user", "daemon-reload"],
-    ["systemctl", "--user", "enable", "coforge-daemon.service"],
+  expect(registrar.calls).toBe(0);
+  expect(commands).toEqual([
+    [...show, "coforge-daemon.service"],
     ["systemctl", "--user", "start", "coforge-daemon.service"],
   ]);
+});
+
+test("an unregistered unit is registered and started once through the registrar, writing nothing", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const service = new SystemdUserDaemonHost({
+    serverUrl: "https://coforge.test",
+    homeDirectory: "/home/alice",
+    executablePath: "/install/coforge-daemon",
+    socketPath: "/run/user/501/coforge/daemon.sock",
+    connect: acceptingConnect("https://coforge.test"),
+    registrar,
+    run: async (command) => {
+      commands.push(command);
+      if (isLoadStateQuery(command)) return loadState("not-found");
+      throw new Error(`unexpected command ${command.join(" ")}`);
+    },
+  });
+
+  await service.ensureRunning();
+  expect(registrar.calls).toBe(1);
+  expect(commands).toEqual([[...show, "coforge-daemon.service"]]);
+});
+
+test("an unregistered unit fails with the registrar's own error", async () => {
+  const registrationFailed = new Error("coforge-installer: another upgrade is running");
+  const service = new SystemdUserDaemonHost({
+    homeDirectory: "/home/alice",
+    executablePath: "/install/coforge-computer",
+    socketPath: "/missing/daemon.sock",
+    registrar: recordingRegistrar(registrationFailed),
+    run: async (command) => (isLoadStateQuery(command) ? loadState("not-found") : ok),
+  });
+  await expect(service.ensureRunning()).rejects.toBe(registrationFailed);
 });
 
 test("a failed start repeats systemd's own reason and names the unit to inspect", async () => {
@@ -51,6 +92,7 @@ test("a failed start repeats systemd's own reason and names the unit to inspect"
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-computer",
     socketPath: "/missing/daemon.sock",
+    registrar: recordingRegistrar(),
     run: async () =>
       failed("Job for coforge-daemon.service failed because the control process exited.", 3),
   });
@@ -61,10 +103,12 @@ test("a failed start repeats systemd's own reason and names the unit to inspect"
 });
 
 test("a shell with no systemd user session says so and gives the commands that open one", async () => {
+  const registrar = recordingRegistrar();
   const service = new SystemdUserDaemonHost({
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-computer",
     socketPath: "/missing/daemon.sock",
+    registrar,
     run: async () => failed("Failed to connect to bus: No medium found"),
   });
   const error = await rejection(service.ensureRunning());
@@ -72,6 +116,7 @@ test("a shell with no systemd user session says so and gives the commands that o
   expect(error.message).toContain("no systemd user session");
   expect(error.message).toContain("su");
   expect(error.message).toContain("machinectl shell");
+  expect(registrar.calls).toBe(0);
 });
 
 test("stopping a Daemon that has no user service installed says how to install one", async () => {
@@ -79,6 +124,7 @@ test("stopping a Daemon that has no user service installed says how to install o
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-computer",
     socketPath: "/missing/daemon.sock",
+    registrar: recordingRegistrar(),
     run: async () =>
       failed("Failed to stop coforge-daemon.service: Unit coforge-daemon.service not loaded.", 5),
   });
@@ -94,6 +140,7 @@ test("start uses systemd rather than launching an unmanaged process", async () =
     homeDirectory: "/home/alice",
     executablePath: "/missing/coforge-computer",
     socketPath: "/missing/daemon.sock",
+    registrar: recordingRegistrar(),
     run: async (command) => {
       commands.push(command);
       return failed("Failed to connect to bus: No medium found");
@@ -102,17 +149,23 @@ test("start uses systemd rather than launching an unmanaged process", async () =
   await expect(service.ensureRunning()).rejects.toThrow(
     "`systemctl --user start coforge-daemon.service` failed (1)",
   );
-  expect(commands).toEqual([["systemctl", "--user", "start", "coforge-daemon.service"]]);
+  expect(commands).toEqual([
+    [...show, "coforge-daemon.service"],
+    ["systemctl", "--user", "start", "coforge-daemon.service"],
+  ]);
 });
 
-test("restart resets any failed-state latch before restarting the systemd user service", async () => {
+test("restart resets any failed-state latch before restarting the registered systemd user service", async () => {
   const commands: string[][] = [];
+  const registrar = recordingRegistrar();
   const service = new SystemdUserDaemonHost({
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-daemon",
     socketPath: "/run/user/501/coforge/daemon.sock",
+    registrar,
     run: async (command) => {
       commands.push(command);
+      if (isLoadStateQuery(command)) return loadState("loaded");
       // Fails the restart step deliberately so this exercises only the command sequence and
       // error handling, not the local-handshake wait a real success would go on to do.
       return command.includes("restart") ? failed("Job for coforge-daemon.service failed.") : ok;
@@ -121,7 +174,9 @@ test("restart resets any failed-state latch before restarting the systemd user s
   await expect(service.restart()).rejects.toThrow(
     "`systemctl --user restart coforge-daemon.service` failed (1)",
   );
+  expect(registrar.calls).toBe(0);
   expect(commands).toEqual([
+    [...show, "coforge-daemon.service"],
     ["systemctl", "--user", "reset-failed", "coforge-daemon.service"],
     ["systemctl", "--user", "restart", "coforge-daemon.service"],
   ]);
@@ -133,8 +188,10 @@ test("restart ignores reset-failed's own exit code", async () => {
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-daemon",
     socketPath: "/run/user/501/coforge/daemon.sock",
+    registrar: recordingRegistrar(),
     run: async (command) => {
       commands.push(command);
+      if (isLoadStateQuery(command)) return loadState("loaded");
       // reset-failed's own exit code (1: nothing to reset) must not fail the restart; the
       // restart step is also failed here only to avoid a real local-handshake wait.
       return failed("Job for coforge-daemon.service failed.");
@@ -144,32 +201,55 @@ test("restart ignores reset-failed's own exit code", async () => {
     "`systemctl --user restart coforge-daemon.service` failed (1)",
   );
   expect(commands).toEqual([
+    [...show, "coforge-daemon.service"],
     ["systemctl", "--user", "reset-failed", "coforge-daemon.service"],
     ["systemctl", "--user", "restart", "coforge-daemon.service"],
   ]);
 });
 
+test("restart of an unregistered unit asks the registrar and changes nothing itself", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const service = new SystemdUserDaemonHost({
+    serverUrl: "https://coforge.test",
+    homeDirectory: "/home/alice",
+    executablePath: "/install/coforge-daemon",
+    socketPath: "/run/user/501/coforge/daemon.sock",
+    connect: acceptingConnect("https://coforge.test"),
+    registrar,
+    run: async (command) => {
+      commands.push(command);
+      if (isLoadStateQuery(command)) return loadState("not-found");
+      throw new Error(`unexpected command ${command.join(" ")}`);
+    },
+  });
+
+  await service.restart();
+  expect(registrar.calls).toBe(1);
+  expect(commands).toEqual([[...show, "coforge-daemon.service"]]);
+});
+
 test("a validated injected service name isolates native lifecycle integration", async () => {
   const commands: string[][] = [];
-  let writtenPath = "";
   const service = new SystemdUserDaemonHost({
     homeDirectory: "/tmp/coforge-native-test",
     executablePath: "/install/coforge-computer",
     socketPath: "/tmp/coforge-native-test/daemon.sock",
     serviceName: "coforge-native-test-a1b2.service",
-    writeFile: async (path) => {
-      writtenPath = path;
-    },
+    registrar: recordingRegistrar(),
     run: async (command) => {
       commands.push(command);
-      return command.includes("start") ? failed("Job failed.") : ok;
+      if (isLoadStateQuery(command)) return loadState("loaded");
+      return failed("Job failed.");
     },
   });
   await expect(service.ensureRunning()).rejects.toThrow(
     "`systemctl --user start coforge-native-test-a1b2.service` failed (1)",
   );
-  expect(commands).toEqual([["systemctl", "--user", "start", "coforge-native-test-a1b2.service"]]);
-  expect(writtenPath).toBe("");
+  expect(commands).toEqual([
+    [...show, "coforge-native-test-a1b2.service"],
+    ["systemctl", "--user", "start", "coforge-native-test-a1b2.service"],
+  ]);
 });
 
 test("systemd host rejects unsafe injected service names", () => {
@@ -180,38 +260,29 @@ test("systemd host rejects unsafe injected service names", () => {
         executablePath: "/install/coforge-computer",
         socketPath: "/tmp/test/daemon.sock",
         serviceName: "../coforge-daemon.service",
+        registrar: recordingRegistrar(),
       }),
   ).toThrow("invalid systemd user service name");
 });
 
-test("the systemd service definition is the unit text the host writes", async () => {
-  const written: string[] = [];
-  const paths: string[] = [];
+test("the systemd service definition is the unit rendered from the host's own inputs", () => {
   const service = new SystemdUserDaemonHost({
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
     stateDirectory: "/state",
     daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
-    writeFile: async (path, content) => {
-      paths.push(path);
-      written.push(content);
-    },
-    run: async () => failed("stop here"),
+    registrar: recordingRegistrar(),
   });
-  await rejection(
-    service.ensureStarted({
-      workspaceId: "w",
-      computerId: "computer",
-      workspaceRoot: "/w",
-      daemonApiKey: "secret",
-    }),
-  );
 
   expect(service.serviceDefinition()).toEqual({
     manager: "systemd-user",
-    contents: written[0]!,
-    path: paths[0]!,
+    contents: systemdUserUnit(
+      "/install/coforge-computer",
+      "/state/daemon.sock",
+      "/state",
+      "wss://coforge.test/connection/websocket",
+    ),
+    path: "/home/alice/.config/systemd/user/coforge-daemon.service",
   });
-  expect(paths[0]).toBe("/home/alice/.config/systemd/user/coforge-daemon.service");
 });

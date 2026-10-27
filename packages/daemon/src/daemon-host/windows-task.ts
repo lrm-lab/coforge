@@ -1,24 +1,22 @@
 import { LocalDaemonLauncher, type LocalDaemonLauncherOptions } from "./launcher";
 import type {
+  CoordinatorServiceRegistrar,
   DaemonLauncher,
   DaemonServiceDefinition,
   DaemonStarted,
   DaemonWorkspaceConfig,
 } from "./launcher";
 import { COORDINATOR_SERVICE } from "./service-identity";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { escapeXmlText } from "@lrm/coforge-sdk/internal";
-import {
-  removeFileQuietly,
-  runSchtasks,
-  windowsTaskUserId,
-  writeUtf16XmlFile,
-} from "#src/platform/windows-scheduled-task";
+import { runSchtasks, windowsTaskUserId } from "#src/platform/windows-scheduled-task";
 
 type CommandRunner = (command: string[]) => Promise<number>;
-type TaskXmlWriter = (path: string, content: string) => Promise<void>;
+
+const FOREGROUND_ADVICE =
+  "Run `coforge-computer foreground` under an external supervisor; CoForge will not detach a fallback process.";
 
 export type WindowsDaemonTaskXmlInput = {
   userId: string;
@@ -95,10 +93,9 @@ export function windowsDaemonTaskXml(input: WindowsDaemonTaskXmlInput): string {
 export class WindowsUserDaemonHost implements DaemonLauncher {
   readonly #taskName: string;
   readonly #run: CommandRunner;
-  readonly #writeTaskXml: TaskXmlWriter;
+  readonly #registrar: CoordinatorServiceRegistrar;
   readonly #local: LocalDaemonLauncher;
   readonly #xml: string;
-  readonly #removeTaskXml: (path: string) => Promise<void>;
 
   constructor(options: {
     taskName?: string;
@@ -108,16 +105,15 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
     serverUrl?: string;
     daemonConnectionEndpoint?: string;
     userId?: string;
+    /** Registers and starts the task when Task Scheduler does not know it. */
+    registrar: CoordinatorServiceRegistrar;
     run?: CommandRunner;
-    writeTaskXml?: TaskXmlWriter;
-    removeTaskXml?: (path: string) => Promise<void>;
     connect?: LocalDaemonLauncherOptions["connect"];
     timeoutMilliseconds?: number;
   }) {
     this.#taskName = options.taskName ?? COORDINATOR_SERVICE.windowsTask;
     this.#run = options.run ?? runSchtasks;
-    this.#writeTaskXml = options.writeTaskXml ?? writeUtf16XmlFile;
-    this.#removeTaskXml = options.removeTaskXml ?? removeFileQuietly;
+    this.#registrar = options.registrar;
     this.#xml = windowsDaemonTaskXml({
       userId: options.userId ?? windowsTaskUserId(),
       executablePath: options.executablePath,
@@ -139,31 +135,43 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
     return this.#local.preflight();
   }
 
-  /** The task XML `ensureStarted` registers, as text; `schtasks /XML` needs it written as UTF-16
-   * with a byte-order mark (`writeUtf16XmlFile`). */
+  /** The task XML the installer registers for this host, as text; `schtasks /XML` needs it written
+   * as UTF-16 with a byte-order mark. */
   serviceDefinition(): DaemonServiceDefinition {
     return { manager: "windows-task", contents: this.#xml };
   }
 
   async ensureStarted(config: DaemonWorkspaceConfig): Promise<DaemonStarted> {
-    // Prefer the user logon task when registration is allowed. When Create/Run is refused,
-    // fall back to an already-running foreground supervisor — never detach an unmanaged process.
-    if (await this.#installAndRun()) return this.#local.ensureStarted(config);
+    // Prefer the user logon task. When it cannot be registered or run, fall back to an
+    // already-running foreground supervisor - never detach an unmanaged process.
     try {
-      return await this.#local.ensureStarted(config);
-    } catch (error) {
-      throw new Error(
-        "The Windows user task could not start CoForge Daemon. Run `coforge-computer foreground` under an external supervisor; CoForge will not detach a fallback process.",
-        { cause: error },
-      );
+      await this.#startTask();
+    } catch (startFailure) {
+      try {
+        return await this.#local.ensureStarted(config);
+      } catch {
+        throw new Error(
+          `The Windows user task could not start CoForge Daemon. ${FOREGROUND_ADVICE}`,
+          {
+            cause: startFailure,
+          },
+        );
+      }
     }
+    return this.#local.ensureStarted(config);
   }
 
   async ensureRunning(): Promise<void> {
-    if (!(await this.#installAndRun()))
+    try {
+      await this.#startTask();
+    } catch (startFailure) {
       throw new Error(
-        "The Windows user task could not start CoForge Daemon. Run `coforge-computer foreground` under an external supervisor; CoForge will not detach a fallback process.",
+        `The Windows user task could not start CoForge Daemon. ${FOREGROUND_ADVICE}`,
+        {
+          cause: startFailure,
+        },
       );
+    }
     await this.#local.ensureRunning();
   }
 
@@ -181,32 +189,27 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
 
   /** The in-place replacement `coforge-computer restart --supervisor` uses to restart the
    * Coordinator process itself. `/End`'s exit code is ignored - the task may already be
-   * stopped, which is not a restart failure - and `/Run` is the actual restart. */
+   * stopped, which is not a restart failure - and `/Run` (or the registrar, for a task Task
+   * Scheduler does not know) is the actual restart. */
   async restart(): Promise<void> {
     await this.#run(["schtasks.exe", "/End", "/TN", this.#taskName]);
-    if (!(await this.#installAndRun()))
-      throw new Error("could not restart the CoForge Daemon user task");
+    try {
+      await this.#startTask();
+    } catch (startFailure) {
+      throw new Error("could not restart the CoForge Daemon user task", { cause: startFailure });
+    }
     await this.#local.ensureRunning();
   }
 
-  async #installAndRun(): Promise<boolean> {
-    const xmlPath = join(tmpdir(), `coforge-daemon-task-${crypto.randomUUID()}.xml`);
-    try {
-      await this.#writeTaskXml(xmlPath, this.#xml);
-      const created = await this.#run([
-        "schtasks.exe",
-        "/Create",
-        "/TN",
-        this.#taskName,
-        "/XML",
-        xmlPath,
-        "/F",
-      ]);
-      if (created !== 0) return false;
-      return (await this.#run(["schtasks.exe", "/Run", "/TN", this.#taskName])) === 0;
-    } finally {
-      await this.#removeTaskXml(xmlPath);
+  /** Runs the registered task, or asks the registrar to register and start one Task Scheduler
+   * does not know. */
+  async #startTask(): Promise<void> {
+    if ((await this.#run(["schtasks.exe", "/Query", "/TN", this.#taskName])) !== 0) {
+      await this.#registrar.registerAndStart();
+      return;
     }
+    if ((await this.#run(["schtasks.exe", "/Run", "/TN", this.#taskName])) !== 0)
+      throw new Error("schtasks /Run did not start the CoForge Daemon user task");
   }
 }
 

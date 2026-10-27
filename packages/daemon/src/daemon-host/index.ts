@@ -5,6 +5,7 @@ export { windowsTaskUserId } from "../platform/windows-scheduled-task";
 export { LocalDaemonLauncher, resolveDaemonExecutablePath } from "./launcher";
 export { COORDINATOR_SERVICE, coordinatorServiceName } from "./service-identity";
 
+import type { CoordinatorServiceRegistrar } from "./launcher";
 import { LaunchdDaemonHost } from "./launchd";
 import { COORDINATOR_SERVICE } from "./service-identity";
 import { SystemdUserDaemonHost } from "./systemd-user";
@@ -23,6 +24,8 @@ export function createDaemonHost(input: {
   runtimeHomeDirectory?: string;
   /** Windows only: the task's user id. Defaults to the signed-in user. */
   userId?: string;
+  /** Registers and starts the Coordinator service when the platform manager does not know it. */
+  registrar: CoordinatorServiceRegistrar;
 }) {
   if (input.platform === "darwin") {
     return new LaunchdDaemonHost({ ...input, label: COORDINATOR_SERVICE.launchdLabel });

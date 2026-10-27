@@ -434,6 +434,13 @@ $Name`: local install failed (exit $LASTEXITCODE; exit 3 means run 'coforge-comp
     }
 
     if ($Setup) {
+      # The installer, not the Computer, registers the Coordinator task. Using this checkout's
+      # build keeps setup from fetching an installer from the fixture's baked release feed.
+      Write-Host "==> Registering and starting the Coordinator task"
+      & $installerBin start | Out-Host
+      if ($LASTEXITCODE -ne 0) {
+        throw "coforge-installer start failed (exit $LASTEXITCODE)"
+      }
       Write-Host "==> Running Computer setup for workspace '$Setup'"
       & $active setup --workspace $Setup --json | Out-Host
       if ($LASTEXITCODE -ne 0) {

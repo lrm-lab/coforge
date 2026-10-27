@@ -1,152 +1,162 @@
 import { expect, test } from "bun:test";
-import { WindowsUserDaemonHost } from "@lrm/coforge-daemon";
+import { WindowsUserDaemonHost, windowsDaemonTaskXml } from "@lrm/coforge-daemon";
+import { acceptingConnect } from "./accepting-connect";
+import { recordingRegistrar } from "./recording-registrar";
 
-test("Windows task dispatches the daemon through XML logon registration", async () => {
+const config = {
+  workspaceId: "w",
+  computerId: "computer",
+  workspaceRoot: "/w",
+  daemonApiKey: "secret",
+};
+const task = ["schtasks.exe"];
+const query = [...task, "/Query", "/TN", "CoForge Daemon"];
+const run = [...task, "/Run", "/TN", "CoForge Daemon"];
+const end = [...task, "/End", "/TN", "CoForge Daemon"];
+
+/** Exit codes by schtasks verb; verbs not listed exit 0. */
+function schtasks(
+  exits: Partial<Record<"/Query" | "/Run" | "/End", number>>,
+  commands: string[][],
+) {
+  return async (command: string[]) => {
+    commands.push(command);
+    return exits[command[1] as "/Query" | "/Run" | "/End"] ?? 0;
+  };
+}
+
+const options = {
+  executablePath: "C:\\Coforge\\coforge-computer.exe",
+  socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
+  userId: "DESKTOP\\alice",
+  timeoutMilliseconds: 20,
+};
+
+test("a registered task is run with schtasks /Run, never created or registered again", async () => {
   const commands: string[][] = [];
-  const written: string[] = [];
-  const task = new WindowsUserDaemonHost({
-    executablePath: "C:\\Users\\alice\\Coforge\\coforge-computer.exe",
-    socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
-    userId: "DESKTOP\\alice",
-    timeoutMilliseconds: 20,
-    writeTaskXml: async (_path, content) => {
-      written.push(content);
-    },
-    run: async (command) => {
-      commands.push(command);
-      return command[1] === "/Run" ? 1 : 0;
-    },
+  const registrar = recordingRegistrar();
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar,
+    run: schtasks({ "/Run": 1 }, commands),
   });
-  await expect(
-    task.ensureStarted({
-      workspaceId: "w",
-      computerId: "computer",
-      workspaceRoot: "/w",
-      daemonApiKey: "secret",
-    }),
-  ).rejects.toThrow("Run `coforge-computer foreground` under an external supervisor");
-  expect(written[0]).toContain("<LogonTrigger>");
-  expect(written[0]).toContain("<RunLevel>LeastPrivilege</RunLevel>");
-  expect(commands[0]!.slice(0, 5)).toEqual([
-    "schtasks.exe",
-    "/Create",
-    "/TN",
-    "CoForge Daemon",
-    "/XML",
-  ]);
-  expect(commands[0]!).toContain("/F");
-  expect(commands[1]).toEqual(["schtasks.exe", "/Run", "/TN", "CoForge Daemon"]);
-});
-
-test("ensureStarted falls back to a live local supervisor when task Create is refused", async () => {
-  const commands: string[][] = [];
-  const task = new WindowsUserDaemonHost({
-    executablePath: "C:\\Coforge\\coforge-computer.exe",
-    socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
-    userId: "DESKTOP\\alice",
-    writeTaskXml: async () => {},
-    run: async (command) => {
-      commands.push(command);
-      return 1;
-    },
-    timeoutMilliseconds: 20,
-  });
-  await expect(
-    task.ensureStarted({
-      workspaceId: "w",
-      computerId: "computer",
-      workspaceRoot: "/w",
-      daemonApiKey: "secret",
-    }),
-  ).rejects.toThrow("Run `coforge-computer foreground` under an external supervisor");
-  expect(commands).toHaveLength(1);
-  expect(commands[0]!.slice(0, 5)).toEqual([
-    "schtasks.exe",
-    "/Create",
-    "/TN",
-    "CoForge Daemon",
-    "/XML",
-  ]);
-});
-
-test("Windows ensureRunning reports task start failure before waiting for a socket", async () => {
-  const commands: string[][] = [];
-  const task = new WindowsUserDaemonHost({
-    executablePath: "C:\\Coforge\\coforge-computer.exe",
-    socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
-    userId: "DESKTOP\\alice",
-    writeTaskXml: async () => {},
-    run: async (command) => {
-      commands.push(command);
-      return 1;
-    },
-  });
-
-  await expect(task.ensureRunning()).rejects.toThrow(
+  await expect(host.ensureStarted(config)).rejects.toThrow(
     "Run `coforge-computer foreground` under an external supervisor",
   );
-  expect(commands[0]![1]).toBe("/Create");
+  expect(registrar.calls).toBe(0);
+  expect(commands).toEqual([query, run]);
 });
 
-test("restart ends then reinstalls and runs the scheduled task", async () => {
+test("an unregistered task is registered and started once through the registrar", async () => {
   const commands: string[][] = [];
-  const task = new WindowsUserDaemonHost({
-    executablePath: "C:\\Coforge\\coforge-computer.exe",
-    socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
-    userId: "DESKTOP\\alice",
-    writeTaskXml: async () => {},
-    run: async (command) => {
-      commands.push(command);
-      // Fail /Run so this exercises only the command sequence, not the local handshake.
-      return command[1] === "/Run" ? 1 : 0;
-    },
+  const registrar = recordingRegistrar();
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    connect: acceptingConnect("https://coforge.test"),
+    serverUrl: "https://coforge.test",
+    registrar,
+    run: schtasks({ "/Query": 1 }, commands),
   });
+  await host.ensureRunning();
+  expect(registrar.calls).toBe(1);
+  expect(commands).toEqual([query]);
+});
 
-  await expect(task.restart()).rejects.toThrow("could not restart the CoForge Daemon user task");
-  expect(commands[0]).toEqual(["schtasks.exe", "/End", "/TN", "CoForge Daemon"]);
-  expect(commands[1]!.slice(0, 5)).toEqual([
-    "schtasks.exe",
-    "/Create",
-    "/TN",
-    "CoForge Daemon",
-    "/XML",
-  ]);
-  expect(commands[2]).toEqual(["schtasks.exe", "/Run", "/TN", "CoForge Daemon"]);
+test("ensureStarted falls back to a live local supervisor when the task cannot be registered", async () => {
+  const commands: string[][] = [];
+  const registrationFailed = new Error("coforge-installer: no installer for this target");
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar: recordingRegistrar(registrationFailed),
+    run: schtasks({ "/Query": 1 }, commands),
+  });
+  const error = await host.ensureStarted(config).catch((thrown: unknown) => thrown as Error);
+  expect((error as Error).message).toContain(
+    "Run `coforge-computer foreground` under an external supervisor",
+  );
+  expect((error as Error).cause).toBe(registrationFailed);
+  expect(commands).toEqual([query]);
+});
+
+test("Windows ensureRunning reports a registration failure before waiting for a socket", async () => {
+  const registrationFailed = new Error("coforge-installer: another upgrade is running");
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar: recordingRegistrar(registrationFailed),
+    run: schtasks({ "/Query": 1 }, []),
+  });
+  const error = await host.ensureRunning().catch((thrown: unknown) => thrown as Error);
+  expect((error as Error).message).toContain(
+    "Run `coforge-computer foreground` under an external supervisor",
+  );
+  expect((error as Error).cause).toBe(registrationFailed);
+});
+
+test("Windows ensureRunning reports a task that will not run", async () => {
+  const commands: string[][] = [];
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar: recordingRegistrar(),
+    run: schtasks({ "/Run": 1 }, commands),
+  });
+  await expect(host.ensureRunning()).rejects.toThrow(
+    "Run `coforge-computer foreground` under an external supervisor",
+  );
+  expect(commands).toEqual([query, run]);
+});
+
+test("restart ends then runs the registered scheduled task", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar,
+    // Fail /Run so this exercises only the command sequence, not the local handshake.
+    run: schtasks({ "/Run": 1 }, commands),
+  });
+  await expect(host.restart()).rejects.toThrow("could not restart the CoForge Daemon user task");
+  expect(registrar.calls).toBe(0);
+  expect(commands).toEqual([end, query, run]);
+});
+
+test("restart of an unregistered task asks the registrar after /End", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    connect: acceptingConnect("https://coforge.test"),
+    serverUrl: "https://coforge.test",
+    registrar,
+    run: schtasks({ "/Query": 1 }, commands),
+  });
+  await host.restart();
+  expect(registrar.calls).toBe(1);
+  expect(commands).toEqual([end, query]);
 });
 
 test("restart ignores /End's own exit code (the task may already be stopped)", async () => {
   const commands: string[][] = [];
-  const task = new WindowsUserDaemonHost({
-    executablePath: "C:\\Coforge\\coforge-computer.exe",
-    socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
-    userId: "DESKTOP\\alice",
-    writeTaskXml: async () => {},
-    run: async (command) => {
-      commands.push(command);
-      return 1;
-    },
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar: recordingRegistrar(),
+    run: schtasks({ "/End": 1, "/Run": 1 }, commands),
   });
-
-  await expect(task.restart()).rejects.toThrow("could not restart the CoForge Daemon user task");
-  expect(commands[0]).toEqual(["schtasks.exe", "/End", "/TN", "CoForge Daemon"]);
-  expect(commands[1]![1]).toBe("/Create");
+  await expect(host.restart()).rejects.toThrow("could not restart the CoForge Daemon user task");
+  expect(commands).toEqual([end, query, run]);
 });
 
-test("the Windows service definition is the task XML the host registers", async () => {
-  const written: string[] = [];
-  const task = new WindowsUserDaemonHost({
+test("the Windows service definition is the task XML rendered from the host's own inputs", () => {
+  const input = {
+    userId: "DESKTOP\\alice",
     executablePath: "C:\\Coforge\\coforge-computer.exe",
     socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
     stateDirectory: "C:\\Users\\alice\\.coforge\\daemon",
     daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
-    userId: "DESKTOP\\alice",
-    writeTaskXml: async (_path, content) => {
-      written.push(content);
-    },
-    removeTaskXml: async () => {},
-    run: async () => 1,
-  });
-  await expect(task.ensureRunning()).rejects.toThrow();
+  };
+  const host = new WindowsUserDaemonHost({ ...input, registrar: recordingRegistrar() });
 
-  expect(task.serviceDefinition()).toEqual({ manager: "windows-task", contents: written[0]! });
+  expect(host.serviceDefinition()).toEqual({
+    manager: "windows-task",
+    contents: windowsDaemonTaskXml(input),
+  });
 });

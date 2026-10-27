@@ -49,6 +49,9 @@ bun "$root/scripts/e2e/build-computer-fixture.ts"
 version=$(mise exec -- bun -e 'console.log((await Bun.file(Bun.argv[1]).json()).version)' "$root/.amp/e2e/native-package/manifest.json")
 (CDPATH='' cd -- "$root/crates/installer" && mise exec -- cargo build --locked --release)
 "$root/target/release/coforge-installer" install --version "$version" --from-directory "$root/.amp/e2e/native-package" --allow-downgrade
+# The installer, not the Computer, registers the supervisor service. Doing it with this checkout's
+# build keeps `setup` from fetching an installer from the fixture's baked release feed.
+"$root/target/release/coforge-installer" start
 
 # First use waits for the real browser device-code approval. Repeated runs reuse
 # the normal credential store. No automatic approval or direct runtime start.

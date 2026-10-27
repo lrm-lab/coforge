@@ -150,6 +150,25 @@ export async function runInstallerRecovery(
 ): Promise<number> {
   const options = { ...defaultUpgradeRunnerOptions(), ...overrides };
   await assertOutsideManagedSupervisor();
+  return runInstallerOnTerminal(options, ["recover", "--caller-pid", String(process.pid)]);
+}
+
+/**
+ * Re-registers a missing or stale service definition through the installer's own `repair`
+ * command, with the terminal attached, and resolves to its exit status. Repair stops nothing, so
+ * it may run from anywhere. The installer names its own receipt, so none is read here.
+ */
+export async function runInstallerRepair(
+  overrides: Partial<UpgradeRunnerOptions> = {},
+): Promise<number> {
+  const options = { ...defaultUpgradeRunnerOptions(), ...overrides };
+  return runInstallerOnTerminal(options, ["repair"]);
+}
+
+async function runInstallerOnTerminal(
+  options: UpgradeRunnerOptions,
+  args: string[],
+): Promise<number> {
   const installer = await options.obtainInstaller({
     feedUrl: options.feedUrl,
     target: options.target,
@@ -157,7 +176,7 @@ export async function runInstallerRecovery(
   });
   const run = await options.spawnInstaller({
     path: installer.path,
-    args: ["recover", "--caller-pid", String(process.pid)],
+    args,
     stdin: "ignore",
     stdout: "inherit",
     stderr: "inherit",
@@ -200,7 +219,7 @@ async function readReceipt(
   return (await readUpgradeReceipt(installRoot, requestId))?.result;
 }
 
-function lastLine(text: string): string | undefined {
+export function lastLine(text: string): string | undefined {
   return text
     .split("\n")
     .map((line) => line.trim())

@@ -1,37 +1,9 @@
 import { expect, test } from "bun:test";
-import {
-  decodeDaemonHandshakeRequest,
-  decodeLocalRpcRequest,
-  encodeDaemonHandshakeResponse,
-  encodeLocalRpcResponse,
-  LOCAL_RPC_METHODS,
-  readLocalRpcFrame,
-} from "@lrm/coforge-sdk/internal";
+import { acceptingConnect } from "./accepting-connect";
+import { recordingRegistrar } from "./recording-registrar";
 import { LaunchdDaemonHost, launchdPlist } from "@lrm/coforge-daemon";
 
 const target = "gui/501/cn.coforge.computer.daemon";
-
-/** A `connect` fake whose handshake always succeeds, so `restart()`/`ensureRunning()` can
- * complete past their local-socket wait without a real Unix socket. */
-function acceptingConnect(serverUrl: string) {
-  return async () => ({
-    request: async (frame: Uint8Array) => {
-      const envelope = decodeLocalRpcRequest(readLocalRpcFrame(frame)!);
-      const request = decodeDaemonHandshakeRequest(envelope.payload);
-      return encodeLocalRpcResponse({
-        method: LOCAL_RPC_METHODS.HANDSHAKE,
-        payload: encodeDaemonHandshakeResponse({
-          protocolMajor: 1,
-          requestId: request.requestId,
-          daemonId: "daemon-1",
-          accepted: true,
-          serverUrl,
-        }),
-      });
-    },
-    close() {},
-  });
-}
 
 test("launchd service dispatches the daemon through the unified executable", () => {
   const plist = launchdPlist({
@@ -48,10 +20,10 @@ test("launchd service dispatches the daemon through the unified executable", () 
   expect(plist).not.toContain("alice-secret");
 });
 
-test("launchd installation is idempotent and does not restart an installed user agent", async () => {
+test("an unregistered label is registered through the registrar, once, and the host writes nothing", async () => {
   const commands: string[][] = [];
-  const writes: string[] = [];
-  let installed = false;
+  const registrar = recordingRegistrar();
+  let registered = false;
   const service = new LaunchdDaemonHost({
     serverUrl: "https://coforge.test",
     label: "cn.coforge.computer.daemon",
@@ -59,33 +31,53 @@ test("launchd installation is idempotent and does not restart an installed user 
     socketPath: "/state/daemon.sock",
     homeDirectory: "/Users/alice",
     uid: 501,
-    writeFile: async (path) => {
-      writes.push(path);
+    registrar: {
+      async registerAndStart() {
+        registered = true;
+        await registrar.registerAndStart();
+      },
     },
+    connect: acceptingConnect("https://coforge.test"),
     run: async (command) => {
       commands.push(command);
-      if (command[1] === "print") return { code: installed ? 0 : 1, stdout: "", stderr: "" };
-      if (command[1] === "bootstrap") installed = true;
-      return { code: 0, stdout: "", stderr: "" };
+      if (command[1] === "print") return { code: registered ? 0 : 1, stdout: "", stderr: "" };
+      throw new Error(`unexpected command ${command.join(" ")}`);
     },
   });
 
-  await service.ensureInstalled();
-  await service.ensureInstalled();
-  expect(writes).toHaveLength(1);
+  await service.ensureRunning();
+  await service.ensureRunning();
+  expect(registrar.calls).toBe(1);
   expect(commands).toEqual([
     ["launchctl", "print", target],
-    [
-      "launchctl",
-      "bootstrap",
-      "gui/501",
-      "/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist",
-    ],
     ["launchctl", "print", target],
   ]);
 });
 
-test("launchd ensureRunning starts only through the user agent before handshaking", async () => {
+test("a loaded label is neither registered nor restarted by ensureRunning", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const service = new LaunchdDaemonHost({
+    serverUrl: "https://coforge.test",
+    label: "cn.coforge.computer.daemon",
+    executablePath: "/install/coforge-computer",
+    socketPath: "/state/daemon.sock",
+    homeDirectory: "/Users/alice",
+    uid: 501,
+    registrar,
+    connect: acceptingConnect("https://coforge.test"),
+    run: async (command) => {
+      commands.push(command);
+      return { code: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  await service.ensureRunning();
+  expect(registrar.calls).toBe(0);
+  expect(commands).toEqual([["launchctl", "print", target]]);
+});
+
+test("ensureRunning fails with the registrar's own error when the label cannot be registered", async () => {
   const commands: string[][] = [];
   const registrationFailed = new Error("registration failed for test");
   const service = new LaunchdDaemonHost({
@@ -94,30 +86,22 @@ test("launchd ensureRunning starts only through the user agent before handshakin
     socketPath: "/state/daemon.sock",
     homeDirectory: "/Users/alice",
     uid: 501,
-    writeFile: async () => {},
+    registrar: recordingRegistrar(registrationFailed),
     run: async (command) => {
       commands.push(command);
-      if (command[1] === "print") return { code: 1, stdout: "", stderr: "" };
-      throw registrationFailed;
+      return { code: 1, stdout: "", stderr: "" };
     },
   });
 
   await expect(service.ensureRunning()).rejects.toBe(registrationFailed);
-  expect(commands).toEqual([
-    ["launchctl", "print", target],
-    [
-      "launchctl",
-      "bootstrap",
-      "gui/501",
-      "/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist",
-    ],
-  ]);
+  expect(commands).toEqual([["launchctl", "print", target]]);
 });
 
 test("launchd stop accepts an absent process but preserves permission errors with their diagnostic", async () => {
   let exitCode = 3;
   let stderr = "";
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -139,6 +123,7 @@ test("REGRESSION: stop does not return until the label actually leaves launchd a
   const printCalls: number[] = [];
   const disappearsAfter = 3;
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -162,6 +147,7 @@ test("REGRESSION: stop does not return until the label actually leaves launchd a
 test("stop returns immediately when the label is already absent", async () => {
   const commands: string[][] = [];
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -179,6 +165,7 @@ test("stop returns immediately when the label is already absent", async () => {
 
 test("stop times out with a clear error when the old job never leaves launchd", async () => {
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -199,6 +186,7 @@ test("stop times out with a clear error when the old job never leaves launchd", 
 test("REGRESSION: restart on a loaded label issues exactly kickstart -k, never bootout or bootstrap", async () => {
   const commands: string[][] = [];
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -221,63 +209,10 @@ test("REGRESSION: restart on a loaded label issues exactly kickstart -k, never b
   ]);
 });
 
-test("restart bootstraps when the label is absent, retrying only EIO(5)/already-in-progress(37), giving up after 3", async () => {
+test("restart of an unregistered label asks the registrar and issues no launchctl change", async () => {
   const commands: string[][] = [];
-  const sleeps: number[] = [];
-  const service = new LaunchdDaemonHost({
-    label: "cn.coforge.computer.daemon",
-    executablePath: "/install/coforge-computer",
-    socketPath: "/state/daemon.sock",
-    homeDirectory: "/Users/alice",
-    uid: 501,
-    writeFile: async () => {},
-    sleep: async (ms) => {
-      sleeps.push(ms);
-    },
-    run: async (command) => {
-      commands.push(command);
-      if (command[1] === "print") return { code: 1, stdout: "", stderr: "" };
-      if (command[1] === "bootstrap")
-        return { code: 5, stdout: "", stderr: "Input/output error tearing down old service" };
-      throw new Error(`unexpected command ${command.join(" ")}`);
-    },
-  });
-
-  await expect(service.restart()).rejects.toThrow(
-    "launchctl bootstrap failed (5): Input/output error tearing down old service",
-  );
-  expect(commands.filter((c) => c[1] === "bootstrap")).toHaveLength(3);
-  expect(commands.some((c) => c[1] === "bootout" || c[1] === "kickstart")).toBe(false);
-  expect(sleeps).toEqual([1_000, 1_000]);
-});
-
-test("restart does not retry bootstrap on a non-retryable exit code", async () => {
-  const commands: string[][] = [];
-  const service = new LaunchdDaemonHost({
-    label: "cn.coforge.computer.daemon",
-    executablePath: "/install/coforge-computer",
-    socketPath: "/state/daemon.sock",
-    homeDirectory: "/Users/alice",
-    uid: 501,
-    writeFile: async () => {},
-    sleep: async () => {
-      throw new Error("must not sleep on a non-retryable failure");
-    },
-    run: async (command) => {
-      commands.push(command);
-      if (command[1] === "print") return { code: 1, stdout: "", stderr: "" };
-      if (command[1] === "bootstrap") return { code: 71, stdout: "", stderr: "" };
-      throw new Error(`unexpected command ${command.join(" ")}`);
-    },
-  });
-
-  await expect(service.restart()).rejects.toThrow("launchctl bootstrap failed (71)");
-  expect(commands.filter((c) => c[1] === "bootstrap")).toHaveLength(1);
-});
-
-test("restart recovers via bootstrap after a retryable failure and completes the handshake", async () => {
-  const commands: string[][] = [];
-  let bootstrapAttempts = 0;
+  const registrar = recordingRegistrar();
+  let registered = false;
   const service = new LaunchdDaemonHost({
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
@@ -286,27 +221,45 @@ test("restart recovers via bootstrap after a retryable failure and completes the
     uid: 501,
     serverUrl: "https://coforge.test",
     connect: acceptingConnect("https://coforge.test"),
-    writeFile: async () => {},
-    sleep: async () => {},
+    registrar: {
+      async registerAndStart() {
+        registered = true;
+        await registrar.registerAndStart();
+      },
+    },
     run: async (command) => {
       commands.push(command);
-      if (command[1] === "print") return { code: 1, stdout: "", stderr: "" };
-      if (command[1] === "bootstrap") {
-        bootstrapAttempts += 1;
-        return bootstrapAttempts === 1
-          ? { code: 37, stdout: "", stderr: "operation already in progress" }
-          : { code: 0, stdout: "", stderr: "" };
-      }
+      if (command[1] === "print") return { code: registered ? 0 : 1, stdout: "", stderr: "" };
       throw new Error(`unexpected command ${command.join(" ")}`);
     },
   });
 
   await service.restart();
-  expect(commands.filter((c) => c[1] === "bootstrap")).toHaveLength(2);
+  expect(registrar.calls).toBe(1);
+  expect(commands).toEqual([["launchctl", "print", target]]);
+});
+
+test("restart of an unregistered label fails with the registrar's error", async () => {
+  const registrationFailed = new Error("coforge-installer: another upgrade is running");
+  const service = new LaunchdDaemonHost({
+    label: "cn.coforge.computer.daemon",
+    executablePath: "/install/coforge-computer",
+    socketPath: "/state/daemon.sock",
+    homeDirectory: "/Users/alice",
+    uid: 501,
+    registrar: recordingRegistrar(registrationFailed),
+    run: async (command) => {
+      if (command[1] === "print") return { code: 1, stdout: "", stderr: "" };
+      throw new Error(`unexpected command ${command.join(" ")}`);
+    },
+  });
+
+  await expect(service.restart()).rejects.toBe(registrationFailed);
 });
 
 test("assertRestartable throws with the launchctl diagnostic when the label is not loaded", async () => {
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -326,6 +279,7 @@ test("assertRestartable throws with the launchctl diagnostic when the label is n
 
 test("assertRestartable resolves when the label is loaded", async () => {
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -339,6 +293,7 @@ test("assertRestartable resolves when the label is loaded", async () => {
 
 test("a failed launchctl command carries its stderr diagnostic in the thrown error", async () => {
   const service = new LaunchdDaemonHost({
+    registrar: recordingRegistrar(),
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
@@ -361,9 +316,7 @@ test("a failed launchctl command carries its stderr diagnostic in the thrown err
   );
 });
 
-test("the launchd service definition is the plist the host writes before bootstrap", async () => {
-  const written: string[] = [];
-  const paths: string[] = [];
+test("the launchd service definition is the plist rendered from the host's own inputs", () => {
   const service = new LaunchdDaemonHost({
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
@@ -372,18 +325,18 @@ test("the launchd service definition is the plist the host writes before bootstr
     daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
     homeDirectory: "/Users/alice",
     uid: 501,
-    writeFile: async (path, content) => {
-      paths.push(path);
-      written.push(content);
-    },
-    run: async (command) => ({ code: command[1] === "print" ? 1 : 0, stdout: "", stderr: "" }),
+    registrar: recordingRegistrar(),
   });
-  await service.ensureInstalled();
 
   expect(service.serviceDefinition()).toEqual({
     manager: "launchd",
-    contents: written[0]!,
-    path: paths[0]!,
+    contents: launchdPlist({
+      label: "cn.coforge.computer.daemon",
+      executablePath: "/install/coforge-computer",
+      socketPath: "/state/daemon.sock",
+      stateDirectory: "/state",
+      daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
+    }),
+    path: "/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist",
   });
-  expect(paths[0]).toBe("/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist");
 });

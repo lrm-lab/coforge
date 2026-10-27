@@ -116,6 +116,7 @@ export const COMPUTER_CLI_COMMANDS = [
   "install",
   "upgrade",
   "recover",
+  "repair",
   "start",
   "stop",
   "restart",

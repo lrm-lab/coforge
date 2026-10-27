@@ -91,6 +91,9 @@ test("a self-referencing latest pointer fails before upgrade consent", async () 
         async recover() {
           return 0;
         },
+        async repair() {
+          return 0;
+        },
         async upgrade() {
           upgraded = true;
         },

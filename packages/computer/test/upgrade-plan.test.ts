@@ -112,6 +112,10 @@ function recordingUpdater(current: string | null, target: string) {
         calls.push("recover");
         return 0;
       },
+      async repair() {
+        calls.push("repair");
+        return 0;
+      },
     },
   };
 }

@@ -1,13 +1,14 @@
 import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "#src/platform/native-command";
-import { writePrivateFile } from "#src/platform/private-file";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
+  CoordinatorServiceRegistrar,
   DaemonLauncher,
   DaemonServiceDefinition,
   DaemonStarted,
   DaemonWorkspaceConfig,
+  LocalDaemonLauncherOptions,
 } from "./launcher";
 import { COORDINATOR_SERVICE } from "./service-identity";
 
@@ -16,7 +17,7 @@ type CommandRunner = (command: string[]) => Promise<NativeCommandResult>;
 export class SystemdUserDaemonHost implements DaemonLauncher {
   readonly #unitPath: string;
   readonly #run: CommandRunner;
-  readonly #writeFile: (path: string, content: string) => Promise<void>;
+  readonly #registrar: CoordinatorServiceRegistrar;
   readonly #local: LocalDaemonLauncher;
   readonly #unit: string;
 
@@ -29,14 +30,16 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
     daemonConnectionEndpoint?: string;
     serviceName?: string;
     runtimeHomeDirectory?: string;
-    writeFile?: (path: string, content: string) => Promise<void>;
+    /** Registers and starts the unit when systemd does not know it. */
+    registrar: CoordinatorServiceRegistrar;
     run?: CommandRunner;
+    connect?: LocalDaemonLauncherOptions["connect"];
   }) {
     const serviceName = options.serviceName ?? COORDINATOR_SERVICE.systemdUserUnit;
     if (!isValidServiceName(serviceName)) throw new Error("invalid systemd user service name");
     this.#unitPath = join(options.homeDirectory, ".config", "systemd", "user", serviceName);
     this.#run = options.run ?? runCommand;
-    this.#writeFile = options.writeFile ?? writePrivateFile;
+    this.#registrar = options.registrar;
     this.#unit = systemdUserUnit(
       options.executablePath,
       options.socketPath,
@@ -50,6 +53,7 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
       socketPath: options.socketPath,
       stateDirectory: options.stateDirectory ?? join(options.homeDirectory, ".coforge", "daemon"),
       serverUrl: options.serverUrl,
+      connect: options.connect,
     });
   }
 
@@ -59,21 +63,19 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
     return this.#local.preflight();
   }
 
-  /** The unit `ensureStarted` writes, for a caller that registers it itself. */
+  /** The unit the installer registers for this host, rendered from the host's own inputs. */
   serviceDefinition(): DaemonServiceDefinition {
     return { manager: "systemd-user", contents: this.#unit, path: this.#unitPath };
   }
 
   async ensureStarted(config: DaemonWorkspaceConfig): Promise<DaemonStarted> {
-    await this.#writeFile(this.#unitPath, this.#unit);
-    await this.#run(["systemctl", "--user", "daemon-reload"]);
-    await this.#run(["systemctl", "--user", "enable", this.#serviceName]);
     await this.ensureRunning();
     return this.#local.ensureStarted(config);
   }
 
   async ensureRunning(): Promise<void> {
-    await this.#systemctl("start");
+    if (await this.#unregistered()) await this.#registrar.registerAndStart();
+    else await this.#systemctl("start");
     await this.#local.ensureRunning();
   }
 
@@ -93,12 +95,32 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
    * Coordinator process itself (not a Workspace runtime). `reset-failed` clears any earlier
    * failed-state latch a previous crash may have left on the unit - its own exit code is
    * ignored, since there is usually nothing to reset - so a stale failure never blocks this
-   * restart; `restart` then does the actual stop-and-start in one systemd transaction.
+   * restart; `restart` then does the actual stop-and-start in one systemd transaction. A unit
+   * systemd does not know is registered and started by the `registrar` instead.
    */
   async restart(): Promise<void> {
-    await this.#run(["systemctl", "--user", "reset-failed", this.#serviceName]);
-    await this.#systemctl("restart");
+    if (await this.#unregistered()) {
+      await this.#registrar.registerAndStart();
+    } else {
+      await this.#run(["systemctl", "--user", "reset-failed", this.#serviceName]);
+      await this.#systemctl("restart");
+    }
     await this.#local.ensureRunning();
+  }
+
+  /** True only when systemd answers that it has no such unit (`LoadState=not-found`). Any other
+   * answer, or none (no user bus, say), is left to the `systemctl` verb that follows, which
+   * reports systemd's own reason. */
+  async #unregistered(): Promise<boolean> {
+    const result = await this.#run([
+      "systemctl",
+      "--user",
+      "show",
+      "--property=LoadState",
+      "--value",
+      this.#serviceName,
+    ]);
+    return result.code === 0 && result.stdout.trim() === "not-found";
   }
 
   /** Runs one `systemctl --user` verb against this Daemon's unit, turning a refusal into the
@@ -160,11 +182,15 @@ async function runCommand(command: string[]): Promise<NativeCommandResult> {
   const child = Bun.spawn(command, {
     env: { ...process.env, LC_ALL: "C" },
     stdin: "ignore",
-    stdout: "ignore",
+    stdout: "pipe",
     stderr: "pipe",
   });
-  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-  return { code, stdout: "", stderr };
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { code, stdout, stderr };
 }
 
 function systemdEscape(value: string): string {

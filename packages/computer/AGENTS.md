@@ -16,8 +16,8 @@ manager. `foreground` is the explicit public mode for containers and other
 external supervisors; no command implicitly detaches an unmanaged fallback.
 Upgrade runs the separately released `coforge-installer` (`release/upgrade-runner.ts`),
 which owns the transaction, the service stop and start, and the receipt. Computer
-launches it and reads the receipt; it does not roll back itself. `coforge-computer
-recover` runs the installer's `recover`.
+launches it and reads the receipt; it does not roll back itself. `recover` and `repair` run the
+installer's command of that name. Only the installer registers the service; hosts run its `start`.
 
 ## Module map
 
@@ -29,44 +29,44 @@ Keep `src` organized by responsibility. New code belongs in the owning module;
 do not grow `cli.ts` or `setup/` into an application god module. Paths are
 relative to `src/`.
 
-| Path                                 | Single responsibility                                                                               |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `main.ts`                            | Binary entrypoint: dispatches the internal modes or the Computer CLI                                |
-| `cli.ts`                             | Commander command tree and thin command actions                                                     |
-| `cli/`                               | Command wiring and output: login, setup, update, daemon, restart; upgrade wording                   |
-| `errors.ts`                          | Stable user-facing CLI error stages                                                                 |
-| `terminal-output.ts`                 | Terminal-safe text                                                                                  |
-| `setup/`                             | Computer setup business flow                                                                        |
-| `workspace/`                         | Direct Workspace lookup and slug validation for setup intent                                        |
-| `registration/`                      | Computer registration idempotency                                                                   |
-| `cloud-rpc-transport.ts`             | User-authenticated HTTPS RPC for `workspace:get` and `computer:register`                            |
-| `login.ts`, `oauth-device-client.ts` | Device-code authorization                                                                           |
-| `logout.ts`                          | Local credential logout while retaining Workspace registrations                                     |
-| `credential-store.ts`                | File-backed User credentials                                                                        |
-| `machine-id.ts`, `platform.ts`       | Machine identity and platform metadata                                                              |
-| `paths.ts`                           | Platform-native state and credential paths                                                          |
-| `local-config.ts`                    | Reading and validating the persisted profile                                                        |
-| `release-channel.ts`                 | Compiled official feed/server mapping                                                               |
-| `daemon-client/`                     | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                       |
-| `daemon-service/`                    | The daemon host's inputs for this machine, shared by `cli.ts` and `__lifecycle service-definition`  |
-| `host/`                              | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |
-| `status/`                            | Read-only `status` report through per-platform ports                                                |
-| `doctor/`                            | Read-only diagnostic checks built from the status report                                            |
-| `logging/`                           | Computer LogTape configuration and the `logs` follower                                              |
-| `updater.ts`                         | Reads the installed version; zod contract schemas and launcher text shared with the installer       |
-| `release/upgrade-runner.ts`          | Runs the installer for one upgrade or `recover`, and returns its receipt                            |
-| `release/remote-upgrade.ts`          | Runs one server-triggered upgrade, records redacted launch output, then removes its finished OS job |
-| `release/upgrade-receipt.ts`         | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)         |
-| `release/upgrade-operation.ts`       | One upgrade operation record, built from CLI or `__remote-upgrade` arguments                        |
-| `release/installer-contract.ts`      | Shapes shared only with `coforge-installer` (release manifest, lifecycle)                           |
-| `release/supervisor-status.ts`       | What the supervisor runs: live snapshot, or persisted bindings when stopped                         |
-| `release/lifecycle-command.ts`       | Hidden `__lifecycle` command: the installer's read-only JSON surface                                |
-| `release/installer-launch.ts`        | Fetches, verifies, and caches the `coforge-installer` binary for this machine                       |
-| `version.ts`                         | Build version                                                                                       |
+| Path                                       | Single responsibility                                                                               |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `main.ts`                                  | Binary entrypoint: dispatches the internal modes or the Computer CLI                                |
+| `cli.ts`                                   | Commander command tree and thin command actions                                                     |
+| `cli/`                                     | Command wiring and output: login, setup, update, daemon, restart; upgrade wording                   |
+| `errors.ts`                                | Stable user-facing CLI error stages                                                                 |
+| `terminal-output.ts`                       | Terminal-safe text                                                                                  |
+| `setup/`                                   | Computer setup business flow                                                                        |
+| `workspace/`                               | Direct Workspace lookup and slug validation for setup intent                                        |
+| `registration/`                            | Computer registration idempotency                                                                   |
+| `cloud-rpc-transport.ts`                   | User-authenticated HTTPS RPC for `workspace:get` and `computer:register`                            |
+| `login.ts`, `oauth-device-client.ts`       | Device-code authorization                                                                           |
+| `logout.ts`                                | Local credential logout while retaining Workspace registrations                                     |
+| `credential-store.ts`                      | File-backed User credentials                                                                        |
+| `machine-id.ts`, `platform.ts`             | Machine identity and platform metadata                                                              |
+| `paths.ts`                                 | Platform-native state and credential paths                                                          |
+| `local-config.ts`                          | Reading and validating the persisted profile                                                        |
+| `release-channel.ts`                       | Compiled official feed/server mapping                                                               |
+| `daemon-client/`                           | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                       |
+| `daemon-service/`                          | The daemon host's inputs for this machine, shared by `cli.ts` and `__lifecycle service-definition`  |
+| `host/`                                    | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |
+| `status/`                                  | Read-only `status` report through per-platform ports                                                |
+| `doctor/`                                  | Read-only diagnostic checks built from the status report                                            |
+| `logging/`                                 | Computer LogTape configuration and the `logs` follower                                              |
+| `updater.ts`                               | Reads the installed version; zod contract schemas and launcher text shared with the installer       |
+| `release/upgrade-runner.ts`                | Runs the installer for one upgrade, or `recover`/`repair` on the terminal                           |
+| `release/coordinator-service-registrar.ts` | Runs `coforge-installer start` to register and start the service                                    |
+| `release/remote-upgrade.ts`                | Runs one server-triggered upgrade, records redacted launch output, then removes its finished OS job |
+| `release/upgrade-receipt.ts`               | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)         |
+| `release/upgrade-operation.ts`             | One upgrade operation record, built from CLI or `__remote-upgrade` arguments                        |
+| `release/installer-contract.ts`            | Shapes shared only with `coforge-installer` (release manifest, lifecycle)                           |
+| `release/supervisor-status.ts`             | What the supervisor runs: live snapshot, or persisted bindings when stopped                         |
+| `release/lifecycle-command.ts`             | Hidden `__lifecycle` command: the installer's read-only JSON surface                                |
+| `release/installer-launch.ts`              | Fetches, verifies, and caches the `coforge-installer` binary for this machine                       |
+| `version.ts`                               | Build version                                                                                       |
 
 `coforge-computer __lifecycle protocol|status|service-definition` is how the installer reads a
-Computer (`service-definition`: the service file it writes before starting the service, rendered
-by the daemon host). It prints exactly one JSON object on stdout (the `Lifecycle*` shapes), exits
+Computer (`service-definition`: the service file it registers, rendered by the daemon host). It prints exactly one JSON object on stdout (the `Lifecycle*` shapes), exits
 with `LIFECYCLE_EXIT_CODE`, and writes nothing, since the installer also probes a candidate binary
 that never ran. It has no pause, runner hold, or resume: an installer upgrade stops the service
 outright and busy Agents are stopped with it. Do not add a control verb without a product decision. The
@@ -107,9 +107,9 @@ scripts, pointed at `<feed>/installer` (pointer and manifest phases) plus their
 it verifies size and checksum in TypeScript, keeps the binary in
 `<install root>/installer/<sha256>/`, prunes to the current plus two more
 recently used copies (ranked by use time, never hashed; a kept copy is verified before use),
-and sweeps what a killed run left after an hour.
-It does not launch the installer, read receipts, or touch the product's own
-upgrade transaction.
+and sweeps what a killed run left after an hour. With the feed unreachable it uses the newest
+cached copy that hashes to its directory name (`installer-cache.ts`). It does not launch the
+installer, read receipts, or touch the product's own upgrade transaction.
 The install and upgrade transaction is serialized by the machine
 mutation lock; do not narrow it to activation or reuse the Supervisor lifetime
 mutex as the upgrade lock.

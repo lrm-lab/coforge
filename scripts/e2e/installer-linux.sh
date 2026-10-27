@@ -199,10 +199,10 @@ record S1 "receipt succeeded for 0.1.0-e2e.1" "$(json_eval "${R:-/dev/null}" "d.
 # ---------------------------------------------------------------------------------------------
 
 snapshot "$OUT/steps/s2-before"
-# Only `coforge-computer setup` writes the unit (packages/daemon/src/daemon-host/systemd-user.ts,
-# SystemdUserDaemonHost.ensureStarted), and setup needs a Workspace server this E2E does not have.
-# So the unit is registered here with linux-supervisor-unit.ts, which prints the product's own
-# systemdUserUnit text; it is enabled and started the way ensureStarted does it, with no Workspace.
+# The unit is registered by `coforge-installer start`; the Computer's `setup` only asks for it
+# (SystemdUserDaemonHost.ensureRunning), and setup needs a Workspace server this E2E does not have.
+# So the unit is registered here by hand with linux-supervisor-unit.ts, which prints the product's
+# own systemdUserUnit text, then enabled and started the way the installer does, with no Workspace.
 step s2-unit bash -c "
   set -e
   cd '$SRC' && mise exec -- bun scripts/e2e/linux-supervisor-unit.ts > '$UNIT'

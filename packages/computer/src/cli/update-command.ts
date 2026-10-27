@@ -4,6 +4,7 @@ import { ComputerUpdater } from "#src/updater";
 import {
   resolveUpgradeRunnerPaths,
   runInstallerRecovery,
+  runInstallerRepair,
   runUpgradeOperation,
 } from "#src/release/upgrade-runner";
 import { nextUpgradeCommandHint, reportStoppedWorkspaces } from "./upgrade-output";
@@ -46,5 +47,6 @@ export function createUpdateCommand(io: {
       reportStoppedWorkspaces(io, result);
     },
     recover: () => runInstallerRecovery(),
+    repair: () => runInstallerRepair(),
   };
 }

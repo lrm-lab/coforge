@@ -80,7 +80,8 @@ function renderServiceDefinition(status: ComputerStatusReport["supervisor"]["ser
   const label = "  Service definition:    ";
   if (status.state === "not_checked") return [];
   if (status.state === "unreadable") return [`${label}unreadable (${terminalText(status.error)})`];
-  return [`${label}${status.state}`];
+  if (status.state === "matches") return [`${label}matches`];
+  return [`${label}${status.state} — run coforge-computer repair`];
 }
 
 function renderLoginShellPath(status: ComputerStatusReport["loginShellPath"]): string {

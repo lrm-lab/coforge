@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "#src/platform/native-command";
-import { writePrivateFile } from "#src/platform/private-file";
 import { escapeXmlText } from "@lrm/coforge-sdk/internal";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
+  CoordinatorServiceRegistrar,
   DaemonLauncher,
   DaemonServiceDefinition,
   DaemonStarted,
@@ -13,11 +13,6 @@ import type {
 } from "./launcher";
 
 type CommandRunner = (command: string[]) => Promise<NativeCommandResult>;
-
-/** launchd exit codes documented as "a previous bootout for this label is still tearing down":
- * EIO, and "operation already in progress". `restart()`'s bootstrap-when-absent fallback retries
- * only these; every other code is a real failure and must not be retried. */
-const BOOTSTRAP_RETRYABLE_EXIT_CODES = new Set([5, 37]);
 
 export type LaunchdDaemonHostOptions = {
   label: string;
@@ -28,17 +23,18 @@ export type LaunchdDaemonHostOptions = {
   daemonConnectionEndpoint?: string;
   homeDirectory: string;
   uid: number;
-  writeFile?: (path: string, content: string) => Promise<void>;
+  /** Registers and starts the user agent when launchd does not know the label. */
+  registrar: CoordinatorServiceRegistrar;
   run?: CommandRunner;
-  /** Test seam so `stop()`'s post-bootout departure poll and `restart()`'s bootstrap retry
-   * backoff do not really wait. Production always uses `Bun.sleep`. */
+  /** Test seam so `stop()`'s post-bootout departure poll does not really wait. Production
+   * always uses `Bun.sleep`. */
   sleep?: (milliseconds: number) => Promise<void>;
   /** How long `stop()` waits for the label to actually leave launchd after a successful
    * `bootout` before giving up. Must exceed launchd's ~5 s SIGKILL teardown window; overridable
    * only so tests can force the timeout branch without really waiting. */
   stopTimeoutMilliseconds?: number;
   /** Test seam for the internal Unix-socket handshake that `ensureRunning()`/`restart()` wait on
-   * after installing or kickstarting the user agent. Production always dials the real socket. */
+   * after registering or kickstarting the user agent. Production always dials the real socket. */
   connect?: (socketPath: string) => Promise<LocalDaemonConnection>;
   /** How long the post-kickstart/bootstrap local handshake wait is willing to retry. Forwarded to
    * the internal `LocalDaemonLauncher`; overridable only for tests. */
@@ -47,9 +43,9 @@ export type LaunchdDaemonHostOptions = {
 
 /**
  * The launchd user-agent lifecycle that hosts the CoForge Daemon on macOS. Two capabilities: the
- * ordinary install/start path shared with every platform (`ensureInstalled`, `ensureRunning`,
- * `stop`), and the in-place restart path unique to launchd (`restart`, `assertRestartable`) that
- * an upgrade uses instead of stop-then-start.
+ * ordinary start path shared with every platform (`ensureRunning`, `stop`), and the in-place
+ * restart path unique to launchd (`restart`, `assertRestartable`) that an upgrade uses instead of
+ * stop-then-start. A label launchd does not know is registered by the `registrar`, never here.
  */
 export class LaunchdDaemonHost implements DaemonLauncher {
   /** Tells an upgrade lifecycle to restart through `restart()` rather than `stop()` + `start()`.
@@ -58,7 +54,6 @@ export class LaunchdDaemonHost implements DaemonLauncher {
   readonly #plistPath: string;
   readonly #target: string;
   readonly #run: CommandRunner;
-  readonly #writeFile: (path: string, content: string) => Promise<void>;
   readonly #sleep: (milliseconds: number) => Promise<void>;
   readonly #stopTimeoutMilliseconds: number;
   readonly #options: LaunchdDaemonHostOptions;
@@ -74,7 +69,6 @@ export class LaunchdDaemonHost implements DaemonLauncher {
     );
     this.#target = `gui/${options.uid}/${options.label}`;
     this.#run = options.run ?? runCommand;
-    this.#writeFile = options.writeFile ?? writePrivateFile;
     this.#sleep = options.sleep ?? Bun.sleep;
     this.#stopTimeoutMilliseconds = options.stopTimeoutMilliseconds ?? 15_000;
     this.#local = new LocalDaemonLauncher({
@@ -92,7 +86,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
     return this.#local.preflight();
   }
 
-  /** The plist `ensureInstalled` and `restart` write, for a caller that registers it itself. */
+  /** The plist the installer registers for this host, rendered from the host's own inputs. */
   serviceDefinition(): DaemonServiceDefinition {
     return { manager: "launchd", contents: launchdPlist(this.#options), path: this.#plistPath };
   }
@@ -103,7 +97,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
   }
 
   async ensureRunning(): Promise<void> {
-    await this.ensureInstalled();
+    if (!(await this.#loaded())) await this.#options.registrar.registerAndStart();
     await this.#local.ensureRunning();
   }
 
@@ -137,22 +131,6 @@ export class LaunchdDaemonHost implements DaemonLauncher {
     );
   }
 
-  async ensureInstalled(): Promise<void> {
-    if ((await this.#run(["launchctl", "print", this.#target])).code === 0) return;
-    await this.#writeFile(this.#plistPath, this.serviceDefinition().contents);
-    const result = await this.#run([
-      "launchctl",
-      "bootstrap",
-      `gui/${this.#options.uid}`,
-      this.#plistPath,
-    ]);
-    if (result.code !== 0)
-      throw new Error(
-        "The launchd user agent could not start CoForge Daemon. Run `coforge-computer foreground` under an external supervisor; CoForge will not detach a fallback process.",
-        { cause: launchctlFailure("bootstrap", result) },
-      );
-  }
-
   /** Throws unless the label is currently loaded in `gui/<uid>`. Lets an upgrade lifecycle refuse
    * a `foreground`, externally supervised Computer — which never installed this user agent —
    * before it switches the active executable symlink, rather than discovering it only after
@@ -167,40 +145,24 @@ export class LaunchdDaemonHost implements DaemonLauncher {
    * label is loaded, `launchctl kickstart -k` re-resolves `ProgramArguments` — so a symlink flip
    * that already landed is honoured — and is synchronous: it does not return until the *new*
    * process has been spawned, so there is never an unload window for launchd to remove the job
-   * in, unlike `bootout` then `bootstrap`.
+   * in, unlike `bootout` then `bootstrap`. It restarts a job launchd already holds and registers
+   * nothing: the one service-control call the Computer still makes itself.
    *
-   * When the label is not loaded — the recovery branch, not the common case — this falls back to
-   * the same write-plist-then-bootstrap `ensureInstalled` uses, retrying only on the documented
-   * "a previous bootout is still tearing down" exit codes (5 = EIO, 37 = operation already in
-   * progress); any other code fails immediately.
+   * When the label is not loaded — the recovery branch, not the common case — the `registrar`
+   * registers and starts it.
    */
   async restart(): Promise<void> {
-    const loaded = (await this.#run(["launchctl", "print", this.#target])).code === 0;
-    if (loaded) {
+    if (await this.#loaded()) {
       const result = await this.#run(["launchctl", "kickstart", "-k", this.#target]);
       if (result.code !== 0) throw launchctlFailure("kickstart", result);
     } else {
-      await this.#writeFile(this.#plistPath, this.serviceDefinition().contents);
-      const attempts = 3;
-      let failure: NativeCommandResult | undefined;
-      for (let attempt = 1; attempt <= attempts; attempt++) {
-        const result = await this.#run([
-          "launchctl",
-          "bootstrap",
-          `gui/${this.#options.uid}`,
-          this.#plistPath,
-        ]);
-        if (result.code === 0) {
-          failure = undefined;
-          break;
-        }
-        failure = result;
-        if (!BOOTSTRAP_RETRYABLE_EXIT_CODES.has(result.code) || attempt === attempts) break;
-        await this.#sleep(1_000);
-      }
-      if (failure) throw launchctlFailure("bootstrap", failure);
+      await this.#options.registrar.registerAndStart();
     }
     await this.#local.ensureRunning();
+  }
+
+  async #loaded(): Promise<boolean> {
+    return (await this.#run(["launchctl", "print", this.#target])).code === 0;
   }
 }
 

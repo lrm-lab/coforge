@@ -51,6 +51,8 @@ export interface UpdateCommand {
   upgrade(version: string, options: UpdateOptions): Promise<void>;
   /** Resolves to the installer's exit status. */
   recover(): Promise<number>;
+  /** Resolves to the installer's exit status. */
+  repair(): Promise<number>;
 }
 
 export interface DaemonCommand {
@@ -205,6 +207,12 @@ export async function runCli(
     .description("Finish an upgrade that did not complete.")
     .action(async () => {
       exitCode = await requireUpdater(dependencies).recover();
+    });
+  program
+    .command("repair")
+    .description("Re-register a missing or stale service definition, stopping nothing.")
+    .action(async () => {
+      exitCode = await requireUpdater(dependencies).repair();
     });
   program
     .command("start")

@@ -95,6 +95,7 @@ export {
   windowsDaemonTaskXml,
   windowsTaskUserId,
 } from "#src/daemon-host/index";
+export type { CoordinatorServiceRegistrar } from "#src/daemon-host/launcher";
 export {
   DAEMON_SERVICE_MANAGERS,
   DaemonCommandRejectedError,

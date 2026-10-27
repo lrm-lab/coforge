@@ -18,7 +18,8 @@ be on PATH and therefore cannot live in a private directory nobody's PATH names:
   directory is genuinely absent from PATH. The shim itself is only a symlink into
   the installation below `~/.coforge` (`active/coforge-computer`), so upgrade and
   downgrade never touch the user's PATH. Computer background startup is
-  user-scoped; only Computer may register a per-user LaunchAgent on macOS.
+  user-scoped; only the installer registers the per-user service (LaunchAgent, systemd user unit,
+  or Task Scheduler task), when the Computer asks it to start one.
   `install.sh --workspace <slug>` (`curl ... | sh -s -- --workspace <slug>`, the
   Add Computer dialog's command) then runs `setup` through the shim's full path,
   because a PATH entry written to shell configuration reaches only later shells,
@@ -94,8 +95,8 @@ installations remain rollbackable to
 their own retained bytes, but rollback does not translate between layouts.
 
 Normal CLI lifecycle commands are one-shot local RPC clients. They start or
-reuse the native per-user process manager and never detach an unmanaged
-fallback. Environments without that manager, including containers, must run
+reuse the native per-user process manager (asking the installer to register it
+when it is missing) and never detach an unmanaged fallback. Environments without that manager, including containers, must run
 `coforge-computer foreground` under an explicit external supervisor. That mode
 does not transfer process ownership to the CLI and is not silently selected.
 

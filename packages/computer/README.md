@@ -74,7 +74,8 @@ a version that is not SemVer the same way. `upgrade --dry-run` (with the same
 whether the installer would refuse the move, then stops without a prompt, a
 download, or any change; it exits 1 when the move would be refused. See
 [`docs/release/upgrade-operations.md`](../../docs/release/upgrade-operations.md).
-`coforge-computer recover` finishes an upgrade that did not complete. All
+`coforge-computer recover` finishes an upgrade that did not complete, and `coforge-computer repair`
+re-registers a missing or stale service definition without stopping anything. All
 versions and the sole Computer shim are installed for the current user; Daemon
 is never exposed as a separate installed command.
 

@@ -30,7 +30,15 @@ installer feed (`installer/latest`, gzip plus the `.sha256` sidecar check) and r
 `coforge-installer install --version <v>`. The installer downloads, verifies, and
 installs the Computer from its own compiled-in feed under the machine mutation
 lock; see [Upgrade operations](upgrade-operations.md). Computer fetches the
-installer through the same embedded scripts and then runs it.
+installer through the same embedded scripts and then runs it. With the feed unreachable it runs
+the most recently used cached installer that still hashes to its directory name.
+
+Only the installer registers the Coordinator service with the platform manager (launchd, systemd
+user, Task Scheduler). The Computer renders the definition (`__lifecycle service-definition`) and,
+when the manager does not know the service, runs `coforge-installer start`, which registers the
+definition and starts the service. `coforge-computer repair` runs the installer's `repair`, the
+fix for a definition that `coforge-computer status` reports as missing or differing. An installer
+too old to have `start` fails with a usage error until the current one can be fetched.
 
 Local builds are installed the same way, with
 `coforge-installer install --version <v> --from-directory <release dir> --allow-downgrade`,
@@ -43,11 +51,12 @@ The POSIX and PowerShell bootstraps accept `install`, `upgrade`, `repair`, `stat
 installer's selection surface: `--version` or `--channel main` may select a target, while an
 omitted selector repairs the active installation. A healthy installation returns a held
 `repair_not_needed` receipt; missing activation links are recreated, and a damaged immutable
-version is quarantined before the installer downloads and verifies a replacement. Once the
-activation is repaired, repair registers the service definition the active version prints (a file
-that already matches is left alone; a Task Scheduler task that is running is not replaced). A
-definition that cannot be registered fails the receipt and keeps the repaired activation. Repair
-does not stop or start the Computer supervisor. `RAFT_COMPUTER_VERSION` and `INSTALL_CHANNEL_DEFAULT` fill
+version is quarantined before the installer downloads and verifies a replacement. Repair then
+reconciles the service definition the active version prints, on a healthy installation too (a file
+that already matches is left alone, and an installation that needs nothing else ends in a held
+`REPAIR_NOT_NEEDED` receipt; a Task Scheduler task that is running is not replaced). A definition
+that cannot be registered fails the receipt and keeps the repaired activation. Repair does not stop
+or start the Computer supervisor. `RAFT_COMPUTER_VERSION` and `INSTALL_CHANNEL_DEFAULT` fill
 omitted bootstrap selections, and explicit flags win. `--setup` passes the remaining arguments to
 the installed Computer after install, upgrade, or repair, including when an operation exits 3 but
 an existing binary remains usable. An installer exit 3 is retried once for install, upgrade, and

@@ -435,8 +435,12 @@ test("renderStatusHuman states whether the service file matches, is missing, or 
     );
 
   expect(line({ state: "matches", path: PLIST_PATH })).toBe("  Service definition:    matches");
-  expect(line({ state: "missing", path: PLIST_PATH })).toBe("  Service definition:    missing");
-  expect(line({ state: "differs", path: PLIST_PATH })).toBe("  Service definition:    differs");
+  expect(line({ state: "missing", path: PLIST_PATH })).toBe(
+    "  Service definition:    missing — run coforge-computer repair",
+  );
+  expect(line({ state: "differs", path: PLIST_PATH })).toBe(
+    "  Service definition:    differs — run coforge-computer repair",
+  );
   expect(line({ state: "unreadable", path: PLIST_PATH, error: "EACCES" })).toBe(
     "  Service definition:    unreadable (EACCES)",
   );

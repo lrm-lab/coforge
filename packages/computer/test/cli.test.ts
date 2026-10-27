@@ -87,6 +87,9 @@ test.each(["", "n", "no", "maybe", null])(
           async recover() {
             return 0;
           },
+          async repair() {
+            return 0;
+          },
         },
       },
       {
@@ -106,7 +109,7 @@ test.each(["", "n", "no", "maybe", null])(
 );
 
 test.each(["y", " YES "])(
-  "install, upgrade, and recover run their own operations; upgrade requires consent: %s",
+  "install, upgrade, recover, and repair run their own operations; upgrade requires consent: %s",
   async (answer) => {
     const calls: Array<{ operation: string; version?: string }> = [];
     const dependencies = {
@@ -129,6 +132,10 @@ test.each(["y", " YES "])(
         async recover() {
           calls.push({ operation: "recover" });
           return 0;
+        },
+        async repair() {
+          calls.push({ operation: "repair" });
+          return 3;
         },
       },
     };
@@ -157,6 +164,7 @@ test.each(["y", " YES "])(
       ),
     ).resolves.toBe(0);
     await expect(runCli(["recover"], dependencies)).resolves.toBe(0);
+    await expect(runCli(["repair"], dependencies)).resolves.toBe(3);
 
     expect(calls).toEqual([
       { operation: "install", version: "latest" },
@@ -166,6 +174,7 @@ test.each(["y", " YES "])(
         version: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       },
       { operation: "recover" },
+      { operation: "repair" },
     ]);
   },
 );
@@ -357,6 +366,9 @@ test("status is registered, read-only, and forwards --json without touching life
       recover: async () => {
         throw new Error("must not be called by status");
       },
+      repair: async () => {
+        throw new Error("must not be called by status");
+      },
     },
   };
 
@@ -435,6 +447,9 @@ test("upgrade and install pass --allow-downgrade to the updater only when it is 
       calls.push({ operation: "upgrade", version, allowDowngrade: options.allowDowngrade });
     },
     async recover() {
+      return 0;
+    },
+    async repair() {
       return 0;
     },
   };
