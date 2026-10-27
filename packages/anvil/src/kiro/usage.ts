@@ -2,6 +2,11 @@ import type { UsageOfficialBucket, UsageSnapshot } from "#src/contract";
 import { UsageUnavailableError } from "#src/contract";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
+/** Kiro's usage read runs two CLI calls (`whoami`, then `chat /usage`) that on the supported
+ * machine together take about 11-13 seconds, past the scan's shared default. The runtime declares
+ * this longer budget, still well inside the browser's 60s wait. */
+export const KIRO_USAGE_TIMEOUT_MS = 20_000;
+
 /** The host returns the official `/usage` text, or undefined when the CLI cannot read it. */
 export type KiroUsageReader = (
   options: Readonly<{
@@ -14,7 +19,12 @@ export async function readKiroUsage(
   options: Readonly<{ workingDirectory: string; timeoutMs?: number }>,
   readResponse: KiroUsageReader,
 ): Promise<UsageSnapshot> {
-  const response = await readResponse(options);
+  // Kiro reads usage with two CLI calls that together outrun a usage scan's shared default, so this
+  // runtime never reads on a shorter budget than its own.
+  const response = await readResponse({
+    ...options,
+    timeoutMs: Math.max(options.timeoutMs ?? 0, KIRO_USAGE_TIMEOUT_MS),
+  });
   if (typeof response !== "string") throw new UsageUnavailableError();
   return parseKiroUsageText(response);
 }

@@ -93,6 +93,12 @@ export type UsageReadResult = {
  * this name for this cache's readers. */
 export const USAGE_STALE_AFTER_MS = SCAN_RESULT_STALE_AFTER_MS;
 
+/** A failed read (`unavailable` or `error`) stays fresh only this long. Long enough that several
+ * panels opening, or a page reload, do not re-run the runtime's CLI each time; short enough that a
+ * transient failure is retried soon instead of leaving the panel blank for the full window. A
+ * successful reading keeps `USAGE_STALE_AFTER_MS`. */
+export const FAILED_USAGE_STALE_AFTER_MS = 2 * 60_000;
+
 /**
  * Write the result and clear the in-flight scan in one round trip. They are one fact — the scan is
  * over because the result exists — so a reader should never be able to observe the two halves of
@@ -149,12 +155,20 @@ export class RedisUsageCache implements UsageCache {
   }
 
   async read(key: UsageCacheKey): Promise<UsageReadResult> {
-    return readScanResult<UsageResultRecord>(
+    const read = await readScanResult<UsageResultRecord>(
       this.redis,
       scanResultKeys(this.scopeKey(key)),
       USAGE_STALE_AFTER_MS,
       this.now(),
     );
+    // A failed read keeps a much shorter fresh window than a successful one, so it does not hold
+    // the panel blank for half an hour while not re-running the runtime's CLI on every page load.
+    if (read.result?.status !== "unavailable" && read.result?.status !== "error") return read;
+    const age = this.now() - Date.parse(read.result.collectedAt);
+    return {
+      ...read,
+      state: Number.isFinite(age) && age <= FAILED_USAGE_STALE_AFTER_MS ? "fresh" : "stale",
+    };
   }
 
   private scopeKey(key: UsageCacheKey) {

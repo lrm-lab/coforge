@@ -4,9 +4,10 @@ import {
   UsageUnavailableError,
   withDeadline,
 } from "@lrm/coforge-anvil";
-import { parseKiroWhoami } from "@lrm/coforge-anvil/kiro";
+import { KIRO_USAGE_TIMEOUT_MS, parseKiroWhoami } from "@lrm/coforge-anvil/kiro";
 import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
 import { rm, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,8 +16,39 @@ import { processSpawner } from "#src/code-agent/process-host";
 import { resolveHostCodeAgentExecutable } from "#src/code-agent/runtime-executable";
 
 const KIRO_USAGE_COMMAND = ["kiro-cli", "chat", "--no-interactive", "/usage"] as const;
-/** Kiro cold-starts in about six seconds on the supported machine; stay below the browser's 60s wait. */
-export const KIRO_USAGE_TIMEOUT_MS = 20_000;
+
+const logger = getLogger(["coforge", "daemon", "kiro-usage"]);
+
+/** Why a Kiro usage read gave up. Logged as a stable code so a failure keeps a reason without
+ * recording the command's own output. */
+type KiroUsageFailureReason =
+  | "timeout"
+  | "not_logged_in"
+  | "device_login"
+  | "nonzero_exit"
+  | "empty_output"
+  | "spawn_failed"
+  | "unexpected";
+
+class KiroUsageFailure extends Error {
+  constructor(readonly reason: KiroUsageFailureReason) {
+    super(`Kiro usage read failed: ${reason}`);
+  }
+}
+
+/** Spawns the CLI's process tree, naming a spawn that throws rather than leaving it unexplained. */
+function spawnTree(
+  spawner: ProcessTreeSpawner,
+  command: readonly string[],
+  cwd: string,
+  environment: Readonly<Record<string, string>>,
+): OwnedProcessTree {
+  try {
+    return spawner.spawn(command, cwd, environment, { terminal: false });
+  } catch {
+    throw new KiroUsageFailure("spawn_failed");
+  }
+}
 
 export type KiroUsageHostOptions = Readonly<{
   workingDirectory: string;
@@ -53,25 +85,26 @@ export async function readKiroUsageResponse(options: KiroUsageHostOptions): Prom
     const deadlineAt = Date.now() + (options.timeoutMs ?? KIRO_USAGE_TIMEOUT_MS);
     const withBudget = <T>(work: Promise<T>) => {
       const remainingMs = deadlineAt - Date.now();
-      if (remainingMs <= 0) return Promise.reject(new UsageUnavailableError());
-      return withDeadline(work, remainingMs, () => new UsageUnavailableError());
+      if (remainingMs <= 0) return Promise.reject(new KiroUsageFailure("timeout"));
+      return withDeadline(work, remainingMs, () => new KiroUsageFailure("timeout"));
     };
-    tree = (options.spawn ?? processSpawner).spawn(
+    tree = spawnTree(
+      options.spawn ?? processSpawner,
       [executable, "whoami", "--format", "json"],
       workingDirectory,
       environment,
-      { terminal: false },
     );
     const identity = await withBudget(collectOutput(tree));
     await cleanupOwnedTree(tree, tree.child).catch(() => {});
     tree = undefined;
-    if (parseKiroWhoami(identity.stdout).state !== "logged_in") throw new UsageUnavailableError();
-    if (deadlineAt <= Date.now()) throw new UsageUnavailableError();
-    tree = (options.spawn ?? processSpawner).spawn(
+    if (parseKiroWhoami(identity.stdout).state !== "logged_in")
+      throw new KiroUsageFailure("not_logged_in");
+    if (deadlineAt <= Date.now()) throw new KiroUsageFailure("timeout");
+    tree = spawnTree(
+      options.spawn ?? processSpawner,
       [executable, ...KIRO_USAGE_COMMAND.slice(1)],
       workingDirectory,
       environment,
-      { terminal: false },
     );
     const result = await withBudget(
       collectOutput(tree, (chunk) => {
@@ -79,15 +112,21 @@ export async function readKiroUsageResponse(options: KiroUsageHostOptions): Prom
           earlyStop = cleanupOwnedTree(tree!, tree!.child).catch(() => {});
       }),
     );
-    if (result.exitCode !== 0 || earlyStop) throw new UsageUnavailableError();
+    if (result.exitCode !== 0 || earlyStop)
+      throw new KiroUsageFailure(earlyStop ? "device_login" : "nonzero_exit");
     const output = result.stdout.includes("Estimated Usage")
       ? result.stdout
       : result.stderr.includes("Estimated Usage")
         ? result.stderr
         : result.stdout;
-    if (!output.trim()) throw new UsageUnavailableError();
+    if (!output.trim()) throw new KiroUsageFailure("empty_output");
     return output;
-  } catch {
+  } catch (error) {
+    logger.warning("Kiro usage read failed", {
+      event: "kiro_usage:read_failed",
+      reason: error instanceof KiroUsageFailure ? error.reason : "unexpected",
+      outcome: "unavailable",
+    });
     throw new UsageUnavailableError();
   } finally {
     if (tree) await (earlyStop ?? cleanupOwnedTree(tree, tree.child)).catch(() => {});

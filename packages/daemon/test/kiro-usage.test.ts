@@ -7,6 +7,7 @@ import {
 } from "@lrm/coforge-anvil";
 import { readKiroUsageResponse } from "#src/code-agent/kiro/usage-host";
 import { usageScanFailure } from "#src/daemon-runtime/usage-scan-response";
+import { captureDaemonLogs } from "./log-capture";
 
 const USAGE = `Estimated Usage | resets on 2026-11-01 | KIRO POWER
 Credits (10000.00 of 10000 covered in plan), 100.0%
@@ -208,4 +209,33 @@ test("keeps Kiro usage unavailable instead of turning it into a sign-in state", 
     status: "unavailable",
     message: "Provider usage is unavailable",
   });
+});
+
+test("logs a stable failure reason, never the native command's output", async () => {
+  const whoami = new FixtureTree('{"account":{"accountType":"IamIdentityCenter"}}');
+  const tree = new FixtureTree("fixture-secret-output", 1);
+  const { records } = await captureDaemonLogs(() =>
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1000,
+      spawn: spawner([whoami, tree], {}),
+    }).catch(() => undefined),
+  );
+  const failed = records.find((record) => record.properties.event === "kiro_usage:read_failed");
+  expect(failed?.properties.reason).toBe("nonzero_exit");
+  expect(JSON.stringify(records)).not.toContain("fixture-secret-output");
+});
+
+test("logs a timeout reason when the native read outruns its budget", async () => {
+  const whoami = new FixtureTree('{"account":{"accountType":"IamIdentityCenter"}}');
+  const tree = new FixtureTree("", 0, true);
+  const { records } = await captureDaemonLogs(() =>
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 20,
+      spawn: spawner([whoami, tree], {}),
+    }).catch(() => undefined),
+  );
+  const failed = records.find((record) => record.properties.event === "kiro_usage:read_failed");
+  expect(failed?.properties.reason).toBe("timeout");
 });

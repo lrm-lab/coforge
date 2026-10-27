@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { UsageUnavailableError } from "@lrm/coforge-anvil";
-import { readKiroUsage } from "@lrm/coforge-anvil/kiro";
+import { KIRO_USAGE_TIMEOUT_MS, readKiroUsage } from "@lrm/coforge-anvil/kiro";
 
 const USAGE = `Estimated Usage | resets on 2026-11-01 | KIRO POWER
 Credits (10000.00 of 10000 covered in plan), 100.0%
@@ -69,15 +69,21 @@ test("does not infer usage from a malformed or unsupported official response", a
   }
 });
 
-test("passes the usage working directory and timeout to the host reader", async () => {
-  let received: unknown;
-  const result = await readKiroUsage(
-    { workingDirectory: "/tmp/kiro-project", timeoutMs: 3210 },
-    async (options) => {
-      received = options;
-      return USAGE;
-    },
-  );
-  expect(received).toEqual({ workingDirectory: "/tmp/kiro-project", timeoutMs: 3210 });
-  expect(result?.provider).toBe("kiro");
+test("never reads usage on a budget shorter than Kiro's own, and keeps a longer one", async () => {
+  // The scan passes its shared 10s default; Kiro's two CLI calls together need longer than that,
+  // so this runtime raises the budget to its own 20s. A caller asking for longer keeps it.
+  const received: Array<{ workingDirectory: string; timeoutMs?: number }> = [];
+  const readResponse = async (options: { workingDirectory: string; timeoutMs?: number }) => {
+    received.push(options);
+    return USAGE;
+  };
+  await readKiroUsage({ workingDirectory: "/tmp/kiro-project", timeoutMs: 10_000 }, readResponse);
+  await readKiroUsage({ workingDirectory: "/tmp/kiro-project", timeoutMs: 30_000 }, readResponse);
+  await readKiroUsage({ workingDirectory: "/tmp/kiro-project" }, readResponse);
+  expect(received).toEqual([
+    { workingDirectory: "/tmp/kiro-project", timeoutMs: KIRO_USAGE_TIMEOUT_MS },
+    { workingDirectory: "/tmp/kiro-project", timeoutMs: 30_000 },
+    { workingDirectory: "/tmp/kiro-project", timeoutMs: KIRO_USAGE_TIMEOUT_MS },
+  ]);
+  expect(KIRO_USAGE_TIMEOUT_MS).toBe(20_000);
 });

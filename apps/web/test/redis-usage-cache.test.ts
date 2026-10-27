@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { RedisUsageCache, USAGE_STALE_AFTER_MS } from "#src/server/centrifugo/usage-cache.server";
+import {
+  FAILED_USAGE_STALE_AFTER_MS,
+  RedisUsageCache,
+  USAGE_STALE_AFTER_MS,
+} from "#src/server/centrifugo/usage-cache.server";
 
 function fakeRedis() {
   const values = new Map<string, string>();
@@ -152,4 +156,33 @@ test("clears an in-flight scan and writes its result in one round trip", async (
   const read = await cache.read(key);
   expect(read.pendingScanId).toBeUndefined();
   expect(read).toMatchObject({ state: "fresh", result: { scanId: "scan-1" } });
+});
+
+test("a failed result stays fresh for two minutes, then reads stale, while a success keeps its window", async () => {
+  const collectedAt = "2026-09-17T00:00:00Z";
+  let now = Date.parse(collectedAt);
+  const redis = fakeRedis();
+  const cache = new RedisUsageCache(redis, "86400", "60", () => now);
+  await cache.putResult({ ...key, scanId: "scan-1", status: "unavailable", collectedAt });
+
+  // Just after the failure it is still fresh: a few panels or a reload do not re-run the CLI.
+  expect((await cache.read(key)).state).toBe("fresh");
+  now += FAILED_USAGE_STALE_AFTER_MS - 1;
+  expect((await cache.read(key)).state).toBe("fresh");
+  // Past the short window it is stale, so the next open scans again well before the 30-minute one.
+  now += 2;
+  await expect(cache.read(key)).resolves.toMatchObject({
+    state: "stale",
+    result: { scanId: "scan-1", status: "unavailable" },
+  });
+
+  const errored = fakeRedis();
+  let errorNow = Date.parse(collectedAt);
+  const errorCache = new RedisUsageCache(errored, "86400", "60", () => errorNow);
+  await errorCache.putResult({ ...key, scanId: "scan-2", status: "error", collectedAt });
+  errorNow += FAILED_USAGE_STALE_AFTER_MS + 1;
+  await expect(errorCache.read(key)).resolves.toMatchObject({
+    state: "stale",
+    result: { status: "error" },
+  });
 });
