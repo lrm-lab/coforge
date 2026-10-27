@@ -99,10 +99,17 @@ export async function runHost(
     );
     const job = await ports.cloud.claim(config.token);
     if (job) {
-      await acceptClaimedJob(job, config, {
-        containers: ports.containers,
-        report: (containerId) => ports.cloud.report(config.token, job.jobId, containerId),
-      });
+      try {
+        await acceptClaimedJob(job, config, {
+          containers: ports.containers,
+          report: (containerId) => ports.cloud.report(config.token, job.jobId, containerId),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[host] ${job.operation} job ${job.jobId} for ${job.computerId} failed: ${message}`,
+        );
+      }
     }
     if (signal.aborted) return;
     await ports.wait(signal);

@@ -7,12 +7,14 @@ import {
   dockerCloudPlacementInspectArgs,
   dockerImageDigestArgs,
   dockerImageInspectArgs,
+  dockerImageTagArgs,
   dockerServiceCreateArgs,
   dockerServiceFindArgs,
   dockerServiceRemoveArgs,
   dockerServiceUpdateArgs,
   dockerVolumeRemoveArgs,
   pinnedImageReference,
+  stableImageTag,
   swarmAccepting,
   type ContainerRuntime,
 } from "#src/host/docker-containers";
@@ -396,14 +398,17 @@ describe("swarm service arguments", () => {
     });
     await runtime.updateServiceImage("computer-1", "coforge-computer:staging");
     const pinned = `coforge-computer:staging@${digest}`;
+    const kept = dockerImageTagArgs(digest, stableImageTag(pinned, digest));
     expect(calls).toEqual([
       dockerImageDigestArgs("coforge-computer:staging"),
+      kept,
       dockerServiceCreateArgs({
         computerId: "computer-1",
         image: pinned,
         env: {},
       }),
       dockerImageDigestArgs("coforge-computer:staging"),
+      kept,
       dockerServiceUpdateArgs("computer-1", pinned),
     ]);
     expect(calls.some((args) => args[0] === "volume")).toBe(false);
@@ -419,6 +424,7 @@ describe("swarm service arguments", () => {
     });
     await runtime.createService({ computerId: "computer-1", image: pinned, env: {} });
     expect(calls).toEqual([
+      dockerImageTagArgs(digest, stableImageTag(pinned, digest)),
       dockerServiceCreateArgs({ computerId: "computer-1", image: pinned, env: {} }),
     ]);
     expect(pinnedImageReference("coforge-computer:staging", `sha256:${"c".repeat(64)}`)).toBe(
