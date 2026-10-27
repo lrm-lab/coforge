@@ -80,6 +80,7 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 | `--color-avatar-outline`   | `#ffffff`                                 | `#ffffff`（明暗一致）                    | 群头像里真人照片的白色贴纸边，与吉祥物美术自带的白边一致 |
 | `--color-online`           | `#1bb618`                                 | `#42c83f`                                | 在线/成功圆点             |
 | `--color-offline`          | `#afbccb`                                 | `#778393`                                | 离线圆点                  |
+| `--color-image-frame` / `--color-image-frame-border` | `oklch(0.9642 0 0)` / `oklch(0.1813 0.005 17.62 / 0.149)` | `oklch(0.3161 0.0052 106.7)` / `oklch(0.9843 0.004 106.47 / 0.102)` | 消息图片框的灰底和 1px 细边框，取 Raft 实际值（task #212）；圆角单张 10px、多图格子 8px，在组件里 |
 
 ## 4. 落地页的隔离 token
 

@@ -51,7 +51,7 @@ function ImageThumbnail({
           noTextPadding
           aria-label={attachment.fileName}
           className={cn(
-            "block h-auto overflow-hidden border border-secondary bg-tertiary p-0 hover:bg-tertiary [&>span]:block [&>span]:size-full",
+            "block h-auto overflow-hidden border border-image-frame-border bg-image-frame p-0 hover:bg-image-frame [&>span]:block [&>span]:size-full",
             className,
           )}
           style={style}

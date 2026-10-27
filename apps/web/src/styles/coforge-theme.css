@@ -74,6 +74,11 @@
   /* The white edge a person's photo gets beside stickers in a channel's group avatar. The
      mascot artwork's own edge is white in both themes, so the photo's is too. */
   --color-avatar-outline: #ffffff;
+
+  /* A message image's frame: the grey it sits on and its hairline border, Raft's own values
+     (task #212). The dark values are re-pointed under `.dark-mode` below. */
+  --color-image-frame: oklch(0.9642 0 0);
+  --color-image-frame-border: oklch(0.1813 0.005 17.62 / 0.149);
 }
 
 /* Sidebar background is a gradient in dark mode, which can't be expressed as a single
@@ -145,6 +150,9 @@
   }
 
   .dark-mode {
+    --color-image-frame: oklch(0.3161 0.0052 106.7);
+    --color-image-frame-border: oklch(0.9843 0.004 106.47 / 0.102);
+
     /* Re-point ramp-based semantic tokens at a lighter step, matching Untitled's own
        dark-mode pattern of remapping rather than redefining the ramp (see theme.css). */
     --color-border-brand: var(--color-brand-400);
