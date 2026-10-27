@@ -40,6 +40,7 @@ import type { ChipMention } from "./message-markdown";
 import type { ChannelSuggestion } from "./reference-completion";
 import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
 import { outboxContinuesRun } from "./conversation-pane-layout";
+import { useMessageExpansion } from "./use-message-expansion";
 import { optimisticSavedEntry } from "./saved-messages-collection";
 import { composerDraftKey } from "./composer-draft";
 import { OutboxMessageRow } from "./outbox-message-row";
@@ -356,15 +357,8 @@ export function ConversationPane({
   /** Message ids whose very long body the reader has opened in full. Kept here rather than in the
    * row: a row is skipped and laid out again as it leaves and re-enters the viewport, and an
    * expanded message must not re-collapse behind the reader. */
-  const [expandedMessages, setExpandedMessages] = useState<ReadonlySet<string>>(new Set());
+  const { expandedMessages, toggleExpandedMessage } = useMessageExpansion();
   const collapsible = conversation.collapseLongMessages !== false;
-  const toggleExpandedMessage = useCallback((messageId: string) => {
-    setExpandedMessages((current) => {
-      const next = new Set(current);
-      if (!next.delete(messageId)) next.add(messageId);
-      return next;
-    });
-  }, []);
   // Runs of consecutive system messages fold into one summary line (system-message-groups.ts). A
   // run never crosses a day divider or the unread divider, so both stay drawn, and the message the
   // pane opens on (the unread boundary) is always a group's first message or a row of its own.
@@ -1007,14 +1001,12 @@ export function ConversationPane({
                 draftKey={outboxDraftKey}
               />
             )}
-            {!root &&
-              conversation.hasNewer &&
-              onLoadNewer && (
-                // An empty sentinel below the newest row: coming into view asks for the page that
-                // restores the evicted tail. Nothing is shown for it — the reader reached the bottom
-                // and the tail is on its way.
-                <div ref={newerSentinelRef} aria-hidden="true" className="h-8" />
-              )}
+            {!root && conversation.hasNewer && onLoadNewer && (
+              // An empty sentinel below the newest row: coming into view asks for the page that
+              // restores the evicted tail. Nothing is shown for it — the reader reached the bottom
+              // and the tail is on its way.
+              <div ref={newerSentinelRef} aria-hidden="true" className="h-8" />
+            )}
           </div>
         </div>
         {/* Along the composer's top edge, over the history's bottom padding: who is typing on the

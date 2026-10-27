@@ -22,7 +22,6 @@ import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
-import { MessageAttachments } from "./attachment-card";
 import { MessageSenderLine } from "./message-sender-line";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
@@ -30,9 +29,7 @@ import { useIsMessageSaved } from "./conversation-host";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-markdown";
 import { formatSelectionQuote, selectionAffordancePlacement } from "./message-quote";
-import { MessageReactionBadges } from "./message-reaction-badges";
 import { MessageReactionPicker, QUICK_REACTION_EMOJIS } from "./message-reaction-picker";
-import type { ReactionSummary } from "./message-reactions";
 import { RootThread, ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
 import {
   copyFragmentMarkdown,
@@ -48,9 +45,8 @@ import { clockLabel } from "#src/lib/dates";
 import { gutterClockLabel } from "./gutter-clock-label";
 import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { SystemMessageRow } from "./system-message-row";
-import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 import { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
-import { SavedMessageMarker } from "./message-status-markers";
+import { MessageRowFooter } from "./message-row-footer";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
@@ -621,21 +617,15 @@ export const MessageRow = memo(function MessageRow({
               )}
             </div>
           )}
-          <MessageAttachments attachments={message.attachments} />
-          <MessageReactionBadges
-            reactions={message.reactions}
+          <MessageRowFooter
+            message={message}
             viewerId={viewerId}
-            onToggle={
+            onToggleReaction={
               onToggleReaction && ((emoji, active) => onToggleReaction(message.id, emoji, active))
             }
+            showsTask={showsTask}
+            onOpenThread={onOpenThread}
           />
-          {/* Saved is a per-viewer state, so this marker is only ever the viewer's own: it says
-              "this one is in your Saved" without opening the hover bar to check its bookmark. The
-              Saved page itself does not repeat it — that list has its own row (see
-              `saved-messages-view.tsx`), where every entry is saved by definition. */}
-          {saveSaved && <SavedMessageMarker />}
-          {showsTask && <MessageTask messageId={message.id} />}
-          {onOpenThread && <RootThread rootId={message.id} onOpen={onOpenThread} />}
         </div>
         {(onOpenThread || onToggleReaction || onToggleSave || copyable) && (
           /* Hidden until revealed: hover/focus in the wide desktop shell (`lg` and up, with
