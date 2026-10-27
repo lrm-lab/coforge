@@ -1,5 +1,10 @@
 export const COMPUTER_ID_LABEL = "coforge.computer_id";
 export const CONTAINER_STATE_MOUNT = "/root/.coforge";
+export const CONTAINER_OPT_MOUNT = "/opt";
+
+export function optVolumeName(computerId: string): string {
+  return `${serviceName(computerId)}-opt`;
+}
 
 export function serviceName(computerId: string): string {
   return `coforge-${computerId}`;
@@ -28,6 +33,8 @@ export function dockerServiceCreateArgs(input: {
     `${COMPUTER_ID_LABEL}=${input.computerId}`,
     "--mount",
     `type=volume,src=${serviceName(input.computerId)},dst=${CONTAINER_STATE_MOUNT}`,
+    "--mount",
+    `type=volume,src=${optVolumeName(input.computerId)},dst=${CONTAINER_OPT_MOUNT}`,
   ];
   for (const [key, value] of Object.entries(input.env)) {
     args.push("--env", `${key}=${value}`);
@@ -59,16 +66,21 @@ function volumeHolders(stderr: string): string[] {
     .filter((id) => /^[0-9a-f]+$/i.test(id));
 }
 
-async function removeDisk(spawn: DockerSpawn, computerId: string): Promise<void> {
-  const volume = await spawn(dockerVolumeRemoveArgs(computerId));
+async function removeOneVolume(spawn: DockerSpawn, name: string): Promise<void> {
+  const volume = await spawn(["volume", "rm", name]);
   if (volume.exitCode === 0 || resourceGone(volume.stderr, "volume")) return;
   const holders = volumeHolders(volume.stderr);
   if (holders.length === 0) throw new Error(volume.stderr || "docker volume rm failed");
   const cleared = await spawn(["rm", "-f", ...holders]);
   if (cleared.exitCode !== 0) throw new Error(cleared.stderr || "docker rm failed");
-  const retry = await spawn(dockerVolumeRemoveArgs(computerId));
+  const retry = await spawn(["volume", "rm", name]);
   if (retry.exitCode === 0 || resourceGone(retry.stderr, "volume")) return;
   throw new Error(retry.stderr || "docker volume rm failed");
+}
+
+async function removeDisk(spawn: DockerSpawn, computerId: string): Promise<void> {
+  await removeOneVolume(spawn, serviceName(computerId));
+  await removeOneVolume(spawn, optVolumeName(computerId));
 }
 
 export function dockerTaskFindArgs(computerId: string): string[] {

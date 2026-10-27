@@ -283,6 +283,8 @@ describe("swarm service arguments", () => {
       "coforge.computer_id=computer-1",
       "--mount",
       "type=volume,src=coforge-computer-1,dst=/root/.coforge",
+      "--mount",
+      "type=volume,src=coforge-computer-1-opt,dst=/opt",
       "--env",
       "COFORGE_SERVER_URL=https://server.example",
       "coforge-computer:local",
@@ -463,6 +465,7 @@ describe("swarm service arguments", () => {
     expect(calls).toEqual([
       ["service", "rm", "coforge-computer-1"],
       ["volume", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1-opt"],
     ]);
   });
 
@@ -481,6 +484,7 @@ describe("swarm service arguments", () => {
     expect(calls).toEqual([
       ["service", "rm", "coforge-computer-1"],
       ["volume", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1-opt"],
     ]);
   });
 
@@ -504,6 +508,7 @@ describe("swarm service arguments", () => {
       ["volume", "rm", "coforge-computer-1"],
       ["rm", "-f", "abc123", "def456"],
       ["volume", "rm", "coforge-computer-1"],
+      ["volume", "rm", "coforge-computer-1-opt"],
     ]);
   });
 

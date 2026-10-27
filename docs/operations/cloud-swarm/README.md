@@ -70,11 +70,11 @@ coforge-computer host
 
 ## 电脑如何落上集群
 
-新用户完成注册，或再创建一个工作区之后，服务端确保该账号的默认云电脑。还没有这台电脑时，放入一条 `create` 任务。`host` 领到后创建单副本服务，名称是 `coforge-<电脑编号>`，标签 `coforge.computer_id=<电脑编号>`，数据卷挂到容器内 `/root/.coforge`。服务起来后，容器里的 `foreground` 为这个工作区启动 Daemon。
+新用户完成注册，或再创建一个工作区之后，服务端确保该账号的默认云电脑。还没有这台电脑时，放入一条 `create` 任务。`host` 领到后创建单副本服务，名称是 `coforge-<电脑编号>`，标签 `coforge.computer_id=<电脑编号>`，数据卷挂到容器内 `/root/.coforge`，另有一块卷挂到 `/opt`，用户往 `/opt` 安装的软件升级后还在。服务起来后，容器里的 `foreground` 为这个工作区启动 Daemon。
 
 该用户再创建一个工作区，并且这台电脑的容器已经就绪时，服务端放入一条 `attach` 任务。`host` 在正在运行的任务里执行 `coforge-computer __attach-workspace`。它把这个工作区写进数据卷，并让已经在跑的 `foreground` 只启动这个工作区的 Daemon。已经连上的其他工作区保持运行。一个 Daemon 只连接一个工作区，多个工作区的 Daemon 可以同时在线。容器还没就绪时这次不放入挂载任务；之后打开该工作区的电脑页会再确保一次。
 
-Agent 的工作目录在数据卷 `/root/.coforge/agent-workspaces` 上。换掉容器之后，Pi 仍能打开原来的会话。
+Agent 的工作目录在数据卷 `/root/.coforge/agent-workspaces` 上。换掉容器之后，Pi 仍能打开原来的会话。`/opt` 是另一块命名卷，装在那里的软件会随通用 `update` 留下来。家目录、桌面和 `/root/.pi` 仍在容器写入层，要保住这些改动时走下面的保留镜像流程。
 
 电脑页上的「此电脑未关联 Agent」表示这个工作区还没有把 Agent 指派到这台电脑。镜像里有 Pi 不会自动创建 Agent。
 
