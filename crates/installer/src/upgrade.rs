@@ -7,22 +7,21 @@
 //! Nothing changes until the candidate is verified and the running supervisor is known to be
 //! healthy and under a service manager. The journal is written before the first process stops, and
 //! cleared only once the machine is on a known good version. A failed rollback keeps the journal,
-//! which refuses every other operation until `recover` settles it (`recover.rs`).
+//! which refuses every other operation until `recover` settles it (`recover.rs`). What is checked
+//! and installed before the journal is written is `upgrade/preparation.rs`.
 
 use std::cmp::Ordering;
 
-use crate::active::{ActiveError, read_active};
+use crate::active::ActiveError;
 use crate::contract::{
-    ActiveState, ERROR_CODE_DOWNGRADE_REFUSED, EXIT_FAILED, EXIT_HELD, EXIT_UNRESOLVED,
-    LifecycleStatus, ReceiptOutcome, RuntimeState, UpgradeReceipt,
+    ERROR_CODE_DOWNGRADE_REFUSED, EXIT_FAILED, EXIT_HELD, EXIT_UNRESOLVED, LifecycleStatus,
+    ReceiptOutcome, RuntimeState, UpgradeReceipt,
 };
 use crate::journal::{Journal, Transaction};
 use crate::lock::{LockError, MachineMutationLock};
-use crate::prepare::prepare_version;
 use crate::processes::VerifiedCaller;
 use crate::receipts::{Begin, ReceiptStore};
-use crate::service::{ServiceError, ServiceState};
-use crate::switch::{ActiveSwitch, Plan, Ports, Target, refusal_inside_service};
+use crate::switch::{ActiveSwitch, Plan, Ports, Target};
 use crate::update_error::UpdateError;
 use crate::version::precedence;
 
@@ -241,119 +240,6 @@ impl Run<'_, '_> {
         }
     }
 
-    /// Everything before the first change: the active version is intact and healthy, its
-    /// supervisor is service-managed, and the candidate verifies.
-    fn prepare(&mut self, selection: &str) -> Result<Prepared, Refusal> {
-        if let Some(message) = refusal_inside_service(
-            self.ports.service,
-            "The upgrade",
-            "coforge-computer upgrade",
-        )
-        .map_err(refuse)?
-        {
-            return Err(refuse(message));
-        }
-        let active = read_active(self.ports.install_root)?;
-        if let Some(active) = &active {
-            self.ports.store.verify_installed(&active.current)?;
-        }
-        self.switch
-            .say(&format!("Preparing CoForge Computer {selection}"));
-        // The target is resolved before anything is installed, so a refused downgrade leaves no
-        // version directory behind.
-        let target = self.ports.release.resolve_version(selection)?;
-        if let Some(installed) = &active
-            && let Some(refusal) =
-                downgrade_refusal(&target, &installed.current, self.allow_downgrade)
-        {
-            return Err(refusal);
-        }
-        // The active version was verified above under this lock; a same-version upgrade must not
-        // hash it again.
-        let verified = active.as_ref().map(|active| active.current.as_str());
-        let to = prepare_version(
-            self.lock,
-            self.ports.release,
-            self.ports.store,
-            &target,
-            verified,
-        )?
-        .version;
-        let probe = self
-            .ports
-            .lifecycle
-            .protocol(&self.ports.store.computer_path(&to))
-            .map_err(|error| Refusal {
-                error: error.to_string(),
-                code: Some(INTEGRITY_CODE),
-            })?;
-        if probe.version != to {
-            return Err(Refusal {
-                error: format!(
-                    "the new Computer executable reports version {}, not {to}",
-                    probe.version
-                ),
-                code: Some(INTEGRITY_CODE),
-            });
-        }
-        let from = match active {
-            None => None,
-            Some(active) => Some(self.inspect(active)?),
-        };
-        if from
-            .as_ref()
-            .is_some_and(|installed| installed.supervisor_running)
-        {
-            self.require_managed_supervisor()?;
-        }
-        Ok(Prepared { from, to })
-    }
-
-    /// The active version's status, which must be healthy before anything stops.
-    fn inspect(&self, active: ActiveState) -> Result<Installed, Refusal> {
-        let status = self
-            .ports
-            .lifecycle
-            .status(&self.ports.store.computer_path(&active.current))
-            .map_err(|error| refuse(error.to_string()))?;
-        if !status.healthy {
-            return Err(refuse(unhealthy_message(&status)));
-        }
-        Ok(Installed {
-            version: active.current,
-            previous: active.previous,
-            supervisor_running: status.supervisor.running,
-            supervisor_id: status.supervisor.id.clone(),
-            runtimes: status
-                .bindings
-                .iter()
-                .map(|binding| RuntimeState {
-                    binding_id: binding.binding_id.clone(),
-                    running: binding.running,
-                })
-                .collect(),
-        })
-    }
-
-    /// A supervisor running outside the service manager (a foreground Computer) cannot be
-    /// restarted by the installer, so the upgrade is refused before it stops anything.
-    fn require_managed_supervisor(&self) -> Result<(), Refusal> {
-        match self.ports.service.state() {
-            Err(error) => Err(refuse(error.to_string())),
-            Ok(ServiceState::NotInstalled) => {
-                let error = ServiceError::NotInstalled {
-                    service: self.ports.service.display_name(),
-                };
-                Err(refuse(format!(
-                    "Cannot upgrade a foreground externally supervised Computer while it is \
-                     running: {error} Stop it through its external supervisor before upgrading, \
-                     or install the supported user service with `coforge-computer start`."
-                )))
-            }
-            Ok(_) => Ok(()),
-        }
-    }
-
     fn switch_to(&mut self, prepared: &Prepared) -> Result<(), String> {
         let from = prepared.from.as_ref();
         let store = self.ports.store;
@@ -559,6 +445,8 @@ fn unhealthy_message(status: &LifecycleStatus) -> String {
         text
     }
 }
+
+mod preparation;
 
 #[cfg(test)]
 pub(crate) mod fakes;
