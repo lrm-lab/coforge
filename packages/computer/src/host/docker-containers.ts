@@ -100,6 +100,18 @@ export function dockerNodeStatusArgs(): string[] {
 
 export const COMPUTER_VERSION_LABEL = "org.coforge.computer.version";
 
+export function dockerServiceRestartArgs(computerId: string): string[] {
+  return ["service", "update", "--force", serviceName(computerId)];
+}
+
+export function dockerActivateRuntimeArgs(containerId: string, version: string): string[] {
+  const args = ["exec"];
+  const feed = process.env.COFORGE_RELEASE_FEED_URL?.trim();
+  if (feed) args.push("-e", `COFORGE_RELEASE_FEED_URL=${feed}`);
+  args.push(containerId, "/usr/local/bin/activate-computer-release.sh", version);
+  return args;
+}
+
 export function dockerServiceUpdateArgs(computerId: string, image: string): string[] {
   return [
     "service",
@@ -215,6 +227,8 @@ export interface ContainerRuntime {
   attachWorkspace(input: { computerId: string; env: Record<string, string> }): Promise<void>;
   /** Replaces the running image. The named volume stays mounted. */
   updateServiceImage(computerId: string, image: string): Promise<void>;
+  /** Installs a published runtime onto the volume, then restarts the same image. */
+  activateRuntime(computerId: string, version: string): Promise<void>;
   inspectPlacement(image: string): Promise<HostImagePlacement>;
   /** Address of the browser desktop inside a running cloud computer. */
   desktopEndpoint(
@@ -262,6 +276,21 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
         dockerServiceUpdateArgs(computerId, await localImageReference(spawn, image)),
         "docker service update failed",
       );
+    },
+    async activateRuntime(computerId, version) {
+      if (!/^[A-Za-z0-9.+-]{1,100}$/.test(version) || version === "." || version.startsWith("-") || version.includes("..")) {
+        throw new Error("invalid runtime version");
+      }
+      const containerId = firstId(
+        await run(spawn, dockerTaskFindArgs(computerId), "docker ps failed"),
+      );
+      if (!containerId) throw new Error("cloud computer task is not running");
+      await run(
+        spawn,
+        dockerActivateRuntimeArgs(containerId, version),
+        "docker exec failed",
+      );
+      await run(spawn, dockerServiceRestartArgs(computerId), "docker service update failed");
     },
     async desktopEndpoint(computerId) {
       const listed = await spawn(dockerTaskFindArgs(computerId));

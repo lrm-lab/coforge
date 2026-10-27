@@ -1,4 +1,4 @@
-export type HostJobOperation = "create" | "delete" | "attach" | "update";
+export type HostJobOperation = "create" | "delete" | "attach" | "update" | "runtime";
 
 export type HostHeartbeatReport = {
   accepting: boolean;
@@ -81,7 +81,8 @@ function claimedJob(value: unknown): ClaimedContainerJob {
     operation !== "create" &&
     operation !== "delete" &&
     operation !== "attach" &&
-    operation !== "update"
+    operation !== "update" &&
+    operation !== "runtime"
   ) {
     throw new Error("invalid claimed job");
   }

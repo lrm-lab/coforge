@@ -14,6 +14,12 @@ export type CloudImageUpgrade = {
     computerId: string;
     imageId: string;
   }): Promise<void>;
+  enqueueRuntime?(input: {
+    userId: string;
+    workspaceId: string;
+    computerId: string;
+    version: string;
+  }): Promise<void>;
 };
 
 export class UpgradeComputer {
@@ -31,7 +37,12 @@ export class UpgradeComputer {
 
   async execute(
     principal: { workspaceId: string; userId?: string },
-    input: { computerId: string; requestId: string; placement?: "local" | "cloud" },
+    input: {
+      computerId: string;
+      requestId: string;
+      placement?: "local" | "cloud";
+      target?: "runtime" | "image";
+    },
   ) {
     const scope = { workspaceId: principal.workspaceId, computerId: input.computerId };
     // A retried requestId already has a record regardless of whether the Computer is currently
@@ -41,7 +52,7 @@ export class UpgradeComputer {
     if (existing) return existing;
     // Presence, not the upgrade identity snapshot, decides whether a *new* request can begin.
     if (!(await this.presence.get(scope))) throw new AppError("COMPUTER_OFFLINE");
-    if (input.placement === "cloud") {
+    if (input.placement === "cloud" && input.target !== "runtime") {
       if (!this.cloud || !principal.userId) throw new AppError("CONFLICT");
       const image = await this.cloud.available(scope.computerId);
       if (!image) throw new AppError("CONFLICT");
@@ -56,6 +67,26 @@ export class UpgradeComputer {
           workspaceId: scope.workspaceId,
           computerId: scope.computerId,
           imageId: image.imageId,
+        });
+        return registered.status;
+      } catch (error) {
+        await this.upgrades.publicationFailed(scope, input.requestId);
+        throw error;
+      }
+    }
+    if (input.placement === "cloud") {
+      if (!this.cloud?.enqueueRuntime || !principal.userId) throw new AppError("CONFLICT");
+      const expectedVersion = await this.latestVersion();
+      const registered = await this.upgrades.begin(scope, input.requestId, expectedVersion, {
+        completeOnIdentity: true,
+      });
+      if (!registered.created) return registered.status;
+      try {
+        await this.cloud.enqueueRuntime({
+          userId: principal.userId,
+          workspaceId: scope.workspaceId,
+          computerId: scope.computerId,
+          version: expectedVersion,
         });
         return registered.status;
       } catch (error) {

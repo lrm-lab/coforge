@@ -302,6 +302,33 @@ describe("cloud computer quota", () => {
     expect(fleet.computers[0]?.containerReady).toBe(true);
   });
 
+  test("a runtime update is claimed with the release in the job name", async () => {
+    const { hosts, fleet, jobs } = harness();
+    const created = await hosts.ensureDefault(request);
+    await hosts.report({
+      token: "host-token",
+      jobId: (await hosts.claim({ token: "host-token" }))!.jobId,
+      containerId: "service-1",
+      now,
+    });
+    await hosts.requestRuntimeUpdate({
+      ...request,
+      computerId: created.computerId,
+      version: "0.1.9-dev.1",
+    });
+    expect(jobs.records.at(-1)?.daemonApiKey).toBeNull();
+    expect(jobs.records.at(-1)?.name).toBe("0.1.9-dev.1");
+    const claimed = await hosts.claim({ token: "host-token" });
+    expect(claimed).toMatchObject({
+      operation: "runtime",
+      computerId: created.computerId,
+      name: "0.1.9-dev.1",
+      daemonApiKey: null,
+    });
+    await hosts.report({ token: "host-token", jobId: claimed!.jobId, now });
+    expect(fleet.computers[0]?.deletedAt).toBeNull();
+  });
+
   test("an image update stays queued while the cluster is not accepting placements", async () => {
     const { hosts, setAccepting } = harness();
     const created = await hosts.ensureDefault(request);

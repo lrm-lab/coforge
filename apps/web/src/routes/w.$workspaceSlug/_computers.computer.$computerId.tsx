@@ -179,8 +179,8 @@ function ComputerDetailPage() {
           })
         }
         latestComputerVersion={latestComputerVersion}
-        onUpgrade={async (requestId) => {
-          const status = await requestUpgrade({ data: { computerId, requestId } });
+        onUpgrade={async (requestId, target) => {
+          const status = await requestUpgrade({ data: { computerId, requestId, target } });
           // The list's upgrading badge reads the operation the server now holds. Not awaited, so the
           // panel starts following it at once.
           if (status.status === "accepted") void router.invalidate();

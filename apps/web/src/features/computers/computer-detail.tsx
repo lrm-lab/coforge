@@ -37,16 +37,13 @@ import {
 } from "./computer-identity";
 import { DetailGroup, DetailRow } from "./computer-detail-rows";
 import { computerDetailUpgradeSlots } from "./computer-detail-upgrade-slots";
-import {
-  computerUpgradeStatusQuery,
-  followComputerUpgrade,
-  upgradeRunning,
-} from "./computer-upgrade-status";
+import { computerUpgradeStatusQuery, upgradeRunning } from "./computer-upgrade-status";
 import {
   describeUpgradeRequestError,
   upgradeOutcome,
   type ComputerUpgradeOutcome,
 } from "./upgrade-failure";
+import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
 import { ComputerTile } from "./computer-tile";
 import {
   CloudImageUpdateDialog,
@@ -154,7 +151,7 @@ export function ComputerDetail({
   onUpdateDisplayName?: (displayName: string) => Promise<void>;
   onRestart?: (requestId: string) => Promise<ComputerRestartStatus>;
   onReadRestartStatus?: (requestId: string) => Promise<ComputerRestartStatus>;
-  onUpgrade?: (requestId: string) => Promise<ComputerUpgradeStatus>;
+  onUpgrade?: (requestId: string, target?: "runtime" | "image") => Promise<ComputerUpgradeStatus>;
   /** The last Agent workspace scan the owner took (kept across reloads); `null` when none. */
   agentWorkspaceScan?: AgentWorkspaceScanSnapshot | null;
   /** Scans the Computer and records the result as `agentWorkspaceScan`. */
@@ -271,22 +268,15 @@ export function ComputerDetail({
   });
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
   const canEditDisplayName = computer.ownedByCurrentUser && Boolean(onUpdateDisplayName);
-  const runUpgrade = async (version: string | undefined) => {
-    if (!onUpgrade) return;
-    const requestId = crypto.randomUUID();
-    setUpgradeRequest({ state: "requesting", version });
-    try {
-      const outcome = upgradeOutcome(await onUpgrade(requestId));
-      if (outcome.state === "failed") {
-        setUpgradeRequest({ state: "refused", version, ...outcome.failure });
-        return;
-      }
-      followComputerUpgrade(queryClient, { computerId: computer.id, requestId, startedHere: true });
-      setUpgradeRequest({ state: "accepted", requestId, version });
-    } catch (error) {
-      setUpgradeRequest({ state: "refused", version, ...describeUpgradeRequestError(error) });
-    }
-  };
+  const runUpgrade = (version: string | undefined, target: "runtime" | "image") =>
+    submitComputerDetailUpgrade({
+      computerId: computer.id,
+      onUpgrade,
+      queryClient,
+      setUpgradeRequest,
+      version,
+      target,
+    });
   const scanWorkspaces = async () => {
     if (!onScanAgentWorkspaces) return;
     setWorkspaceScanStatus("scanning");
@@ -653,7 +643,7 @@ export function ComputerDetail({
         onOpenChange={setImageUpdateOpen}
         onConfirm={async () => {
           setImageUpdateOpen(false);
-          await runUpgrade(imageOffer);
+          await runUpgrade(imageOffer, "image");
         }}
       />
       <ComputerUpgradeConfirmDialog
@@ -664,7 +654,7 @@ export function ComputerDetail({
         targetVersion={runtimeOffer}
         onConfirm={async () => {
           setUpgradeConfirmOpen(false);
-          await runUpgrade(runtimeOffer);
+          await runUpgrade(runtimeOffer, "runtime");
         }}
       />
       {onDeleteComputer && (

@@ -91,8 +91,8 @@ export function isPrereleaseVersion(version: string | null | undefined): boolean
 }
 
 /**
- * The runtime release a local Computer could install, or none. A cloud Computer's runtime stays
- * the image it was started from; a newer node image is not this offer (features/computers/AGENTS.md).
+ * The runtime release a Computer could install, or none. A cloud Computer uses the same
+ * comparison against the release feed. A newer node image is a separate offer.
  */
 export function availableUpdateVersion(
   computer: {
@@ -101,13 +101,12 @@ export function availableUpdateVersion(
   },
   latestComputerVersion: string | null | undefined,
 ): string | undefined {
-  if (computerKind(computer.kind) === "cloud") return undefined;
   return isComputerUpdateAvailable(computer.computerVersion, latestComputerVersion)
     ? (latestComputerVersion ?? undefined)
     : undefined;
 }
 
-/** What the list badge names: a local Computer's newer runtime, or a cloud Computer's newer image. */
+/** What the list badge names: a newer runtime, or for a cloud Computer a newer image when the runtime is current. */
 export function computerListUpdateVersion(
   computer: {
     kind: string;
@@ -116,6 +115,8 @@ export function computerListUpdateVersion(
   },
   latestComputerVersion: string | null | undefined,
 ): string | undefined {
+  const runtime = availableUpdateVersion(computer, latestComputerVersion);
+  if (runtime) return runtime;
   if (computerKind(computer.kind) === "cloud") return computer.imageUpdate?.version || undefined;
-  return availableUpdateVersion(computer, latestComputerVersion);
+  return undefined;
 }

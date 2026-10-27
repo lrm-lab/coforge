@@ -53,6 +53,11 @@ export async function acceptClaimedJob(
     await ports.report(job.computerId);
     return;
   }
+  if (job.operation === "runtime") {
+    await ports.containers.activateRuntime(job.computerId, job.name);
+    await ports.report(job.computerId);
+    return;
+  }
   const env = containerEnv(job, config.serverUrl);
   if (job.operation === "attach") {
     await ports.containers.attachWorkspace({ computerId: job.computerId, env });

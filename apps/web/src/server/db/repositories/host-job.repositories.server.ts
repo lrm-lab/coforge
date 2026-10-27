@@ -264,7 +264,13 @@ function fromRow(row: JobRow): HostJobRecord {
 }
 
 function operation(value: string): HostJobOperation {
-  if (value === "create" || value === "delete" || value === "attach" || value === "update")
+  if (
+    value === "create" ||
+    value === "delete" ||
+    value === "attach" ||
+    value === "update" ||
+    value === "runtime"
+  )
     return value;
   throw new HostJobError(422, "invalid host job");
 }

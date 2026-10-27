@@ -14,27 +14,41 @@ export function computerDetailUpgradeSlots(input: {
 }) {
   const isCloud = computerKind(input.kind) === "cloud";
   const upgrade = input.upgrade;
+  const runtimeSucceeded =
+    input.request.state !== "idle" &&
+    input.request.target === "runtime" &&
+    upgrade.state === "succeeded";
+  const imageSucceeded =
+    input.request.state !== "idle" &&
+    input.request.target === "image" &&
+    upgrade.state === "succeeded";
   const currentVersion =
-    !isCloud && upgrade.state === "succeeded" ? upgrade.version : input.computerVersion;
-  const currentImageVersion =
-    isCloud && upgrade.state === "succeeded" ? upgrade.version : input.imageVersion;
-  const runtimeSlot = isCloud
-    ? null
-    : upgradeSlotState({
-        upgrade,
-        request: input.request,
-        computer: input,
-        currentVersion,
-        latestComputerVersion: input.latestComputerVersion,
-      });
+    upgrade.state === "succeeded" && (!isCloud || runtimeSucceeded)
+      ? upgrade.version
+      : input.computerVersion;
+  const currentImageVersion = isCloud && imageSucceeded ? upgrade.version : input.imageVersion;
+  const runtimeSlot = upgradeSlotState({
+    upgrade,
+    request: input.request,
+    slot: "runtime",
+    computer: input,
+    currentVersion,
+    latestComputerVersion: input.latestComputerVersion,
+  });
   const imageSlot = isCloud
     ? upgradeSlotState({
         upgrade,
         request: input.request,
+        slot: "image",
         computer: input,
         currentVersion: currentImageVersion,
         latestComputerVersion: input.latestComputerVersion,
-        offer: upgrade.state === "succeeded" ? null : (input.imageUpdate?.version ?? null),
+        offer:
+          upgrade.state === "succeeded" &&
+          input.request.state !== "idle" &&
+          input.request.target === "image"
+            ? null
+            : (input.imageUpdate?.version ?? null),
       })
     : null;
   return {

@@ -47,15 +47,17 @@ test("the version reads as the panel states it, and an unreported one as an em d
   expect(computerVersionLabel({})).toBe("—");
 });
 
-test("a cloud Computer's runtime row does not offer an image replace or a release upgrade", () => {
+test("a cloud Computer offers a newer runtime, and the list names the image when the runtime is current", () => {
   const cloud = {
     kind: "cloud",
     computerVersion: "0.1.7-dev.1",
     imageUpdate: { version: "0.1.8-dev.3" },
   };
 
-  expect(availableUpdateVersion(cloud, "0.1.8-dev.3")).toBeUndefined();
+  expect(availableUpdateVersion(cloud, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
   expect(computerListUpdateVersion(cloud, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
+  expect(computerListUpdateVersion(cloud, "0.1.7-dev.1")).toBe("0.1.8-dev.3");
+  expect(computerListUpdateVersion({ ...cloud, imageUpdate: null }, "0.1.7-dev.1")).toBeUndefined();
 });
 
 test("a local Computer's update is a newer runtime release", () => {

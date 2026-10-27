@@ -13,6 +13,6 @@ test("a cloud computer keeps runtime and image upgrade slots separate", () => {
     latestComputerVersion: "0.1.8-dev.3",
   });
 
-  expect(slots.runtimeSlot).toBeNull();
+  expect(slots.runtimeSlot).toEqual({ state: "available", offer: "0.1.8-dev.3" });
   expect(slots.imageSlot).toEqual({ state: "available", offer: "0.1.8-dev.3" });
 });

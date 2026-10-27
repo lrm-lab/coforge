@@ -2,16 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   COMPUTER_RELEASE_APP,
   encodeDaemonRuntimeProviderModelRefreshRequest,
-  isValidReleaseVersion,
   requireRuntimeProvider,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import { AppError } from "#src/lib/app-error";
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
-import {
-  getCloudImageInventory,
-  readCloudComputerImages,
-} from "#src/server/hosts/cloud-image-inventory.server";
+import { readCloudComputerImages } from "#src/server/hosts/cloud-image-inventory.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
 import { HostJobError } from "#src/server/hosts/host-jobs.server";
@@ -21,6 +16,7 @@ import {
   readRestartStatusInputSchema,
   readUsageInputSchema,
   restartComputerInputSchema,
+  upgradeComputerInputSchema,
   scanAgentWorkspacesInputSchema,
   deleteAgentWorkspaceInputSchema,
   scanUsageInputSchema,
@@ -54,7 +50,7 @@ import { getComputerRestartStore } from "#src/server/computers/computer-restart-
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
 import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
-import { UpgradeComputer } from "#src/server/computers/upgrade-computer.server";
+import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
 import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
 import { productionReleaseCatalog } from "#src/server/release-catalog/release-catalog-production.server";
 import {
@@ -344,47 +340,10 @@ export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
     return status;
   });
 
-async function fetchExpectedUpgradeVersion(): Promise<string> {
-  const feedUrl = resolveReleaseFeedUrl();
-  if (!feedUrl) throw new AppError("RELEASE_FEED_UNAVAILABLE");
-  const response = await fetch(`${feedUrl}/latest`, { signal: AbortSignal.timeout(3_000) });
-  const expectedVersion = response.ok ? (await response.text()).trim() : "";
-  if (!isValidReleaseVersion(expectedVersion)) throw new AppError("RELEASE_FEED_UNAVAILABLE");
-  return expectedVersion;
-}
-
 export const upgradeComputer = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(restartComputerInputSchema)
-  .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    const computer = await db.computer.findFirst({
-      where: { id: data.computerId },
-      select: { ownerId: true, kind: true },
-    });
-    if (!computer || computer.ownerId !== user.id) throw new Error("Computer is not available");
-    const scope = { workspaceId, computerId: data.computerId };
-    const connection = await db.workspaceComputer.findFirst({
-      where: scope,
-      select: { id: true },
-    });
-    if (!connection) throw new Error("Computer is not available");
-    const placement = computer.kind === "cloud" ? "cloud" : "local";
-    return new UpgradeComputer(
-      getComputerUpgradeStore(),
-      getComputerStatusCache(),
-      fetchExpectedUpgradeVersion,
-      createCentrifugoServerApi(),
-      {
-        available: (computerId) => getCloudImageInventory().available(computerId),
-        enqueue: async (input) => {
-          await productionCloudComputers(db).requestImageUpdate({
-            ...input,
-            now: new Date(),
-          });
-        },
-      },
-    ).execute({ workspaceId, userId: user.id }, { ...data, placement });
-  });
+  .validator(upgradeComputerInputSchema)
+  .handler(async ({ context, data }) => runUpgradeComputerAction(context, data));
 
 export const getLatestComputerVersion = createServerFn({ method: "GET" }).handler(async () => {
   const feedUrl = resolveReleaseFeedUrl();

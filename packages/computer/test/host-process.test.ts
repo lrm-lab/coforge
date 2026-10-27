@@ -47,6 +47,7 @@ function containers(overrides: Partial<ContainerRuntime> = {}): ContainerRuntime
     removeService: async () => undefined,
     attachWorkspace: async () => undefined,
     updateServiceImage: async () => undefined,
+    activateRuntime: async () => undefined,
     inspectPlacement: async () => ({
       image: { id: "sha256:img", version: "1.0.0" },
       computers: [],
@@ -165,6 +166,31 @@ describe("host process", () => {
       },
     });
     expect(calls).toEqual(["update:computer-1:coforge-computer:local", "report:computer-1"]);
+  });
+
+  test("runtime installs the published version and does not replace the image", async () => {
+    const calls: string[] = [];
+    await acceptClaimedJob(
+      { ...job, operation: "runtime", name: "1.2.3", daemonApiKey: null },
+      config,
+      {
+        containers: containers({
+          activateRuntime: async (computerId, version) => {
+            calls.push(`runtime:${computerId}:${version}`);
+          },
+          updateServiceImage: async () => {
+            throw new Error("unexpected image replace");
+          },
+          removeService: async () => {
+            throw new Error("unexpected remove");
+          },
+        }),
+        report: async (id) => {
+          calls.push(`report:${id ?? ""}`);
+        },
+      },
+    );
+    expect(calls).toEqual(["runtime:computer-1:1.2.3", "report:computer-1"]);
   });
 
   test("a tick registers, heartbeats, claims, and stops when the signal aborts", async () => {

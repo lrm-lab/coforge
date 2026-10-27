@@ -5,9 +5,13 @@ import type { ComputerUpgradeOutcome, UpgradeRequestErrorCopy } from "./upgrade-
  * or refused before the server held it (which leaves no record a reload could find). */
 export type ComputerUpgradeRequest =
   | { state: "idle" }
-  | { state: "requesting"; version?: string }
-  | { state: "accepted"; requestId: string; version?: string }
-  | ({ state: "refused"; version?: string } & UpgradeRequestErrorCopy);
+  | { state: "requesting"; version?: string; target?: "runtime" | "image" }
+  | { state: "accepted"; requestId: string; version?: string; target?: "runtime" | "image" }
+  | ({
+      state: "refused";
+      version?: string;
+      target?: "runtime" | "image";
+    } & UpgradeRequestErrorCopy);
 
 /** What the slot under the Version row shows (rules in features/computers/AGENTS.md). `offer` is
  * the newer release, which an available slot installs and a failed one retries; `version` the
@@ -26,6 +30,7 @@ export type ComputerUpgradeSlotState =
 export function upgradeSlotState({
   upgrade,
   request,
+  slot,
   computer,
   currentVersion,
   latestComputerVersion,
@@ -33,6 +38,8 @@ export function upgradeSlotState({
 }: {
   upgrade: ComputerUpgradeOutcome | { state: "idle" };
   request: ComputerUpgradeRequest;
+  /** Which row this slot is. A request aimed at the other row does not paint this one. */
+  slot?: "runtime" | "image";
   computer: Parameters<typeof availableUpdateVersion>[0];
   /** The version it runs, or the one an upgrade here just reached. */
   currentVersion: string | null | undefined;
@@ -48,6 +55,12 @@ export function upgradeSlotState({
           latestComputerVersion,
         );
   const requested = request.state === "idle" ? undefined : request.version;
+  const foreign =
+    request.state !== "idle" &&
+    request.target !== undefined &&
+    slot !== undefined &&
+    request.target !== slot;
+  if (foreign) return offer ? { state: "available", offer } : null;
   if (upgrade.state === "running")
     return {
       state: "upgrading",

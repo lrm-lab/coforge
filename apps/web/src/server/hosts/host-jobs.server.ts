@@ -1,4 +1,7 @@
 import { AppError } from "#src/lib/app-error";
+import { buildHostJobRecord, cloudComputerView } from "./host-job-record.server";
+import { requestCloudRuntimeHostJob } from "./host-jobs-cloud-runtime.server";
+import { resolveHostJobWorkspace } from "./host-jobs-workspace.server";
 
 export class HostJobError extends Error {
   constructor(
@@ -22,7 +25,7 @@ export function cloudImageUpdateError(error: HostJobError): {
 }
 
 export type CloudSlot = "default" | "extra";
-export type HostJobOperation = "create" | "delete" | "attach" | "update";
+export type HostJobOperation = "create" | "delete" | "attach" | "update" | "runtime";
 
 export type CloudComputer = {
   id: string;
@@ -126,7 +129,8 @@ const OPERATION_ORDER: Record<HostJobOperation, number> = {
   delete: 0,
   attach: 1,
   update: 2,
-  create: 3,
+  runtime: 3,
+  create: 4,
 };
 
 export class HostJobs {
@@ -161,7 +165,7 @@ export class HostJobs {
     );
     if (existing) {
       await this.#attachIfNeeded(existing, workspace, input.userId, clusterId, input.now);
-      return view(existing, null);
+      return cloudComputerView(existing, null);
     }
     return this.#create(
       input.userId,
@@ -216,9 +220,9 @@ export class HostJobs {
       throw new HostJobError(409, "the default cloud computer cannot be deleted");
     const key = `cloud-delete:${computer.id}`;
     const existing = await this.deps.jobs.findByIdempotency(input.userId, key);
-    if (existing) return view(computer, existing.id);
+    if (existing) return cloudComputerView(computer, existing.id);
     const clusterId = await this.deps.cluster.id();
-    const job = this.#job({
+    const job = buildHostJobRecord({
       clusterId,
       operation: "delete",
       workspace,
@@ -230,7 +234,7 @@ export class HostJobs {
     });
     await this.deps.jobs.insert(job);
     await this.deps.jobs.abandon(computer.id, input.now);
-    return view(computer, job.id);
+    return cloudComputerView(computer, job.id);
   }
 
   /** Removes this cloud computer's service and disk, then places the same computer again.
@@ -251,9 +255,9 @@ export class HostJobs {
     if (input.confirmName.trim() !== expected)
       throw new HostJobError(409, "confirmation does not match");
     const open = await this.deps.jobs.findOpenFormat(input.userId, computer.id);
-    if (open) return view(computer, open.id);
+    if (open) return cloudComputerView(computer, open.id);
     const clusterId = await this.deps.cluster.id();
-    const job = this.#job({
+    const job = buildHostJobRecord({
       clusterId,
       operation: "delete",
       workspace,
@@ -265,7 +269,7 @@ export class HostJobs {
     });
     await this.deps.jobs.insert(job);
     await this.deps.jobs.abandon(computer.id, input.now);
-    return view(computer, job.id);
+    return cloudComputerView(computer, job.id);
   }
 
   /** Replaces the running image while keeping the computer's named volume. */
@@ -302,9 +306,9 @@ export class HostJobs {
     const imageId = requireText(input.imageId, "invalid image id");
     const key = `cloud-update:${computer.id}:${imageId}`;
     const existing = await this.deps.jobs.findByIdempotency(input.userId, key);
-    if (existing) return view(computer, existing.id);
+    if (existing) return cloudComputerView(computer, existing.id);
     const clusterId = await this.deps.cluster.id();
-    const job = this.#job({
+    const job = buildHostJobRecord({
       clusterId,
       operation: "update",
       workspace,
@@ -315,7 +319,18 @@ export class HostJobs {
       now: input.now,
     });
     await this.deps.jobs.insert(job);
-    return view(computer, job.id);
+    return cloudComputerView(computer, job.id);
+  }
+
+  /** Installs a published coforge-computer onto the computer's volume, then restarts it. */
+  async requestRuntimeUpdate(input: {
+    userId: string;
+    workspaceId: string;
+    computerId: string;
+    version: string;
+    now: Date;
+  }): Promise<CloudComputerView> {
+    return requestCloudRuntimeHostJob(this.deps, input);
   }
 
   async claim(input: { token: string; now?: Date }): Promise<ClaimedHostJob | undefined> {
@@ -337,7 +352,12 @@ export class HostJobs {
         return undefined;
       }
     }
-    if (job.operation !== "delete" && job.operation !== "update" && !job.daemonApiKey)
+    if (
+      job.operation !== "delete" &&
+      job.operation !== "update" &&
+      job.operation !== "runtime" &&
+      !job.daemonApiKey
+    )
       return undefined;
     return {
       jobId: job.id,
@@ -411,7 +431,7 @@ export class HostJobs {
       computerId: computer.id,
     });
     await this.deps.fleet.link(computer.id, workspace.id, workspace.slug);
-    const job = this.#job({
+    const job = buildHostJobRecord({
       clusterId,
       operation: "create",
       workspace,
@@ -422,7 +442,7 @@ export class HostJobs {
       now,
     });
     await this.deps.jobs.insert(job);
-    return view(computer, job.id);
+    return cloudComputerView(computer, job.id);
   }
 
   async #attachIfNeeded(
@@ -473,7 +493,7 @@ export class HostJobs {
       computerId: computer.id,
     });
     await this.deps.jobs.insert(
-      this.#job({
+      buildHostJobRecord({
         clusterId,
         operation: "attach",
         workspace,
@@ -499,7 +519,7 @@ export class HostJobs {
       computerId: computer.id,
     });
     await this.deps.jobs.insert(
-      this.#job({
+      buildHostJobRecord({
         clusterId: job.clusterId,
         operation: "create",
         workspace: { id: job.workspaceId, slug: job.workspaceSlug },
@@ -512,33 +532,6 @@ export class HostJobs {
     );
   }
 
-  #job(input: {
-    clusterId: string;
-    operation: HostJobOperation;
-    workspace: { id: string; slug: string };
-    computer: CloudComputer;
-    ownerId: string;
-    idempotencyKey: string;
-    daemonApiKey: string | null;
-    now: Date;
-  }): HostJobRecord {
-    return {
-      id: crypto.randomUUID(),
-      clusterId: input.clusterId,
-      operation: input.operation,
-      workspaceId: input.workspace.id,
-      workspaceSlug: input.workspace.slug,
-      computerId: input.computer.id,
-      ownerId: input.ownerId,
-      idempotencyKey: input.idempotencyKey,
-      name: input.computer.name,
-      daemonApiKey: input.daemonApiKey,
-      containerId: null,
-      createdAt: input.now,
-      reportedAt: null,
-    };
-  }
-
   async #ownerDisplayName(userId: string, given?: string): Promise<string> {
     const supplied = given?.trim();
     if (supplied) return supplied;
@@ -548,9 +541,7 @@ export class HostJobs {
   }
 
   async #workspace(workspaceId: string, userId: string): Promise<{ id: string; slug: string }> {
-    const workspace = await this.deps.workspaces.findMember(workspaceId, userId);
-    if (!workspace) throw new HostJobError(403, "workspace access denied");
-    return workspace;
+    return resolveHostJobWorkspace(this.deps.workspaces, workspaceId, userId);
   }
 }
 
@@ -566,16 +557,6 @@ function cloudComputerName(displayName: string, slot: CloudSlot): string {
 
 function active(computers: CloudComputer[]): CloudComputer[] {
   return computers.filter((computer) => computer.deletedAt === null);
-}
-
-function view(computer: CloudComputer, jobId: string | null): CloudComputerView {
-  return {
-    computerId: computer.id,
-    slot: computer.slot,
-    name: computer.name,
-    containerReady: computer.containerReady,
-    jobId,
-  };
 }
 
 function requireText(value: string, message: string): string {

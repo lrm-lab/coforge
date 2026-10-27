@@ -42,10 +42,11 @@ These rules apply to `src/features/computers/`.
   still reports the old error while `isFetching` is true, and the follow stays until it returns.
 - Every member is told an update is waiting: the list tile's badge and the detail's upgrade slot,
   which for a member who is not the owner is a plain "v{X} available" line, never a request to ask
-  the owner. The Version row is the runtime the daemon reported. A local Computer offers a newer
-  release there. A cloud Computer does not: its runtime stays the image it was started from, and a
-  newer node image is a separate Image row. That row names the image the computer is running (the
-  node image's label when the layers match) and offers a replace when they differ. A running or
+  the owner. The Version row is the runtime the daemon reported. A local Computer and a cloud
+  Computer both offer a newer release there: the cloud copy is installed onto the computer's
+  volume and the container restarts on the same image. A newer node image is a separate Image
+  row. That row names the image the computer is running (the node image's label when the layers
+  match) and offers a replace when they differ. A running or
   failed upgrade shows to every member; Upgrade and Retry stay the owner's.
   Versions always show in full (`0.1.4-dev.2`, never `dev.2`). A success has no inline slot: the
   row that owned the upgrade changes, and the watcher's toast confirms it (§13).

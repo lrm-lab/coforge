@@ -176,6 +176,45 @@ test("a cloud computer image replace is queued on the host and never published t
   expect(publications).toEqual([]);
 });
 
+test("a cloud runtime upgrade is queued on the host and does not replace the image", async () => {
+  const store = new RedisComputerUpgradeStore(memoryRedis());
+  const scope = { workspaceId: "workspace-1", computerId: "computer-1" };
+  await store.ready(scope, identity("old", "0.1.2-dev.attach", 1), []);
+  const queued: string[] = [];
+  const { upgrade, publications } = upgradeComputer({
+    upgrades: store,
+    online: true,
+    latestVersion: async () => "0.1.3-dev.4",
+    cloud: {
+      available: async () => ({ imageId: "sha256:new", version: "node-2" }),
+      enqueue: async () => {
+        throw new Error("image replace");
+      },
+      enqueueRuntime: async (input) => {
+        queued.push(input.version);
+      },
+    },
+  });
+
+  const status = await upgrade.execute(
+    { workspaceId: "workspace-1", userId: "user-a" },
+    {
+      computerId: "computer-1",
+      requestId: "upgrade-runtime",
+      placement: "cloud",
+      target: "runtime",
+    },
+  );
+
+  expect(status).toMatchObject({
+    requestId: "upgrade-runtime",
+    status: "accepted",
+    expectedVersion: "0.1.3-dev.4",
+  });
+  expect(queued).toEqual(["0.1.3-dev.4"]);
+  expect(publications).toEqual([]);
+});
+
 test("a cloud image replace completes once the host reports the offered image layer", async () => {
   const store = new RedisComputerUpgradeStore(memoryRedis(), Date.now, async () => "sha256:new");
   const scope = { workspaceId: "workspace-1", computerId: "computer-1" };
