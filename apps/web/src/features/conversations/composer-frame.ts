@@ -3,3 +3,7 @@
  * stay the same size and the stream does not jump when the conversation loads. */
 export const COMPOSER_FRAME_CLASS =
   "relative mx-4 mt-2 mb-3 flex shrink-0 flex-col gap-1 rounded-xl border border-primary bg-primary p-2 md:mx-6";
+
+/** How the live composer's box shows it has focus; the loading screen's copy never takes focus. */
+export const COMPOSER_FOCUS_CLASS =
+  "transition-shadow focus-within:border-fg-quaternary focus-within:shadow-xs";

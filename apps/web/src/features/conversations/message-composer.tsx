@@ -31,7 +31,7 @@ import {
   forcesStackedLayout,
 } from "./composer-behavior";
 import { ComposerSendButton } from "./composer-send-button";
-import { COMPOSER_FRAME_CLASS } from "./composer-frame";
+import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { AttachmentTile, uploadAttachment, type PendingAttachment } from "./composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
@@ -524,7 +524,7 @@ export function MessageComposer({
       onDragOver={dragOver}
       onDragLeave={dragLeave}
       onDrop={drop}
-      className={`transition-shadow focus-within:border-fg-quaternary focus-within:shadow-xs ${COMPOSER_FRAME_CLASS}`}
+      className={`${COMPOSER_FOCUS_CLASS} ${COMPOSER_FRAME_CLASS}`}
     >
       {draggingFile && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-secondary text-sm font-medium text-secondary">
