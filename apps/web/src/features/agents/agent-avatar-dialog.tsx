@@ -2,7 +2,7 @@ import { useState } from "react";
 import { XClose as X } from "@untitledui/icons";
 import { Heading, RadioGroup } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
@@ -74,7 +74,7 @@ export function AgentAvatarDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left" data-agent-avatar-dialog>
+        <Dialog className="text-left" data-agent-avatar-dialog>
           {({ close }) => (
             <>
               <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">

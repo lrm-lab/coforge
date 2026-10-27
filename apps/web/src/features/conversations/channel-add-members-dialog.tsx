@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Text } from "react-aria-components";
 import { Plus, SearchLg } from "@untitledui/icons";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";

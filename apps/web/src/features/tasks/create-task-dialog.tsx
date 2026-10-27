@@ -4,7 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 

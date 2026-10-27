@@ -6,7 +6,7 @@ import type { PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
 import { executePiChat } from "./pi-chat.functions";

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { ComputerInstallCommand } from "./computer-install-command";
 import { CloudComputerStep } from "./cloud-computer-step";

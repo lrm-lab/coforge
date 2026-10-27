@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Heading } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { getComputerReleaseNotes } from "./computers.functions";
@@ -44,7 +44,7 @@ export function ComputerReleaseNotesLink({ release }: { release: ComputerRelease
       </Button>
       <ModalOverlay isOpen={open} onOpenChange={setOpen} isDismissable>
         <Modal className="w-[calc(100vw-2rem)] max-w-xl">
-          <Dialog className="overflow-hidden text-left">
+          <Dialog className="text-left">
             {({ close }) => (
               <>
                 <div className="px-6 pt-6">

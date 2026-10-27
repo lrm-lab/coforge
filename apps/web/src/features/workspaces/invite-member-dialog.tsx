@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { m } from "#src/paraglide/messages";
 import { InviteLinkPanel, useInviteLink } from "./invite-link-panel";

@@ -10,7 +10,7 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { agentProfileQuery } from "#src/features/agents/profile-panel/agent-profile-queries";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";

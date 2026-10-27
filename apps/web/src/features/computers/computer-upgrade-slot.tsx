@@ -11,7 +11,7 @@ import { Heading, ProgressBar, Text } from "react-aria-components";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { Alert } from "#src/components/ui/alert";
 import { ProgressSteps } from "#src/components/ui/progress-steps";
@@ -253,7 +253,7 @@ function UpgradeConfirmFrame({
   return (
     <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {({ close }) => (
             <>
               <div className="px-6 pt-6">

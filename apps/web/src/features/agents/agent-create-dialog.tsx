@@ -5,7 +5,7 @@ import { Monitor01 as Monitor } from "@untitledui/icons";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";

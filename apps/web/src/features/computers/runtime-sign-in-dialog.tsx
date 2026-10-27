@@ -23,7 +23,7 @@ import {
   DialogActions,
   DialogCancel,
 } from "#src/components/ui/dialog-actions";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import {
@@ -74,7 +74,7 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {target.provider === RUNTIME_PROVIDER.KIRO && !kiroIdentityCenter ? (
             <KiroEnterpriseSignIn onStart={setKiroIdentityCenter} onClose={onClose} />
           ) : (

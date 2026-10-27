@@ -1,7 +1,7 @@
 import { XClose as X } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
@@ -41,7 +41,7 @@ export function WeeklyTemplateDetailDialog({
   return (
     <ModalOverlay isOpen onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="overflow-hidden">
+        <Dialog>
           {({ close }) => (
             <>
               <div className="flex items-start justify-between gap-6 px-6 pt-6">

@@ -15,7 +15,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Select } from "#src/components/base/select/select";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
@@ -273,7 +273,7 @@ export function CreateWeeklyTemplateDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-xl">
-        <Dialog className="overflow-hidden">
+        <Dialog>
           {({ close }) => (
             <>
               <div className="flex items-start justify-between gap-6 px-6 pt-6">

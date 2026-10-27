@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Text } from "react-aria-components";
 import { AlertTriangle, LogOut01, Trash01 } from "@untitledui/icons";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -259,7 +259,7 @@ function DangerDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {({ close }) => (
             <form
               className="contents"

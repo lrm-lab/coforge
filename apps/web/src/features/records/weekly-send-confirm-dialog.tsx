@@ -1,7 +1,7 @@
 import { AlertCircle, XClose as X } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";

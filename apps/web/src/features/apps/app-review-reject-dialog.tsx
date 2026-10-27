@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Heading } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Alert } from "#src/components/ui/alert";

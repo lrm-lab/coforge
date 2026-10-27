@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Text } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
@@ -23,7 +23,7 @@ export function ServerAdminRoleDialog({
   return (
     <ModalOverlay isOpen onOpenChange={(next) => !next && onClose()}>
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {({ close }) => (
             <>
               <DialogHeader title={m.channel_members_server_admin_title()} onClose={close} />
@@ -86,7 +86,7 @@ export function RemoveMemberDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {({ close }) => (
             <>
               <DialogHeader

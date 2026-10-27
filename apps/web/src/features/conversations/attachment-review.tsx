@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy01, Download01, MessageSquare01, XClose } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import {
-  Dialog,
-  DialogTrigger,
-  Modal,
-  ModalOverlay,
-} from "#src/components/application/modals/modal";
+import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Empty, EmptyTitle } from "#src/components/ui/empty";
 import { useAppToast } from "#src/components/ui/toast";
 import { fileTypeLabel } from "#src/features/files/file-meta";
@@ -140,7 +135,7 @@ export function AttachmentReviewDialog({
       >
         <Modal
           className={cn(
-            "h-dvh max-h-dvh w-full rounded-none shadow-none max-sm:overflow-hidden sm:rounded-none",
+            "h-dvh max-h-dvh w-full rounded-none shadow-none max-sm:h-(--visual-viewport-height) max-sm:max-h-(--visual-viewport-height) max-sm:overflow-hidden sm:rounded-none",
             image && "bg-transparent",
           )}
         >

@@ -18,7 +18,7 @@ import {
   ModalOverlay as SlideoutOverlay,
   SlideoutMenu,
 } from "#src/components/application/slideout-menus/slideout-menu";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -764,7 +764,7 @@ function UnsavedChangesDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           <DialogHeader title={m.channel_settings_unsaved_title()} />
           <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
             {m.channel_settings_unsaved_message()}

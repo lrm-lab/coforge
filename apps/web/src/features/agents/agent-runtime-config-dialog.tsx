@@ -7,7 +7,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { StatusDot } from "#src/components/ui/status-dot";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { m } from "#src/paraglide/messages";
 import { agentEnvironmentNameError, agentEnvironmentRowsChanged } from "./agent-form";

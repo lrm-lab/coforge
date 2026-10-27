@@ -29,7 +29,7 @@ import {
 import { Spinner } from "#src/components/ui/spinner";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useSendWindowCountdown } from "./use-send-window";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";

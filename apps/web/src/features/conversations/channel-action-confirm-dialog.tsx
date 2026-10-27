@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Text } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -124,7 +124,7 @@ export function ChannelActionConfirmDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {({ close }) => (
             <>
               <DialogHeader title={copy.title()} onClose={busy ? undefined : close} />

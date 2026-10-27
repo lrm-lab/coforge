@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { Check, HelpCircle, Minus, XClose as X } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import { WORKSPACE_ROLE_CAPABILITIES } from "./workspace-role-capabilities";

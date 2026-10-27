@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { Heading, Text } from "react-aria-components";
 import { Trash01, XClose } from "@untitledui/icons";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";

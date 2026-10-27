@@ -3,7 +3,7 @@ import { Heading, Text } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import type { AgentRuntimeControls } from "./agent-runtime-controls";
 

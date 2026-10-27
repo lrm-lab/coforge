@@ -3,7 +3,7 @@ import { Heading, Text } from "react-aria-components";
 import { AlertCircle, XClose as X } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
@@ -45,7 +45,7 @@ export function ConfirmDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {({ close }) => (
             <>
               <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">

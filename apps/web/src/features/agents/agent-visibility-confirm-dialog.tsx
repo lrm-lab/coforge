@@ -3,7 +3,7 @@ import { AlertCircle } from "@untitledui/icons";
 import { Text } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -100,7 +100,7 @@ export function AgentVisibilityConfirmDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="overflow-hidden text-left">
+        <Dialog className="text-left">
           {({ close }) => (
             <>
               <DialogHeader

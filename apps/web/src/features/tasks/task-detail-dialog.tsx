@@ -12,15 +12,14 @@ import {
   DotsHorizontal as MoreHorizontal,
   XClose,
 } from "@untitledui/icons";
-import { useState, type ComponentProps, type CSSProperties, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { Heading } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
-import { useVisualViewportTop } from "#src/hooks/use-visual-viewport-top";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { StatusBadge, TaskHistory, type TimelineNames } from "./task-history";
@@ -175,22 +174,18 @@ export function TaskDetailDialog({
 }
 
 /**
- * The popup's overlay. A phone shows the popup as a full-screen sheet over exactly the visual
- * viewport (React Aria's `--visual-viewport-height`, at its measured offset, so px): with the
- * keyboard up, the header stays at the top and the composer sits right above the keyboard. The
- * offset changes while the keyboard moves; only this component renders again, not the thread.
+ * The popup's overlay. A phone shows the popup as a full-screen sheet over the visual viewport the
+ * overlay follows: with the keyboard up, the header stays at the top and the composer sits right
+ * above the keyboard.
  */
 function TaskPopupOverlay(
   props: Pick<ComponentProps<typeof ModalOverlay>, "isOpen" | "onOpenChange" | "children">,
 ) {
-  // Every board card holds a closed popup, so only an open one follows the viewport.
-  const viewportTop = useVisualViewportTop(props.isOpen ?? false);
   return (
     <ModalOverlay
       {...props}
       isDismissable
-      style={{ "--visual-viewport-top": `${viewportTop}px` } as CSSProperties}
-      className="max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0 max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
+      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
     />
   );
 }

@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import { XClose } from "@untitledui/icons";
 import { Checkbox as AriaCheckbox, Heading, Text } from "react-aria-components";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";

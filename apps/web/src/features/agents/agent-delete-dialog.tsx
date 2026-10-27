@@ -5,7 +5,7 @@ import { Heading, Text } from "react-aria-components";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { m } from "#src/paraglide/messages";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
@@ -64,7 +64,7 @@ export function AgentDeleteDialog({
       }}
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="overflow-hidden text-left" data-agent-delete-dialog>
+        <Dialog className="flex flex-col text-left" data-agent-delete-dialog>
           {({ close }) => (
             <>
               <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
@@ -83,29 +83,33 @@ export function AgentDeleteDialog({
                   onClick={close}
                 />
               </div>
-              <div className="mx-6 mt-4 flex items-start gap-3">
-                <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
-                <Text slot="description" className="text-sm text-secondary">
-                  {m.agent_delete_dialog_description()}
-                </Text>
+              {/* Only the middle scrolls: with the keyboard up the title and the buttons stay in
+                  view, so the confirmation can be typed and confirmed. */}
+              <div className="min-h-0 flex-1 overflow-y-auto pb-6" data-dialog-body>
+                <div className="mx-6 mt-4 flex items-start gap-3">
+                  <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
+                  <Text slot="description" className="text-sm text-secondary">
+                    {m.agent_delete_dialog_description()}
+                  </Text>
+                </div>
+                <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
+                  {m.agent_delete_confirm()}
+                  <Input
+                    autoFocus
+                    value={confirmation}
+                    onChange={setConfirmation}
+                    placeholder={m.agent_delete_placeholder()}
+                    isDisabled={deleting}
+                    aria-label={m.agent_delete_confirm()}
+                  />
+                </label>
+                {error && (
+                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
+                    {error}
+                  </p>
+                )}
               </div>
-              <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
-                {m.agent_delete_confirm()}
-                <Input
-                  autoFocus
-                  value={confirmation}
-                  onChange={setConfirmation}
-                  placeholder={m.agent_delete_placeholder()}
-                  isDisabled={deleting}
-                  aria-label={m.agent_delete_confirm()}
-                />
-              </label>
-              {error && (
-                <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                  {error}
-                </p>
-              )}
-              <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
+              <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
                 <Button color="secondary" isDisabled={deleting} onPress={close}>
                   {m.controls_cancel()}
                 </Button>
