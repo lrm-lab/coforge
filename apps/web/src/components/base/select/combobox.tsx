@@ -49,7 +49,7 @@ const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: I
                 cx(
                     "relative flex w-full items-center gap-2 rounded-lg bg-primary shadow-xs ring-1 ring-primary outline-hidden transition-shadow duration-100 ease-linear ring-inset",
                     isDisabled && "cursor-not-allowed opacity-50",
-                    isFocusWithin && "ring-2 ring-brand",
+                    isFocusWithin && "ring-2 ring-border-input-focus",
 
                     // Icon styles
                     "*:data-icon:shrink-0 *:data-icon:text-fg-quaternary",

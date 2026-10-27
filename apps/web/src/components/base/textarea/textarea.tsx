@@ -36,7 +36,7 @@ export const TextAreaBase = ({ className, size = "md", ...props }: TextAreaBaseP
                     // Resize handle
                     "[&::-webkit-resizer]:bg-(image:--resize-handle-bg) [&::-webkit-resizer]:bg-contain dark:[&::-webkit-resizer]:bg-(image:--resize-handle-bg-dark)",
 
-                    state.isFocused && !state.isDisabled && "ring-2 ring-brand",
+                    state.isFocused && !state.isDisabled && "ring-2 ring-border-input-focus",
                     state.isDisabled && "cursor-not-allowed opacity-50",
                     state.isInvalid && "ring-error_subtle",
                     state.isInvalid && state.isFocused && "ring-2 ring-error",

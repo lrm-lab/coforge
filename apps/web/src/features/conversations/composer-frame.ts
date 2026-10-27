@@ -6,4 +6,4 @@ export const COMPOSER_FRAME_CLASS =
 
 /** How the live composer's box shows it has focus; the loading screen's copy never takes focus. */
 export const COMPOSER_FOCUS_CLASS =
-  "transition-shadow focus-within:border-fg-quaternary focus-within:shadow-xs";
+  "transition-shadow focus-within:border-border-input-focus focus-within:shadow-xs";

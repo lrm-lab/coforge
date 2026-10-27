@@ -112,7 +112,7 @@ export function PiChatComposer({
             </ol>
           </div>
         )}
-        <div className="overflow-hidden rounded-xl border border-primary bg-primary shadow-xs focus-within:border-secondary">
+        <div className="overflow-hidden rounded-xl border border-primary bg-primary shadow-xs focus-within:border-border-input-focus">
           <TextArea
             aria-label={m.pi_chat_message()}
             placeholder={busy ? m.pi_chat_busy_placeholder() : m.pi_chat_placeholder()}

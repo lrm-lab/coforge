@@ -36,6 +36,10 @@
   /* The current left-navigation item's fill (task #222), its own token so `bg-tertiary`, which it
      used, stays put everywhere else. Re-pointed under `.dark-mode` below. */
   --color-nav-bg-current: #efeff7;
+  /* A text field's focus border (task #227): the design spec's brand violet, on its own token so
+     `ring-brand`'s other uses (selected cards, keyboard focus rings) keep theirs. Re-pointed
+     under `.dark-mode` below. */
+  --color-border-input-focus: var(--color-brand-600);
 
   /* Left-navigation label and icon (design spec): a cool grey at rest, the sidebar's ink on the
      current item. Re-pointed under `.dark-mode` below. */
@@ -184,6 +188,9 @@
     --color-sidebar-item-active: var(--color-sidebar-accent);
     /* Dark mode keeps the grey it had until the requester picks one. */
     --color-nav-bg-current: var(--color-bg-tertiary);
+    /* #5d36dc is 2.8:1 on the dark field, under the 3:1 a control's border needs; the lighter step
+       (7.5:1) until the requester picks one. */
+    --color-border-input-focus: var(--color-brand-400);
     --color-sidebar-accent-fg: #c5bafe;
 
     /* A resting nav item keeps the light theme's cool-grey hue, lightened for a dark column

@@ -97,7 +97,7 @@ export const InputBase = ({
                 cx(
                     "group/input relative flex w-full flex-row place-content-center place-items-center rounded-lg bg-primary shadow-xs ring-1 ring-primary transition-shadow duration-100 ease-linear ring-inset",
 
-                    isFocusWithin && !isDisabled && "ring-2 ring-brand",
+                    isFocusWithin && !isDisabled && "ring-2 ring-border-input-focus",
 
                     // Disabled state styles
                     isDisabled && "cursor-not-allowed opacity-50",
