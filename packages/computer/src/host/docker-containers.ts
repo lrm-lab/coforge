@@ -104,6 +104,20 @@ export function dockerServiceRestartArgs(computerId: string): string[] {
   return ["service", "update", "--force", serviceName(computerId)];
 }
 
+export function dockerServiceImageArgs(computerId: string): string[] {
+  return [
+    "service",
+    "inspect",
+    "--format",
+    "{{.Spec.TaskTemplate.ContainerSpec.Image}}",
+    serviceName(computerId),
+  ];
+}
+
+export function dockerImageTagArgs(source: string, target: string): string[] {
+  return ["tag", source, target];
+}
+
 export function dockerActivateRuntimeArgs(containerId: string, version: string): string[] {
   const args = ["exec"];
   const feed = process.env.COFORGE_RELEASE_FEED_URL?.trim();
@@ -159,6 +173,20 @@ export function pinnedImageReference(image: string, inspectLine: string): string
     throw new Error("docker image inspect returned an unusable image id");
   }
   return `${image}@${digest}`;
+}
+
+/**
+ * A second name in the same repository. Moving `staging` onto a newer build
+ * takes the old name away; Swarm then refuses `staging@old-digest` even though
+ * the image is still on disk. This name stays, so a later restart can find it.
+ */
+export function stableImageTag(image: string, digest: string): string {
+  const named = image.split("@")[0] ?? image;
+  const slash = named.lastIndexOf("/");
+  const colon = named.lastIndexOf(":");
+  const repo = colon > slash ? named.slice(0, colon) : named;
+  const hex = digest.replace(/^sha256:/i, "");
+  return `${repo}:pinned-${hex.slice(0, 12)}`;
 }
 
 export function dockerCloudContainerListArgs(): string[] {
@@ -250,7 +278,10 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
     async createService(input) {
       const result = await run(
         spawn,
-        dockerServiceCreateArgs({ ...input, image: await localImageReference(spawn, input.image) }),
+        dockerServiceCreateArgs({
+          ...input,
+          image: await localImageReference(spawn, input.image),
+        }),
         "docker service create failed",
       );
       const id = firstId(result);
@@ -286,6 +317,12 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       ) {
         throw new Error("invalid runtime version");
       }
+      const recorded = await run(
+        spawn,
+        dockerServiceImageArgs(computerId),
+        "docker service inspect failed",
+      );
+      await keepPinnedImageTagged(spawn, recorded.stdout);
       const containerId = firstId(
         await run(spawn, dockerTaskFindArgs(computerId), "docker ps failed"),
       );
@@ -340,9 +377,20 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
 }
 
 async function localImageReference(spawn: DockerSpawn, image: string): Promise<string> {
-  if (image.includes("@")) return image;
-  const inspected = await run(spawn, dockerImageDigestArgs(image), "docker image inspect failed");
-  return pinnedImageReference(image, inspected.stdout);
+  const pinned = image.includes("@")
+    ? image
+    : pinnedImageReference(
+        image,
+        (await run(spawn, dockerImageDigestArgs(image), "docker image inspect failed")).stdout,
+      );
+  await keepPinnedImageTagged(spawn, pinned);
+  return pinned;
+}
+
+async function keepPinnedImageTagged(spawn: DockerSpawn, image: string): Promise<void> {
+  const digest = imageLayerId(image);
+  if (!digest) return;
+  await run(spawn, dockerImageTagArgs(digest, stableImageTag(image, digest)), "docker tag failed");
 }
 
 function parseImageInspect(stdout: string): { id: string; version: string } | undefined {
