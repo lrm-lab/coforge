@@ -102,7 +102,7 @@ export class CommandCodeSession implements AgentSession {
           ? state.sessionId
           : undefined;
       if (typeof sessionId !== "string" || !sessionId.trim())
-        throw new Error("COMMAND_CODE did not create a session");
+        throw new Error("Command Code did not create a session");
       this.#identity = { sessionId, state: resuming ? "resumable" : "empty" };
       // Command Code ACP does not expose a model list reliably; keep its native default.
       await this.options.onSessionId?.(sessionId);
@@ -114,7 +114,7 @@ export class CommandCodeSession implements AgentSession {
 
   #requireTransport() {
     const transport = this.#transport;
-    if (!transport) throw new Error("COMMAND_CODE session is not open");
+    if (!transport) throw new Error("Command Code session is not open");
     return transport;
   }
 
@@ -126,7 +126,7 @@ export class CommandCodeSession implements AgentSession {
   }
   notify(text: string, options?: AgentNoticeOptions): Promise<void> {
     if (this.#disposed || this.#failed || this.#interrupting)
-      return Promise.reject(new Error("COMMAND_CODE cannot accept input before submission"));
+      return Promise.reject(new Error("Command Code cannot accept input before submission"));
     const admission = Promise.withResolvers<void>();
     this.#queue.push({
       text,
@@ -157,13 +157,13 @@ export class CommandCodeSession implements AgentSession {
         status = "completed";
       } else if (response.stopReason === "cancelled") {
         input.admission.reject(
-          new Error("COMMAND_CODE input cancelled; delivery outcome is unknown"),
+          new Error("Command Code input cancelled; delivery outcome is unknown"),
         );
         status = "interrupted";
       } else {
         this.#accept(input);
         this.#emit(
-          { type: "error", message: `COMMAND_CODE prompt stopped: ${response.stopReason}` },
+          { type: "error", message: `Command Code prompt stopped: ${response.stopReason}` },
           input,
         );
       }
@@ -174,8 +174,8 @@ export class CommandCodeSession implements AgentSession {
         input.admission.reject(
           new Error(
             input.attempted
-              ? "COMMAND_CODE input delivery outcome is unknown"
-              : "COMMAND_CODE rejected input before submission",
+              ? "Command Code input delivery outcome is unknown"
+              : "Command Code rejected input before submission",
           ),
         );
       // A terminal RPC failure is an accepted failed turn. Only transport loss leaves delivery
@@ -185,7 +185,7 @@ export class CommandCodeSession implements AgentSession {
         nonEmptyString(data?.detail) ??
         nonEmptyString(data?.message) ??
         (rpcFailure ? nonEmptyString(error.data) : undefined) ??
-        (error instanceof Error ? error.message : "COMMAND_CODE prompt failed");
+        (error instanceof Error ? error.message : "Command Code prompt failed");
       if (!this.#disposed)
         this.#emit(
           {
@@ -247,12 +247,12 @@ export class CommandCodeSession implements AgentSession {
   }
   cancelPendingNotices() {
     for (const input of this.#queue.splice(0))
-      input.admission.reject(new Error("COMMAND_CODE queued input cancelled before submission"));
+      input.admission.reject(new Error("Command Code queued input cancelled before submission"));
     this.#active?.admission.reject(
       new Error(
         this.#active.attempted
-          ? "COMMAND_CODE input cancelled; delivery outcome is unknown"
-          : "COMMAND_CODE input cancelled before submission",
+          ? "Command Code input cancelled; delivery outcome is unknown"
+          : "Command Code input cancelled before submission",
       ),
     );
   }

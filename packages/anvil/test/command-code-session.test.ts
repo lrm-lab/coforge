@@ -150,7 +150,7 @@ test(
       );
       await f.session.interrupt();
       expect(await queued).toMatchObject({
-        message: "COMMAND_CODE queued input cancelled before submission",
+        message: "Command Code queued input cancelled before submission",
       });
       expect(f.events).toContainEqual({ type: "completed", status: "interrupted" });
       expect((await f.records()).filter((r) => r.method === "session/prompt")).toHaveLength(1);
@@ -275,7 +275,7 @@ test(
       const queued = f.session.notify!("not submitted").catch((error: unknown) => error);
       await f.session.dispose();
       expect(await queued).toMatchObject({
-        message: "COMMAND_CODE queued input cancelled before submission",
+        message: "Command Code queued input cancelled before submission",
       });
     } finally {
       await f.close();
@@ -293,7 +293,7 @@ test(
       await f.waitForPrompt();
       f.session.cancelPendingNotices!();
       expect(await pending).toMatchObject({
-        message: "COMMAND_CODE input cancelled; delivery outcome is unknown",
+        message: "Command Code input cancelled; delivery outcome is unknown",
       });
       const completed = f.nextCompleted();
       await f.release();
