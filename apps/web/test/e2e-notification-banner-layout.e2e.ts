@@ -2,9 +2,8 @@ import { expect, test } from "bun:test";
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
 /**
- * Browser E2E (tasks #181, #231): the notification banner above the composer is the design's white
- * card, with no close button of its own, and keeps its text readable. Its buttons sit beside the
- * body only while the body keeps 280px; in a narrower pane (beside an open thread, a phone, or the
+ * Browser E2E (task #181): the notification banner above the composer keeps its text readable. Its
+ * buttons sit beside the body only while the body keeps 280px; in a narrower pane (beside an open thread, a phone, or the
  * 440–550px panes checked here) they take their own row under it, so the text is never squeezed
  * into a narrow column. Opt-in like the other browser E2Es (it reuses the replying fixture's
  * channel and thread); see `helpers/agent-replying-fixture.ts`. Screenshots are written under
@@ -13,8 +12,8 @@ import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 const fx = setupAgentReplying({ artifactsName: "notification-banner" });
 const { suffix, browser, evaluate, until } = fx;
 
-/** Where the banner's Enable button sits against its body text, how wide that text is, whether the
- * card is white and how many buttons it has (Dismiss and Enable only); and in the message column
+/** Where the banner's Enable button sits against its body text, how wide that text is and how tall
+ * the button is (32px, as on Raft); and in the message column
  * that holds it and the composer, whether the two line up, the column's side room, and the room it
  * had before task #181's follow-up (10% of the pane, at most 104px). */
 const layout = `(() => {
@@ -31,8 +30,7 @@ const layout = `(() => {
     beside: e.left >= b.right,
     below: e.top >= b.bottom,
     bodyWidth: Math.round(b.width),
-    white: getComputedStyle(card).backgroundColor === "rgb(255, 255, 255)",
-    buttons: card.querySelectorAll("button").length,
+    buttonHeight: Math.round(e.height),
     cardWidth: Math.round(c.width),
     alignedWithComposer: Math.abs(c.left - f.left) < 1 && Math.abs(c.right - f.right) < 1,
     room: Math.round(parseFloat(getComputedStyle(column).paddingLeft)),
@@ -44,8 +42,7 @@ type Layout = {
   beside: boolean;
   below: boolean;
   bodyWidth: number;
-  white: boolean;
-  buttons: number;
+  buttonHeight: number;
   cardWidth: number;
   alignedWithComposer: boolean;
   room: number;
@@ -60,7 +57,7 @@ test("the banner's buttons move under its text when the pane narrows", async () 
   await fx.untilText(`Thread root ${suffix}`);
   await until(bannerShown);
   const wide = await evaluate<Layout>(layout);
-  expect(wide).toMatchObject({ beside: true, below: false, white: true, buttons: 2 });
+  expect(wide).toMatchObject({ beside: true, below: false, buttonHeight: 32 });
   expect(wide!.bodyWidth).toBeGreaterThanOrEqual(280);
   expect(wide!.alignedWithComposer).toBe(true);
   await fx.screenshot("wide.png");
