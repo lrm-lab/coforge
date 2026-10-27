@@ -136,6 +136,11 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         cause.errorId === "page-fill-browser"
       ) {
         setError(m.action_card_page_fill_browser());
+      } else if (
+        isAppErrorCode(cause, "TEMPORARILY_UNAVAILABLE") &&
+        cause.errorId === "page-fill-desktop"
+      ) {
+        setError(m.action_card_page_fill_desktop());
       } else if (isAppErrorCode(cause, "INVALID_INPUT") && cause.errorId === "page-fill-field") {
         setError(m.action_card_page_fill_field());
       } else setError(m.action_card_error());

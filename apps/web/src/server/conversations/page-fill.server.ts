@@ -71,7 +71,7 @@ export async function postPageFill(input: {
       },
       body: JSON.stringify({ fields: body }),
       redirect: "manual",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(45_000),
     });
   } catch {
     throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "page-fill-desktop" });

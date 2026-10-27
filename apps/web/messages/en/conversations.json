@@ -268,6 +268,7 @@
   "action_card_page_fill_done": "Filled into the page",
   "action_card_denied_page_fill": "Only this Agent's owner can fill this in.",
   "action_card_page_fill_browser": "The page is not open. Ask the Agent to open it in its browser first.",
+  "action_card_page_fill_desktop": "Could not write into the cloud page. Try again.",
   "action_card_page_fill_field": "Could not find the field. Ask the Agent to send the card again.",
   "action_card_commit_channel_create": "Create Channel",
   "action_card_commit_agent_create": "Create Agent",

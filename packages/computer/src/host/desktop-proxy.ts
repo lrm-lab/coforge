@@ -140,7 +140,7 @@ async function proxyHttp(
   search: string,
 ): Promise<Response> {
   const headers = new Headers(request.headers);
-  for (const name of ["host", "connection", "content-length", "transfer-encoding"]) {
+  for (const name of ["host", "connection", "transfer-encoding"]) {
     headers.delete(name);
   }
   headers.set("x-vnc-token", target.token);
@@ -148,12 +148,16 @@ async function proxyHttp(
   const title = params.get("title") ?? undefined;
   params.delete("title");
   const rest = params.toString();
+  const buffered =
+    request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
+  if (buffered) headers.set("content-length", String(buffered.byteLength));
+  else headers.delete("content-length");
   const upstream = await fetch(
     `http://${target.host}:${target.port}${upstreamPath}${rest.length > 0 ? `?${rest}` : ""}`,
     {
       method: request.method,
       headers,
-      body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+      body: buffered,
       redirect: "manual",
     },
   );

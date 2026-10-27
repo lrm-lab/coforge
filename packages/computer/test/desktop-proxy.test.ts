@@ -168,6 +168,47 @@ describe("desktop proxy", () => {
     }
   });
 
+  test("a fill POST keeps its body and a content-length the container can read", async () => {
+    const seen: { length: string | null; body: string }[] = [];
+    const upstream = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      async fetch(request) {
+        seen.push({
+          length: request.headers.get("content-length"),
+          body: await request.text(),
+        });
+        return new Response(JSON.stringify({ filled: ["username"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    const upstreamPort = upstream.port;
+    if (upstreamPort === undefined) throw new Error("upstream did not bind");
+    const proxy = startDesktopProxy({
+      hostname: "127.0.0.1",
+      port: 0,
+      resolve: async () => ({ host: "127.0.0.1", port: upstreamPort, token: "desk-token" }),
+    });
+    try {
+      const payload = JSON.stringify({
+        fields: [{ id: "username", selector: "#user", value: "ada" }],
+      });
+      const response = await fetch(`http://127.0.0.1:${proxy.port}/desktop/computer-1/agent-1/fill`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: payload,
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ filled: ["username"] });
+      expect(seen).toEqual([{ length: String(payload.length), body: payload }]);
+    } finally {
+      proxy.stop();
+      upstream.stop(true);
+    }
+  });
+
   test("a requested title is written into the page and not sent to the container", async () => {
     const seen: string[] = [];
     const upstream = Bun.serve({

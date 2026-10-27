@@ -255,6 +255,7 @@
   "action_card_page_fill_done": "已填入网页",
   "action_card_denied_page_fill": "只有这个 Agent 的所有者可以填写。",
   "action_card_page_fill_browser": "网页还没打开。请让 Agent 先在它自己的浏览器里打开这个页面。",
+  "action_card_page_fill_desktop": "没能写进云电脑上的网页，请重试。",
   "action_card_page_fill_field": "没有找到要填的格子。请让 Agent 再发一张卡片。",
   "action_card_commit_channel_create": "创建群聊",
   "action_card_commit_agent_create": "创建 Agent",
