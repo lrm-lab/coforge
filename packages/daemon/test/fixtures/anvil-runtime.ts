@@ -28,6 +28,8 @@ export const anvilRuntimeFixtures = {
     .pathname,
   grokClientInfo: new URL("../../../anvil/test/fixtures/grok-client-info.ts", import.meta.url)
     .pathname,
+  commandCode: new URL("../../../anvil/test/fixtures/command-code-acp.ts", import.meta.url)
+    .pathname,
   kiro: new URL("../../../anvil/test/fixtures/kiro-acp.ts", import.meta.url).pathname,
   kiroClientInfo: new URL("../../../anvil/test/fixtures/kiro-client-info.ts", import.meta.url)
     .pathname,

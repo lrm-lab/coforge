@@ -34,6 +34,7 @@ test("a launch refuses a Command Code CLI below 1.87.2 before spawning", async (
         },
       },
       buildEnvironment: () => ({}),
+      buildCatalogEnvironment: () => ({}),
       createReplyIntentScanner: () => ({
         feed: () => undefined,
         complete: () => {},

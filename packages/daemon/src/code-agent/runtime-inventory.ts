@@ -1,4 +1,5 @@
 import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
+import { commandCodeRuntimeHost } from "#src/code-agent/command-code/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { join } from "node:path";
@@ -10,6 +11,7 @@ import {
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
+import { discoverCommandCodeCatalog } from "@lrm/coforge-anvil/command-code";
 import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
 import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
 import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
@@ -64,6 +66,7 @@ type CatalogCommands = {
   opencode?: readonly string[];
   grok?: readonly string[];
   antigravity?: readonly string[];
+  commandCode?: readonly string[];
 };
 
 export type CodeAgentDiscoveryOptions = {
@@ -99,6 +102,7 @@ const CACHEABLE_CATALOG_PROVIDERS = [
   RUNTIME_PROVIDER.CURSOR,
   RUNTIME_PROVIDER.OPENCODE,
   RUNTIME_PROVIDER.ANTIGRAVITY,
+  RUNTIME_PROVIDER.COMMAND_CODE,
 ] as const;
 
 function piCacheKeyPaths(environment: Readonly<Record<string, string | undefined>>): string[] {
@@ -367,6 +371,26 @@ export async function discoverCodeAgentCatalogs(
           .catch(() => undefined)
           .then((catalog) => ({
             provider: RUNTIME_PROVIDER.OPENCODE,
+            keyPaths: [executable],
+            catalog,
+          })),
+      );
+  }
+  // The model list is session/new's model select. Without this branch a refresh never probes
+  // Command Code, so Edit Runtime Configuration stays empty and Refresh fails.
+  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.COMMAND_CODE)) {
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.COMMAND_CODE);
+    if (executable)
+      discoveries.push(
+        discoverCommandCodeCatalog(
+          commands.commandCode ?? [executable],
+          cwd,
+          environment,
+          commandCodeRuntimeHost,
+        )
+          .catch(() => undefined)
+          .then((catalog) => ({
+            provider: RUNTIME_PROVIDER.COMMAND_CODE,
             keyPaths: [executable],
             catalog,
           })),

@@ -46,6 +46,7 @@ async function fixture(
       },
       versionReader: async () => "1.87.3",
       buildEnvironment: () => ({ COMMAND_CODE_FIXTURE_LOG: log, ...environment }),
+      buildCatalogEnvironment: () => ({ COMMAND_CODE_FIXTURE_LOG: log, ...environment }),
       createReplyIntentScanner: () => ({
         feed: () => undefined,
         complete: () => {},
@@ -440,6 +441,7 @@ async function rejectedLaunch(options: {
       },
       versionReader: async () => "1.87.3",
       buildEnvironment: () => ({ COMMAND_CODE_FIXTURE_LOG: log, ...options.environment }),
+      buildCatalogEnvironment: () => ({ COMMAND_CODE_FIXTURE_LOG: log, ...options.environment }),
       createReplyIntentScanner: () => ({
         feed: () => undefined,
         complete: () => {},

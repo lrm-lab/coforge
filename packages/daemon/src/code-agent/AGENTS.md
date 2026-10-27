@@ -75,8 +75,10 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   project scan also requires a trusted workspace and walks up to the git root; this scan does
   neither. Assigned packs go to the native project root `.commandcode/skills`
   (`getProjectSkillsDir` on that CLI).
-- Command Code has no model catalog or usage scan in the adapter. ACP model/config fields are
-  optional; absent fields mean the native default model. Permission requests are allow-once only
+- The model catalog is `session/new`'s `model` config option, read by Anvil and cached with the
+  other CLI catalogs. This version's web UI offers that model list only. It does not offer effort,
+  because effort options exist only after the session switches model. A missing effort option
+  leaves the model's own default. There is no usage scan. Permission requests are allow-once only
   for the active session, and all other requests are cancelled.
 - Native Command Code rules live in [Anvil Command Code instructions](../../../anvil/src/command-code/AGENTS.md).
 

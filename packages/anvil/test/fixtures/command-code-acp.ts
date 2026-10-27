@@ -13,6 +13,68 @@ async function markInstructionMod() {
   await writeFile(join(dirname(modPath), "loaded"), "loaded\n");
 }
 const sessionId = "command-code-fixture-session";
+let currentModel = "native-model";
+let currentEffort = "default";
+const modelOptions = [
+  { value: "native-model", name: "Native", description: "Current default" },
+  { value: "other-model", name: "Other", description: "Shorter effort list" },
+  { value: "plain-model", name: "Plain", description: "No effort control" },
+];
+function effortChoices(model: string) {
+  if (model === "plain-model") return undefined;
+  if (model === "other-model") {
+    return [
+      { value: "default", name: "Default" },
+      { value: "low", name: "Low" },
+    ];
+  }
+  return [
+    { value: "default", name: "Default" },
+    { value: "high", name: "High" },
+  ];
+}
+function configOptions() {
+  const efforts = effortChoices(currentModel);
+  return [
+    {
+      id: "model",
+      name: "Model",
+      category: "model",
+      type: "select",
+      currentValue: currentModel,
+      options: modelOptions,
+    },
+    ...(efforts
+      ? [
+          {
+            id: "effort",
+            name: "Effort",
+            description: "Reasoning effort for the current model",
+            category: "thought_level",
+            type: "select",
+            currentValue: efforts.some((entry) => entry.value === currentEffort)
+              ? currentEffort
+              : "default",
+            options: efforts,
+          },
+        ]
+      : []),
+  ];
+}
+function applyConfig(configId: unknown, value: unknown) {
+  if (typeof value !== "string") return;
+  if (configId === "model" && modelOptions.some((entry) => entry.value === value)) {
+    currentModel = value;
+    const efforts = effortChoices(currentModel);
+    currentEffort = efforts?.some((entry) => entry.value === "default")
+      ? "default"
+      : (efforts?.[0]?.value ?? "default");
+    return;
+  }
+  if (configId !== "effort") return;
+  const efforts = effortChoices(currentModel);
+  if (efforts?.some((entry) => entry.value === value)) currentEffort = value;
+}
 const write = (value: unknown) => console.log(JSON.stringify(value));
 const update = (value: unknown) =>
   write({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: value } });
@@ -28,6 +90,8 @@ for await (const line of console) {
   }
   switch (request.method) {
     case "initialize":
+      if (Bun.env.COMMAND_CODE_FIXTURE_STDERR === "1")
+        console.error("auth failed sk-abcdefghijklmnop");
       await markInstructionMod();
       reply({
         protocolVersion: Bun.env.COMMAND_CODE_FIXTURE_PROTOCOL === "0" ? 0 : 1,
@@ -40,21 +104,41 @@ for await (const line of console) {
       break;
     case "session/new":
     case "session/resume":
-      reply({
-        sessionId,
-        configOptions: [
-          {
-            id: "model",
-            name: "Model",
-            type: "select",
-            currentValue: "native-model",
-            options: [{ value: "native-model", name: "Native" }],
-          },
-        ],
-      });
+      if (Bun.env.COMMAND_CODE_FIXTURE_EXIT_BEFORE_CONFIG === "1") {
+        reply({ sessionId, configOptions: [] });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        process.exit(0);
+      }
+      if (Bun.env.COMMAND_CODE_FIXTURE_EMPTY_MODEL === "1") {
+        reply({
+          sessionId,
+          configOptions: [
+            {
+              id: "model",
+              name: "Model",
+              category: "model",
+              type: "select",
+              currentValue: "",
+              options: [],
+            },
+          ],
+        });
+        break;
+      }
+      if (Bun.env.COMMAND_CODE_FIXTURE_MISSING_CONFIG === "1") {
+        reply({ sessionId, configOptions: [] });
+        break;
+      }
+      if (Bun.env.COMMAND_CODE_FIXTURE_DELAYED_CONFIG === "1") {
+        reply({ sessionId, configOptions: [] });
+        update({ sessionUpdate: "config_option_update", configOptions: configOptions() });
+        break;
+      }
+      reply({ sessionId, configOptions: configOptions() });
       break;
     case "session/set_config_option":
-      reply({ configOptions: [] });
+      applyConfig(request.params?.configId, request.params?.value);
+      reply({ configOptions: configOptions() });
       break;
     case "session/prompt": {
       const text = request.params.prompt[0].text;

@@ -7,6 +7,9 @@ export interface CommandCodeRuntimeHost {
   readonly processTreeSpawner: ProcessTreeSpawner;
   readonly versionReader: CliVersionReader;
   buildEnvironment(options: AgentSessionOptions): Record<string, string>;
+  buildCatalogEnvironment(
+    environment: Readonly<Record<string, string | undefined>>,
+  ): Record<string, string>;
   createReplyIntentScanner(): {
     feed(delta: {
       callId: string;

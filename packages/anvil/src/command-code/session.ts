@@ -1,4 +1,8 @@
-import { RequestError, type RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import {
+  RequestError,
+  type RequestPermissionRequest,
+  type SessionConfigOption,
+} from "@agentclientprotocol/sdk";
 import { dirname, join } from "node:path";
 import type {
   AgentNoticeOptions,
@@ -7,6 +11,7 @@ import type {
   AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
+import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
 import {
@@ -104,7 +109,7 @@ export class CommandCodeSession implements AgentSession {
       if (typeof sessionId !== "string" || !sessionId.trim())
         throw new Error("Command Code did not create a session");
       this.#identity = { sessionId, state: resuming ? "resumable" : "empty" };
-      // Command Code ACP does not expose a model list reliably; keep its native default.
+      await this.#applyRuntimeConfig(sessionId, state.configOptions ?? []);
       await this.options.onSessionId?.(sessionId);
     } catch (error) {
       await this.dispose().catch(() => undefined);
@@ -112,6 +117,46 @@ export class CommandCodeSession implements AgentSession {
     }
   }
 
+  async #applyRuntimeConfig(sessionId: string, initial: SessionConfigOption[]) {
+    const model = this.options.runtime?.model;
+    const reasoning = this.options.runtime?.reasoning;
+    if (!model && !reasoning) return;
+    const transport = this.#requireTransport();
+    let config = initial;
+    const select = async (id: string, value: string) => {
+      const option = config.find((entry) => entry.id === id);
+      const available =
+        option?.type === "select" &&
+        option.options.some((entry) =>
+          "value" in entry
+            ? entry.value === value
+            : entry.options.some((child) => child.value === value),
+        );
+      if (!available) {
+        if (id === "model") throw new RuntimeModelNotFoundError(value);
+        throw new Error(`Command Code ${id} selection is unavailable`);
+      }
+      const configured = await this.#bounded(
+        transport.connection.agent.request("session/set_config_option", {
+          sessionId,
+          configId: id,
+          value,
+        }),
+      );
+      config = configured.configOptions;
+      if (!config.some((entry) => entry.id === id && entry.currentValue === value))
+        throw new Error(`Command Code did not apply ${id}`);
+    };
+    if (model) {
+      config = await transport.waitForConfig(sessionId, config, "model", this.#timeoutMs);
+      await select("model", model);
+    }
+    // Effort options depend on the model that was just selected. When the returned option does
+    // not exist, the model's own default stays. A present option that lacks the value fails.
+    if (!reasoning) return;
+    const effort = config.find((entry) => entry.category === "thought_level");
+    if (effort) await select(effort.id, reasoning);
+  }
   #requireTransport() {
     const transport = this.#transport;
     if (!transport) throw new Error("Command Code session is not open");

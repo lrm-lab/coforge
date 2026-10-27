@@ -29,7 +29,7 @@
 | `src/antigravity/` | Antigravity per-turn protocol, tool events, version/catalog policy and usage parsing |
 | `src/dsh/` | DSH ACP, pinned preview version, native catalogs and literal instruction content behind host ports |
 | `src/grok/` | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities |
-| `src/command-code/` | Command Code ACP sessions and a private `--mod` instruction bridge |
+| `src/command-code/` | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge |
 | `src/kiro/` | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
 | `src/opencode/` | OpenCode provider, turn protocol, version policy and catalog parsing |
 | `src/cursor/` | Cursor turn protocol, provider and model catalog parsing |

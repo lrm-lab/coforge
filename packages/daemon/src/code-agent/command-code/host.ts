@@ -20,6 +20,10 @@ export const commandCodeRuntimeHost: CommandCodeRuntimeHost = {
     }),
     PWD: options.agentWorkspaceDirectory,
   }),
+  buildCatalogEnvironment: (environment) =>
+    agentEnvironment(undefined, environment, undefined, {
+      extraEnv: { NO_COLOR: "1" },
+    }),
 };
 export function createCommandCodeAuthHost(command: readonly string[]): CommandCodeAuthHost {
   return {
