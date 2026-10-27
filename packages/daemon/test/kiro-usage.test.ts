@@ -7,6 +7,7 @@ import {
 } from "@lrm/coforge-anvil";
 import { readKiroUsageResponse } from "#src/code-agent/kiro/usage-host";
 import { usageScanFailure } from "#src/daemon-runtime/usage-scan-response";
+import { readKiroUsage } from "@lrm/coforge-anvil/kiro";
 import { captureDaemonLogs } from "./log-capture";
 
 const USAGE = `Estimated Usage | resets on 2026-11-01 | KIRO POWER
@@ -59,7 +60,7 @@ class FixtureTree implements OwnedProcessTree {
 }
 
 function spawner(
-  trees: FixtureTree | readonly FixtureTree[],
+  trees: OwnedProcessTree | readonly OwnedProcessTree[],
   calls: { command?: readonly string[]; cwd?: string; env?: Record<string, string> },
 ): ProcessTreeSpawner {
   const queue = Array.isArray(trees) ? [...trees] : [trees];
@@ -238,4 +239,51 @@ test("logs a timeout reason when the native read outruns its budget", async () =
   );
   const failed = records.find((record) => record.properties.event === "kiro_usage:read_failed");
   expect(failed?.properties.reason).toBe("timeout");
+});
+
+/** A command that takes `delayMs` to exit, so the host's deadline is what decides the read. */
+function slowTree(output: string, delayMs: number): OwnedProcessTree {
+  return {
+    child: {
+      pid: 1,
+      exitCode: 0,
+      stdin: { write: () => true, end: () => {}, flush: async () => {} },
+      exited: new Promise((resolve) => setTimeout(() => resolve(0), delayMs)),
+      stdout: (async function* () {
+        yield new TextEncoder().encode(output);
+      })(),
+      stderr: (async function* () {})(),
+      kill() {},
+    },
+    async terminate() {},
+    async waitForExit() {
+      return true;
+    },
+  };
+}
+
+test("a read that outlives the caller's budget succeeds once the runtime raises it", async () => {
+  // The 10s-versus-~12s case, scaled down: a caller budget shorter than the read kills it, while
+  // the runtime's own path raises the budget to KIRO_USAGE_TIMEOUT_MS and lets the read finish.
+  const slowSpawn = () =>
+    spawner(
+      [slowTree('{"account":{"accountType":"IamIdentityCenter"}}', 50), slowTree(USAGE, 50)],
+      {},
+    );
+  const tempDirectory = { create: async () => "/tmp/kiro-slow", remove: async () => {} };
+
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 5,
+      spawn: slowSpawn(),
+      tempDirectory,
+    }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+
+  await expect(
+    readKiroUsage({ workingDirectory: "/tmp/kiro-project", timeoutMs: 5 }, (options) =>
+      readKiroUsageResponse({ ...options, spawn: slowSpawn(), tempDirectory }),
+    ),
+  ).resolves.toMatchObject({ provider: "kiro" });
 });
