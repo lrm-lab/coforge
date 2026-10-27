@@ -31,6 +31,8 @@ type ReviewFile = {
   contentType: string;
   sizeBytes: number;
   previewUrl?: string;
+  thumbnailUrl?: string;
+  largeUrl?: string;
 };
 
 // The icon bar is drawn at full text color, as on Raft; the tertiary gray reads as disabled.
@@ -218,9 +220,12 @@ export function AttachmentReviewDialog({
                     >
                       {image ? (
                         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                          {/* The large tier over the thumbnail the message already showed until it
+                            arrives; Download keeps the original. */}
                           <LoadingImage
-                            src={file.previewUrl ?? href}
-                            fallbackSrc={file.previewUrl ? href : undefined}
+                            src={file.largeUrl ?? file.previewUrl ?? href}
+                            placeholderSrc={file.thumbnailUrl}
+                            fallbackSrc={file.largeUrl || file.previewUrl ? href : undefined}
                             onFailed={() => setImageFailed(true)}
                             alt={file.fileName}
                             className="flex size-full items-center justify-center"

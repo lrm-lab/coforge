@@ -20,6 +20,9 @@ export type ConversationFile = {
    * (same signing as message attachments); its absence means the client preview falls back to
    * the authenticated route, and a PDF stays download-only. */
   previewUrl?: string;
+  thumbnailUrl?: string;
+  iconUrl?: string;
+  largeUrl?: string;
   /** The message this file was sent on, for locate-in-chat links; the hash anchor resolves a
    * thread reply through its root, orphaned files (message deleted) have none. */
   messageId: string | null;

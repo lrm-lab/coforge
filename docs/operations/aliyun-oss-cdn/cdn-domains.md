@@ -72,6 +72,10 @@ EdgeScript：域名边界本身就是 fail-closed 的，一个域名请求另一
    `X-Cache: HIT`、`X-Swift-CacheTime: 86400`。
 4. 不在 `files.coforge.cn` 配置会忽略 CDN signing 参数的 Ignore Parameters 或 custom
    cache key。CDN 先验签，再用去掉鉴权材料后的规范化 path 作为 cache 身份。
+   图片缩放（task #212）在同一签名 URL 上加 `x-oss-process`：签名只覆盖 path，该参数透传回源
+   由 OSS 处理，且计入 cache key（2026-10-27 staging 实测，原图与缩放图各自 MISS 后 HIT）。
+   三档固定写法见 `attachment-image-variants.server.ts`，顺序不能变；开 Ignore Parameters
+   会让各档串成一份。
 5. 三个域名都新增全域 Modify Outgoing Request Headers `Delete Cookie` 与 Modify
    Outgoing Response Headers `Delete Set-Cookie`。应用 session cookie 必须是 application
    host-only，不能设置 `Domain=.coforge.cn`。CDN 不用 Cookie 鉴权或形成 cache identity。

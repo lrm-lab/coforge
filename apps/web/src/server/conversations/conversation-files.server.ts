@@ -29,14 +29,18 @@ export async function listConversationFiles(
     },
   });
   return {
-    files: attachments.map((attachment) => ({
-      ...attachmentView(attachment),
-      createdAt: attachment.createdAt.toISOString(),
-      inlineImage: isInlineImage(attachment.contentType),
-      sender: attachment.uploader
-        ? humanLabel(attachment.uploader)
-        : attachment.uploaderAgent?.displayName || attachment.uploaderAgent?.name || "",
-      messageId: attachment.message?.id ?? null,
-    })),
+    files: attachments.map((attachment) => {
+      const view = attachmentView(attachment);
+      return {
+        ...view,
+        createdAt: attachment.createdAt.toISOString(),
+        // A HEIC is drawn too, from its WebP icon.
+        inlineImage: isInlineImage(attachment.contentType) || view.iconUrl !== undefined,
+        sender: attachment.uploader
+          ? humanLabel(attachment.uploader)
+          : attachment.uploaderAgent?.displayName || attachment.uploaderAgent?.name || "",
+        messageId: attachment.message?.id ?? null,
+      };
+    }),
   };
 }

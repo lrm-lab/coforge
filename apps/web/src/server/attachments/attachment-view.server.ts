@@ -1,5 +1,6 @@
 import { getFileDelivery, type FileDelivery } from "#src/server/files/file-delivery.server";
 import { isDeliveryInlinePreview, isInlineImage } from "./attachment-response.server";
+import { imageVariants, isResizableImage } from "./attachment-image-variants.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import type { Prisma } from "#src/generated/prisma/client";
 
@@ -32,6 +33,13 @@ export type AttachmentView = {
    * the bytes when delivery is not configured). Its absence is also the client's signal that a
    * PDF cannot be previewed in this deployment, so it offers the download instead. */
   previewUrl?: string;
+  /** The resized WebP variants of an image OSS can resize (`imageVariants`), on the same
+   * signature: a message shows `thumbnailUrl`, a Files row `iconUrl`, the lightbox `largeUrl`;
+   * Download keeps the original. A GIF has none (resizing keeps one frame). A HEIC has these and
+   * no `previewUrl`: a browser cannot show its original. */
+  thumbnailUrl?: string;
+  iconUrl?: string;
+  largeUrl?: string;
 };
 
 /** A signing failure must never take a message read down: the client falls back to the
@@ -67,16 +75,19 @@ export function attachmentView(
   delivery: FileDelivery | null = getFileDelivery(),
 ): AttachmentView {
   const { imageWidth, imageHeight } = row;
-  const previewUrl =
-    delivery && (isInlineImage(row.contentType) || isDeliveryInlinePreview(row.contentType))
+  const inlineImage = isInlineImage(row.contentType);
+  const resizable = isResizableImage(row.contentType);
+  const signed =
+    delivery && (inlineImage || resizable || isDeliveryInlinePreview(row.contentType))
       ? signPreviewUrl(delivery, row.objectKey)
       : undefined;
+  const previewUrl = signed && (inlineImage || !resizable) ? signed : undefined;
   return {
     id: row.id,
     fileName: row.fileName,
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,
-    ...(isInlineImage(row.contentType) &&
+    ...(inlineImage &&
     imageWidth !== null &&
     imageHeight !== null &&
     Number.isInteger(imageWidth) &&
@@ -86,5 +97,6 @@ export function attachmentView(
       ? { imageWidth, imageHeight }
       : {}),
     ...(previewUrl ? { previewUrl } : {}),
+    ...(signed && resizable ? imageVariants(signed) : {}),
   };
 }

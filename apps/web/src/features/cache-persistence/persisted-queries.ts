@@ -178,7 +178,7 @@ export function storedQueryData(queryKey: QueryKey, data: unknown): unknown {
  * the row would stay on its fallback; dropped, the row shows the attachment through the
  * authenticated route until the read that follows the restore brings a fresh one.
  */
-const EXPIRING_URL_KEYS = new Set(["previewUrl"]);
+const EXPIRING_URL_KEYS = new Set(["previewUrl", "thumbnailUrl", "iconUrl", "largeUrl"]);
 
 function withoutExpiringUrls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutExpiringUrls);

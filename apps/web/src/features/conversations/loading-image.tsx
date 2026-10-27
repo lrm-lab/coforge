@@ -97,14 +97,19 @@ export function ImageFrame({
  * A new `src` for an image already shown is the same picture under a fresh signature (one
  * component is one attachment): the loaded picture stays up while the new URL loads off-screen,
  * and is swapped once it has, so a re-read never drops a visible image back to its skeleton.
+ * `placeholderSrc` (a smaller copy of the same picture, already on screen elsewhere) stands in
+ * the same way from the first paint: the lightbox shows the message's thumbnail until the
+ * original has loaded (task #212).
  */
 export function LoadingImage({
   src,
+  placeholderSrc,
   fallbackSrc,
   onFailed,
   ...frame
 }: {
   src: string;
+  placeholderSrc?: string;
   fallbackSrc?: string;
   onFailed?: () => void;
 } & Pick<
@@ -117,7 +122,12 @@ export function LoadingImage({
     status: ImageStatus;
     /** The URL still on screen while `src` loads off-screen. */
     shown?: string;
-  }>({ src, fallback: false, status: "loading" });
+  }>(() => ({
+    src,
+    fallback: false,
+    status: "loading",
+    shown: placeholderSrc && placeholderSrc !== src ? placeholderSrc : undefined,
+  }));
   const current = state.fallback && fallbackSrc ? fallbackSrc : state.src;
   if (state.src !== src)
     setState({
@@ -166,7 +176,17 @@ export function LoadingImage({
       probe.src = "";
     };
   }, [shown, current, src]);
-  if (shown) return <ImageFrame {...frame} src={shown} status="loaded" imgRef={img} />;
+  if (shown)
+    return (
+      <ImageFrame
+        {...frame}
+        src={shown}
+        status="loaded"
+        imgRef={img}
+        // A stand-in that fails gives way to the skeleton while `src` still loads.
+        onError={() => setState((prev) => ({ ...prev, shown: undefined }))}
+      />
+    );
   return (
     <ImageFrame
       {...frame}

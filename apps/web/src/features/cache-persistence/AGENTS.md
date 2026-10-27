@@ -36,7 +36,8 @@ because the API is experimental.
   other tab checks it). The check and the write are separate transactions, so a tab switching
   person in between can still leave one row, removed by the next claim or sign-out.
 - Kept data holds no signed URL that expires before the copy does: `storedQueryData` drops every
-  `previewUrl` (a 30-minute CDN signature). Check a new kind for others.
+  `previewUrl` and its WebP tiers (`thumbnailUrl`, `iconUrl`, `largeUrl`; a 30-minute CDN
+  signature). Check a new kind for others.
 - Every way to `/auth/logout` goes through `signOut()` (`features/auth/sign-out.ts`), which removes
   every row and seals the page against writing more before it navigates. Do not link to
   `/auth/logout` directly.

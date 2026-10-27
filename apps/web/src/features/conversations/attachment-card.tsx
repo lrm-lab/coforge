@@ -10,6 +10,10 @@ import { m } from "#src/paraglide/messages";
 import { previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
 import { LoadingImage } from "./loading-image";
+import {
+  MESSAGE_IMAGE_MAX_HEIGHT_PX,
+  MESSAGE_IMAGE_MAX_WIDTH_PX,
+} from "#src/lib/attachment-image-box";
 import type { MessageView } from "./message-row";
 
 /** The authenticated backend fallback: forced downloads, and inline images once their signed
@@ -19,19 +23,17 @@ export function attachmentUrl(attachment: { id: string }) {
   return `/api/attachments/${attachment.id}`;
 }
 
-/** The tallest an inline image is drawn (`max-h-80`), in CSS pixels. */
-const IMAGE_MAX_HEIGHT_PX = 320;
-
 /**
  * An image's final box while it is still loading, from the size the server read off the upload:
- * its pixels as CSS pixels, scaled down to `IMAGE_MAX_HEIGHT_PX`. The card takes that width, capped
+ * its pixels as CSS pixels, scaled down into the message box (`attachment-image-box.ts`, which the
+ * server sizes the thumbnail to). The card takes that width, capped
  * by the row (`max-w-full`), and the frame fills it at the image's ratio. Without a size the frame
  * stays at its minimum until the image arrives.
  */
 function imageBox({ imageWidth: width, imageHeight: height }: MessageView["attachments"][number]) {
   if (!width || !height) return undefined;
   return {
-    width: `${Math.min(width, (IMAGE_MAX_HEIGHT_PX * width) / height)}px`,
+    width: `${Math.min(width, MESSAGE_IMAGE_MAX_WIDTH_PX, (MESSAGE_IMAGE_MAX_HEIGHT_PX * width) / height)}px`,
     aspectRatio: `${width} / ${height}`,
   };
 }
@@ -45,7 +47,13 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
   const box = imageBox(attachment);
   if (attachment.contentType.startsWith("image/") && !imgBroken)
     return (
-      <div className="relative mt-1 w-fit max-w-full" style={box && { width: box.width }}>
+      <div
+        className="relative mt-1 w-fit"
+        style={{
+          maxWidth: `min(100%, ${MESSAGE_IMAGE_MAX_WIDTH_PX}px)`,
+          ...(box && { width: box.width }),
+        }}
+      >
         <AttachmentReviewDialog file={attachment}>
           {() => (
             <Button
@@ -55,8 +63,8 @@ export function AttachmentCard({ attachment }: { attachment: MessageView["attach
               className={cn(box ? "block w-full" : "grid place-items-center", IMAGE_BUTTON_CLASS)}
             >
               <LoadingImage
-                src={attachment.previewUrl ?? href}
-                fallbackSrc={attachment.previewUrl ? href : undefined}
+                src={attachment.thumbnailUrl ?? attachment.previewUrl ?? href}
+                fallbackSrc={attachment.thumbnailUrl || attachment.previewUrl ? href : undefined}
                 onFailed={() => setImgBroken(true)}
                 alt={attachment.fileName}
                 className={cn("min-h-24 min-w-24", box ? "w-full" : "max-w-full")}

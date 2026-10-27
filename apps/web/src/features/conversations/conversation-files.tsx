@@ -69,8 +69,8 @@ export function FileRow({
     <span className="flex w-full min-w-0 items-center gap-3">
       {isImage ? (
         <LoadingImage
-          src={file.previewUrl ?? href}
-          fallbackSrc={file.previewUrl ? href : undefined}
+          src={file.iconUrl ?? file.previewUrl ?? href}
+          fallbackSrc={file.iconUrl || file.previewUrl ? href : undefined}
           alt=""
           className="size-10 shrink-0 rounded-lg ring-1 ring-secondary ring-inset"
           imgClassName="size-full object-cover"

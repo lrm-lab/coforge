@@ -89,6 +89,10 @@ export type DirectConversationView = {
       imageWidth?: number;
       imageHeight?: number;
       previewUrl?: string;
+      /** WebP tiers of a resizable image (`AttachmentView`): message, Files row, lightbox. */
+      thumbnailUrl?: string;
+      iconUrl?: string;
+      largeUrl?: string;
     }[];
   }>;
 };
