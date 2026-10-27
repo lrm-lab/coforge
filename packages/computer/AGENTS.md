@@ -33,7 +33,7 @@ relative to `src/`.
 | ------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | `main.ts`                            | Binary entrypoint: dispatches the internal modes or the Computer CLI                                |
 | `cli.ts`                             | Commander command tree and thin command actions                                                     |
-| `cli/`                               | Human output for command results, including upgrade and install wording (`upgrade-output.ts`)       |
+| `cli/`                               | Command wiring and output: login, setup, update, daemon, restart; upgrade wording                   |
 | `errors.ts`                          | Stable user-facing CLI error stages                                                                 |
 | `terminal-output.ts`                 | Terminal-safe text                                                                                  |
 | `setup/`                             | Computer setup business flow                                                                        |
