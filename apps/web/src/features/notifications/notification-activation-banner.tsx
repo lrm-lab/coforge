@@ -163,45 +163,31 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
     </>
   );
   return (
-    // As on Raft, the banner's own width decides the layout, not the window's: from 452px the
-    // buttons sit beside the body, level with its last line; narrower (a phone, or the pane beside
-    // an open thread), and under an error as on Raft, they take their own row, right-aligned.
-    <div ref={ref} className="@container mx-4 mt-2 md:mx-6">
+    // The text keeps room to read: the buttons sit beside the body, level with its last line, only
+    // while the body still has 280px; with less (a phone, the pane beside an open thread, or a
+    // longer translation) they wrap onto their own row, right-aligned, as they do under an error.
+    <div ref={ref} className="mx-4 mt-2 md:mx-6">
       <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-xl border border-utility-blue-200 bg-utility-blue-50 px-3 py-2.5 text-sm">
-        <BellRinging01
-          aria-hidden="true"
-          className="col-start-1 row-start-1 mt-0.5 size-4 text-fg-primary"
-        />
-        <p
-          className={cx(
-            "col-start-2 row-start-1 font-semibold text-primary",
-            !error && "@min-[452px]:col-span-2",
-          )}
-        >
+        <BellRinging01 aria-hidden="true" className="mt-0.5 size-4 text-fg-primary" />
+        <p className="font-semibold text-primary">
           <span className="md:hidden">{m.notification_activation_mobile_title()}</span>
           <span className="max-md:hidden">{m.notification_activation_desktop_title()}</span>
         </p>
-        <div className="col-start-2 row-start-2 min-w-0 text-primary">
-          <p>
-            <span className="md:hidden">{m.notification_activation_mobile_body()}</span>
-            <span className="max-md:hidden">{m.notification_activation_desktop_body()}</span>
-          </p>
-          {error && (
-            <p role="alert" className="mt-1 font-semibold text-primary">
-              {error === "unavailable"
-                ? m.notification_activation_error_unavailable()
-                : m.notification_activation_error_generic()}
+        <div className="col-start-2 flex flex-wrap items-end justify-end gap-2">
+          <div className={cx("min-w-0 grow basis-70 text-primary", error && "basis-full")}>
+            <p>
+              <span className="md:hidden">{m.notification_activation_mobile_body()}</span>
+              <span className="max-md:hidden">{m.notification_activation_desktop_body()}</span>
             </p>
-          )}
-        </div>
-        <div
-          className={cx(
-            "col-start-2 mt-2 flex flex-wrap justify-end gap-2",
-            !error &&
-              "@min-[452px]:col-start-3 @min-[452px]:row-start-2 @min-[452px]:mt-0 @min-[452px]:self-end",
-          )}
-        >
-          {actions}
+            {error && (
+              <p role="alert" className="mt-1 font-semibold text-primary">
+                {error === "unavailable"
+                  ? m.notification_activation_error_unavailable()
+                  : m.notification_activation_error_generic()}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">{actions}</div>
         </div>
       </div>
     </div>
