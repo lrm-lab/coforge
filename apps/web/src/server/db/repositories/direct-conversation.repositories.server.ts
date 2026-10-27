@@ -124,6 +124,7 @@ import {
 } from "#src/server/db/repositories/agent-attention.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
+import { resolveAgentConversationTarget } from "./agent-target-resolution.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   advanceAgentReadGroups,
@@ -651,26 +652,24 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     directConversation: (userId: string) => Promise<{ id: string }>,
     peerConversation: (peerAgentId: string) => Promise<{ id: string }>,
   ): Promise<ResolvedAgentTarget> {
+    const resolved = await resolveAgentConversationTarget({
+      db: this.db,
+      workspaceId,
+      agentId,
+      target,
+      getChannel: (parentTarget) => this.getAgentChannel(workspaceId, agentId, parentTarget),
+      directConversation,
+      peerConversation,
+    });
+    const { conversation, isChannel } = resolved;
     const parentTarget = target.split(":")[0]!;
-    const isChannel = parentTarget.startsWith("#");
-    const conversation = isChannel
-      ? await this.getAgentChannel(workspaceId, agentId, parentTarget)
-      : ((await appEventConversation(this.db, workspaceId, agentId, parentTarget)) ??
-        (
-          await openDirectPeerConversation(
-            this.db,
-            { workspaceId, agentId },
-            dmParentTarget(target),
-            { user: directConversation, agent: peerConversation },
-          )
-        ).conversation);
     const threadRootId = await this.targetRoot(conversation.id, target);
     return {
       conversationId: conversation.id,
       threadRootId,
       canonicalTarget: deliveryTarget(parentTarget, threadRootId),
       isChannel,
-      isUserAgentDirectConversation: isUserAgentDirectConversation(conversation),
+      isUserAgentDirectConversation: resolved.isUserAgentDirectConversation,
     };
   }
 
