@@ -4,8 +4,8 @@ import {
   parseKiroIdentityCenterOptions,
   type KiroIdentityCenterOptions,
 } from "@lrm/coforge-sdk/internal";
-import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 
 /** The two native IAM Identity Center inputs precede the shared runtime login progress. */
@@ -59,14 +59,12 @@ export function KiroEnterpriseSignIn({
             {m.runtime_auth_kiro_invalid_target()}
           </p>
         )}
-        <div className="flex justify-end gap-3 pt-1">
-          <Button color="secondary" onPress={onClose}>
-            {m.controls_cancel()}
-          </Button>
-          <Button type="submit" isDisabled={!startUrl.trim() || !region.trim()}>
+        <DialogActions className="pt-1">
+          <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
+          <DialogAction type="submit" isDisabled={!startUrl.trim() || !region.trim()}>
             {m.runtime_auth_sign_in()}
-          </Button>
-        </div>
+          </DialogAction>
+        </DialogActions>
       </div>
     </form>
   );

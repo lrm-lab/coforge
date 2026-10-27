@@ -17,6 +17,12 @@ import type { KiroIdentityCenterOptions, RuntimeAuthProvider } from "@lrm/coforg
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
+import {
+  DIALOG_BUTTON_SIZE,
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+} from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
@@ -212,20 +218,20 @@ function SignInAttempt({
           dispatch={dispatch}
         />
       </div>
-      <div className="flex justify-end gap-3 px-6 pt-5 pb-5">
+      <DialogActions className="px-6 pt-6 pb-6">
         {state.phase === "signed_in" ? (
-          <Button onPress={close}>{m.runtime_auth_done()}</Button>
+          <DialogAction onPress={close}>{m.runtime_auth_done()}</DialogAction>
         ) : (
           <>
-            <Button color="secondary" onPress={close}>
+            <DialogCancel onPress={close}>
               {running ? m.controls_cancel() : m.controls_close()}
-            </Button>
+            </DialogCancel>
             {state.phase === "failed" && retryable(state.failure) && (
-              <Button onPress={onRetry}>{m.runtime_auth_try_again()}</Button>
+              <DialogAction onPress={onRetry}>{m.runtime_auth_try_again()}</DialogAction>
             )}
           </>
         )}
-      </div>
+      </DialogActions>
     </>
   );
 }
@@ -295,7 +301,7 @@ function AuthPage({ url }: { url: string }) {
     <>
       <p>{m.runtime_auth_open_page_hint()}</p>
       <Button
-        size="sm"
+        size={DIALOG_BUTTON_SIZE}
         iconTrailing={LinkExternal01}
         isDisabled={!safe}
         onPress={() => safe && window.open(safe, "_blank", "noopener,noreferrer")}
@@ -404,7 +410,7 @@ function CodeForm({
         />
         <Button
           type="submit"
-          size="md"
+          size={DIALOG_BUTTON_SIZE}
           color="secondary"
           isLoading={sending}
           isDisabled={!code.trim()}

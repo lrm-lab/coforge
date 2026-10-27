@@ -2,9 +2,9 @@ import { useState } from "react";
 import { Heading, Text } from "react-aria-components";
 import { AlertCircle, XClose as X } from "@untitledui/icons";
 
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
@@ -75,11 +75,11 @@ export function ConfirmDialog({
                   {error}
                 </p>
               )}
-              <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={pending} onPress={close}>
+              <DialogActions className="mt-6 shrink-0 px-6 pb-6">
+                <DialogCancel isDisabled={pending} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   color="primary-destructive"
                   isLoading={pending}
                   showTextWhileLoading
@@ -98,8 +98,8 @@ export function ConfirmDialog({
                   }}
                 >
                   {pending && pendingLabel ? pendingLabel : confirmLabel}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>
