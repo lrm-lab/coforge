@@ -1,0 +1,6 @@
+{
+  "lifecycle_protocol": 1,
+  "version": "0.2.0",
+  "manager": "launchd",
+  "contents": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n  <key>Label</key><string>cn.coforge.computer.daemon</string>\n  <key>EnvironmentVariables</key><dict><key>COFORGE_DAEMON_CONNECTION_ENDPOINT</key><string>wss://coforge.example/connection/websocket</string></dict>\n  <key>ProgramArguments</key>\n  <array><string>/Users/example/.coforge/computer/install/active/coforge-computer</string><string>__daemon</string><string>--socket</string><string>/Users/example/.coforge/daemon/daemon.sock</string><string>--state-directory</string><string>/Users/example/.coforge/daemon</string></array>\n  <key>StandardOutPath</key><string>/Users/example/.coforge/daemon/daemon.log</string>\n  <key>StandardErrorPath</key><string>/Users/example/.coforge/daemon/daemon.log</string>\n  <key>RunAtLoad</key><true/>\n  <key>KeepAlive</key><true/>\n  <key>ProcessType</key><string>Background</string>\n</dict>\n</plist>\n"
+}

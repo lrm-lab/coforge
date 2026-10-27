@@ -12,6 +12,9 @@ pub const LIFECYCLE_PROTOCOL: u32 = 1;
 pub struct LifecycleProtocol {
     pub lifecycle_protocol: u32,
     pub version: String,
+    /// The `__lifecycle` commands the build answers; absent from a Computer that predates it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<Vec<String>>,
 }
 
 /// `coforge-computer __lifecycle status`.

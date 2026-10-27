@@ -1,5 +1,10 @@
 import { LocalDaemonLauncher, type LocalDaemonLauncherOptions } from "./launcher";
-import type { DaemonLauncher, DaemonStarted, DaemonWorkspaceConfig } from "./launcher";
+import type {
+  DaemonLauncher,
+  DaemonServiceDefinition,
+  DaemonStarted,
+  DaemonWorkspaceConfig,
+} from "./launcher";
 import { COORDINATOR_SERVICE } from "./service-identity";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -132,6 +137,12 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
 
   preflight(): Promise<void> {
     return this.#local.preflight();
+  }
+
+  /** The task XML `ensureStarted` registers, as text; `schtasks /XML` needs it written as UTF-16
+   * with a byte-order mark (`writeUtf16XmlFile`). */
+  serviceDefinition(): DaemonServiceDefinition {
+    return { manager: "windows-task", contents: this.#xml };
   }
 
   async ensureStarted(config: DaemonWorkspaceConfig): Promise<DaemonStarted> {

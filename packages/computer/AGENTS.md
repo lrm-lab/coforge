@@ -48,6 +48,7 @@ relative to `src/`.
 | `local-config.ts`                    | Reading and validating the persisted profile                                                        |
 | `release-channel.ts`                 | Compiled official feed/server mapping                                                               |
 | `daemon-client/`                     | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                       |
+| `daemon-service/`                    | The daemon host's inputs for this machine, shared by `cli.ts` and `__lifecycle service-definition`  |
 | `host/`                              | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |
 | `status/`                            | Read-only `status` report through per-platform ports                                                |
 | `doctor/`                            | Read-only diagnostic checks built from the status report                                            |
@@ -63,12 +64,12 @@ relative to `src/`.
 | `release/installer-launch.ts`        | Fetches, verifies, and caches the `coforge-installer` binary for this machine                       |
 | `version.ts`                         | Build version                                                                                       |
 
-`coforge-computer __lifecycle protocol|status` is how the installer reads a
-Computer. It prints exactly one JSON object on stdout (the `Lifecycle*` shapes),
-exits with `LIFECYCLE_EXIT_CODE`, and writes nothing, since the installer also
-probes a candidate binary that never ran. It has no pause, runner hold, or
-resume: an installer upgrade stops the service outright and busy Agents are
-stopped with it. Do not add a control verb without a product decision. The
+`coforge-computer __lifecycle protocol|status|service-definition` is how the installer reads a
+Computer (`service-definition`: the service file it writes before starting the service, rendered
+by the daemon host). It prints exactly one JSON object on stdout (the `Lifecycle*` shapes), exits
+with `LIFECYCLE_EXIT_CODE`, and writes nothing, since the installer also probes a candidate binary
+that never ran. It has no pause, runner hold, or resume: an installer upgrade stops the service
+outright and busy Agents are stopped with it. Do not add a control verb without a product decision. The
 product's own upgrade and `__lifecycle status` share `release/supervisor-status.ts`.
 
 `scripts/installer-contract.ts` (outside `src/`, never bundled) generates
@@ -113,7 +114,6 @@ The install and upgrade transaction is serialized by the machine
 mutation lock; do not narrow it to activation or reuse the Supervisor lifetime
 mutex as the upgrade lock.
 
-`src/release-channel.ts` owns the compiled official feed/server mapping.
 `src/local-config.ts` owns reading and validating the persisted profile against
 that environment; login, setup, and lifecycle adapters share that public seam.
 

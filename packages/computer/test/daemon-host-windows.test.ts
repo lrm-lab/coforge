@@ -131,3 +131,22 @@ test("restart ignores /End's own exit code (the task may already be stopped)", a
   expect(commands[0]).toEqual(["schtasks.exe", "/End", "/TN", "CoForge Daemon"]);
   expect(commands[1]![1]).toBe("/Create");
 });
+
+test("the Windows service definition is the task XML the host registers", async () => {
+  const written: string[] = [];
+  const task = new WindowsUserDaemonHost({
+    executablePath: "C:\\Coforge\\coforge-computer.exe",
+    socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
+    stateDirectory: "C:\\Users\\alice\\.coforge\\daemon",
+    daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
+    userId: "DESKTOP\\alice",
+    writeTaskXml: async (_path, content) => {
+      written.push(content);
+    },
+    removeTaskXml: async () => {},
+    run: async () => 1,
+  });
+  await expect(task.ensureRunning()).rejects.toThrow();
+
+  expect(task.serviceDefinition()).toEqual({ manager: "windows-task", contents: written[0]! });
+});

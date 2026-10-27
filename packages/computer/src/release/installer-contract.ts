@@ -60,10 +60,32 @@ export const LIFECYCLE_ERROR_CODE = {
 
 const lifecycleProtocol = z.number().int().positive();
 
-/** `__lifecycle protocol`: answered without contacting the supervisor or writing anything. */
+/** The `__lifecycle` commands this build answers, in `LifecycleProtocolSchema.commands`. */
+export const LIFECYCLE_COMMANDS = ["protocol", "status", "service-definition"] as const;
+
+/** `__lifecycle protocol`: answered without contacting the supervisor or writing anything.
+ * `commands` lists what this build answers; a Computer that predates it has no such field. */
 export const LifecycleProtocolSchema = z
-  .looseObject({ lifecycle_protocol: lifecycleProtocol, version: z.string() })
+  .looseObject({
+    lifecycle_protocol: lifecycleProtocol,
+    version: z.string(),
+    commands: z.array(z.string()).optional(),
+  })
   .meta({ title: "__lifecycle protocol" });
+
+/** `__lifecycle service-definition`: the per-user service definition the installer writes before it
+ * starts the supervisor service, rendered by this build's own daemon host (so it needs no
+ * supervisor and writes nothing). `contents` is the launchd plist, systemd user unit, or Task
+ * Scheduler XML text; the Windows XML declares UTF-16 and must be written with a byte-order mark. */
+export const LifecycleServiceDefinitionSchema = z
+  .looseObject({
+    lifecycle_protocol: lifecycleProtocol,
+    version: z.string(),
+    manager: z.enum(["launchd", "systemd-user", "windows-task"]),
+    contents: z.string(),
+  })
+  .meta({ title: "__lifecycle service-definition" });
+export type LifecycleServiceDefinition = z.infer<typeof LifecycleServiceDefinitionSchema>;
 
 /** One reason the runtime set is not healthy (`SupervisorProblem` in supervisor-status.ts). */
 export const LifecycleProblemSchema = z.looseObject({

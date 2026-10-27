@@ -68,6 +68,7 @@ fn every_golden_is_covered_by_a_test() {
         "lifecycle-codes.json",
         "lifecycle.error.json",
         "lifecycle.protocol.json",
+        "lifecycle.service-definition.json",
         "lifecycle.status.absent.json",
         "lifecycle.status.running.json",
         "lock.json",

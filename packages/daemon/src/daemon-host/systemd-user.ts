@@ -3,7 +3,12 @@ import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "#src/platform/native-command";
 import { writePrivateFile } from "#src/platform/private-file";
 import { LocalDaemonLauncher } from "./launcher";
-import type { DaemonLauncher, DaemonStarted, DaemonWorkspaceConfig } from "./launcher";
+import type {
+  DaemonLauncher,
+  DaemonServiceDefinition,
+  DaemonStarted,
+  DaemonWorkspaceConfig,
+} from "./launcher";
 import { COORDINATOR_SERVICE } from "./service-identity";
 
 type CommandRunner = (command: string[]) => Promise<NativeCommandResult>;
@@ -52,6 +57,11 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
 
   preflight(): Promise<void> {
     return this.#local.preflight();
+  }
+
+  /** The unit `ensureStarted` writes, for a caller that registers it itself. */
+  serviceDefinition(): DaemonServiceDefinition {
+    return { manager: "systemd-user", contents: this.#unit };
   }
 
   async ensureStarted(config: DaemonWorkspaceConfig): Promise<DaemonStarted> {

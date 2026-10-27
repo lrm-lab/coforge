@@ -29,6 +29,13 @@ import type { WorkspaceCloudConnectionReport } from "#src/supervisor/workspace-s
  * way at the Coordinator's deadline and finishes behind the answer. */
 export type DaemonStarted = { lifecycleUnderWay?: boolean };
 
+/** The per-user service definition a platform manager registers for the Coordinator, exactly as the
+ * host writes it: a launchd plist, a systemd user unit, or Task Scheduler XML (UTF-16 on disk). */
+export type DaemonServiceDefinition = {
+  manager: "launchd" | "systemd-user" | "windows-task";
+  contents: string;
+};
+
 export interface DaemonLauncher {
   preflight?(): Promise<void>;
   ensureStarted(input: DaemonWorkspaceConfig): Promise<DaemonStarted>;

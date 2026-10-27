@@ -6,6 +6,7 @@ import { escapeXmlText } from "@lrm/coforge-sdk/internal";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
   DaemonLauncher,
+  DaemonServiceDefinition,
   DaemonStarted,
   DaemonWorkspaceConfig,
   LocalDaemonConnection,
@@ -91,6 +92,11 @@ export class LaunchdDaemonHost implements DaemonLauncher {
     return this.#local.preflight();
   }
 
+  /** The plist `ensureInstalled` and `restart` write, for a caller that registers it itself. */
+  serviceDefinition(): DaemonServiceDefinition {
+    return { manager: "launchd", contents: launchdPlist(this.#options) };
+  }
+
   async ensureStarted(config: DaemonWorkspaceConfig): Promise<DaemonStarted> {
     await this.ensureRunning();
     return this.#local.ensureStarted(config);
@@ -133,7 +139,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
 
   async ensureInstalled(): Promise<void> {
     if ((await this.#run(["launchctl", "print", this.#target])).code === 0) return;
-    await this.#writeFile(this.#plistPath, launchdPlist(this.#options));
+    await this.#writeFile(this.#plistPath, this.serviceDefinition().contents);
     const result = await this.#run([
       "launchctl",
       "bootstrap",
@@ -174,7 +180,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
       const result = await this.#run(["launchctl", "kickstart", "-k", this.#target]);
       if (result.code !== 0) throw launchctlFailure("kickstart", result);
     } else {
-      await this.#writeFile(this.#plistPath, launchdPlist(this.#options));
+      await this.#writeFile(this.#plistPath, this.serviceDefinition().contents);
       const attempts = 3;
       let failure: NativeCommandResult | undefined;
       for (let attempt = 1; attempt <= attempts; attempt++) {

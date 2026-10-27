@@ -24,11 +24,7 @@ import { resolveComputerConfigDirectory } from "./paths";
 import { ComputerSetup } from "#src/setup/computer-setup";
 import { currentComputerNames, currentComputerPlatform } from "./platform";
 import { FileMachineIdFallback, resolveMachineId } from "./machine-id";
-import {
-  HttpComputerRegisterTransport,
-  HttpWorkspaceRpcTransport,
-  resolveDaemonConnectionEndpoint,
-} from "./cloud-rpc-transport";
+import { HttpComputerRegisterTransport, HttpWorkspaceRpcTransport } from "./cloud-rpc-transport";
 import {
   ComputerRegistrationClient,
   RUNNER_HOLD_REASONS,
@@ -36,14 +32,13 @@ import {
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import {
-  createDaemonHost,
   holdRunnersUntilQuiescent,
   LocalDaemonLauncher,
   readOperatingSystem,
-  resolveDaemonExecutablePath,
   COFORGE_DAEMON_SERVER_URL,
   runMachineSupervisor,
 } from "@lrm/coforge-daemon";
+import { createDaemonLauncher, daemonExecutablePathFor } from "#src/daemon-service/daemon-host";
 import { createWorkspaceLookup } from "#src/workspace/lookup";
 import { isValidComputerWorkspaceSlug } from "#src/workspace/workspace-slug";
 import { registrationIdempotencyKey } from "#src/registration/idempotency-key";
@@ -530,35 +525,6 @@ export function createSetupCommand(
       writeSetupResult(io.stdout, result, options.json);
     },
   };
-}
-
-function daemonExecutablePathFor(platform: "darwin" | "linux" | "win32", installDirectory: string) {
-  return process.env.COFORGE_E2E_ALLOW_DEVICE_AUTH === "1" &&
-    process.env.COFORGE_E2E_DAEMON_EXECUTABLE
-    ? process.env.COFORGE_E2E_DAEMON_EXECUTABLE
-    : resolveDaemonExecutablePath({ installRoot: installDirectory, platform });
-}
-
-function createDaemonLauncher(
-  platform: "darwin" | "linux" | "win32",
-  installDirectory: string,
-  stateDirectory: string,
-  serverUrl: string,
-) {
-  return createDaemonHost({
-    platform,
-    executablePath: daemonExecutablePathFor(platform, installDirectory),
-    socketPath: resolveDaemonSocketPath({ platform, stateDirectory }),
-    stateDirectory,
-    serverUrl,
-    daemonConnectionEndpoint:
-      process.env.COFORGE_E2E_ALLOW_DEVICE_AUTH === "1" &&
-      process.env.COFORGE_E2E_DAEMON_CONNECTION_ENDPOINT
-        ? process.env.COFORGE_E2E_DAEMON_CONNECTION_ENDPOINT
-        : resolveDaemonConnectionEndpoint(serverUrl),
-    homeDirectory: homedir(),
-    uid: process.getuid?.() ?? 0,
-  });
 }
 
 /** Platform and local control seams used by `restartSupervisor`. */

@@ -9,6 +9,12 @@
     },
     "version": {
       "type": "string"
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

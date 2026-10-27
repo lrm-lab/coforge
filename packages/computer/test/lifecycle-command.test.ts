@@ -13,6 +13,7 @@ import {
   LIFECYCLE_EXIT_CODE,
   LifecycleErrorSchema,
   LifecycleProtocolSchema,
+  LifecycleServiceDefinitionSchema,
   LifecycleStatusSchema,
 } from "#src/release/installer-contract";
 import { SUPERVISOR_PROBLEM_CODE } from "#src/release/supervisor-status";
@@ -141,6 +142,7 @@ subprocessTest(
     expect(LifecycleProtocolSchema.parse(result.json())).toEqual({
       lifecycle_protocol: 1,
       version,
+      commands: ["protocol", "status", "service-definition"],
     });
     await expectGoldenFields(result.json(), "lifecycle.protocol.json");
   },
@@ -264,12 +266,32 @@ test.each(["pause", "hold", "release", "resume"])(
 );
 
 subprocessTest(
-  "protocol and status write nothing, so the installer can probe a binary that never ran",
+  "service-definition renders this machine's definition from the home it runs under, wherever the binary lives",
+  async () => {
+    const home = await freshHome();
+
+    const result = await lifecycle(home, "service-definition");
+
+    expect(result.exitCode).toBe(0);
+    const definition = LifecycleServiceDefinitionSchema.parse(result.json());
+    expect(definition).toMatchObject({ lifecycle_protocol: 1, version });
+    const managers = { darwin: "launchd", linux: "systemd-user", win32: "windows-task" } as const;
+    expect(definition.manager).toBe(managers[process.platform as keyof typeof managers]);
+    // The service starts the active executable, not the binary that rendered the text.
+    expect(definition.contents).toContain(join(home, ".coforge", "computer", "install", "active"));
+    expect(definition.contents).not.toContain(executable);
+    await expectGoldenFields(definition, "lifecycle.service-definition.json");
+  },
+);
+
+subprocessTest(
+  "protocol, status and service-definition write nothing, so the installer can probe a binary that never ran",
   async () => {
     const home = await freshHome();
 
     expect((await lifecycle(home, "protocol")).exitCode).toBe(0);
     expect((await lifecycle(home, "status")).exitCode).toBe(0);
+    expect((await lifecycle(home, "service-definition")).exitCode).toBe(0);
 
     expect(await readdir(home)).toEqual([]);
   },

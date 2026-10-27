@@ -41,8 +41,11 @@ import {
   LIFECYCLE_PROTOCOL,
   LifecycleErrorSchema,
   LifecycleProtocolSchema,
+  LifecycleServiceDefinitionSchema,
   LifecycleStatusSchema,
+  LIFECYCLE_COMMANDS,
 } from "#src/release/installer-contract";
+import { resolveServiceDefinition } from "#src/daemon-service/daemon-host";
 import { SUPERVISOR_PROBLEM_CODE } from "#src/release/supervisor-status";
 import {
   ActiveStateSchema,
@@ -386,6 +389,23 @@ export function renderInstallerContract(): Map<string, string> {
       instance(LifecycleProtocolSchema, {
         lifecycle_protocol: LIFECYCLE_PROTOCOL,
         version: "0.2.0",
+        commands: LIFECYCLE_COMMANDS,
+      }),
+    ],
+    ["lifecycle.service-definition.schema.json", jsonSchema(LifecycleServiceDefinitionSchema)],
+    [
+      "lifecycle.service-definition.json",
+      instance(LifecycleServiceDefinitionSchema, {
+        lifecycle_protocol: LIFECYCLE_PROTOCOL,
+        version: "0.2.0",
+        // Rendered by the real daemon host for an example macOS machine.
+        ...resolveServiceDefinition({
+          platform: "darwin",
+          homeDirectory: HOMES.darwin,
+          uid: 501,
+          environment: {},
+          serverUrl: "https://coforge.example",
+        }),
       }),
     ],
     ["lifecycle.status.schema.json", jsonSchema(LifecycleStatusSchema)],

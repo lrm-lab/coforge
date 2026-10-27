@@ -111,6 +111,7 @@ pub(crate) fn protocol(version: &str) -> LifecycleProtocol {
     LifecycleProtocol {
         lifecycle_protocol: LIFECYCLE_PROTOCOL,
         version: version.to_owned(),
+        commands: None,
     }
 }
 

@@ -129,6 +129,7 @@ export {
 export type { ProcessLock } from "#src/platform/process-lock";
 export type {
   DaemonLauncher,
+  DaemonServiceDefinition,
   DaemonStarted,
   DaemonCommandRunner,
   DaemonWorkspaceConfig,

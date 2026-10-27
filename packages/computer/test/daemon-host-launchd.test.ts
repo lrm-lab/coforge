@@ -360,3 +360,23 @@ test("a failed launchctl command carries its stderr diagnostic in the thrown err
     'launchctl kickstart failed (113): Could not find service "cn.coforge.computer.daemon" in domain for port',
   );
 });
+
+test("the launchd service definition is the plist the host writes before bootstrap", async () => {
+  const written: string[] = [];
+  const service = new LaunchdDaemonHost({
+    label: "cn.coforge.computer.daemon",
+    executablePath: "/install/coforge-computer",
+    socketPath: "/state/daemon.sock",
+    stateDirectory: "/state",
+    daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
+    homeDirectory: "/Users/alice",
+    uid: 501,
+    writeFile: async (_path, content) => {
+      written.push(content);
+    },
+    run: async (command) => ({ code: command[1] === "print" ? 1 : 0, stdout: "", stderr: "" }),
+  });
+  await service.ensureInstalled();
+
+  expect(service.serviceDefinition()).toEqual({ manager: "launchd", contents: written[0]! });
+});

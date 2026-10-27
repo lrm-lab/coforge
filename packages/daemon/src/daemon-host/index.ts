@@ -21,6 +21,8 @@ export function createDaemonHost(input: {
   uid: number;
   serviceName?: string;
   runtimeHomeDirectory?: string;
+  /** Windows only: the task's user id. Defaults to the signed-in user. */
+  userId?: string;
 }) {
   if (input.platform === "darwin") {
     return new LaunchdDaemonHost({ ...input, label: COORDINATOR_SERVICE.launchdLabel });
