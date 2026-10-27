@@ -24,7 +24,8 @@ import { createPublicChannel } from "./channels.functions";
 import { ConversationHostProvider } from "./conversation-host";
 import {
   useCurrentWorkspaceId,
-  useLiveAgents,
+  useVisibleLiveAgents,
+  useRefreshAgentDirectory,
 } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { CreateChannelDialog } from "./create-channel-dialog";
@@ -90,7 +91,8 @@ export function useMarkConversationSeen(): (
 /** Keep both panels mounted so returning to the list preserves scroll and drafts. */
 export function ConversationNavigation({ children }: { children: ReactNode }) {
   const { channels, directs, viewerId, readAt } = useSidebarLists();
-  const agents = useLiveAgents();
+  const agents = useVisibleLiveAgents();
+  const refreshAgentDirectory = useRefreshAgentDirectory();
   const workspaceId = useCurrentWorkspaceId();
   // Every channel by id, from the Query cache the chat loader filled; kept live by
   // `channel.created.v1` / `channel.updated.v1` (`useApplyChannelSignal`).
@@ -147,7 +149,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const applyChannelSignal = useApplyChannelSignal();
   const knownAgentIds = useMemo(() => new Set(agents.map((agent) => agent.id)), [agents]);
-  // The Workspace layout's Agent roster only re-reads through the router: one re-read at a time.
+  // One re-read of the Agents at a time.
   const rosterRefresh = useRef<Promise<void> | undefined>(undefined);
   const unread = useChannelUnread({
     workspaceId,
@@ -160,12 +162,15 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     // list, not the page (a burst is read once).
     onClosedConversationActivity: (lists, event) => {
       void refreshSidebar(lists);
-      // A new Agent writing first: its DM row needs the Agent in the roster, which only the
-      // layout's loader reads.
+      // A new Agent writing first: its DM row needs the Agent in the store, the viewer's own or
+      // another member's public one.
       if (unknownAgentOf(event, knownAgentIds) && !rosterRefresh.current)
-        rosterRefresh.current = router.invalidate().finally(() => {
-          rosterRefresh.current = undefined;
-        });
+        // A failed read is retried by the next such message.
+        rosterRefresh.current = refreshAgentDirectory()
+          .catch(() => undefined)
+          .finally(() => {
+            rosterRefresh.current = undefined;
+          });
     },
     // A channel was created, changed or is gone: applied from the event, not re-read.
     onChannelSignal: applyChannelSignal,

@@ -61,9 +61,9 @@ export type LiveAgent = {
   visibility?: AgentVisibility;
   /** Set only on an Agent visible to the viewer but outside their own `listAgents` roster
    * (`extraLiveAgent`): its name, mascot and display, no description, so `useLiveAgents()` (the
-   * Members directory, DM sidebar, mention list) filters it out; `useLiveAgent(id)` still returns
-   * it so the profile panel gets its live status/Activity, and `useLiveWorkspaceAgents` returns it
-   * for the chat list header. */
+   * Members directory, mention list) filters it out; `useLiveAgent(id)` still returns it so the
+   * profile panel gets its live status/Activity, `useLiveWorkspaceAgents` returns it for the chat
+   * list header, and `useVisibleLiveAgents` for the DM sidebar and the replying line. */
   isExtra?: true;
 };
 
@@ -309,17 +309,26 @@ function inRoster(agent: { isExtra?: true }) {
 }
 
 /**
- * The live Agent list (with realtime status), for the sidebar's Direct message section.
+ * The live Agent list (with realtime status): the viewer's own roster.
  *
- * The Members directory / DM sidebar / mention list roster: never includes an `isExtra`
- * Agent. Those carry no description and are read through `useLiveAgent(id)` (live status and
- * Activity for the profile panel) and `useLiveWorkspaceAgents` (the chat list header).
+ * The Members directory / mention list roster: never includes an `isExtra` Agent. Those carry no
+ * description and are read through `useLiveAgent(id)` (live status and Activity for the profile
+ * panel), `useLiveWorkspaceAgents` (the chat list header) and `useVisibleLiveAgents`.
  */
 export function useLiveAgents(): LiveAgent[] {
   const agents = useSelector(useContext(LiveAgentStoreContext), (state) => state);
   // One list per store value, not per call: consumers memoize on it, and a fresh array on every
   // render would invalidate all of them.
   return useMemo(() => agents.filter(inRoster), [agents]);
+}
+
+/**
+ * Every live Agent the viewer may see, their own and the others' (`isExtra`): who the sidebar's
+ * DMs are with and who may be replying. Any member may message another member's public Agent, and
+ * the roster alone would leave that DM out of the list and its replies unannounced.
+ */
+export function useVisibleLiveAgents(): LiveAgent[] {
+  return useSelector(useContext(LiveAgentStoreContext), (state) => state);
 }
 
 /**

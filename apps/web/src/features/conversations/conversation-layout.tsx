@@ -4,7 +4,7 @@ import { MessageSquare01 as MessagesSquare } from "@untitledui/icons";
 
 import {
   useCurrentWorkspaceId,
-  useLiveAgents,
+  useVisibleLiveAgents,
 } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -28,7 +28,7 @@ import { listedDirectIds } from "./sidebar-rows";
  */
 export function EmptyConversation() {
   const { channels, directs } = useSidebarLists();
-  const agents = useLiveAgents();
+  const agents = useVisibleLiveAgents();
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
   const desktop = useBreakpoint("lg");

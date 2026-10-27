@@ -12,7 +12,7 @@ import { replyingAgentIds } from "./reply-intents";
 import { useReplyIntentStore } from "./reply-intents-context";
 import { MAX_REPLYING_FACES, replyingAgentsAmong, replyingNames } from "./replying-agents-summary";
 import { useConversationReplyIntents } from "./reply-intents-realtime";
-import { useCurrentWorkspaceId, useLiveAgents } from "./workspace-agents-realtime";
+import { useCurrentWorkspaceId, useVisibleLiveAgents } from "./workspace-agents-realtime";
 import "./replying-agents-line.css";
 
 /** Agent ids never contain a comma, so a place's Agents travel as one comparable string. */
@@ -22,7 +22,7 @@ const ID_SEPARATOR = ",";
  * The line at the foot of a conversation pane saying which Agents are about to post in this place:
  * the open conversation's top level, or the open thread (`threadRootId`). Everyone who can read the
  * place sees it, whether or not they can write there. It renders nothing while nobody is replying
- * or Live agent activity is off, and does not read the roster then. An Agent's message arriving in
+ * or Live agent activity is off, and does not read the Agents then. An Agent's message arriving in
  * the place ends its entry there (`useEndReplyIntentsOnArrival`).
  */
 export function ReplyingAgentsLine({
@@ -118,10 +118,10 @@ function ReplyingAgents({
   onLeft?: () => void;
   className?: string;
 }) {
-  const roster = useLiveAgents();
+  const agents = useVisibleLiveAgents();
   const replying = useMemo(
-    () => replyingAgentsAmong(roster, replyingIds.split(ID_SEPARATOR)),
-    [roster, replyingIds],
+    () => replyingAgentsAmong(agents, replyingIds.split(ID_SEPARATOR)),
+    [agents, replyingIds],
   );
   if (replying.length === 0) return null;
   // The wording comes from the messages and locale at render, so a locale change shows at once.

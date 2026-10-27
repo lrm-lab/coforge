@@ -104,10 +104,9 @@ export function applyUnreadEvent(
 }
 
 /**
- * The Agent a DM signal names when the viewer's roster does not know it yet (one made from an
- * action card or in another tab, writing first): its DM row only lists once the roster has it, so
- * the page must re-read the roster too. Undefined for a known Agent, a DM between members, or a
- * channel.
+ * The Agent a DM signal names when the viewer's Agents do not know it yet (one made from an
+ * action card or in another tab, writing first): its DM row only lists once they have it, so the
+ * page must re-read them too. Undefined for a known Agent, a DM between members, or a channel.
  */
 export function unknownAgentOf(
   event: UnreadEventInput,
