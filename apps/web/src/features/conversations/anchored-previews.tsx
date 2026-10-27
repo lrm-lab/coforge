@@ -14,6 +14,7 @@ import {
   useSelectionComment,
   type Anchoring,
 } from "./attachment-anchoring";
+import { markdownSections } from "./markdown-sections";
 import { MessageBody } from "./message-body";
 
 const HEADING_HIGHLIGHT = ["bg-tertiary", "ring-2", "ring-brand/50", "rounded"];
@@ -22,6 +23,8 @@ const RANGE_HIGHLIGHT = "bg-tertiary";
 const MARKED_MAX = 200;
 /** Rows or lines rendered at once; the rest follow a chunk at a time, after the first paint. */
 const RENDER_CHUNK = 500;
+/** Sections of a long Markdown file parsed and rendered at once (`markdownSections`). */
+const MARKDOWN_RENDER_CHUNK = 4;
 
 /** The h1–h3 headings of a rendered Markdown file: its sections, as in Raft. */
 const headingsIn = (element: HTMLElement | null) => [
@@ -35,6 +38,8 @@ const titlesOf = (headings: HTMLElement[]) => headings.map((heading) => heading.
  */
 export function MarkdownPreview({ text, anchoring }: { text: string; anchoring?: Anchoring }) {
   const ref = useRef<HTMLDivElement>(null);
+  const sections = useMemo(() => markdownSections(text), [text]);
+  const { chunks, done } = useProgressiveChunks(sections.length, MARKDOWN_RENDER_CHUNK);
   const toAnchor = useCallback((range: Range) => {
     const headings = headingsIn(ref.current);
     const start = startNode(range);
@@ -48,8 +53,8 @@ export function MarkdownPreview({ text, anchoring }: { text: string; anchoring?:
   }, []);
   const commentButton = useSelectionComment(ref, toAnchor, anchoring);
   useEffect(() => {
-    if (!anchoring) return;
-    // Headings are read once per rendered file; only a jump needs the live element again.
+    // Headings are read once the whole file is rendered; only a jump needs the live element again.
+    if (!anchoring || !done) return;
     const locateSection = sectionLocator(titlesOf(headingsIn(ref.current)));
     const locate = (anchor: AttachmentCommentAnchor) =>
       anchor.type === "md-section" ? locateSection(anchor.data) : null;
@@ -59,23 +64,25 @@ export function MarkdownPreview({ text, anchoring }: { text: string; anchoring?:
         const index = locate(anchor);
         const heading = index === null ? undefined : headingsIn(ref.current)[index];
         if (!heading) return;
-        heading.scrollIntoView({ block: "start", behavior: "smooth" });
+        // Instant: a smooth scroll across a 5 MB file takes well over a second.
+        heading.scrollIntoView({ block: "start" });
         heading.classList.add(...HEADING_HIGHLIGHT);
         setTimeout(() => heading.classList.remove(...HEADING_HIGHLIGHT), ANCHOR_HIGHLIGHT_MS);
       },
     });
     return () => anchoring.onSurface(null);
-  }, [text, anchoring]);
+  }, [text, anchoring, done]);
   // The outline lists the same h1–h3 a section comment is placed under, once they are rendered.
   const [outline, setOutline] = useState<{ title: string; level: number }[]>([]);
   useEffect(() => {
+    if (!done) return;
     setOutline(
       headingsIn(ref.current).map((heading) => ({
         title: heading.textContent ?? "",
         level: Number(heading.tagName.slice(1)),
       })),
     );
-  }, [text]);
+  }, [text, done]);
   return (
     <div ref={ref} className="min-h-0 flex-1 overflow-auto bg-secondary px-4 py-6 sm:px-6 sm:py-10">
       <div className="mx-auto flex max-w-6xl items-start justify-center gap-12">
@@ -107,13 +114,30 @@ export function MarkdownPreview({ text, anchoring }: { text: string; anchoring?:
           </nav>
         )}
         <article className="markdown-preview w-full max-w-3xl min-w-0 rounded-xl border border-secondary bg-primary px-6 py-8 text-md text-primary sm:px-10 sm:py-12">
-          <MessageBody body={text} />
+          {chunks.map(([start, end]) => (
+            <MarkdownRun key={start} sections={sections} start={start} end={end} />
+          ))}
         </article>
       </div>
       {commentButton}
     </div>
   );
 }
+
+/** A few sections of a long Markdown file, parsed and rendered in one step. */
+const MarkdownRun = memo(function MarkdownRun({
+  sections,
+  start,
+  end,
+}: {
+  sections: readonly string[];
+  start: number;
+  end: number;
+}) {
+  return sections
+    .slice(start, end)
+    .map((section, index) => <MessageBody key={start + index} body={section} />);
+});
 
 const toLineAnchor = rangeAnchor("lines", "data-anchor-line");
 
@@ -167,23 +191,23 @@ const LineRun = memo(function LineRun({
  * short while every line still ends up in the page, so selecting and finding text work as usual.
  * `ensure` asks for everything up to a line at once, for a jump past what is rendered yet.
  */
-export function useProgressiveChunks(total: number) {
-  const [count, setCount] = useState(() => Math.min(total, RENDER_CHUNK));
-  useEffect(() => setCount(Math.min(total, RENDER_CHUNK)), [total]);
+export function useProgressiveChunks(total: number, size = RENDER_CHUNK) {
+  const [count, setCount] = useState(() => Math.min(total, size));
+  useEffect(() => setCount(Math.min(total, size)), [total, size]);
   useEffect(() => {
     if (count >= total) return;
-    const timer = setTimeout(() => setCount((n) => Math.min(total, n + RENDER_CHUNK)), 0);
+    const timer = setTimeout(() => setCount((n) => Math.min(total, n + size)), 0);
     return () => clearTimeout(timer);
-  }, [count, total]);
+  }, [count, total, size]);
   const ensure = useCallback(
     (n: number) => setCount((current) => Math.max(current, Math.min(total, n))),
     [total],
   );
   const chunks = Array.from(
-    { length: Math.ceil(count / RENDER_CHUNK) },
-    (_, chunk) => [chunk * RENDER_CHUNK, Math.min(total, (chunk + 1) * RENDER_CHUNK)] as const,
+    { length: Math.ceil(count / size) },
+    (_, chunk) => [chunk * size, Math.min(total, (chunk + 1) * size)] as const,
   );
-  return { chunks, ensure };
+  return { chunks, ensure, done: count >= total };
 }
 
 /**
