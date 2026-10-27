@@ -15,6 +15,7 @@ import { Select } from "#src/components/base/select/select";
 import { refreshComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
 import { m } from "#src/paraglide/messages";
 import { AgentFastModeField } from "./agent-fast-mode-field";
+import { AgentReasoningField } from "./agent-reasoning-field";
 import { KEYED_MODEL_PROVIDERS, PI_BUILTIN_MODEL_PROVIDERS } from "./agent.schemas";
 import { modelProviderDisplayName } from "./model-provider-display";
 import {
@@ -512,18 +513,11 @@ export function AgentRuntimeFields({
       <input type="hidden" name="reasoning" value={submittedReasoning} />
       <input type="hidden" name="fastMode" value={submittedFastMode ? "true" : ""} />
       {reasoningVisible && (
-        <Select
-          label={m.agent_form_reasoning()}
-          size="md"
-          className="min-w-0"
-          selectedKey={reasoning}
-          onSelectionChange={(key) => key !== null && setReasoning(String(key))}
-        >
-          <Select.Item id="" label={m.agent_form_provider_default()} />
-          {selectedModel?.reasoningEfforts.map((effort) => (
-            <Select.Item key={effort} id={effort} label={effort} />
-          ))}
-        </Select>
+        <AgentReasoningField
+          efforts={selectedModel?.reasoningEfforts ?? []}
+          value={reasoning}
+          onChange={setReasoning}
+        />
       )}
       {fastModeVisible && <AgentFastModeField isSelected={fastMode} onChange={setFastMode} />}
     </>
