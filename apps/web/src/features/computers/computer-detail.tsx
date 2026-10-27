@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ChevronRight,
   Edit01 as Pencil,
@@ -6,41 +6,21 @@ import {
   Terminal,
   Trash01 as Trash,
 } from "@untitledui/icons";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
-import { useAppToast } from "#src/components/ui/toast";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { TerminalCommand } from "./terminal-command";
 import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
 import { ComputerDetailHeader } from "./computer-detail-header";
-import {
-  computerImageVersionLabel,
-  computerLabel,
-  computerVersionLabel,
-  operatingSystemLabel,
-} from "./computer-identity";
-import { DetailGroup, DetailRow } from "./computer-detail-rows";
-import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
-import { computerUpgradeStatusQuery, upgradeRunning } from "./computer-upgrade-status";
-import {
-  describeUpgradeRequestError,
-  upgradeOutcome,
-  type ComputerUpgradeOutcome,
-} from "./upgrade-failure";
-import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
+import { computerLabel } from "./computer-identity";
+import { DetailGroup } from "./computer-detail-rows";
 import { ComputerTile } from "./computer-tile";
-import {
-  CloudImageUpdateDialog,
-  ComputerUpgradeConfirmDialog,
-  ComputerUpgradeSlot,
-  type ComputerUpgradeRequest,
-} from "./computer-upgrade-slot";
+import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer-upgrade-slot";
 import { ComputerRuntimeList } from "./computer-runtimes";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
@@ -48,16 +28,16 @@ import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
 import type { AgentControlExecute } from "#src/features/agents/agent-runtime-controls";
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { ComputerRemoveAction } from "./computer-remove-action";
 import { ComputerDetailAgentRoster } from "./computer-detail-agent-roster";
-import { ComputerDate } from "./computer-detail-date";
+import { ComputerDetailIdentityRows } from "./computer-detail-identity";
 import {
   RESTART_MAX_POLLS,
   RESTART_POLL_INTERVAL_MS,
   type ComputerDetailView,
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
+import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
 export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
 
@@ -141,57 +121,7 @@ export function ComputerDetail({
     }
   };
   const workspaceSlug = useWorkspaceSlug();
-  const toast = useAppToast();
-  const queryClient = useQueryClient();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    // Set again on mount: StrictMode unmounts and remounts once in development.
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-  const [restartState, setRestartState] = useState<
-    "idle" | "pending" | "accepted" | "completed" | "error"
-  >("idle");
-  const [upgradeRequest, setUpgradeRequest] = useState<ComputerUpgradeRequest>({ state: "idle" });
-  const storedUpgrade = computer.upgrade ?? undefined;
-  const followedUpgradeId =
-    upgradeRequest.state === "accepted"
-      ? upgradeRequest.requestId
-      : storedUpgrade && upgradeRunning(storedUpgrade)
-        ? storedUpgrade.requestId
-        : null;
-  const [liveStatus] = useQueries({
-    queries: (followedUpgradeId ? [followedUpgradeId] : []).map((requestId) => ({
-      ...computerUpgradeStatusQuery(computer.id, requestId),
-      enabled: false,
-    })),
-  });
-  const storedOutcome = storedUpgrade ? upgradeOutcome(storedUpgrade) : undefined;
-  // A recovery fetch keeps the last error until it returns. The status it already holds is
-  // what the slot shows while that read is in flight.
-  const liveUpgrade: ComputerUpgradeOutcome | undefined = !liveStatus
-    ? undefined
-    : liveStatus.isError && !liveStatus.isFetching
-      ? { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) }
-      : liveStatus.data
-        ? upgradeOutcome(liveStatus.data)
-        : upgradeRequest.state === "accepted"
-          ? { state: "running" }
-          : (storedOutcome ?? { state: "running" });
-  // A stored success is history: the loader's version already includes it.
-  const upgrade: ComputerUpgradeOutcome | { state: "idle" } =
-    upgradeRequest.state === "requesting"
-      ? { state: "running" }
-      : upgradeRequest.state === "refused"
-        ? { state: "failed", failure: upgradeRequest }
-        : (liveUpgrade ??
-          (storedOutcome && storedOutcome.state !== "succeeded"
-            ? storedOutcome
-            : { state: "idle" }));
-  const upgrading = upgrade.state === "running";
   const {
     isCloud,
     currentVersion,
@@ -200,24 +130,26 @@ export function ComputerDetail({
     imageSlot,
     runtimeOffer,
     imageOffer,
-  } = computerDetailUpgradeSlotsFor(computer, {
-    upgrade,
-    request: upgradeRequest,
-    liveStatus: liveStatus?.data,
-    storedUpgrade,
+    upgrading,
+    restartState,
+    runUpgrade,
+    runRestart,
+  } = useComputerDetailLifecycle({
+    computerId: computer.id,
+    kind: computer.kind,
+    computerVersion: computer.computerVersion,
+    imageVersion: computer.imageVersion,
+    imageUpdate: computer.imageUpdate,
+    upgrade: computer.upgrade,
     latestComputerVersion,
+    onUpgrade,
+    onRestart,
+    onReadRestartStatus,
+    restartPollIntervalMs,
+    restartMaxPolls,
   });
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
   const canEditDisplayName = computer.ownedByCurrentUser && Boolean(onUpdateDisplayName);
-  const runUpgrade = (version: string | undefined, target: "runtime" | "image") =>
-    submitComputerDetailUpgrade({
-      computerId: computer.id,
-      onUpgrade,
-      queryClient,
-      setUpgradeRequest,
-      version,
-      target,
-    });
   const scanWorkspaces = async () => {
     if (!onScanAgentWorkspaces) return;
     setWorkspaceScanStatus("scanning");
@@ -227,50 +159,6 @@ export function ComputerDetail({
     } catch {
       setWorkspaceScanStatus("error");
     }
-  };
-
-  const runRestart = () => {
-    if (!onRestart) return;
-    setRestartState("pending");
-    const requestId = crypto.randomUUID();
-    // The restart poll outlives navigation; only touch state while still mounted.
-    const settle = (update: () => void) => {
-      if (mountedRef.current) update();
-    };
-    void onRestart(requestId)
-      .then(async (initial) => {
-        if (initial.status !== "accepted") return initial;
-        settle(() => {
-          setRestartState("accepted");
-          toast.success(m.computer_restart_accepted());
-        });
-        if (!onReadRestartStatus) return initial;
-        for (let poll = 0; poll < restartMaxPolls; poll += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, restartPollIntervalMs));
-          const result = await onReadRestartStatus(requestId);
-          if (result.status !== "accepted") return result;
-        }
-        return { requestId, status: "failed" as const, reason: "timeout" as const };
-      })
-      .then(
-        (result) =>
-          settle(() => {
-            if (result.status === "completed") {
-              setRestartState("completed");
-              toast.success(m.computer_restart_completed());
-            } else if (result.status === "accepted") {
-              setRestartState("accepted");
-            } else {
-              setRestartState("error");
-              toast.error(m.computer_restart_error());
-            }
-          }),
-        () =>
-          settle(() => {
-            setRestartState("error");
-            toast.error(m.computer_restart_error());
-          }),
-      );
   };
 
   const label = computerLabel(computer);
@@ -374,73 +262,20 @@ export function ComputerDetail({
           </div>
 
           <DetailGroup>
-            <dl className="divide-y divide-secondary">
-              <DetailRow
-                label={m.computer_hostname()}
-                value={<span className="font-mono">{computer.name}</span>}
-              />
-              <DetailRow label={m.computer_system()} value={operatingSystemLabel(computer)} />
-              <DetailRow
-                label={m.computer_version()}
-                value={
-                  <span className="font-mono">
-                    {computerVersionLabel({ computerVersion: currentVersion })}
-                  </span>
-                }
-                footer={
-                  runtimeSlot && (
-                    <ComputerUpgradeSlot
-                      slot={runtimeSlot}
-                      canUpgrade={canUpgrade}
-                      computerName={label}
-                      cloud={false}
-                      online={computer.online}
-                      onUpgrade={() => setUpgradeConfirmOpen(true)}
-                    />
-                  )
-                }
-              />
-              {isCloud && (
-                <DetailRow
-                  label={m.computer_image_version()}
-                  value={
-                    <span className="font-mono">
-                      {computerImageVersionLabel({ imageVersion: currentImageVersion })}
-                    </span>
-                  }
-                  footer={
-                    imageSlot && (
-                      <ComputerUpgradeSlot
-                        slot={imageSlot}
-                        canUpgrade={canUpgrade}
-                        computerName={label}
-                        cloud
-                        online={computer.online}
-                        onUpgrade={() => setImageUpdateOpen(true)}
-                      />
-                    )
-                  }
-                />
-              )}
-              {computer.creator && (
-                <DetailRow
-                  label={m.computer_added_by()}
-                  value={
-                    <span className="flex min-w-0 items-center justify-end gap-2">
-                      <IdentityAvatar
-                        size="xs"
-                        name={creatorName}
-                        src={computer.creator.avatarUrl}
-                      />
-                      <span className="truncate">
-                        {creatorName} ·{" "}
-                        <ComputerDate value={computer.connectedAt} timeZone={timeZone} />
-                      </span>
-                    </span>
-                  }
-                />
-              )}
-            </dl>
+            <ComputerDetailIdentityRows
+              computer={computer}
+              label={label}
+              timeZone={timeZone}
+              creatorName={creatorName}
+              isCloud={isCloud}
+              currentVersion={currentVersion}
+              currentImageVersion={currentImageVersion}
+              runtimeSlot={runtimeSlot}
+              imageSlot={imageSlot}
+              canUpgrade={canUpgrade}
+              onRuntimeUpgrade={() => setUpgradeConfirmOpen(true)}
+              onImageUpgrade={() => setImageUpdateOpen(true)}
+            />
             <div className="border-t border-secondary py-3">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-medium text-primary">{m.computer_runtimes()}</h3>
