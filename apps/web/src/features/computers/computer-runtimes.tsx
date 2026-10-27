@@ -2,7 +2,7 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 import { useContext, useState, type ReactNode } from "react";
 import { OverlayTriggerStateContext } from "react-aria-components";
 import { LogIn01, LogOut01 } from "@untitledui/icons";
-import { RUNTIME_AUTH_PROVIDERS, type RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
+import type { RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
@@ -15,14 +15,15 @@ import { RuntimeSignInDialog, unsupportedText } from "./runtime-sign-in-dialog";
 import { RuntimeSignOutDialog } from "./runtime-sign-out-dialog";
 import { RuntimeUsage } from "./runtime-usage";
 import type { AccountState } from "./runtime-usage-status";
+import {
+  isRuntimeLoginStateProvider,
+  isSignableRuntimeProvider,
+  runtimeLoginChip,
+} from "./runtime-login-chip";
 import { useRuntimeAuthStatusRefresh } from "./use-runtime-auth-signals";
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
   "rounded-md outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
-
-function isAuthProvider(provider: string): provider is RuntimeAuthProvider {
-  return (RUNTIME_AUTH_PROVIDERS as readonly string[]).includes(provider);
-}
 
 type AuthDialog = { kind: "sign_in" | "sign_out"; provider: RuntimeAuthProvider; name: string };
 
@@ -82,15 +83,18 @@ export function ComputerRuntimeList({
       <ul className="mt-2 flex flex-wrap gap-1.5">
         {computer.runtimes.map((runtime) => {
           const provider = runtime.provider;
-          const auth = isAuthProvider(provider) ? computer.runtimeAuth?.[provider] : undefined;
-          const signable = canSignIn && isAuthProvider(provider);
+          const login = runtimeLoginChip({
+            provider,
+            status: isRuntimeLoginStateProvider(provider)
+              ? computer.runtimeAuth?.[provider]
+              : undefined,
+            canSignIn,
+          });
+          const { auth, account, signable } = login;
           const open = (kind: AuthDialog["kind"]) =>
-            isAuthProvider(provider) &&
+            isSignableRuntimeProvider(provider) &&
             setAuthDialog({ kind, provider, name: runtime.displayName });
           const kiroOnWindows = provider === RUNTIME_PROVIDER.KIRO && computer.platform === "win32";
-          // A login-capable runtime with no state at all runs on a Computer too old to send one:
-          // said only to someone who could sign it in, the one person an upgrade helps.
-          const account = auth?.state ?? (signable ? "unreported" : undefined);
           // One button in one place, for the state the popover shows (`shownAccount`): Sign In when
           // signed out, Sign Out when signed in. An icon the size of the popover's Refresh, named
           // by its tooltip and its label (Frank, task #209); signed out, the band says why.

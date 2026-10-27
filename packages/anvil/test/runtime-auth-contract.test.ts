@@ -8,10 +8,11 @@ import {
   normalizeRuntimeAuthCode,
 } from "#src/contract";
 
-test("runtime auth is limited to the providers with a supported login flow", () => {
-  expect(RUNTIME_AUTH_PROVIDERS).toEqual(["claude-code", "codex", "kiro"]);
+test("runtime auth is limited to providers with a supported status surface", () => {
+  expect(RUNTIME_AUTH_PROVIDERS).toEqual(["claude-code", "codex", "kiro", "command-code"]);
   expect(isRuntimeAuthProvider("claude-code")).toBe(true);
   expect(isRuntimeAuthProvider("codex")).toBe(true);
+  expect(isRuntimeAuthProvider("command-code")).toBe(true);
   expect(isRuntimeAuthProvider("pi")).toBe(false);
   expect(isRuntimeAuthProvider("unknown")).toBe(false);
 });

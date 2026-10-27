@@ -13,7 +13,7 @@ const logger = getLogger(["coforge", "daemon", "code-agent", "runtime-auth-statu
 /** How long one runtime's status read may take before it reads as unknown. */
 export const RUNTIME_AUTH_STATUS_TIMEOUT_MS = 20_000;
 
-/** Every login-capable runtime's status, read together. */
+/** Every runtime with an auth-status surface, read together. */
 export type RuntimeAuthCollection = {
   collectedAtMs: number;
   runtimes: RuntimeAuthStatus[];
@@ -31,7 +31,7 @@ export type RuntimeAuthStatusSources = {
 };
 
 /**
- * Collects the login status of every runtime with a login flow and reports it. A runtime the
+ * Collects the login status of every runtime with an auth-status surface and reports it. A runtime the
  * inventory did not find is `unavailable/not_installed` without running anything; the others are
  * read in parallel through their adapter, each bounded, and a read that fails, has no adapter yet
  * or outlasts its deadline is `unknown`. Every status is sanitized before it leaves the Computer.

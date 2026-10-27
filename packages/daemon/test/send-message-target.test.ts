@@ -82,7 +82,15 @@ test("the target is the raw --target of the invocation, not the activity row's c
 });
 
 test("a tool name is a shell tool when it resolves to the shell", () => {
-  for (const name of ["bash", "Bash", "shell", "command_execution", "run_shell_command"])
+  for (const name of [
+    "bash",
+    "Bash",
+    "shell",
+    "command_execution",
+    "run_shell_command",
+    "shell_command",
+    "powershell",
+  ])
     expect(isShellToolName(name)).toBe(true);
   for (const name of ["Read", "write_file", "mcp__chat__bash", "", "apply_patch"])
     expect(isShellToolName(name)).toBe(false);

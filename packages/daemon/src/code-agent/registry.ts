@@ -1,6 +1,14 @@
 import { claudeRuntimeHost } from "#src/code-agent/claude-code/host";
 import { claudeAuthHost } from "#src/code-agent/claude-code/auth-host";
 import { DshProvider } from "@lrm/coforge-anvil/dsh";
+import {
+  CommandCodeProvider,
+  CommandCodeRuntimeAuthAdapter,
+} from "@lrm/coforge-anvil/command-code";
+import {
+  commandCodeRuntimeHost,
+  createCommandCodeAuthHost,
+} from "#src/code-agent/command-code/host";
 import { dshRuntimeHost } from "#src/code-agent/dsh/host";
 import { piRuntimeHost } from "#src/code-agent/pi/host";
 import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
@@ -38,7 +46,10 @@ type CodeAgentProviderRegistryOptions = {
 };
 
 function providerExecutable(
-  provider: ExternalCodeAgentProvider | typeof RUNTIME_PROVIDER.DSH,
+  provider:
+    | ExternalCodeAgentProvider
+    | typeof RUNTIME_PROVIDER.DSH
+    | typeof RUNTIME_PROVIDER.COMMAND_CODE,
   options: CodeAgentProviderRegistryOptions,
 ): string | undefined {
   return resolveHostCodeAgentExecutable(provider, options.environment, options.platform);
@@ -59,6 +70,12 @@ export function createRuntimeAuthAdapter(
       });
     case RUNTIME_PROVIDER.KIRO:
       return new KiroRuntimeAuthAdapter(createKiroAuthHost(options.platform));
+    case RUNTIME_PROVIDER.COMMAND_CODE: {
+      const executable =
+        providerExecutable(RUNTIME_PROVIDER.COMMAND_CODE, options) ??
+        (options.platform === "win32" ? "cmdc" : "cmd");
+      return new CommandCodeRuntimeAuthAdapter(createCommandCodeAuthHost([executable]));
+    }
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeRuntimeAuthAdapter({
         host: claudeAuthHost,
@@ -115,6 +132,13 @@ export function createCodeAgentProvider(
       return new DshProvider({
         host: dshRuntimeHost,
         ...(executable ? { command: [executable] } : {}),
+      });
+    }
+    case RUNTIME_PROVIDER.COMMAND_CODE: {
+      const executable = providerExecutable(RUNTIME_PROVIDER.COMMAND_CODE, options);
+      return new CommandCodeProvider({
+        host: commandCodeRuntimeHost,
+        command: [executable ?? (options.platform === "win32" ? "cmdc" : "cmd")],
       });
     }
     default: {

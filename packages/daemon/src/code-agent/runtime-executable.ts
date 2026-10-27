@@ -83,6 +83,21 @@ export const dshCodeAgent = {
   installedExecutableCandidates: noInstalledExecutableCandidates,
 } as const;
 
+export const commandCodeAgent = {
+  provider: RUNTIME_PROVIDER.COMMAND_CODE,
+  executable: "cmd",
+  installedExecutableCandidates: noInstalledExecutableCandidates,
+} as const;
+
+function executableName(
+  agent: ExternalCodeAgent | typeof dshCodeAgent | typeof commandCodeAgent,
+  platform: NodeJS.Platform,
+) {
+  return agent.provider === RUNTIME_PROVIDER.COMMAND_CODE && platform === "win32"
+    ? "cmdc"
+    : agent.executable;
+}
+
 export const externalCodeAgents = [
   {
     provider: RUNTIME_PROVIDER.CODEX,
@@ -123,6 +138,7 @@ export const externalCodeAgents = [
     executable: "agy",
     installedExecutableCandidates: noInstalledExecutableCandidates,
   },
+  commandCodeAgent,
 ] as const;
 
 export type ExternalCodeAgentProvider = (typeof externalCodeAgents)[number]["provider"];
@@ -135,7 +151,7 @@ export const externalCodeAgent: Record<ExternalCodeAgentProvider, ExternalCodeAg
   >;
 
 export async function resolveExternalCodeAgentExecutable(
-  agent: ExternalCodeAgent | typeof dshCodeAgent,
+  agent: ExternalCodeAgent | typeof dshCodeAgent | typeof commandCodeAgent,
   probe: ExternalCodeAgentProbe,
   searchPath: string | undefined,
   environment: Readonly<Record<string, string | undefined>>,
@@ -143,7 +159,7 @@ export async function resolveExternalCodeAgentExecutable(
 ): Promise<string | undefined> {
   const resolved = await probe.resolve?.(agent.provider, agent.executable, searchPath);
   if (resolved) return resolved;
-  const fromPath = probe.which(agent.executable, searchPath);
+  const fromPath = probe.which(executableName(agent, platform), searchPath);
   if (fromPath) return fromPath;
   for (const candidate of agent.installedExecutableCandidates(environment, platform))
     if (await probe.exists?.(candidate)) return candidate;
@@ -154,13 +170,21 @@ export async function resolveExternalCodeAgentExecutable(
  * candidates as inventory. Provider construction is synchronous, so this host-only form uses
  * filesystem checks directly rather than the asynchronous test probe seam above. */
 export function resolveHostCodeAgentExecutable(
-  provider: ExternalCodeAgentProvider | typeof RUNTIME_PROVIDER.DSH,
+  provider:
+    | ExternalCodeAgentProvider
+    | typeof RUNTIME_PROVIDER.DSH
+    | typeof RUNTIME_PROVIDER.COMMAND_CODE,
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
   platform: NodeJS.Platform = process.platform,
 ): string | undefined {
-  const agent = provider === RUNTIME_PROVIDER.DSH ? dshCodeAgent : externalCodeAgent[provider];
+  const agent =
+    provider === RUNTIME_PROVIDER.DSH
+      ? dshCodeAgent
+      : provider === RUNTIME_PROVIDER.COMMAND_CODE
+        ? commandCodeAgent
+        : externalCodeAgent[provider];
   const searchPath = codeAgentExecutableSearchPath(environment, platform);
-  const fromPath = Bun.which(agent.executable, { PATH: searchPath });
+  const fromPath = Bun.which(executableName(agent, platform), { PATH: searchPath });
   if (fromPath) return fromPath;
   return agent
     .installedExecutableCandidates(environment, platform)

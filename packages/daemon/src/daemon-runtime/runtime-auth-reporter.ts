@@ -30,7 +30,7 @@ type Ports = {
  */
 export class RuntimeAuthReporter {
   readonly #collector: RuntimeAuthStatusCollector;
-  /** The login-capable providers the last inventory held; undefined until one is known. */
+  /** The providers with an auth-status surface the last inventory held; undefined until one is known. */
   #installed: ReadonlySet<RuntimeAuthProvider> | undefined;
 
   constructor(ports: Ports) {

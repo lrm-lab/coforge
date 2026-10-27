@@ -104,6 +104,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/code-agent/pi/`                 | Built-in CoForge provider/catalog/metadata and Pi host composition; native SDK Session is shared through Anvil                                             |
 | `src/code-agent/antigravity/host.ts` | Session, command, version and live environment capabilities for Antigravity                                                                                |
 | `src/code-agent/dsh/`                | DSH environment, private launch files and process-scoped catalog discovery; native ACP and plugin content live in Anvil                                    |
+| `src/code-agent/command-code/`       | Command Code host capabilities for its native ACP session                                                                                                  |
 | `src/code-agent/grok/host.ts`        | Host environment, client identity, reply intent and account-label policies for Grok                                                                        |
 | `src/code-agent/process-host.ts`     | Platform process-tree spawning for Anvil execution                                                                                                         |
 | `src/code-agent/catalog-host.ts`     | Environment and process capabilities for Anvil JSONL catalog execution                                                                                     |

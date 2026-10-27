@@ -13,6 +13,7 @@ const runtimes = [
   "antigravity",
   "pi",
   "dsh",
+  "command-code",
   "codex",
   "claude-code",
 ].map((name) => resolve(anvil, "src", name));

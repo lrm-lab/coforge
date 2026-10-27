@@ -8,6 +8,7 @@ import kiroMark from "@lobehub/icons-static-svg/icons/kiro-color.svg";
 import grokMark from "@lobehub/icons-static-svg/icons/grok.svg";
 import opencodeMark from "@lobehub/icons-static-svg/icons/opencode.svg";
 import piMark from "@lobehub/icons-static-svg/icons/pi.svg";
+import commandaMark from "@lobehub/icons-static-svg/icons/commanda-color.svg";
 import { m } from "#src/paraglide/messages";
 
 /**
@@ -27,6 +28,7 @@ export const RUNTIME_PROVIDER_DISPLAY_ORDER: readonly RuntimeProvider[] = [
   RUNTIME_PROVIDER.OPENCODE,
   RUNTIME_PROVIDER.GROK,
   RUNTIME_PROVIDER.ANTIGRAVITY,
+  RUNTIME_PROVIDER.COMMAND_CODE,
 ];
 
 /** The label shown in the runtime picker and the Agent detail page. CoForge's own built-in
@@ -43,6 +45,7 @@ export function runtimeProviderLabel(provider: RuntimeProvider): string {
     [RUNTIME_PROVIDER.GROK]: "Grok Build",
     [RUNTIME_PROVIDER.ANTIGRAVITY]: "Antigravity CLI",
     [RUNTIME_PROVIDER.DSH]: "DeepSeek Harness",
+    [RUNTIME_PROVIDER.COMMAND_CODE]: "Command Code",
   };
   return labels[provider];
 }
@@ -61,6 +64,7 @@ export const RUNTIME_PROVIDER_MARK: Record<
   [RUNTIME_PROVIDER.GROK]: grokMark,
   [RUNTIME_PROVIDER.ANTIGRAVITY]: antigravityMark,
   [RUNTIME_PROVIDER.DSH]: deepseekMark,
+  [RUNTIME_PROVIDER.COMMAND_CODE]: commandaMark,
 };
 
 /** Whether that mark is a full-color icon rendered as an `<img>`, as opposed to a monochrome
@@ -78,4 +82,5 @@ export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<
   [RUNTIME_PROVIDER.GROK]: false,
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
   [RUNTIME_PROVIDER.DSH]: true,
+  [RUNTIME_PROVIDER.COMMAND_CODE]: true,
 };

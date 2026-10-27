@@ -60,6 +60,26 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - ACP has no login flow. Existing native API-key/account configuration remains native; catalog
   availability is not proof of authentication, quota or successful generation.
 
+## Command Code
+
+- Command Code uses `cmd acp`. It has no ACP system-prompt field, so the host-supplied
+  instructions are injected with a private `--mod` whose `appendSystemPrompt` hook returns
+  the text read once at process start. A resumed session starts a new process and reads the
+  briefing for that launch. The launch never includes `--safe-mode`, because that skips
+  `--mod`. The temporary directory is removed when the session ends or the launch fails.
+  Do not write those instructions into the Agent workspace. Discovery and launch both refuse a
+  CLI below 1.87.2, the release that first loads `--mod` on `cmd acp`. A cached inventory entry
+  is checked again the same way. An unparseable version is not refused.
+- Skill metadata lists the Agent workspace and home only. Command Code CLI 1.87.3 help
+  (`extendingBody`) discovers `.commandcode/skills` and `.agents/skills` in each place. A native
+  project scan also requires a trusted workspace and walks up to the git root; this scan does
+  neither. Assigned packs go to the native project root `.commandcode/skills`
+  (`getProjectSkillsDir` on that CLI).
+- Command Code has no model catalog or usage scan in the adapter. ACP model/config fields are
+  optional; absent fields mean the native default model. Permission requests are allow-once only
+  for the active session, and all other requests are cancelled.
+- Native Command Code rules live in [Anvil Command Code instructions](../../../anvil/src/command-code/AGENTS.md).
+
 ## Standing instructions
 
 - Keep the standing CoForge Agent instructions in one provider-neutral source,
@@ -86,7 +106,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - Every Provider injects them through the provider's native system or developer
   instruction mechanism: Codex app-server `developerInstructions`, the Claude
   Code system-prompt-file option, the CoForge Agent resource-loader
-  system-prompt override, and Grok ACP `_meta.systemPromptOverride`.
+  system-prompt override, Grok ACP `_meta.systemPromptOverride`, and Command
+  Code's private `--mod` `appendSystemPrompt` hook.
 - Current channel roles override names, previous sessions and local memory. Without current coordinator status or explicit human delegation, an Agent must not assign, chase or reprioritize peers. Coordination stays scoped to its channel and grants no extra permissions. Web annotates channel reads with current roles; launches preserve Agent-owned memory.
 - Do not copy the text into a provider. Do not write `AGENTS.md` or `CLAUDE.md` into the user's
   Agent workspace for a provider that supports native injection.
