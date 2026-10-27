@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
 import { usageWindowLabel } from "#src/features/computers/runtime-usage-windows";
+import {
+  usageFailureDescription,
+  usageHealth,
+  usageReadForAuth,
+} from "#src/features/computers/runtime-usage-status";
+import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
 
 test("each runtime names its usage windows the way that runtime reports them", () => {
   const session = { windowDurationMinutes: 300 };
@@ -49,4 +56,22 @@ test("the Public toggle stays live while its update is in flight so the peek sur
     /if \(!updatingRuntimeIds\.has\(runtime\.id\)\)\s*\n\s*void setRuntimePublic/,
   );
   expect(detail).not.toMatch(/isDisabled=\{updatingRuntimeIds\.has\(runtime\.id\)\}/);
+});
+
+test("only the runtime's own login check says whether it is signed in", () => {
+  const reauth = {
+    state: "fresh",
+    result: { status: "reauth", collectedAt: "2026-10-27T00:00:00.000Z" },
+  } as unknown as UsageReadResult;
+  // Kiro's whoami says signed in while the usage reader's token has expired (task #203): the
+  // usage is unavailable, not a second, contradicting "Not signed in".
+  const signedIn = usageReadForAuth(reauth, { state: "logged_in" } as RuntimeAuthStatus);
+  expect(signedIn?.result?.status).toBe("unavailable");
+  expect(String(usageFailureDescription(signedIn?.result))).toBe(
+    "Usage is temporarily unavailable.",
+  );
+  expect(String(usageHealth(signedIn)?.label)).not.toBe("Not signed in");
+  // Signed out, or with no login check, the reader's own answer stands.
+  expect(usageReadForAuth(reauth, { state: "logged_out" } as RuntimeAuthStatus)).toBe(reauth);
+  expect(usageReadForAuth(reauth, undefined)).toBe(reauth);
 });

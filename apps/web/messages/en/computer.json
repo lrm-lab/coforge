@@ -154,6 +154,8 @@
   "computer_usage_not_connected": "Not connected yet",
   "computer_usage_read_failed_retry": "Couldn't read usage. Refresh to try again.",
   "computer_usage_reauth": "Sign in to read usage",
+  "computer_usage_unavailable_now": "Usage is temporarily unavailable.",
+  "computer_runtime_sign_in_hint": "Sign in to use {runtime} and read usage.",
   "computer_shared_computer": "Shared computer",
   "computer_runtime_public": "Public",
   "computer_runtime_auth_logged_in": "Signed in",

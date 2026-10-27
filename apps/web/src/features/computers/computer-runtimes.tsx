@@ -4,7 +4,6 @@ import { OverlayTriggerStateContext } from "react-aria-components";
 import { LogIn01, LogOut01 } from "@untitledui/icons";
 import { RUNTIME_AUTH_PROVIDERS, type RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
 
-import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { m } from "#src/paraglide/messages";
@@ -84,45 +83,32 @@ export function ComputerRuntimeList({
           const open = (kind: AuthDialog["kind"]) =>
             isAuthProvider(provider) &&
             setAuthDialog({ kind, provider, name: runtime.displayName });
-          // The account is the last band, as on Raft: its state beside the one action it allows,
-          // the same button signed in or out.
           const signIn =
             signable &&
             auth?.state === "logged_out" &&
             (provider !== RUNTIME_PROVIDER.KIRO || computer.platform !== "win32");
           const signOut = signable && auth?.state === "logged_in";
-          const account =
-            auth?.state === "unavailable" && auth.unavailableReason ? (
-              <p key="account" className="px-4 py-3 text-sm text-tertiary">
-                {unsupportedText(auth.unavailableReason, runtime.displayName)}
-              </p>
-            ) : auth?.state === "logged_in" || auth?.state === "logged_out" ? (
-              <div key="account" className="flex items-center justify-between gap-3 px-4 py-3">
-                {auth.state === "logged_in" ? (
-                  <Badge color="success" size="sm">
-                    {m.computer_runtime_auth_logged_in()}
-                  </Badge>
-                ) : (
-                  <Badge color="warning" size="sm">
-                    {m.computer_runtime_auth_logged_out()}
-                  </Badge>
-                )}
-                {(signIn || signOut) && (
-                  <PopoverAction onPress={() => open(signIn ? "sign_in" : "sign_out")}>
-                    {(press) => (
-                      <Button
-                        size="sm"
-                        color="secondary"
-                        iconLeading={signIn ? LogIn01 : LogOut01}
-                        onPress={press}
-                      >
-                        {signIn ? m.runtime_auth_sign_in() : m.runtime_auth_sign_out()}
-                      </Button>
-                    )}
-                  </PopoverAction>
-                )}
-              </div>
-            ) : undefined;
+          // One button in one place, signed in or out: the account band's own action.
+          const accountAction = (signIn || signOut) && (
+            <PopoverAction onPress={() => open(signIn ? "sign_in" : "sign_out")}>
+              {(press) => (
+                <Button
+                  size="sm"
+                  color="secondary"
+                  iconLeading={signIn ? LogIn01 : LogOut01}
+                  className="shrink-0"
+                  onPress={press}
+                >
+                  {signIn ? m.runtime_auth_sign_in() : m.runtime_auth_sign_out()}
+                </Button>
+              )}
+            </PopoverAction>
+          );
+          const unavailable = auth?.state === "unavailable" && auth.unavailableReason && (
+            <p key="account" className="px-4 py-3 text-sm text-tertiary">
+              {unsupportedText(auth.unavailableReason, runtime.displayName)}
+            </p>
+          );
           const visibility = computer.ownedByCurrentUser && (
             <div key="public" className="px-4 py-3">
               <div className="flex items-center justify-between gap-4">
@@ -162,7 +148,8 @@ export function ComputerRuntimeList({
                 auth={auth}
                 triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
                 trigger={(health) => <RuntimeChip runtime={runtime} auth={auth} health={health} />}
-                actions={(visibility || account) && [visibility, account]}
+                actions={(visibility || unavailable) && [visibility, unavailable]}
+                accountAction={accountAction || undefined}
               />
             </li>
           );

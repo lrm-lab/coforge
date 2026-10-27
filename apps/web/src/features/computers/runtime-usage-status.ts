@@ -1,9 +1,23 @@
+import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
 import { m } from "#src/paraglide/messages";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 /** `ok` only when the last read is fresh, available, and no usage window is at its limit; `label`
  * is the popover badge's own word for it, so the dot and the badge never name it differently. */
 export type UsageHealth = { ok: boolean; label: string };
+
+/**
+ * Whether a runtime is signed in is its own login check (`auth`), never the usage reader. A reader
+ * asking to sign in again while that check says signed in holds a stale or unreadable credential
+ * of its own, so its read counts as usage unavailable: the popover names the login state once.
+ */
+export function usageReadForAuth(
+  data: UsageReadResult | undefined,
+  auth: RuntimeAuthStatus | undefined,
+): UsageReadResult | undefined {
+  if (auth?.state !== "logged_in" || data?.result?.status !== "reauth") return data;
+  return { ...data, result: { ...data.result, status: "unavailable" } };
+}
 
 export function usageHealth(data: UsageReadResult | undefined): UsageHealth | undefined {
   if (!data?.result) return undefined;
@@ -48,7 +62,8 @@ export function usageBadge(
 export function usageFailureDescription(result: UsageResultRecord | undefined) {
   const status = result?.status;
   if (status === "reauth") return m.computer_usage_reauth();
-  if (status === "unavailable" || status === "error") return m.computer_usage_read_failed_retry();
+  if (status === "unavailable") return m.computer_usage_unavailable_now();
+  if (status === "error") return m.computer_usage_read_failed_retry();
   if (status === "unsupported")
     return result?.message === USAGE_READER_NOT_CONNECTED
       ? m.computer_usage_not_connected()

@@ -23,6 +23,7 @@ import {
   usageBadge,
   usageFailureDescription,
   usageHealth,
+  usageReadForAuth,
   type UsageHealth,
 } from "./runtime-usage-status";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
@@ -101,6 +102,7 @@ export function RuntimeUsage({
   actions,
   showUsage = true,
   auth,
+  accountAction,
 }: {
   computerId: string;
   runtime: Runtime;
@@ -123,6 +125,8 @@ export function RuntimeUsage({
   /** The runtime's login state on the Computer page, account fields only for those allowed them
    * (`runtimeAuthView`). With it, the popover opens even without usage, to show that account. */
   auth?: RuntimeAuthStatus;
+  /** Signs the runtime in or out: drawn on the account band, signed in or not. */
+  accountAction?: ReactNode;
 }) {
   const supportsUsage = showUsage && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
@@ -130,7 +134,8 @@ export function RuntimeUsage({
     computerOnline,
   });
 
-  const health = supportsUsage ? usageHealth(usage.data) : undefined;
+  const usageRead = usageReadForAuth(usage.data, auth);
+  const health = supportsUsage ? usageHealth(usageRead) : undefined;
   const resolvedTrigger = trigger ? (
     trigger(health)
   ) : (
@@ -162,7 +167,7 @@ export function RuntimeUsage({
             <RuntimeUsagePopoverContent
               runtime={runtime}
               showUsage={supportsUsage}
-              data={usage.data}
+              data={usageRead}
               scanning={usage.scanning}
               scanFailed={usage.scanFailed}
               computerOnline={computerOnline}
@@ -172,6 +177,7 @@ export function RuntimeUsage({
               auth={auth}
               footer={footer}
               actions={actions}
+              accountAction={accountAction}
             />
           )}
         </Dialog>
@@ -200,6 +206,7 @@ export function RuntimeUsagePopoverContent({
   auth,
   footer,
   actions,
+  accountAction,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
   /** False for a runtime that reports no usage: only the runtime band and the footer show. */
@@ -215,6 +222,7 @@ export function RuntimeUsagePopoverContent({
   auth?: RuntimeAuthStatus;
   footer?: ReactNode;
   actions?: ReactNode;
+  accountAction?: ReactNode;
 }) {
   const hydrated = useHydrated();
   const snapshot = data?.result?.snapshot;
@@ -227,7 +235,7 @@ export function RuntimeUsagePopoverContent({
         : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
-  // A signed-out runtime has no account to show; the caller's account band names its state.
+  // A signed-out runtime has no account to show: its band says so instead, beside Sign In.
   const signedOut = auth?.state === "logged_out";
   const planType = snapshot?.planType ?? auth?.account?.planLabel;
   const plan = planType ? formatPlan(planType) : undefined;
@@ -299,25 +307,45 @@ export function RuntimeUsagePopoverContent({
           )}
         </div>
 
-        {!signedOut && (showUsage || plan || accountLabel) && (
+        {signedOut && (
+          <div className="flex items-center justify-between gap-3 bg-warning-primary px-4 py-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-medium text-warning-primary">
+                {m.computer_runtime_auth_logged_out()}
+              </h3>
+              {/* Only beside the button that does it: a viewer who may not sign in gets no hint. */}
+              {accountAction && (
+                <p className="text-xs text-tertiary">
+                  {m.computer_runtime_sign_in_hint({ runtime: runtime.displayName })}
+                </p>
+              )}
+            </div>
+            {accountAction}
+          </div>
+        )}
+
+        {!signedOut && (showUsage || plan || accountLabel || accountAction) && (
           <section className="px-4 py-3">
             {/* The account band leads with the plan, then the signed-in account. A credits note
               counts too: Codex can report credits with no plan and no email, and that note used
               to show under the fallback heading. The empty "Runtime account" line is omitted
               only when the runtime names nothing and nothing is wrong. */}
-            {(plan || accountLabel || accountNote || badge) && (
-              <div className="flex items-start justify-between gap-3">
+            {(plan || accountLabel || accountNote || badge || accountAction) && (
+              <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-medium text-primary">
                     {plan || accountLabel || m.computer_usage_account()}
                   </h3>
                   {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
                 </div>
-                {badge && (
-                  <Badge color={badge.color} size="sm" className="shrink-0">
-                    {badge.label}
-                  </Badge>
-                )}
+                {/* The sign-out button takes the badge's place: the usage below already shows a
+                  limit or a failed read, and a badge beside it would name a state twice. */}
+                {accountAction ??
+                  (badge && (
+                    <Badge color={badge.color} size="sm" className="shrink-0">
+                      {badge.label}
+                    </Badge>
+                  ))}
               </div>
             )}
             {!showUsage ? null : reading ? (

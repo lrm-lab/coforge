@@ -155,6 +155,8 @@
   "computer_usage_not_connected": "尚未接入",
   "computer_usage_read_failed_retry": "未能读取用量，请刷新重试",
   "computer_usage_reauth": "登录后才能读取用量",
+  "computer_usage_unavailable_now": "用量暂时不可用。",
+  "computer_runtime_sign_in_hint": "登录后才能使用 {runtime} 并读取用量。",
   "computer_shared_computer": "共享电脑",
   "computer_runtime_public": "公开",
   "computer_runtime_auth_logged_in": "已登录",
