@@ -18,6 +18,7 @@ import { useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
+import { ExpandListButton } from "./conversation-list-button";
 import { useSavedEntries, useSavedMessages } from "./conversation-host";
 import { savedJumpTarget } from "./saved-messages-model";
 import type { SavedEntry } from "./saved-messages-collection";
@@ -39,6 +40,7 @@ export function SavedMessagesView() {
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         heading={m.conversation_saved_nav()}
+        breadcrumb={<ExpandListButton />}
         meta={
           <span className="shrink-0 text-sm text-tertiary">
             {m.conversation_saved_count({ count: entries.length })}

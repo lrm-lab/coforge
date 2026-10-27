@@ -9,6 +9,7 @@ import {
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
+import { ExpandListButton } from "./conversation-list-button";
 import { ConversationPending } from "./conversation-pending";
 import { useSidebarLists } from "./sidebar-lists";
 import {
@@ -60,7 +61,12 @@ export function EmptyConversation() {
   });
   if (opening || firstJoinedChannel(channels)) return <ConversationPending />;
   return (
-    <div className="grid h-full place-content-center justify-items-center px-6 text-center">
+    <div className="relative grid h-full place-content-center justify-items-center px-6 text-center">
+      {/* With nothing open there is no conversation header: the collapsed list's way back stands
+          where that header's would. */}
+      <div className="absolute top-2 left-6">
+        <ExpandListButton />
+      </div>
       <div className="mb-5 flex size-12 items-center justify-center rounded-xl border border-secondary bg-primary shadow-xs">
         <MessagesSquare aria-hidden="true" className="size-6 text-tertiary" />
       </div>

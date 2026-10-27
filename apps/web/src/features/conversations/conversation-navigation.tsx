@@ -16,7 +16,10 @@ import { Spinner } from "#src/components/ui/spinner";
 import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
-import { ConversationListContext } from "./conversation-list-button";
+import { CollapseListButton, ConversationListContext } from "./conversation-list-button";
+import { useListShortcut } from "./conversation-list-layout";
+import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
+import { LIST_COLUMN_CLASS } from "./conversation-list-width";
 import { ConversationDirectory } from "./conversation-directory";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -228,12 +231,14 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   // This renders on every live Agent or sidebar change; a new value each time would re-render
   // every reader, the open conversation's panes included.
   const detailVisible = desktop || !showList;
+  useListShortcut(desktop);
   const listControls = useMemo(
     () => ({
       showList: () => setBrowsing(true),
       closeList: () => setBrowsing(false),
       detailVisible,
       listBesideFrom: "lg" as const,
+      collapsibleList: true,
     }),
     [detailVisible],
   );
@@ -246,13 +251,16 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
           >
             <section
+              data-conversation-list
               className={cx(
-                "min-h-0 flex-1 flex-col lg:flex lg:w-72 lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
+                "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
+                LIST_COLUMN_CLASS,
                 showList ? "flex" : "hidden",
               )}
             >
               <PageHeader
                 heading={m.navigation_chat()}
+                actions={<CollapseListButton />}
                 meta={
                   <>
                     <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
@@ -278,6 +286,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   onCreateChannel={() => setCreating(true)}
                 />
               </div>
+              <ConversationListResizeHandle />
             </section>
             <div
               className={cx(

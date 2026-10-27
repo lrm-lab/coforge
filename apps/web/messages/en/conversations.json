@@ -1,6 +1,9 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "conversation_back_to_list": "Back to conversations",
+  "conversation_list_resize": "Resize conversation list",
+  "conversation_list_collapse": "Collapse conversation list",
+  "conversation_list_expand": "Expand conversation list",
   "channels_title": "Channels",
   "conversation_unread_divider": "New messages",
   "conversation_system_group_task_updates": [

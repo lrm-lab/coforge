@@ -5,6 +5,8 @@ import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { MessageSkeleton } from "./message-skeleton";
 import { ConversationBackHeader } from "./conversation-list-button";
+import { LIST_COLUMN_CLASS } from "./conversation-list-width";
+import { cx } from "#src/utils/cx";
 
 /**
  * The loading screen Chat shows until its lists and the open conversation have been read in the
@@ -18,7 +20,12 @@ export function MessagesPending() {
       data-panel-cards
       className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
     >
-      <section className="hidden min-h-0 flex-col lg:flex lg:w-72 lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary">
+      <section
+        className={cx(
+          "hidden min-h-0 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
+          LIST_COLUMN_CLASS,
+        )}
+      >
         <PageHeader heading={m.navigation_chat()} />
         <div
           aria-hidden="true"

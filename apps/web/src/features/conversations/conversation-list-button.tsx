@@ -1,8 +1,10 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { ArrowLeft } from "@untitledui/icons";
+import { ArrowLeft, LayoutLeft } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { setListCollapsed, useListShortcutLabel } from "./conversation-list-layout";
+import { LIST_COLLAPSED_SHOW_CLASS } from "./conversation-list-width";
 
 /** The width from which a list sits beside its conversation; below it the conversation takes the
  * list's place, with a back arrow to it. */
@@ -27,6 +29,8 @@ export const ConversationListContext = createContext<{
   /** The back button's name, when the list is not Chat's conversations. */
   backLabel?: string;
   listBesideFrom: ListBesideFrom;
+  /** Set by a list that can be collapsed from `lg` (Chat's): the header shows a button for it. */
+  collapsibleList?: boolean;
 } | null>(null);
 
 /**
@@ -59,15 +63,62 @@ export function MountedListControls({
 
 export function ConversationListButton() {
   const navigation = useContext(ConversationListContext);
-  if (!navigation) return null;
+  return (
+    <>
+      {navigation && (
+        <ButtonUtility
+          icon={ArrowLeft}
+          size="sm"
+          color="tertiary"
+          aria-label={navigation.backLabel ?? m.conversation_back_to_list()}
+          onClick={navigation.showList}
+          className={cx(
+            "-ml-2 shrink-0",
+            LIST_BESIDE_CLASSES[navigation.listBesideFrom].narrowOnly,
+          )}
+        />
+      )}
+      {/* Without a context this is Chat's own loading frame, which has no list to go back to. */}
+      {(!navigation || navigation.collapsibleList) && <ExpandListButton />}
+    </>
+  );
+}
+
+/** Shows Chat's collapsed list again. Shown from `lg` only while the list is collapsed; the class
+ * on `<html>` decides, so the server markup and the first paint agree. */
+export function ExpandListButton() {
+  const shortcut = useListShortcutLabel();
+  const label = m.conversation_list_expand();
   return (
     <ButtonUtility
-      icon={ArrowLeft}
+      icon={LayoutLeft}
       size="sm"
       color="tertiary"
-      aria-label={navigation.backLabel ?? m.conversation_back_to_list()}
-      onClick={navigation.showList}
-      className={cx("-ml-2 shrink-0", LIST_BESIDE_CLASSES[navigation.listBesideFrom].narrowOnly)}
+      aria-label={label}
+      tooltip={shortcut ? `${label} (${shortcut})` : label}
+      tooltipPlacement="bottom"
+      data-expand-list
+      onClick={() => setListCollapsed(false)}
+      className={cx("-ml-2 hidden shrink-0", LIST_COLLAPSED_SHOW_CLASS)}
+    />
+  );
+}
+
+/** The Chat list header's button that collapses the list, from `lg`. */
+export function CollapseListButton() {
+  const shortcut = useListShortcutLabel();
+  const label = m.conversation_list_collapse();
+  return (
+    <ButtonUtility
+      icon={LayoutLeft}
+      size="sm"
+      color="tertiary"
+      aria-label={label}
+      tooltip={shortcut ? `${label} (${shortcut})` : label}
+      tooltipPlacement="bottom"
+      data-collapse-list
+      onClick={() => setListCollapsed(true)}
+      className="max-lg:hidden"
     />
   );
 }
