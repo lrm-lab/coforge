@@ -104,7 +104,7 @@ function DirectConversationPage({
   ...props
 }: ConversationPageProps & { conversationId: string }) {
   const data = useDirectConversation(conversationId);
-  const { conversation } = data.page;
+  const { conversation } = data;
   return conversation.kind === "agent" ? (
     <AgentDirectConversationPage {...props} data={data} conversation={conversation} />
   ) : (

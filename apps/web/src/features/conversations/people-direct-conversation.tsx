@@ -15,7 +15,7 @@ import type { useDirectConversation } from "./use-conversation-data";
 
 /** A direct conversation between Workspace members, as its page loads it. */
 export type PeopleDirectConversationView = Extract<
-  ReturnType<typeof useDirectConversation>["page"]["conversation"],
+  ReturnType<typeof useDirectConversation>["conversation"],
   { kind: "people" }
 >;
 

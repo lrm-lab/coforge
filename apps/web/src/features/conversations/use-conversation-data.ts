@@ -166,15 +166,20 @@ export function useDirectConversation(conversationId: string) {
     // No Task refresh here either — see the channel branch above.
     onAgentReadChanged,
   });
-  const loadedConversation = page.conversation as DirectConversationView;
+  // The loaded conversation with the Agent's live read position: what every view of this DM
+  // reads, so none of them shows the position as of the last load.
+  const loadedConversation = page.conversation;
   const conversation = useMemo(
-    () => ({
-      ...loadedConversation,
-      agentReadThroughSequence: Math.max(
-        agentReadPositions[conversationId] ?? 0,
-        loadedConversation.agentReadThroughSequence ?? 0,
-      ),
-    }),
+    () =>
+      loadedConversation.kind === "agent"
+        ? {
+            ...loadedConversation,
+            agentReadThroughSequence: Math.max(
+              agentReadPositions[conversationId] ?? 0,
+              loadedConversation.agentReadThroughSequence ?? 0,
+            ),
+          }
+        : loadedConversation,
     [agentReadPositions, conversationId, loadedConversation],
   );
   const viewerReactor = useViewerReactor(conversation.viewerId);
@@ -182,9 +187,10 @@ export function useDirectConversation(conversationId: string) {
 
   return {
     page,
+    conversation,
     taskView,
     conversationProps: {
-      conversation,
+      conversation: conversation as DirectConversationView,
       canSendAsTask: true,
       onSend: async (
         body: string,
