@@ -97,7 +97,6 @@ import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
 import {
   attachmentView,
   ATTACHMENT_VIEW_SELECT,
-  type AttachmentView,
   type AttachmentViewRow,
 } from "#src/server/attachments/attachment-view.server";
 import {
@@ -121,6 +120,7 @@ import {
 } from "#src/server/db/repositories/agent-attention.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
+import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   searchAgentMessagePage,
   type AgentMessageSearchOptions,
@@ -132,13 +132,18 @@ import {
   type AgentRecoveryRow,
 } from "./agent-recovery-row.server";
 
-/** The three Agent-visible sender facts, spread onto every Agent-facing message shape
- * in this file so they cannot drift into three different field sets. */
-type AgentFacingSender = {
-  senderKind: MessageSenderKind;
-  senderHandle: string;
-  senderDescription: string;
-};
+import type {
+  AgentFacingSender,
+  AttachmentMetadata,
+  DirectConversationPage,
+  DirectConversationPageOptions,
+} from "./direct-conversation-types.server";
+export type {
+  AgentFacingSender,
+  AttachmentMetadata,
+  DirectConversationPage,
+  DirectConversationPageOptions,
+} from "./direct-conversation-types.server";
 
 /** The `latestSender`-prefixed sibling of `AgentFacingSender`: the same three facts, attached to
  * a target's attention summary or delivery envelope rather than a specific message's own sender.
@@ -151,36 +156,6 @@ export type LatestSenderFields = {
 };
 
 export type AgentMentionBinding = { type: "user" | "agent"; id: string; name: string };
-
-/** Signed previews belong only to browser messages. Agents keep the authenticated
- * `/api/agent` proxy route and do not receive browser layout dimensions. */
-export type AttachmentMetadata = AttachmentView;
-
-export type DirectConversationPage = {
-  messages: ({
-    id: string;
-    sequence: number;
-    body: string;
-    createdAt: Date;
-    target: string;
-    /** Always present, possibly empty; order matches send/upload order. */
-    attachments: AttachmentMetadata[];
-    task?: MessageTaskMetadata;
-  } & AgentFacingSender)[];
-  hasOlder: boolean;
-  hasNewer: boolean;
-};
-
-export type DirectConversationPageOptions = {
-  before?: string;
-  after?: string;
-  around?: string;
-  limit?: number;
-  fromSequence?: number;
-  throughSequence?: number;
-  /** Reads from the Agent's read position and reports where it stood and where it moved. */
-  unread?: boolean;
-};
 
 export type AgentRecoveryContext = {
   resumeMessages: Array<
@@ -441,7 +416,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   constructor(
     private readonly db: PrismaClient,
     { oneRequest = false }: { oneRequest?: boolean } = {},
-    private readonly realtime?: ReactionPort,
+    private readonly realtime?: ReactionPort & Pick<ConversationRealtime, "agentReadChanged">,
   ) {
     if (oneRequest) this.#agentChannels = new Map();
   }
@@ -838,6 +813,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             // The viewer's own conversation-level read cursor: the client positions the
             // initial view at the first unread message and draws the divider there.
             readThroughSequence: true,
+            agentReadThroughSequence: true,
             // The full public profile: the pane resolves stored `<@kind:uuid>` tokens (and offers
             // @-completion) from these rows, so a mention of the viewer — the row that used to be
             // missing — is resolvable without a second query.
@@ -955,6 +931,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             // its own creator, so an existing DM held by anyone else reads read-only once it goes
             // private. Independent of `deletedAt`'s own read-only rule.
             dmWritable: canDirectMessageAgent(userId, agent),
+            ...(members.find((member) => member.agentId === agent.id)
+              ? {
+                  agentReadThroughSequence: members.find((member) => member.agentId === agent.id)!
+                    .agentReadThroughSequence,
+                }
+              : {}),
           }
         : peer
           ? {
@@ -1344,6 +1326,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       page,
       resolveTarget: (value) => this.resolveAgentTarget(workspaceId, agentId, value),
       resolveAnchor: (conversationId, anchor) => this.resolveMessage(conversationId, anchor),
+      agentReadChanged: this.realtime?.agentReadChanged?.bind(this.realtime),
     });
   }
 

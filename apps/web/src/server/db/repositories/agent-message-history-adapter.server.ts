@@ -4,7 +4,7 @@ import {
   agentHistoryConsumptionScope,
   type ResolvedAgentTarget,
 } from "./resolved-agent-target.server";
-import type { DirectConversationPageOptions } from "./direct-conversation.repositories.server";
+import type { DirectConversationPageOptions } from "./direct-conversation-types.server";
 
 export function readDirectConversationMessagesPage(input: {
   db: PrismaClient;
@@ -17,6 +17,12 @@ export function readDirectConversationMessagesPage(input: {
     conversationId: string,
     anchor: string,
   ): Promise<{ id: string; sequence: number; threadRootId: string | null }>;
+  agentReadChanged?: (input: {
+    workspaceId: string;
+    conversationId: string;
+    agentId: string;
+    readThroughSequence: number;
+  }) => Promise<void>;
 }) {
   return input.resolveTarget(input.target).then((resolved) => {
     const { conversationId, threadRootId, canonicalTarget, isChannel } = resolved;
@@ -29,6 +35,7 @@ export function readDirectConversationMessagesPage(input: {
       isChannel,
       page: input.page,
       consumptionScope: agentHistoryConsumptionScope(input.agentId, resolved),
+      agentReadChanged: input.agentReadChanged,
       resolveAnchor: (anchor) => input.resolveAnchor(conversationId, anchor),
     });
   });
