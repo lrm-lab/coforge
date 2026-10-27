@@ -119,6 +119,19 @@ function instance(schema: z.ZodType, value: unknown): string {
   return json(schema.parse(value));
 }
 
+/** What `__lifecycle service-definition` prints for an example macOS machine: the manager and
+ * contents the real daemon host renders, without the path it also knows. */
+function exampleServiceDefinition() {
+  const { manager, contents } = resolveServiceDefinition({
+    platform: "darwin",
+    homeDirectory: HOMES.darwin,
+    uid: 501,
+    environment: {},
+    serverUrl: "https://coforge.example",
+  });
+  return { manager, contents };
+}
+
 function jsonSchema(schema: z.ZodType): string {
   return json(z.toJSONSchema(schema));
 }
@@ -398,14 +411,7 @@ export function renderInstallerContract(): Map<string, string> {
       instance(LifecycleServiceDefinitionSchema, {
         lifecycle_protocol: LIFECYCLE_PROTOCOL,
         version: "0.2.0",
-        // Rendered by the real daemon host for an example macOS machine.
-        ...resolveServiceDefinition({
-          platform: "darwin",
-          homeDirectory: HOMES.darwin,
-          uid: 501,
-          environment: {},
-          serverUrl: "https://coforge.example",
-        }),
+        ...exampleServiceDefinition(),
       }),
     ],
     ["lifecycle.status.schema.json", jsonSchema(LifecycleStatusSchema)],
