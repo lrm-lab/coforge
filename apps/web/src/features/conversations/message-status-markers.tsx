@@ -14,7 +14,7 @@ export function SavedMessageMarker() {
 
 export function AgentReadReceipt() {
   return (
-    <div className="message-text flex items-center justify-end gap-1 text-xs leading-4 text-tertiary">
+    <div className="message-text flex items-center justify-end gap-1 font-mono text-xs leading-4 text-tertiary">
       <Check aria-hidden="true" className="size-3" />
       {m.conversation_read()}
     </div>

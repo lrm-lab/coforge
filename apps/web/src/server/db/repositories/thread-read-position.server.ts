@@ -36,7 +36,7 @@ export async function readThroughOf(
 /** Moves an Agent's read position forward to `sequence`, in the thread `threadRootId` names or else
  * in the conversation, never back. */
 export async function advanceAgentRead(
-  db: PrismaClient,
+  db: Prisma.TransactionClient | PrismaClient,
   read: {
     memberId: string;
     conversationId: string;

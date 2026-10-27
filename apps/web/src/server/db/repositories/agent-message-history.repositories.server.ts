@@ -18,7 +18,11 @@ import {
   isSequenceAnchor,
   sequenceAnchor,
 } from "./direct-conversation-anchor.server";
-import { readThroughOf, advanceAgentRead } from "./thread-read-position.server";
+import { readThroughOf } from "./thread-read-position.server";
+import {
+  advanceAgentReadPosition,
+  type AgentReadChangedInput,
+} from "#src/server/conversations/agent-read-realtime.server";
 
 /** Windowing and read-through after the caller has authorized and resolved its target. */
 export async function readAgentMessagePage(
@@ -33,12 +37,7 @@ export async function readAgentMessagePage(
     page: AgentMessagesPage;
     consumptionScope?: AgentHistoryConsumptionScope;
     additionalScope?: Prisma.MessageWhereInput;
-    agentReadChanged?(input: {
-      workspaceId: string;
-      conversationId: string;
-      agentId: string;
-      readThroughSequence: number;
-    }): Promise<void>;
+    agentReadChanged?(input: AgentReadChangedInput): Promise<void>;
     resolveAnchor(
       anchor: string,
     ): Promise<{ id: string; sequence: number; threadRootId: string | null }>;
@@ -163,23 +162,17 @@ export async function readAgentMessagePage(
   const agentReadThroughSequence =
     modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
   if (agentReadThroughSequence) {
-    const advanced = await advanceAgentRead(db, {
+    const publication = await advanceAgentReadPosition({
+      db,
       memberId: agentMember.id,
       conversationId,
       workspaceId,
       agentId,
       threadRootId,
       sequence: agentReadThroughSequence,
+      isDirectConversation: !isChannel,
     });
-    if (advanced && !isChannel && !threadRootId) {
-      const publication = agentReadChanged?.({
-        workspaceId,
-        conversationId,
-        agentId,
-        readThroughSequence: agentReadThroughSequence,
-      });
-      void publication?.catch(() => {});
-    }
+    if (publication) void agentReadChanged?.(publication)?.catch(() => {});
   }
   return {
     messages,

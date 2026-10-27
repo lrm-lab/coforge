@@ -121,6 +121,7 @@ import {
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import { advanceAgentReadGroups } from "./agent-read-groups.repositories.server";
 import {
   searchAgentMessagePage,
   type AgentMessageSearchOptions,
@@ -1450,7 +1451,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }> {
     const bounded = clampPageLimit(limit, 100);
     const scope = target ? await this.drainScope(workspaceId, agentId, target) : undefined;
-    return this.db.$transaction(async (tx) => {
+    const drained = await this.db.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<
         Array<
           Pick<
@@ -1468,7 +1469,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         LIMIT ${bounded + 1}`;
       const hasMore = rows.length > bounded;
       const page = rows.slice(0, bounded);
-      if (page.length === 0) return { messages: [], hasMore: false };
+      if (page.length === 0)
+        return { result: { messages: [], hasMore: false }, agentReadChanges: [] };
       const messageRows = await tx.message.findMany({
         where: { id: { in: page.map((row) => row.id) } },
         include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
@@ -1534,31 +1536,25 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         select: { id: true, conversationId: true },
       });
       const memberIdByConversation = new Map(members.map((m) => [m.conversationId, m.id]));
-      for (const group of targetGroups.values()) {
-        if (group.threadRootId) {
-          const memberId = memberIdByConversation.get(group.conversationId);
-          if (!memberId) throw new Error("Agent is not a conversation member");
-          await advanceThreadRead(
-            tx,
-            memberId,
-            group.conversationId,
-            workspaceId,
-            group.threadRootId,
-            group.maxSequence,
-          );
-        } else {
-          await tx.conversationMember.updateMany({
-            where: {
-              conversationId: group.conversationId,
-              agentId,
-              agentReadThroughSequence: { lt: group.maxSequence },
-            },
-            data: { agentReadThroughSequence: group.maxSequence },
-          });
-        }
-      }
-      return { messages, hasMore };
+      const directConversationById = new Map(
+        messageRows.map((message) => [
+          message.conversationId,
+          message.conversation.channelName === null,
+        ]),
+      );
+      const agentReadChanges = await advanceAgentReadGroups({
+        db: tx,
+        groups: targetGroups.values(),
+        memberIdByConversation,
+        directConversationById,
+        workspaceId,
+        agentId,
+      });
+      return { result: { messages, hasMore }, agentReadChanges };
     });
+    for (const change of drained.agentReadChanges)
+      void this.realtime?.agentReadChanged?.(change)?.catch(() => {});
+    return drained.result;
   }
 
   /**

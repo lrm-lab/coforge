@@ -34,7 +34,16 @@ test("events drain and recovery keep the unread rule across channels, direct mes
         runtimeConfig: {},
       },
     });
-    const repo = new PrismaDirectConversationRepository(db);
+    const agentReadChanges: object[] = [];
+    const repo = new PrismaDirectConversationRepository(
+      db,
+      {},
+      {
+        agentReadChanged: async (event) => {
+          agentReadChanges.push(event);
+        },
+      },
+    );
     const channels = new PublicChannels(db, { execute: async (_scope, persist) => persist() });
     const opened = await repo.openForUser(workspace.id, user.id, agent.id);
     const general = await enrollGeneralChannel(db, workspace.id);
@@ -200,6 +209,14 @@ test("events drain and recovery keep the unread rule across channels, direct mes
       expect.arrayContaining(expected),
     );
     expect(drained.messages).toHaveLength(expected.length);
+    expect(agentReadChanges).toEqual([
+      {
+        workspaceId: workspace.id,
+        conversationId: opened.conversationId,
+        agentId: agent.id,
+        readThroughSequence: readRoot.sequence,
+      },
+    ]);
     expect(await repo.drainAgentEvents(workspace.id, agent.id, 50)).toEqual({
       messages: [],
       hasMore: false,
