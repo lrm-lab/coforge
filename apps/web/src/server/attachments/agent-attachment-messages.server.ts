@@ -160,7 +160,9 @@ export function attachmentMessageRefusal(error: unknown) {
           error:
             error.errorId === "attachment-message-text-only"
               ? "attachment discussion sends support plain text only; attachments and explicit mentions are unsupported"
-              : "attachment message is not available",
+              : error.errorId === "attachment-comments-no-preview"
+                ? "this file has no preview (a type without one, or a text file over 5 MB), so it takes no comments"
+                : "attachment message is not available",
           code: error.code,
           retryable: false,
         },

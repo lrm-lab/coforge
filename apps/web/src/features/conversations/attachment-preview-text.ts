@@ -1,22 +1,25 @@
 import { previewText } from "./attachment-preview-kind";
 
+/** What reading a text preview found: its text, a file past the limit, or nothing to show. */
+export type PreviewRead = { text: string } | "too-large" | "unavailable";
+
 /**
  * Reads a text attachment for its preview through the authenticated route, as Raft does before it
  * opens one: a declared length past `maxBytes` stops before reading, and the stream is cancelled as
- * soon as it passes the limit. `null` when the file has no preview to show (too large, not UTF-8
- * text, blank, or the request failed); an abort through `signal` rejects instead.
+ * soon as it passes the limit (`"too-large"`). `"unavailable"` when the file has no text to show
+ * (not UTF-8 text, blank, or the request failed); an abort through `signal` rejects instead.
  */
 export async function readPreviewText(
   href: string,
   maxBytes: number,
   signal: AbortSignal,
-): Promise<string | null> {
+): Promise<PreviewRead> {
   try {
     const response = await fetch(href, { signal });
-    if (!response.ok || !response.body) return null;
+    if (!response.ok || !response.body) return "unavailable";
     if (Number(response.headers.get("content-length")) > maxBytes) {
       void response.body.cancel();
-      return null;
+      return "too-large";
     }
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -27,7 +30,7 @@ export async function readPreviewText(
       total += value.byteLength;
       if (total > maxBytes) {
         void reader.cancel();
-        return null;
+        return "too-large";
       }
       chunks.push(value);
     }
@@ -37,9 +40,10 @@ export async function readPreviewText(
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return previewText(bytes);
+    const text = previewText(bytes);
+    return text === null ? "unavailable" : { text };
   } catch (error) {
     if (signal.aborted) throw error;
-    return null;
+    return "unavailable";
   }
 }

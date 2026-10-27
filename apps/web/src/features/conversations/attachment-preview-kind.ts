@@ -192,25 +192,26 @@ export function attachmentPreviewKind(
 }
 
 /**
- * The most a text preview reads, per kind, as in Raft 1.0.53 for text and Markdown. A larger file
- * has no preview (its discussion still opens), so neither the card nor the server offers a place
- * in it to comment on.
+ * The most a text preview (Markdown, text, CSV, HTML) reads into the page, so a huge file cannot
+ * hang the browser. A larger text file has no preview, like any type without one.
  */
-export const TEXT_PREVIEW_MAX_BYTES = {
-  markdown: 64 * 1024,
-  text: 96 * 1024,
-  csv: 2 * 1024 * 1024,
-  html: 2 * 1024 * 1024,
-} as const;
+export const TEXT_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 
-type TextPreviewKind = keyof typeof TEXT_PREVIEW_MAX_BYTES;
+const TEXT_PREVIEW_KINDS = new Set<AttachmentPreviewKind>(["markdown", "text", "csv", "html"]);
 
-export const isTextPreviewKind = (kind: AttachmentPreviewKind | null): kind is TextPreviewKind =>
-  kind !== null && kind in TEXT_PREVIEW_MAX_BYTES;
+export const isTextPreviewKind = (
+  kind: AttachmentPreviewKind | null,
+): kind is "markdown" | "text" | "csv" | "html" => kind !== null && TEXT_PREVIEW_KINDS.has(kind);
 
-/** `attachmentPreviewKind`, with a text kind dropped when the file is past its limit. */
+type StoredFile = { fileName: string; contentType: string; sizeBytes: number; previewUrl?: string };
+
+/**
+ * The preview one stored file opens, or `null` when it has none: a type without one, or a text
+ * file past `TEXT_PREVIEW_MAX_BYTES`. A file with no preview downloads when opened and takes no
+ * comments, as on Raft.
+ */
 export function previewKindFor(
-  file: { fileName: string; contentType: string; sizeBytes: number; previewUrl?: string },
+  file: StoredFile,
   applicationOrigin: string | undefined = globalThis.location?.origin,
 ): AttachmentPreviewKind | null {
   const kind = attachmentPreviewKind(
@@ -219,7 +220,22 @@ export function previewKindFor(
     file.previewUrl,
     applicationOrigin,
   );
-  return isTextPreviewKind(kind) && file.sizeBytes > TEXT_PREVIEW_MAX_BYTES[kind] ? null : kind;
+  return isTextPreviewKind(kind) && file.sizeBytes > TEXT_PREVIEW_MAX_BYTES ? null : kind;
+}
+
+/**
+ * Whether a file takes comments: one the reader can look at, an image or a file with a preview.
+ * The server asks this before every new comment. A PDF counts by its type: it previews wherever
+ * attachments are delivered from their own origin, which the server does not see per file.
+ */
+export function takesComments(
+  file: StoredFile,
+  applicationOrigin: string | undefined = globalThis.location?.origin,
+): boolean {
+  if (file.contentType.startsWith("image/")) return true;
+  if (getFileExtension(file.fileName) === "pdf" || file.contentType === "application/pdf")
+    return true;
+  return previewKindFor(file, applicationOrigin) !== null;
 }
 
 /**

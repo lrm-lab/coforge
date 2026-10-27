@@ -46,8 +46,8 @@ export async function readAgentAttachmentComments(
     attachmentId,
     viewer: {
       canComment: page.canComment,
-      canResolve: page.canComment,
-      ...(page.canComment
+      canResolve: page.canReact,
+      ...(page.canReact
         ? { resolveAction: { type: "reaction" as const, emoji: "✅" as const } }
         : {}),
       ...(page.disabledReason ? { reason: page.disabledReason } : {}),

@@ -53,15 +53,16 @@ export function FileRow({
       href={`${href}?download`}
     />
   );
-  // One preview affordance per card, covering the whole card body — the thumbnail *and* the name —
-  // with the actions beside it: a file opens wherever the reader clicks the card, not only on the
-  // thumbnail (or, worse, only on the file name). Every file can open its discussion, including a type without a preview.
-  const previewable = previewKindFor(file);
-  const previewLabel = isImage
+  // One affordance per card, covering the whole card body — the thumbnail *and* the name — with
+  // the actions beside it: a file opens wherever the reader clicks the card, not only on the
+  // thumbnail (or, worse, only on the file name). A file without a preview downloads instead, as
+  // on Raft, and takes no comments.
+  const opens = isImage || previewKindFor(file) !== null;
+  const cardLabel = isImage
     ? file.fileName
-    : previewable
+    : opens
       ? m.conversation_attachment_preview_open({ name: file.fileName })
-      : m.attachment_comments_open({ name: file.fileName });
+      : m.attachment_preview_download({ name: file.fileName });
   // `Button` wraps children in one `display: block` span. The row owns its own flex so the
   // thumbnail and name sit side by side instead of stacking, then centering in the leftover
   // `flex-1` space (`justify-center` is the Button default).
@@ -100,19 +101,31 @@ export function FileRow({
   return (
     <li className="flex items-center gap-2 rounded-xl border border-secondary bg-primary py-2 pr-2 pl-3">
       <div className="min-w-0 flex-1">
-        <AttachmentReviewDialog file={file}>
-          {({ loading }) => (
-            <Button
-              color="tertiary"
-              noTextPadding
-              isLoading={loading}
-              aria-label={previewLabel}
-              className="h-auto w-full min-w-0 justify-start rounded-lg p-0 text-left hover:bg-transparent [&>span]:w-full [&>span]:min-w-0"
-            >
-              {cardBody}
-            </Button>
-          )}
-        </AttachmentReviewDialog>
+        {opens ? (
+          <AttachmentReviewDialog file={file}>
+            {({ loading }) => (
+              <Button
+                color="tertiary"
+                noTextPadding
+                isLoading={loading}
+                aria-label={cardLabel}
+                className={CARD_BODY}
+              >
+                {cardBody}
+              </Button>
+            )}
+          </AttachmentReviewDialog>
+        ) : (
+          <Button
+            color="tertiary"
+            noTextPadding
+            href={`${href}?download`}
+            aria-label={cardLabel}
+            className={CARD_BODY}
+          >
+            {cardBody}
+          </Button>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {messageId && onOpenMessage && (
@@ -129,6 +142,9 @@ export function FileRow({
     </li>
   );
 }
+
+const CARD_BODY =
+  "h-auto w-full min-w-0 justify-start rounded-lg p-0 text-left hover:bg-transparent [&>span]:w-full [&>span]:min-w-0";
 
 /** Card-shaped placeholder rows, in the real list's layout so nothing shifts when files land. */
 function FilesSkeleton() {

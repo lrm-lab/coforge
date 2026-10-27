@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  TEXT_PREVIEW_MAX_BYTES,
   attachmentPreviewKind,
   isFrameableDocumentUrl,
   previewKindFor,
+  takesComments,
   previewText,
 } from "#src/features/conversations/attachment-preview-kind";
 
@@ -130,23 +132,47 @@ describe("the other kinds are decided by name, then by content type", () => {
   });
 });
 
-describe("a text preview is bounded as in Raft and shows only UTF-8 text", () => {
+describe("a text preview reads up to 5 MB and shows only UTF-8 text", () => {
   const file = (fileName: string, sizeBytes: number) => ({
     fileName,
     contentType: "application/octet-stream",
     sizeBytes,
   });
 
-  test("text up to 96 KB and Markdown up to 64 KB preview; past that only the discussion opens", () => {
-    expect(previewKindFor(file("server.log", 96 * 1024), APP_ORIGIN)).toBe("text");
-    expect(previewKindFor(file("server.log", 96 * 1024 + 1), APP_ORIGIN)).toBeNull();
-    expect(previewKindFor(file("notes.md", 64 * 1024), APP_ORIGIN)).toBe("markdown");
-    expect(previewKindFor(file("notes.md", 64 * 1024 + 1), APP_ORIGIN)).toBeNull();
-    // CSV and HTML keep their larger bound; media is not a text preview at all.
-    expect(previewKindFor(file("data.csv", 2 * 1024 * 1024), APP_ORIGIN)).toBe("csv");
-    expect(previewKindFor(file("data.csv", 2 * 1024 * 1024 + 1), APP_ORIGIN)).toBeNull();
-    expect(previewKindFor(file("page.html", 1024 * 1024), APP_ORIGIN)).toBe("html");
-    expect(previewKindFor(file("clip.mp4", 40 * 1024 * 1024), APP_ORIGIN)).toBe("video");
+  const MB = 1024 * 1024;
+
+  test("a text file previews up to 5 MB, of any text kind; past that it has no preview", () => {
+    // Frank's 164 KB report, past the old 64 KB Markdown bound, previews.
+    expect(previewKindFor(file("report.md", 164 * 1024), APP_ORIGIN)).toBe("markdown");
+    for (const [name, kind] of [
+      ["report.md", "markdown"],
+      ["server.log", "text"],
+      ["data.csv", "csv"],
+      ["page.html", "html"],
+    ] as const) {
+      expect(previewKindFor(file(name, TEXT_PREVIEW_MAX_BYTES), APP_ORIGIN)).toBe(kind);
+      expect(previewKindFor(file(name, TEXT_PREVIEW_MAX_BYTES + 1), APP_ORIGIN)).toBeNull();
+    }
+    expect(TEXT_PREVIEW_MAX_BYTES).toBe(5 * MB);
+    // Media is not read into the page, so it has no such limit.
+    expect(previewKindFor(file("clip.mp4", 40 * MB), APP_ORIGIN)).toBe("video");
+  });
+
+  test("a file takes comments when it can be looked at: an image or a file with a preview", () => {
+    const typed = (fileName: string, contentType: string, sizeBytes = 1024) => ({
+      fileName,
+      contentType,
+      sizeBytes,
+    });
+    expect(takesComments(typed("report.md", "text/markdown", 164 * 1024), APP_ORIGIN)).toBe(true);
+    expect(takesComments(typed("photo.png", "image/png", 20 * MB), APP_ORIGIN)).toBe(true);
+    expect(takesComments(typed("clip.mp4", "video/mp4"), APP_ORIGIN)).toBe(true);
+    // A PDF previews from the delivery origin, which the server never sees: its type decides.
+    expect(takesComments(typed("brief.pdf", "application/pdf"), undefined)).toBe(true);
+    expect(takesComments(typed("bundle.zip", "application/zip"), APP_ORIGIN)).toBe(false);
+    expect(
+      takesComments(typed("huge.log", "text/plain", TEXT_PREVIEW_MAX_BYTES + 1), APP_ORIGIN),
+    ).toBe(false);
   });
 
   test("the whole file must decode as UTF-8 and hold more than whitespace", () => {

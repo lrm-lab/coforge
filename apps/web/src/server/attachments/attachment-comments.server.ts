@@ -4,7 +4,7 @@ import {
   anchorTypeForPreview,
   type AttachmentCommentAnchor,
 } from "#src/features/conversations/attachment-comment-anchors";
-import { previewKindFor } from "#src/features/conversations/attachment-preview-kind";
+import { previewKindFor, takesComments } from "#src/features/conversations/attachment-preview-kind";
 import type { mapBrowserMessage } from "#src/server/conversations/conversation-history.server";
 import type { VersionedReactions } from "#src/server/conversations/reaction-write.server";
 
@@ -113,7 +113,9 @@ export class AttachmentComments {
       attachmentId: input.attachmentId,
       conversationId: access.conversationId,
       threadTarget: `attachment:${input.attachmentId}`,
-      canComment: disabledReason === null,
+      // A file without a preview keeps its comments readable and resolvable, but takes no new ones.
+      canComment: disabledReason === null && takesComments(access),
+      canReact: disabledReason === null,
       disabledReason,
     };
   }
@@ -125,7 +127,10 @@ export class AttachmentComments {
     if (input.rootId && input.anchor) throw new AppError("INVALID_INPUT");
     return this.store.post(actor, { ...input, body }, (access) => {
       writable(access);
-      // Only the position kind this file's preview offers; the file's content is never read here.
+      // A file no one can look at takes no new comments (those it already has stay); one that can
+      // takes only the position kind its preview offers. The file's content is never read here.
+      if (!takesComments(access))
+        throw new AppError("ACCESS_DENIED", { errorId: "attachment-comments-no-preview" });
       if (input.anchor && input.anchor.type !== anchorTypeForPreview(previewKindFor(access)))
         throw new AppError("INVALID_INPUT");
     });

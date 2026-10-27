@@ -203,26 +203,24 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "mobile-dark.png"))} }));
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
-    await page.click(${JSON.stringify(`button[aria-label="Comments on ${zipName}"]`)});
-    await page.waitForSelector('[role="dialog"] textarea', { timeout: 5000 });
-    await page.fill('[role="dialog"] textarea', ${JSON.stringify(zipBody)});
-    // Enter sends, as in Raft and the composer.
-    await page.click('[role="dialog"] textarea');
-    await page.keyboard.press("Enter");
-    await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(zipBody)});
-    const zipSafety = await page.evaluate(({ id, contents }) => ({
-      renderedBytes: document.body.innerText.includes(contents),
-      previewRequests: performance.getEntriesByType("resource").filter((entry) => new URL(entry.name).pathname === "/api/attachments/" + id).length,
-      download: Boolean(document.querySelector('[role="dialog"] a[href="/api/attachments/' + id + '?download"]')),
-    }), { id: ${JSON.stringify(zipAttachmentId)}, contents: ${JSON.stringify(zipContent)} });
-    if (zipSafety.renderedBytes || zipSafety.previewRequests !== 0 || !zipSafety.download) throw new Error("ZIP preview/download contract changed: " + JSON.stringify(zipSafety));
-    console.log("E2E_ZIP_DISCUSSION_WITHOUT_PREVIEW");
+    // A ZIP has no preview, so its card is its download, as on Raft: no dialog, no discussion.
+    const zipCard = await page.evaluate(({ id, name, contents }) => {
+      const link = document.querySelector('a[aria-label="Download ' + name + '"]');
+      return {
+        href: link?.getAttribute("href"),
+        renderedBytes: document.body.innerText.includes(contents),
+        commentsEntry: Boolean(document.querySelector('button[aria-label^="Comments on ' + name + '"]')),
+        previewRequests: performance.getEntriesByType("resource").filter((entry) => new URL(entry.name).pathname === "/api/attachments/" + id).length,
+      };
+    }, { id: ${JSON.stringify(zipAttachmentId)}, name: ${JSON.stringify(zipName)}, contents: ${JSON.stringify(zipContent)} });
+    if (zipCard.href !== "/api/attachments/${zipAttachmentId}?download" || zipCard.renderedBytes || zipCard.commentsEntry || zipCard.previewRequests !== 0) throw new Error("ZIP download contract changed: " + JSON.stringify(zipCard));
+    console.log("E2E_ZIP_DOWNLOADS_WITHOUT_DISCUSSION");
     console.log("E2E_COMMENTS_PERSISTED");
   `);
   expect(result).toContain("E2E_COMMENTS_PERSISTED");
-  expect(result).toContain("E2E_ZIP_DISCUSSION_WITHOUT_PREVIEW");
+  expect(result).toContain("E2E_ZIP_DOWNLOADS_WITHOUT_DISCUSSION");
   expect(await db.message.count({ where: { workspaceId, body } })).toBe(1);
-  expect(await db.message.count({ where: { workspaceId, body: zipBody } })).toBe(1);
+  expect(await db.message.count({ where: { workspaceId, body: zipBody } })).toBe(0);
   await db.conversation.update({ where: { id: conversationId }, data: { archivedAt: new Date() } });
   const archived = await runBrowser(`
     const task = await taskSpace("coforge-backend task116 review revisions");

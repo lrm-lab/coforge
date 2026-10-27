@@ -22,7 +22,7 @@ import {
   isTextPreviewKind,
   previewKindFor,
 } from "./attachment-preview-kind";
-import { readPreviewText } from "./attachment-preview-text";
+import { readPreviewText, type PreviewRead } from "./attachment-preview-text";
 import { LoadingImage } from "./loading-image";
 
 type ReviewFile = {
@@ -39,16 +39,13 @@ type ReviewFile = {
 const TOOLBAR_ICON = "text-fg-primary hover:text-fg-primary";
 
 /**
- * All file types have a discussion, even when this deployment cannot preview their bytes.
- *
- * A previewable file fills the screen under an icon bar, its comments closed until asked for, as
- * on Raft's page. One without a preview keeps a small dialog of its discussion alone, where Raft
- * downloads it: every file here has a discussion an Agent may write under, so the reader needs a
- * way in to it.
+ * An image's lightbox, or a previewable file filling the screen under an icon bar, its comments
+ * closed until asked for, as on Raft's page. A file without a preview never opens here: its card
+ * downloads it (`previewKindFor`).
  *
  * A text preview is read before the dialog opens, as in Raft: `children` (the card) shows
- * `loading` meanwhile, and a file that turns out to have no preview opens its discussion alone,
- * like any other file without one.
+ * `loading` meanwhile. A file found to have no preview after all (past `TEXT_PREVIEW_MAX_BYTES`,
+ * or no UTF-8 text) downloads instead of opening.
  */
 export function AttachmentReviewDialog({
   file,
@@ -84,30 +81,34 @@ export function AttachmentReviewDialog({
     setJumpTo(null);
   }, [jumpTo, surface, commentsOnPhone]);
   const href = `/api/attachments/${file.id}`;
-  const available = previewKindFor(file);
+  const kind = previewKindFor(file);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  // The text a preview shows, read once per card: `null` when it turned out to have none.
-  const [text, setText] = useState<string | null | undefined>(undefined);
+  // What reading the text preview found, once per card.
+  const [read, setRead] = useState<PreviewRead | undefined>(undefined);
+  const text = typeof read === "object" ? read.text : undefined;
   const reading = useRef<AbortController | null>(null);
   useEffect(() => () => reading.current?.abort(), []);
-  const kind = isTextPreviewKind(available) && text === null ? null : available;
   const onOpenChange = (next: boolean) => {
     if (!next) {
       setOpen(false);
       setPendingAnchor(null);
       return;
     }
-    if (!isTextPreviewKind(available) || text !== undefined) return setOpen(true);
+    // A file found to have no preview after all (past the limit, or no text) downloads instead,
+    // as one without a preview does from its card.
+    if (read === "too-large" || read === "unavailable") return download(`${href}?download`);
+    if (!isTextPreviewKind(kind) || read !== undefined) return setOpen(true);
     if (loading) return;
     setLoading(true);
     const controller = new AbortController();
     reading.current = controller;
-    void readPreviewText(href, TEXT_PREVIEW_MAX_BYTES[available], controller.signal).then(
+    void readPreviewText(href, TEXT_PREVIEW_MAX_BYTES, controller.signal).then(
       (value) => {
-        setText(value);
+        setRead(value);
         setLoading(false);
-        setOpen(true);
+        if (typeof value === "object") setOpen(true);
+        else download(`${href}?download`);
       },
       // Aborted: the card is gone.
       () => {},
@@ -117,8 +118,7 @@ export function AttachmentReviewDialog({
   // to load shows its "no preview" note on the plain sheet, where it can be read.
   const isImage = file.contentType.startsWith("image/");
   const image = isImage && !imageFailed;
-  const canPreview = isImage || kind !== null;
-  const showComments = !isImage && (commentsOnPhone || !canPreview);
+  const showComments = !isImage && commentsOnPhone;
   const commentsShown = commentsOnPhone || commentsExpanded;
   const toast = useAppToast();
   const copyLabel =
@@ -134,17 +134,13 @@ export function AttachmentReviewDialog({
       <ModalOverlay
         isDismissable
         className={cn(
-          canPreview &&
-            "px-0 backdrop-blur-none sm:px-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]",
+          "px-0 backdrop-blur-none sm:px-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]",
           image && "bg-black/65",
         )}
       >
         <Modal
           className={cn(
-            "w-full max-sm:overflow-hidden",
-            canPreview
-              ? "h-dvh max-h-dvh rounded-none shadow-none sm:rounded-none"
-              : "h-full max-h-full sm:h-[85vh] sm:max-w-lg",
+            "h-dvh max-h-dvh w-full rounded-none shadow-none max-sm:overflow-hidden sm:rounded-none",
             image && "bg-transparent",
           )}
         >
@@ -162,7 +158,7 @@ export function AttachmentReviewDialog({
                       {file.fileName}
                     </span>
                   </p>
-                  {canPreview && !isImage && (
+                  {!isImage && (
                     <ButtonUtility
                       icon={MessageSquare01}
                       size="sm"
@@ -211,51 +207,49 @@ export function AttachmentReviewDialog({
                   />
                 </div>
                 <div className="flex min-h-0 flex-1">
-                  {canPreview && (
-                    <div
-                      className={cn(
-                        "min-h-0 min-w-0 flex-1 flex-col overflow-auto lg:flex",
-                        commentsOnPhone ? "hidden" : "flex",
-                      )}
-                    >
-                      {image ? (
-                        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                          {/* The large tier over the thumbnail the message already showed until it
+                  <div
+                    className={cn(
+                      "min-h-0 min-w-0 flex-1 flex-col overflow-auto lg:flex",
+                      commentsOnPhone ? "hidden" : "flex",
+                    )}
+                  >
+                    {image ? (
+                      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                        {/* The large tier over the thumbnail the message already showed until it
                             arrives; Download keeps the original. */}
-                          <LoadingImage
-                            src={file.largeUrl ?? file.previewUrl ?? href}
-                            placeholderSrc={file.thumbnailUrl}
-                            fallbackSrc={file.largeUrl || file.previewUrl ? href : undefined}
-                            onFailed={() => setImageFailed(true)}
-                            alt={file.fileName}
-                            className="flex size-full items-center justify-center"
-                            imgClassName="max-h-full max-w-full object-contain"
-                            skeletonClassName="m-auto size-[min(24rem,100%)]"
-                          />
-                        </div>
-                      ) : kind ? (
-                        <AttachmentPreview
-                          fileName={file.fileName}
-                          kind={kind}
-                          href={href}
-                          previewUrl={file.previewUrl}
-                          text={text ?? undefined}
-                          anchoring={anchoring}
-                          commentsOpen={commentsExpanded}
+                        <LoadingImage
+                          src={file.largeUrl ?? file.previewUrl ?? href}
+                          placeholderSrc={file.thumbnailUrl}
+                          fallbackSrc={file.largeUrl || file.previewUrl ? href : undefined}
+                          onFailed={() => setImageFailed(true)}
+                          alt={file.fileName}
+                          className="flex size-full items-center justify-center"
+                          imgClassName="max-h-full max-w-full object-contain"
+                          skeletonClassName="m-auto size-[min(24rem,100%)]"
                         />
-                      ) : (
-                        <Empty>
-                          <EmptyTitle>{m.attachment_comments_no_preview()}</EmptyTitle>
-                        </Empty>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    ) : kind ? (
+                      <AttachmentPreview
+                        fileName={file.fileName}
+                        kind={kind}
+                        href={href}
+                        previewUrl={file.previewUrl}
+                        text={text}
+                        anchoring={anchoring}
+                        commentsOpen={commentsExpanded}
+                      />
+                    ) : (
+                      <Empty>
+                        <EmptyTitle>{m.attachment_comments_no_preview()}</EmptyTitle>
+                      </Empty>
+                    )}
+                  </div>
                   {!isImage && (
                     <div
                       className={cn(
                         "min-h-0 min-w-0 flex-1",
-                        canPreview && "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
-                        canPreview && (commentsExpanded ? "lg:block" : "lg:hidden"),
+                        "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
+                        commentsExpanded ? "lg:block" : "lg:hidden",
                         showComments ? "block" : "hidden",
                       )}
                     >
@@ -283,4 +277,13 @@ export function AttachmentReviewDialog({
       </ModalOverlay>
     </DialogTrigger>
   );
+}
+
+/**
+ * Downloads by navigating to the `?download` address, which answers `Content-Disposition:
+ * attachment`, so the page stays where it is. A navigation is not a pop-up: Safari lets it through
+ * even after the asynchronous read, where it may block a synthetic link click.
+ */
+function download(href: string) {
+  window.location.assign(href);
 }

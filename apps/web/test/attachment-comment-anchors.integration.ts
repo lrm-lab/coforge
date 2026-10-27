@@ -57,18 +57,42 @@ test("each previewable kind stores its own anchor, read back on the comment", as
     const whole = await comments.post(f.actor, { attachmentId: csv.id, body: "Whole file" });
     expect(whole.anchor).toBeNull();
 
-    // A log past the 96 KB text preview has no lines to point at, only its whole-file discussion.
-    const large = await sibling("server.log", "text/plain", 96 * 1024 + 1);
-    await expect(
-      comments.post(f.actor, {
-        attachmentId: large.id,
-        body: "Too far down",
-        anchor: { type: "lines", data: { start: 1, end: 1 } },
-      }),
-    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    // A 164 KB report, past the old 64 KB Markdown bound, takes a section comment now.
+    const report = await sibling("report.md", "text/markdown", 164 * 1024);
+    const section = {
+      type: "md-section" as const,
+      data: { headingId: "summary", headingTitle: "Summary" },
+    };
     expect(
-      (await comments.post(f.actor, { attachmentId: large.id, body: "Whole" })).anchor,
+      (
+        await comments.post(f.actor, {
+          attachmentId: report.id,
+          body: "This section",
+          anchor: section,
+        })
+      ).anchor,
+    ).toEqual(section);
+
+    // A PDF takes comments by its type; a ZIP has no preview, lists none, and takes none.
+    const pdf = await sibling("brief.pdf", "application/pdf");
+    expect(
+      (await comments.post(f.actor, { attachmentId: pdf.id, body: "Brief" })).anchor,
     ).toBeNull();
+    const zip = await sibling("bundle.zip", "application/zip");
+    expect(await comments.list(f.actor, { attachmentId: zip.id })).toMatchObject({
+      canComment: false,
+      canReact: true,
+    });
+    await expect(
+      comments.post(f.actor, { attachmentId: zip.id, body: "Zip" }),
+    ).rejects.toMatchObject({ code: "ACCESS_DENIED", errorId: "attachment-comments-no-preview" });
+
+    // A log past the 5 MB preview has no preview, so it takes no comments at all.
+    const large = await sibling("server.log", "text/plain", 5 * 1024 * 1024 + 1);
+    for (const anchor of [{ type: "lines" as const, data: { start: 1, end: 1 } }, undefined])
+      await expect(
+        comments.post(f.actor, { attachmentId: large.id, body: "Here", anchor }),
+      ).rejects.toMatchObject({ code: "ACCESS_DENIED", errorId: "attachment-comments-no-preview" });
   } finally {
     await f.close();
   }

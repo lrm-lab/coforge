@@ -12,7 +12,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * built Web with development skip-auth, PostgreSQL, Redis, Centrifugo and ego-browser.
  * DATABASE_URL, COFORGE_E2E_WEB_URL, COFORGE_E2E_CENTRIFUGO_URL and COFORGE_FILE_STORAGE_DIR must
  * name that stack. Creates one channel with a Markdown, a CSV and two `.ts` files (TypeScript and an
- * MPEG transport stream, both labelled `video/mp2t`) and a log past the text preview's bound, and
+ * MPEG transport stream, both labelled `video/mp2t`) and a log past the line-comment limit, and
  * deletes them afterwards.
  * Screenshots: .amp/e2e/attachment-comment-anchors/. */
 const databaseUrl = Bun.env.DATABASE_URL;
@@ -267,19 +267,18 @@ test("a TypeScript file labelled video/mp2t takes line comments; a real transpor
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
     await page.click(${JSON.stringify(open(streamName))});
-    // Read before the dialog opens: not UTF-8, so only its discussion opens, as for any file
-    // without a preview.
-    await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes("Comments here relate only to"), undefined, { timeout: 10000 });
-    if (await page.evaluate(() => !!document.querySelector('[role="dialog"] [data-anchor-line], [role="dialog"] pre')))
-      throw new Error("binary rendered as lines");
-
-    // A log past the 96 KB text bound is not read at all: its card opens the discussion.
-    await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
-    await page.click(${JSON.stringify(`button[aria-label="Comments on ${largeName}"]`)});
-    await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes("Comments here relate only to"), undefined, { timeout: 10000 });
-    await page.waitForTimeout(1000);
+    // Read before the dialog opens: not UTF-8, so it has no preview after all and downloads
+    // instead, as a file without one does from its card.
+    await page.waitForTimeout(1500);
+    if (await page.evaluate(() => !!document.querySelector('[role="dialog"]')))
+      throw new Error("a file with no text opened a dialog");
     console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "transport-stream.png"))} }));
+
+    // A log past the old 96 KB bound previews its lines.
+    await page.click(${JSON.stringify(open(largeName))});
+    await page.waitForSelector('[role="dialog"] [data-anchor-line="1"]', { timeout: 10000 });
+    await page.waitForTimeout(500);
+    console.log(await page.screenshot({ path: ${JSON.stringify(join(artifacts, "large-log.png"))} }));
     console.log("E2E_TS_BINARY_REFUSED");
   `);
   expect(result).toContain("E2E_TS_LINE_JUMP");

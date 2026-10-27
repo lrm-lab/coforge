@@ -17,7 +17,6 @@
   "attachment_comments_not_member": "加入原会话后可发表评论。",
   "attachment_comments_read_only": "原会话只读。",
   "attachment_comments_no_preview": "暂不支持预览",
-  "attachment_comments_open": "查看 {name} 的评论",
   "attachment_comments_empty_hint": "这里的评论仅关联 {name}。如需一般性讨论，请在消息列中回复。",
   "attachment_comments_comment_selection": "评论",
   "attachment_comments_anchor_section": "§ {title}",

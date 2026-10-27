@@ -17,7 +17,6 @@
   "attachment_comments_not_member": "Join the original conversation to comment.",
   "attachment_comments_read_only": "This conversation is read-only.",
   "attachment_comments_no_preview": "Preview unavailable",
-  "attachment_comments_open": "Comments on {name}",
   "attachment_comments_empty_hint": "Comments here relate only to {name}. For general discussion, reply in the message list.",
   "attachment_comments_comment_selection": "Comment",
   "attachment_comments_anchor_section": "§ {title}",
