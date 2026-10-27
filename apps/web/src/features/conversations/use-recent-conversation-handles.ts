@@ -6,7 +6,11 @@ type RecentMessage = {
   sequence: number;
 };
 
-/** Ranks mention completion by the handles that recently authored messages in this stream. */
+/**
+ * Ranks mention completion by the handles that recently authored messages in this stream. The
+ * sender handle, rather than display name, is the identity used by mention matching; older
+ * messages from the same handle do not push its recent entry down.
+ */
 export function useRecentConversationHandles(messages: readonly RecentMessage[]) {
   return useMemo(() => {
     const handles: string[] = [];

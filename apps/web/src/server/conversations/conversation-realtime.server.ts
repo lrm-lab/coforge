@@ -20,7 +20,8 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { readConversationSignalParticipants } from "#src/server/db/repositories/conversation-signal.repositories.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import { publishAgentReadChanged, type AgentReadChangedInput } from "./agent-read-realtime.server";
+import { publishAgentReadChanged } from "./agent-read-realtime.server";
+import type { AgentReadChangedInput } from "#src/server/db/repositories/agent-read-position.repositories.server";
 
 export type ConversationRealtimeMessage = {
   conversationId: string;

@@ -121,7 +121,12 @@ import {
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { advanceAgentReadGroups } from "./agent-read-groups.repositories.server";
+import {
+  advanceAgentReadGroups,
+  agentReadGroupsForPage,
+  isUserAgentDirectConversation,
+  publishAgentReadChangesAfterCommit,
+} from "./agent-read-groups.repositories.server";
 import {
   searchAgentMessagePage,
   type AgentMessageSearchOptions,
@@ -1451,15 +1456,17 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }> {
     const bounded = clampPageLimit(limit, 100);
     const scope = target ? await this.drainScope(workspaceId, agentId, target) : undefined;
-    const drained = await this.db.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<
-        Array<
-          Pick<
-            AgentRecoveryRow,
-            "id" | "conversationId" | "threadRootId" | "sequence" | "nonMemberMention"
-          >
-        >
-      >`
+    return publishAgentReadChangesAfterCommit(
+      () =>
+        this.db.$transaction(async (tx) => {
+          const rows = await tx.$queryRaw<
+            Array<
+              Pick<
+                AgentRecoveryRow,
+                "id" | "conversationId" | "threadRootId" | "sequence" | "nonMemberMention"
+              >
+            >
+          >`
         WITH unread AS (
           ${unreadAgentMessagesFragment(workspaceId, agentId, scope)}
         )
@@ -1467,94 +1474,83 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         FROM unread
         ORDER BY "conversationId", "rootSequence", "sequence"
         LIMIT ${bounded + 1}`;
-      const hasMore = rows.length > bounded;
-      const page = rows.slice(0, bounded);
-      if (page.length === 0)
-        return { result: { messages: [], hasMore: false }, agentReadChanges: [] };
-      const messageRows = await tx.message.findMany({
-        where: { id: { in: page.map((row) => row.id) } },
-        include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
-      });
-      const rowById = new Map(messageRows.map((row) => [row.id, row]));
-      const targetOf = await directTargets(
-        tx,
-        workspaceId,
-        agentId,
-        messageRows.map((row) => row.conversation),
-      );
-      const coordination = await readChannelCoordination(
-        tx,
-        workspaceId,
-        agentId,
-        messageRows
-          .filter((row) => row.conversation.channelName !== null)
-          .map((row) => row.conversationId),
-      );
-      const messages = page.map((row) => {
-        const message = rowById.get(row.id);
-        if (!message) throw new Error(`drained Agent message is missing: ${row.id}`);
-        return {
-          ...toAgentMessage(
-            message,
-            messageDeliveryTarget(message, targetOf),
-            agentId,
-            coordination.get(row.conversationId),
-          ),
-          // Reached the Agent outside the channel: readable, but it cannot reply there.
-          ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
-        };
-      });
-      // A notified non-member has no read boundary in the channel: the message is read once.
-      const nonMemberIds = page.filter((row) => row.nonMemberMention).map((row) => row.id);
-      if (nonMemberIds.length)
-        await tx.pendingMentionAction.updateMany({
-          where: {
-            workspaceId,
-            targetAgentId: agentId,
-            messageId: { in: nonMemberIds },
-            notifiedAt: { not: null },
-            targetReadAt: null,
-          },
-          data: { targetReadAt: new Date() },
-        });
-      const targetGroups = new Map<
-        string,
-        { conversationId: string; threadRootId: string | null; maxSequence: number }
-      >();
-      for (const row of page.filter((pageRow) => !pageRow.nonMemberMention)) {
-        const key = `${row.conversationId}:${row.threadRootId ?? ""}`;
-        const existing = targetGroups.get(key);
-        if (!existing || row.sequence > existing.maxSequence)
-          targetGroups.set(key, {
-            conversationId: row.conversationId,
-            threadRootId: row.threadRootId,
-            maxSequence: row.sequence,
+          const hasMore = rows.length > bounded;
+          const page = rows.slice(0, bounded);
+          if (page.length === 0)
+            return { result: { messages: [], hasMore: false }, agentReadChanges: [] };
+          const messageRows = await tx.message.findMany({
+            where: { id: { in: page.map((row) => row.id) } },
+            include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
           });
-      }
-      const members = await tx.conversationMember.findMany({
-        where: { agentId, conversationId: { in: [...new Set(page.map((r) => r.conversationId))] } },
-        select: { id: true, conversationId: true },
-      });
-      const memberIdByConversation = new Map(members.map((m) => [m.conversationId, m.id]));
-      const directConversationById = new Map(
-        messageRows.map((message) => [
-          message.conversationId,
-          message.conversation.channelName === null,
-        ]),
-      );
-      const agentReadChanges = await advanceAgentReadGroups({
-        db: tx,
-        groups: targetGroups.values(),
-        memberIdByConversation,
-        directConversationById,
-        workspaceId,
-        agentId,
-      });
-      return { result: { messages, hasMore }, agentReadChanges };
-    });
-    for (const change of drained.agentReadChanges)
-      void this.realtime?.agentReadChanged?.(change)?.catch(() => {});
-    return drained.result;
+          const rowById = new Map(messageRows.map((row) => [row.id, row]));
+          const targetOf = await directTargets(
+            tx,
+            workspaceId,
+            agentId,
+            messageRows.map((row) => row.conversation),
+          );
+          const coordination = await readChannelCoordination(
+            tx,
+            workspaceId,
+            agentId,
+            messageRows
+              .filter((row) => row.conversation.channelName !== null)
+              .map((row) => row.conversationId),
+          );
+          const messages = page.map((row) => {
+            const message = rowById.get(row.id);
+            if (!message) throw new Error(`drained Agent message is missing: ${row.id}`);
+            return {
+              ...toAgentMessage(
+                message,
+                messageDeliveryTarget(message, targetOf),
+                agentId,
+                coordination.get(row.conversationId),
+              ),
+              // Reached the Agent outside the channel: readable, but it cannot reply there.
+              ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
+            };
+          });
+          // A notified non-member has no read boundary in the channel: the message is read once.
+          const nonMemberIds = page.filter((row) => row.nonMemberMention).map((row) => row.id);
+          if (nonMemberIds.length)
+            await tx.pendingMentionAction.updateMany({
+              where: {
+                workspaceId,
+                targetAgentId: agentId,
+                messageId: { in: nonMemberIds },
+                notifiedAt: { not: null },
+                targetReadAt: null,
+              },
+              data: { targetReadAt: new Date() },
+            });
+          const targetGroups = agentReadGroupsForPage(page);
+          const members = await tx.conversationMember.findMany({
+            where: {
+              agentId,
+              conversationId: { in: [...new Set(page.map((r) => r.conversationId))] },
+            },
+            select: { id: true, conversationId: true },
+          });
+          const memberIdByConversation = new Map(members.map((m) => [m.conversationId, m.id]));
+          const directConversationById = new Map(
+            messageRows.map((message) => [
+              message.conversationId,
+              isUserAgentDirectConversation(message.conversation),
+            ]),
+          );
+          const agentReadChanges = await advanceAgentReadGroups({
+            db: tx,
+            groups: targetGroups.values(),
+            memberIdByConversation,
+            directConversationById,
+            workspaceId,
+            agentId,
+          });
+          return { result: { messages, hasMore }, agentReadChanges };
+        }),
+      this.realtime?.agentReadChanged?.bind(this.realtime),
+    );
   }
 
   /**

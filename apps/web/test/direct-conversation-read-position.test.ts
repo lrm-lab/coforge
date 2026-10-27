@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read-position.repositories.server";
+import { publishAgentReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
 
 /** Only an `unread` read moves the Agent's read position, and it moves it across a sequence the
  * conversation does not have. */
@@ -100,4 +102,48 @@ test("publishes an Agent read position only after the database advances", async 
       readThroughSequence: 3,
     },
   ]);
+});
+
+test("thread and channel read advances do not publish Agent DM events", async () => {
+  const db = {
+    conversationMember: { updateMany: async () => ({ count: 1 }) },
+    $executeRaw: async () => 1,
+  } as unknown as PrismaClient;
+  expect(
+    await advanceAgentReadPosition({
+      db,
+      conversationId: "channel-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      sequence: 4,
+      isDirectConversation: false,
+    }),
+  ).toBeUndefined();
+  expect(
+    await advanceAgentReadPosition({
+      db,
+      memberId: "member-1",
+      conversationId: "channel-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      threadRootId: "root-1",
+      sequence: 5,
+      isDirectConversation: false,
+    }),
+  ).toBeUndefined();
+});
+
+test("a rolled-back drain does not publish collected Agent read changes", async () => {
+  const published: object[] = [];
+  await expect(
+    publishAgentReadChangesAfterCommit(
+      async () => {
+        throw new Error("rollback");
+      },
+      async (change) => {
+        published.push(change);
+      },
+    ),
+  ).rejects.toThrow("rollback");
+  expect(published).toEqual([]);
 });

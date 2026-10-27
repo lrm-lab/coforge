@@ -22,7 +22,7 @@ import { readThroughOf } from "./thread-read-position.server";
 import {
   advanceAgentReadPosition,
   type AgentReadChangedInput,
-} from "#src/server/conversations/agent-read-realtime.server";
+} from "./agent-read-position.repositories.server";
 
 /** Windowing and read-through after the caller has authorized and resolved its target. */
 export async function readAgentMessagePage(

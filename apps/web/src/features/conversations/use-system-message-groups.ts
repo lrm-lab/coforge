@@ -2,7 +2,10 @@ import { useCallback, useState } from "react";
 
 type GroupItem = { type: "systemGroup"; messages: readonly { id: string }[] } | { type: string };
 
-/** Owns the open state for folded system-message groups and jump-target reveal. */
+/**
+ * Owns the open state for folded system-message groups and jump-target reveal. A group stays open
+ * while any member is open, so new notices or older history cannot re-fold it under the reader.
+ */
 export function useSystemMessageGroups<T extends GroupItem>(items: readonly T[]) {
   const [openedMessages, setOpenedMessages] = useState<ReadonlySet<string>>(new Set());
   const toggleGroup = useCallback((messages: readonly { id: string }[]) => {

@@ -33,6 +33,9 @@ export function MessageSenderGutter({
       {grouped ? (
         <time
           dateTime={new Date(message.createdAt).toISOString()}
+          // The short gutter label is visible on hover; the full localized time remains available
+          // to screen readers and the mobile action sheet. The explicit leading keeps the 12px
+          // timestamp on the same 24px line as the message text.
           className="message-text text-xs leading-[var(--text-md--line-height)] whitespace-nowrap text-quaternary tabular-nums opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100"
         >
           <span aria-hidden="true">{gutterTime}</span>

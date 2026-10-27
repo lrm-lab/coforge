@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { handleAgentEventsGet } from "#src/routes/api/agent/v1/events";
+import { createAgentEventsRepository, handleAgentEventsGet } from "#src/routes/api/agent/v1/events";
 
 const request = (search = "") => new Request(`https://server.example/api/agent/v1/events${search}`);
 
@@ -7,6 +7,14 @@ const baseRepository = {
   setAgentChannelMuted: async () => {},
   setAgentThreadFollowed: async () => {},
 };
+
+test("the Agent events route wires realtime publication into its repository", () => {
+  const repository = createAgentEventsRepository(
+    {} as never,
+    { agentReadChanged: async () => {} } as never,
+  );
+  expect((repository as unknown as { realtime?: unknown }).realtime).toBeDefined();
+});
 
 test("forwards the requested limit and scope to the repository drain", async () => {
   let received: unknown;

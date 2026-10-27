@@ -4,12 +4,24 @@ import { handleAppBotEventsGet } from "#src/server/app-bots/app-bot-agent-api.se
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { agentIdempotencyKeyFromQuery } from "#src/server/agents/agent-http-routes.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   drainAgentEvents,
   type AgentMessageRepository,
 } from "#src/server/agents/agent-messages.server";
 
 export type AgentEventsGetPrincipal = { workspaceId: string; agentId: string };
+
+export function createAgentEventsRepository(db: PrismaClient, realtime?: ConversationRealtime) {
+  return new PrismaDirectConversationRepository(
+    db,
+    {},
+    realtime ?? new CentrifugoConversationRealtime(createCentrifugoServerApi()),
+  );
+}
 
 export async function handleAgentEventsGet(
   request: Request,
@@ -43,7 +55,7 @@ export const Route = createFileRoute("/api/agent/v1/events")({
         // An app's bot reads its inbox without taking it (`AppBotInbox`).
         "appBot" in principal
           ? handleAppBotEventsGet(request, principal, db)
-          : handleAgentEventsGet(request, principal, new PrismaDirectConversationRepository(db)),
+          : handleAgentEventsGet(request, principal, createAgentEventsRepository(db)),
     },
   },
 });

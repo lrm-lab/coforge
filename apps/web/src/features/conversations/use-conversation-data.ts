@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -167,11 +167,16 @@ export function useDirectConversation(conversationId: string) {
     onAgentReadChanged,
   });
   const loadedConversation = page.conversation as DirectConversationView;
-  const conversation = {
-    ...loadedConversation,
-    agentReadThroughSequence:
-      agentReadPositions[conversationId] ?? loadedConversation.agentReadThroughSequence,
-  };
+  const conversation = useMemo(
+    () => ({
+      ...loadedConversation,
+      agentReadThroughSequence: Math.max(
+        agentReadPositions[conversationId] ?? 0,
+        loadedConversation.agentReadThroughSequence ?? 0,
+      ),
+    }),
+    [agentReadPositions, conversationId, loadedConversation],
+  );
   const viewerReactor = useViewerReactor(conversation.viewerId);
   const taskView = useConversationTasks(conversation.conversationId);
 

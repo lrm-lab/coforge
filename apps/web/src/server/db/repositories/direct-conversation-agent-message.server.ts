@@ -76,7 +76,9 @@ export const CONVERSATION_TARGET_MEMBERS = {
 /** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
 export const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
   ...AGENT_MESSAGE_INCLUDE,
-  conversation: { include: { members: CONVERSATION_TARGET_MEMBERS } },
+  conversation: {
+    select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
+  },
 } satisfies Prisma.MessageInclude;
 
 /** Where a Message is delivered: its conversation's target, with its thread root if it has one. */

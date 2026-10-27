@@ -192,3 +192,7 @@ These rules apply to `src/server/conversations/`.
 ## Action cards
 
 See [action-cards.md](./action-cards.md).
+
+## Agent read realtime
+
+`conversation.agent_read.v1` is published only on the private `chat:<conversationId>` channel after an Agent's DM main read-through advances durably. Its payload carries `workspaceId`, `conversationId`, `agentId`, and monotonic `readThroughSequence`; thread and channel reads do not publish it.

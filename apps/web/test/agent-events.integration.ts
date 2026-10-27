@@ -221,6 +221,7 @@ test("events drain and recovery keep the unread rule across channels, direct mes
       messages: [],
       hasMore: false,
     });
+    expect(agentReadChanges).toHaveLength(1);
     void late;
   } finally {
     await db.agentMessageDelivery.deleteMany({ where: { workspaceId: workspace.id } });
