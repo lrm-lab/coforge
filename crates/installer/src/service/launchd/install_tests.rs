@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use super::*;
 use crate::clock::VirtualClock;
 use crate::service::coordinator_service;
-use crate::service::fakes::{ScriptedRunner, definition};
+use crate::service::fakes::{ScriptedRunner, definition, modified, place_dated};
 use crate::test_support::Scratch;
 
 fn plist_in(home: &Scratch) -> PathBuf {
@@ -32,6 +32,25 @@ fn installing_writes_the_plist_and_runs_nothing() {
         fs::read_to_string(plist_in(&home)).unwrap(),
         "<plist>new</plist>"
     );
+}
+
+#[test]
+fn a_plist_that_already_holds_the_definition_is_not_rewritten() {
+    let home = Scratch::new("launchd-install-identical");
+    let plist = plist_in(&home);
+    let placed = place_dated(&plist, "<plist>same</plist>");
+    install(&home, &definition("launchd", "<plist>same</plist>")).unwrap();
+    assert_eq!(modified(&plist), placed);
+}
+
+#[test]
+fn a_plist_that_differs_is_rewritten() {
+    let home = Scratch::new("launchd-install-differs");
+    let plist = plist_in(&home);
+    let placed = place_dated(&plist, "<plist>old</plist>");
+    install(&home, &definition("launchd", "<plist>new</plist>")).unwrap();
+    assert_eq!(fs::read_to_string(&plist).unwrap(), "<plist>new</plist>");
+    assert_ne!(modified(&plist), placed);
 }
 
 #[cfg(unix)]

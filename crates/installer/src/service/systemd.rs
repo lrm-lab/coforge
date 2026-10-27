@@ -241,6 +241,12 @@ impl SupervisorService for SystemdUser<'_> {
 
     fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
         definition::require_manager("systemd-user", definition)?;
+        // A unit file that already holds the definition is the registration: the Computer wrote
+        // it with its own reload and enable, so neither is repeated, and a `systemctl --user
+        // disable` a person ran since stays theirs.
+        if definition::is_in_place(&self.unit_file, &definition.contents) {
+            return Ok(());
+        }
         definition::write_private(&self.unit_file, &definition.contents)?;
         let reload = execute(
             self.runner,
@@ -255,6 +261,11 @@ impl SupervisorService for SystemdUser<'_> {
             return Err(self.refused(&enable));
         }
         Ok(())
+    }
+
+    fn install_may_end_running_service(&self) -> bool {
+        // `daemon-reload` and `enable` do not restart a running unit.
+        false
     }
 
     fn start(&self) -> Result<StartOutcome, ServiceError> {

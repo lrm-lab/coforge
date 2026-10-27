@@ -85,8 +85,19 @@ pub trait SupervisorService {
     fn stop(&self) -> Result<StopOutcome, ServiceError>;
 
     /// Registers `definition` with the manager without starting the service, replacing any
-    /// earlier registration. The definition must be for this backend's manager.
+    /// earlier registration. The definition must be for this backend's manager. launchd and
+    /// systemd leave a definition file that already holds exactly these bytes alone, so a
+    /// registration that is current changes nothing; a Windows task has no file to compare and
+    /// is always replaced.
     fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError>;
+
+    /// Whether [`SupervisorService::install`] may end a running service when it replaces its
+    /// registration. launchd and systemd only write what they read at the next bootstrap or
+    /// reload, so they answer no. Windows answers yes: `schtasks /Create /F` is documented only
+    /// as suppressing the warning for an existing task, and nothing documents what it does to a
+    /// running instance. A caller that must not disturb a running service registers only when
+    /// this is false.
+    fn install_may_end_running_service(&self) -> bool;
 
     /// Starts the service and waits, bounded, until the manager reports it running. Already
     /// running is not an error. A service that is not installed is [`ServiceError::NotInstalled`]:

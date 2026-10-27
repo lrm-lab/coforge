@@ -21,6 +21,7 @@ fn repair_with_service(
     let table = FakeTable::new(&clock);
     let service = FakeService::new(service_state);
     let lifecycle = FakeLifecycle::default();
+    fixture.answers_protocol(&lifecycle, OLD);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
     let outcome = repair(&ports, REQUEST, None, false, &mut |_| {});
     assert_eq!(service.calls(), ["state"]);

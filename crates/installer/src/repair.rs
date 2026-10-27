@@ -2,8 +2,10 @@
 //!
 //! A healthy immutable version only needs its activation recreated: the links, and on POSIX the
 //! `current/` copy that runs. A damaged version is quarantined and fetched again through the
-//! normal manifest/checksum pipeline. Repair never stops or starts the Computer supervisor,
-//! matching the reference installer's forced-stop-free repair transaction.
+//! normal manifest/checksum pipeline. Once the activation is repaired, the active version's
+//! service definition is registered with the service manager (`repair/service_definition.rs`).
+//! Repair never stops or starts the Computer supervisor, matching the reference installer's
+//! forced-stop-free repair transaction.
 
 use std::cmp::Ordering;
 use std::fs;
@@ -135,6 +137,7 @@ pub fn repair(
             Some(ERROR_CODE_DOWNGRADE_REFUSED),
         );
     }
+    let activation;
     let active_is_target = active.as_ref().is_some_and(|state| state.current == target);
     if active_is_target && ports.store.verify_installed(&target).is_ok() {
         let state = active.as_ref().expect("active_is_target implies active");
@@ -147,13 +150,10 @@ pub fn repair(
             );
         }
         stage(&format!("Verifying active CoForge Computer {target}"));
-        match activate(ports, state) {
-            Ok(Activation::Complete) => {}
-            Ok(Activation::ExecutableSpared) => {
-                return executable_spared(ports, &receipts, &lock, request_id, &target);
-            }
+        activation = match activate(ports, state) {
+            Ok(activation) => activation,
             Err(error) => return failed(&receipts, &lock, request_id, error.to_string(), None),
-        }
+        };
     } else {
         let target_is_damaged = ports.store.version_directory(&target).exists()
             && ports.store.verify_installed(&target).is_err();
@@ -182,7 +182,7 @@ pub fn repair(
             current: prepared.version.clone(),
             previous: active.as_ref().and_then(|old| old.previous.clone()),
         };
-        let activation = match activate(ports, &state) {
+        activation = match activate(ports, &state) {
             Ok(activation) => activation,
             Err(error) => {
                 restore_quarantine(quarantined_version);
@@ -192,9 +192,31 @@ pub fn repair(
             }
         };
         drop(quarantined_active_metadata.take());
-        if activation == Activation::ExecutableSpared {
-            return executable_spared(ports, &receipts, &lock, request_id, &target);
-        }
+    }
+    // The activation is repaired for good: a service definition that cannot be registered fails
+    // the receipt but undoes nothing.
+    let definition = service_definition::register(ports, &target, stage);
+    if activation == Activation::ExecutableSpared {
+        return executable_spared(
+            ports,
+            &receipts,
+            &lock,
+            request_id,
+            &target,
+            definition.err(),
+        );
+    }
+    if let Err(error) = definition {
+        return failed(
+            &receipts,
+            &lock,
+            request_id,
+            format!(
+                "CoForge Computer {target} was repaired, but its service definition could not be \
+                 registered: {error}"
+            ),
+            None,
+        );
     }
     stage(&format!("Repaired active CoForge Computer {target}"));
     match record(
@@ -289,8 +311,12 @@ fn executable_spared(
     lock: &MachineMutationLock,
     request_id: &str,
     version: &str,
+    definition_error: Option<String>,
 ) -> Outcome {
     let service = ports.service.display_name();
+    let definition = definition_error.map_or_else(String::new, |error| {
+        format!(" Its service definition could not be registered either: {error}")
+    });
     failed(
         receipts,
         lock,
@@ -298,7 +324,7 @@ fn executable_spared(
         format!(
             "{service} is running CoForge Computer {version} from a file that differs from the \
              installed version, so repair left that file as it is and repaired everything else. \
-             Stop {service}, then run the repair again."
+             Stop {service}, then run the repair again.{definition}"
         ),
         Some(BUSY_ERROR_CODE),
     )
@@ -364,6 +390,8 @@ fn record(
         .map_err(|error| error.to_string())?;
     Ok(receipt)
 }
+
+mod service_definition;
 
 #[cfg(test)]
 mod tests;

@@ -340,7 +340,15 @@ impl SupervisorService for Launchd<'_> {
 
     fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
         definition::require_manager("launchd", definition)?;
+        if definition::is_in_place(&self.plist, &definition.contents) {
+            return Ok(());
+        }
         definition::write_private(&self.plist, &definition.contents)
+    }
+
+    fn install_may_end_running_service(&self) -> bool {
+        // A plist is read at the next bootstrap; the loaded job is untouched.
+        false
     }
 
     fn start(&self) -> Result<StartOutcome, ServiceError> {

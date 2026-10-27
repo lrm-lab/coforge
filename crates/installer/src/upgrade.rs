@@ -14,8 +14,8 @@ use std::cmp::Ordering;
 
 use crate::active::ActiveError;
 use crate::contract::{
-    ERROR_CODE_DOWNGRADE_REFUSED, EXIT_FAILED, EXIT_HELD, EXIT_UNRESOLVED, LifecycleStatus,
-    ReceiptOutcome, RuntimeState, UpgradeReceipt,
+    ERROR_CODE_DOWNGRADE_REFUSED, EXIT_FAILED, EXIT_HELD, EXIT_UNRESOLVED,
+    LifecycleServiceDefinition, LifecycleStatus, ReceiptOutcome, RuntimeState, UpgradeReceipt,
 };
 use crate::journal::{Journal, Transaction};
 use crate::lock::{LockError, MachineMutationLock};
@@ -193,6 +193,9 @@ struct Installed {
     supervisor_running: bool,
     /// The supervisor's id before the switch: a restarted one must have another.
     supervisor_id: Option<String>,
+    /// The service definition its rollback registers, read before anything stopped. Read only
+    /// when the supervisor runs; `None` also for a Computer that predates the command.
+    definition: Option<LifecycleServiceDefinition>,
     runtimes: Vec<RuntimeState>,
 }
 
@@ -209,6 +212,9 @@ impl Installed {
 struct Prepared {
     from: Option<Installed>,
     to: String,
+    /// The candidate's service definition, read before anything stopped (see
+    /// [`Installed::definition`]).
+    to_definition: Option<LifecycleServiceDefinition>,
 }
 
 /// One upgrade from the journal onward.
@@ -259,6 +265,7 @@ impl Run<'_, '_> {
             &Target {
                 version: &prepared.to,
                 previous: previous.as_deref(),
+                definition: prepared.to_definition.as_ref(),
             },
             &plan,
         )
@@ -311,6 +318,7 @@ impl Run<'_, '_> {
         let target = Target {
             version: &from.version,
             previous: from.previous.as_deref(),
+            definition: from.definition.as_ref(),
         };
         match self.switch.switch(&target, &plan) {
             Ok(()) => {

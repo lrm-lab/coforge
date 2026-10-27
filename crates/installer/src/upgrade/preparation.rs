@@ -1,12 +1,13 @@
 //! Everything an upgrade checks and installs before its first change: the active version is
-//! intact and healthy, its supervisor is service-managed and its service definition readable, and
-//! the candidate verifies. A failure here is a [`Refusal`]: nothing was changed.
+//! intact and healthy, and the candidate verifies. When the active supervisor runs, it is
+//! service-managed and both versions' service definitions are read here, so the switch runs no
+//! Computer executable inside the downtime. A failure here is a [`Refusal`]: nothing was changed.
 
 use super::{
     INTEGRITY_CODE, Installed, Prepared, Refusal, Run, downgrade_refusal, refuse, unhealthy_message,
 };
 use crate::active::read_active;
-use crate::contract::{ActiveState, RuntimeState};
+use crate::contract::{ActiveState, LifecycleServiceDefinition, RuntimeState};
 use crate::lifecycle::reported_service_definition;
 use crate::prepare::prepare_version;
 use crate::service::{ServiceError, ServiceState};
@@ -68,18 +69,24 @@ impl Run<'_, '_> {
                 code: Some(INTEGRITY_CODE),
             });
         }
-        let from = match active {
+        let mut from = match active {
             None => None,
             Some(active) => Some(self.inspect(active)?),
         };
+        let mut to_definition = None;
         if let Some(installed) = from
-            .as_ref()
+            .as_mut()
             .filter(|installed| installed.supervisor_running)
         {
             self.require_managed_supervisor()?;
-            self.require_readable_service_definition(&installed.version)?;
+            installed.definition = self.read_service_definition(&installed.version)?;
+            to_definition = self.read_service_definition(&to)?;
         }
-        Ok(Prepared { from, to })
+        Ok(Prepared {
+            from,
+            to,
+            to_definition,
+        })
     }
 
     /// The active version's status, which must be healthy before anything stops.
@@ -97,6 +104,7 @@ impl Run<'_, '_> {
             previous: active.previous,
             supervisor_running: status.supervisor.running,
             supervisor_id: status.supervisor.id.clone(),
+            definition: None,
             runtimes: status
                 .bindings
                 .iter()
@@ -127,15 +135,18 @@ impl Run<'_, '_> {
         }
     }
 
-    /// The rollback registers the active version's service definition again, so a Computer that
-    /// reports one must be able to say it now, before anything stops. A Computer that predates
-    /// the command has none to read.
-    fn require_readable_service_definition(&self, version: &str) -> Result<(), Refusal> {
+    /// The service definition of `version`, read from its stored executable before anything
+    /// stops: the switch registers the candidate's, and its rollback the active version's, and
+    /// neither may depend on a Computer that has not started yet. `None` is a Computer that
+    /// predates the command, which has none to read.
+    fn read_service_definition(
+        &self,
+        version: &str,
+    ) -> Result<Option<LifecycleServiceDefinition>, Refusal> {
         reported_service_definition(
             self.ports.lifecycle,
             &self.ports.store.computer_path(version),
         )
-        .map(|_| ())
         .map_err(|error| refuse(error.to_string()))
     }
 }

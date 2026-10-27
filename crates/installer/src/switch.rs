@@ -1,11 +1,12 @@
 //! The switch of the active version: stop the supervisor when it runs, make a target version
-//! active, register its service definition, restart the supervisor, and probe that it reports the
-//! target. The upgrade and recovery both switch through [`ActiveSwitch`], so they stop, activate,
+//! active, register the target's service definition, restart the supervisor, and probe that it
+//! reports the target. The upgrade and recovery both switch through [`ActiveSwitch`], so they stop, activate,
 //! register, restart, and probe the same way.
 //!
 //! The switch makes no decision about what to switch to: `upgrade.rs` decides what to install and
 //! roll back to, and `recover.rs` decides what the journal asks for. Its one refusal is that a
-//! process must not stop the service it runs inside. Each failure is returned to the caller as
+//! process must not stop the service it runs inside. It runs no Computer executable to learn a
+//! definition: the caller read it from the target before anything stopped. Each failure is returned to the caller as
 //! text; the caller records it in a receipt or keeps the journal.
 
 use std::convert::Infallible;
@@ -14,8 +15,10 @@ use std::time::Duration;
 
 use crate::active;
 use crate::clock::{Clock, poll_until};
-use crate::contract::{ACTIVE_STATE_SCHEMA_VERSION, ActiveState, DeadProcessIdentity};
-use crate::lifecycle::{ComputerLifecycle, reported_service_definition};
+use crate::contract::{
+    ACTIVE_STATE_SCHEMA_VERSION, ActiveState, DeadProcessIdentity, LifecycleServiceDefinition,
+};
+use crate::lifecycle::ComputerLifecycle;
 use crate::prepare::ReleaseSource;
 use crate::processes::{
     Escalation, ProcessTable, ProductExecutable, VerifiedCaller, collect, dead_process_identity,
@@ -45,6 +48,10 @@ pub struct Ports<'a> {
 pub(crate) struct Target<'a> {
     pub(crate) version: &'a str,
     pub(crate) previous: Option<&'a str>,
+    /// The service definition to register before the supervisor starts, read from the target
+    /// before anything stopped. `None` is a Computer that predates `__lifecycle
+    /// service-definition`, started from what it installed itself.
+    pub(crate) definition: Option<&'a LifecycleServiceDefinition>,
 }
 
 /// What a switch stops before it changes the active version, and how it restarts.
@@ -110,7 +117,7 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
         self.say(&format!("Switching the active executable to {version}"));
         self.activate(target)?;
         if plan.supervisor_running {
-            self.install_service_definition(version)?;
+            self.install_service_definition(target)?;
             self.say(&format!("Starting Computer supervisor {version}"));
             self.ports
                 .service
@@ -131,21 +138,18 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
         Ok(())
     }
 
-    /// Registers the service definition of the executable that now runs, so that the start that
-    /// follows never depends on a definition an earlier registration left on disk (a plist can
-    /// vanish while its job stays loaded). A Computer that predates `service-definition` is left
-    /// to start from what it installed itself.
-    fn install_service_definition(&mut self, version: &str) -> Result<(), String> {
-        let executable = self.ports.store.running_computer_path(version);
-        let Some(definition) = reported_service_definition(self.ports.lifecycle, &executable)
-            .map_err(|error| error.to_string())?
-        else {
+    /// Registers the target's service definition, so that the start that follows never depends on
+    /// a definition an earlier registration left on disk (a plist can vanish while its job stays
+    /// loaded). It was read before the switch stopped anything: asking the activated executable
+    /// would be a cold start of a large executable inside the downtime.
+    fn install_service_definition(&mut self, target: &Target<'_>) -> Result<(), String> {
+        let Some(definition) = target.definition else {
             return Ok(());
         };
         self.say("Installing the Computer supervisor service definition");
         self.ports
             .service
-            .install(&definition)
+            .install(definition)
             .map_err(|error| error.to_string())
     }
 

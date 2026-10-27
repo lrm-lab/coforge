@@ -28,6 +28,7 @@ fn repairs_missing_active_links_from_the_verified_active_version() {
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
+    fixture.answers_protocol(&lifecycle, OLD);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let mut stages = Vec::new();
@@ -70,6 +71,7 @@ fn reinstalls_a_corrupt_active_version_without_stopping_service() {
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
+    fixture.answers_protocol(&lifecycle, OLD);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let outcome = repair(&ports, REQUEST, None, false, &mut |_| {});
@@ -129,6 +131,9 @@ fn an_unselected_installation_without_active_state_is_held() {
         Outcome::NoReceipt { .. } => panic!("repair did not record the held result"),
     }
 }
+
+/// What repair registers with the service manager, and what it leaves alone.
+mod service_definition;
 
 /// The POSIX layout: `active` -> `current`, a synced copy of the active version.
 #[cfg(unix)]

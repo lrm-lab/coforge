@@ -114,3 +114,14 @@ fn a_definition_for_another_manager_is_refused_before_any_file_or_command() {
     );
     assert!(installed.seen.is_empty());
 }
+
+#[test]
+fn replacing_a_task_is_not_known_to_leave_a_running_instance_alone() {
+    let runner = Capturing {
+        code: 0,
+        seen: RefCell::new(Vec::new()),
+    };
+    let clock = VirtualClock::new();
+    let task = WindowsTask::new(&runner, &clock, &coordinator_service(), SYSTEM_ROOT).unwrap();
+    assert!(task.install_may_end_running_service());
+}

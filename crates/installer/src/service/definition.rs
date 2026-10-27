@@ -25,6 +25,12 @@ pub(super) fn require_manager(
     }
 }
 
+/// Whether the file at `path` already holds exactly `contents`, byte for byte. A file that is
+/// missing or cannot be read does not: writing it then reports what is wrong.
+pub(super) fn is_in_place(path: &Path, contents: &str) -> bool {
+    fs::read(path).is_ok_and(|held| held == contents.as_bytes())
+}
+
 /// Writes `contents` to `path` atomically, owner-only (`0600`), creating a missing parent
 /// directory owner-only (`0700`): a reader never sees a partial file.
 pub(super) fn write_private(path: &Path, contents: &str) -> Result<(), ServiceError> {

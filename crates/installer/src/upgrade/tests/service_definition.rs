@@ -72,12 +72,6 @@ fn a_rollback_installs_the_definition_of_the_version_it_restores() {
     let service = FakeService::new(ServiceState::Running { pid: Some(100) });
     let lifecycle = FakeLifecycle::default();
     script_rolling_back_upgrade(&fixture, &lifecycle);
-    // `current/` holds the new version for the first switch and the restored one for the second.
-    let running = fixture.running_computer(NEW);
-    lifecycle.answers_service_definition(
-        &running,
-        vec![Some(service_definition(NEW)), Some(service_definition(OLD))],
-    );
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let (outcome, _) = run(&ports, REQUEST, NEW, None);
@@ -96,7 +90,7 @@ fn a_rollback_installs_the_definition_of_the_version_it_restores() {
 }
 
 #[test]
-fn a_definition_the_new_computer_cannot_print_rolls_the_upgrade_back() {
+fn a_definition_the_new_computer_cannot_print_refuses_the_upgrade_before_anything_stops() {
     let fixture = Fixture::new("upgrade-definition-unreadable");
     fixture.install_old();
     let clock = VirtualClock::new();
@@ -104,28 +98,42 @@ fn a_definition_the_new_computer_cannot_print_rolls_the_upgrade_back() {
     table.spawn(100, 1, &fixture.canonical_computer(OLD));
     let service = FakeService::new(ServiceState::Running { pid: Some(100) });
     let lifecycle = FakeLifecycle::default();
-    script_rolling_back_upgrade(&fixture, &lifecycle);
-    lifecycle.answers_service_definition(
-        &fixture.running_computer(NEW),
-        vec![None, Some(service_definition(OLD))],
-    );
+    script_reporting_upgrade(&fixture, &lifecycle);
+    lifecycle.answers_service_definition(&fixture.computer(NEW), vec![None]);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let (outcome, _) = run(&ports, REQUEST, NEW, None);
 
+    assert_eq!(exit_of(&outcome), 1);
     let receipt = receipt(&outcome);
-    assert_eq!(receipt.error_code(), Some(ERROR_CODE_ROLLED_BACK));
-    assert_eq!(receipt.restored_version(), Some(OLD));
-    assert!(
-        receipt.error().unwrap().contains("service-definition"),
-        "{:?}",
-        receipt.error()
-    );
-    assert_eq!(
-        service.calls(),
-        ["state", "stop", "stop", "install", "start"]
-    );
-    assert_eq!(service.installed(), [service_definition(OLD)]);
+    assert_eq!(receipt.status(), ReceiptStatus::Failed);
+    assert_eq!(receipt.error_code(), None);
+    assert!(receipt.error().unwrap().contains("service-definition"));
+    assert_eq!(service.calls(), ["state"]);
+    assert!(table.signals().is_empty());
+    assert_eq!(active(&fixture), active_state(OLD, None));
+    assert_eq!(Journal::new(fixture.root()).read().unwrap(), None);
+}
+
+#[test]
+fn a_candidate_that_predates_the_command_is_started_as_before() {
+    let fixture = Fixture::new("upgrade-definition-older-candidate");
+    fixture.install_old();
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    table.spawn(100, 1, &fixture.canonical_computer(OLD));
+    let service = FakeService::new(ServiceState::Running { pid: Some(100) });
+    let lifecycle = FakeLifecycle::default();
+    script_reporting_upgrade(&fixture, &lifecycle);
+    lifecycle.answers_protocol(&fixture.computer(NEW), vec![Some(protocol(NEW))]);
+    let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+
+    let (outcome, stages) = run(&ports, REQUEST, NEW, None);
+
+    assert_eq!(exit_of(&outcome), 0, "{outcome:?}");
+    assert_eq!(service.calls(), ["state", "stop", "start"]);
+    assert!(service.installed().is_empty());
+    assert!(!stages.iter().any(|stage| stage == INSTALLING));
 }
 
 #[test]
@@ -174,14 +182,11 @@ fn an_active_definition_that_cannot_be_read_refuses_the_upgrade_before_anything_
     assert_eq!(Journal::new(fixture.root()).read().unwrap(), None);
 }
 
-#[test]
-fn recovery_installs_the_restored_definition_before_it_starts() {
-    let fixture = Fixture::new("recover-definition");
+/// A journal of an upgrade from a running [`OLD`] that was interrupted after `current/` held [`NEW`].
+fn interrupt_an_upgrade_to_new(fixture: &Fixture) {
     fixture.install_old();
     fixture.install(NEW);
     fixture.activate(NEW, Some(OLD));
-    // The interrupted candidate no longer verifies, so recovery restores the previous version.
-    fs::write(fixture.computer(NEW), b"").unwrap();
     let lock = MachineMutationLock::acquire(fixture.root()).unwrap();
     Journal::new(fixture.root())
         .record(
@@ -195,7 +200,14 @@ fn recovery_installs_the_restored_definition_before_it_starts() {
             },
         )
         .unwrap();
-    drop(lock);
+}
+
+#[test]
+fn recovery_installs_the_restored_definition_before_it_starts() {
+    let fixture = Fixture::new("recover-definition");
+    interrupt_an_upgrade_to_new(&fixture);
+    // The interrupted candidate no longer verifies, so recovery restores the previous version.
+    fs::write(fixture.computer(NEW), b"").unwrap();
     let clock = VirtualClock::new();
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::Stopped).without_definition();
@@ -217,4 +229,44 @@ fn recovery_installs_the_restored_definition_before_it_starts() {
     );
     assert_eq!(service.calls(), ["stop", "install", "start"]);
     assert_eq!(service.installed(), [service_definition(OLD)]);
+}
+
+#[test]
+fn recovery_falls_back_to_the_previous_version_when_the_interrupted_one_cannot_print_its_definition()
+ {
+    let fixture = Fixture::new("recover-definition-unreadable");
+    interrupt_an_upgrade_to_new(&fixture);
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = FakeService::new(ServiceState::Stopped).without_definition();
+    let lifecycle = FakeLifecycle::default();
+    for version in [OLD, NEW] {
+        fixture.reports_service_definition(&lifecycle, version);
+    }
+    lifecycle.answers_service_definition(&fixture.computer(NEW), vec![None]);
+    lifecycle.answers_status(
+        &fixture.computer(OLD),
+        vec![Some(running(OLD, "restored-id"))],
+    );
+    let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+    let mut stages = Vec::new();
+
+    let outcome = recover(&ports, None, &mut |stage| stages.push(stage.to_owned()));
+
+    assert_eq!(
+        outcome,
+        RecoverOutcome::Recovered {
+            version: OLD.to_owned()
+        }
+    );
+    // The first attempt failed before it stopped anything.
+    assert_eq!(service.calls(), ["stop", "install", "start"]);
+    assert_eq!(service.installed(), [service_definition(OLD)]);
+    assert!(
+        stages
+            .iter()
+            .any(|stage| stage.contains("does not settle") && stage.contains("service-definition")),
+        "{stages:?}"
+    );
+    assert_eq!(active(&fixture), active_state(OLD, None));
 }

@@ -15,6 +15,7 @@ use crate::contract::{
     ReceiptStatus, UpgradeReceipt,
 };
 use crate::journal::{Journal, Transaction};
+use crate::lifecycle::reported_service_definition;
 use crate::lock::{LockError, MachineMutationLock};
 use crate::processes::VerifiedCaller;
 use crate::receipts::ReceiptStore;
@@ -168,7 +169,9 @@ pub fn recover(
     finish(&journal, &lock, from)
 }
 
-/// Makes `target` the active version through the shared switch, after its bytes verify.
+/// Makes `target` the active version through the shared switch, after its bytes verify and, when
+/// the supervisor will be started, after its service definition is read: a `target` that cannot
+/// print it fails here, before anything stops, as any other failure of the attempt does.
 fn attempt(
     switch: &mut ActiveSwitch<'_, '_>,
     ports: &Ports<'_>,
@@ -180,6 +183,12 @@ fn attempt(
         .store
         .verify_installed(target)
         .map_err(|error| format!("{target} cannot be restored: {error}"))?;
+    let definition = if transaction.supervisor_running {
+        reported_service_definition(ports.lifecycle, &ports.store.computer_path(target))
+            .map_err(|error| error.to_string())?
+    } else {
+        None
+    };
     let previous = previous_for(transaction, target);
     let plan = Plan {
         supervisor_running: transaction.supervisor_running,
@@ -191,6 +200,7 @@ fn attempt(
         &Target {
             version: target,
             previous: previous.as_deref(),
+            definition: definition.as_ref(),
         },
         &plan,
     )

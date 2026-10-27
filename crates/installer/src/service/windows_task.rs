@@ -216,6 +216,11 @@ impl SupervisorService for WindowsTask<'_> {
         }
     }
 
+    fn install_may_end_running_service(&self) -> bool {
+        // Not established: see the trait.
+        true
+    }
+
     fn start(&self) -> Result<StartOutcome, ServiceError> {
         match self.read()? {
             None => {

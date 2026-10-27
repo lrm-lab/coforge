@@ -233,6 +233,8 @@ pub(crate) struct FakeService {
     inside: Cell<bool>,
     /// Whether the manager holds a definition; `start` of a service without one is refused.
     registered: Cell<bool>,
+    /// Whether `install` may end a running service, as a Windows task's may.
+    install_ends_running: Cell<bool>,
     installed: RefCell<Vec<LifecycleServiceDefinition>>,
 }
 
@@ -244,6 +246,7 @@ impl FakeService {
             next_pid: Cell::new(9000),
             inside: Cell::new(false),
             registered: Cell::new(true),
+            install_ends_running: Cell::new(false),
             installed: RefCell::new(Vec::new()),
         }
     }
@@ -252,6 +255,12 @@ impl FakeService {
     /// as not installed until a definition is installed. Not a call: it is not recorded.
     pub(crate) fn without_definition(self) -> Self {
         self.registered.set(false);
+        self
+    }
+
+    /// Installing over a running service may end it, as it may on Windows. Not a call.
+    pub(crate) fn whose_install_may_end_a_running_service(self) -> Self {
+        self.install_ends_running.set(true);
         self
     }
 
@@ -297,6 +306,10 @@ impl SupervisorService for FakeService {
         self.installed.borrow_mut().push(definition.clone());
         self.registered.set(true);
         Ok(())
+    }
+
+    fn install_may_end_running_service(&self) -> bool {
+        self.install_ends_running.get()
     }
 
     fn start(&self) -> Result<StartOutcome, ServiceError> {
@@ -430,17 +443,15 @@ impl Fixture {
     }
 
     /// Scripts a `version` Computer that lists `service-definition` among its commands and prints
-    /// [`service_definition`] for `version`, from the store's copy and from the executable that
-    /// runs once it is active.
+    /// [`service_definition`] for `version`, from the store's copy: the installer asks every
+    /// definition before it stops anything, never the executable that runs once it is active.
     pub(crate) fn reports_service_definition(&self, lifecycle: &FakeLifecycle, version: &str) {
-        for executable in [self.computer(version), self.running_computer(version)] {
-            lifecycle.answers_protocol(
-                &executable,
-                vec![Some(protocol_with_service_definition(version))],
-            );
-            lifecycle
-                .answers_service_definition(&executable, vec![Some(service_definition(version))]);
-        }
+        let executable = self.computer(version);
+        lifecycle.answers_protocol(
+            &executable,
+            vec![Some(protocol_with_service_definition(version))],
+        );
+        lifecycle.answers_service_definition(&executable, vec![Some(service_definition(version))]);
     }
 
     /// Installs `version` from the feed into the store, as a completed preparation leaves it.

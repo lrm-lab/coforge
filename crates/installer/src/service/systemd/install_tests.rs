@@ -4,7 +4,9 @@ use std::path::Path;
 use super::*;
 use crate::clock::VirtualClock;
 use crate::service::coordinator_service;
-use crate::service::fakes::{FixedCgroup, ScriptedRunner, Step, definition, exits, ok};
+use crate::service::fakes::{
+    FixedCgroup, ScriptedRunner, Step, definition, exits, modified, ok, place_dated,
+};
 use crate::test_support::Scratch;
 
 const RELOAD: &str = "systemctl --user daemon-reload";
@@ -49,6 +51,40 @@ fn installing_writes_the_unit_then_reloads_and_enables_without_starting() {
         fs::read_to_string(unit_in(home.path())).unwrap(),
         "[Service]\nExecStart=/x\n"
     );
+}
+
+#[test]
+fn a_unit_that_already_holds_the_definition_is_left_alone_and_nothing_is_run() {
+    let home = Scratch::new("systemd-install-identical");
+    let unit = unit_in(home.path());
+    let placed = place_dated(&unit, "[Service]\nExecStart=/x\n");
+    let (result, ran) = install(
+        home.path(),
+        &definition("systemd-user", "[Service]\nExecStart=/x\n"),
+        Vec::new(),
+    );
+    result.unwrap();
+    assert!(ran.is_empty(), "{ran:?}");
+    assert_eq!(modified(&unit), placed);
+}
+
+#[test]
+fn a_unit_that_differs_is_rewritten_then_reloaded_and_enabled() {
+    let home = Scratch::new("systemd-install-differs");
+    let unit = unit_in(home.path());
+    let placed = place_dated(&unit, "[Service]\nExecStart=/old\n");
+    let (result, ran) = install(
+        home.path(),
+        &definition("systemd-user", "[Service]\nExecStart=/new\n"),
+        vec![ok(RELOAD, ""), ok(ENABLE, "")],
+    );
+    result.unwrap();
+    assert_eq!(ran, [RELOAD, ENABLE]);
+    assert_eq!(
+        fs::read_to_string(&unit).unwrap(),
+        "[Service]\nExecStart=/new\n"
+    );
+    assert_ne!(modified(&unit), placed);
 }
 
 #[cfg(unix)]

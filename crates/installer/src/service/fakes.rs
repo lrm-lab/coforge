@@ -3,7 +3,9 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::time::Duration;
+use std::fs;
+use std::path::Path;
+use std::time::{Duration, SystemTime};
 
 use super::{CommandLine, CommandOutput, CommandRunner, ProcessCgroup, RunError};
 use crate::contract::{LIFECYCLE_PROTOCOL, LifecycleServiceDefinition};
@@ -16,6 +18,27 @@ pub(crate) fn definition(manager: &str, contents: &str) -> LifecycleServiceDefin
         manager: manager.to_owned(),
         contents: contents.to_owned(),
     }
+}
+
+/// Writes `contents` to `path`, creating its directory, and dates the file long ago. A test tells a
+/// definition that was rewritten from one that was left alone by [`modified`] no longer being
+/// the returned time.
+pub(crate) fn place_dated(path: &Path, contents: &str) -> SystemTime {
+    let long_ago = SystemTime::UNIX_EPOCH + Duration::from_secs(86_400);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, contents).unwrap();
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(long_ago)
+        .unwrap();
+    long_ago
+}
+
+/// When `path` was last written.
+pub(crate) fn modified(path: &Path) -> SystemTime {
+    fs::metadata(path).unwrap().modified().unwrap()
 }
 
 /// A cgroup listing that the test chooses; `None` is a file that cannot be read.

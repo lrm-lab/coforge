@@ -103,10 +103,13 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/clock.rs`: the clock and sleep port the bounded waits run through (virtual in tests).
 - `src/service.rs`: OS service control of the Computer supervisor: state (not installed, stopped,
   running with the manager's pid), stop (waits until the manager has dropped it), install (registers
-  the service definition the Computer reports, without starting it), start (waits for a process).
+  the service definition the Computer reports, without starting it; launchd and systemd leave a
+  file that already holds the same bytes alone), `install_may_end_running_service` (whether
+  replacing a registration may end a running service: Windows only), start (waits for a process).
   One backend per manager in `src/service/` behind the `CommandRunner` port.
 - `src/service/definition.rs`: what the backends share to register a definition: the manager
-  check, the atomic owner-only write, and the UTF-16 temporary file `schtasks` reads.
+  check, the byte comparison with the file already in place, the atomic owner-only write, and the
+  UTF-16 temporary file `schtasks` reads.
 - `src/service/port.rs`: the `CommandRunner` port and `SystemRunner`, which runs a manager tool
   with a bound and kills it at the deadline.
 - `src/service/error.rs`: `ServiceError`, each failure worded with what to run next.
@@ -137,16 +140,18 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   __lifecycle` bounded and reads its versioned JSON. Tests in `src/lifecycle/tests.rs`.
 - `src/switch.rs`: the switch of the active version, shared by upgrade and recovery: `Ports` (every
   port a transaction touches), `Target`, `Plan`, and `ActiveSwitch` (stop the supervisor and its
-  processes, activate, register the activated executable's service definition, restart, probe). It
-  decides nothing about what to switch to.
+  processes, activate, register the `Target`'s service definition, restart, probe). It decides
+  nothing about what to switch to and runs no Computer executable to learn a definition: the
+  caller reads it before anything stops.
   `refusal_inside_service` refuses both operations when the caller runs inside the running service.
 - `src/upgrade.rs`: the upgrade transaction (lock, journal, receipt, prepare, switch, roll back).
   Tests in `src/upgrade/tests.rs` (scripted lifecycle and service, real files and loopback feed);
   the service definition across upgrade, rollback, and recovery in
   `src/upgrade/tests/service_definition.rs`.
 - `src/upgrade/preparation.rs`: everything an upgrade checks before its first change (the active
-  version's health, supervisor management and readable service definition, the candidate); a
-  failure is a refusal with nothing changed.
+  version's health, supervisor management, the candidate, and, while the supervisor runs, the
+  service definitions of both versions, read from their stored executables); a failure is a
+  refusal with nothing changed.
 - `src/upgrade/fakes.rs`: test doubles and fixture for the upgrade and recovery tests: scripted
   lifecycle and service, and an install root with versions `0.1.0` and `0.2.0` served by a
   loopback feed.
@@ -160,12 +165,15 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/request_id.rs`: generates the request id of an `install` (RFC 9562 version 4; unique, not
   secret). Tests in `src/request_id/tests.rs`.
 - `src/recover.rs`: `coforge-computer recover`. Refuses from inside the running service, then
-  settles the journal through `switch`: keeps a recorded success or an already-active new version
+  settles the journal through `switch`, reading the definition of the version each attempt switches
+  to before that attempt stops anything: keeps a recorded success or an already-active new version
   that settles, otherwise restores the previous version. Writes a receipt only when none exists;
   clears the journal only after settling. Tests in `src/recover/tests.rs`.
 - `src/repair.rs`: `coforge-installer repair`. Verifies the selected immutable version, repairs
   the activation, and quarantines and redownloads a damaged payload without touching service
   processes; writes a repair receipt. Tests live with the module.
+- `src/repair/service_definition.rs`: repair's registration of the active version's service
+  definition after the activation is repaired; it never stops or starts the service.
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
   scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,
   which can script a path's first answers), a tiny release tree, and runners
