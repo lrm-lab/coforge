@@ -12,6 +12,7 @@ import {
   EmptyTitle,
 } from "#src/components/ui/empty";
 import { ClockTime } from "#src/components/ui/relative-time";
+import { ConversationBottomPin } from "#src/features/conversations/conversation-bottom-pin";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -26,7 +27,7 @@ import {
 
 /** The profile panel's Activity log: one monospace row per entry, each hung on a round marker on
  * a connector line with its clock on the right, oldest at the top, newest at the bottom, the list
- * kept scrolled to the newest row. */
+ * kept on the newest row while the reader is there. */
 export function AgentActivityTimeline({
   activity,
   display,
@@ -63,15 +64,36 @@ export function AgentActivityTimeline({
     [activity],
   );
 
+  // Opens on the newest row and stays there while the list grows (rows appended, a streamed row
+  // growing, a row wrapping once it renders past its content-visibility estimate) until the reader
+  // scrolls up; scrolling back to the bottom follows again. Same pin as a conversation's history.
   const scrollRef = useRef<HTMLDivElement>(null);
-  const newest = rows.at(-1);
-  // Re-runs whenever a row is appended or the newest row grows (a streamed statement merging
-  // in another fragment) — the two ways the list can change without an explicit "load more".
-  const newestSignal = newest ? `${newest.key}:${newest.detail.length}` : "";
+  const listRef = useRef<HTMLOListElement>(null);
+  const [bottomPin] = useState(() => new ConversationBottomPin());
+  const following = useRef(true);
+  const empty = rows.length === 0;
   useLayoutEffect(() => {
     const container = scrollRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
-  }, [newestSignal]);
+    if (!container) return;
+    // A list that (re)appears opens on its newest row, whatever an earlier one was scrolled to.
+    following.current = true;
+    bottomPin.pin(container, "instant");
+    // Judged from where the reader stood before this resize: the callback runs after layout.
+    const observer = new ResizeObserver(() => {
+      const wasAtBottom = bottomPin.beforeResize(container);
+      if (following.current && wasAtBottom) bottomPin.pin(container, "instant");
+    });
+    observer.observe(container);
+    if (listRef.current) observer.observe(listRef.current);
+    return () => observer.disconnect();
+  }, [bottomPin, empty]);
+  function trackReadingPosition() {
+    const container = scrollRef.current;
+    if (!container) return;
+    const distance = bottomPin.scroll(container);
+    // The conversation history's "near enough to follow" distance.
+    if (distance !== undefined) following.current = distance <= 48;
+  }
 
   if (!rows.length)
     return (
@@ -89,8 +111,16 @@ export function AgentActivityTimeline({
     );
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto">
-      <ol aria-label="Activity timeline" className="list-none px-5 py-3">
+    <div
+      ref={scrollRef}
+      onScroll={trackReadingPosition}
+      onWheel={bottomPin.read}
+      onTouchMove={bottomPin.read}
+      onPointerDown={bottomPin.read}
+      onKeyDown={bottomPin.read}
+      className="h-full overflow-y-auto"
+    >
+      <ol ref={listRef} aria-label="Activity timeline" className="list-none px-5 py-3">
         {rows.map((row) => {
           const observation = observations.get(row.key);
           const entry = observation?.entry;
