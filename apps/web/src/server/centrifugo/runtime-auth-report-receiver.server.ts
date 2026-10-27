@@ -55,7 +55,8 @@ export function createRuntimeAuthReportMethod(
     } catch {
       return { code: 503, message: "runtime auth status report was not recorded" };
     }
-    if (stored) await announce(report.computerId).catch(() => {});
+    // The daemon does not wait on it: the report is stored either way.
+    if (stored) void announce(report.computerId).catch(() => {});
     return new Uint8Array();
   };
 }

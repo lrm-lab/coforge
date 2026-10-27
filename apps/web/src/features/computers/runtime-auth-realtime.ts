@@ -1,3 +1,4 @@
+import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 import type { RuntimeAuthSignal } from "#src/server/computers/runtime-auth.server";
 
 /**
@@ -8,22 +9,18 @@ import type { RuntimeAuthSignal } from "#src/server/computers/runtime-auth.serve
  */
 export const runtimeAuthChannel = (userId: string) => `runtimeauth:user:${userId}`;
 
-const SIGNAL_TYPES: ReadonlySet<unknown> = new Set<RuntimeAuthSignal["type"]>([
-  "runtime-auth.login.v1",
-  "runtime-auth.logout.v1",
-  "runtime-auth.status.v1",
-]);
-const decoder = new TextDecoder();
+const SIGNAL_TYPES: Record<RuntimeAuthSignal["type"], true> = {
+  "runtime-auth.login.v1": true,
+  "runtime-auth.logout.v1": true,
+  "runtime-auth.status.v1": true,
+};
 
 /** A publication on that channel, as JSON or its bytes; anything else is dropped. */
 export function parseRuntimeAuthSignal(data: unknown): RuntimeAuthSignal | undefined {
-  try {
-    const value: unknown = data instanceof Uint8Array ? JSON.parse(decoder.decode(data)) : data;
-    if (typeof value !== "object" || value === null) return undefined;
-    return SIGNAL_TYPES.has((value as { type?: unknown }).type)
-      ? (value as RuntimeAuthSignal)
-      : undefined;
-  } catch {
-    return undefined;
-  }
+  const value = publicationDataOrUndefined(data);
+  if (typeof value !== "object" || value === null) return undefined;
+  const type = (value as { type?: unknown }).type;
+  return typeof type === "string" && Object.hasOwn(SIGNAL_TYPES, type)
+    ? (value as RuntimeAuthSignal)
+    : undefined;
 }
