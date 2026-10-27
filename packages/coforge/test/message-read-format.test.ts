@@ -157,3 +157,13 @@ test("a plain read names the server unread cursor even when it is 0", () => {
     'Server unread cursor before this read: seq 0. Use coforge message read --target "#general" --after 0 to browse newer messages.',
   );
 });
+
+test("a plain latest read reports when it advanced the server read position", () => {
+  const output = formatReadWindow(
+    "#general",
+    { messages: [message(4)], unreadCursorBefore: 1, readPositionAfter: 4 },
+    {},
+  );
+  expect(output).toContain("Read position: seq 1 → 4.");
+  expect(output).not.toContain("Server unread cursor before this read");
+});

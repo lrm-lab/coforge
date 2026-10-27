@@ -126,10 +126,16 @@ export function formatReadWindow(
       `Around: ${options.around}. Your read position did not move. To read new messages and mark them read, use --unread.`,
     );
   if (folded) lines.push(folded);
-  if (!options.unread && response.unreadCursorBefore !== undefined)
+  if (!options.unread && response.unreadCursorBefore !== undefined) {
+    const advanced =
+      response.readPositionAfter !== undefined &&
+      response.readPositionAfter > response.unreadCursorBefore;
     lines.push(
-      `Server unread cursor before this read: seq ${response.unreadCursorBefore}. Use coforge message read --target "${target}" --after ${response.unreadCursorBefore} to browse newer messages.`,
+      advanced
+        ? `Read position: seq ${response.unreadCursorBefore} → ${response.readPositionAfter}.`
+        : `Server unread cursor before this read: seq ${response.unreadCursorBefore}. Use coforge message read --target "${target}" --after ${response.unreadCursorBefore} to browse newer messages.`,
     );
+  }
   const taskHint = formatTaskWorkflowHint(messages);
   if (taskHint) lines.push(taskHint);
   lines.push("");

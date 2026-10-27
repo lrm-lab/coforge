@@ -99,8 +99,21 @@ export async function readAgentMessagePage(
   const map = (rows: DirectConversationMessageRow[]) =>
     rows.map((row) => toAgentMessage(row, canonicalTarget, agentId, coordination));
   const isHistoryRead = Boolean(page.before || page.after || page.around);
-  // Only `unread` reads from the read position and moves it; a read with no anchor and no
-  // sequence range shows the newest page and leaves the position alone.
+  const advanceReadThrough = async (sequence: number) => {
+    const publication = await advanceAgentReadPosition({
+      db,
+      memberId: agentMember.id,
+      conversationId,
+      workspaceId,
+      agentId,
+      threadRootId,
+      sequence,
+      isDirectConversation: isUserAgentDirectConversation,
+    });
+    if (publication) void agentReadChanged?.(publication)?.catch(() => {});
+  };
+  // An `unread` read starts at the read position. A latest or anchored page moves it only when the
+  // shared contiguity rule proves that it joins the existing read-through.
   const window =
     page.around && anchor
       ? await readWindowAround(db, scope, anchor.sequence, limit)
@@ -110,15 +123,32 @@ export async function readAgentMessagePage(
           page.throughSequence === undefined
         ? await readLatestWindow(db, scope, limit)
         : undefined;
-  if (window)
+  if (window) {
+    const latestSequence = window.rows.at(-1)?.sequence ?? readThrough;
+    const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
+      anchor: "latest",
+      readThrough,
+      minSequence: window.rows[0]?.sequence,
+      maxSequence: latestSequence,
+      hasOlder: window.hasOlder,
+      sequenceBeforePage:
+        "sequenceBeforePage" in window && typeof window.sequenceBeforePage === "number"
+          ? window.sequenceBeforePage
+          : undefined,
+    });
+    const agentReadThroughSequence =
+      modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
+    if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);
     return {
       messages: map(window.rows),
       hasOlder: window.hasOlder,
       hasNewer: window.hasNewer,
-      modelSeenUpToSeq: null,
+      modelSeenUpToSeq,
       consumptionScope,
       ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
+      ...(agentReadThroughSequence ? { readPositionAfter: agentReadThroughSequence } : {}),
     };
+  }
   const effectiveFromSequence = isHistoryRead
     ? page.fromSequence
     : (page.fromSequence ?? readThrough + 1);
@@ -163,19 +193,7 @@ export async function readAgentMessagePage(
   // moves the read-through there.
   const agentReadThroughSequence =
     modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
-  if (agentReadThroughSequence) {
-    const publication = await advanceAgentReadPosition({
-      db,
-      memberId: agentMember.id,
-      conversationId,
-      workspaceId,
-      agentId,
-      threadRootId,
-      sequence: agentReadThroughSequence,
-      isDirectConversation: isUserAgentDirectConversation,
-    });
-    if (publication) void agentReadChanged?.(publication)?.catch(() => {});
-  }
+  if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);
   return {
     messages,
     hasOlder,

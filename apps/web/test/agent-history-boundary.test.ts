@@ -76,3 +76,24 @@ test("an anchored around read and an empty page state no boundary", () => {
     }),
   ).toBeNull();
 });
+
+test("a latest page joins when its omitted predecessor is already read", () => {
+  expect(
+    agentHistoryModelSeenBoundary({
+      ...page,
+      anchor: "latest",
+      minSequence: 12,
+      maxSequence: 14,
+      sequenceBeforePage: 10,
+    }),
+  ).toBe(14);
+  expect(
+    agentHistoryModelSeenBoundary({
+      ...page,
+      anchor: "latest",
+      minSequence: 12,
+      maxSequence: 14,
+      sequenceBeforePage: 11,
+    }),
+  ).toBeNull();
+});

@@ -5,8 +5,7 @@ import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read
 import { publishAgentReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
-/** Only an `unread` read moves the Agent's read position, and it moves it across a sequence the
- * conversation does not have. */
+/** Unread reads and complete latest pages move the Agent's read position monotonically. */
 
 test("an unanchored canonical read advances across a missing sequence", async () => {
   const events: object[] = [];
@@ -66,6 +65,294 @@ test("an unanchored canonical read advances across a missing sequence", async ()
       readThroughSequence: 3,
     },
   ]);
+});
+
+test("a plain latest read advances a User-Agent DM when the full unread page fits", async () => {
+  const updates: object[] = [];
+  const events: object[] = [];
+  const db = {
+    agent: { findMany: async () => [] },
+    user: { findUnique: async () => ({ id: "user-1" }) },
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 1 }),
+      updateMany: async (input: object) => {
+        updates.push(input);
+        return { count: 1 };
+      },
+    },
+    message: {
+      findMany: async () => [
+        {
+          id: "message-3",
+          sequence: 3,
+          body: "newest",
+          createdAt: new Date(0),
+          sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        },
+        {
+          id: "message-2",
+          sequence: 2,
+          body: "pending",
+          createdAt: new Date(0),
+          sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        },
+      ],
+    },
+  } as unknown as PrismaClient;
+  class TestConversationRepository extends PrismaDirectConversationRepository {
+    override async userIdForUsername() {
+      return "user-1";
+    }
+    override async findUserAgentConversation() {
+      return { id: "conversation-1" };
+    }
+    override async getOrCreateUserAgent() {
+      return { id: "conversation-1" };
+    }
+  }
+  const page = await new TestConversationRepository(
+    db,
+    {},
+    {
+      agentReadChanged: async (event: object) => {
+        events.push(event);
+      },
+    },
+  ).readMessagesPage("workspace-1", "agent-1", "@alice", {});
+  expect(page.modelSeenUpToSeq).toBe(3);
+  expect(updates[0]).toMatchObject({ data: { agentReadThroughSequence: 3 } });
+  expect(events).toEqual([
+    {
+      workspaceId: "workspace-1",
+      conversationId: "conversation-1",
+      agentId: "agent-1",
+      readThroughSequence: 3,
+    },
+  ]);
+});
+
+test("a plain latest read leaves the cursor when unread messages exceed the page", async () => {
+  const updates: object[] = [];
+  const db = {
+    agent: { findMany: async () => [] },
+    user: { findUnique: async () => ({ id: "user-1" }) },
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 0 }),
+      updateMany: async (input: object) => {
+        updates.push(input);
+        return { count: 1 };
+      },
+    },
+    message: {
+      findMany: async () =>
+        [1, 2, 3].map((sequence) => ({
+          id: `message-${sequence}`,
+          sequence,
+          body: "pending",
+          createdAt: new Date(0),
+          sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        })),
+    },
+  } as unknown as PrismaClient;
+  class TestConversationRepository extends PrismaDirectConversationRepository {
+    override async userIdForUsername() {
+      return "user-1";
+    }
+    override async findUserAgentConversation() {
+      return { id: "conversation-1" };
+    }
+    override async getOrCreateUserAgent() {
+      return { id: "conversation-1" };
+    }
+  }
+  const page = await new TestConversationRepository(
+    db,
+    {},
+    {
+      agentReadChanged: async () => {
+        throw new Error("must not publish");
+      },
+    },
+  ).readMessagesPage("workspace-1", "agent-1", "@alice", { limit: 2 });
+  expect(page.modelSeenUpToSeq).toBeNull();
+  expect(updates).toEqual([]);
+});
+
+test("a plain latest read advances when only the tail of a full page is unread", async () => {
+  const updates: object[] = [];
+  const db = {
+    agent: { findMany: async () => [] },
+    user: { findUnique: async () => ({ id: "user-1" }) },
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 2 }),
+      updateMany: async (input: object) => {
+        updates.push(input);
+        return { count: 1 };
+      },
+    },
+    message: {
+      findMany: async () =>
+        [4, 3, 2].map((sequence) => ({
+          id: `message-${sequence}`,
+          sequence,
+          body: "pending",
+          createdAt: new Date(0),
+          sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        })),
+    },
+  } as unknown as PrismaClient;
+  class TestConversationRepository extends PrismaDirectConversationRepository {
+    override async userIdForUsername() {
+      return "user-1";
+    }
+    override async findUserAgentConversation() {
+      return { id: "conversation-1" };
+    }
+    override async getOrCreateUserAgent() {
+      return { id: "conversation-1" };
+    }
+  }
+  const page = await new TestConversationRepository(db).readMessagesPage(
+    "workspace-1",
+    "agent-1",
+    "@alice",
+    {
+      limit: 2,
+    },
+  );
+  expect(page.modelSeenUpToSeq).toBe(4);
+  expect(updates[0]).toMatchObject({ data: { agentReadThroughSequence: 4 } });
+});
+
+test("a plain latest read advances across a sequence gap when the omitted row is already read", async () => {
+  const updates: object[] = [];
+  const db = {
+    agent: { findMany: async () => [] },
+    user: { findUnique: async () => ({ id: "user-1" }) },
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 3 }),
+      updateMany: async (input: object) => {
+        updates.push(input);
+        return { count: 1 };
+      },
+    },
+    message: {
+      findMany: async () =>
+        [6, 5, 3].map((sequence) => ({
+          id: `message-${sequence}`,
+          sequence,
+          body: "pending",
+          createdAt: new Date(0),
+          sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        })),
+    },
+  } as unknown as PrismaClient;
+  class TestConversationRepository extends PrismaDirectConversationRepository {
+    override async userIdForUsername() {
+      return "user-1";
+    }
+    override async findUserAgentConversation() {
+      return { id: "conversation-1" };
+    }
+    override async getOrCreateUserAgent() {
+      return { id: "conversation-1" };
+    }
+  }
+  const page = await new TestConversationRepository(db).readMessagesPage(
+    "workspace-1",
+    "agent-1",
+    "@alice",
+    {
+      limit: 2,
+    },
+  );
+  expect(page.modelSeenUpToSeq).toBe(6);
+  expect(updates[0]).toMatchObject({ data: { agentReadThroughSequence: 6 } });
+});
+
+test("a plain historical read never advances the User-Agent DM cursor", async () => {
+  const updates: object[] = [];
+  let anchorLookup = true;
+  const db = {
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 1 }),
+      updateMany: async (input: object) => {
+        updates.push(input);
+        return { count: 1 };
+      },
+    },
+    message: {
+      findMany: async () =>
+        anchorLookup
+          ? ((anchorLookup = false),
+            [{ id: "deadbeef", sequence: 3, threadRootId: null, senderMemberId: null }])
+          : [
+              {
+                id: "message-1",
+                sequence: 1,
+                body: "old",
+                createdAt: new Date(0),
+                sender: {
+                  agentId: null,
+                  agent: null,
+                  user: { username: "alice", description: "" },
+                },
+                attachments: [],
+                mentions: [],
+                memoryHint: null,
+                task: null,
+                actionCard: null,
+              },
+            ],
+    },
+  } as unknown as PrismaClient;
+  class TestConversationRepository extends PrismaDirectConversationRepository {
+    override async resolveAgentTarget() {
+      return {
+        conversationId: "conversation-1",
+        threadRootId: null,
+        canonicalTarget: "@alice",
+        isChannel: false,
+        isUserAgentDirectConversation: true,
+      };
+    }
+  }
+  const page = await new TestConversationRepository(
+    db,
+    {},
+    {
+      agentReadChanged: async () => {
+        throw new Error("must not publish");
+      },
+    },
+  ).readMessagesPage("workspace-1", "agent-1", "@alice", { before: "deadbeef" });
+  expect(page.modelSeenUpToSeq).toBe(1);
+  expect(updates).toEqual([]);
 });
 
 test("an Agent peer read does not publish a User-Agent DM event", async () => {

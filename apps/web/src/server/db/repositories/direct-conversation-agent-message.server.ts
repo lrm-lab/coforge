@@ -225,13 +225,19 @@ export async function readLatestWindow(
     take: limit + 1,
     include: AGENT_MESSAGE_INCLUDE,
   });
-  return { rows: rows.slice(0, limit).reverse(), hasOlder: rows.length > limit, hasNewer: false };
+  return {
+    rows: rows.slice(0, limit).reverse(),
+    hasOlder: rows.length > limit,
+    hasNewer: false,
+    ...(rows.length > limit ? { sequenceBeforePage: rows.at(-1)?.sequence } : {}),
+  };
 }
 
 /**
  * Where the Agent's read position stood before a read and where it moved to, for the reads that
  * move it from the position: an unread read reports both and whether more remain, and a plain
- * read without an anchor reports where it started, so the CLI can say what lies newer.
+ * latest read reports where it started so the CLI can describe a complete-page advance or what
+ * lies newer.
  */
 export function readPositionReport(
   unread: boolean | undefined,
