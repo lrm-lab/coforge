@@ -144,7 +144,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
   const actions = (
     <>
       <Button
-        size="sm"
+        size="xs"
         color="tertiary"
         onPress={() => {
           writeDismissed();
@@ -155,29 +155,32 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
       >
         {m.notification_activation_dismiss()}
       </Button>
-      <Button size="sm" color="secondary" isDisabled={enabling} onPress={() => void enable()}>
+      <Button size="xs" color="secondary" isDisabled={enabling} onPress={() => void enable()}>
         {enabling ? m.notification_activation_enabling() : m.notification_activation_enable()}
       </Button>
     </>
   );
   return (
-    <div
-      ref={ref}
-      // Beside the text on a desktop; on a phone, or under an error as on Raft, the buttons take
-      // their own row, right-aligned.
-      className={cx(
-        "mx-4 mt-2 flex flex-col gap-2 rounded-xl border border-utility-blue-200 bg-utility-blue-50 px-3 py-2.5 text-sm md:mx-6",
-        !error && "md:flex-row md:items-center md:gap-3",
-      )}
-    >
-      <div className="flex min-w-0 flex-1 items-start gap-2">
-        <BellRinging01 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-primary" />
-        <div className="min-w-0">
-          <p className="font-semibold text-primary">
-            <span className="md:hidden">{m.notification_activation_mobile_title()}</span>
-            <span className="max-md:hidden">{m.notification_activation_desktop_title()}</span>
-          </p>
-          <p className="text-secondary">
+    // As on Raft, the banner's own width decides the layout, not the window's: from 452px the
+    // buttons sit beside the body, level with its last line; narrower (a phone, or the pane beside
+    // an open thread), and under an error as on Raft, they take their own row, right-aligned.
+    <div ref={ref} className="@container mx-4 mt-2 md:mx-6">
+      <div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-xl border border-utility-blue-200 bg-utility-blue-50 px-3 py-2.5 text-sm">
+        <BellRinging01
+          aria-hidden="true"
+          className="col-start-1 row-start-1 mt-0.5 size-4 text-fg-primary"
+        />
+        <p
+          className={cx(
+            "col-start-2 row-start-1 font-semibold text-primary",
+            !error && "@min-[452px]:col-span-2",
+          )}
+        >
+          <span className="md:hidden">{m.notification_activation_mobile_title()}</span>
+          <span className="max-md:hidden">{m.notification_activation_desktop_title()}</span>
+        </p>
+        <div className="col-start-2 row-start-2 min-w-0 text-primary">
+          <p>
             <span className="md:hidden">{m.notification_activation_mobile_body()}</span>
             <span className="max-md:hidden">{m.notification_activation_desktop_body()}</span>
           </p>
@@ -189,8 +192,16 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
             </p>
           )}
         </div>
+        <div
+          className={cx(
+            "col-start-2 mt-2 flex flex-wrap justify-end gap-2",
+            !error &&
+              "@min-[452px]:col-start-3 @min-[452px]:row-start-2 @min-[452px]:mt-0 @min-[452px]:self-end",
+          )}
+        >
+          {actions}
+        </div>
       </div>
-      <div className="flex shrink-0 justify-end gap-2">{actions}</div>
     </div>
   );
 }
