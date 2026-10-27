@@ -7,6 +7,8 @@
     "pathPattern": [
       "./messages/{locale}/common.json",
       "./messages/{locale}/agents.json",
+      "./messages/{locale}/agent-migration.json",
+      "./messages/{locale}/agent-reminders.json",
       "./messages/{locale}/agent-activity.json",
       "./messages/{locale}/agent-mascots.json",
       "./messages/{locale}/agent-runtime.json",
