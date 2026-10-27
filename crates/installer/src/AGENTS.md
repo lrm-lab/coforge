@@ -90,9 +90,16 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   syncs it from a version directory and tells whether it is in sync. Tests in
   `src/current/tests.rs` (real files).
 - `src/contract.rs`: serde types for every file and JSON shape shared with the
-  product (manifests, `active.json`, `installation.json`, receipts,
-  `__lifecycle` output, lock, service names, paths). Tests in
-  `src/contract/tests.rs`.
+  product, split by concept into `src/contract/` and re-exported from `contract`, so callers name
+  `contract::X`. `ArtifactIdentity` and `to_file_json` live here; the golden test helpers and the
+  golden coverage list are in `src/contract/tests.rs`, each submodule's tests in its `tests.rs`.
+- `src/contract/manifests.rs`: the product and installer release manifests, the feed list, and
+  the release version cases.
+- `src/contract/installation.rs`: `active.json`, `installation.json`, and the launchers.
+- `src/contract/receipts.rs`: upgrade receipts and their outcomes, exit and error codes, and
+  dead-process evidence.
+- `src/contract/lifecycle.rs`: the JSON `coforge-computer __lifecycle` prints.
+- `src/contract/machine.rs`: the machine mutation lock, service names, and paths.
 - `src/clock.rs`: the clock and sleep port the bounded waits run through (virtual in tests).
 - `src/service.rs`: OS service control of the Computer supervisor: state (not installed, stopped,
   running with the manager's pid), stop (waits until the manager has dropped it), start (waits
