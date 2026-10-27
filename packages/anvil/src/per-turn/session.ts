@@ -32,11 +32,30 @@ function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+/** The one run a fresh session needs before it can be returned, if this provider has one. */
+function freshBootstrap(
+  protocol: TurnProtocol,
+  options: AgentSessionOptions,
+): { noun: string; prompt: string } | undefined {
+  if (options.sessionId) return undefined;
+  if (protocol.instructionsTurn) {
+    return { noun: protocol.instructionsTurn.identityNoun, prompt: options.instructions };
+  }
+  if (protocol.identityBootstrap) {
+    return {
+      noun: protocol.identityBootstrap.identityNoun,
+      prompt: protocol.identityBootstrap.prompt,
+    };
+  }
+  return undefined;
+}
+
 /**
  * The `AgentSession` of a per-turn provider: every turn is its own child process, and the turn ends
- * when that process exits. A fresh session has no history to resume, so - for a provider that has
- * no system-prompt channel of its own - it is established at once with a first turn whose only
- * content is the standing instructions; a resumed session spawns nothing until real input arrives.
+ * when that process exits. A fresh session has no history to resume. `instructionsTurn` establishes
+ * it with a first turn whose only content is `options.instructions`. `identityBootstrap` establishes
+ * it with that protocol's own prompt, which is not the standing briefing. A resumed session spawns
+ * nothing until real input arrives.
  * The provider's `TurnProtocol` says how to launch a turn and how to read its records.
  */
 export async function createPerTurnSession(
@@ -45,9 +64,10 @@ export async function createPerTurnSession(
   host: PerTurnSessionHost,
 ): Promise<AgentSession> {
   const session = new PerTurnAgentSession(protocol, options, host);
-  if (!options.sessionId && protocol.instructionsTurn) {
+  const bootstrap = freshBootstrap(protocol, options);
+  if (bootstrap) {
     try {
-      await session.bootstrap(protocol.instructionsTurn.identityNoun);
+      await session.bootstrap(bootstrap.noun, bootstrap.prompt);
     } catch (error) {
       await session.dispose().catch(() => undefined);
       throw error;
@@ -107,13 +127,13 @@ class PerTurnAgentSession implements AgentSession {
       : undefined;
   }
 
-  /** Spawns a fresh session's first (instructions-only) turn and resolves once a record names a
-   * session id, or rejects if that turn ends (or fails to spawn) before one does. */
-  async bootstrap(identityNoun: string): Promise<void> {
+  /** Spawns the prompt `freshBootstrap` selected and resolves once a record names a session id,
+   * or rejects if that turn ends or fails to spawn before one does. */
+  async bootstrap(identityNoun: string, prompt: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       this.#bootstrap = { identityNoun, resolve, reject };
       try {
-        this.#spawnTurn(this.#options.instructions);
+        this.#spawnTurn(prompt);
       } catch (error) {
         this.#settleBootstrap(toError(error));
       }

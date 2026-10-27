@@ -1,5 +1,6 @@
 import type { AgentSessionOptions } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { OPENCODE_CONFIG_CONTENT_ENV } from "./instructions";
 import { asRecord, eventTime } from "#src/json-record";
 import type { TurnRecord } from "#src/per-turn/turn-process";
 import type {
@@ -15,18 +16,22 @@ import type {
  * with the prompt as the final argv item. Resume is `--session <id>`, which OpenCode reports on its
  * own events (`sessionID`).
  *
- * The standing Agent instructions are the whole prompt of a fresh session's first turn: OpenCode
- * v2 reads a project's `AGENTS.md` itself and has no system-prompt flag, so there is no other
- * channel for them. A resumed session never resends them.
+ * Standing instructions are not a turn. `configContent` is `{instructions:[absolute path]}` and
+ * is applied on every launch, including resume: each `opencode run` is a new process, and a
+ * resumed session would otherwise lose the briefing. OpenCode appends that file after AGENTS.md.
+ * A fresh session spawns nothing until real input arrives, except a memory control session: the
+ * CLI names the session only after a run starts, and conversation recovery reads that id first.
  */
+export const OPENCODE_MEMORY_IDENTITY_PROMPT = "Reply with ok.";
+
 export function createOpenCodeTurnProtocol(
   options: AgentSessionOptions,
   command: readonly string[],
+  configContent: string,
 ): TurnProtocol {
   return {
     provider: RUNTIME_PROVIDER.OPENCODE,
     displayName: "OpenCode",
-    instructionsTurn: { identityNoun: "a session identity" },
     resumedIdentity: "resumable",
     repeatedSessionId: "ignore",
     identityReports: "every-completion",
@@ -37,7 +42,18 @@ export function createOpenCodeTurnProtocol(
       // the wrong tree.
       PWD: options.agentWorkspaceDirectory,
       NO_COLOR: "1",
+      // The host spreads this last. The provider refuses to build it when the variable is already
+      // set, so this assignment never replaces a caller's value.
+      [OPENCODE_CONFIG_CONTENT_ENV]: configContent,
     },
+    ...(options.memoryControlSession
+      ? {
+          identityBootstrap: {
+            identityNoun: "a session identity",
+            prompt: OPENCODE_MEMORY_IDENTITY_PROMPT,
+          },
+        }
+      : {}),
     launch: (request) => openCodeCommand(options, command, request),
     openTurn: (scope) => new OpenCodeTurnReader(scope),
   };

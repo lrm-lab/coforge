@@ -36,7 +36,7 @@ import {
   CATALOG_CACHE_TTL_MS,
   fileStatCacheKey,
   readInventoryCache,
-  writeInventoryCache,
+  updateInventoryCache,
 } from "./runtime-inventory-cache";
 import { discoverExternalCodeAgents } from "./runtime-probe";
 import { claudeStaticCatalog } from "@lrm/coforge-anvil/claude-code";
@@ -420,16 +420,23 @@ export async function discoverCodeAgentCatalogs(
   const results = await Promise.all(discoveries);
   if (options.cacheDirectory) {
     const cacheDirectory = options.cacheDirectory;
-    const cache = await readInventoryCache(cacheDirectory);
-    let dirty = false;
-    for (const { provider, keyPaths, catalog } of results) {
-      if (!provider || !keyPaths || !catalog) continue;
-      const key = await fileStatCacheKey(keyPaths);
-      if (!key) continue;
-      cache[provider] = { ...cache[provider], key, catalog, catalogProbedAt: Date.now() };
-      dirty = true;
-    }
-    if (dirty) await writeInventoryCache(cacheDirectory, cache);
+    const probedAt = Date.now();
+    const updates = (
+      await Promise.all(
+        results.map(async ({ provider, keyPaths, catalog }) => {
+          if (!provider || !keyPaths || !catalog) return undefined;
+          const key = await fileStatCacheKey(keyPaths);
+          return key ? { provider, key, catalog } : undefined;
+        }),
+      )
+    ).filter((update) => update !== undefined);
+    // Merge only these catalogs into the latest file. Writing the whole snapshot read above would
+    // restore a runtime or entry another discovery changed or dropped in between.
+    if (updates.length)
+      await updateInventoryCache(cacheDirectory, (current) => {
+        for (const { provider, key, catalog } of updates)
+          current[provider] = { ...current[provider], key, catalog, catalogProbedAt: probedAt };
+      });
   }
   return results.flatMap(({ catalog }) => (catalog ? [catalog] : []));
 }

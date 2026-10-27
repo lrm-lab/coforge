@@ -57,8 +57,18 @@ test("registry launches OpenCode from its installer path when PATH misses it", a
       environment: { COFORGE_OPENCODE_MODE: "text", COFORGE_OPENCODE_LAUNCH_LOG: launchLog },
     });
     try {
-      await completed(session);
-      expect(await Bun.file(launchLog).text()).toContain("installer path instructions");
+      // A fresh OpenCode session does not launch until real input. The installer-path binary is
+      // the one that writes this log, and the standing instructions live in the private file.
+      const done = completed(session);
+      await session.sendMessage("ping");
+      await done;
+      const launch = JSON.parse((await Bun.file(launchLog).text()).trim()) as {
+        prompt: string;
+        configContent: string;
+      };
+      expect(launch.prompt).toBe("ping");
+      const config = JSON.parse(launch.configContent) as { instructions: string[] };
+      expect(await Bun.file(config.instructions[0]!).text()).toBe("installer path instructions");
     } finally {
       await session.dispose();
     }

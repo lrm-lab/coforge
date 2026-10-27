@@ -1,4 +1,5 @@
 import { appendFile } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 
 /**
  * Stand-in for the `opencode` binary: a fresh process per invocation, argv-driven, no stdin.
@@ -44,7 +45,8 @@ aiberm/gpt-5.6-luna
 const argv = process.argv.slice(2);
 
 if (argv.includes("--version")) {
-  process.stdout.write(`${Bun.env.COFORGE_OPENCODE_VERSION ?? "2.0.7"}\n`);
+  // 2.0.30 is the first release that loads absolute instructions from OPENCODE_CONFIG_CONTENT.
+  process.stdout.write(`${Bun.env.COFORGE_OPENCODE_VERSION ?? "2.0.30"}\n`);
   process.exit(0);
 }
 
@@ -113,12 +115,13 @@ const variant = hashIndex >= 0 ? modelArgument!.slice(hashIndex + 1) : undefined
 const sessionIndex = argv.indexOf("--session");
 const resumeId = sessionIndex >= 0 ? argv[sessionIndex + 1] : undefined;
 const prompt = argv.at(-1);
+const configContent = await requireOpenCodeInstructions();
 
 const launchLog = Bun.env.COFORGE_OPENCODE_LAUNCH_LOG;
 if (launchLog) {
   await appendFile(
     launchLog,
-    `${JSON.stringify({ prompt, model, variant, resumeId, dir: Bun.env.PWD })}\n`,
+    `${JSON.stringify({ prompt, model, variant, resumeId, dir: Bun.env.PWD, configContent })}\n`,
   );
 }
 
@@ -142,9 +145,8 @@ const timestamp = Date.now();
 
 write({ type: "step_start", timestamp, sessionID: sessionId, part: { type: "step-start" } });
 
-// A test's own event listener is registered after `createAgentSession` resolved (which happens on
-// this first event), so anything written immediately can race the subscription. The delay lets a
-// test opt into observing the rest of the turn deterministically.
+// The delay separates `step_start` from the rest of the turn, so a test can see progress before
+// the turn finishes.
 const turnDelayMs = Number(Bun.env.COFORGE_OPENCODE_TURN_DELAY_MS ?? "0");
 if (turnDelayMs > 0) await Bun.sleep(turnDelayMs);
 
@@ -235,3 +237,32 @@ if (mode === "silent-exit") {
 }
 
 throw new Error(`unknown COFORGE_OPENCODE_MODE: ${mode}`);
+
+/** The turn overlay: one absolute instructions file, and that file has to exist. */
+async function requireOpenCodeInstructions(): Promise<string> {
+  const content = Bun.env.OPENCODE_CONFIG_CONTENT;
+  if (!content) {
+    console.error("missing OPENCODE_CONFIG_CONTENT");
+    process.exit(1);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    console.error("OPENCODE_CONFIG_CONTENT is not JSON");
+    process.exit(1);
+  }
+  const instructions = (parsed as { instructions?: unknown }).instructions;
+  const path = Array.isArray(instructions) ? instructions[0] : undefined;
+  if (
+    !Array.isArray(instructions) ||
+    instructions.length !== 1 ||
+    typeof path !== "string" ||
+    !isAbsolute(path) ||
+    !(await Bun.file(path).exists())
+  ) {
+    console.error("OPENCODE_CONFIG_CONTENT must name one absolute instructions file");
+    process.exit(1);
+  }
+  return content;
+}

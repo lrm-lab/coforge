@@ -110,11 +110,12 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - Every Provider injects them through the provider's native system or developer
   instruction mechanism: Codex app-server `developerInstructions`, the Claude
   Code system-prompt-file option, the CoForge Agent resource-loader
-  system-prompt override, Grok ACP `_meta.systemPromptOverride`, and Command
-  Code's private `--mod` `appendSystemPrompt` hook.
+  system-prompt override, Grok ACP `_meta.systemPromptOverride`, Command
+  Code's private `--mod` `appendSystemPrompt` hook, and OpenCode's
+  `OPENCODE_CONFIG_CONTENT` instructions file.
 - Current channel roles override names, previous sessions and local memory. Without current coordinator status or explicit human delegation, an Agent must not assign, chase or reprioritize peers. Coordination stays scoped to its channel and grants no extra permissions. Web annotates channel reads with current roles; launches preserve Agent-owned memory.
-- Do not copy the text into a provider. Do not write `AGENTS.md` or `CLAUDE.md` into the user's
-  Agent workspace for a provider that supports native injection.
+- Do not copy the text into a provider. Do not write `AGENTS.md`, `CLAUDE.md`, or an OpenCode
+  config file into the user's Agent workspace for a provider that supports native injection.
 - Deliver Message recovery bodies directly as turn input and App Inbox wakeups
   separately. Never append them to the standing instructions.
 - When a session lacks older user-referenced context, the instructions direct the Agent to lexical
@@ -155,6 +156,10 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   one (`instructionsTurn`, `resumedIdentity`, `repeatedSessionId`, `identityReports`,
   `mintSessionId`, `sanitizeEnvironment`, `lostResume`, reader `end`) records an observed CLI difference. Check the real CLI before adding
   one or making two providers agree; the fixtures do not prove a binary.
+- OpenCode does not set `instructionsTurn`. From CLI 2.0.30, every launch, including resume,
+  appends the standing instructions through `OPENCODE_CONFIG_CONTENT`. A fresh memory control
+  session still runs one short turn so the CLI can name the session before conversation recovery.
+  See [Anvil OpenCode instructions](../../../anvil/src/opencode/AGENTS.md).
 - The session never parses provider output. A reader emits through the `TurnScope`, synchronously,
   so events keep the CLI's order. A turn's stdin mode is a CLI fact: `eof` where the CLI waits for
   stdin EOF (OpenCode, #652), `open` for Cursor (`eof` is unverified there), `line` for agy.

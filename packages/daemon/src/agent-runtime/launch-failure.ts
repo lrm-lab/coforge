@@ -142,12 +142,14 @@ function launchFailureDetail(
         `${runtimeName} cannot use the Agent's model provider setting. Configure the model ` +
         "provider in the Agent's settings, then start it again."
       );
-    case LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID:
-      // The error's own sentence names the variable and what is wrong with its value.
-      return (
-        `${error instanceof Error ? error.message : "An Agent environment variable is invalid"}. ` +
-        "Correct it in the Agent's environment variables, then start the Agent again."
-      );
+    case LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID: {
+      // The error's own sentence names the variable. A message that already ends with a period
+      // keeps that period; the recovery step is a separate sentence.
+      const message =
+        error instanceof Error ? error.message : "An Agent environment variable is invalid";
+      const stem = message.endsWith(".") ? message : `${message}.`;
+      return `${stem} Correct it in the Agent's environment variables, then start the Agent again.`;
+    }
     case LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED:
       return (
         "Agent runtime could not be started. See `coforge-computer logs` for the cause, then " +

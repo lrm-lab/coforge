@@ -49,6 +49,28 @@ export async function writeInventoryCache(
   }
 }
 
+/** Serializes in-process read-modify-write of the cache file so two callers cannot overwrite each
+ * other's entries. Discovery reads the file once for lookups, then changes it here, which re-reads
+ * the latest state: a provider one caller dropped is not restored by another that read it earlier. */
+let inventoryCacheUpdate: Promise<void> = Promise.resolve();
+
+export async function updateInventoryCache(
+  stateDirectory: string,
+  update: (cache: ProbeCache) => void,
+): Promise<void> {
+  const run = inventoryCacheUpdate
+    .catch(() => {})
+    .then(async () => {
+      const cache = await readInventoryCache(stateDirectory);
+      update(cache);
+      await writeInventoryCache(stateDirectory, cache);
+    });
+  inventoryCacheUpdate = run;
+  return run.catch(() => {
+    // Best-effort, like the write itself: a failed update only costs the next restart a re-probe.
+  });
+}
+
 /**
  * Builds a stable cache key from one or more files' mtime and size. Returns undefined when any
  * file cannot be stat'd (missing, unreadable), which every caller treats as an unconditional

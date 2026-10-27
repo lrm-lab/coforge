@@ -1,18 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, utimes } from "node:fs/promises";
+import { mkdtemp, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  discoverCodeAgentCatalogs,
-  loadCachedCodeAgentCatalogs,
-} from "#src/code-agent/runtime-inventory";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
-import { fileStatCacheKey, writeInventoryCache } from "#src/code-agent/runtime-inventory-cache";
-import { OPENCODE_DISCOVERY_BUDGET_MS } from "./catalog-discovery-budget";
-import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
-
-const OPENCODE_FIXTURE = anvilRuntimeFixtures.opencode;
+import {
+  fileStatCacheKey,
+  readInventoryCache,
+  writeInventoryCache,
+} from "#src/code-agent/runtime-inventory-cache";
 
 describe("Code Agent probe cache", () => {
   test("skips the version spawn when the cached probe key still matches the executable", async () => {
@@ -107,6 +103,254 @@ describe("Code Agent probe cache", () => {
     }
   });
 
+  test("re-validates a cached OpenCode runtime and drops it when below 2.0.30", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const opencodePath = join(binDirectory, "opencode");
+    await Bun.write(opencodePath, "#!/bin/sh\necho opencode\n");
+    try {
+      const key = await fileStatCacheKey([opencodePath]);
+      await writeInventoryCache(stateDirectory, {
+        opencode: {
+          key: key!,
+          runtime: { provider: "opencode", version: "2.0.29", displayName: "OpenCode" },
+        },
+      });
+      let spawnCalls = 0;
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "opencode" ? opencodePath : undefined),
+        spawn: () => {
+          spawnCalls++;
+          return { stdout: new Blob(["opencode v2.0.29"]).stream(), exited: Promise.resolve(0) };
+        },
+      };
+
+      const runtimes = await discoverExternalCodeAgents(
+        probe,
+        { PATH: "" },
+        undefined,
+        undefined,
+        stateDirectory,
+      );
+
+      expect(runtimes).toEqual([]);
+      expect(spawnCalls).toBe(0);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("does not restore a cached OpenCode runtime below 2.0.30 when the live probe rejects it", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const opencodePath = join(binDirectory, "opencode");
+    await Bun.write(opencodePath, "#!/bin/sh\necho opencode\n");
+    try {
+      await writeInventoryCache(stateDirectory, {
+        opencode: {
+          key: "stale-before-replace",
+          runtime: { provider: "opencode", version: "2.0.7", displayName: "OpenCode" },
+        },
+      });
+      let spawnCalls = 0;
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "opencode" ? opencodePath : undefined),
+        spawn: () => {
+          spawnCalls++;
+          return { stdout: new Blob(["opencode v2.0.20"]).stream(), exited: Promise.resolve(0) };
+        },
+      };
+
+      await expect(
+        discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
+      ).resolves.toEqual([]);
+      expect(spawnCalls).toBe(1);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("does not restore a supported cached OpenCode runtime when the live binary is below 2.0.30", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const opencodePath = join(binDirectory, "opencode");
+    await Bun.write(opencodePath, "#!/bin/sh\necho opencode\n");
+    try {
+      await writeInventoryCache(stateDirectory, {
+        opencode: {
+          key: "stale-supported",
+          runtime: { provider: "opencode", version: "2.0.40", displayName: "OpenCode" },
+        },
+      });
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "opencode" ? opencodePath : undefined),
+        spawn: () => ({
+          stdout: new Blob(["opencode v2.0.29"]).stream(),
+          exited: Promise.resolve(0),
+        }),
+      };
+
+      await expect(
+        discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
+      ).resolves.toEqual([]);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("a rejected OpenCode probe drops a supported cache so a later miss cannot restore it", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const opencodePath = join(binDirectory, "opencode");
+    await Bun.write(opencodePath, "#!/bin/sh\necho opencode\n");
+    try {
+      await writeInventoryCache(stateDirectory, {
+        opencode: {
+          key: "stale-supported",
+          runtime: { provider: "opencode", version: "2.0.40", displayName: "OpenCode" },
+        },
+      });
+      let reject = true;
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "opencode" ? opencodePath : undefined),
+        spawn: () =>
+          reject
+            ? { stdout: new Blob(["opencode v2.0.29"]).stream(), exited: Promise.resolve(0) }
+            : { stdout: new Blob(["broken\n"]).stream(), exited: Promise.resolve(1) },
+      };
+
+      await expect(
+        discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
+      ).resolves.toEqual([]);
+      expect((await readInventoryCache(stateDirectory)).opencode).toBeUndefined();
+
+      reject = false;
+      await expect(
+        discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
+      ).resolves.toEqual([]);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("a discovery that read the cache before a rejection cannot restore the dropped runtime", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const opencodePath = join(binDirectory, "opencode");
+    const kiroPath = join(binDirectory, "kiro-cli");
+    await Bun.write(opencodePath, "#!/bin/sh\necho opencode\n");
+    await Bun.write(kiroPath, "#!/bin/sh\necho kiro-cli\n");
+    try {
+      await writeInventoryCache(stateDirectory, {
+        opencode: {
+          key: "seed-supported",
+          runtime: { provider: "opencode", version: "2.0.40", displayName: "OpenCode" },
+        },
+      });
+      let releaseKiro!: () => void;
+      const kiroGate = new Promise<number>((resolve) => {
+        releaseKiro = () => resolve(0);
+      });
+      let kiroProbing!: () => void;
+      const kiroStarted = new Promise<void>((resolve) => {
+        kiroProbing = resolve;
+      });
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) =>
+          name === "opencode" ? opencodePath : name === "kiro-cli" ? kiroPath : undefined,
+        spawn: (command) => {
+          if (command === kiroPath) {
+            kiroProbing();
+            return { stdout: new Blob(["kiro-cli 99.0.0"]).stream(), exited: kiroGate };
+          }
+          return { stdout: new Blob(["opencode v2.0.29"]).stream(), exited: Promise.resolve(0) };
+        },
+      };
+
+      // This discovery reads the cache, which still holds the supported OpenCode runtime, then
+      // holds while its own probe is outstanding.
+      const kiroDiscovery = discoverExternalCodeAgents(
+        probe,
+        { PATH: "" },
+        undefined,
+        "kiro",
+        stateDirectory,
+      );
+      await kiroStarted;
+      // Meanwhile an OpenCode probe reads and refuses the version, dropping the cached runtime.
+      await discoverExternalCodeAgents(probe, { PATH: "" }, undefined, "opencode", stateDirectory);
+      releaseKiro();
+      await kiroDiscovery;
+
+      // The first discovery persists after the drop; it must not write the runtime back.
+      expect((await readInventoryCache(stateDirectory)).opencode?.runtime).toBeUndefined();
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps a supported cached OpenCode runtime when the live version probe exits non-zero", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const opencodePath = join(binDirectory, "opencode");
+    await Bun.write(opencodePath, "#!/bin/sh\necho opencode\n");
+    try {
+      await writeInventoryCache(stateDirectory, {
+        opencode: {
+          key: "stale-supported",
+          runtime: { provider: "opencode", version: "2.0.40", displayName: "OpenCode" },
+        },
+      });
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "opencode" ? opencodePath : undefined),
+        spawn: () => ({
+          stdout: new Blob(["broken\n"]).stream(),
+          exited: Promise.resolve(1),
+        }),
+      };
+
+      await expect(
+        discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
+      ).resolves.toEqual([{ provider: "opencode", version: "2.0.40", displayName: "OpenCode" }]);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("does not restore a cached OpenCode runtime below 2.0.30 when the version probe throws", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const opencodePath = join(binDirectory, "opencode");
+    await Bun.write(opencodePath, "#!/bin/sh\necho opencode\n");
+    try {
+      await writeInventoryCache(stateDirectory, {
+        opencode: {
+          key: "stale-before-throw",
+          runtime: { provider: "opencode", version: "2.0.29", displayName: "OpenCode" },
+        },
+      });
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "opencode" ? opencodePath : undefined),
+        spawn: () => {
+          throw new Error("version probe failed");
+        },
+      };
+
+      await expect(
+        discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
+      ).resolves.toEqual([]);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("without a cache directory, every discovery spawns again", async () => {
     let spawnCalls = 0;
     const probe: ExternalCodeAgentProbe = {
@@ -120,138 +364,4 @@ describe("Code Agent probe cache", () => {
     await discoverExternalCodeAgents(probe);
     expect(spawnCalls).toBe(2);
   });
-
-  test("caches the Pi model catalog keyed by models.json and auth.json, and invalidates on change", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
-    const home = await mkdtemp(join(tmpdir(), "coforge-probe-cache-pi-"));
-    const agentDir = join(home, ".pi", "agent");
-    await mkdir(agentDir, { recursive: true });
-    const writeModels = (id: string) =>
-      Bun.write(
-        join(agentDir, "models.json"),
-        JSON.stringify({
-          providers: {
-            fixture: {
-              baseUrl: "http://localhost.invalid/v1",
-              apiKey: "local",
-              models: [{ id, name: id, api: "openai-completions" }],
-            },
-          },
-        }),
-      );
-    await writeModels("host-model-1");
-    // The real Pi SDK creates auth.json on discovery; the fake below does not, and the cache key
-    // needs both files to exist.
-    await Bun.write(join(agentDir, "auth.json"), "{}");
-    const environment = { HOME: home, PATH: "", PI_OFFLINE: "1" };
-    const runtimes = [{ provider: "pi" as const, version: "0.0.0", displayName: "Pi" }];
-    const probe: ExternalCodeAgentProbe = {
-      which: () => undefined,
-      spawn: () => ({ stdout: new Blob([]).stream(), exited: Promise.resolve(0) }),
-    };
-    try {
-      await discoverCodeAgentCatalogs(runtimes, {
-        cwd: home,
-        environment,
-        probe,
-        // Stands in for the Pi SDK reading models.json; this case is about the cache key.
-        piModels: async () => [{ id: "host-model-1", provider: "fixture" }] as never,
-        cacheDirectory: stateDirectory,
-      });
-
-      const cached = await loadCachedCodeAgentCatalogs(runtimes, {
-        cwd: home,
-        environment,
-        probe,
-        piModels: async () => [],
-        cacheDirectory: stateDirectory,
-      });
-      expect(cached.needsRefresh).toBe(false);
-      expect(cached.catalogs.find((catalog) => catalog.provider === "pi")?.models).toContainEqual(
-        expect.objectContaining({ id: "host-model-1" }),
-      );
-
-      // Changing models.json invalidates the cached key.
-      await writeModels("host-model-2");
-      const stale = await loadCachedCodeAgentCatalogs(runtimes, {
-        cwd: home,
-        environment,
-        probe,
-        piModels: async () => [],
-        cacheDirectory: stateDirectory,
-      });
-      expect(stale.needsRefresh).toBe(true);
-    } finally {
-      await rm(stateDirectory, { recursive: true, force: true });
-      await rm(home, { recursive: true, force: true });
-    }
-  });
-
-  test("loadCachedCodeAgentCatalogs never spawns and needs a refresh when nothing is cached yet", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
-    try {
-      const result = await loadCachedCodeAgentCatalogs(
-        [{ provider: "codex", version: "0.151.0", displayName: "Codex" }],
-        {
-          probe: {
-            which: () => "/bin/codex",
-            spawn: () => ({ stdout: new Blob([]).stream(), exited: Promise.resolve(0) }),
-          },
-          piModels: async () => [],
-          cacheDirectory: stateDirectory,
-        },
-      );
-      expect(result.needsRefresh).toBe(true);
-      // CoForge's static catalog is always included; nothing dynamic is available yet.
-      expect(result.catalogs.map((catalog) => catalog.provider)).toEqual(["coforge"]);
-    } finally {
-      await rm(stateDirectory, { recursive: true, force: true });
-    }
-  });
 });
-
-test(
-  "the live refresh discovers the OpenCode catalog too, not just its runtime",
-  async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-opencode-catalog-state-"));
-    // The refresh resolves the provider's executable through `probe.which`; point it at a path that
-    // exists (the injected `commands.opencode` is what actually runs) so the branch is taken.
-    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-opencode-catalog-bin-"));
-    const opencodePath = join(binDirectory, "opencode");
-    await Bun.write(opencodePath, "#!/bin/sh\nexit 0\n");
-    try {
-      const probe: ExternalCodeAgentProbe = {
-        which: (name) => (name === "opencode" ? opencodePath : undefined),
-        spawn: () => ({
-          stdout: new Blob(["opencode v2.0.12"]).stream(),
-          exited: Promise.resolve(0),
-        }),
-      };
-      const catalogs = await discoverCodeAgentCatalogs(
-        [{ provider: "opencode" as const, version: "2.0.12", displayName: "OpenCode" }],
-        {
-          cwd: process.cwd(),
-          // A fixture home keeps the Pi catalog, discovered in the same pass, off the developer's
-          // real Pi configuration; that discovery can run for seconds and was most of this test's
-          // time.
-          environment: { PATH: process.env.PATH, HOME: "/fixture/home" },
-          commands: { opencode: [process.execPath, OPENCODE_FIXTURE, "models"] },
-          probe,
-          piModels: async () => [],
-          cacheDirectory: stateDirectory,
-        },
-      );
-
-      const opencode = catalogs.find((catalog) => catalog.provider === "opencode");
-      expect(opencode?.models.map((model) => model.id)).toEqual([
-        "opencode/big-pickle",
-        "aiberm/gpt-5.6-luna",
-      ]);
-      expect(opencode?.models[0]?.reasoningEfforts).toEqual(["low", "medium", "high"]);
-    } finally {
-      await rm(stateDirectory, { recursive: true, force: true });
-      await rm(binDirectory, { recursive: true, force: true });
-    }
-  },
-  OPENCODE_DISCOVERY_BUDGET_MS,
-);

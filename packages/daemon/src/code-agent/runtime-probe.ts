@@ -44,7 +44,7 @@ import { codexClientInfo } from "./codex/host";
 import {
   fileStatCacheKey,
   readInventoryCache,
-  writeInventoryCache,
+  updateInventoryCache,
 } from "./runtime-inventory-cache";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
@@ -95,7 +95,7 @@ async function probeRuntimeVersion(
    * Agent process would get it, so version probing sees the same launchers. */
   environment: Readonly<Record<string, string | undefined>>,
   versionProbeTimeoutMs: number,
-): Promise<RuntimeMetadata | undefined> {
+): Promise<RuntimeVersionProbe> {
   const probeEnvironment = agentEnvironment(undefined, environment);
   const providerProbe =
     provider === RUNTIME_PROVIDER.CODEX
@@ -103,13 +103,17 @@ async function probeRuntimeVersion(
       : undefined;
   if (providerProbe !== undefined) {
     const version = await within(providerProbe);
-    return version ? { provider, version, displayName: "Codex" } : undefined;
+    return version
+      ? { kind: "runtime", runtime: { provider, version, displayName: "Codex" } }
+      : { kind: "unavailable" };
   }
   if (provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
     const version = await probeClaudeCodeVersion(executable, (child) =>
       probe.spawn(child, withoutClaudeCodeMarker(probeEnvironment)),
     );
-    return version ? { provider, version, displayName: "Claude Code" } : undefined;
+    return version
+      ? { kind: "runtime", runtime: { provider, version, displayName: "Claude Code" } }
+      : { kind: "unavailable" };
   }
   const { output, exitCode } = await versionProbeOutput(
     probe.spawn(executable, probeEnvironment),
@@ -123,7 +127,7 @@ async function probeRuntimeVersion(
       exit_code: exitCode,
       outcome: "unavailable",
     });
-    return undefined;
+    return { kind: "unavailable" };
   }
   // Grok prints `grok <version> (<build hash>)`; the version is the dotted-numeric token, not the
   // last word.
@@ -134,29 +138,64 @@ async function probeRuntimeVersion(
           .split(/\s+/)
           .find((token) => /^\d+(\.\d+)*$/.test(token))
       : lastWord(output);
-  if (!version) return undefined;
+  if (!version) return { kind: "unavailable" };
   if (provider === RUNTIME_PROVIDER.KIRO && isKiroVersionUnsupported(version)) {
     logKiroVersionUnsupported(name, version);
-    return undefined;
+    return { kind: "unavailable" };
   }
   if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeVersionUnsupported(version)) {
     logOpenCodeVersionUnsupported(name, version);
-    return undefined;
+    return { kind: "rejected" };
   }
   if (provider === RUNTIME_PROVIDER.GROK && isGrokVersionUnsupported(version)) {
     logGrokVersionUnsupported(name, version);
-    return undefined;
+    return { kind: "unavailable" };
   }
   if (provider === RUNTIME_PROVIDER.ANTIGRAVITY && isAntigravityVersionUnsupported(version)) {
     logAntigravityVersionUnsupported(name, version);
-    return undefined;
+    return { kind: "unavailable" };
   }
   if (provider === RUNTIME_PROVIDER.COMMAND_CODE && isCommandCodeVersionUnsupported(version)) {
     logCommandCodeVersionUnsupported(name, version);
-    return undefined;
+    return { kind: "unavailable" };
   }
-  return { provider, version, displayName: externalRuntimeDisplayName(provider) };
+  return {
+    kind: "runtime",
+    runtime: { provider, version, displayName: externalRuntimeDisplayName(provider) },
+  };
 }
+
+/** `rejected` is a version the probe read and the floor refused. `unavailable` is a miss: the
+ * probe threw, exited non-zero, or printed nothing that could be gated. Only a miss may fall
+ * back to a cached runtime. */
+type RuntimeVersionProbe =
+  | { kind: "runtime"; runtime: RuntimeMetadata }
+  | { kind: "rejected" }
+  | { kind: "unavailable" };
+
+/** An older daemon cached this OpenCode build before the floor moved. Serving it, including as a
+ * probe-failure fallback, would keep offering a CLI this build refuses to launch. */
+function cachedOpenCodeBelowFloor(
+  provider: ExternalCodeAgentProvider,
+  name: string,
+  runtime: RuntimeMetadata | undefined,
+): boolean {
+  if (
+    provider !== RUNTIME_PROVIDER.OPENCODE ||
+    runtime === undefined ||
+    !isOpenCodeVersionUnsupported(runtime.version)
+  ) {
+    return false;
+  }
+  logOpenCodeVersionUnsupported(name, runtime.version);
+  return true;
+}
+
+/** A live probe that read a refused version must erase this provider's cached runtime. A later
+ * miss would otherwise restore an older, still-supported entry for a different executable. */
+type DiscoveredExternalAgent =
+  | { runtime: RuntimeMetadata; cacheKey: string | undefined }
+  | { dropProvider: ExternalCodeAgentProvider };
 
 export async function discoverExternalCodeAgents(
   probe: ExternalCodeAgentProbe,
@@ -169,11 +208,10 @@ export async function discoverExternalCodeAgents(
   const runtimes: RuntimeMetadata[] = [];
   const searchPath = codeAgentExecutableSearchPath(environment, platform);
   const cache = cacheDirectory ? await readInventoryCache(cacheDirectory) : undefined;
-  let dirty = false;
   const results = await Promise.all(
     externalCodeAgents
       .filter(({ provider }) => !requestedProvider || requestedProvider === provider)
-      .map(async (agent) => {
+      .map(async (agent): Promise<DiscoveredExternalAgent | undefined> => {
         const { provider, executable: name } = agent;
         let executable: string | undefined;
         try {
@@ -206,6 +244,7 @@ export async function discoverExternalCodeAgents(
               logKiroVersionUnsupported(name, cached.runtime.version);
               return undefined;
             }
+            if (cachedOpenCodeBelowFloor(provider, name, cached.runtime)) return undefined;
             if (
               provider === RUNTIME_PROVIDER.COMMAND_CODE &&
               isCommandCodeVersionUnsupported(cached.runtime.version)
@@ -221,7 +260,7 @@ export async function discoverExternalCodeAgents(
             });
             return { runtime: cached.runtime, cacheKey: undefined };
           }
-          const runtime = await probeRuntimeVersion(
+          const probed = await probeRuntimeVersion(
             provider,
             name,
             executable,
@@ -229,10 +268,14 @@ export async function discoverExternalCodeAgents(
             environment,
             versionProbeTimeoutMs,
           );
-          if (runtime) return { runtime, cacheKey };
+          if (probed.kind === "runtime") return { runtime: probed.runtime, cacheKey };
+          // The binary on disk was read and refused. Drop the cached runtime now; returning
+          // nothing would leave an older supported entry for the next probe miss to restore.
+          if (probed.kind === "rejected") return { dropProvider: provider };
           // A transient version/app-server failure must not make an installed runtime vanish
           // from the Computer inventory. Keep the last successful result when the executable
           // itself is unchanged; the next refresh will retry the live probe.
+          if (cachedOpenCodeBelowFloor(provider, name, cached?.runtime)) return undefined;
           if (cached?.runtime) {
             logger.warning("Code Agent runtime probe failed; using cached runtime", {
               event: "code_agent_runtime:cache_fallback",
@@ -258,6 +301,7 @@ export async function discoverExternalCodeAgents(
               : undefined
             : undefined;
           const fallbackCached = fallbackCacheKey ? cache?.[provider] : undefined;
+          if (cachedOpenCodeBelowFloor(provider, name, fallbackCached?.runtime)) return undefined;
           if (fallbackCached?.runtime) {
             logger.warning("Code Agent runtime probe failed; using cached runtime", {
               event: "code_agent_runtime:cache_fallback",
@@ -272,19 +316,39 @@ export async function discoverExternalCodeAgents(
         }
       }),
   );
+  const dropped = new Set<ExternalCodeAgentProvider>();
+  const probed: {
+    provider: RuntimeMetadata["provider"];
+    cacheKey: string;
+    runtime: RuntimeMetadata;
+  }[] = [];
   for (const result of results) {
     if (!result) continue;
-    runtimes.push(result.runtime);
-    if (cache && result.cacheKey) {
-      cache[result.runtime.provider] = {
-        ...cache[result.runtime.provider],
-        key: result.cacheKey,
-        runtime: result.runtime,
-      };
-      dirty = true;
+    if ("dropProvider" in result) {
+      dropped.add(result.dropProvider);
+      continue;
     }
+    runtimes.push(result.runtime);
+    if (result.cacheKey)
+      probed.push({
+        provider: result.runtime.provider,
+        cacheKey: result.cacheKey,
+        runtime: result.runtime,
+      });
   }
-  if (cache && dirty && cacheDirectory) await writeInventoryCache(cacheDirectory, cache);
+  // Persist only this discovery's own changes. Writing the whole snapshot it read earlier would
+  // restore a provider another discovery dropped in between.
+  if (cacheDirectory && (dropped.size > 0 || probed.length > 0)) {
+    await updateInventoryCache(cacheDirectory, (current) => {
+      for (const provider of dropped) delete current[provider];
+      for (const entry of probed)
+        current[entry.provider] = {
+          ...current[entry.provider],
+          key: entry.cacheKey,
+          runtime: entry.runtime,
+        };
+    });
+  }
   return runtimes;
 }
 

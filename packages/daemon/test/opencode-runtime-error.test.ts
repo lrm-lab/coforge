@@ -3,7 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
-import { type AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { AgentEnvironmentError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { launchFailureActivity } from "#src/agent-runtime/launch-failure";
 import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import {
   RUNTIME_ERROR_CLASS,
@@ -42,6 +43,7 @@ test("OpenCode quota errors retain the daemon rate-limit classification", async 
           if (event.type === "completed") resolve();
         });
       });
+      await session.sendMessage("go");
       await completed;
       expect(events).toContainEqual({
         type: "error",
@@ -60,4 +62,14 @@ test("OpenCode quota errors retain the daemon rate-limit classification", async 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("an OpenCode environment refusal keeps a single period before the recovery step", () => {
+  const message =
+    "OpenCode cannot start because OPENCODE_CONFIG_CONTENT is already set. CoForge will not overwrite it.";
+  const activity = launchFailureActivity(new AgentEnvironmentError(message), "OpenCode");
+  expect(activity.detail).toBe(
+    `${message} Correct it in the Agent's environment variables, then start the Agent again.`,
+  );
+  expect(activity.runtimeError.errorReason).toBe("agent_environment_invalid");
 });

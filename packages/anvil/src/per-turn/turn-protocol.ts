@@ -66,10 +66,14 @@ export interface TurnProtocol {
   readonly displayName: string;
   /** Set for a provider with no system-prompt channel: a fresh session's first turn carries only
    * the standing instructions and must name the session, which `identityNoun` words for the failure
-   * message when it does not ("Cursor did not establish a session identity"). Unset: `launch` sends
-   * the instructions itself on every turn, and a fresh session spawns nothing until real input
+   * message when it does not ("Cursor did not establish a session identity"). Unset: the protocol
+   * carries the instructions on every turn, and a fresh session spawns nothing until real input
    * arrives. */
   readonly instructionsTurn?: Readonly<{ identityNoun: string }>;
+  /** A fresh session must run this prompt before it is returned, because a caller reads the id
+   * the CLI reports and this provider has no id until a run starts. The prompt is not the standing
+   * instructions. A resumed session leaves it unset in effect: an existing id skips the run. */
+  readonly identityBootstrap?: Readonly<{ identityNoun: string; prompt: string }>;
   /** The state a session resumed from a given id starts in. `unknown` for a provider whose resume
    * can find the session gone. */
   readonly resumedIdentity: "resumable" | "unknown";

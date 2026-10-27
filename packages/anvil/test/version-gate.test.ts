@@ -21,7 +21,9 @@ test("a version that is still not dotted numbers is never below the minimum", ()
 
 test("OpenCode's minimum applies to the v prefix its CLI prints", () => {
   expect(isOpenCodeVersionUnsupported("v1.18.31")).toBe(true);
-  expect(isOpenCodeVersionUnsupported("v2.0.0")).toBe(false);
+  expect(isOpenCodeVersionUnsupported("v2.0.0")).toBe(true);
+  expect(isOpenCodeVersionUnsupported("v2.0.29")).toBe(true);
+  expect(isOpenCodeVersionUnsupported("v2.0.30")).toBe(false);
   expect(isOpenCodeVersionUnsupported("v2.1.0")).toBe(false);
   expect(isOpenCodeVersionUnsupported("nightly")).toBe(false);
 });
@@ -41,6 +43,6 @@ test("an OpenCode launch is refused when --version prints opencode v1", async ()
   ).rejects.toMatchObject({
     code: "runtime_version_too_old",
     message:
-      "OpenCode v1.18.31 is unsupported; requires OpenCode >= 2.0.0. Upgrade opencode before starting this runtime.",
+      "OpenCode v1.18.31 is unsupported; requires OpenCode >= 2.0.30. Upgrade opencode before starting this runtime.",
   });
 });

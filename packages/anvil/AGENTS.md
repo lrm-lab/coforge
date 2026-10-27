@@ -31,7 +31,7 @@
 | `src/grok/` | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities |
 | `src/command-code/` | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge |
 | `src/kiro/` | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
-| `src/opencode/` | OpenCode provider, turn protocol, version policy and catalog parsing |
+| `src/opencode/` | OpenCode turns, version policy, catalog, and private instruction overlay |
 | `src/cursor/` | Cursor turn protocol, provider and model catalog parsing |
 | `src/codex/` | Codex sessions, native events, auth, usage and catalog policy through required host capabilities |
 | `src/claude-code/` | Claude sessions, native events, auth, usage, history and catalog through required host capabilities |
@@ -42,6 +42,7 @@
 ## Runtime instructions
 
 - [Cursor adapter](src/cursor/AGENTS.md)
+- [OpenCode adapter](src/opencode/AGENTS.md)
 - [Grok adapter](src/grok/AGENTS.md)
 - [Command Code adapter](src/command-code/AGENTS.md)
 - [DSH adapter](src/dsh/AGENTS.md)
