@@ -138,6 +138,7 @@ export function RuntimeUsage({
   const usage = useRuntimeUsage(computerId, runtime.provider, {
     enabled: supportsUsage,
     computerOnline,
+    signedIn: account === "logged_in",
   });
 
   const usageRead = usageReadForAuth(usage.data, account);

@@ -15,6 +15,7 @@ import { RuntimeSignInDialog, unsupportedText } from "./runtime-sign-in-dialog";
 import { RuntimeSignOutDialog } from "./runtime-sign-out-dialog";
 import { RuntimeUsage } from "./runtime-usage";
 import type { AccountState } from "./runtime-usage-status";
+import { useRuntimeAuthStatusRefresh } from "./use-runtime-auth-signals";
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
   "rounded-md outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
@@ -59,6 +60,7 @@ export function ComputerRuntimeList({
     new Set(),
   );
   const [authDialog, setAuthDialog] = useState<AuthDialog | undefined>(undefined);
+  useRuntimeAuthStatusRefresh(computer.id);
   const canSignIn = computer.ownedByCurrentUser || computer.canManageAgents;
   const computerName = computerLabel(computer);
   const setRuntimePublic = async (runtimeId: string, isPublic: boolean) => {

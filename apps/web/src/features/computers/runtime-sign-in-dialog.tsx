@@ -11,7 +11,6 @@ import {
 } from "react";
 import { Heading } from "react-aria-components";
 import { useServerFn } from "@tanstack/react-start";
-import { useRouter } from "@tanstack/react-router";
 import { Copy01, LinkExternal01, XClose } from "@untitledui/icons";
 import type { KiroIdentityCenterOptions, RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
 
@@ -58,7 +57,6 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
   const [attempt, setAttempt] = useState(0);
   const [kiroIdentityCenter, setKiroIdentityCenter] = useState<KiroIdentityCenterOptions>();
   const closeAction = useRef<(() => void) | undefined>(undefined);
-  const router = useRouter();
   return (
     <ModalOverlay
       isOpen
@@ -83,10 +81,7 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
                 setAttempt((n) => n + 1);
                 setKiroIdentityCenter(undefined);
               }}
-              onClose={(signedIn) => {
-                if (signedIn) void router.invalidate();
-                onClose();
-              }}
+              onClose={onClose}
             />
           )}
         </Dialog>
@@ -108,7 +103,7 @@ function SignInAttempt({
   kiroIdentityCenter?: KiroIdentityCenterOptions;
   closeAction: RefObject<(() => void) | undefined>;
   onRetry: () => void;
-  onClose: (signedIn: boolean) => void;
+  onClose: () => void;
 }) {
   const [state, dispatch] = useReducer(loginReducer, initialLoginState);
   const start = useServerFn(startRuntimeAuthLogin);
@@ -184,7 +179,7 @@ function SignInAttempt({
     closed.current = true;
     if (running && loginId.current)
       void cancel({ data: { computerId, loginId: loginId.current } }).catch(() => {});
-    onClose(state.phase === "signed_in");
+    onClose();
   };
 
   useLayoutEffect(() => {
@@ -222,7 +217,7 @@ function SignInAttempt({
           <Button onPress={close}>{m.runtime_auth_done()}</Button>
         ) : (
           <>
-            <Button color="link-gray" onPress={close}>
+            <Button color="secondary" onPress={close}>
               {running ? m.controls_cancel() : m.controls_close()}
             </Button>
             {state.phase === "failed" && retryable(state.failure) && (

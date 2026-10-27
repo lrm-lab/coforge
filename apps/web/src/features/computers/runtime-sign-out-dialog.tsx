@@ -1,6 +1,5 @@
 import { useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useRouter } from "@tanstack/react-router";
 import type { RuntimeAuthLogoutResult, RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
 
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
@@ -48,7 +47,6 @@ export function RuntimeSignOutDialog({
   agentNames: readonly string[];
   onClose: () => void;
 }) {
-  const router = useRouter();
   const logout = useServerFn(logoutRuntimeAuth);
   const read = useServerFn(readRuntimeAuthLogout);
   const waiting = useRef<
@@ -118,7 +116,6 @@ export function RuntimeSignOutDialog({
         else catchUp();
         const outcome = await result;
         if (outcome.kind === "logged_out") {
-          void router.invalidate();
           onClose();
           return;
         }

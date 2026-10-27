@@ -8,10 +8,12 @@ import {
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   PrismaComputerRuntimeAuthStore,
+  runtimeAuthChangeAnnouncer,
   storedRuntimeAuth,
 } from "#src/server/computers/computer-runtime-auth.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";
+import { createCentrifugoServerApi } from "./server-api.server";
 import {
   createDaemonRuntimeCodeAgentsUpdateMethod,
   type CentrifugoRpcMethod,
@@ -20,10 +22,12 @@ import {
 /**
  * A Computer's runtime login report (`daemon:v1:runtime_auth:status_report`). Only the connection's own
  * Computer may report; each status is sanitized again before it is stored, and a report older
- * than the stored one is accepted and dropped.
+ * than the stored one is accepted and dropped. A stored one is announced to whoever may be showing
+ * the Computer; a lost announcement waits for their next read and does not fail the report.
  */
 export function createRuntimeAuthReportMethod(
   store: Pick<PrismaComputerRuntimeAuthStore, "record">,
+  announce: (computerId: string) => Promise<void>,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const rejection = rejectNonDaemonPrincipal(metadata.principal);
@@ -45,12 +49,14 @@ export function createRuntimeAuthReportMethod(
     } catch {
       return { code: 400, message: "invalid runtime auth status report" };
     }
+    let stored: boolean;
     try {
-      await store.record(report.computerId, auth);
-      return new Uint8Array();
+      stored = await store.record(report.computerId, auth);
     } catch {
       return { code: 503, message: "runtime auth status report was not recorded" };
     }
+    if (stored) await announce(report.computerId).catch(() => {});
+    return new Uint8Array();
   };
 }
 
@@ -67,7 +73,10 @@ export function computerRuntimeMethods(
       ? createDaemonRuntimeCodeAgentsUpdateMethod(new PrismaComputerRuntimeRepository(db))
       : unavailable,
     [RUNTIME_AUTH_STATUS_REPORT_METHOD]: db
-      ? createRuntimeAuthReportMethod(new PrismaComputerRuntimeAuthStore(db))
+      ? createRuntimeAuthReportMethod(
+          new PrismaComputerRuntimeAuthStore(db),
+          runtimeAuthChangeAnnouncer(db, createCentrifugoServerApi()),
+        )
       : unavailable,
   };
 }

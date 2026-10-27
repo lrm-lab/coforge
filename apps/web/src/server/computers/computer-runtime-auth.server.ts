@@ -5,7 +5,10 @@ import {
   type RuntimeAuthStatus,
 } from "@lrm/coforge-anvil";
 import type { RuntimeAuthReportedState } from "@lrm/coforge-sdk/internal";
+import { runtimeAuthChannel } from "#src/features/computers/runtime-auth-realtime";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import type { RuntimeAuthSignal } from "./runtime-auth.server";
 
 /**
  * A Computer's newest runtime login report as stored in `computers.runtimeAuth`: one status per
@@ -117,4 +120,27 @@ export class PrismaComputerRuntimeAuthStore {
           OR ("runtimeAuth"->>'collectedAtMs')::bigint < ${auth.collectedAtMs})`;
     return updated > 0;
   }
+}
+
+/**
+ * Tells every member of each Workspace the Computer is in that a newer login status was stored, so
+ * an open Computer page reads it again. The daemon reports only after a change or an inventory,
+ * never on a timer, so this is as rare as the reports themselves.
+ */
+export function runtimeAuthChangeAnnouncer(
+  db: { workspaceMembership: Pick<PrismaClient["workspaceMembership"], "findMany"> },
+  api: Pick<CentrifugoServerApi, "broadcast">,
+) {
+  return async (computerId: string) => {
+    const members = await db.workspaceMembership.findMany({
+      where: { workspace: { computers: { some: { computerId } } } },
+      select: { userId: true },
+      distinct: ["userId"],
+    });
+    const signal: RuntimeAuthSignal = { type: "runtime-auth.status.v1", computerId };
+    await api.broadcast(
+      members.map(({ userId }) => runtimeAuthChannel(userId)),
+      signal,
+    );
+  };
 }

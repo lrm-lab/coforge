@@ -50,7 +50,9 @@ export type RuntimeAuthLogoutView = {
 /** What the starter's channel carries; the page reads the same shape once on open. */
 export type RuntimeAuthSignal =
   | ({ type: "runtime-auth.login.v1"; computerId: string } & RuntimeAuthLoginView)
-  | ({ type: "runtime-auth.logout.v1"; computerId: string } & RuntimeAuthLogoutView);
+  | ({ type: "runtime-auth.logout.v1"; computerId: string } & RuntimeAuthLogoutView)
+  /** The Computer stored a newer login status report: whoever shows it reads it again. */
+  | { type: "runtime-auth.status.v1"; computerId: string };
 
 function logoutView(record: RuntimeAuthLogoutRecord): RuntimeAuthLogoutView {
   const { requestId, provider, result } = record;

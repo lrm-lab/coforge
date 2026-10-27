@@ -13,6 +13,10 @@ These rules apply to `src/features/computers/`.
   `unsupported` result remains visible in its popover. Refresh waits for the daemon to re-read
   and report native login status as well as usage, then invalidates route data so the new
   Computer authentication snapshot reaches its popover; Agent Profile shares the usage refresh.
+  A sign-in or sign-out shows without a reload: the daemon reports the new login status, the
+  server announces each stored report on every viewer's `runtimeAuthChannel`, and the Computer
+  page re-reads its routes (`useRuntimeAuthStatusRefresh`); a runtime that becomes signed in
+  scans its usage once. The dialogs do not invalidate: their result arrives before that report.
 - A runtime's popover opens on a press, with a close button and Escape, as on
   Raft, on the Computer page and the Agent profile alike (`runtime-usage.tsx`).
   A quota reads as the share left.

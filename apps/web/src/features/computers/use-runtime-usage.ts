@@ -19,9 +19,9 @@ function runtimeUsageQueryKey(computerId: string, provider: RuntimeProvider) {
 export function useRuntimeUsage(
   computerId: string,
   provider: RuntimeProvider,
-  options: { enabled: boolean; computerOnline?: boolean },
+  options: { enabled: boolean; computerOnline?: boolean; signedIn?: boolean },
 ) {
-  const { enabled, computerOnline } = options;
+  const { enabled, computerOnline, signedIn } = options;
   const queryClient = useQueryClient();
   const router = useRouter();
   const queryKey = runtimeUsageQueryKey(computerId, provider);
@@ -50,6 +50,14 @@ export function useRuntimeUsage(
     autoScanned.current = autoScanTarget;
     scan.mutate();
   }, [enabled, query.data, computerOnline, autoScanTarget, scan.mutate]);
+
+  // A sign-in while shown: the usage read before it belongs to no account, however fresh.
+  const wasSignedIn = useRef(signedIn);
+  useEffect(() => {
+    const signedInNow = signedIn && !wasSignedIn.current;
+    wasSignedIn.current = signedIn;
+    if (signedInNow && enabled && computerOnline !== false) scan.mutate();
+  }, [signedIn, enabled, computerOnline, scan.mutate]);
 
   return {
     data: query.data,

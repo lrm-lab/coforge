@@ -5,7 +5,14 @@ import {
 } from "@lrm/coforge-sdk/internal";
 
 import { createRuntimeAuthReportMethod } from "#src/server/centrifugo/runtime-auth-report-receiver.server";
-import type { StoredRuntimeAuth } from "#src/server/computers/computer-runtime-auth.server";
+import {
+  parseRuntimeAuthSignal,
+  runtimeAuthChannel,
+} from "#src/features/computers/runtime-auth-realtime";
+import {
+  runtimeAuthChangeAnnouncer,
+  type StoredRuntimeAuth,
+} from "#src/server/computers/computer-runtime-auth.server";
 
 const principal = () => ({
   userId: "user-1",
@@ -33,8 +40,13 @@ const report = (overrides: Partial<RuntimeAuthStatusReport> = {}) =>
 
 function recorder(result = true) {
   const calls: [string, StoredRuntimeAuth][] = [];
+  const announced: string[] = [];
   return {
     calls,
+    announced,
+    announce: async (computerId: string) => {
+      announced.push(computerId);
+    },
     store: {
       record: async (computerId: string, auth: StoredRuntimeAuth) => {
         calls.push([computerId, auth]);
@@ -45,8 +57,8 @@ function recorder(result = true) {
 }
 
 test("stores the connection's Computer's report, keyed by provider", async () => {
-  const { calls, store } = recorder();
-  const method = createRuntimeAuthReportMethod(store);
+  const { calls, store, announce } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce);
 
   expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
   expect(calls).toEqual([
@@ -68,8 +80,8 @@ test("stores the connection's Computer's report, keyed by provider", async () =>
 });
 
 test("sanitizes again on receipt: an unmasked label is dropped, an unknown provider is retained", async () => {
-  const { calls, store } = recorder();
-  const method = createRuntimeAuthReportMethod(store);
+  const { calls, store, announce } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce);
 
   await method(
     report({
@@ -91,15 +103,33 @@ test("sanitizes again on receipt: an unmasked label is dropped, an unknown provi
 });
 
 test("an older report than the stored one is accepted and ignored", async () => {
-  const { store } = recorder(false);
-  const method = createRuntimeAuthReportMethod(store);
+  const { store, announce, announced } = recorder(false);
+  const method = createRuntimeAuthReportMethod(store, announce);
+
+  expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
+  expect(announced).toEqual([]);
+});
+
+test("a stored report is announced, so an open Computer page shows a sign-in without a reload", async () => {
+  const { store, announce, announced } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce);
+
+  expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
+  expect(announced).toEqual(["computer-1"]);
+});
+
+test("a lost announcement still answers the report as stored", async () => {
+  const { store } = recorder();
+  const method = createRuntimeAuthReportMethod(store, async () => {
+    throw new Error("Centrifugo is down");
+  });
 
   expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
 });
 
 test("refuses a malformed report, another Computer's, or an Agent's", async () => {
-  const { calls, store } = recorder();
-  const method = createRuntimeAuthReportMethod(store);
+  const { calls, store, announce } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce);
 
   expect(await method(new Uint8Array([1, 2, 3]), { principal: principal() })).toMatchObject({
     code: 400,
@@ -114,11 +144,14 @@ test("refuses a malformed report, another Computer's, or an Agent's", async () =
 });
 
 test("a report that could not be stored answers 503", async () => {
-  const method = createRuntimeAuthReportMethod({
-    record: async () => {
-      throw new Error("database is down");
+  const method = createRuntimeAuthReportMethod(
+    {
+      record: async () => {
+        throw new Error("database is down");
+      },
     },
-  });
+    async () => {},
+  );
 
   expect(await method(report(), { principal: principal() })).toEqual({
     code: 503,
@@ -127,8 +160,8 @@ test("a report that could not be stored answers 503", async () => {
 });
 
 test("a structurally invalid status report is refused before persistence", async () => {
-  const { calls, store } = recorder();
-  const method = createRuntimeAuthReportMethod(store);
+  const { calls, store, announce } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce);
   for (const runtimes of [
     [
       { provider: "codex", state: "unknown" as const },
@@ -144,8 +177,8 @@ test("a structurally invalid status report is refused before persistence", async
 });
 
 test("a report with one invalid provider still records the valid runtime", async () => {
-  const { calls, store } = recorder();
-  const method = createRuntimeAuthReportMethod(store);
+  const { calls, store, announce } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce);
   expect(
     await method(
       report({
@@ -158,4 +191,43 @@ test("a report with one invalid provider still records the valid runtime", async
     ),
   ).toBeInstanceOf(Uint8Array);
   expect(calls[0]?.[1].runtimes).toEqual({ kiro: { provider: "kiro", state: "logged_in" } });
+});
+
+test("a change is announced once to every member of each Workspace the Computer is in", async () => {
+  const queries: unknown[] = [];
+  const sent: [string[], unknown][] = [];
+  const announce = runtimeAuthChangeAnnouncer(
+    {
+      workspaceMembership: {
+        findMany: async (query: unknown) => {
+          queries.push(query);
+          return [{ userId: "owner" }, { userId: "member" }];
+        },
+      },
+    } as never,
+    { broadcast: async (channels, data) => void sent.push([channels, data]) },
+  );
+
+  await announce("computer-1");
+  expect(queries).toEqual([
+    {
+      where: { workspace: { computers: { some: { computerId: "computer-1" } } } },
+      select: { userId: true },
+      distinct: ["userId"],
+    },
+  ]);
+  expect(sent).toEqual([
+    [
+      [runtimeAuthChannel("owner"), runtimeAuthChannel("member")],
+      { type: "runtime-auth.status.v1", computerId: "computer-1" },
+    ],
+  ]);
+});
+
+test("the page takes a status signal, and still drops anything else", () => {
+  const status = { type: "runtime-auth.status.v1", computerId: "computer-1" } as const;
+  expect(parseRuntimeAuthSignal(status)).toEqual(status);
+  expect(parseRuntimeAuthSignal(new TextEncoder().encode(JSON.stringify(status)))).toEqual(status);
+  expect(parseRuntimeAuthSignal({ type: "runtime-auth.other.v1" })).toBeUndefined();
+  expect(parseRuntimeAuthSignal(new Uint8Array([1]))).toBeUndefined();
 });

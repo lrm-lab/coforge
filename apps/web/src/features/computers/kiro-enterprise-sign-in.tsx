@@ -60,7 +60,7 @@ export function KiroEnterpriseSignIn({
           </p>
         )}
         <div className="flex justify-end gap-3 pt-1">
-          <Button color="link-gray" onPress={onClose}>
+          <Button color="secondary" onPress={onClose}>
             {m.controls_cancel()}
           </Button>
           <Button type="submit" isDisabled={!startUrl.trim() || !region.trim()}>
