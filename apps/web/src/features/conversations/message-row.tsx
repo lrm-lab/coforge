@@ -18,14 +18,13 @@ import type {
 } from "#src/features/agents/profile-panel/open-agent-profile";
 import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
-import { AgentModelLabel } from "#src/features/agents/agent-model-label";
-import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import { MessageAttachments } from "./attachment-card";
+import { MessageSenderLine } from "./message-sender-line";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import { useIsMessageSaved } from "./conversation-host";
@@ -518,32 +517,13 @@ export const MessageRow = memo(function MessageRow({
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {!grouped && (
-            <p className="flex min-h-5 items-baseline gap-2 pr-8">
-              {openSenderProfile ? (
-                <Button
-                  color="tertiary"
-                  noTextPadding
-                  onPress={openSenderProfile}
-                  className="h-auto min-w-0 truncate rounded p-0 text-sm font-semibold text-primary hover:bg-transparent hover:text-primary hover:underline"
-                >
-                  {displayName}
-                </Button>
-              ) : (
-                <span className="min-w-0 truncate text-sm font-semibold text-primary">
-                  {displayName}
-                </span>
-              )}
-              {message.senderKind === "agent" && message.senderAgentId && !deleted && (
-                <AgentModelLabel agentId={message.senderAgentId} seenAt={message.createdAt} />
-              )}
-              {deleted && <DeletedAgentBadge />}
-              <time
-                dateTime={new Date(message.createdAt).toISOString()}
-                className="shrink-0 text-xs text-tertiary tabular-nums"
-              >
-                {clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
-              </time>
-            </p>
+            <MessageSenderLine
+              message={message}
+              displayName={displayName}
+              deleted={deleted}
+              onOpenSender={openSenderProfile}
+              time={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+            />
           )}
           {message.actionCard ? (
             <>
