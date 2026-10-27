@@ -23,6 +23,15 @@ export function createAgentEventsRepository(db: PrismaClient, realtime?: Convers
   );
 }
 
+export function handleAgentEventsRouteGet(
+  request: Request,
+  principal: AgentEventsGetPrincipal,
+  db: PrismaClient,
+  createRepository: (db: PrismaClient) => AgentMessageRepository = createAgentEventsRepository,
+) {
+  return handleAgentEventsGet(request, principal, createRepository(db));
+}
+
 export async function handleAgentEventsGet(
   request: Request,
   principal: AgentEventsGetPrincipal,
@@ -55,7 +64,7 @@ export const Route = createFileRoute("/api/agent/v1/events")({
         // An app's bot reads its inbox without taking it (`AppBotInbox`).
         "appBot" in principal
           ? handleAppBotEventsGet(request, principal, db)
-          : handleAgentEventsGet(request, principal, createAgentEventsRepository(db)),
+          : handleAgentEventsRouteGet(request, principal, db),
     },
   },
 });

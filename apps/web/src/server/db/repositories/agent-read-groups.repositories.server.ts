@@ -10,17 +10,6 @@ export type AgentReadGroup = {
   maxSequence: number;
 };
 
-export function isUserAgentDirectConversation(conversation: {
-  channelName: string | null;
-  directKey: string | null;
-}) {
-  return (
-    conversation.channelName === null &&
-    conversation.directKey?.startsWith("agent:") === true &&
-    conversation.directKey.includes("|user:")
-  );
-}
-
 export function agentReadGroupsForPage(
   rows: readonly {
     conversationId: string;

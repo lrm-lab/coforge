@@ -40,7 +40,11 @@ import {
 } from "./agent-peer-direct.repositories.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { isAppBot } from "#src/features/agents/agent-system-kind";
-import { isAgentPeerDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
+import {
+  isAgentPeerDirectKey,
+  isUserAgentDirectConversation,
+  peopleDirectPeerId,
+} from "#src/features/conversations/direct-key";
 import {
   HELD_CONTEXT_LIMIT,
   type MessageSenderKind,
@@ -124,7 +128,6 @@ import type { ConversationRealtime } from "#src/server/conversations/conversatio
 import {
   advanceAgentReadGroups,
   agentReadGroupsForPage,
-  isUserAgentDirectConversation,
   publishAgentReadChangesAfterCommit,
 } from "./agent-read-groups.repositories.server";
 import {
@@ -543,11 +546,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     }
   }
 
-  /**
-   * Resolve an Agent-facing target (`#channel` or `@user`, optionally `:root` for a thread)
-   * to its conversation, thread root and canonical spelling. Public so other Agent HTTP routes
-   * (e.g. attachment upload) can reuse the same target grammar instead of duplicating it.
-   */
+  /** Resolves an Agent target to its conversation, optional thread root and canonical spelling.
+   * Public so Agent HTTP routes share the same target grammar. */
   async resolveAgentTarget(
     workspaceId: string,
     agentId: string,
@@ -670,6 +670,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       threadRootId,
       canonicalTarget: deliveryTarget(parentTarget, threadRootId),
       isChannel,
+      isUserAgentDirectConversation: isUserAgentDirectConversation(conversation),
     };
   }
 

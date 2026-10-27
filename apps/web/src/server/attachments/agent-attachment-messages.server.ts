@@ -85,6 +85,7 @@ export function createAgentAttachmentMessages(
         threadRootId: rootId,
         canonicalTarget,
         isChannel: false,
+        isUserAgentDirectConversation: false,
         page,
         additionalScope: { attachmentComment: { attachmentId } },
         resolveAnchor: (value) => anchor(attachmentId, value),

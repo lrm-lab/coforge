@@ -6,6 +6,7 @@ export type ResolvedAgentTarget = {
   threadRootId: string | null;
   canonicalTarget: string;
   isChannel: boolean;
+  isUserAgentDirectConversation?: boolean;
 };
 
 /** The `consumption_scope` of an Agent history read: which conversation it consumed, for

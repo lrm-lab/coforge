@@ -2,9 +2,11 @@ import { useMemo, useState } from "react";
 import { unreadBoundary } from "./conversation-open-position";
 
 /**
- * Captures the unread divider's position once when a conversation or thread opens. The divider
- * stays frozen while the mark-read effect advances the server cursor, and useState's initializer
- * avoids a render-phase ref write surviving a discarded React render.
+ * Captures the unread divider's position once when a conversation or thread opens. The default
+ * lands on the first unread message, like Slack; the divider stays frozen while the mark-read
+ * effect advances the server cursor. The dependency list intentionally keys only on conversation
+ * and root identity, and useState's initializer avoids a render-phase ref write surviving a
+ * discarded React render.
  */
 export function useConversationOpenBoundary(
   messages: Parameters<typeof unreadBoundary>[0],

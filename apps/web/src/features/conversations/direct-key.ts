@@ -23,6 +23,22 @@ export function agentDirectKey(userId: string, agentId: string) {
   return `agent:${agentId}|user:${userId}`;
 }
 
+/** Whether a key is the direct conversation between one Workspace person and one Agent. */
+export function isUserAgentDirectKey(directKey: string | null) {
+  const parts = directKey?.split("|");
+  return parts?.length === 2 && parts[0]?.startsWith("agent:") && parts[1]?.startsWith("user:");
+}
+
+/** Whether a conversation-shaped value is a User-Agent DM rather than a channel or app/Agent DM. */
+export function isUserAgentDirectConversation(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const channelName = Reflect.get(value, "channelName");
+  const directKey = Reflect.get(value, "directKey");
+  return (
+    channelName === null && isUserAgentDirectKey(typeof directKey === "string" ? directKey : null)
+  );
+}
+
 /** Whether a direct conversation is between people (no Agent part). */
 export function isPeopleDirectKey(directKey: string) {
   return directKey.split("|").every((part) => part.startsWith("user:"));

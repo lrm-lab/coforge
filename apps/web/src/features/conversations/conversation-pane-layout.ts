@@ -40,3 +40,21 @@ export function agentReadMessageId(input: {
     ? message.id
     : undefined;
 }
+
+export function agentReadMessageIdForPane(input: {
+  root: boolean;
+  conversation: {
+    hasNewer?: boolean;
+    agentReadThroughSequence?: number;
+    viewerId?: string;
+  };
+  messages: Parameters<typeof agentReadMessageId>[0]["messages"];
+}) {
+  return agentReadMessageId({
+    root: input.root,
+    hasNewer: input.conversation.hasNewer,
+    messages: input.messages,
+    agentReadThroughSequence: input.conversation.agentReadThroughSequence,
+    viewerId: input.conversation.viewerId,
+  });
+}

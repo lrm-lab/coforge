@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { createAgentEventsRepository, handleAgentEventsGet } from "#src/routes/api/agent/v1/events";
+import {
+  createAgentEventsRepository,
+  handleAgentEventsGet,
+  handleAgentEventsRouteGet,
+} from "#src/routes/api/agent/v1/events";
 
 const request = (search = "") => new Request(`https://server.example/api/agent/v1/events${search}`);
 
@@ -8,12 +12,25 @@ const baseRepository = {
   setAgentThreadFollowed: async () => {},
 };
 
-test("the Agent events route wires realtime publication into its repository", () => {
-  const repository = createAgentEventsRepository(
+test("the Agent events route assembles the repository with realtime", async () => {
+  let assembled: unknown;
+  const result = await handleAgentEventsRouteGet(
+    request(),
+    { workspaceId: "workspace-1", agentId: "agent-1" },
     {} as never,
-    { agentReadChanged: async () => {} } as never,
+    () => {
+      assembled = createAgentEventsRepository(
+        {} as never,
+        { agentReadChanged: async () => {} } as never,
+      );
+      return {
+        ...baseRepository,
+        drainAgentEvents: async () => ({ messages: [], hasMore: false }),
+      } as never;
+    },
   );
-  expect((repository as unknown as { realtime?: unknown }).realtime).toBeDefined();
+  expect((assembled as { realtime?: unknown }).realtime).toBeDefined();
+  expect(result.status).toBe(200);
 });
 
 test("forwards the requested limit and scope to the repository drain", async () => {

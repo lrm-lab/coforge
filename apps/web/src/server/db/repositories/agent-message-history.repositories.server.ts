@@ -34,6 +34,7 @@ export async function readAgentMessagePage(
     threadRootId: string | null;
     canonicalTarget: string;
     isChannel: boolean;
+    isUserAgentDirectConversation: boolean;
     page: AgentMessagesPage;
     consumptionScope?: AgentHistoryConsumptionScope;
     additionalScope?: Prisma.MessageWhereInput;
@@ -50,6 +51,7 @@ export async function readAgentMessagePage(
     threadRootId,
     canonicalTarget,
     isChannel,
+    isUserAgentDirectConversation,
     page,
     consumptionScope,
     additionalScope,
@@ -170,7 +172,7 @@ export async function readAgentMessagePage(
       agentId,
       threadRootId,
       sequence: agentReadThroughSequence,
-      isDirectConversation: !isChannel,
+      isDirectConversation: isUserAgentDirectConversation,
     });
     if (publication) void agentReadChanged?.(publication)?.catch(() => {});
   }

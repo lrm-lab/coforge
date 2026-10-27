@@ -3,6 +3,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read-position.repositories.server";
 import { publishAgentReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
+import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
 /** Only an `unread` read moves the Agent's read position, and it moves it across a sequence the
  * conversation does not have. */
@@ -75,6 +76,15 @@ test("publishes an Agent read position only after the database advances", async 
     },
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
+    override async resolveAgentTarget() {
+      return {
+        conversationId: "conversation-1",
+        threadRootId: null,
+        canonicalTarget: "@alice",
+        isChannel: false,
+        isUserAgentDirectConversation: true,
+      };
+    }
     override async userIdForUsername() {
       return "user-1";
     }
@@ -131,6 +141,18 @@ test("thread and channel read advances do not publish Agent DM events", async ()
       isDirectConversation: false,
     }),
   ).toBeUndefined();
+  expect(
+    await advanceAgentReadPosition({
+      db,
+      memberId: "member-1",
+      conversationId: "conversation-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      threadRootId: "root-1",
+      sequence: 6,
+      isDirectConversation: true,
+    }),
+  ).toBeUndefined();
 });
 
 test("a rolled-back drain does not publish collected Agent read changes", async () => {
@@ -146,4 +168,67 @@ test("a rolled-back drain does not publish collected Agent read changes", async 
     ),
   ).rejects.toThrow("rollback");
   expect(published).toEqual([]);
+});
+
+test("history reads of a channel or DM thread do not publish a DM main read", async () => {
+  const events: object[] = [];
+  const db = {
+    conversationMember: {
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 1 }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    threadRead: { findUnique: async () => ({ readThroughSequence: 1 }) },
+    conversation: { findMany: async () => [] },
+    message: {
+      findMany: async () => [
+        {
+          id: "message-3",
+          sequence: 3,
+          threadRootId: "root-1",
+          body: "pending",
+          createdAt: new Date(0),
+          sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
+          attachments: [],
+          mentions: [],
+          memoryHint: null,
+          task: null,
+          actionCard: null,
+        },
+      ],
+    },
+    $executeRaw: async () => 1,
+  } as unknown as PrismaClient;
+  const page = {
+    unread: true,
+    limit: 50,
+  };
+  await readAgentMessagePage(db, {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    conversationId: "channel-1",
+    threadRootId: null,
+    canonicalTarget: "#general",
+    isChannel: true,
+    isUserAgentDirectConversation: false,
+    page,
+    agentReadChanged: async (event) => {
+      events.push(event);
+    },
+    resolveAnchor: async () => ({ id: "root-1", sequence: 1, threadRootId: "root-1" }),
+  });
+  await readAgentMessagePage(db, {
+    workspaceId: "workspace-1",
+    agentId: "agent-1",
+    conversationId: "conversation-1",
+    threadRootId: "root-1",
+    canonicalTarget: "@alice:root-1",
+    isChannel: false,
+    isUserAgentDirectConversation: true,
+    page,
+    agentReadChanged: async (event) => {
+      events.push(event);
+    },
+    resolveAnchor: async () => ({ id: "root-1", sequence: 1, threadRootId: "root-1" }),
+  });
+  expect(events).toEqual([]);
 });

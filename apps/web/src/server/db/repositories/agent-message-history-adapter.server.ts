@@ -33,6 +33,7 @@ export function readDirectConversationMessagesPage(input: {
       threadRootId,
       canonicalTarget,
       isChannel,
+      isUserAgentDirectConversation: resolved.isUserAgentDirectConversation === true,
       page: input.page,
       consumptionScope: agentHistoryConsumptionScope(input.agentId, resolved),
       agentReadChanged: input.agentReadChanged,

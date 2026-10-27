@@ -33,6 +33,7 @@ export function useSystemMessageGroups<T extends GroupItem>(items: readonly T[])
         group.messages.some((message) => openedMessages.has(message.id))
       )
         return false;
+      // The message is visible only after the next render, so callers use true to retry a jump.
       setOpenedMessages((current) => new Set(current).add(messageId));
       return true;
     },
