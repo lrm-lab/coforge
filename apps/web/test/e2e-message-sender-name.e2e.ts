@@ -23,6 +23,22 @@ const nameBoxes = (name: string) => `(() => [...document.querySelectorAll("[data
     const time = text.closest("p").querySelector("time").getBoundingClientRect();
     return { timeInside: time.right <= row.right + 0.5, startClipped: own.left < box.left - 0.5, ellipsis: getComputedStyle(text).textOverflow === "ellipsis", overflows: text.scrollWidth > text.clientWidth };
   }))()`;
+/** Narrows the first row naming `name` until it has 20px left for the model beside a whole name and
+ * the time, then reports whether the name lost any of its width (a fraction of a pixel already
+ * shows its ellipsis, which `scrollWidth` rounds away) and how wide the model still is. */
+const squeezeBesideModel = (name: string) => `(() => {
+  const text = [...document.querySelectorAll("main p [data-text]")].find((node) => node.textContent === ${JSON.stringify(name)});
+  const row = text.closest("p");
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  const whole = range.getBoundingClientRect().width;
+  const time = row.querySelector("time").getBoundingClientRect().width;
+  row.style.width = (whole + time + 2 * 8 + 32 + 20) + "px";
+  const cut = range.getBoundingClientRect().width > text.getBoundingClientRect().width + 0.01;
+  const model = row.firstElementChild.lastElementChild.getBoundingClientRect().width;
+  row.style.width = "";
+  return { cut, model: Math.round(model) };
+})()`;
 type NameBox = {
   timeInside: boolean;
   startClipped: boolean;
@@ -46,6 +62,12 @@ test("a long sender name in the thread pane keeps its first letters", async () =
     if (box.overflows) expect(box.ellipsis).toBe(true);
   }
   await fx.screenshot("thread-pane.png");
+
+  // With room for the whole name but not the model too, the model gives way and the name keeps
+  // every letter: no ellipsis beside a model still showing ("leagent-o…  gemini-…").
+  const squeezed = await evaluate<{ cut: boolean; model: number }>(squeezeBesideModel(name));
+  expect(squeezed.cut).toBe(false);
+  expect(squeezed.model).toBeGreaterThan(0);
 
   // A name longer than the whole row ends in an ellipsis rather than losing its start. Another
   // Agent posts it, so its row has a header of its own.
