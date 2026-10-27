@@ -25,6 +25,10 @@ export function assignedSkillsDirectory(
     case RUNTIME_PROVIDER.DSH:
     case RUNTIME_PROVIDER.ANTIGRAVITY:
       return join(cwd, ".agents", "skills");
+    case RUNTIME_PROVIDER.COMMAND_CODE:
+      // Native project root from Command Code CLI 1.87.3 `getProjectSkillsDir`
+      // (`cmd skills add`). `.agents/skills` is only the compat scan location.
+      return join(cwd, ".commandcode", "skills");
     case RUNTIME_PROVIDER.KIRO:
       return join(cwd, ".kiro", "skills");
     case RUNTIME_PROVIDER.CURSOR:

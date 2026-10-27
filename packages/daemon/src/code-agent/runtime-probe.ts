@@ -21,6 +21,10 @@ import {
 import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "@lrm/coforge-anvil/kiro";
 import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "@lrm/coforge-anvil/grok";
 import {
+  isCommandCodeVersionUnsupported,
+  logCommandCodeVersionUnsupported,
+} from "@lrm/coforge-anvil/command-code";
+import {
   isAntigravityVersionUnsupported,
   logAntigravityVersionUnsupported,
 } from "@lrm/coforge-anvil/antigravity";
@@ -147,6 +151,10 @@ async function probeRuntimeVersion(
     logAntigravityVersionUnsupported(name, version);
     return undefined;
   }
+  if (provider === RUNTIME_PROVIDER.COMMAND_CODE && isCommandCodeVersionUnsupported(version)) {
+    logCommandCodeVersionUnsupported(name, version);
+    return undefined;
+  }
   return { provider, version, displayName: externalRuntimeDisplayName(provider) };
 }
 
@@ -196,6 +204,13 @@ export async function discoverExternalCodeAgents(
               isKiroVersionUnsupported(cached.runtime.version)
             ) {
               logKiroVersionUnsupported(name, cached.runtime.version);
+              return undefined;
+            }
+            if (
+              provider === RUNTIME_PROVIDER.COMMAND_CODE &&
+              isCommandCodeVersionUnsupported(cached.runtime.version)
+            ) {
+              logCommandCodeVersionUnsupported(name, cached.runtime.version);
               return undefined;
             }
             logger.info("Code Agent runtime probe served from cache", {
@@ -328,6 +343,8 @@ function externalRuntimeDisplayName(provider: ExternalCodeAgentProvider): string
       return "Grok Build";
     case RUNTIME_PROVIDER.ANTIGRAVITY:
       return "Antigravity CLI";
+    case RUNTIME_PROVIDER.COMMAND_CODE:
+      return "Command Code";
     default: {
       const unreachable: never = provider;
       throw new Error(`Unhandled external Code Agent provider: ${unreachable}`);

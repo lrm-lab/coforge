@@ -135,6 +135,11 @@ export async function listAgentSkills(options: {
           native("DSH_AGENTS_HOME", ".agents", "skills"),
         ];
       break;
+    case RUNTIME_PROVIDER.COMMAND_CODE:
+      // CLI 1.87.3 `extendingBody`: workspace and home `.commandcode/skills` and `.agents/skills` only.
+      locals = [local(".commandcode/skills"), local(".agents/skills")];
+      if (home) globals = [personal(".commandcode/skills"), personal(".agents/skills")];
+      break;
     case RUNTIME_PROVIDER.PI:
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];
       if (home)

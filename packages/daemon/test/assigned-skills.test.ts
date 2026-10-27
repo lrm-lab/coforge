@@ -86,6 +86,12 @@ test("assignedSkillsDirectory places Antigravity packs under .agents/skills", ()
   );
 });
 
+test("assignedSkillsDirectory places Command Code packs under .commandcode/skills", () => {
+  expect(assignedSkillsDirectory("command-code", "/workspace")).toBe(
+    join("/workspace", ".commandcode", "skills"),
+  );
+});
+
 test("parseAssignedSkillPacks accepts only known packs", () => {
   expect(parseAssignedSkillPacks(["weekly-report", "weekly-report", "other"])).toEqual([
     "weekly-report",

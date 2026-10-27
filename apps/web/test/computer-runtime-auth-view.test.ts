@@ -44,6 +44,15 @@ test("a Computer that never reported, or a column that is not a report, shows no
   expect(parseStoredRuntimeAuth("nope")).toBeNull();
 });
 
+test("Command Code login state reaches the Computer page", () => {
+  const stored = storedRuntimeAuth(1, [{ provider: "command-code", state: "logged_out" }]);
+  expect(
+    runtimeAuthView(stored, { showAccount: false, visibleProviders: ["command-code"] }),
+  ).toEqual({
+    "command-code": { provider: "command-code", state: "logged_out" },
+  });
+});
+
 test("a stored label that is not masked is dropped on read", () => {
   const stored = {
     collectedAtMs: 1,

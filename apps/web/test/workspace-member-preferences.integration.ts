@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { PANEL_TABS, TAB_ORDER_PANELS } from "#src/features/panel-tabs/panel-tab-order";
 import {
   PrismaWorkspaceMemberPreferencesRepository,
   WorkspaceMemberPreferences,
@@ -46,6 +47,14 @@ test("each member keeps their own tab order per Workspace, removed with the memb
       conversation: ["files", "chat", "tasks"],
       agentProfile: ["activity", "profile"],
     });
+
+    // Every tab of every panel can be saved: the table's checks list the same tabs as the code.
+    for (const panel of TAB_ORDER_PANELS) {
+      const all: string[] = [...PANEL_TABS[panel]].reverse();
+      await preferences.setTabOrder(workspaceId, userId, panel, all);
+      const saved: string[] = (await preferences.getTabOrders(workspaceId, userId))[panel];
+      expect(saved).toEqual(all);
+    }
 
     await expect(
       Promise.resolve(

@@ -54,11 +54,12 @@ export type SessionResumeFacts = {
   lastContextTokens?: number;
 };
 
-/** Runtime providers whose native authentication can be driven by the Computer. */
+/** Runtime providers whose native authentication status is exposed to the Computer. */
 export const RUNTIME_AUTH_PROVIDERS = [
   RUNTIME_PROVIDER.CLAUDE_CODE,
   RUNTIME_PROVIDER.CODEX,
   RUNTIME_PROVIDER.KIRO,
+  RUNTIME_PROVIDER.COMMAND_CODE,
 ] as const;
 export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
 
