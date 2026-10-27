@@ -71,19 +71,19 @@ test("does not infer usage from a malformed or unsupported official response", a
 
 test("never reads usage on a budget shorter than Kiro's own, and keeps a longer one", async () => {
   // The scan passes its shared 10s default; Kiro's two CLI calls together need longer than that,
-  // so this runtime raises the budget to its own 20s. A caller asking for longer keeps it.
+  // so this runtime raises the budget to its own 40s. A caller asking for longer keeps it.
   const received: Array<{ workingDirectory: string; timeoutMs?: number }> = [];
   const readResponse = async (options: { workingDirectory: string; timeoutMs?: number }) => {
     received.push(options);
     return USAGE;
   };
   await readKiroUsage({ workingDirectory: "/tmp/kiro-project", timeoutMs: 10_000 }, readResponse);
-  await readKiroUsage({ workingDirectory: "/tmp/kiro-project", timeoutMs: 30_000 }, readResponse);
+  await readKiroUsage({ workingDirectory: "/tmp/kiro-project", timeoutMs: 60_000 }, readResponse);
   await readKiroUsage({ workingDirectory: "/tmp/kiro-project" }, readResponse);
   expect(received).toEqual([
     { workingDirectory: "/tmp/kiro-project", timeoutMs: KIRO_USAGE_TIMEOUT_MS },
-    { workingDirectory: "/tmp/kiro-project", timeoutMs: 30_000 },
+    { workingDirectory: "/tmp/kiro-project", timeoutMs: 60_000 },
     { workingDirectory: "/tmp/kiro-project", timeoutMs: KIRO_USAGE_TIMEOUT_MS },
   ]);
-  expect(KIRO_USAGE_TIMEOUT_MS).toBe(20_000);
+  expect(KIRO_USAGE_TIMEOUT_MS).toBe(40_000);
 });

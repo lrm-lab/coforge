@@ -3,9 +3,9 @@ import { UsageUnavailableError } from "#src/contract";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 /** Kiro's usage read runs two CLI calls (`whoami`, then `chat /usage`) that on the supported
- * machine together take about 11-13 seconds, past the scan's shared default. The runtime declares
- * this longer budget, still well inside the browser's 60s wait. */
-export const KIRO_USAGE_TIMEOUT_MS = 20_000;
+ * machines together take 11 seconds to well over 20, past the scan's shared default. The runtime
+ * declares this longer budget, still inside the browser's 60-second wait. */
+export const KIRO_USAGE_TIMEOUT_MS = 40_000;
 
 /** The host returns the official `/usage` text, or undefined when the CLI cannot read it. */
 export type KiroUsageReader = (

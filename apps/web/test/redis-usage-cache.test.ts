@@ -24,18 +24,36 @@ function fakeRedis() {
       calls.push(`del:${keys.join(",")}`);
       return removed;
     },
-    // PUT_RESULT: KEYS = [result key, scan key], ARGV = [encoded result, ttl seconds].
+    // PUT_SUCCESS writes three keys (reading, attempt, scan); PUT_ATTEMPT writes two (attempt,
+    // scan). KEYS come first, then ARGV.
     async eval(_script: string, numberOfKeys: number, ...keysAndArgs: Array<string | number>) {
-      expect(numberOfKeys).toBe(2);
-      values.set(String(keysAndArgs[0]), String(keysAndArgs[2]));
-      values.delete(String(keysAndArgs[1]));
-      calls.push(`eval:${keysAndArgs[0]}:EX:${keysAndArgs[3]}:del:${keysAndArgs[1]}`);
+      if (numberOfKeys === 3) {
+        values.set(String(keysAndArgs[0]), String(keysAndArgs[3]));
+        values.set(String(keysAndArgs[1]), String(keysAndArgs[4]));
+        values.delete(String(keysAndArgs[2]));
+      } else {
+        values.set(String(keysAndArgs[0]), String(keysAndArgs[2]));
+        values.delete(String(keysAndArgs[1]));
+      }
+      calls.push(`eval:${numberOfKeys}`);
       return 1;
     },
   };
 }
 
 const key = { workspaceId: "w1", computerId: "c1", provider: "codex" as const };
+const T0 = Date.parse("2026-09-17T00:00:00Z");
+
+/** One cache over a mutable clock, so a test can age a reading or an attempt. */
+function clockCache(redis: ReturnType<typeof fakeRedis>) {
+  let now = T0;
+  return {
+    cache: new RedisUsageCache(redis, "86400", "60", () => now),
+    advance: (milliseconds: number) => {
+      now += milliseconds;
+    },
+  };
+}
 
 test("a missing key reports state missing with no result", async () => {
   const redis = fakeRedis();
@@ -43,9 +61,9 @@ test("a missing key reports state missing with no result", async () => {
   await expect(cache.read(key)).resolves.toEqual({ state: "missing" });
 });
 
-test("a result within the stale window reads back fresh, scoped to a versioned per-provider key", async () => {
+test("a successful reading reads back fresh, scoped to a versioned per-provider key", async () => {
   const redis = fakeRedis();
-  const cache = new RedisUsageCache(redis, "86400", "60", () => Date.parse("2026-09-17T00:00:00Z"));
+  const { cache } = clockCache(redis);
   await cache.putResult({
     ...key,
     scanId: "scan-1",
@@ -57,34 +75,32 @@ test("a result within the stale window reads back fresh, scoped to a versioned p
     state: "fresh",
     result: { scanId: "scan-1", snapshot: { planType: "pro" } },
   });
-  expect(redis.calls[0]).toContain(
-    "coforge:workspace:w1:computer:c1:usage:v2:codex:result:EX:86400",
-  );
+  expect(redis.values.has("coforge:workspace:w1:computer:c1:usage:v2:codex:result")).toBe(true);
 });
 
-test("a result older than the stale window reads back stale, not missing", async () => {
+test("a reading older than the window reads back stale, not missing", async () => {
   const redis = fakeRedis();
-  const cache = new RedisUsageCache(redis, "86400", "60", () => Date.parse("2026-09-17T01:00:00Z"));
-  await cache.putResult({
-    ...key,
-    scanId: "scan-1",
-    status: "available",
-    collectedAt: new Date(
-      Date.parse("2026-09-17T01:00:00Z") - USAGE_STALE_AFTER_MS - 1,
-    ).toISOString(),
-  });
-  await expect(cache.read(key)).resolves.toMatchObject({ state: "stale" });
-});
-
-test("starting a new scan never erases the previous result", async () => {
-  const redis = fakeRedis();
-  const cache = new RedisUsageCache(redis);
+  const { cache, advance } = clockCache(redis);
   await cache.putResult({
     ...key,
     scanId: "scan-1",
     status: "available",
     snapshot: { provider: "codex", planType: "pro" },
-    collectedAt: new Date().toISOString(),
+    collectedAt: "2026-09-17T00:00:00Z",
+  });
+  advance(USAGE_STALE_AFTER_MS + 1);
+  await expect(cache.read(key)).resolves.toMatchObject({ state: "stale" });
+});
+
+test("starting a new scan never erases the previous reading", async () => {
+  const redis = fakeRedis();
+  const { cache } = clockCache(redis);
+  await cache.putResult({
+    ...key,
+    scanId: "scan-1",
+    status: "available",
+    snapshot: { provider: "codex", planType: "pro" },
+    collectedAt: "2026-09-17T00:00:00Z",
   });
   await cache.putScan({ ...key, scanId: "scan-2", status: "pending" });
 
@@ -96,7 +112,7 @@ test("starting a new scan never erases the previous result", async () => {
 
 test("a completed scan clears its own pending marker so it stops reporting as pending", async () => {
   const redis = fakeRedis();
-  const cache = new RedisUsageCache(redis);
+  const { cache } = clockCache(redis);
   await cache.putScan({ ...key, scanId: "scan-1", status: "pending" });
   expect((await cache.read(key)).pendingScanId).toBe("scan-1");
 
@@ -104,16 +120,17 @@ test("a completed scan clears its own pending marker so it stops reporting as pe
     ...key,
     scanId: "scan-1",
     status: "available",
-    collectedAt: new Date().toISOString(),
+    snapshot: { provider: "codex" },
+    collectedAt: "2026-09-17T00:00:00Z",
   });
   const read = await cache.read(key);
   expect(read.pendingScanId).toBeUndefined();
   expect(read.result?.scanId).toBe("scan-1");
 });
 
-test("an old Daemon's result without its own collectedAt still carries the server-assigned one", async () => {
+test("an old Daemon's reading without its own collectedAt still carries the server-assigned one", async () => {
   const redis = fakeRedis();
-  const cache = new RedisUsageCache(redis, "86400", "60", () => Date.parse("2026-09-17T00:00:00Z"));
+  const { cache } = clockCache(redis);
   // The caller (the scan-result RPC method) is what falls back to server-receive time when the
   // snapshot itself is silent; the cache just stores and classifies whatever `collectedAt` it's
   // given.
@@ -130,12 +147,10 @@ test("an old Daemon's result without its own collectedAt still carries the serve
   });
 });
 
-test("clears an in-flight scan and writes its result in one round trip", async () => {
+test("a successful scan writes the reading, its attempt and clears the pending marker in one call", async () => {
   const redis = fakeRedis();
-  const cache = new RedisUsageCache(redis, "86400", "60", () => Date.parse("2026-09-17T00:00:00Z"));
+  const { cache } = clockCache(redis);
   await cache.putScan({ ...key, scanId: "scan-1", status: "pending" });
-  // A pending scan is what a read reports as still in flight.
-  expect((await cache.read(key)).pendingScanId).toBe("scan-1");
   redis.calls.length = 0;
 
   await cache.putResult({
@@ -146,43 +161,117 @@ test("clears an in-flight scan and writes its result in one round trip", async (
     collectedAt: "2026-09-17T00:00:00Z",
   });
 
-  // One call that both writes the result (with its TTL) and drops the scan marker — not a set
-  // followed by a separate del.
-  expect(redis.calls).toHaveLength(1);
-  expect(redis.calls[0]).toMatch(/^eval:/);
-  expect(redis.calls[0]).toContain(":EX:86400:");
-  expect(redis.calls[0]).toContain(":del:");
-  // And the read that follows no longer reports the scan as pending, while the result is there.
-  const read = await cache.read(key);
-  expect(read.pendingScanId).toBeUndefined();
-  expect(read).toMatchObject({ state: "fresh", result: { scanId: "scan-1" } });
+  expect(redis.calls).toEqual(["eval:3"]);
+  expect((await cache.read(key)).pendingScanId).toBeUndefined();
 });
 
-test("a failed result stays fresh for two minutes, then reads stale, while a success keeps its window", async () => {
-  const collectedAt = "2026-09-17T00:00:00Z";
-  let now = Date.parse(collectedAt);
+test("a failed scan keeps a reading older than 30 minutes and does not re-scan within 2 minutes", async () => {
   const redis = fakeRedis();
-  const cache = new RedisUsageCache(redis, "86400", "60", () => now);
-  await cache.putResult({ ...key, scanId: "scan-1", status: "unavailable", collectedAt });
+  const { cache, advance } = clockCache(redis);
+  await cache.putResult({
+    ...key,
+    scanId: "scan-1",
+    status: "available",
+    snapshot: { provider: "codex", planType: "pro" },
+    collectedAt: "2026-09-17T00:00:00Z",
+  });
 
-  // Just after the failure it is still fresh: a few panels or a reload do not re-run the CLI.
-  expect((await cache.read(key)).state).toBe("fresh");
-  now += FAILED_USAGE_STALE_AFTER_MS - 1;
-  expect((await cache.read(key)).state).toBe("fresh");
-  // Past the short window it is stale, so the next open scans again well before the 30-minute one.
-  now += 2;
+  // The success is now long past its 30-minute window. A failed attempt must not leave the entry
+  // permanently stale (which every page load would re-scan): freshness follows the attempt.
+  advance(40 * 60_000);
+  await cache.putScan({ ...key, scanId: "scan-2", status: "pending" });
+  await cache.putResult({
+    ...key,
+    scanId: "scan-2",
+    status: "unavailable",
+    message: "Provider usage is unavailable",
+    collectedAt: "2026-09-17T00:40:00Z",
+  });
+
+  const read = await cache.read(key);
+  expect(read.state).toBe("fresh");
+  expect(read.pendingScanId).toBeUndefined();
+  expect(read.result).toMatchObject({
+    scanId: "scan-2",
+    status: "unavailable",
+    collectedAt: "2026-09-17T00:00:00Z",
+    snapshot: { planType: "pro" },
+  });
+
+  advance(FAILED_USAGE_STALE_AFTER_MS + 1);
+  expect((await cache.read(key)).state).toBe("stale");
+});
+
+test("a reauthentication failure does not keep showing the last reading", async () => {
+  const redis = fakeRedis();
+  const { cache } = clockCache(redis);
+  await cache.putResult({
+    ...key,
+    scanId: "scan-1",
+    status: "available",
+    snapshot: { provider: "codex", planType: "pro" },
+    collectedAt: "2026-09-17T00:00:00Z",
+  });
+  await cache.putResult({
+    ...key,
+    scanId: "scan-2",
+    status: "reauth",
+    collectedAt: "2026-09-17T00:00:00Z",
+  });
+
+  const read = await cache.read(key);
+  expect(read.result?.status).toBe("reauth");
+  expect(read.result?.snapshot).toBeUndefined();
+});
+
+test("a failed scan with no earlier reading is recorded as the failure", async () => {
+  const redis = fakeRedis();
+  const { cache } = clockCache(redis);
+  await cache.putResult({
+    ...key,
+    scanId: "scan-1",
+    status: "unavailable",
+    collectedAt: "2026-09-17T00:00:00Z",
+  });
   await expect(cache.read(key)).resolves.toMatchObject({
-    state: "stale",
+    state: "fresh",
     result: { scanId: "scan-1", status: "unavailable" },
   });
+});
 
-  const errored = fakeRedis();
-  let errorNow = Date.parse(collectedAt);
-  const errorCache = new RedisUsageCache(errored, "86400", "60", () => errorNow);
-  await errorCache.putResult({ ...key, scanId: "scan-2", status: "error", collectedAt });
-  errorNow += FAILED_USAGE_STALE_AFTER_MS + 1;
-  await expect(errorCache.read(key)).resolves.toMatchObject({
-    state: "stale",
-    result: { status: "error" },
+test("a failed attempt stays fresh for two minutes, then reads stale", async () => {
+  const redis = fakeRedis();
+  const { cache, advance } = clockCache(redis);
+  await cache.putResult({
+    ...key,
+    scanId: "scan-1",
+    status: "error",
+    collectedAt: "2026-09-17T00:00:00Z",
   });
+  expect((await cache.read(key)).state).toBe("fresh");
+  advance(FAILED_USAGE_STALE_AFTER_MS - 1);
+  expect((await cache.read(key)).state).toBe("fresh");
+  advance(2);
+  await expect(cache.read(key)).resolves.toMatchObject({
+    state: "stale",
+    result: { scanId: "scan-1", status: "error" },
+  });
+});
+
+test("a reading written before attempts were recorded still reads", async () => {
+  const redis = fakeRedis();
+  const { cache, advance } = clockCache(redis);
+  redis.values.set(
+    "coforge:workspace:w1:computer:c1:usage:v2:codex:result",
+    JSON.stringify({
+      ...key,
+      scanId: "scan-1",
+      status: "available",
+      snapshot: { provider: "codex", planType: "pro" },
+      collectedAt: "2026-09-17T00:00:00Z",
+    }),
+  );
+  expect((await cache.read(key)).state).toBe("fresh");
+  advance(USAGE_STALE_AFTER_MS + 1);
+  expect((await cache.read(key)).state).toBe("stale");
 });
