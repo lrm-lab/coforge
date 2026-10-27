@@ -38,7 +38,8 @@ import { ThreadPaneHeader, type ThreadFollow } from "./thread-pane-header";
 import { makeReferenceBodyFormatter } from "./mention-text";
 import type { ChipMention } from "./message-markdown";
 import type { ChannelSuggestion } from "./reference-completion";
-import { GROUPING_WINDOW_MS, MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
+import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
+import { outboxContinuesRun } from "./conversation-pane-layout";
 import { optimisticSavedEntry } from "./saved-messages-collection";
 import { composerDraftKey } from "./composer-draft";
 import { OutboxMessageRow } from "./outbox-message-row";
@@ -338,13 +339,13 @@ export function ConversationPane({
     } else void showLatestMessages();
   }, [outboxEntries]);
   // The first pending row continues the viewer's run of messages right above it, as a sent one would.
-  const lastMessage = conversation.messages.at(-1);
-  const outboxContinuesRun =
-    lastMessage !== undefined &&
-    isOwn(lastMessage) &&
-    dayLabel(lastMessage.createdAt, dateLocale, timeZone) ===
-      dayLabel(new Date(), dateLocale, timeZone) &&
-    Date.now() - new Date(lastMessage.createdAt).getTime() <= GROUPING_WINDOW_MS;
+  const outboxContinues = outboxContinuesRun(
+    conversation.messages,
+    isOwn,
+    dayLabel,
+    dateLocale,
+    timeZone,
+  );
   // The own-messages index shows the stored body, which spells a mention as its raw
   // `<@agent:uuid>` token. Resolve those to `@handle` the way the message list does, using the
   // conversation's known mentionables. Applies to channels too (both render through here).
@@ -986,7 +987,7 @@ export function ConversationPane({
                   <OutboxMessageRow
                     key={entry.localId}
                     entry={entry}
-                    grouped={index > 0 || outboxContinuesRun}
+                    grouped={index > 0 || outboxContinues}
                     composerShown={canCompose}
                     plainMentions={plainMentions}
                     viewerId={conversation.viewerId}

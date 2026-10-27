@@ -6,7 +6,6 @@ import {
 import { Bookmark, BookmarkCheck, Code02, Copy01, CornerUpLeft } from "@untitledui/icons";
 import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 
-import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { useAppToast } from "#src/components/ui/toast";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -50,6 +49,8 @@ import { gutterClockLabel } from "./gutter-clock-label";
 import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { SystemMessageRow } from "./system-message-row";
 import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
+import { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
+import { SavedMessageMarker } from "./message-status-markers";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
@@ -97,7 +98,7 @@ export type MessageView = {
   weeklyReportHidden?: boolean;
 };
 
-export const GROUPING_WINDOW_MS = 5 * 60 * 1000;
+export { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
 
 /** The vertical edges of the visible region a floating control must stay inside: the nearest
  * scrollport ancestor's box, or the viewport when the element is not inside a scroller. */
@@ -632,13 +633,7 @@ export const MessageRow = memo(function MessageRow({
               "this one is in your Saved" without opening the hover bar to check its bookmark. The
               Saved page itself does not repeat it — that list has its own row (see
               `saved-messages-view.tsx`), where every entry is saved by definition. */}
-          {saveSaved && (
-            <div className="flex pt-0.5">
-              <BadgeWithIcon type="color" color="brand" size="sm" iconLeading={Bookmark}>
-                {m.conversation_saved_marker()}
-              </BadgeWithIcon>
-            </div>
-          )}
+          {saveSaved && <SavedMessageMarker />}
           {showsTask && <MessageTask messageId={message.id} />}
           {onOpenThread && <RootThread rootId={message.id} onOpen={onOpenThread} />}
         </div>

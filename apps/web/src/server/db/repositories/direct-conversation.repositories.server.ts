@@ -1,4 +1,4 @@
-import { readAgentMessagePage } from "./agent-message-history.repositories.server";
+import { readDirectConversationMessagesPage } from "./agent-message-history-adapter.server";
 import { findAgentScopedMessage } from "./agent-message-lookup.repositories.server";
 import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
@@ -120,10 +120,7 @@ import {
   type AgentAttentionScope,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
-import {
-  agentHistoryConsumptionScope,
-  type ResolvedAgentTarget,
-} from "./resolved-agent-target.server";
+import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
 import {
   searchAgentMessagePage,
   type AgentMessageSearchOptions,
@@ -1339,19 +1336,14 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     target: string,
     page: DirectConversationPageOptions = {},
   ) {
-    const resolved = await this.resolveAgentTarget(workspaceId, agentId, target);
-    const { conversationId, threadRootId, canonicalTarget, isChannel } = resolved;
-    const consumptionScope = agentHistoryConsumptionScope(agentId, resolved);
-    return readAgentMessagePage(this.db, {
+    return readDirectConversationMessagesPage({
+      db: this.db,
       workspaceId,
       agentId,
-      conversationId,
-      threadRootId,
-      canonicalTarget,
-      isChannel,
+      target,
       page,
-      consumptionScope,
-      resolveAnchor: (anchor) => this.resolveMessage(conversationId, anchor),
+      resolveTarget: (value) => this.resolveAgentTarget(workspaceId, agentId, value),
+      resolveAnchor: (conversationId, anchor) => this.resolveMessage(conversationId, anchor),
     });
   }
 
