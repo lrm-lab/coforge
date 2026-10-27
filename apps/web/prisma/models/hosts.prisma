@@ -14,12 +14,12 @@ model HostNode {
   @@map("host_nodes")
 }
 
-/// One create, attach, update, or delete for a cloud Computer. The daemon key stays here until the
-/// cluster reports the job, then it is cleared. The browser never receives it.
+/// One create, attach, update, runtime upgrade, or delete for a cloud Computer. The daemon key
+/// stays here until the cluster reports the job, then it is cleared. The browser never receives it.
 model HostJob {
   id                String    @id @default(uuid(7)) @db.Uuid
   hostId            String    @map("host_id") @db.Uuid
-  /// "create", "delete", "attach", or "update".
+  /// "create", "delete", "attach", "update", or "runtime".
   operation         String    @default("create")
   workspaceId       String    @map("workspace_id") @db.Uuid
   workspaceSlug     String    @map("workspace_slug")
