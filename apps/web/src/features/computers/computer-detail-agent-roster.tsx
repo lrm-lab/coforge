@@ -166,9 +166,6 @@ export function ComputerDetailAgentRoster({
         {agents.length ? (
           <ul className="divide-y divide-secondary">
             {agents.map((agent) => {
-              const handle = (
-                <span className="ml-auto shrink-0 text-xs text-tertiary">@{agent.name}</span>
-              );
               const toggle = (selected: boolean) =>
                 setSelectedIds((current) => {
                   const next = new Set(current);
@@ -197,7 +194,6 @@ export function ComputerDetailAgentRoster({
                             isFocusVisible={isFocusVisible}
                           />
                           <AgentRosterIdentity agent={agent} />
-                          {handle}
                         </>
                       )}
                     </AriaCheckbox>
@@ -215,13 +211,11 @@ export function ComputerDetailAgentRoster({
                     >
                       <span className="flex w-full min-w-0 items-center gap-3">
                         <AgentRosterIdentity agent={agent} />
-                        {handle}
                       </span>
                     </Button>
                   ) : (
                     <span className="flex w-full items-center gap-3 py-3 text-sm">
                       <AgentRosterIdentity agent={agent} />
-                      {handle}
                     </span>
                   )}
                 </li>
@@ -239,6 +233,9 @@ export function ComputerDetailAgentRoster({
   );
 }
 
+/** An Agent's avatar, name, runtime and @handle. The handle takes at most 40% of the row and
+ * truncates, so a generated one (`assistant-<uuid>`, wider than a phone) cannot take the row from
+ * the name and runtime. */
 function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][number] }) {
   const display = useLiveAgentDisplay(agent.id) ?? agent.display;
   return (
@@ -258,6 +255,9 @@ function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][nu
             {agent.runtimeConfig.model ? ` · ${agent.runtimeConfig.model}` : ""}
           </span>
         </span>
+      </span>
+      <span className="ml-auto max-w-[40%] min-w-0 truncate text-xs text-tertiary">
+        @{agent.name}
       </span>
     </>
   );

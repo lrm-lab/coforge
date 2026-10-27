@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 /**
  * The subtle-fill container shared by the detail groups: no border, no
  * shadow, an optional heading inset to the row text, dividers between rows
- * supplied by the child list itself (`dl`/`ul` with `divide-y`).
+ * supplied by the child list itself (`dl`/`ul` with `divide-y`). The heading's actions move to
+ * a line of their own, left-aligned, when they do not fit beside it, as on Raft's phone layout.
  */
 export function DetailGroup({
   heading,
@@ -19,7 +20,7 @@ export function DetailGroup({
   return (
     <section aria-labelledby={headingId}>
       {(heading || action) && (
-        <div className="mb-2 flex items-center justify-between gap-3 px-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4">
           {heading && (
             <h2 id={headingId} className="text-sm font-semibold text-primary">
               {heading}
