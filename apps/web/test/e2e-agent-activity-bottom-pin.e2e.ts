@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { AGENT_ACTIVITY_DETAIL_KIND, encodeAgentActivity } from "@lrm/coforge-sdk/internal";
 import { agentActivityChannelFor } from "#src/features/agents/agent-activity";
+import { AGENT_ACTIVITY_WINDOW } from "#src/features/agents/agent-activity-window";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
@@ -33,6 +34,8 @@ let workspaceId: string;
 let workspaceSlug: string;
 let computerId: string;
 let agentId: string;
+/** An Agent whose feed is full, so each new row pushes the oldest out of the top. */
+let fullAgentId: string;
 
 const scroller = `document.querySelector('ol[aria-label="Activity timeline"]')?.parentElement`;
 const distance = `(() => { const s=${scroller}; return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : null; })()`;
@@ -59,18 +62,22 @@ async function settledDistance() {
 }
 
 /** Publishes one live Activity row, as the daemon's relay would, and waits for it to render. */
-async function publishRow(label: string) {
+async function publishRow(label: string, agent = agentId) {
   clientSeq += 1;
   await centrifugo.publish(
-    agentActivityChannelFor(workspaceId, agentId, "private"),
+    agentActivityChannelFor(workspaceId, agent, "private"),
     encodeAgentActivity({
       protocolMajor: 1,
       requestId: crypto.randomUUID(),
       workspaceId,
-      agentId,
+      agentId: agent,
       detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND,
       level: "info",
-      detail: `echo ${label} && bun run test --filter some/long/path/live-segment --reporter verbose`,
+      // A full feed's new rows are short, so the tall ones they push out shrink the list.
+      detail:
+        agent === agentId
+          ? `echo ${label} && bun run test --filter some/long/path/live-segment --reporter verbose`
+          : `echo ${label}`,
       observedAtMs: Date.now(),
       launchId: "e2e-launch",
       clientSeq,
@@ -79,7 +86,7 @@ async function publishRow(label: string) {
   await browser(
     "wait",
     "--fn",
-    `document.body.innerText.includes(${JSON.stringify(`echo ${label}`)})`,
+    `document.querySelector('ol[aria-label="Activity timeline"]')?.textContent.includes(${JSON.stringify(`echo ${label}`)}) === true`,
   );
 }
 
@@ -130,7 +137,6 @@ beforeAll(async () => {
     },
   });
   agentId = agent.id;
-  clientSeq = ROWS;
   const start = Date.now() - ROWS * 1000;
   await db.agentActivity.createMany({
     data: Array.from({ length: ROWS }, (_, index) => ({
@@ -144,6 +150,41 @@ beforeAll(async () => {
       // Long enough to wrap to several lines on a phone, short of the 200-character fold.
       detail: `cd /workspace/project-${index} && bun run test --filter some/long/path/segment-${index} --reporter verbose`,
       occurredAt: new Date(start + index * 1000),
+    })),
+  });
+  const full = await db.agent.create({
+    data: {
+      workspaceId,
+      ownerId: DEV_BROWSER_USER.id,
+      computerId,
+      name: "activity-full",
+      visibility: "private",
+      displayName: "Activity full",
+      runtimeConfig: {
+        runtime: "pi",
+        provider: { kind: "default" },
+        model: "e2e-model",
+        modelProvider: "e2e-provider",
+        reasoning: "balanced",
+      },
+    },
+  });
+  fullAgentId = full.id;
+  // Live rows continue both feeds' sequences: a seq already stored is the stored row, not a new one.
+  clientSeq = Math.max(ROWS, AGENT_ACTIVITY_WINDOW);
+  const fullStart = Date.now() - AGENT_ACTIVITY_WINDOW * 1000;
+  await db.agentActivity.createMany({
+    data: Array.from({ length: AGENT_ACTIVITY_WINDOW }, (_, index) => ({
+      workspaceId,
+      agentId: fullAgentId,
+      computerId,
+      launchId: "e2e-launch",
+      clientSeq: index + 1,
+      detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNNING_COMMAND,
+      level: "info",
+      // Several lines on a phone, still short of the 200-character fold.
+      detail: `cd /workspace/project-${index} && bun install && bun run build --filter some/long/path/segment-${index} && bun run test --filter some/long/path/segment-${index} --reporter verbose`,
+      occurredAt: new Date(fullStart + index * 1000),
     })),
   });
 });
@@ -200,3 +241,46 @@ for (const width of [1440, 390])
     expect(whileReading).toBeGreaterThan(scrolledUp);
     expect(followed).toBeLessThanOrEqual(1);
   }, 120_000);
+
+/** The first row not entirely above the view's top, by its text, and its top's offset from it. */
+const readingRow = `(() => {
+  const s = ${scroller};
+  const top = s.getBoundingClientRect().top;
+  const row = [...s.querySelectorAll("ol > li")].find((li) => li.getBoundingClientRect().bottom > top);
+  return { text: row.textContent.slice(0, 60), offset: Math.round(row.getBoundingClientRect().top - top) };
+})()`;
+
+test("390px: rows leaving the top of a full feed leave the row being read in place", async () => {
+  await browser("set", "viewport", "390", "844");
+  await browser(
+    "open",
+    `${proxy.origin}/en/w/${workspaceSlug}/members?profile=agent:${fullAgentId}&agentTab=activity`,
+  );
+  await browser("wait", "--fn", `${scroller} != null`);
+  await browser("eval", "document.fonts.ready");
+  await settledDistance();
+  // Safari has no native scroll anchoring (caniuse: css-overflow-anchor), and Chromium's alone
+  // let QA's reader drop to the bottom; switched off here as in Safari, the pane holds the row.
+  await browser("eval", `(() => { const s=${scroller}; s.style.overflowAnchor = "none"; })()`);
+  await browser(
+    "eval",
+    `(() => { const s=${scroller}; s.dispatchEvent(new WheelEvent("wheel")); s.scrollTop -= 500; })()`,
+  );
+  await settledDistance();
+  const before = await evaluate<{ text: string; offset: number }>(readingRow);
+  const heightBefore = await evaluate<number>(`${scroller}.scrollHeight`);
+  // Each short row pushes a tall one out of the top: the list gets shorter than the distance the
+  // reader scrolled up, which used to clamp them to the bottom.
+  for (let index = 1; index <= 40; index++) await publishRow(`short-${index}`, fullAgentId);
+  await settledDistance();
+  const after = await evaluate<{ text: string; offset: number }>(readingRow);
+  const heightAfter = await evaluate<number>(`${scroller}.scrollHeight`);
+  await browser("screenshot", join(artifacts, "390-full-feed.png"));
+  await Bun.write(
+    join(artifacts, "390-full-feed.json"),
+    JSON.stringify({ before, after, heightBefore, heightAfter }, null, 2),
+  );
+  expect(heightBefore - heightAfter).toBeGreaterThan(500);
+  expect(after.text).toBe(before.text);
+  expect(Math.abs(after.offset - before.offset)).toBeLessThanOrEqual(1);
+}, 120_000);

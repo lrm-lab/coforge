@@ -71,6 +71,8 @@ export function AgentActivityTimeline({
   const listRef = useRef<HTMLOListElement>(null);
   const [bottomPin] = useState(() => new ConversationBottomPin());
   const following = useRef(true);
+  // The row at the top of the view while the reader is scrolled up, and how far down it sits.
+  const reading = useRef<ReadingRow>(undefined);
   const empty = rows.length === 0;
   useLayoutEffect(() => {
     const container = scrollRef.current;
@@ -82,17 +84,32 @@ export function AgentActivityTimeline({
     const observer = new ResizeObserver(() => {
       const wasAtBottom = bottomPin.beforeResize(container);
       if (following.current && wasAtBottom) bottomPin.pin(container, "instant");
+      else holdReadingRow(container);
     });
     observer.observe(container);
     if (listRef.current) observer.observe(listRef.current);
     return () => observer.disconnect();
   }, [bottomPin, empty]);
+  // Rows come and go above the reader too: the feed keeps only its newest frames, so new ones push
+  // the oldest out, and a statement's rows merge as it streams. Hold the row the reader is looking
+  // at where it was, rather than a distance from either end; Safari has no native scroll anchoring.
+  function holdReadingRow(container: HTMLElement) {
+    if (following.current) return;
+    // A scroll the pane has not handled yet is the reader's: theirs is the row to hold now.
+    if (reading.current?.scrollTop === container.scrollTop)
+      restoreReadingRow(container, reading.current);
+    reading.current = readingRowOf(container);
+  }
+  useLayoutEffect(() => {
+    if (scrollRef.current) holdReadingRow(scrollRef.current);
+  }, [rows]);
   function trackReadingPosition() {
     const container = scrollRef.current;
     if (!container) return;
     const distance = bottomPin.scroll(container);
     // The conversation history's "near enough to follow" distance.
     if (distance !== undefined) following.current = distance <= 48;
+    reading.current = following.current ? undefined : readingRowOf(container);
   }
 
   if (!rows.length)
@@ -210,6 +227,7 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
     // the marker's offset puts each centre 1rem down), from the first marker to the last. The
     // marker's ring in the panel's own background masks the line behind it.
     <li
+      data-activity-row={row.key}
       className="relative grid grid-cols-[0.5625rem_minmax(0,1fr)_auto] gap-x-3 py-1.5 font-mono before:absolute before:inset-y-0 before:left-1 before:border-l before:border-secondary first:before:top-4 last:before:bottom-auto last:before:h-4 only:before:hidden"
       style={ROW_RENDER_COST}
     >
@@ -256,3 +274,30 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
     </li>
   );
 });
+
+/** The first two rows not entirely above the view's top edge, and their tops' offsets from it:
+ * the second stands in when the first is re-keyed (a merged statement's oldest fragment left). */
+type ReadingRow = { rows: { key: string; offset: number }[]; scrollTop: number } | undefined;
+
+function readingRowOf(container: HTMLElement): ReadingRow {
+  const top = container.getBoundingClientRect().top;
+  const rows: { key: string; offset: number }[] = [];
+  for (const row of container.querySelectorAll<HTMLElement>("li[data-activity-row]")) {
+    const box = row.getBoundingClientRect();
+    if (box.bottom <= top) continue;
+    rows.push({ key: row.dataset.activityRow!, offset: box.top - top });
+    if (rows.length === 2) break;
+  }
+  return rows.length ? { rows, scrollTop: container.scrollTop } : undefined;
+}
+
+/** Scrolls the first of those rows still in the feed back to its offset. */
+function restoreReadingRow(container: HTMLElement, reading: ReadingRow) {
+  for (const { key, offset } of reading?.rows ?? []) {
+    const row = container.querySelector(`li[data-activity-row="${CSS.escape(key)}"]`);
+    if (!row) continue;
+    const shift = row.getBoundingClientRect().top - container.getBoundingClientRect().top - offset;
+    if (Math.abs(shift) >= 1) container.scrollTop += shift;
+    return;
+  }
+}
