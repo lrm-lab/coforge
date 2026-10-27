@@ -10,7 +10,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { useAppToast } from "#src/components/ui/toast";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog } from "#src/components/application/modals/modal";
-import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import type {
   OpenAgentProfile,
   OpenPersonProfile,
@@ -24,13 +23,15 @@ import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import { MessageSenderLine } from "./message-sender-line";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
+import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import { useIsMessageSaved } from "./conversation-host";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-markdown";
 import { formatSelectionQuote, selectionAffordancePlacement } from "./message-quote";
 import { MessageReactionPicker, QUICK_REACTION_EMOJIS } from "./message-reaction-picker";
-import { RootThread, ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
+import { ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
+import type { ReactionSummary } from "./message-reactions";
 import {
   copyFragmentMarkdown,
   copyFragmentStyled,
@@ -38,7 +39,6 @@ import {
   selectionFragmentHtml,
 } from "./selection-copy";
 import { copyText } from "#src/lib/clipboard";
-import { MessageTask } from "#src/features/tasks/message-task";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { clockLabel } from "#src/lib/dates";
@@ -47,6 +47,8 @@ import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { SystemMessageRow } from "./system-message-row";
 import { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
 import { MessageRowFooter } from "./message-row-footer";
+import { AgentReadReceipt } from "./message-status-markers";
+import { MessageSenderGutter } from "./message-sender-gutter";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
@@ -177,6 +179,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenTask,
   channelNames,
   onQuoteSelection,
+  agentRead = false,
 }: {
   message: MessageView;
   conversationId?: string;
@@ -232,6 +235,7 @@ export const MessageRow = memo(function MessageRow({
    * conversation has no composer to put it in), no affordance is offered and no selection is
    * read at all. */
   onQuoteSelection?: (quote: string) => void;
+  agentRead?: boolean;
 }) {
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
@@ -469,49 +473,18 @@ export const MessageRow = memo(function MessageRow({
           grouped ? "pt-0 pb-1" : "py-3",
         )}
       >
-        <div className="flex w-9 shrink-0 items-start justify-center">
-          {grouped ? (
-            // Shown on hover or focus only, so it carries no tooltip a touch or keyboard reader
-            // could not reach: the short label is for the eye, the full time (AM/PM included) for
-            // screen readers, and the tap action sheet shows it too.
-            <time
-              dateTime={new Date(message.createdAt).toISOString()}
-              // `text-xs` is the scale's 0.75rem; the explicit `leading-` keeps the message line
-              // height, which `text-xs` would otherwise pair with its own (measured: both spell
-              // 12px/24px here).
-              className="message-text text-xs leading-[var(--text-md--line-height)] whitespace-nowrap text-quaternary tabular-nums opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100"
-            >
-              <span aria-hidden="true">
-                {gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
-              </span>
-              <span className="sr-only">
-                {clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
-              </span>
-            </time>
-          ) : openableAgentId && onOpenAgentProfile ? (
-            <AgentHoverCard
-              agentId={openableAgentId}
-              conversationId={conversationId}
-              name={message.senderName}
-              handle={message.senderHandle}
-              src={message.senderAvatarUrl}
-              trigger={avatar}
-              onOpenProfile={onOpenAgentProfile}
-            />
-          ) : openablePersonId ? (
-            <Button
-              color="link-gray"
-              noTextPadding
-              aria-label={m.member_person_open_profile({ name: message.senderName })}
-              className="shrink-0 rounded-full!"
-              onPress={openSenderProfile}
-            >
-              {avatar}
-            </Button>
-          ) : (
-            avatar
-          )}
-        </div>
+        <MessageSenderGutter
+          message={message}
+          grouped={grouped}
+          conversationId={conversationId}
+          openableAgentId={openableAgentId}
+          openablePersonId={openablePersonId}
+          onOpenAgentProfile={onOpenAgentProfile}
+          openSenderProfile={openSenderProfile}
+          avatar={avatar}
+          gutterTime={gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+          fullTime={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {!grouped && (
             <MessageSenderLine
@@ -626,6 +599,7 @@ export const MessageRow = memo(function MessageRow({
             showsTask={showsTask}
             onOpenThread={onOpenThread}
           />
+          {agentRead && <AgentReadReceipt />}
         </div>
         {(onOpenThread || onToggleReaction || onToggleSave || copyable) && (
           /* Hidden until revealed: hover/focus in the wide desktop shell (`lg` and up, with

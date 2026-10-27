@@ -381,5 +381,6 @@
       }
     }
   ],
-  "chat_section_change_failed": "Couldn't save this change."
+  "chat_section_change_failed": "Couldn't save this change.",
+  "conversation_read": "Read"
 }

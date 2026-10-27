@@ -23,6 +23,8 @@ export type DirectConversationView = {
    * first message past it is the first unread; the initial view positions there and draws the
    * divider. Absent for a non-member, a fully-read fresh seed, or an unvisited thread. */
   readThroughSequence?: number;
+  /** The Agent's actual read position, present only for a User-Agent DM. */
+  agentReadThroughSequence?: number;
   threadReadThrough?: Record<string, number>;
   /** Each thread of the loaded window as a summary, by its root's id: the messages are top-level
    * only, and a thread's replies are read when its pane opens (`thread-pane.tsx`). */
@@ -58,6 +60,7 @@ export type DirectConversationView = {
     sequence: number;
     threadRootId?: string;
     senderKind: "user" | "agent" | "system";
+    senderUserId?: string;
     /** The sender's member row here (none for a system message): the viewer wrote the message
      * exactly when it is the view's `senderMemberId` (`own-message.ts`), in a channel and a DM. */
     senderMemberId?: string | null;

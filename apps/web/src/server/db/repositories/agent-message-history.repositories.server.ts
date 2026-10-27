@@ -33,6 +33,12 @@ export async function readAgentMessagePage(
     page: AgentMessagesPage;
     consumptionScope?: AgentHistoryConsumptionScope;
     additionalScope?: Prisma.MessageWhereInput;
+    agentReadChanged?(input: {
+      workspaceId: string;
+      conversationId: string;
+      agentId: string;
+      readThroughSequence: number;
+    }): Promise<void>;
     resolveAnchor(
       anchor: string,
     ): Promise<{ id: string; sequence: number; threadRootId: string | null }>;
@@ -48,6 +54,7 @@ export async function readAgentMessagePage(
     page,
     consumptionScope,
     additionalScope,
+    agentReadChanged,
     resolveAnchor,
   } = input;
   const scope = {
@@ -155,8 +162,8 @@ export async function readAgentMessagePage(
   // moves the read-through there.
   const agentReadThroughSequence =
     modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
-  if (agentReadThroughSequence)
-    await advanceAgentRead(db, {
+  if (agentReadThroughSequence) {
+    const advanced = await advanceAgentRead(db, {
       memberId: agentMember.id,
       conversationId,
       workspaceId,
@@ -164,6 +171,16 @@ export async function readAgentMessagePage(
       threadRootId,
       sequence: agentReadThroughSequence,
     });
+    if (advanced && !isChannel && !threadRootId) {
+      const publication = agentReadChanged?.({
+        workspaceId,
+        conversationId,
+        agentId,
+        readThroughSequence: agentReadThroughSequence,
+      });
+      void publication?.catch(() => {});
+    }
+  }
   return {
     messages,
     hasOlder,

@@ -11,10 +11,12 @@ import { subscriptionGap } from "#src/features/realtime/subscription-gap";
 import {
   conversationRealtimeChannel,
   decodeChannelUpdatedEvent,
+  decodeAgentReadEvent,
   decodeMemberChangedEvent,
   decodeMessageAvailableEvent,
   decodeMessageReactionEvent,
   type MessageReactionEvent,
+  type AgentReadEvent,
 } from "./conversation-realtime";
 import { deviceComposerOutbox } from "./use-message-outbox";
 
@@ -48,6 +50,7 @@ export function subscribeToConversationRealtime(
      * may be stale. A first subscribe does not count: the page's read carries no stream position
      * to compare (`streamMovedSince`), so a change between that read and it waits for the next. */
     onPublicationsLost?: () => void;
+    onAgentReadChanged?: (event: AgentReadEvent) => void;
   },
 ) {
   const channel = conversationRealtimeChannel(input.conversationId);
@@ -79,6 +82,12 @@ export function subscribeToConversationRealtime(
       const reaction = decodeMessageReactionEvent(data);
       if (reaction) {
         if (reaction.conversationId === input.conversationId) input.onReaction?.(reaction);
+        return;
+      }
+      const agentRead = decodeAgentReadEvent(data);
+      if (agentRead) {
+        if (agentRead.conversationId === input.conversationId)
+          input.onAgentReadChanged?.(agentRead);
         return;
       }
       // Not a message event: the other payloads this channel carries are a membership change,
@@ -115,6 +124,7 @@ export function useConversationRealtime(
   onChannelUpdated?: () => void,
   onReaction?: (event: MessageReactionEvent) => void,
   onPublicationsLost?: () => void,
+  onAgentReadChanged?: (event: AgentReadEvent) => void,
 ) {
   const client = useBrowserRealtime();
   const getToken = useServerFn(getConversationRealtimeToken);
@@ -128,6 +138,8 @@ export function useConversationRealtime(
   reactionRef.current = onReaction;
   const publicationsLostRef = useRef(onPublicationsLost);
   publicationsLostRef.current = onPublicationsLost;
+  const agentReadRef = useRef(onAgentReadChanged);
+  agentReadRef.current = onAgentReadChanged;
 
   useEffect(() => {
     if (!client || !conversationId) return;
@@ -141,6 +153,7 @@ export function useConversationRealtime(
         deviceComposerOutbox().acknowledge(idempotencyKey, messageId),
       onReaction: (event) => reactionRef.current?.(event),
       onPublicationsLost: () => publicationsLostRef.current?.(),
+      onAgentReadChanged: (event) => agentReadRef.current?.(event),
     });
   }, [client, conversationId, getToken]);
 }

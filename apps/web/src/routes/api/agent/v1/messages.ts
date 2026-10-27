@@ -392,7 +392,11 @@ export const Route = createFileRoute("/api/agent/v1/messages")({
         handleAgentMessagesGet(
           request,
           principal,
-          new PrismaDirectConversationRepository(db),
+          new PrismaDirectConversationRepository(
+            db,
+            {},
+            new CentrifugoConversationRealtime(createCentrifugoServerApi()),
+          ),
           createAgentAttachmentMessages(db, getMessageRequestIdempotency()),
         ),
       POST: ({ request, context: { principal, db } }) =>

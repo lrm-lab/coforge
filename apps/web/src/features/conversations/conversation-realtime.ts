@@ -103,6 +103,20 @@ export function decodeMessageAvailableEvent(input: unknown): MessageAvailableEve
   };
 }
 
+const agentReadEvent = z.object({
+  type: z.literal("conversation.agent_read.v1"),
+  workspaceId: z.string().min(1),
+  conversationId: z.string().min(1),
+  agentId: z.string().min(1),
+  readThroughSequence: z.number().int().nonnegative(),
+});
+
+export type AgentReadEvent = z.infer<typeof agentReadEvent>;
+
+export function decodeAgentReadEvent(value: unknown): AgentReadEvent | undefined {
+  return decodeJsonPublication(agentReadEvent, value);
+}
+
 /**
  * An in-page notification signal (Frank, 2026-09-23): while a CoForge tab is open, the page shows
  * the OS notification itself from this realtime event instead of relying on Web Push, since Google

@@ -15,3 +15,28 @@ export function outboxContinuesRun(
     Date.now() - new Date(lastMessage.createdAt).getTime() <= GROUPING_WINDOW_MS,
   );
 }
+
+export function agentReadMessageId(input: {
+  root: boolean;
+  hasNewer?: boolean;
+  messages: readonly {
+    id: string;
+    sequence: number;
+    senderKind: string;
+    senderUserId?: string;
+    weeklyReportHidden?: boolean;
+  }[];
+  agentReadThroughSequence?: number;
+  viewerId?: string;
+}) {
+  const message = input.messages.filter((item) => item.weeklyReportHidden !== true).at(-1);
+  return !input.root &&
+    !input.hasNewer &&
+    input.agentReadThroughSequence !== undefined &&
+    input.viewerId !== undefined &&
+    message?.senderKind === "user" &&
+    message.senderUserId === input.viewerId &&
+    message.sequence <= input.agentReadThroughSequence
+    ? message.id
+    : undefined;
+}

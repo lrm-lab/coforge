@@ -367,5 +367,6 @@
       }
     }
   ],
-  "chat_section_change_failed": "这项改动没有保存成功。"
+  "chat_section_change_failed": "这项改动没有保存成功。",
+  "conversation_read": "已读"
 }

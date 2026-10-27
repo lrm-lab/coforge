@@ -7,12 +7,27 @@ import { onNetworkRead } from "#src/features/conversations/conversation-queries"
 import {
   decodeChannelCreatedEvent,
   decodeChannelUpdatedEvent,
+  decodeAgentReadEvent,
   decodeMessageAvailableEvent,
   decodeNotificationAvailableEvent,
   decodeViewerEvent,
 } from "#src/features/conversations/conversation-realtime";
 
 describe("conversation realtime", () => {
+  test("decodes the versioned Agent read position event", () => {
+    const event = {
+      type: "conversation.agent_read.v1" as const,
+      workspaceId: "workspace-a",
+      conversationId: "dm-a",
+      agentId: "agent-a",
+      readThroughSequence: 12,
+    };
+    expect(decodeAgentReadEvent(event)).toEqual(event);
+    expect(decodeAgentReadEvent(new TextEncoder().encode(JSON.stringify(event)))).toEqual(event);
+    expect(decodeAgentReadEvent({ ...event, readThroughSequence: -1 })).toBeUndefined();
+    expect(decodeAgentReadEvent({ ...event, agentId: "" })).toBeUndefined();
+  });
+
   test("decodes only the versioned channel-updated contract", () => {
     const event = {
       type: "channel.updated.v1" as const,

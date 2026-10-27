@@ -49,10 +49,11 @@ export async function advanceAgentRead(
   const { memberId, conversationId, workspaceId, agentId, threadRootId, sequence } = read;
   if (threadRootId) {
     await advanceThreadRead(db, memberId, conversationId, workspaceId, threadRootId, sequence);
-    return;
+    return true;
   }
-  await db.conversationMember.updateMany({
+  const result = await db.conversationMember.updateMany({
     where: { conversationId, agentId, agentReadThroughSequence: { lt: sequence } },
     data: { agentReadThroughSequence: sequence },
   });
+  return result.count > 0;
 }

@@ -38,7 +38,7 @@ import { makeReferenceBodyFormatter } from "./mention-text";
 import type { ChipMention } from "./message-markdown";
 import type { ChannelSuggestion } from "./reference-completion";
 import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
-import { outboxContinuesRun } from "./conversation-pane-layout";
+import { agentReadMessageId, outboxContinuesRun } from "./conversation-pane-layout";
 import { useMessageExpansion } from "./use-message-expansion";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 import { optimisticSavedEntry } from "./saved-messages-collection";
@@ -52,6 +52,7 @@ import { useOwnMessagesIndex } from "./own-messages-menu";
 import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
 import { useConversationOpenBoundary } from "./use-conversation-open-boundary";
+import { useSystemMessageGroups } from "./use-system-message-groups";
 import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
@@ -334,6 +335,13 @@ export function ConversationPane({
     () => conversation.messages.filter((message) => message.weeklyReportHidden !== true),
     [conversation.messages],
   );
+  const agentReadId = agentReadMessageId({
+    root: Boolean(root),
+    hasNewer: conversation.hasNewer,
+    messages: visibleMessages,
+    agentReadThroughSequence: conversation.agentReadThroughSequence,
+    viewerId: conversation.viewerId,
+  });
   const streamItems = useMemo(
     () =>
       groupSystemMessages(
@@ -345,35 +353,11 @@ export function ConversationPane({
       ),
     [visibleMessages, openBoundary, dateLocale, timeZone],
   );
-  /** System message ids whose folded group is open. A group is open while any of its messages is
-   * here, so a group that grows (a new notice, older history) stays open for the reader. */
-  const [openedSystemMessages, setOpenedSystemMessages] = useState<ReadonlySet<string>>(new Set());
-  const toggleSystemGroup = useCallback((messages: readonly { id: string }[]) => {
-    setOpenedSystemMessages((current) => {
-      const next = new Set(current);
-      const open = messages.some((message) => next.has(message.id));
-      for (const message of messages) {
-        if (open) next.delete(message.id);
-        else next.add(message.id);
-      }
-      return next;
-    });
-  }, []);
-  /** Opens the folded group hiding a message a jump is heading for. True when it did, i.e. the
-   * row exists only from the next render on; false when the message is not folded away. */
-  function revealSystemMessage(messageId: string): boolean {
-    const group = streamItems.find(
-      (item) =>
-        item.type === "systemGroup" && item.messages.some((message) => message.id === messageId),
-    );
-    if (
-      group?.type !== "systemGroup" ||
-      group.messages.some((message) => openedSystemMessages.has(message.id))
-    )
-      return false;
-    setOpenedSystemMessages((current) => new Set(current).add(messageId));
-    return true;
-  }
+  const {
+    openedMessages: openedSystemMessages,
+    toggleGroup: toggleSystemGroup,
+    revealGroupMessage: revealSystemMessage,
+  } = useSystemMessageGroups(streamItems);
   const revealSystemMessageRef = useRef(revealSystemMessage);
   revealSystemMessageRef.current = revealSystemMessage;
   useLayoutEffect(() => {
@@ -942,6 +926,7 @@ export function ConversationPane({
                       onOpenTask={openTaskReference}
                       channelNames={channelNames}
                       onQuoteSelection={canCompose ? quoteSelection : undefined}
+                      agentRead={message.id === agentReadId}
                     />
                   );
                 })}
@@ -969,12 +954,14 @@ export function ConversationPane({
                 draftKey={outboxDraftKey}
               />
             )}
-            {!root && conversation.hasNewer && onLoadNewer && (
-              // An empty sentinel below the newest row: coming into view asks for the page that
-              // restores the evicted tail. Nothing is shown for it — the reader reached the bottom
-              // and the tail is on its way.
-              <div ref={newerSentinelRef} aria-hidden="true" className="h-8" />
-            )}
+            {!root &&
+              conversation.hasNewer &&
+              onLoadNewer && (
+                // An empty sentinel below the newest row: coming into view asks for the page that
+                // restores the evicted tail. Nothing is shown for it — the reader reached the bottom
+                // and the tail is on its way.
+                <div ref={newerSentinelRef} aria-hidden="true" className="h-8" />
+              )}
           </div>
         </div>
         {/* Along the composer's top edge, over the history's bottom padding: who is typing on the

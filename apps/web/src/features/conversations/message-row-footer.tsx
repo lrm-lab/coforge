@@ -1,7 +1,6 @@
 import { MessageAttachments } from "./attachment-card";
 import { useIsMessageSaved } from "./conversation-host";
 import { MessageReactionBadges } from "./message-reaction-badges";
-import type { ReactionSummary } from "./message-reactions";
 import { SavedMessageMarker } from "./message-status-markers";
 import { RootThread } from "./thread-summary";
 import { MessageTask } from "#src/features/tasks/message-task";

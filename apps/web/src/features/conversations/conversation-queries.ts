@@ -50,6 +50,7 @@ import {
   updateLoadedReply,
 } from "./thread-cache";
 import { mergeWindowThreads, newestReflectedSequence } from "./thread-summary-model";
+import type { AgentReadEvent } from "./conversation-realtime";
 
 export const directConversationQuery = (conversationId: string) =>
   conversationPages(["conversation", "direct", conversationId], (page) =>
@@ -151,6 +152,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   loadUpdates,
   onRealtime,
   onArrived,
+  onAgentReadChanged,
 }: {
   query: ReturnType<typeof conversationPages<M, T>>["query"];
   /** The newest page on its own: how "back to latest" recovers a tail the window evicted. */
@@ -160,6 +162,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   onRealtime?: () => Promise<unknown>;
   /** The messages `mergeUpdates` folds in, as they arrive. */
   onArrived?: (conversationId: string, messages: readonly M[]) => void;
+  onAgentReadChanged?: (event: AgentReadEvent) => void;
 }) {
   const queryClient = useQueryClient();
   /** The pane updates this synchronously from its real scroll position. Query meta lets a focus or
@@ -360,6 +363,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     () => void queryClient.invalidateQueries({ queryKey: query.queryKey }).catch(() => {}),
     (event) => reactionSync.apply(event.messageId, event),
     () => void reactionSync.repair(),
+    onAgentReadChanged,
   );
 
   /** Replace the loaded history with a window around one message. */

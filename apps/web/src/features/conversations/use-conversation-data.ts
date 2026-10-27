@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -30,6 +31,7 @@ import {
   toggleChannelMessageReactionVersioned,
   toggleDirectMessageReactionVersioned,
 } from "./message-reactions.functions";
+import type { DirectConversationView } from "./conversation-types";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -145,13 +147,31 @@ export function useDirectConversation(conversationId: string) {
   const markRead = useServerFn(markDirectThreadRead);
   const loadOwnMessages = useServerFn(loadOwnConversationMessages);
   const endReplyIntents = useEndReplyIntentsOnArrival();
+  const [agentReadPositions, setAgentReadPositions] = useState<Record<string, number>>({});
+  const onAgentReadChanged = useCallback(
+    (event: { conversationId: string; readThroughSequence: number }) =>
+      setAgentReadPositions((current) => ({
+        ...current,
+        [event.conversationId]: Math.max(
+          current[event.conversationId] ?? 0,
+          event.readThroughSequence,
+        ),
+      })),
+    [],
+  );
   const page = useConversationQuery({
     onArrived: endReplyIntents,
     ...directConversationQuery(conversationId),
     loadUpdates: directConversationUpdates(conversationId),
     // No Task refresh here either — see the channel branch above.
+    onAgentReadChanged,
   });
-  const { conversation } = page;
+  const loadedConversation = page.conversation as DirectConversationView;
+  const conversation = {
+    ...loadedConversation,
+    agentReadThroughSequence:
+      agentReadPositions[conversationId] ?? loadedConversation.agentReadThroughSequence,
+  };
   const viewerReactor = useViewerReactor(conversation.viewerId);
   const taskView = useConversationTasks(conversation.conversationId);
 
