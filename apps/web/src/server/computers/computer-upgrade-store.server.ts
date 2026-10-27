@@ -148,11 +148,17 @@ export class RedisComputerUpgradeStore {
     );
   }
   async publicationFailed(scope: Scope, requestId: string) {
-    await this.replaceAccepted(scope, requestId, {
+    const raw = await this.redis.get(this.requestKey(scope, requestId));
+    const current = raw ? this.parse(raw) : undefined;
+    await this.replaceAccepted(
+      scope,
       requestId,
-      status: "failed",
-      reason: "publication",
-    });
+      this.withUpgradeTarget(current, {
+        requestId,
+        status: "failed",
+        reason: "publication",
+      }),
+    );
   }
   /**
    * Accepts the Daemon's terminal report for one operation. A reported failure is authoritative:
@@ -167,13 +173,17 @@ export class RedisComputerUpgradeStore {
     // A settled request is never reopened by a late or contradictory report.
     if (!raw || current?.status !== "accepted") return;
     if (result.status === "failed") {
-      await this.replaceAccepted(scope, result.requestId, {
-        requestId: result.requestId,
-        status: "failed",
-        reason: "reported",
-        ...(result.error ? { error: sanitizeUpgradeErrorText(result.error) } : {}),
-        ...(result.errorCode ? { errorCode: result.errorCode } : {}),
-      });
+      await this.replaceAccepted(
+        scope,
+        result.requestId,
+        this.withUpgradeTarget(current, {
+          requestId: result.requestId,
+          status: "failed",
+          reason: "reported",
+          ...(result.error ? { error: sanitizeUpgradeErrorText(result.error) } : {}),
+          ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+        }),
+      );
       return;
     }
     if (result.version && result.version !== current.expectedVersion) return;
@@ -211,8 +221,12 @@ export class RedisComputerUpgradeStore {
       if (completed) return this.public(completed);
     }
     if (current.status === "accepted" && Date.parse(current.expiresAt) <= this.now()) {
-      const failed = { requestId, status: "failed" as const, reason: "timeout" as const };
-      if (await this.replace(scope, requestId, failed)) return failed;
+      const failed = this.withUpgradeTarget(current, {
+        requestId,
+        status: "failed",
+        reason: "timeout",
+      });
+      if (await this.replace(scope, requestId, failed)) return this.public(failed);
     }
     return this.public(current);
   }
@@ -235,7 +249,11 @@ export class RedisComputerUpgradeStore {
           completedAt: new Date(this.now()).toISOString(),
         });
       else if (current?.status === "accepted" && raw)
-        await this.replace(scope, requestId, { requestId, status: "failed", reason: "evidence" });
+        await this.replace(
+          scope,
+          requestId,
+          this.withUpgradeTarget(current, { requestId, status: "failed", reason: "evidence" }),
+        );
     }
     await this.storeNewerIdentity(scope, identity);
   }
@@ -269,7 +287,7 @@ export class RedisComputerUpgradeStore {
       Boolean(current.expectedImageId) &&
       sameImageLayer(current.expectedImageId ?? "", runningImageId ?? "");
     if (imageReplaced) {
-      const record: Stored = {
+      const record = this.withUpgradeTarget(current, {
         requestId,
         status: "completed",
         expectedVersion: current.expectedVersion,
@@ -278,7 +296,7 @@ export class RedisComputerUpgradeStore {
         workerInstanceId:
           identity?.workerInstanceId ?? current.previousWorkerInstanceId ?? requestId,
         completedAt: new Date(this.now()).toISOString(),
-      };
+      });
       if (await this.replace(scope, requestId, record)) return record;
       return undefined;
     }
@@ -354,13 +372,21 @@ export class RedisComputerUpgradeStore {
       ])) === 1
     );
   }
-  private public({
-    previousWorkerInstanceId: _previous,
-    completeOnIdentity: _completeOnIdentity,
-    expectedImageId: _expectedImageId,
-    ...value
-  }: Stored) {
-    return value;
+  /** Keeps the image-replace marker so a later public status still names the Image row. */
+  private withUpgradeTarget(current: Stored | undefined, next: Stored): Stored {
+    return current?.expectedImageId ? { ...next, expectedImageId: current.expectedImageId } : next;
+  }
+
+  private public(stored: Stored): ComputerUpgradeStatus {
+    const {
+      previousWorkerInstanceId: _previous,
+      completeOnIdentity: _completeOnIdentity,
+      expectedImageId,
+      ...value
+    } = stored;
+    if (value.status === "unknown") return value;
+    // Image replaces store the offered layer id; runtime upgrades (cloud or local) do not.
+    return { ...value, target: expectedImageId ? "image" : "runtime" };
   }
   private parse(raw: string): Stored | undefined {
     try {

@@ -46,8 +46,9 @@ These rules apply to `src/features/computers/`.
   Computer both offer a newer release there: the cloud copy is installed onto the computer's
   volume and the container restarts on the same image. A newer node image is a separate Image
   row. That row names the image the computer is running (the node image's label when the layers
-  match) and offers a replace when they differ. A running or
-  failed upgrade shows to every member; Upgrade and Retry stay the owner's.
+  match) and offers a replace when they differ. A running or failed upgrade paints only its own
+  row (Version for runtime, Image for a node-image replace), including after a reload, from the
+  status `target`; Upgrade and Retry stay the owner's.
   Versions always show in full (`0.1.4-dev.2`, never `dev.2`). A success has no inline slot: the
   row that owned the upgrade changes, and the watcher's toast confirms it (§13).
 - The slot's "What's new" opens the notes the release catalog (`server/release-catalog/`) holds for

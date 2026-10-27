@@ -15,6 +15,7 @@ function accepted(now = Date.now()): ComputerUpgradeStatus {
     status: "accepted",
     expectedVersion: "0.1.4-dev.2",
     expiresAt: new Date(now + 60 * 60_000).toISOString(),
+    target: "runtime",
   };
 }
 
@@ -27,6 +28,7 @@ function completed(): ComputerUpgradeStatus {
     daemonVersion: "0.1.4-dev.2",
     workerInstanceId: "worker-1",
     completedAt: new Date().toISOString(),
+    target: "runtime",
   };
 }
 

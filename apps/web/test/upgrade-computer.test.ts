@@ -171,6 +171,7 @@ test("a cloud computer image replace is queued on the host and never published t
     requestId: "upgrade-1",
     status: "accepted",
     expectedVersion: "0.1.3-dev.2",
+    target: "image",
   });
   expect(queued).toEqual([{ computerId: "computer-1", imageId: "sha256:new" }]);
   expect(publications).toEqual([]);
@@ -210,6 +211,7 @@ test("a cloud runtime upgrade is queued on the host and does not replace the ima
     requestId: "upgrade-runtime",
     status: "accepted",
     expectedVersion: "0.1.3-dev.4",
+    target: "runtime",
   });
   expect(queued).toEqual(["0.1.3-dev.4"]);
   expect(publications).toEqual([]);

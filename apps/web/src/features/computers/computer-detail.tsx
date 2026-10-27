@@ -36,7 +36,7 @@ import {
   type ComputerIdentity,
 } from "./computer-identity";
 import { DetailGroup, DetailRow } from "./computer-detail-rows";
-import { computerDetailUpgradeSlots } from "./computer-detail-upgrade-slots";
+import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
 import { computerUpgradeStatusQuery, upgradeRunning } from "./computer-upgrade-status";
 import {
   describeUpgradeRequestError,
@@ -257,13 +257,11 @@ export function ComputerDetail({
     imageSlot,
     runtimeOffer,
     imageOffer,
-  } = computerDetailUpgradeSlots({
-    kind: computer.kind,
-    computerVersion: computer.computerVersion,
-    imageVersion: computer.imageVersion,
-    imageUpdate: computer.imageUpdate,
+  } = computerDetailUpgradeSlotsFor(computer, {
     upgrade,
     request: upgradeRequest,
+    liveStatus: liveStatus?.data,
+    storedUpgrade,
     latestComputerVersion,
   });
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
