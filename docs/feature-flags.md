@@ -18,10 +18,10 @@ before its first use: `isFeatureDefined(flag)` (does the loaded file mark the fl
 `assertStartupConfig` (the `startup_config_checked` log line reports `feature_flags: configured`
 or `disabled`).
 
-- Unset or blank: no provider is installed and every flag is off.
-  Staging and production set it: each one's definitions are the `coforge_feature_flags` config
-  inlined in its `infra/<environment>/docker-compose.yml` (write `$` as `$$` there), so they ship
-  and roll back with that file; a change takes effect on that environment's next deploy.
+- Unset or blank: no provider is installed and every flag is off. Production runs this way.
+  Staging sets it: its definitions are the `coforge_feature_flags` config inlined in
+  `infra/staging/docker-compose.yml` (write `$` as `$$` there), so they ship and roll back with
+  that file; a change takes effect on the next staging deploy.
 - Set: the file must exist and pass flagd's flag definition schema, or the boot fails with an
   error naming the variable. The check is stricter than the provider, which would load a file
   whose targeting rule is misspelt and only log it. A misspelt property name, such as

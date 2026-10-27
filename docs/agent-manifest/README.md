@@ -16,9 +16,8 @@ cannot state (coherence, sorted scopes, path parameters) are in
 
 ## Discovery
 
-The app's Agent manifest URL comes from the Workspace's app list (`coforge app list`, with the
-`app-agent-manifest` flag on): `agentManifestUrl` and where it came from,
-`agentManifestUrlSource`. It is `explicit` when the publisher gave the URL when registering the app,
+The app's Agent manifest URL comes from the Workspace's app list (`coforge app list`): `agentManifestUrl` and
+where it came from, `agentManifestUrlSource`. It is `explicit` when the publisher gave the URL when registering the app,
 and `well_known` when it is derived: `/.well-known/coforge-agent-manifest.json` on the homepage's
 origin. For a `well_known` URL a 404 or 410 is normal: the app publishes no manifest (CLI exit 0; with
 `--json`, `{"ok":true,"data":{"app","manifest":null,"actions":[]}}`). For an `explicit` URL it is the

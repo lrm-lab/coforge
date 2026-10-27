@@ -178,15 +178,14 @@ export function ProfileFields({
   );
 }
 
-/** Login with CoForge: the exact URIs people return to, the Agent manifest URL (`manifest`: where
- * `app-agent-manifest` is on), and the scopes the app may ask for. */
+/** Login with CoForge: the exact URIs people return to, the Agent manifest URL, and the scopes the
+ * app may ask for. */
 export function LoginFields({
   draft,
   change,
   errors,
-  manifest,
   agentEvents,
-}: FieldsProps & { manifest: boolean; agentEvents: boolean }) {
+}: FieldsProps & { agentEvents: boolean }) {
   const redirectLabelId = useId();
   const redirectHintId = useId();
   const scopesLabelId = useId();
@@ -259,20 +258,18 @@ export function LoginFields({
           </div>
         )}
       </div>
-      {manifest && (
-        <Input
-          label={m.apps_field_agent_manifest()}
-          hint={errors.agentManifestUrl ?? m.apps_field_agent_manifest_hint()}
-          isInvalid={Boolean(errors.agentManifestUrl)}
-          type="url"
-          inputMode="url"
-          autoComplete="off"
-          spellCheck="false"
-          placeholder="https://example.com/.well-known/coforge-agent-manifest.json"
-          value={draft.agentManifestUrl}
-          onChange={(value) => change("agentManifestUrl", value)}
-        />
-      )}
+      <Input
+        label={m.apps_field_agent_manifest()}
+        hint={errors.agentManifestUrl ?? m.apps_field_agent_manifest_hint()}
+        isInvalid={Boolean(errors.agentManifestUrl)}
+        type="url"
+        inputMode="url"
+        autoComplete="off"
+        spellCheck="false"
+        placeholder="https://example.com/.well-known/coforge-agent-manifest.json"
+        value={draft.agentManifestUrl}
+        onChange={(value) => change("agentManifestUrl", value)}
+      />
       <div role="group" aria-labelledby={scopesLabelId} className="grid gap-1.5">
         <Label id={scopesLabelId}>{m.apps_field_scopes()}</Label>
         <div className="grid gap-3 rounded-xl border border-secondary p-4">

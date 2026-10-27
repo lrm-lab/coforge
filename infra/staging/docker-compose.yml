@@ -330,19 +330,13 @@ services:
     restart: unless-stopped
 
 # The flagd flag definitions staging Web reads (docs/feature-flags.md). Inline, so they ship and
-# roll back with this file. app-agent-manifest: Agents in every Workspace see apps' Agent manifests.
+# roll back with this file. A feature shipped dark adds its flag here.
 configs:
   coforge_feature_flags:
     content: |
       {
         "$$schema": "https://flagd.dev/schema/v0/flags.json",
-        "flags": {
-          "app-agent-manifest": {
-            "state": "ENABLED",
-            "variants": { "on": true, "off": false },
-            "defaultVariant": "on"
-          }
-        }
+        "flags": {}
       }
 
 networks:

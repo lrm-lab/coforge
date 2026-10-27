@@ -29,8 +29,7 @@ rules (the same as Settings → Applications): `INVALID_INPUT` names the field (
   not combine. **A redirect URL cannot be cleared** (Raft refuses it): an empty list is refused.
 - `--scope` replaces the Login scopes beyond the fixed ones (`openid`, `profile`, `identity`), as
   at registration; `--clear-scopes` leaves only the fixed ones.
-- Setting `--agent-manifest-url` needs `app-agent-manifest` on for the Workspace
-  (`app-agent-manifest-off`, `access_denied`), as in Settings.
+- `--agent-manifest-url` sets the app's Agent manifest URL (an https URL), as in Settings.
 - Data permissions and notification events are not changed here; installed Workspaces re-approve
   those through the installation's own mechanism, which an update never touches.
 

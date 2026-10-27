@@ -192,7 +192,7 @@ function AppEditorForm({
   /** Validates and sends the form; whether it was saved. Refusals show beside their fields. */
   async function save(stayOpen: boolean): Promise<boolean> {
     setFormError("");
-    const input = inputOf(draft, declares.manifest);
+    const input = inputOf(draft);
     // A change never carries the key (it is the client ID), and a blank one asks for a made key.
     const { key, ...rest } = input;
     const refused = refusedAppFields(editing || key === "" ? rest : input);
@@ -338,11 +338,7 @@ function AppEditorForm({
             }
             description={m.apps_section_login_description()}
           >
-            <LoginFields
-              {...fields}
-              manifest={declares.manifest}
-              agentEvents={declares.agentEvents}
-            />
+            <LoginFields {...fields} agentEvents={declares.agentEvents} />
           </EditorSection>
           {declares.setup && (
             <EditorSection

@@ -49,7 +49,7 @@ export function AppDetail({
   onUninstall: (app: AppSummary) => Promise<void>;
 }) {
   const homepage = app?.homepageUrl ? new URL(app.homepageUrl) : null;
-  const manifest = app && declares.manifest ? resolveAgentManifest(app) : null;
+  const manifest = app ? resolveAgentManifest(app) : null;
   const permissions = app?.permissions;
   const setup = app?.setup;
   const installationId = permissions?.installationId ?? setup?.installation?.installationId;

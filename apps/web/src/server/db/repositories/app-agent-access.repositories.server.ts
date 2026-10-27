@@ -124,17 +124,9 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
         ownerId: true,
         visibility: true,
         systemKind: true,
-        workspace: { select: { slug: true } },
       },
     });
-    return row
-      ? {
-          ownerId: row.ownerId,
-          visibility: row.visibility,
-          systemKind: row.systemKind,
-          workspaceSlug: row.workspace.slug,
-        }
-      : undefined;
+    return row ?? undefined;
   }
 
   async listInstalledApps(workspaceId: string) {

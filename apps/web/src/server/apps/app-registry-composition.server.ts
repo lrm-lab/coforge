@@ -1,6 +1,5 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppRegistry } from "#src/server/apps/app-registry.server";
-import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { toPublicServerError } from "#src/server/errors/public-error.server";
 import { getPublicImageStorage } from "#src/server/files/public-image-storage.server";
 import { PrismaAppRegistryStore } from "#src/server/db/repositories/app.repositories.server";
@@ -17,7 +16,6 @@ export function createAppRegistry(db: Prisma.TransactionClient) {
       removalFailed: (error) => void toPublicServerError(error),
     },
     {
-      agentManifestEnabled: (workspace) => isFeatureEnabled("app-agent-manifest", workspace),
       findReviewLogo: (input) => new PrismaAppPublishingStore(db).findLogoForReview(input),
     },
   );

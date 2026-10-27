@@ -76,9 +76,7 @@ export async function fixture(db: PrismaClient, { flag = "on" as "on" | "off" } 
   const memory = memoryStorage();
   const management = new AppAgentManagement(
     createAppOwnerAgents(db),
-    new AppRegistry(new PrismaAppRegistryStore(db), memory.images, {
-      agentManifestEnabled: async () => true,
-    }),
+    new AppRegistry(new PrismaAppRegistryStore(db), memory.images),
     createAppShareLinks(db),
     createAppPublishing(db),
   );

@@ -84,8 +84,6 @@ services:
       COFORGE_WEB_PUSH_SUBJECT: https://coforge.cn
       COFORGE_OIDC_ISSUER: https://coforge.cn/oidc
       COFORGE_OIDC_SIGNING_JWKS_FILE: /run/secrets/coforge_oidc_signing_jwks
-      # Feature flags on production (docs/feature-flags.md); the definitions are the config below.
-      COFORGE_FEATURE_FLAGS_FILE: /etc/coforge/feature-flags.json
       # In-process weekly-report schedule clock. Production has no separate
       # cron sidecar; one minute matches the local/dev default. Deployments that
       # later add an external HTTP cron should unset this to avoid double ticks
@@ -170,9 +168,6 @@ services:
         uid: "1000"
         gid: "1000"
         mode: 0400
-    configs:
-      - source: coforge_feature_flags
-        target: /etc/coforge/feature-flags.json
     ports:
       # loopback diagnostics only; never public
       - "127.0.0.1:18080:3000"
@@ -253,22 +248,6 @@ services:
     networks:
       - coforge
     restart: unless-stopped
-
-# The flagd flag definitions production Web reads (docs/feature-flags.md). Inline, so they ship and
-# roll back with this file. app-agent-manifest: Agents in every Workspace see apps' Agent manifests.
-configs:
-  coforge_feature_flags:
-    content: |
-      {
-        "$$schema": "https://flagd.dev/schema/v0/flags.json",
-        "flags": {
-          "app-agent-manifest": {
-            "state": "ENABLED",
-            "variants": { "on": true, "off": false },
-            "defaultVariant": "on"
-          }
-        }
-      }
 
 networks:
   coforge: {}

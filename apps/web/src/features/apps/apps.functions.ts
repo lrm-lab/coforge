@@ -174,14 +174,12 @@ const keyInput = z.object({ key: z.string().max(APP_KEY_MAX_LENGTH) });
 
 /** Which declarations the editor shows in this Workspace: where the `app-data-permissions` and
  * `app-installation-setup` flags are on, and, with `app-data-permissions`, `app-notifications`
- * (the App notifications section and the events in the permissions); `manifest` where
- * `app-agent-manifest` is on, `marketplace` and `reviewer` where `app-marketplace` is. */
+ * (the App notifications section and the events in the permissions); `marketplace` and `reviewer`
+ * where `app-marketplace` is. */
 export type AppDeclarations = {
   permissions: boolean;
   setup: boolean;
   notifications: boolean;
-  /** The Agent manifest URL field and rows (`app-agent-manifest`). */
-  manifest: boolean;
   /** The Agent inbound scopes in the Login section (`app-agent-events`). */
   agentEvents: boolean;
   /** The editor's Bot section and the installation's Enable bot (`app-bot`). */
@@ -198,7 +196,7 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     declareNoStore();
     const actor = actorOf(context);
-    const [{ apps, manifest, workspaceSlug }, permissions, setups] = await Promise.all([
+    const [{ apps, workspaceSlug }, permissions, setups] = await Promise.all([
       createAppRegistry(context.db).listWorkspaceApps(actor),
       createAppPermissions(context.db).workspacePermissions(actor),
       createAppInstallationSetup(context.db).workspaceSetups(actor),
@@ -242,7 +240,6 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
         permissions: permissions !== null,
         setup: setups !== null,
         notifications,
-        manifest,
         agentEvents: await isFeatureEnabled("app-agent-events", {
           workspaceId: actor.workspaceId,
           workspaceSlug,

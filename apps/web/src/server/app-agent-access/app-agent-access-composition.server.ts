@@ -13,7 +13,6 @@ import {
   CentrifugoConversationRealtime,
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
-import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { PrismaAppAgentAccessStore } from "#src/server/db/repositories/app-agent-access.repositories.server";
 import { PrismaInstallationAgentScopeStore } from "#src/server/db/repositories/app-installation-agent-scope.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -31,10 +30,8 @@ const appGrantCards = (db: PrismaClient, realtime: () => ConversationRealtime | 
   new AppGrantCards(db, new PrismaDirectConversationRepository(db), realtime);
 
 const appAgentAccess = (db: PrismaClient, cards: AppGrantCards) =>
-  new AppAgentAccess(
-    new PrismaAppAgentAccessStore(db),
-    (workspaceId, requestId) => cards.publishDecided(workspaceId, requestId),
-    (workspace) => isFeatureEnabled("app-agent-manifest", workspace),
+  new AppAgentAccess(new PrismaAppAgentAccessStore(db), (workspaceId, requestId) =>
+    cards.publishDecided(workspaceId, requestId),
   );
 
 /** The browser publication of a posted approval card; none when Centrifugo is not configured,

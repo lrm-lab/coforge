@@ -16,8 +16,6 @@ import type { FeatureFlagsConfiguration } from "./configuration.server";
 export const FEATURE_FLAGS = {
   "app-agent-events":
     "Applications phase 2: an installed app sends an event or a notification to one Agent",
-  "app-agent-manifest":
-    "Applications phase 2: an app's Agent manifest URL, shown to Agents and to the people granting access",
   "app-bot":
     "Applications phase 2: an app's bot — the editor's toggle and the installation's Enable bot (the API is not gated)",
   "app-data-permissions": "Applications phase 2: the data permissions a Workspace grants an app",

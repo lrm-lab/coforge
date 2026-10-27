@@ -56,12 +56,6 @@ export type AppActor = { workspaceId: string; actorUserId: string };
 
 type AppMember = { role: WorkspaceMemberRole; workspaceSlug: string };
 
-/** Whether `app-agent-manifest` is on for the Workspace. */
-export type AgentManifestFlag = (workspace: {
-  workspaceId: string;
-  workspaceSlug: string;
-}) => Promise<boolean>;
-
 /** What a write may set on an app: a checked patch, or a new secret. */
 export type AppChange = AppPatch & { clientSecretHash?: string; secretRotatedAt?: Date };
 
@@ -154,25 +148,18 @@ export class AppRegistry {
       now?: () => Date;
       /** The random part of a key made for an app registered without one. */
       keySuffix?: () => string;
-      /** Whether the Workspace may set an app's Agent manifest URL; off when absent. */
-      agentManifestEnabled?: AgentManifestFlag;
       /** A logo the member path does not show: a platform reviewer's view of a pending app's
        * (`server/app-marketplace/`). Asked only after the member path misses. */
       findReviewLogo?: AppLogoLookup;
     } = {},
   ) {}
 
-  /** The Workspace's apps, and whether it shows the Agent manifest URL (`app-agent-manifest`). */
-  async listWorkspaceApps(
-    actor: AppActor,
-  ): Promise<{ apps: AppView[]; manifest: boolean; workspaceSlug: string }> {
+  /** The Workspace's apps, and its slug (a feature-flag rule may match it). */
+  async listWorkspaceApps(actor: AppActor): Promise<{ apps: AppView[]; workspaceSlug: string }> {
     const member = await this.store.findMember(actor.workspaceId, actor.actorUserId);
     if (!member) throw new AppError("ACCESS_DENIED");
-    const [apps, manifest] = await Promise.all([
-      this.store.listForWorkspace(actor.workspaceId),
-      this.manifestAllowed({ workspaceId: actor.workspaceId, workspaceSlug: member.workspaceSlug }),
-    ]);
-    return { apps, manifest, workspaceSlug: member.workspaceSlug };
+    const apps = await this.store.listForWorkspace(actor.workspaceId);
+    return { apps, workspaceSlug: member.workspaceSlug };
   }
 
   /** Registers the app in the actor's Workspace; its client secret is in the answer and nowhere
@@ -182,9 +169,7 @@ export class AppRegistry {
     actor: AppActor,
     input: AppRegistrationInput,
   ): Promise<{ app: AppView; clientSecret: string }> {
-    const member = this.appManager(
-      await this.store.findMember(actor.workspaceId, actor.actorUserId),
-    );
+    this.appManager(await this.store.findMember(actor.workspaceId, actor.actorUserId));
     const chosen = typeof input.key === "string" ? input.key.trim() : input.key;
     const { secret, hash } = mintAppClientSecret();
     const create = (app: AppRegistrationInput) =>
@@ -207,10 +192,6 @@ export class AppRegistry {
       // transaction (`AppEditorSave.register`) is not left with a failed statement to retry after.
       if (chosen === "" && (await this.store.find(key))) continue;
       const checkedInput = checked(checkAppInput({ ...input, key }, "registration"));
-      await this.assertManifestUrlAllowed(
-        { workspaceId: actor.workspaceId, workspaceSlug: member.workspaceSlug },
-        checkedInput,
-      );
       const created = await create(checkedInput);
       if (created) return { app: created, clientSecret: secret };
     }
@@ -230,26 +211,20 @@ export class AppRegistry {
     patch: AppPatch,
   ): Promise<{ app: AppView; workspaceSlug: string }> {
     const { member } = await this.ownApp(actor, key);
-    const workspace = { workspaceId: actor.workspaceId, workspaceSlug: member.workspaceSlug };
     return {
-      app: await this.applyPatch(workspace, key, patch),
+      app: await this.applyPatch(actor.workspaceId, key, patch),
       workspaceSlug: member.workspaceSlug,
     };
   }
 
   /** `updateApp` for an app an Agent manages (`AppOwnerAgents.manager` judged it). */
   updateManagedApp(managed: ManagedApp, patch: AppPatch): Promise<AppView> {
-    return this.applyPatch(managed, managed.app.key, patch);
+    return this.applyPatch(managed.workspaceId, managed.app.key, patch);
   }
 
-  private async applyPatch(
-    workspace: { workspaceId: string; workspaceSlug: string },
-    key: string,
-    patch: AppPatch,
-  ): Promise<AppView> {
+  private async applyPatch(workspaceId: string, key: string, patch: AppPatch): Promise<AppView> {
     const change = checked(checkAppInput(patch, "patch"));
-    await this.assertManifestUrlAllowed(workspace, change);
-    return this.written(await this.store.update(workspace.workspaceId, key, change));
+    return this.written(await this.store.update(workspaceId, key, change));
   }
 
   /** Replaces the app's client secret: the old one stops verifying at once, and the new one is in
@@ -398,28 +373,11 @@ export class AppRegistry {
     }
   }
 
-  /** Setting an Agent manifest URL is refused where `app-agent-manifest` is off; clearing it is not. */
-  private async assertManifestUrlAllowed(
-    workspace: { workspaceId: string; workspaceSlug: string },
-    change: AppPatch,
-  ): Promise<void> {
-    if (!change.agentManifestUrl || (await this.manifestAllowed(workspace))) return;
-    throw new AppError("ACCESS_DENIED", { errorId: "app-agent-manifest-off" });
-  }
-
   /** The actor as a member who may manage apps. */
   private appManager(member: AppMember | undefined): AppMember {
     assertCanManageApps(member?.role);
     if (!member) throw new AppError("ACCESS_DENIED");
     return member;
-  }
-
-  private async manifestAllowed(workspace: {
-    workspaceId: string;
-    workspaceSlug: string;
-  }): Promise<boolean> {
-    const flag = this.options.agentManifestEnabled;
-    return flag ? flag(workspace) : false;
   }
 
   /** A write's answer; none means the app went in between. */

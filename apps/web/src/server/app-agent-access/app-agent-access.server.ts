@@ -48,22 +48,21 @@ export type AgentAppGrantView = {
   scopes: string[];
   source: AgentAppGrantSource;
   grantedAt: Date;
-} & Partial<AgentManifestLocation>;
+} & AgentManifestLocation;
 
 /** A grant as the store reads it: the app's own Agent manifest URL, if it set one, instead of the
- * location an Agent is told (`AppAgentAccess` resolves it where `app-agent-manifest` is on). */
+ * location an Agent is told (`AppAgentAccess` resolves it). */
 type StoredGrant = Omit<AgentAppGrantView, keyof AgentManifestLocation> & {
   agentManifestUrl: string | null;
 };
 
-/** `row` as an Agent sees it: where `app-agent-manifest` is on, with the manifest location resolved
- * from the stored URL and the homepage; otherwise without either field. */
+/** `row` as an Agent sees it: with the manifest location resolved from the stored URL and the
+ * homepage. */
 function withManifest<T extends { homepageUrl: string | null; agentManifestUrl: string | null }>(
-  enabled: boolean,
   row: T,
-): Omit<T, "agentManifestUrl"> & Partial<AgentManifestLocation> {
-  const { agentManifestUrl, ...rest } = row;
-  return enabled ? { ...rest, ...resolveAgentManifest(row) } : rest;
+): Omit<T, "agentManifestUrl"> & AgentManifestLocation {
+  const { agentManifestUrl: _stored, ...rest } = row;
+  return { ...rest, ...resolveAgentManifest(row) };
 }
 
 /** An Agent's request for an app that waits for a person. */
@@ -88,7 +87,7 @@ export type AgentAppAccessList = {
  * people, so the Agent's list leaves it out. */
 export type AgentInstalledAppView = Omit<InstalledAppView, "allowedScopes" | "logoUrl"> & {
   access: AgentAppAccessState;
-} & Partial<AgentManifestLocation>;
+} & AgentManifestLocation;
 
 /** The answer to an Agent asking to use an app. */
 export type AgentAccessOutcome =
@@ -103,7 +102,6 @@ type AgentRow = {
   ownerId: string;
   visibility: string;
   systemKind: string | null;
-  workspaceSlug: string;
 };
 /** A grant to give: its row is created, or the one revoked or given before is replaced. */
 type GrantInput = {
@@ -194,21 +192,14 @@ export class AppAgentAccess {
       workspaceId: string,
       requestId: string,
     ) => Promise<void> = async () => {},
-    /** Whether the Workspace has `app-agent-manifest` on: only then are the Agent manifest
-     * locations listed. */
-    private readonly manifestEnabled: (workspace: {
-      workspaceId: string;
-      workspaceSlug: string;
-    }) => Promise<boolean> = async () => false,
   ) {}
 
   async list(actor: AgentAppAccessActor, agentId: string): Promise<AgentAppAccessList> {
-    const { canManage, workspaceSlug } = await this.viewAgent(actor, agentId);
-    const [apps, grants, pendingRequests, manifest] = await Promise.all([
+    const { canManage } = await this.viewAgent(actor, agentId);
+    const [apps, grants, pendingRequests] = await Promise.all([
       this.store.listInstalledApps(actor.workspaceId),
       this.store.listActiveGrants(agentId),
       this.store.listPendingRequests(agentId),
-      this.manifestEnabled({ workspaceId: actor.workspaceId, workspaceSlug }),
     ]);
     return {
       canManage,
@@ -221,7 +212,7 @@ export class AppAgentAccess {
           ...app
         }) => app,
       ),
-      grants: grants.map((grant) => withManifest(manifest, grant)),
+      grants: grants.map(withManifest),
       pendingRequests,
     };
   }
@@ -235,11 +226,10 @@ export class AppAgentAccess {
   }): Promise<AgentInstalledAppView[]> {
     const found = await this.store.findAgent(agent.workspaceId, agent.agentId);
     if (!found) throw new AppError("NOT_FOUND");
-    const [apps, grants, pendingRequests, manifest] = await Promise.all([
+    const [apps, grants, pendingRequests] = await Promise.all([
       this.store.listInstalledApps(agent.workspaceId),
       this.store.listGrantStates(agent.agentId),
       this.store.listPendingRequests(agent.agentId),
-      this.manifestEnabled({ workspaceId: agent.workspaceId, workspaceSlug: found.workspaceSlug }),
     ]);
     return appsVisibleToAgent(apps, grants, agent.agentId).map((installedApp) => {
       const {
@@ -259,7 +249,7 @@ export class AppAgentAccess {
         inScope: agentInScope(installedApp, agent.agentId),
         pendingRequest: pendingRequests.find((request) => request.appKey === view.key),
       });
-      return withManifest(manifest, { ...view, agentManifestUrl, access: accessState(decision) });
+      return withManifest({ ...view, agentManifestUrl, access: accessState(decision) });
     });
   }
 
@@ -422,10 +412,7 @@ export class AppAgentAccess {
     if (!role) throw new AppError("ACCESS_DENIED");
     if (!agent || !canSeeAgent({ kind: "user", userId: actor.userId, role }, agent))
       throw new AppError("NOT_FOUND");
-    return {
-      canManage: canManageAgentAppAccess({ userId: actor.userId, role }, agent),
-      workspaceSlug: agent.workspaceSlug,
-    };
+    return { canManage: canManageAgentAppAccess({ userId: actor.userId, role }, agent) };
   }
 
   private async manageAgent(actor: AgentAppAccessActor, agentId: string): Promise<void> {
