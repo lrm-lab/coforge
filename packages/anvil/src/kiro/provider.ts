@@ -31,7 +31,7 @@ export class KiroProvider implements CodeAgentProvider {
   constructor(private readonly options: KiroProviderOptions) {}
 
   readUsage(options: { workingDirectory: string; timeoutMs?: number }) {
-    return readKiroUsage({ timeoutMs: options.timeoutMs }, this.options.host.readUsageResponse);
+    return readKiroUsage(options, this.options.host.readUsageResponse);
   }
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {

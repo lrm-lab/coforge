@@ -1,176 +1,87 @@
-import type { UsageOfficialBucket, UsageOfficialGroup, UsageSnapshot } from "#src/contract";
+import type { UsageOfficialBucket, UsageSnapshot } from "#src/contract";
 import { UsageUnavailableError } from "#src/contract";
-import { asRecord as record } from "#src/json-record";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
-/** The host returns raw usage JSON, or undefined when native credentials are unavailable. */
-export type KiroUsageReader = (options: Readonly<{ timeoutMs?: number }>) => Promise<unknown>;
+/** The host returns the official `/usage` text, or undefined when the CLI cannot read it. */
+export type KiroUsageReader = (
+  options: Readonly<{
+    workingDirectory: string;
+    timeoutMs?: number;
+  }>,
+) => Promise<string | undefined>;
 
 export async function readKiroUsage(
-  options: Readonly<{ timeoutMs?: number }>,
+  options: Readonly<{ workingDirectory: string; timeoutMs?: number }>,
   readResponse: KiroUsageReader,
-): Promise<UsageSnapshot | null> {
+): Promise<UsageSnapshot> {
   const response = await readResponse(options);
-  if (response === undefined) return null;
-  const result = snapshot(response);
-  if (!result) throw new UsageUnavailableError();
-  return result;
+  if (typeof response !== "string") throw new UsageUnavailableError();
+  return parseKiroUsageText(response);
 }
 
-function snapshot(value: unknown): UsageSnapshot | null {
-  const data = record(value);
-  if (!Array.isArray(data?.usageBreakdownList)) return null;
-  let invalid = false;
-  const officialGroups: UsageOfficialGroup[] = [];
-  for (const raw of data.usageBreakdownList) {
-    const item = record(raw);
-    if (!item) {
-      invalid = true;
-      continue;
-    }
-    const group = breakdownGroup(item, data);
-    if (group === "invalid") invalid = true;
-    else if (group) officialGroups.push(group);
-  }
-  if (officialGroups.length === 0) {
-    if (invalid) throw new UsageUnavailableError();
-    return null;
-  }
-  const plan = cleanCreditPlan(data);
-  const title = record(data.subscriptionInfo)?.subscriptionTitle;
+export function parseKiroUsageText(output: string): UsageSnapshot {
+  const lines = Bun.stripANSI(output)
+    .split(/\r?\n/gu)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2 || lines.length > 3) throw new UsageUnavailableError();
+  const header = /^Estimated Usage \| resets on (\d{4}-\d{2}-\d{2}) \| ([^|\r\n]{1,80})$/u.exec(
+    lines[0]!,
+  );
+  const credits =
+    /^Credits \(([\d,]+(?:\.\d+)?) of ([\d,]+(?:\.\d+)?) covered in plan\), (\d+(?:\.\d+)?)%$/u.exec(
+      lines[1]!,
+    );
+  if (
+    !header ||
+    !credits ||
+    (lines[2] && lines[2] !== "Your plan is managed by your organization's administrator.")
+  )
+    throw new UsageUnavailableError();
+  const resetsAt = resetDate(header[1]!);
+  const used = number(credits[1]!);
+  const limit = number(credits[2]!);
+  const percent = number(credits[3]!);
+  if (
+    !Number.isFinite(used) ||
+    !Number.isFinite(limit) ||
+    !Number.isFinite(percent) ||
+    limit <= 0 ||
+    used < 0 ||
+    used > limit
+  )
+    throw new UsageUnavailableError();
+  const expected = (used / limit) * 100;
+  if (Math.abs(expected - percent) > 0.1) throw new UsageUnavailableError();
+  const reset = new Date(resetsAt);
+  const monthStart = Date.UTC(reset.getUTCFullYear(), reset.getUTCMonth() - 1, 1);
+  const windowDurationMinutes = (Date.parse(resetsAt) - monthStart) / 60_000;
+  const bucket: UsageOfficialBucket = {
+    name: "Credits",
+    window: "credit",
+    usedPercent: percent,
+    status: used >= limit ? "limit_reached" : "ok",
+    windowDurationMinutes,
+    resetsAt,
+  };
   return {
     provider: RUNTIME_PROVIDER.KIRO,
-    ...(typeof title === "string" && title.trim() ? { planType: title } : {}),
-    officialGroups,
-    ...plan,
+    planType: header[2]!.trim(),
+    creditUsage: { used, limit, overage: 0 },
+    primary: { usedPercent: percent, status: bucket.status, windowDurationMinutes, resetsAt },
+    officialGroups: [{ buckets: [bucket] }],
   };
 }
 
-/** Every breakdown, including its bonuses and free trial. A plan-only percent is added only
- * for one clean CREDIT row. Bonuses or an ACTIVE trial stay on the snapshot and do not reject it. */
-function breakdownGroup(
-  item: Record<string, unknown>,
-  data: Record<string, unknown>,
-): UsageOfficialGroup | "invalid" | undefined {
-  if (item.bonuses !== undefined && !Array.isArray(item.bonuses)) return "invalid";
-  const resourceType = typeof item.resourceType === "string" ? item.resourceType.trim() : "";
-  if (!resourceType || resourceType.length > 80) return "invalid";
-  const amounts = creditAmounts(item, data);
-  if (amounts === "invalid") return "invalid";
-  const mixed = hasInseparableCredits(item);
-  const buckets: UsageOfficialBucket[] = [];
-  if (amounts && !mixed) {
-    buckets.push({
-      name: resourceType,
-      window: "credit",
-      usedPercent: Math.round((amounts.used / amounts.limit) * 10_000) / 100,
-      status: amounts.used >= amounts.limit ? "limit_reached" : "ok",
-      windowDurationMinutes: amounts.windowDurationMinutes,
-      resetsAt: amounts.resetsAt,
-    });
-  } else if (amounts && mixed) {
-    buckets.push({
-      name: resourceType,
-      description:
-        amounts.overage > 0
-          ? `${amounts.total} / ${amounts.limit} + ${amounts.overage}`
-          : `${amounts.total} / ${amounts.limit}`,
-    });
-  }
-  if (Array.isArray(item.bonuses)) {
-    for (const bonus of item.bonuses) {
-      if (!record(bonus)) return "invalid";
-      buckets.push({ window: "bonus", status: "parse_unavailable" });
-    }
-  }
-  const trial = record(item.freeTrialInfo);
-  const trialStatus =
-    typeof trial?.freeTrialStatus === "string" ? trial.freeTrialStatus.trim() : "";
-  if (trialStatus)
-    buckets.push({ window: "freeTrial", name: "freeTrial", description: trialStatus });
-  if (buckets.length === 0) return undefined;
-  const name = buckets.length > 1 ? resourceType : undefined;
-  return { ...(name ? { name } : {}), buckets };
+function number(value: string): number {
+  return Number(value.replaceAll(",", ""));
 }
 
-function hasInseparableCredits(item: Record<string, unknown>): boolean {
-  return (
-    (Array.isArray(item.bonuses) && item.bonuses.length > 0) ||
-    record(item.freeTrialInfo)?.freeTrialStatus === "ACTIVE"
-  );
-}
-
-function creditAmounts(
-  item: Record<string, unknown>,
-  data: Record<string, unknown>,
-):
-  | {
-      total: number;
-      used: number;
-      limit: number;
-      overage: number;
-      windowDurationMinutes: number;
-      resetsAt: string;
-    }
-  | "invalid"
-  | undefined {
-  const total = item.currentUsageWithPrecision;
-  const limit = item.usageLimitWithPrecision;
-  const overage = item.currentOveragesWithPrecision ?? 0;
-  const reset = item.nextDateReset ?? data.nextDateReset;
-  if (total === undefined && limit === undefined && item.currentOveragesWithPrecision === undefined)
-    return undefined;
-  if (
-    !nonnegative(total) ||
-    !nonnegative(limit) ||
-    limit === 0 ||
-    !nonnegative(overage) ||
-    total < overage
-  )
-    return "invalid";
-  const used = total - overage;
-  if (
-    used > limit ||
-    typeof reset !== "number" ||
-    !Number.isFinite(reset) ||
-    reset < 1_000_000_000 ||
-    reset > 4_102_444_800
-  )
-    return "invalid";
-  const date = new Date(reset * 1000);
-  const monthStart = Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 1, 1);
-  const monthEnd = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
-  return {
-    total,
-    used,
-    limit,
-    overage,
-    windowDurationMinutes: (monthEnd - monthStart) / 60_000,
-    resetsAt: date.toISOString(),
-  };
-}
-
-/** The old two-slot reading: one CREDIT breakdown whose numbers are not mixed with bonuses
- * or an ACTIVE free trial. Other breakdowns stay on `officialGroups` and are not folded in. */
-function cleanCreditPlan(
-  data: Record<string, unknown>,
-): Pick<UsageSnapshot, "creditUsage" | "primary"> {
-  const credits = (data.usageBreakdownList as unknown[])
-    .map(record)
-    .filter((item) => item?.resourceType === "CREDIT" && !hasInseparableCredits(item));
-  if (credits.length !== 1) return {};
-  const amounts = creditAmounts(credits[0]!, data);
-  if (!amounts || amounts === "invalid") return {};
-  return {
-    creditUsage: { used: amounts.used, limit: amounts.limit, overage: amounts.overage },
-    primary: {
-      usedPercent: Math.round((amounts.used / amounts.limit) * 10_000) / 100,
-      windowDurationMinutes: amounts.windowDurationMinutes,
-      resetsAt: amounts.resetsAt,
-    },
-  };
-}
-
-function nonnegative(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+function resetDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
+  if (!match) throw new UsageUnavailableError();
+  const timestamp = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const date = new Date(timestamp);
+  if (date.toISOString().slice(0, 10) !== value) throw new UsageUnavailableError();
+  return date.toISOString();
 }

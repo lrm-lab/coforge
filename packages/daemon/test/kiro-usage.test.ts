@@ -1,219 +1,150 @@
-import { afterEach, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { readKiroUsage as parseKiroUsage } from "@lrm/coforge-anvil/kiro";
-import { UsageUnavailableError } from "@lrm/coforge-anvil";
+import { expect, test } from "bun:test";
+import {
+  UsageUnavailableError,
+  type OwnedChildProcess,
+  type OwnedProcessTree,
+  type ProcessTreeSpawner,
+} from "@lrm/coforge-anvil";
 import { readKiroUsageResponse } from "#src/code-agent/kiro/usage-host";
+import { usageScanFailure } from "#src/daemon-runtime/usage-scan-response";
 
-function readKiroUsage(options: Parameters<typeof readKiroUsageResponse>[0]) {
-  return parseKiroUsage({ timeoutMs: options?.timeoutMs }, () => readKiroUsageResponse(options));
-}
+const USAGE = `Estimated Usage | resets on 2026-11-01 | KIRO POWER
+Credits (10000.00 of 10000 covered in plan), 100.0%
+Your plan is managed by your organization's administrator.`;
 
-const directories: string[] = [];
-afterEach(async () => {
-  for (const directory of directories.splice(0))
-    await rm(directory, { recursive: true, force: true });
-});
+class FixtureChild implements OwnedChildProcess {
+  readonly pid = 42;
+  readonly exitCode = 0;
+  readonly stdin = { write: () => true, end: () => {}, flush: async () => {} };
+  readonly exited: Promise<number>;
+  readonly stdout: AsyncIterable<Uint8Array>;
+  readonly stderr: AsyncIterable<Uint8Array> = (async function* () {})();
+  killed = false;
 
-async function credentials(region = "us-east-1") {
-  const directory = await mkdtemp(join(tmpdir(), "coforge-kiro-usage-"));
-  directories.push(directory);
-  const path = join(directory, "data.sqlite3");
-  const db = new Database(path);
-  db.exec(
-    "CREATE TABLE auth_kv(key TEXT PRIMARY KEY, value TEXT); CREATE TABLE state(key TEXT PRIMARY KEY, value TEXT)",
-  );
-  db.query("INSERT INTO auth_kv VALUES (?, ?)").run(
-    "kirocli:odic:token",
-    JSON.stringify({
-      access_token: "fixture-access",
-      refresh_token: "fixture-refresh",
-      expires_at: "2099-01-01T00:00:00Z",
-    }),
-  );
-  const arn = `arn:aws:codewhisperer:${region}:123456789012:profile/test`;
-  db.query("INSERT INTO state VALUES (?, ?)").run(
-    "api.codewhisperer.profile",
-    JSON.stringify({ arn }),
-  );
-  db.close();
-  return { directory, path, arn };
-}
-
-const payload = {
-  subscriptionInfo: { subscriptionTitle: "KIRO PRO" },
-  nextDateReset: 1790812800,
-  usageBreakdownList: [
-    {
-      resourceType: "CREDIT",
-      currentUsageWithPrecision: 75,
-      usageLimitWithPrecision: 200,
-      currentOveragesWithPrecision: 15,
-    },
-  ],
-};
-
-test("reads the current Kiro account without modifying credentials and excludes overage from monthly quota", async () => {
-  const fixture = await credentials();
-  const before = await Bun.file(fixture.path).arrayBuffer();
-  let calls = 0;
-  const result = await readKiroUsage({
-    environment: { KIRO_DATA_DIR: fixture.directory },
-    fetch: async (url, init) => {
-      calls++;
-      expect(String(url)).toBe("https://codewhisperer.us-east-1.amazonaws.com/");
-      expect(init?.method).toBe("POST");
-      expect(init?.redirect).toBe("error");
-      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer fixture-access");
-      expect(new Headers(init?.headers).get("X-Amz-Target")).toBe(
-        "AmazonCodeWhispererService.GetUsageLimits",
-      );
-      expect(JSON.parse(String(init?.body))).toEqual({ profileArn: fixture.arn });
-      return Response.json(payload);
-    },
-  });
-  expect(calls).toBe(1);
-  expect(result).toEqual({
-    provider: "kiro",
-    planType: "KIRO PRO",
-    creditUsage: { used: 60, limit: 200, overage: 15 },
-    primary: {
-      usedPercent: 30,
-      windowDurationMinutes: 43200,
-      resetsAt: "2026-10-01T00:00:00.000Z",
-    },
-    officialGroups: [
-      {
-        buckets: [
-          {
-            name: "CREDIT",
-            window: "credit",
-            usedPercent: 30,
-            status: "ok",
-            windowDurationMinutes: 43200,
-            resetsAt: "2026-10-01T00:00:00.000Z",
-          },
-        ],
-      },
-    ],
-  });
-  expect(await Bun.file(fixture.path).arrayBuffer()).toEqual(before);
-  expect(JSON.stringify(result)).not.toContain("fixture-");
-});
-
-test("uses the fixed European endpoint and the credit-specific reset", async () => {
-  const fixture = await credentials("eu-central-1");
-  const result = await readKiroUsage({
-    environment: { KIRO_DATA_DIR: fixture.directory },
-    fetch: async (url) => {
-      expect(url).toBe("https://q.eu-central-1.amazonaws.com/");
-      return Response.json({
-        ...payload,
-        usageBreakdownList: [
-          {
-            ...payload.usageBreakdownList[0],
-            nextDateReset: 1793491200,
-            currentUsageWithPrecision: 0,
-            currentOveragesWithPrecision: 0,
-          },
-        ],
-      });
-    },
-  });
-  expect(result?.primary).toEqual({
-    usedPercent: 0,
-    windowDurationMinutes: 44640,
-    resetsAt: "2026-11-01T00:00:00.000Z",
-  });
-});
-
-test("never sends credentials for expired tokens or unsupported profile identities", async () => {
-  const fixture = await credentials();
-  const db = new Database(fixture.path);
-  try {
-    for (const [key, value, table] of [
-      [
-        "kirocli:odic:token",
-        { access_token: "fixture-access", expires_at: "2020-01-01T00:00:00Z" },
-        "auth_kv",
-      ],
-      ["kirocli:odic:token", { access_token: "fixture-access", expires_at: "bad-date" }, "auth_kv"],
-      [
-        "api.codewhisperer.profile",
-        { arn: "arn:aws:codewhisperer:evil.example:123456789012:profile/test" },
-        "state",
-      ],
-      ["api.codewhisperer.profile", { arn: fixture.arn + "\n" }, "state"],
-    ] as const) {
-      db.query("UPDATE auth_kv SET value = ?").run(
-        JSON.stringify({ access_token: "fixture-access" }),
-      );
-      db.query(`UPDATE ${table} SET value = ? WHERE key = ?`).run(JSON.stringify(value), key);
-      let calls = 0;
-      expect(
-        await readKiroUsage({
-          environment: { KIRO_DATA_DIR: fixture.directory },
-          fetch: async () => {
-            calls++;
-            return Response.json(payload);
-          },
-        }),
-      ).toBeNull();
-      expect(calls).toBe(0);
-    }
-  } finally {
-    db.close();
+  constructor(output: string, exitCode = 0, pending = false) {
+    this.exited = pending ? new Promise(() => {}) : Promise.resolve(exitCode);
+    this.stdout = (async function* () {
+      if (output) yield new TextEncoder().encode(output);
+    })();
   }
-});
 
-test("auth rejection is unavailable, transport failure is sanitized, and neither retries", async () => {
-  const fixture = await credentials();
-  for (const status of [401, 403]) {
-    let calls = 0;
-    expect(
-      await readKiroUsage({
-        environment: { KIRO_DATA_DIR: fixture.directory },
-        fetch: async () => {
-          calls++;
-          return new Response("fixture-secret", { status });
+  kill() {
+    this.killed = true;
+  }
+}
+
+class FixtureTree implements OwnedProcessTree {
+  readonly child: FixtureChild;
+  terminated = false;
+
+  constructor(output: string, exitCode = 0, pending = false) {
+    this.child = new FixtureChild(output, exitCode, pending);
+  }
+
+  async terminate() {
+    this.terminated = true;
+    this.child.kill();
+  }
+
+  async waitForExit() {
+    return this.terminated;
+  }
+}
+
+function spawner(
+  tree: FixtureTree,
+  calls: { command?: readonly string[]; cwd?: string; env?: Record<string, string> },
+): ProcessTreeSpawner {
+  return {
+    spawn(command, cwd, environment) {
+      calls.command = command;
+      calls.cwd = cwd;
+      calls.env = { ...environment };
+      return tree;
+    },
+  };
+}
+
+test("runs the official usage slash command in the requested workspace", async () => {
+  const tree = new FixtureTree(USAGE);
+  const calls: { command?: readonly string[]; cwd?: string; env?: Record<string, string> } = {};
+  const removed: string[] = [];
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1000,
+      environment: { PATH: "/fixture" },
+      spawn: spawner(tree, calls),
+      resolveExecutable: () => "/opt/homebrew/bin/kiro-cli",
+      tempDirectory: {
+        create: async () => "/tmp/empty-kiro-usage",
+        remove: async (path) => {
+          removed.push(path);
         },
-      }),
-    ).toBeNull();
-    expect(calls).toBe(1);
-  }
-  await expect(
-    readKiroUsage({
-      environment: { KIRO_DATA_DIR: fixture.directory },
-      fetch: async () => {
-        throw new Error("fixture-secret Authorization");
       },
     }),
-  ).rejects.toThrow("Kiro usage request failed");
+  ).resolves.toBe(USAGE);
+  expect(calls.command).toEqual([
+    "/opt/homebrew/bin/kiro-cli",
+    "chat",
+    "--no-interactive",
+    "/usage",
+  ]);
+  expect(calls.cwd).toBe("/tmp/empty-kiro-usage");
+  expect(calls.env?.NO_COLOR).toBe("1");
+  expect(calls.env?.TERM).toBe("dumb");
+  expect(calls.env?.PATH).toContain("/fixture");
+  expect(removed).toEqual(["/tmp/empty-kiro-usage"]);
+  expect(tree.terminated).toBe(true);
 });
 
-// The library port receives usage data only; credentials and native paths remain in the host.
-test("Kiro usage host returns only the raw usage response", async () => {
-  const fixture = await credentials();
-  const result = await readKiroUsageResponse({
-    environment: { KIRO_DATA_DIR: fixture.directory },
-    fetch: async () => Response.json(payload),
+test("cleans up the owned process tree when the usage command times out", async () => {
+  const tree = new FixtureTree("", 0, true);
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1,
+      spawn: spawner(tree, {}),
+    }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+  expect(tree.terminated).toBe(true);
+  expect(tree.child.killed).toBe(true);
+});
+
+test("rejects a non-zero native command without exposing its output", async () => {
+  const tree = new FixtureTree("fixture-secret", 1);
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1000,
+      spawn: spawner(tree, {}),
+    }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+});
+
+test("classifies an unavailable executable as unavailable usage", async () => {
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1000,
+      spawn: {
+        spawn: () => {
+          throw new Error("ENOENT fixture-secret");
+        },
+      },
+    }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+});
+
+test("keeps Kiro usage unavailable instead of turning it into a sign-in state", () => {
+  expect(
+    usageScanFailure(
+      new UsageUnavailableError(),
+      () => undefined,
+      () => new Date(),
+    ),
+  ).toMatchObject({
+    status: "unavailable",
+    message: "Provider usage is unavailable",
   });
-  expect(result).toEqual(payload);
-  expect(JSON.stringify(result)).not.toContain("fixture-access");
-  expect(JSON.stringify(result)).not.toContain(fixture.directory);
-});
-
-test("preserves an already classified usage error from the injected requester", async () => {
-  const fixture = await credentials();
-  const unavailable = new UsageUnavailableError();
-  await expect(
-    readKiroUsage({
-      environment: { KIRO_DATA_DIR: fixture.directory },
-      fetch: async () => {
-        throw unavailable;
-      },
-    }),
-  ).rejects.toBe(unavailable);
 });

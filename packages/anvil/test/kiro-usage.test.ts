@@ -1,60 +1,64 @@
 import { expect, test } from "bun:test";
-import { readKiroUsage as parseKiroUsage } from "@lrm/coforge-anvil/kiro";
 import { UsageUnavailableError } from "@lrm/coforge-anvil";
-import { kiroUsagePayload as payload } from "./fixtures/kiro-usage";
+import { readKiroUsage } from "@lrm/coforge-anvil/kiro";
 
-function readKiroUsage(options: { fetch(): Promise<Response> }) {
-  return parseKiroUsage({}, async () => (await options.fetch()).json());
-}
+const USAGE = `Estimated Usage | resets on 2026-11-01 | KIRO POWER
+Credits (10000.00 of 10000 covered in plan), 100.0%
+Your plan is managed by your organization's administrator.`;
 
-test("keeps bonuses and an active free trial without turning them into a plan-only percent", async () => {
-  const withBonus = await readKiroUsage({
-    fetch: async () =>
-      Response.json({
-        ...payload,
-        usageBreakdownList: [{ ...payload.usageBreakdownList[0], bonuses: [{}] }],
-      }),
-  });
-  expect(withBonus?.primary).toBeUndefined();
-  expect(withBonus?.creditUsage).toBeUndefined();
-  expect(withBonus?.officialGroups?.[0]?.name).toBe("CREDIT");
-  expect(withBonus?.officialGroups?.[0]?.buckets).toEqual([
-    { name: "CREDIT", description: "75 / 200 + 15" },
-    { window: "bonus", status: "parse_unavailable" },
-  ]);
-  const withTrial = await readKiroUsage({
-    fetch: async () =>
-      Response.json({
-        ...payload,
-        usageBreakdownList: [
-          { ...payload.usageBreakdownList[0], freeTrialInfo: { freeTrialStatus: "ACTIVE" } },
+test("parses the official non-interactive usage output and marks a full plan", async () => {
+  await expect(
+    readKiroUsage({ workingDirectory: "/tmp/fixture", timeoutMs: 1000 }, async () => USAGE),
+  ).resolves.toEqual({
+    provider: "kiro",
+    planType: "KIRO POWER",
+    creditUsage: { used: 10000, limit: 10000, overage: 0 },
+    primary: {
+      usedPercent: 100,
+      status: "limit_reached",
+      windowDurationMinutes: 44640,
+      resetsAt: "2026-11-01T00:00:00.000Z",
+    },
+    officialGroups: [
+      {
+        buckets: [
+          {
+            name: "Credits",
+            window: "credit",
+            usedPercent: 100,
+            status: "limit_reached",
+            windowDurationMinutes: 44640,
+            resetsAt: "2026-11-01T00:00:00.000Z",
+          },
         ],
-      }),
-  });
-  expect(withTrial?.primary).toBeUndefined();
-  expect(withTrial?.officialGroups?.[0]?.buckets[1]).toEqual({
-    window: "freeTrial",
-    name: "freeTrial",
-    description: "ACTIVE",
+      },
+    ],
   });
 });
 
-test("does not invent quota from invalid numbers or millisecond resets", async () => {
-  for (const changes of [
-    { currentUsageWithPrecision: -1 },
-    { usageLimitWithPrecision: 0 },
-    { currentUsageWithPrecision: 10, currentOveragesWithPrecision: 15 },
-    { currentUsageWithPrecision: 300 },
-    { nextDateReset: 1790812800000 },
+test("does not infer usage from a malformed or unsupported official response", async () => {
+  for (const output of [
+    undefined,
+    "Not logged in. Run kiro-cli login.",
+    "Estimated Usage | resets on 2026-11-01 | KIRO POWER\nCredits: unknown",
+    "Estimated Usage | resets on 2026-11-01 | KIRO POWER\nCredits (100 of 200 covered in plan), 42.0%",
+    "Estimated Usage | resets on 2026-11-01 | KIRO POWER\nCredits (200 of 100 covered in plan), 200.0%",
   ]) {
     await expect(
-      readKiroUsage({
-        fetch: async () =>
-          Response.json({
-            ...payload,
-            usageBreakdownList: [{ ...payload.usageBreakdownList[0], ...changes }],
-          }),
-      }),
+      readKiroUsage({ workingDirectory: "/tmp/fixture", timeoutMs: 1000 }, async () => output),
     ).rejects.toBeInstanceOf(UsageUnavailableError);
   }
+});
+
+test("passes the usage working directory and timeout to the host reader", async () => {
+  let received: unknown;
+  const result = await readKiroUsage(
+    { workingDirectory: "/tmp/kiro-project", timeoutMs: 3210 },
+    async (options) => {
+      received = options;
+      return USAGE;
+    },
+  );
+  expect(received).toEqual({ workingDirectory: "/tmp/kiro-project", timeoutMs: 3210 });
+  expect(result?.provider).toBe("kiro");
 });

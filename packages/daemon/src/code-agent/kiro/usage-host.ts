@@ -1,91 +1,92 @@
-import { Database } from "bun:sqlite";
-import { homedir } from "node:os";
-import { join, isAbsolute } from "node:path";
-import { UsageUnavailableError, asRecord as record } from "@lrm/coforge-anvil";
+import {
+  type OwnedProcessTree,
+  type ProcessTreeSpawner,
+  UsageUnavailableError,
+  withDeadline,
+} from "@lrm/coforge-anvil";
+import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { rm, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { agentEnvironment } from "#src/code-agent/environment";
+import { processSpawner } from "#src/code-agent/process-host";
+import { resolveHostCodeAgentExecutable } from "#src/code-agent/runtime-executable";
 
-// Kiro's private CLI store/API, also consumed by CodexBar. Never refresh or
-// migrate this store. Unknown identities and schemas fail closed.
-export async function readKiroUsageResponse(
-  options: {
-    environment?: Readonly<Record<string, string | undefined>>;
-    platform?: NodeJS.Platform;
-    timeoutMs?: number;
-    fetch?: (url: string, init: RequestInit) => Promise<Response>;
-  } = {},
-): Promise<unknown> {
-  const environment = options.environment ?? Bun.env;
-  const home = environment.HOME ?? homedir();
-  const expand = (value: string | undefined) => {
-    const path = value?.trim();
-    return path?.startsWith("~/") ? join(home, path.slice(2)) : path;
+const KIRO_USAGE_COMMAND = ["kiro-cli", "chat", "--no-interactive", "/usage"] as const;
+/** Kiro cold-starts in about six seconds on the supported machine; stay below the browser's 60s wait. */
+export const KIRO_USAGE_TIMEOUT_MS = 20_000;
+
+export type KiroUsageHostOptions = Readonly<{
+  workingDirectory: string;
+  environment?: Readonly<Record<string, string | undefined>>;
+  platform?: NodeJS.Platform;
+  timeoutMs?: number;
+  spawn?: ProcessTreeSpawner;
+  resolveExecutable?: (environment: Readonly<Record<string, string>>) => string | undefined;
+  tempDirectory?: Readonly<{
+    create(): Promise<string>;
+    remove(path: string): Promise<void>;
+  }>;
+}>;
+
+/** Runs Kiro's documented `/usage` command without reading its credential store. */
+export async function readKiroUsageResponse(options: KiroUsageHostOptions): Promise<string> {
+  const platform = options.platform ?? process.platform;
+  const environment = agentEnvironment(undefined, options.environment ?? Bun.env, platform, {
+    extraEnv: { NO_COLOR: "1", TERM: "dumb" },
+  });
+  const executable =
+    options.resolveExecutable?.(environment) ??
+    resolveHostCodeAgentExecutable(RUNTIME_PROVIDER.KIRO, environment, platform) ??
+    "kiro-cli";
+  const directory = options.tempDirectory ?? {
+    create: () => mkdtemp(join(tmpdir(), "coforge-kiro-usage-")),
+    remove: (path: string) => rm(path, { recursive: true, force: true }),
   };
-  const root =
-    expand(environment.KIRO_DATA_DIR) ||
-    ((options.platform ?? process.platform) === "darwin"
-      ? join(home, "Library/Application Support/kiro-cli")
-      : join(expand(environment.XDG_DATA_HOME) || join(home, ".local/share"), "kiro-cli"));
-  if (!isAbsolute(root)) return undefined;
-  const path = join(root, "data.sqlite3");
-  if (!(await Bun.file(path).exists())) return undefined;
-  let db: Database | undefined;
-  let token: Record<string, unknown> | undefined;
-  let profile: Record<string, unknown> | undefined;
+  let workingDirectory: string | undefined;
+  let tree: OwnedProcessTree | undefined;
   try {
-    db = new Database(path, { readonly: true });
-    db.exec("PRAGMA busy_timeout = 250; BEGIN");
-    const authRow = db
-      .query<{ value: string }, []>("SELECT value FROM auth_kv WHERE key = 'kirocli:odic:token'")
-      .get();
-    const profileRow = db
-      .query<{ value: string }, []>(
-        "SELECT value FROM state WHERE key = 'api.codewhisperer.profile'",
-      )
-      .get();
-    token = record(JSON.parse(authRow?.value ?? "null"));
-    profile = record(JSON.parse(profileRow?.value ?? "null"));
-    db.exec("COMMIT");
+    workingDirectory = await directory.create();
+    tree = (options.spawn ?? processSpawner).spawn(
+      [executable, ...KIRO_USAGE_COMMAND.slice(1)],
+      workingDirectory,
+      environment,
+      { terminal: false },
+    );
+    const result = await withDeadline(
+      collectOutput(tree),
+      options.timeoutMs ?? KIRO_USAGE_TIMEOUT_MS,
+      () => new UsageUnavailableError(),
+    );
+    if (result.exitCode !== 0) throw new UsageUnavailableError();
+    const output = result.stdout.includes("Estimated Usage")
+      ? result.stdout
+      : result.stderr.includes("Estimated Usage")
+        ? result.stderr
+        : result.stdout;
+    if (!output.trim()) throw new UsageUnavailableError();
+    return output;
   } catch {
-    return undefined;
+    throw new UsageUnavailableError();
   } finally {
-    db?.close();
+    if (tree) await cleanupOwnedTree(tree, tree.child).catch(() => {});
+    if (workingDirectory) await directory.remove(workingDirectory).catch(() => {});
   }
-  if (typeof token?.access_token !== "string" || !token.access_token.trim()) return undefined;
-  if (
-    token.expires_at !== undefined &&
-    (typeof token.expires_at !== "string" ||
-      !Number.isFinite(Date.parse(token.expires_at)) ||
-      Date.parse(token.expires_at) <= Date.now())
-  )
-    return undefined;
-  const arn = profile?.arn;
-  // Reject control characters in native profile data before constructing auth headers.
-  // oxlint-disable-next-line no-control-regex
-  if (typeof arn !== "string" || /\s|[\u0000-\u001f\u007f]/u.test(arn)) return undefined;
-  const match = /^arn:aws:codewhisperer:(us-east-1|eu-central-1):[0-9]{12}:profile\/.+$/.exec(arn);
-  if (!match) return undefined;
-  const endpoint =
-    match[1] === "us-east-1"
-      ? "https://codewhisperer.us-east-1.amazonaws.com/"
-      : "https://q.eu-central-1.amazonaws.com/";
-  try {
-    const response = await (options.fetch ?? fetch)(endpoint, {
-      method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
-      headers: {
-        Authorization: `Bearer ${token.access_token}`,
-        "Content-Type": "application/x-amz-json-1.0",
-        "X-Amz-Target": "AmazonCodeWhispererService.GetUsageLimits",
-      },
-      body: JSON.stringify({ profileArn: arn }),
-    });
-    if (response.status === 401 || response.status === 403) return undefined;
-    if (!response.ok) throw new Error("Kiro usage unavailable");
-    return await response.json();
-  } catch (error) {
-    // An injected requester may already have classified unavailability. Preserve that error.
-    if (error instanceof UsageUnavailableError) throw error;
-    // Transport errors may include request headers or local paths.
-    throw new Error("Kiro usage request failed");
-  }
+}
+
+async function collectOutput(tree: OwnedProcessTree) {
+  const [stdout, stderr, exitCode] = await Promise.all([
+    readStream(tree.child.stdout),
+    readStream(tree.child.stderr),
+    tree.child.exited,
+  ]);
+  return { stdout, stderr, exitCode };
+}
+
+async function readStream(stream: AsyncIterable<Uint8Array>): Promise<string> {
+  const decoder = new TextDecoder();
+  let output = "";
+  for await (const chunk of stream) output += decoder.decode(chunk, { stream: true });
+  return output + decoder.decode();
 }

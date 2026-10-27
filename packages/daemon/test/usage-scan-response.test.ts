@@ -80,7 +80,7 @@ describe("usageScanFailure", () => {
     expect(decoded(answer.snapshotJson)).toEqual(observed);
   });
 
-  test("without one, an unavailable provider and any other failure differ", () => {
+  test("a Kiro expired-token usage read is unavailable, never reauth", () => {
     expect(usageScanFailure(new UsageUnavailableError(), () => undefined, now)).toMatchObject({
       status: "unavailable",
       message: "Provider usage is unavailable",
