@@ -31,6 +31,7 @@ export function upgradeSlotState({
   upgrade,
   request,
   slot,
+  owner,
   computer,
   currentVersion,
   latestComputerVersion,
@@ -40,6 +41,11 @@ export function upgradeSlotState({
   request: ComputerUpgradeRequest;
   /** Which row this slot is. A request aimed at the other row does not paint this one. */
   slot?: "runtime" | "image";
+  /**
+   * Which row owns the in-flight upgrade: this panel's request, or the server status when the
+   * request was lost (reload / another tab). Without it, both cloud rows paint the same bar.
+   */
+  owner?: "runtime" | "image";
   computer: Parameters<typeof availableUpdateVersion>[0];
   /** The version it runs, or the one an upgrade here just reached. */
   currentVersion: string | null | undefined;
@@ -55,11 +61,7 @@ export function upgradeSlotState({
           latestComputerVersion,
         );
   const requested = request.state === "idle" ? undefined : request.version;
-  const foreign =
-    request.state !== "idle" &&
-    request.target !== undefined &&
-    slot !== undefined &&
-    request.target !== slot;
+  const foreign = owner !== undefined && slot !== undefined && owner !== slot;
   if (foreign) return offer ? { state: "available", offer } : null;
   if (upgrade.state === "running")
     return {

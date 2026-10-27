@@ -13,9 +13,19 @@ export type ComputerRestartStatus =
     }
   | { requestId: string; status: "failed"; reason: "timeout" | "publication" };
 
+/** Which detail row owns a cloud upgrade: Version (runtime) or Image. */
+export type ComputerUpgradeTarget = "runtime" | "image";
+
 /** One upgrade operation's status, as `computer-upgrade-store.server.ts` stores and returns it. */
 export type ComputerUpgradeStatus =
-  | { requestId: string; status: "accepted"; expectedVersion: string; expiresAt: string }
+  | {
+      requestId: string;
+      status: "accepted";
+      expectedVersion: string;
+      expiresAt: string;
+      /** Which detail row owns this upgrade. Set by the store for every public read. */
+      target?: ComputerUpgradeTarget;
+    }
   | {
       requestId: string;
       status: "completed";
@@ -24,6 +34,7 @@ export type ComputerUpgradeStatus =
       daemonVersion: string;
       workerInstanceId: string;
       completedAt: string;
+      target?: ComputerUpgradeTarget;
     }
   | {
       requestId: string;
@@ -33,6 +44,7 @@ export type ComputerUpgradeStatus =
       error?: string;
       /** See `UPGRADE_ERROR_CODE`; only ever set alongside `reason: "reported"`. */
       errorCode?: string;
+      target?: ComputerUpgradeTarget;
     }
   | { requestId: string; status: "unknown"; reason: "corrupt" };
 

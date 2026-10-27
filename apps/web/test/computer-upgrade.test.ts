@@ -202,6 +202,7 @@ test("a read at the deadline still finds the record and reports the timeout", as
     requestId: "request",
     status: "failed",
     reason: "timeout",
+    target: "runtime",
   });
 });
 
