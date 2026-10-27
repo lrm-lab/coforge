@@ -48,6 +48,8 @@ test.skipIf(!db)(
           description: "Notes for the team.",
           whenToUse: "Read or write the team's notes.",
           homepageUrl: "https://notes.acme.example/",
+          agentManifestUrl: "https://notes.acme.example/.well-known/coforge-agent-manifest.json",
+          agentManifestUrlSource: "well_known",
           builtIn: false,
           access: "automatic",
         },
