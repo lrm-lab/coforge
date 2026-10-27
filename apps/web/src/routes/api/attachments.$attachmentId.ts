@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { requireBrowserUser } from "#src/server/auth/require-user.server";
 import {
-  attachmentResponseHeaders,
+  attachmentResponse,
   isDeliveryInlinePreview,
   isInlineImage,
 } from "#src/server/attachments/attachment-response.server";
@@ -71,10 +71,7 @@ export async function handleAttachmentDownload(
         ? signedRedirect(dependencies, attachment.objectKey)
         : null;
     if (redirect) return redirect;
-    const file = await open();
-    return new Response(file.body, {
-      headers: attachmentResponseHeaders(attachment, forceDownload),
-    });
+    return attachmentResponse(request, attachment, await open(), forceDownload);
   } catch {
     return textResponse("not found", { status: 404 });
   }
