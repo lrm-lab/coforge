@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { RefreshCw01 } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 import {
@@ -12,7 +11,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
-import { refreshComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
 import { m } from "#src/paraglide/messages";
 import { AgentFastModeField } from "./agent-fast-mode-field";
 import { AgentReasoningField } from "./agent-reasoning-field";
@@ -37,6 +35,7 @@ import {
 } from "./agent-runtime-fields-state";
 import { RUNTIME_PROVIDER_DISPLAY_ORDER, runtimeProviderLabel } from "./runtime-provider-display";
 import { RuntimeProviderMark } from "./runtime-provider-mark";
+import { useRuntimeCatalogRefresh } from "./use-runtime-catalog-refresh";
 
 export * from "./agent-runtime-fields-state";
 
@@ -91,58 +90,18 @@ export function AgentRuntimeFields({
   const [retry, setRetry] = useState(0);
   const loading = useRef(new Set<string>());
   const previousComputerId = useRef(computerId);
-  const refreshingComputer = useRef<string | undefined>(undefined);
-  const [refreshingComputerId, setRefreshingComputerId] = useState<string>();
-  const [refreshFailedComputerId, setRefreshFailedComputerId] = useState<string>();
-  const refreshing = refreshingComputerId === computerId;
-  const requestRefresh = useServerFn(refreshComputerRuntimeCatalog);
+  const catalogRefresh = useRuntimeCatalogRefresh({
+    open,
+    computerId,
+    provider,
+    isLoading: (id) => loading.current.has(id),
+    setOptions: setOptionsByComputer,
+  });
   const options = optionsByComputer[computerId];
   const failed = failedComputerId === computerId;
   const isPi = provider === RUNTIME_PROVIDER.PI;
   const piConfigured = isPi && piProviderChoice === "";
   const piBuiltin = isPi && !piConfigured;
-
-  // Opening the list uses the stored catalog. Only this button asks for a fresh probe.
-  const refreshCatalog = async () => {
-    if (!open || !computerId || refreshingComputer.current || loading.current.has(computerId))
-      return;
-    refreshingComputer.current = computerId;
-    setRefreshingComputerId(computerId);
-    setRefreshFailedComputerId(undefined);
-    try {
-      const result = await requestRefresh({ data: { computerId } });
-      if (
-        result.status !== "refreshed" ||
-        !result.catalogs.some((catalog) => catalog.provider === provider)
-      ) {
-        setRefreshFailedComputerId(computerId);
-        return;
-      }
-      setOptionsByComputer((current) => {
-        const previous = current[computerId];
-        const refreshedProviders = new Set<string>(
-          result.catalogs.map((catalog) => catalog.provider),
-        );
-        return {
-          ...current,
-          [computerId]: {
-            providers: previous?.providers ?? [],
-            catalogs: [
-              ...(previous?.catalogs ?? []).filter(
-                (catalog) => !refreshedProviders.has(catalog.provider),
-              ),
-              ...result.catalogs,
-            ],
-          },
-        };
-      });
-    } catch {
-      setRefreshFailedComputerId(computerId);
-    } finally {
-      refreshingComputer.current = undefined;
-      setRefreshingComputerId(undefined);
-    }
-  };
 
   useEffect(() => {
     if (!open) setApiKey("");
@@ -434,16 +393,16 @@ export function AgentRuntimeFields({
             </Select>
             <div className="absolute top-0 right-0 flex h-5 items-center">
               <ButtonUtility
-                icon={refreshing ? Spinner : RefreshCw01}
+                icon={catalogRefresh.refreshing ? Spinner : RefreshCw01}
                 size="xs"
                 color="tertiary"
                 tooltip={m.agent_form_model_refresh()}
-                onClick={() => void refreshCatalog()}
-                isDisabled={refreshingComputerId !== undefined || !options}
+                onClick={() => void catalogRefresh.refresh()}
+                isDisabled={catalogRefresh.busy || !options}
               />
             </div>
           </div>
-          {refreshFailedComputerId === computerId && (
+          {catalogRefresh.failed && (
             <p role="alert" className="text-sm text-error-primary">
               {m.agent_form_model_refresh_failed()}
             </p>
