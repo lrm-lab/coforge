@@ -140,9 +140,11 @@ test("lone images keep their shape; several share a grid with wide ones on a row
   await browser("screenshot", "--full", join(artifacts, "1440.png"));
   await Bun.write(join(artifacts, "1440.json"), JSON.stringify(box, null, 2));
 
-  // A lone image: within 416×288 at its ratio (the border adds a pixel each side).
+  // A lone image: within 416×288 at its ratio; its border is inside that box.
   expect(box["landscape.png"]).toMatchObject({ width: 384, height: 288 });
-  expect(box["long.png"]!.height).toBe(288);
+  // 43px wide at 300:2000 is 286.7 tall: the width is whole pixels, the height follows.
+  expect(box["long.png"]!.height).toBeGreaterThanOrEqual(286);
+  expect(box["long.png"]!.height).toBeLessThanOrEqual(288);
   expect(box["long.png"]!.width).toBeLessThanOrEqual(44);
   expect(box["unknown.png"]).toMatchObject({ width: 176, height: 132 });
 

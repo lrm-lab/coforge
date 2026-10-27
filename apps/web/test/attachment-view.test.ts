@@ -136,7 +136,7 @@ test("an image OSS can resize gets three WebP tiers on its one signature", () =>
     iconUrl: `${signed}&x-oss-process=${TIER.iconUrl}`,
     largeUrl: `${signed}&x-oss-process=${TIER.largeUrl}`,
   };
-  // Twice the message's 800×320 box, twice the Files row's 40px square, 2048 for the lightbox,
+  // Twice the message's 416×288 box, twice the Files row's 40px square, 2048 for the lightbox,
   // each in one fixed order so a picture in a tier is one CDN cache entry (task #212).
   for (const type of ["image/png", "image/jpeg", "image/webp"])
     expect(view(type)).toMatchObject({ previewUrl: signed, ...tiers });

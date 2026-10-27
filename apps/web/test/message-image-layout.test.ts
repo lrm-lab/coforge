@@ -32,11 +32,17 @@ test("2.2:1 and wider is wide, 0.55:1 and narrower is tall, an unknown size is n
 
 test("four images go two and two; five go three and two", () => {
   const normal = size(400, 300);
-  expect(galleryRows([normal, normal, normal, normal]).map((row) => row.indexes)).toEqual([
+  expect(
+    galleryRows([normal, normal, normal, normal]).map((row) => row.map((cell) => cell.index)),
+  ).toEqual([
     [0, 1],
     [2, 3],
   ]);
-  expect(galleryRows([normal, normal, normal, normal, normal]).map((row) => row.indexes)).toEqual([
+  expect(
+    galleryRows([normal, normal, normal, normal, normal]).map((row) =>
+      row.map((cell) => cell.index),
+    ),
+  ).toEqual([
     [0, 1, 2],
     [3, 4],
   ]);
@@ -45,8 +51,11 @@ test("four images go two and two; five go three and two", () => {
 test("a wide image takes its own row and splits the run around it; only normal ones fill", () => {
   const rows = galleryRows([size(400, 300), size(100, 400), size(1000, 100), size(400, 300)]);
   expect(rows).toEqual([
-    { indexes: [0, 1], fit: ["cover", "contain"] },
-    { indexes: [2], fit: ["contain"] },
-    { indexes: [3], fit: ["cover"] },
+    [
+      { index: 0, fit: "cover" },
+      { index: 1, fit: "contain" },
+    ],
+    [{ index: 2, fit: "contain" }],
+    [{ index: 3, fit: "cover" }],
   ]);
 });

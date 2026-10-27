@@ -46,7 +46,7 @@ export function singleImageBox(image: ImageSize) {
   };
 }
 
-export type GalleryRow = { indexes: number[]; fit: ("cover" | "contain")[] };
+export type GalleryRow = { index: number; fit: "cover" | "contain" }[];
 
 /**
  * Rows for two or more images, by index: a wide image takes a row of its own; the images between
@@ -55,12 +55,11 @@ export type GalleryRow = { indexes: number[]; fit: ("cover" | "contain")[] };
  */
 export function galleryRows(images: readonly ImageSize[]): GalleryRow[] {
   const rows: GalleryRow[] = [];
-  const row = (indexes: number[]) => ({
-    indexes,
-    fit: indexes.map((index) =>
-      imageShape(images[index]!) === "normal" ? ("cover" as const) : ("contain" as const),
-    ),
-  });
+  const row = (indexes: number[]): GalleryRow =>
+    indexes.map((index) => ({
+      index,
+      fit: imageShape(images[index]!) === "normal" ? "cover" : "contain",
+    }));
   let run: number[] = [];
   const flush = () => {
     const size = run.length === 4 ? 2 : 3;

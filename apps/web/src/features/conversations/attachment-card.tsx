@@ -28,7 +28,7 @@ type Attachment = MessageView["attachments"][number];
 
 const isImage = (attachment: Attachment) => attachment.contentType.startsWith("image/");
 
-/** The image a message shows first: its thumbnail, else the original, else the backend route. */
+/** One image as a button opening its preview: its thumbnail, else the original, else the route. */
 function ImageThumbnail({
   attachment,
   className,
@@ -76,10 +76,11 @@ function ImageThumbnail({
  * that cannot be loaded falls back to its file card.
  */
 export function MessageAttachments({ attachments }: { attachments: readonly Attachment[] }) {
-  const [broken, setBroken] = useState(false);
+  const [brokenId, setBrokenId] = useState<string>();
   const images = attachments.filter(isImage);
   const files = attachments.filter((attachment) => !isImage(attachment));
   const lone = images.length === 1 ? images[0]! : undefined;
+  const broken = lone !== undefined && brokenId === lone.id;
   if (lone && broken) files.unshift(lone);
   const rows = images.length > 1 ? galleryRows(images) : [];
   return (
@@ -91,7 +92,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
             className="max-w-full rounded-[10px]"
             style={singleImageBox(lone)}
             imgClassName="object-contain"
-            onFailed={() => setBroken(true)}
+            onFailed={() => setBrokenId(lone.id)}
           />
         </div>
       )}
@@ -102,21 +103,21 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
         >
           {rows.map((row) => (
             <div
-              key={row.indexes.join()}
+              key={row.map((cell) => cell.index).join()}
               className={cn(
                 "grid gap-1",
-                row.indexes.length === 1 ? "grid-cols-1" : "grid-cols-2",
-                row.indexes.length === 3
+                row.length === 1 ? "grid-cols-1" : "grid-cols-2",
+                row.length === 3
                   ? "auto-rows-[7rem] @min-[360px]:auto-rows-[8rem]"
                   : "auto-rows-[8rem] @min-[360px]:auto-rows-[9rem]",
               )}
             >
-              {row.indexes.map((index, cell) => (
+              {row.map(({ index, fit }) => (
                 <ImageThumbnail
                   key={images[index]!.id}
                   attachment={images[index]!}
                   className="size-full rounded-lg"
-                  imgClassName={row.fit[cell] === "cover" ? "object-cover" : "object-contain"}
+                  imgClassName={fit === "cover" ? "object-cover" : "object-contain"}
                 />
               ))}
             </div>

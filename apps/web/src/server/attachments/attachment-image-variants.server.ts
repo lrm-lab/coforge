@@ -36,7 +36,7 @@ function process(mode: "m_lfit" | "m_fill", width: number, height: number, quali
 }
 
 const TIERS = {
-  /** A message: within twice its 800×320 box, so a long screenshot never becomes a strip. */
+  /** A message: within twice a lone image's 416×288 box; a grid cell is smaller still. */
   thumbnailUrl: process(
     "m_lfit",
     MESSAGE_IMAGE_MAX_WIDTH_PX * SCALE,
