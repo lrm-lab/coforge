@@ -1,5 +1,5 @@
 import { RefreshCw01 as RefreshCw, XClose } from "@untitledui/icons";
-import { useId, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
@@ -18,12 +18,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useRuntimeUsage } from "./use-runtime-usage";
-import {
-  officialBucketDetail,
-  officialBucketLabel,
-  usageWindowLabel,
-} from "./runtime-usage-windows";
-import { UsageWindow } from "./usage-window";
+import { RuntimeUsageWindows } from "./runtime-usage-windows-list";
 import {
   usageBadge,
   usageFailureDescription,
@@ -222,8 +217,6 @@ export function RuntimeUsagePopoverContent({
   actions?: ReactNode;
 }) {
   const hydrated = useHydrated();
-  const notesId = useId();
-  const [notesOpen, setNotesOpen] = useState(false);
   const snapshot = data?.result?.snapshot;
   const badge = data?.result ? usageBadge(data.result) : undefined;
   const reason =
@@ -247,16 +240,7 @@ export function RuntimeUsagePopoverContent({
       ? m.computer_usage_credits_available()
       : undefined;
   const accountNote = [plan && accountLabel, credits].filter(Boolean).join(" · ");
-  const windows = snapshot
-    ? (["primary", "secondary"] as const).flatMap((key) => {
-        const window = snapshot[key];
-        return window ? [{ key, window }] : [];
-      })
-    : [];
   const refreshLabel = scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh();
-  const hasUsageNotes = Boolean(
-    snapshot?.officialDescription || snapshot?.officialGroups?.some((group) => group.description),
-  );
 
   return (
     <div className="flex min-h-0 flex-col divide-y divide-secondary">
@@ -344,98 +328,11 @@ export function RuntimeUsagePopoverContent({
             ) : (
               <>
                 {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
-                {snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
-                  // Rows read "group · window", as on Raft, then the used share and reset. The
-                  // provider's notes stay on the snapshot and open from this button: a tooltip
-                  // inside the peek would close it (task #258). Per-bucket sentences are not
-                  // painted; they repeat the reset already on the row.
-                  <div className="mt-3 space-y-4">
-                    {snapshot.officialGroups.map((group, index) => (
-                      <div key={`${group.name ?? "group"}-${index}`} className="space-y-3">
-                        {group.buckets.map((bucket, bucketIndex) => {
-                          const detail = officialBucketDetail(bucket);
-                          const rowLabel = officialBucketLabel(bucket);
-                          return (
-                            <UsageWindow
-                              key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
-                              label={
-                                group.name && group.name !== rowLabel
-                                  ? `${group.name} · ${rowLabel}`
-                                  : rowLabel
-                              }
-                              window={{
-                                ...(bucket.usedPercent !== undefined
-                                  ? { usedPercent: bucket.usedPercent }
-                                  : {}),
-                                ...(bucket.status ? { status: bucket.status } : {}),
-                                ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
-                              }}
-                              detail={detail}
-                              note={detail ? undefined : bucket.description}
-                              creditUsage={
-                                bucket.window === "credit" ? snapshot.creditUsage : undefined
-                              }
-                              timeZone={timeZone}
-                              showLeft
-                            />
-                          );
-                        })}
-                      </div>
-                    ))}
-                    {hasUsageNotes && (
-                      <div>
-                        <Button
-                          size="sm"
-                          color="link-gray"
-                          aria-expanded={notesOpen}
-                          aria-controls={notesId}
-                          onPress={() => setNotesOpen((open) => !open)}
-                        >
-                          {notesOpen ? m.computer_usage_hide_notes() : m.computer_usage_notes()}
-                        </Button>
-                        {notesOpen && (
-                          <div id={notesId} className="mt-2 space-y-2">
-                            {snapshot.officialDescription && (
-                              <p className="text-xs break-words text-tertiary">
-                                {snapshot.officialDescription}
-                              </p>
-                            )}
-                            {snapshot.officialGroups.map((group, index) =>
-                              group.description ? (
-                                <p
-                                  key={`${group.name ?? "note"}-${index}`}
-                                  className="text-xs break-words text-tertiary"
-                                >
-                                  {group.name && (
-                                    <span className="font-medium text-secondary">
-                                      {group.name}.{" "}
-                                    </span>
-                                  )}
-                                  {group.description}
-                                </p>
-                              ) : null,
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  windows.length > 0 && (
-                    <div className="mt-3 space-y-3">
-                      {windows.map(({ key, window }) => (
-                        <UsageWindow
-                          key={key}
-                          label={usageWindowLabel(runtime.provider, key, window)}
-                          window={window}
-                          creditUsage={key === "primary" ? snapshot?.creditUsage : undefined}
-                          timeZone={timeZone}
-                          showLeft
-                        />
-                      ))}
-                    </div>
-                  )
-                )}
+                <RuntimeUsageWindows
+                  provider={runtime.provider}
+                  snapshot={snapshot}
+                  timeZone={timeZone}
+                />
               </>
             )}
           </section>
