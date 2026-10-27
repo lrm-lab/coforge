@@ -1,4 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import agentPackage from "./package.json";
 
 export const provider = RUNTIME_PROVIDER.COFORGE;
 export { RUNTIME_PROVIDER };
@@ -19,7 +20,8 @@ export {
 } from "#src/training-trajectory";
 export { classifyPiLaunchFailure, PiLaunchError, piLaunchTrace } from "#src/launch-error";
 export type { PiLaunchCategory, PiLaunchTrace } from "#src/launch-error";
-export { getAgentDir, VERSION as PI_SDK_VERSION } from "@earendil-works/pi-coding-agent";
+export { getAgentDir } from "@earendil-works/pi-coding-agent";
+export const PI_SDK_VERSION = agentPackage.dependencies["@earendil-works/pi-coding-agent"];
 export { COFORGE_PROVIDER_MODELS_GENERATED } from "#src/coforge-provider-models.generated";
 export { supportedReasoningEfforts } from "#src/reasoning-levels";
 export { runPiChatWorker } from "#src/pi-chat/worker";
