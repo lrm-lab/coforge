@@ -816,7 +816,5 @@ fn the_same_version_is_never_gated_even_without_semver_precedence() {
 #[cfg(unix)]
 mod current_layout;
 
-/// The switch registers the service definition before it starts the supervisor; the rollback
-/// scripts lean on the single `current/` executable.
-#[cfg(unix)]
+/// The switch registers the service definition before it starts the supervisor.
 mod service_definition;
