@@ -18,7 +18,6 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
-import { attachmentFileNameSummary } from "./attachment-file-name";
 import { useSavedMessages } from "./conversation-host";
 import { conversationOpenPosition, unreadBoundary } from "./conversation-open-position";
 import { ConversationBottomPin } from "./conversation-bottom-pin";
@@ -50,6 +49,7 @@ import { groupSystemMessages } from "./system-message-groups";
 import { useMessageOutbox, useOutboxEntries } from "./use-message-outbox";
 import { MessageNavigationGroup } from "./message-navigation-group";
 import { useOwnMessagesIndex } from "./own-messages-menu";
+import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
 import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
@@ -259,21 +259,10 @@ export function ConversationPane({
   const isOwn = (message: { senderMemberId?: string | null }) =>
     isViewerMessage(message, conversation.senderMemberId);
   // Only derived from the loaded page when no indexed own-message source is wired up.
-  const loadedOwnMessages = useMemo(
-    () =>
-      onLoadOwnMessages
-        ? []
-        : conversation.messages
-            .filter(isOwn)
-            .sort((left, right) => left.sequence - right.sequence)
-            .map((message) => ({
-              id: message.id,
-              sequence: message.sequence,
-              body: message.body,
-              createdAt: message.createdAt,
-              attachmentFileName: attachmentFileNameSummary(message.attachments),
-            })),
-    [conversation.messages, conversation.senderMemberId, onLoadOwnMessages],
+  const loadedOwnMessages = useLoadedOwnMessages(
+    conversation.messages,
+    conversation.senderMemberId,
+    onLoadOwnMessages,
   );
   const ownIndex = useOwnMessagesIndex({
     conversationId: conversation.conversationId,
