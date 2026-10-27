@@ -1,3 +1,4 @@
+import { RollingNumber } from "#src/components/ui/rolling-number";
 import { cx } from "#src/utils/cx";
 
 /** Slack-style badge: the count up to 99, then "99+". Hidden from AT, so the row that owns it
@@ -8,7 +9,8 @@ export function UnreadBadge({ count }: { count: number }) {
       aria-hidden="true"
       className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary-solid px-1.5 dark:bg-secondary-solid text-xs font-semibold leading-none text-white tabular-nums"
     >
-      {count > 99 ? "99+" : count}
+      <RollingNumber value={Math.min(count, 99)} />
+      {count > 99 && "+"}
     </span>
   );
 }

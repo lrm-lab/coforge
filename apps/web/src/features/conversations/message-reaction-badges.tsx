@@ -1,5 +1,6 @@
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { RollingNumber } from "#src/components/ui/rolling-number";
 import { cn } from "#src/lib/utils";
 import type { ReactionSummary } from "./message-reactions";
 
@@ -38,7 +39,7 @@ export function MessageReactionBadges({
                     : "bg-utility-neutral-50 text-utility-neutral-700 ring-utility-neutral-200 hover:bg-utility-neutral-100",
                 )}
               >
-                {emoji} {count}
+                {emoji} <RollingNumber value={count} />
               </Button>
             </TooltipTrigger>
           </Tooltip>
