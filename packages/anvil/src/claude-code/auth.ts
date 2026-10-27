@@ -18,6 +18,7 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CLAUDE_CODE, "auth"]);
 
 export const CLAUDE_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
+const CLAUDE_AUTH_URL_WAIT_MS = 1_000;
 export const CLAUDE_AUTH_STATUS_TIMEOUT_MS = 20_000;
 export const CLAUDE_LOGOUT_TIMEOUT_MS = 60_000;
 /** First Claude Code release whose `auth login` accepts the code pasted back on stdin. */
@@ -41,6 +42,8 @@ const ANSI = new RegExp(`${ESCAPE}\\[[0-9;?]*[ -/]*[@-~]`, "gu");
 // The link counts only once its line is complete: a chunk may end in the middle of it.
 const AUTH_URL = /If the browser didn't open, visit:\s*(\S+)[\r\n]/u;
 const CODE_PROMPT = /Paste code here if prompted\s*>/u;
+const MISSING_AUTH_URL_DETAIL =
+  "Claude Code did not provide a sign-in link before asking for a code";
 const INVALID_CODE_LINES = /^Invalid code\b/gmu;
 const LOGIN_SUCCESSFUL = /Login successful\b/u;
 const LOGIN_FAILED = /Login failed:[ \t]*(.*)$/mu;
@@ -199,6 +202,9 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     let interactionFailed: string | undefined;
     let loginFailure: string | undefined;
     let reportedSuccess = false;
+    let codePromptSeen = false;
+    let missingAuthUrl = false;
+    let authUrlWaitTimer: ReturnType<typeof setTimeout> | undefined;
     let exitCode: number | undefined;
     const settled = Promise.withResolvers<"timeout" | "cancelled" | "exited">();
     const timer = setTimeout(() => {
@@ -219,6 +225,10 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     const fail = (reason: string) => {
       interactionFailed = detail(reason) ?? "interaction failed";
       process.kill();
+    };
+    const failMissingAuthUrl = () => {
+      missingAuthUrl = true;
+      fail(MISSING_AUTH_URL_DETAIL);
     };
     const emit = (event: RuntimeAuthLoginEvent) => {
       try {
@@ -257,6 +267,21 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
       if (!interactionFailed) fail("no code was entered");
     };
 
+    const requestCode = (message: string) => {
+      if (announcedUrl) {
+        promptedForCode = true;
+        void askForCode(message);
+        return;
+      }
+      codePromptSeen = true;
+      if (!authUrlWaitTimer) {
+        authUrlWaitTimer = setTimeout(() => {
+          authUrlWaitTimer = undefined;
+          if (!announcedUrl && !interactionFailed) failMissingAuthUrl();
+        }, CLAUDE_AUTH_URL_WAIT_MS);
+      }
+    };
+
     let promptedForCode = false;
     let invalidCodes = 0;
     const watch = async (
@@ -284,6 +309,10 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
           const trusted = url ? anthropicUrl(url) : undefined;
           if (trusted) {
             announcedUrl = true;
+            if (authUrlWaitTimer) {
+              clearTimeout(authUrlWaitTimer);
+              authUrlWaitTimer = undefined;
+            }
             emit({
               kind: "auth_url",
               verificationUrl: trusted,
@@ -296,8 +325,7 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
         }
         // The prompt may print before the link, and may be only partly written so far.
         if (!promptedForCode && CODE_PROMPT.test(seen)) {
-          promptedForCode = true;
-          void askForCode("Paste the code shown after signing in.");
+          requestCode("Paste the code shown after signing in.");
         }
         reportedSuccess ||= LOGIN_SUCCESSFUL.test(seen);
         loginFailure ??= LOGIN_FAILED.exec(seen)?.[1]?.trim();
@@ -306,9 +334,7 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
         const rejected = seen.match(INVALID_CODE_LINES)?.length ?? 0;
         if (rejected > invalidCodes) {
           invalidCodes = rejected;
-          void askForCode(
-            "That code was not accepted. Paste the full code shown after signing in.",
-          );
+          requestCode("That code was not accepted. Paste the full code shown after signing in.");
         }
         loginFailure ??= LOGIN_FAILED.exec(seen)?.[1]?.trim();
       }),
@@ -318,7 +344,11 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
       const outcome = await settled.promise;
       if (outcome === "cancelled" || active.cancelled) return { status: "cancelled" };
       if (interactionFailed)
-        return { status: "failed", reason: "interaction_failed", detail: interactionFailed };
+        return {
+          status: "failed",
+          reason: missingAuthUrl ? "process_failed" : "interaction_failed",
+          detail: interactionFailed,
+        };
       if (outcome === "timeout") return { status: "failed", reason: "timed_out" };
       await reading;
       if (untrustedLink)
@@ -327,6 +357,8 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
           reason: "process_failed",
           detail: "Claude Code printed a sign-in link that is not an Anthropic address",
         };
+      if (codePromptSeen && !announcedUrl)
+        return { status: "failed", reason: "process_failed", detail: MISSING_AUTH_URL_DETAIL };
       // The CLI saying it succeeded, or exiting 0, is only a claim: `auth status` decides. A
       // success line with a bad exit code still counts once the account reads as signed in.
       if (exitCode !== 0 && !reportedSuccess)
@@ -344,6 +376,7 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
       };
     } finally {
       clearTimeout(timer);
+      if (authUrlWaitTimer) clearTimeout(authUrlWaitTimer);
       interaction.signal?.removeEventListener("abort", abort);
       await Promise.all(cancelReaders.map((cancel) => cancel()));
       if (this.#active === active) this.#active = undefined;

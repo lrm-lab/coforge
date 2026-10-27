@@ -79,6 +79,24 @@ test("login surfaces the authorization link, takes the pasted code and signs in"
   expect(commands).toContainEqual(["claude", "auth", "login"]);
 });
 
+test("does not ask for a pasted code when Claude gives no sign-in link", async () => {
+  const login = new FakeAuthProcess();
+  const { adapter } = adapterWith(login);
+  const events: RuntimeAuthLoginEvent[] = [];
+  const result = adapter.startLogin(
+    { workingDirectory: "/tmp", timeoutMs: 2_000 },
+    { onEvent: (event) => events.push(event), prompt: async () => "code" },
+  );
+  login.say("Paste code here if prompted > ");
+  await expect(result).resolves.toMatchObject({
+    status: "failed",
+    reason: "process_failed",
+  });
+  expect(events).toEqual([]);
+  expect(login.written).toEqual([]);
+  expect(login.killed).toBe(true);
+});
+
 test("login refuses a link that does not point at an Anthropic host and stops at once", async () => {
   const login = new FakeAuthProcess();
   const { adapter } = adapterWith(login);
@@ -91,6 +109,38 @@ test("login refuses a link that does not point at an Anthropic host and stops at
   await expect(result).resolves.toMatchObject({ status: "failed", reason: "process_failed" });
   expect(events).toEqual([]);
   expect(login.killed).toBe(true);
+});
+
+test("an untrusted link with a code prompt reports the link refusal", async () => {
+  const login = new FakeAuthProcess();
+  const { adapter } = adapterWith(login);
+  const result = adapter.startLogin(
+    { workingDirectory: "/tmp", timeoutMs: 2_000 },
+    { onEvent: () => {}, prompt: async () => "code" },
+  );
+  login.say("Paste code here if prompted >\n");
+  login.say("If the browser didn't open, visit: https://evil.example/login\n");
+  await expect(result).resolves.toMatchObject({
+    status: "failed",
+    reason: "process_failed",
+    detail: "Claude Code printed a sign-in link that is not an Anthropic address",
+  });
+});
+
+test("an exited CLI without a sign-in link reports the missing link", async () => {
+  const login = new FakeAuthProcess();
+  const { adapter } = adapterWith(login);
+  const result = adapter.startLogin(
+    { workingDirectory: "/tmp", timeoutMs: 2_000 },
+    { onEvent: () => {}, prompt: async () => "code" },
+  );
+  login.say("Paste code here if prompted >\n");
+  login.finish(0);
+  await expect(result).resolves.toMatchObject({
+    status: "failed",
+    reason: "process_failed",
+    detail: "Claude Code did not provide a sign-in link before asking for a code",
+  });
 });
 
 test("the link and prompt are found when split across chunks and escape sequences", async () => {
@@ -313,7 +363,7 @@ test("an empty paste is asked for again", async () => {
       prompt: async () => pastes.shift()!,
     },
   );
-  login.say("Paste code here if prompted >");
+  login.say(`If the browser didn't open, visit: ${OAUTH_URL}\nPaste code here if prompted >`);
   await Bun.sleep(20);
   expect(messages[1]).toMatch(/No code was entered/u);
   expect(login.written).toEqual(["real-code\n"]);
@@ -333,7 +383,7 @@ test("the code prompt is answered even when it prints before the link", async ()
   await Bun.sleep(10);
   login.say(`If the browser didn't open, visit: ${OAUTH_URL}\n`);
   await Bun.sleep(10);
-  expect(events.map((event) => event.kind)).toEqual(["code_prompt", "auth_url"]);
+  expect(events.map((event) => event.kind)).toEqual(["auth_url", "code_prompt"]);
   login.finish(0);
   await result;
 });

@@ -11,6 +11,7 @@ export type LoginView = {
   loginId: string;
   sequence: number;
   event?: RuntimeAuthLoginEvent;
+  authUrl?: Extract<RuntimeAuthLoginEvent, { kind: "auth_url" }>;
   result?: RuntimeAuthLoginResult;
 };
 
@@ -123,7 +124,11 @@ export function loginReducer(state: LoginState, action: LoginAction): LoginState
       const { view } = action;
       if (view.loginId !== state.loginId || view.sequence <= state.sequence) return state;
       if (view.result) return finished(view.result);
-      const next = { ...state, sequence: view.sequence };
+      const next = {
+        ...state,
+        sequence: view.sequence,
+        ...(state.link || !view.authUrl ? {} : { link: view.authUrl }),
+      };
       const event = view.event;
       if (!event) return next;
       switch (event.kind) {

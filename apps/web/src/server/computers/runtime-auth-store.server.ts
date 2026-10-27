@@ -48,6 +48,8 @@ export type RuntimeAuthLoginRecord = {
   /** The last report applied; 0 until the daemon first answers. */
   sequence: number;
   event?: RuntimeAuthLoginEvent;
+  /** Kept separately so a catch-up read still carries the sign-in page after a code prompt. */
+  authUrl?: Extract<RuntimeAuthLoginEvent, { kind: "auth_url" }>;
   result?: RuntimeAuthLoginResult;
 };
 
@@ -162,7 +164,12 @@ export class RedisRuntimeAuthStore implements RuntimeAuthStore {
     return this.update(scope, loginId, (record) => {
       if (record.result || sequence <= record.sequence) return undefined;
       return "event" in report
-        ? { ...record, sequence, event: report.event }
+        ? {
+            ...record,
+            sequence,
+            event: report.event,
+            ...(report.event.kind === "auth_url" ? { authUrl: report.event } : {}),
+          }
         : { ...record, sequence, result: report.result };
     });
   }

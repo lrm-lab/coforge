@@ -44,6 +44,25 @@ test("an info line keeps the device code the reader still has to type", () => {
   });
 });
 
+test("a catch-up code prompt keeps the authorization link that arrived before it", () => {
+  const authUrl = { kind: "auth_url" as const, url: "https://claude.ai/oauth" };
+  const state = run(
+    started,
+    view({ loginId, sequence: 2, authUrl, event: { kind: "code_prompt", message: "Paste" } }),
+  );
+  expect(state).toMatchObject({ phase: "running", link: authUrl, prompt: "Paste" });
+});
+
+test("a later catch-up event cannot replace an already shown authorization link", () => {
+  const authUrl = { kind: "auth_url" as const, url: "https://claude.ai/oauth" };
+  const state = run(
+    started,
+    view({ loginId, sequence: 1, event: authUrl }),
+    view({ loginId, sequence: 2, authUrl, event: { kind: "info", message: "Waiting" } }),
+  );
+  expect(state).toMatchObject({ phase: "running", link: authUrl, info: "Waiting" });
+});
+
 test("the catch-up read and the channel overlap or arrive out of order; the login only moves forward", () => {
   // Read returns the latest view (2) before the channel delivers 1, then 2 again.
   const reordered = run(started, view(info), view(device), view(info));

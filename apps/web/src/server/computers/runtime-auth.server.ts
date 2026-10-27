@@ -37,6 +37,7 @@ export type RuntimeAuthLoginView = {
   provider: RuntimeAuthProvider;
   sequence: number;
   event?: RuntimeAuthLoginEvent;
+  authUrl?: Extract<RuntimeAuthLoginEvent, { kind: "auth_url" }>;
   result?: RuntimeAuthLoginResult;
 };
 
@@ -59,8 +60,15 @@ function logoutView(record: RuntimeAuthLogoutRecord): RuntimeAuthLogoutView {
 const encoder = new TextEncoder();
 
 function loginView(record: RuntimeAuthLoginRecord): RuntimeAuthLoginView {
-  const { loginId, provider, sequence, event, result } = record;
-  return { loginId, provider, sequence, ...(event && { event }), ...(result && { result }) };
+  const { loginId, provider, sequence, event, authUrl, result } = record;
+  return {
+    loginId,
+    provider,
+    sequence,
+    ...(event && { event }),
+    ...(authUrl && { authUrl }),
+    ...(result && { result }),
+  };
 }
 
 /**

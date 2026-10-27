@@ -144,6 +144,10 @@ test("reports reach only the starter, in order, and the result frees the provide
   };
   const event = { kind: "auth_url", url: "https://example.com/login" } as const;
   expect(await auth.receiveLoginReport(scope(), loginReport(loginId, 1, { event }))).toBe(true);
+  const prompt = { kind: "code_prompt", message: "Paste the code" } as const;
+  expect(await auth.receiveLoginReport(scope(), loginReport(loginId, 2, { event: prompt }))).toBe(
+    true,
+  );
   // A stale or repeated report is accepted and dropped.
   expect(
     await auth.receiveLoginReport(
@@ -151,7 +155,7 @@ test("reports reach only the starter, in order, and the result frees the provide
       loginReport(loginId, 1, { event: { kind: "info", message: "old" } }),
     ),
   ).toBe(true);
-  expect(signals("alice")).toHaveLength(1);
+  expect(signals("alice")).toHaveLength(2);
   expect(signals("alice")[0]).toMatchObject({
     type: "runtime-auth.login.v1",
     computerId,
@@ -162,8 +166,9 @@ test("reports reach only the starter, in order, and the result frees the provide
   expect(signals("bob")).toEqual([]);
   expect(await auth.readLogin(bob, { computerId, loginId })).toBeUndefined();
   expect(await auth.readLogin(alice, { computerId, loginId })).toMatchObject({
-    sequence: 1,
-    event,
+    sequence: 2,
+    authUrl: event,
+    event: prompt,
   });
 
   await auth.receiveLoginReport(
