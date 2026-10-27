@@ -54,7 +54,7 @@ export const DELETABLE_STATUSES: readonly AppPublishStatus[] = [
   "rejected",
 ];
 
-/** Whether an app can be deleted; an app without a status (`app-marketplace` off) is private. */
+/** Whether an app can be deleted; an app without a status counts as private. */
 export const canDeleteApp = (status: AppPublishStatus = "private") =>
   DELETABLE_STATUSES.includes(status);
 

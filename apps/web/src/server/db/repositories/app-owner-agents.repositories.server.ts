@@ -43,7 +43,6 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
         workspaceId: true,
         role: true,
         deletedAt: true,
-        workspace: { select: { slug: true } },
       },
     });
     return row
@@ -52,7 +51,6 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
           workspaceId: row.workspaceId,
           role: row.role,
           archived: row.deletedAt !== null,
-          workspaceSlug: row.workspace.slug,
         }
       : undefined;
   }

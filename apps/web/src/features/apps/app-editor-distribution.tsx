@@ -17,9 +17,9 @@ export type PublishingActions = {
 };
 
 /**
- * The editor's Distribution section (behind `app-marketplace`): the app's Marketplace status, a
- * hint while a request waits, the private share link card, and what can be done in that status:
- * withdraw a pending publish request; request publication when private or rejected (saving the editor first); a note once
+ * The editor's Distribution section: the app's Marketplace status, a hint while a request waits,
+ * the private share link card, and what can be done in that status: withdraw a pending publish
+ * request; request publication when private or rejected (saving the editor first); a note once
  * published. Asking for removal from the Marketplace is the Danger zone's. Each action acts at
  * once, apart from the form's Save.
  */

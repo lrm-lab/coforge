@@ -59,7 +59,7 @@ CoForge 记录工作区中发生的事，并投递到订阅了该事件类型的
 - **私有分享链接。** 想不经审核就分享，可以为应用创建链接。同一时间只有一个有效链接，创建时只显示一次，30 天后过期。
   你可以重新生成或撤销它；撤销不会影响已经完成的安装。
 
-在已开启的部署中可用。契约：[应用市场](https://github.com/lrm-lab/coforge/blob/main/docs/app-marketplace.md)（英文）。
+契约：[应用市场](https://github.com/lrm-lab/coforge/blob/main/docs/app-marketplace.md)（英文）。
 
 ## 把应用的输出当作数据
 

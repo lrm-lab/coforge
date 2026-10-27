@@ -8,10 +8,8 @@ import {
   type AppReviewOutcome,
 } from "#src/features/apps/app-publish-status";
 import type { AppCategory } from "#src/features/apps/app-category";
-import {
-  assertCanManageApps,
-  type WorkspaceMemberRole,
-} from "#src/server/workspaces/member-role.server";
+import { requireMarketplaceMember } from "#src/server/app-marketplace/marketplace-access.server";
+import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
 /** The member acting, in the Workspace the request names. */
 export type PublishingActor = { workspaceId: string; actorUserId: string };
@@ -57,11 +55,11 @@ export type DecideInput = {
 };
 
 export interface AppPublishingStore {
-  /** The person's role in the Workspace, and the Workspace's slug (a flag rule may match it). */
+  /** The person's role in the Workspace. */
   findMember(
     workspaceId: string,
     userId: string,
-  ): Promise<{ role: WorkspaceMemberRole; workspaceSlug: string } | undefined>;
+  ): Promise<{ role: WorkspaceMemberRole } | undefined>;
   /** The app `key` that `workspaceId` owns. */
   findOwned(
     workspaceId: string,
@@ -81,14 +79,6 @@ export interface AppPublishingStore {
   decide(input: DecideInput): Promise<"done" | "missing" | "decided">;
 }
 
-/** Whether `app-marketplace` is on for the Workspace. */
-export type MarketplaceFlag = (workspace: {
-  workspaceId: string;
-  workspaceSlug: string;
-}) => Promise<boolean>;
-
-/** The refusal for a Workspace where `app-marketplace` is off: the feature is not there. */
-const OFF = () => new AppError("ACCESS_DENIED", { errorId: "app-marketplace-off" });
 /** A publish request needs the app to say what it is: Raft refuses one without a description. */
 const DESCRIPTION_REQUIRED = () =>
   new AppError("INVALID_INPUT", { errorId: "app-description-required" });
@@ -98,9 +88,8 @@ const NOT_ALLOWED = () => new AppError("CONFLICT", { errorId: "app-publish-statu
 /**
  * Marketplace review of an app: the state machine behind `apps.publishStatus`. The owners and
  * admins of the app's Workspace request publication, withdraw that request, and request
- * unpublication; a platform operator (`app_reviewer`) decides. Everything is refused where
- * `app-marketplace` is off for the Workspace the request comes from. A repeated request is
- * answered with the state the first one reached, and an app has at most one pending request.
+ * unpublication; a platform operator (`app_reviewer`) decides. A repeated request is answered
+ * with the state the first one reached, and an app has at most one pending request.
  *
  * Approving unpublication only makes the app private here. What happens to other Workspaces'
  * installations belongs to the install slice, which hooks in at `decide`.
@@ -108,15 +97,8 @@ const NOT_ALLOWED = () => new AppError("CONFLICT", { errorId: "app-publish-statu
 export class AppPublishing {
   constructor(
     private readonly store: AppPublishingStore,
-    private readonly enabled: MarketplaceFlag,
     private readonly now: () => Date = () => new Date(),
   ) {}
-
-  /** Whether the Workspace has Marketplace review on. The caller has already read the slug while
-   * checking the person is a member, so this does not look the member up again. */
-  async isEnabledIn(workspace: { workspaceId: string; workspaceSlug: string }): Promise<boolean> {
-    return this.enabled(workspace);
-  }
 
   /** Files a publish request; from `private` or `rejected` only. Answers the status. */
   async requestPublish(actor: PublishingActor, key: string): Promise<AppPublishStatus> {
@@ -147,15 +129,10 @@ export class AppPublishing {
     return this.settled(actor, key, "private");
   }
 
-  /** What a member (already checked by the caller, who read the slug) sees of the Marketplace:
-   * whether review is on in the Workspace, and, only there, whether they are a platform operator
-   * who reviews apps. */
-  async access(
-    workspace: { workspaceId: string; workspaceSlug: string },
-    userId: string,
-  ): Promise<{ enabled: boolean; reviewer: boolean }> {
-    const enabled = await this.enabled(workspace);
-    return { enabled, reviewer: enabled && (await this.store.isAppReviewer(userId)) };
+  /** Whether the person is a platform operator who reviews apps (the caller has already checked
+   * they are a member of the Workspace). */
+  async isReviewer(userId: string): Promise<boolean> {
+    return this.store.isAppReviewer(userId);
   }
 
   /** The requests waiting for a decision, oldest first. */
@@ -194,7 +171,6 @@ export class AppPublishing {
   }
 
   private async requestManaged(managed: ManagedApp, kind: AppReviewKind) {
-    if (!(await this.enabled(managed))) throw OFF();
     const { app } = managed;
     const owned = { appId: app.id, publishStatus: app.publishStatus, description: app.description };
     return this.fileRequest(managed, app.key, owned, kind, null);
@@ -226,33 +202,16 @@ export class AppPublishing {
     throw NOT_ALLOWED();
   }
 
-  /** The person's role in the Workspace and whether `app-marketplace` is on there; `undefined`
-   * for a non-member. */
-  private async membership(actor: PublishingActor) {
-    const member = await this.store.findMember(actor.workspaceId, actor.actorUserId);
-    if (!member) return undefined;
-    const enabled = await this.enabled({
-      workspaceId: actor.workspaceId,
-      workspaceSlug: member.workspaceSlug,
-    });
-    return { role: member.role, enabled };
-  }
-
-  /** The app is the actor's Workspace's own and its owners and admins act; the flag is on. */
+  /** The app is the actor's Workspace's own and its owners and admins act. */
   private async ownedApp(actor: PublishingActor, key: string) {
-    const member = await this.membership(actor);
-    if (!member) throw new AppError("ACCESS_DENIED");
-    assertCanManageApps(member.role);
-    if (!member.enabled) throw OFF();
+    await requireMarketplaceMember(this.store, actor, { manage: true });
     const app = await this.store.findOwned(actor.workspaceId, key);
     if (!app) throw new AppError("NOT_FOUND");
     return app;
   }
 
   private async assertReviewer(reviewer: PublishingActor) {
-    const member = await this.membership(reviewer);
-    if (!member) throw new AppError("ACCESS_DENIED");
-    if (!member.enabled) throw OFF();
+    await requireMarketplaceMember(this.store, reviewer, { manage: false });
     if (!(await this.store.isAppReviewer(reviewer.actorUserId)))
       throw new AppError("ACCESS_DENIED");
   }

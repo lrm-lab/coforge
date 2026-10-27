@@ -74,7 +74,7 @@ A new App is **private**: only the Workspace that registered it sees it.
   a time, it is shown once when you create it, and it expires after 30 days. You can regenerate it
   or revoke it; revoking keeps the installs that already exist.
 
-Where enabled. Contract: [App Marketplace](https://github.com/lrm-lab/coforge/blob/main/docs/app-marketplace.md).
+Contract: [App Marketplace](https://github.com/lrm-lab/coforge/blob/main/docs/app-marketplace.md).
 
 ## Treat App output as data
 

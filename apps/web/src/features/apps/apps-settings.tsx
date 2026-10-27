@@ -69,13 +69,11 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
     notifications: false,
     agentEvents: false,
     bot: false,
-    marketplace: false,
     reviewer: false,
   });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const { appsTab: requestedView = "installed", appsCategory: category = "all" } =
-    settingsRoute.useSearch();
+  const { appsTab: view = "installed", appsCategory: category = "all" } = settingsRoute.useSearch();
   const navigate = settingsRoute.useNavigate();
   const [query, setQuery] = useState("");
   const [layout, setLayout] = useAppsLayout();
@@ -250,25 +248,12 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
 
   const all = apps ?? [];
   // Installed: every app installed here, the ones installed from the Marketplace included; My apps:
-  // the ones this Workspace registered. The Marketplace tab exists only where `app-marketplace` is on.
+  // the ones this Workspace registered.
   const mine = all.filter((app) => app.owned);
-  const views = APPS_VIEWS.filter((id) => id !== "marketplace" || declares.marketplace);
-  const view = views.includes(requestedView) ? requestedView : "installed";
   const list = view === "mine" ? mine : all;
   const shown = filterApps(list, { query, category });
   // The Marketplace tab shows no count: its list is its own panel's.
   const counts: Partial<Record<AppsView, number>> = { installed: all.length, mine: mine.length };
-  // A tab the Workspace no longer has (the Marketplace where its flag is off) leaves the URL once
-  // the apps and flags are read, so a shared link does not keep naming it.
-  const unavailableView = apps !== undefined && requestedView !== view;
-  useEffect(() => {
-    if (unavailableView) {
-      void navigate({
-        search: (prev) => ({ ...prev, appsTab: view === "installed" ? undefined : view }),
-        replace: true,
-      });
-    }
-  }, [unavailableView, view, navigate]);
   // The editor shows the app as the list now holds it, so a refresh reaches it too.
   const editing =
     editor?.mode === "edit"
@@ -301,7 +286,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
         <Tabs
           selectedKey={view}
           onSelectionChange={(key) => {
-            const next = views.find((candidate) => candidate === key);
+            const next = APPS_VIEWS.find((candidate) => candidate === key);
             if (next) showList({ view: next });
           }}
         >
@@ -326,7 +311,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
               aria-label={m.apps_views_label()}
               className="w-max max-w-full"
             >
-              {views.map((id) => (
+              {APPS_VIEWS.map((id) => (
                 <Tab key={id} id={id}>
                   {/* The tab's own badge hides below `md`; this one stays at every width. */}
                   {TAB_LABELS[id]()}
@@ -404,7 +389,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
             </div>
           )}
 
-          {views.map((id) =>
+          {APPS_VIEWS.map((id) =>
             id === "marketplace" ? (
               <TabPanel key={id} id={id} className="mt-4 grid gap-3 outline-hidden">
                 <MarketplacePanel

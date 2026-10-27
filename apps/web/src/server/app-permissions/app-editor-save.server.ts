@@ -37,9 +37,6 @@ export type AppEditorSaved = {
   setup: AppSetupView | null;
 };
 
-/** A Save's answer, with the Workspace's slug the member lookup read (for a flag it can decide). */
-export type AppEditorUpdated = AppEditorSaved & { workspaceSlug: string };
-
 /**
  * Saving an app in the editor: its profile fields and, where the editor shows them, the data
  * groups it declares and the page it is set up on. The application use case that owns the Save, so
@@ -57,7 +54,7 @@ export class AppEditorSave {
   /** Declares `permissionGroups` when given (refused where `app-data-permissions` is off) and
    * `setup` when given (refused where `app-installation-setup` is off), then changes the profile
    * fields `patch` names. `permissions` and `setup` are `null` while their flags are off. */
-  async save(actor: AppActor, key: string, change: AppEditorChange): Promise<AppEditorUpdated> {
+  async save(actor: AppActor, key: string, change: AppEditorChange): Promise<AppEditorSaved> {
     return this.transaction(async ({ registry, permissions, setup }) => {
       const declared =
         change.permissionGroups === undefined
@@ -70,10 +67,9 @@ export class AppEditorSave {
             );
       const declaredSetup =
         change.setup === undefined ? undefined : await setup.declare(actor, key, change.setup);
-      const { app, workspaceSlug } = await registry.updateAppInWorkspace(actor, key, change.patch);
+      const app = await registry.updateApp(actor, key, change.patch);
       return {
         app,
-        workspaceSlug,
         permissions: declared ?? (await permissions.appPermissions(actor, key)),
         setup: declaredSetup ?? (await setup.appSetup(actor, key)),
       };

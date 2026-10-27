@@ -51,7 +51,6 @@ const MANAGEMENT_MESSAGES: Record<string, string> = {
   "app-publish-status-conflict": "The app's publish status does not allow this request.",
   "app-description-required":
     "A publish request needs the app to have a description: set one with app update --description.",
-  "app-marketplace-off": "The Marketplace is not available in this Workspace.",
   "app-redirect-uris-invalid":
     "The redirect URLs are not acceptable. They cannot be cleared; give one or more valid URLs.",
   "app-owner-agent-invalid":

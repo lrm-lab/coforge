@@ -2,11 +2,7 @@ import { AppError } from "#src/lib/app-error";
 import type { ManagedApp } from "#src/server/apps/managed-app";
 import type { AppPublishStatus } from "#src/features/apps/app-publish-status";
 import { mintShareToken } from "#src/server/app-marketplace/app-share-link-token.server";
-import {
-  marketplaceOff,
-  requireMarketplaceMember,
-  type MarketplaceFlag,
-} from "#src/server/app-marketplace/marketplace-access.server";
+import { requireMarketplaceMember } from "#src/server/app-marketplace/marketplace-access.server";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
 /** A share link lives this many days unless the caller asks for another (Raft's app editor makes
@@ -25,7 +21,7 @@ export interface AppShareLinkStore {
   findMember(
     workspaceId: string,
     userId: string,
-  ): Promise<{ role: WorkspaceMemberRole; workspaceSlug: string } | undefined>;
+  ): Promise<{ role: WorkspaceMemberRole } | undefined>;
   /** The app `key` that `workspaceId` owns. */
   findOwned(
     workspaceId: string,
@@ -50,7 +46,7 @@ export interface AppShareLinkStore {
 const SHAREABLE: readonly AppPublishStatus[] = ["private", "rejected"];
 
 /**
- * Private share links (`app-marketplace`): an owner or admin of an app's Workspace creates one,
+ * Private share links: an owner or admin of an app's Workspace creates one,
  * and an owner or admin of another Workspace installs the app from it (`AppInstallations`). One
  * link is active at a time; creating again revokes the old one (Raft's "Regenerate"). The URL is
  * shown once, when created: only its hash is stored. Revoking stops new installs and removes none.
@@ -59,7 +55,6 @@ const SHAREABLE: readonly AppPublishStatus[] = ["private", "rejected"];
 export class AppShareLinks {
   constructor(
     private readonly store: AppShareLinkStore,
-    private readonly enabled: MarketplaceFlag,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -84,7 +79,6 @@ export class AppShareLinks {
   /** `create` for an app an Agent manages: the link records no user. */
   async createManaged(managed: ManagedApp, options: { expiresInDays?: number } = {}) {
     const days = checkedDays(options.expiresInDays);
-    await this.requireEnabled(managed);
     return this.makeLink(managedShareApp(managed), null, days);
   }
 
@@ -105,7 +99,6 @@ export class AppShareLinks {
 
   /** `status` for an app an Agent manages. */
   async statusManaged(managed: ManagedApp): Promise<ShareLinkStatus | null> {
-    await this.requireEnabled(managed);
     return (await this.store.findActive(managed.app.id, this.now())) ?? null;
   }
 
@@ -117,17 +110,12 @@ export class AppShareLinks {
 
   /** `revoke` for an app an Agent manages. */
   async revokeManaged(managed: ManagedApp): Promise<void> {
-    await this.requireEnabled(managed);
     await this.store.revoke(managed.app.id, this.now());
   }
 
-  private async requireEnabled(workspace: { workspaceId: string; workspaceSlug: string }) {
-    if (!(await this.enabled(workspace))) throw marketplaceOff();
-  }
-
-  /** The actor manages apps, the Marketplace is on for their Workspace, and `key` is its own app. */
+  /** The actor manages apps in their Workspace, and `key` is its own app. */
   private async ownedApp(actor: ShareLinkActor, key: string) {
-    await requireMarketplaceMember(this.store, this.enabled, actor, { manage: true });
+    await requireMarketplaceMember(this.store, actor, { manage: true });
     const app = await this.store.findOwned(actor.workspaceId, key);
     if (!app) throw new AppError("NOT_FOUND");
     return app;

@@ -99,8 +99,7 @@ Workspace install the app without Marketplace review. `share-link` makes one (30
 1 to 365 as in Raft's agent CLI), revokes the previous one, and **prints the URL once**; nothing
 stores it (only its hash), so `share-link-status` shows only whether a link is active and when it
 was made and ends. `revoke-share-link` ends it, in any publish status; Workspaces that installed
-keep the app. Only a `private` or `rejected` app is shared (`app-share-status-conflict`). All three
-are `access_denied` (`app-marketplace-off`) where `app-marketplace` is off for the Workspace.
+keep the app. Only a `private` or `rejected` app is shared (`app-share-status-conflict`).
 
 ## Publish requests
 
@@ -113,8 +112,8 @@ Files the [Marketplace review](../app-marketplace.md) request a platform reviewe
 prints the app's publish status (`publish_requested`, `unpublish_requested`). A publish request
 needs a description (`app-description-required`; set one with `app update --description`) and an
 app that is `private` or `rejected`; an unpublish request needs a `published` app
-(`app-publish-status-conflict` otherwise). Repeating a request answers the state it reached. Behind
-`app-marketplace` like share links. Rows these Agent requests write record no requesting user.
+(`app-publish-status-conflict` otherwise). Repeating a request answers the state it reached. Rows these
+Agent requests write record no requesting user.
 
 ## HTTP
 

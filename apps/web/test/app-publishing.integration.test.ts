@@ -1,7 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { afterAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "#src/generated/prisma/client";
@@ -12,13 +9,10 @@ import { grantPlatformOperator } from "#src/server/app-marketplace/platform-oper
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { PrismaAppPublishingStore } from "#src/server/db/repositories/app-publishing.repositories.server";
 import { PrismaAppRegistryStore } from "#src/server/db/repositories/app.repositories.server";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 
 /**
  * Marketplace review against local PostgreSQL with migrations applied: the publish, withdraw and
- * unpublish requests of an app's owners and admins, a platform operator's decisions, and that
- * none of it is reachable while `app-marketplace` is off for the Workspace.
+ * unpublish requests of an app's owners and admins, and a platform operator's decisions.
  *
  * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL.
  */
@@ -27,45 +21,14 @@ const db = connectionString
   ? new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
   : undefined;
 
-const RUN = crypto.randomUUID().slice(0, 8);
-const ON_SLUGS = Array.from({ length: 16 }, (_, index) => `mkt-on-${RUN}-${index}`);
-let nextOnSlug = 0;
-let flagDirectory: string | undefined;
-
-beforeAll(async () => {
-  if (!db) return;
-  flagDirectory = await mkdtemp(join(tmpdir(), "coforge-app-marketplace-"));
-  const path = join(flagDirectory, "flags.json");
-  await Bun.write(
-    path,
-    JSON.stringify({
-      $schema: "https://flagd.dev/schema/v0/flags.json",
-      flags: {
-        "app-marketplace": {
-          state: "ENABLED",
-          variants: { on: true, off: false },
-          defaultVariant: "off",
-          targeting: { if: [{ in: [{ var: "workspaceSlug" }, ON_SLUGS] }, "on", "off"] },
-        },
-      },
-    }),
-  );
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: path }),
-  );
-});
-
 afterAll(async () => {
-  await installFeatureFlags({ status: "disabled" });
-  if (flagDirectory) await rm(flagDirectory, { recursive: true, force: true });
   await db?.$disconnect();
 });
 
-/** A Workspace with an owner, an admin, a member and a member who is a platform operator, an app
- * registered by the owner, and the flag on unless `flag` is `off`. */
-async function fixture(db: PrismaClient, { flag = "on" }: { flag?: "on" | "off" } = {}) {
+/** A Workspace with an owner, an admin, a member and a member who is a platform operator, and an app
+ * registered by the owner. */
+async function fixture(db: PrismaClient) {
   const suffix = crypto.randomUUID().slice(0, 8);
-  const slug = flag === "on" ? ON_SLUGS[nextOnSlug++]! : `mkt-off-${suffix}`;
   const person = (name: string) => ({
     displayName: `mkt-${name}-${suffix}`,
     username: `mkt-${name}-${suffix}`,
@@ -79,7 +42,7 @@ async function fixture(db: PrismaClient, { flag = "on" }: { flag?: "on" | "off" 
   };
   const workspace = await db.workspace.create({
     data: {
-      slug,
+      slug: `mkt-${suffix}`,
       name: "Marketplace",
       members: {
         create: Object.entries(people).map(([name, user]) => ({
@@ -119,7 +82,6 @@ async function fixture(db: PrismaClient, { flag = "on" }: { flag?: "on" | "off" 
     });
   return {
     key,
-    slug,
     people,
     actor,
     stored,
@@ -248,6 +210,10 @@ test.skipIf(!db)("only a platform operator lists and decides requests", async ()
       ).toMatchObject({ code: "ACCESS_DENIED" });
     }
     expect((await app.stored()).publishStatus).toBe("publish_requested");
+
+    for (const role of ["owner", "admin", "member"] as const)
+      expect(await publishing.isReviewer(app.actor(role).actorUserId)).toBe(false);
+    expect(await publishing.isReviewer(app.actor("reviewer").actorUserId)).toBe(true);
 
     const pending = await publishing.listPendingReviews(app.actor("reviewer"));
     expect(pending.find((entry) => entry.requestId === requestId)).toMatchObject({
@@ -409,32 +375,6 @@ test.skipIf(!db)("an operator reads a pending app's logo; an outsider never does
     ).toBeUndefined();
   } finally {
     await db!.user.deleteMany({ where: { id: { in: [outsider.id, operator.id] } } });
-    await app.cleanup();
-  }
-});
-
-test.skipIf(!db)("with app-marketplace off every operation is refused", async () => {
-  const app = await fixture(db!, { flag: "off" });
-  const publishing = createAppPublishing(db!);
-  const off = { code: "ACCESS_DENIED", errorId: "app-marketplace-off" } as const;
-  try {
-    expect(
-      await publishing.isEnabledIn({
-        workspaceId: app.actor("owner").workspaceId,
-        workspaceSlug: app.slug,
-      }),
-    ).toBe(false);
-    expect(await refusal(publishing.requestPublish(app.actor("owner"), app.key))).toEqual(off);
-    expect(await refusal(publishing.withdrawPublish(app.actor("owner"), app.key))).toEqual(off);
-    expect(await refusal(publishing.requestUnpublish(app.actor("owner"), app.key))).toEqual(off);
-    expect(await refusal(publishing.listPendingReviews(app.actor("reviewer")))).toEqual(off);
-    expect(
-      await refusal(
-        publishing.decide(app.actor("reviewer"), crypto.randomUUID(), { outcome: "approved" }),
-      ),
-    ).toEqual(off);
-    expect((await app.stored()).publishStatus).toBe("private");
-  } finally {
     await app.cleanup();
   }
 });

@@ -2,12 +2,12 @@ import { AppError } from "#src/lib/app-error";
 import { APP_PERMISSIONS_CHANGED } from "#src/features/apps/app-permissions";
 import type { AppCategory } from "#src/features/apps/app-category";
 import type { AppActor } from "#src/server/apps/app-registry.server";
-import type { AppPermissions } from "#src/server/app-permissions/app-permissions.server";
+import type {
+  AppPermissions,
+  DataPermissionsFlag,
+} from "#src/server/app-permissions/app-permissions.server";
 import { hashShareToken } from "#src/server/app-marketplace/app-share-link-token.server";
-import {
-  requireMarketplaceMember,
-  type MarketplaceFlag,
-} from "#src/server/app-marketplace/marketplace-access.server";
+import { requireMarketplaceMember } from "#src/server/app-marketplace/marketplace-access.server";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
 /** An app as another Workspace sees it, before it is said whether that Workspace has it. */
@@ -111,13 +111,10 @@ export type InstallationScope = {
   permissions: Pick<AppPermissions, "approve">;
 };
 
-export type InstallationFlag = MarketplaceFlag;
-
 /**
- * Discovering published apps of other Workspaces and installing them, behind `app-marketplace`
- * for the Workspace the request comes from. Every member browses; owners and admins (who manage
- * apps) install and uninstall. An install creates the same `app_installations` row registering
- * does, and, where `app-data-permissions` is on, approves the declaration the installer was shown
+ * Discovering published apps of other Workspaces and installing them. Every member browses;
+ * owners and admins (who manage apps) install and uninstall. An install creates the same
+ * `app_installations` row registering does, and, where `app-data-permissions` is on, approves the declaration the installer was shown
  * (Raft: "Install records exactly these"), through the same approval an installed app's update
  * takes; a declaration changed meanwhile is CONFLICT (`app-permissions-changed`) and nothing is
  * installed. Agent access starts as All Agents (the column default). An app another Workspace
@@ -131,12 +128,11 @@ export class AppInstallations {
     ) => Promise<Result>,
     /** Single reads that need no transaction. */
     private readonly reads: AppInstallationStore,
-    private readonly marketplaceOn: InstallationFlag,
-    private readonly permissionsOn: InstallationFlag,
+    private readonly permissionsOn: DataPermissionsFlag,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  /** What opening the Marketplace shows, read in one transaction after one member and flag check:
+  /** What opening the Marketplace shows, read in one transaction after one member check:
    * the apps other Workspaces published with whether this one has installed each, and whether an
    * install approves the shown declaration here (`app-data-permissions` is on), so a surface says
    * "approves exactly these" only where it is true. */
@@ -144,9 +140,7 @@ export class AppInstallations {
     actor: AppActor,
   ): Promise<{ listings: MarketplaceListing[]; approvesOnInstall: boolean }> {
     return this.transaction(async ({ store }) => {
-      const workspace = await requireMarketplaceMember(store, this.marketplaceOn, actor, {
-        manage: false,
-      });
+      const workspace = await this.gatedWorkspace(store, actor, { manage: false });
       return {
         listings: await store.listListings(actor.workspaceId),
         approvesOnInstall: await this.permissionsOn(workspace),
@@ -159,9 +153,7 @@ export class AppInstallations {
    * Workspace already has changes nothing. */
   async install(actor: AppActor, key: string, revision: number): Promise<void> {
     await this.transaction(async ({ store, permissions }) => {
-      const workspace = await requireMarketplaceMember(store, this.marketplaceOn, actor, {
-        manage: true,
-      });
+      const workspace = await this.gatedWorkspace(store, actor, { manage: true });
       // Locks the app row until the transaction ends, so an offline approval cannot run between
       // this check and the installation row: it waits, then removes the row this wrote.
       const listing = await store.findListing(actor.workspaceId, key, { lock: true });
@@ -178,8 +170,8 @@ export class AppInstallations {
   }
 
   /** What a private share link shows a signed-in person: the app and the Workspaces they may
-   * install it in (where they own or administer and the Marketplace is on). NOT_FOUND for a link
-   * that is unknown, revoked or expired. */
+   * install it in (where they own or administer). NOT_FOUND for a link that is unknown, revoked or
+   * expired. */
   async previewShared(userId: string, token: string): Promise<SharedAppPreview> {
     const shared = await this.reads.findLiveShare(hashShareToken(token), this.now());
     if (!shared) throw new AppError("NOT_FOUND");
@@ -190,19 +182,17 @@ export class AppInstallations {
         memberships.map((membership) => membership.workspaceId),
       ),
     );
-    const offered = await Promise.all(
+    const targets = await Promise.all(
       memberships.map(async (membership) => {
         const workspace = { workspaceId: membership.workspaceId, workspaceSlug: membership.slug };
-        const [marketplace, approvesOnInstall] = await Promise.all([
-          this.marketplaceOn(workspace),
-          this.permissionsOn(workspace),
-        ]);
-        return marketplace
-          ? [{ ...membership, installed: installed.has(membership.workspaceId), approvesOnInstall }]
-          : [];
+        return {
+          ...membership,
+          installed: installed.has(membership.workspaceId),
+          approvesOnInstall: await this.permissionsOn(workspace),
+        };
       }),
     );
-    return { app: shared.app, expiresAt: shared.expiresAt, targets: offered.flat() };
+    return { app: shared.app, expiresAt: shared.expiresAt, targets };
   }
 
   /** Installs, in the actor's Workspace, the app a live share link names, the way a Marketplace
@@ -211,9 +201,7 @@ export class AppInstallations {
    * has the app and cannot install it from a link. */
   async installShared(actor: AppActor, token: string, revision: number): Promise<void> {
     await this.transaction(async ({ store, permissions }) => {
-      const workspace = await requireMarketplaceMember(store, this.marketplaceOn, actor, {
-        manage: true,
-      });
+      const workspace = await this.gatedWorkspace(store, actor, { manage: true });
       const shared = await store.findLiveShare(hashShareToken(token), this.now());
       if (!shared || shared.app.ownerWorkspaceId === actor.workspaceId) {
         throw new AppError("NOT_FOUND");
@@ -236,6 +224,17 @@ export class AppInstallations {
     const shared = await this.reads.findLiveShare(hashShareToken(token), this.now());
     if (!shared?.logo) throw new AppError("NOT_FOUND");
     return shared.logo;
+  }
+
+  /** The actor's Workspace as `permissionsOn` reads it, once the actor passes the Marketplace
+   * gate. */
+  private async gatedWorkspace(
+    store: AppInstallationStore,
+    actor: AppActor,
+    options: { manage: boolean },
+  ): Promise<{ workspaceId: string; workspaceSlug: string }> {
+    const { workspaceSlug } = await requireMarketplaceMember(store, actor, options);
+    return { workspaceId: actor.workspaceId, workspaceSlug };
   }
 
   private async installListing(
@@ -263,7 +262,7 @@ export class AppInstallations {
    * and tokens there. NOT_FOUND when it is not installed here, or is the Workspace's own. */
   async uninstall(actor: AppActor, key: string): Promise<void> {
     await this.transaction(async ({ store }) => {
-      await requireMarketplaceMember(store, this.marketplaceOn, actor, { manage: true });
+      await requireMarketplaceMember(store, actor, { manage: true });
       const installed = await store.findInstalledElsewhere(actor.workspaceId, key);
       if (!installed) throw new AppError("NOT_FOUND");
       await store.uninstall({

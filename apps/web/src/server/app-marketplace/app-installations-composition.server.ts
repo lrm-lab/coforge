@@ -5,8 +5,8 @@ import { PrismaAppInstallationStore } from "#src/server/db/repositories/app-inst
 import { inTransaction } from "#src/server/db/transaction.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
-/** Marketplace installs over PostgreSQL, behind `app-marketplace`; an install and its approval
- * (`app-data-permissions`) share one transaction. */
+/** Marketplace installs over PostgreSQL; an install and its approval (`app-data-permissions`)
+ * share one transaction. */
 export function createAppInstallations(db: PrismaClient) {
   return new AppInstallations(
     (work) =>
@@ -14,7 +14,6 @@ export function createAppInstallations(db: PrismaClient) {
         work({ store: new PrismaAppInstallationStore(tx), permissions: createAppPermissions(tx) }),
       ),
     new PrismaAppInstallationStore(db),
-    (workspace) => isFeatureEnabled("app-marketplace", workspace),
     (workspace) => isFeatureEnabled("app-data-permissions", workspace),
   );
 }

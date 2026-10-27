@@ -47,9 +47,9 @@ const CONFIRM_COPY: Record<
 
 /**
  * The editor's danger zone: regenerating the client secret, asking for a published app to go
- * offline (`onRequestUnpublish`, only where `app-marketplace` is on and the app is published) and
- * deleting the app, which a published app cannot be. Each acts at once after its own
- * confirmation, apart from the form's Save.
+ * offline (`onRequestUnpublish`, only while the app is published) and deleting the app, which a
+ * published app cannot be. Each acts at once after its own confirmation, apart from the form's
+ * Save.
  */
 export function DangerZoneRows({
   app,
@@ -63,7 +63,7 @@ export function DangerZoneRows({
   /** Each throws when the server refuses it. */
   onRegenerate: () => Promise<void>;
   onDelete: () => Promise<void>;
-  onRequestUnpublish?: () => Promise<void>;
+  onRequestUnpublish: () => Promise<void>;
 }) {
   const [action, setAction] = useState<DangerAction>("regenerate");
   const [open, setOpen] = useState(false);
@@ -72,7 +72,7 @@ export function DangerZoneRows({
     setOpen(true);
   };
   const copy = CONFIRM_COPY[action];
-  const runs: Record<DangerAction, (() => Promise<void>) | undefined> = {
+  const runs: Record<DangerAction, () => Promise<void>> = {
     regenerate: onRegenerate,
     unpublish: onRequestUnpublish,
     delete: onDelete,
@@ -95,7 +95,7 @@ export function DangerZoneRows({
             </Button>
           }
         />
-        {onRequestUnpublish && app.publishStatus === "published" && (
+        {app.publishStatus === "published" && (
           <DangerRow
             title={m.apps_publish_lifecycle_title()}
             description={m.apps_publish_lifecycle_description()}
@@ -142,7 +142,7 @@ export function DangerZoneRows({
             : copy.failed()
         }
         onConfirm={async () => {
-          await runs[action]?.();
+          await runs[action]();
           setOpen(false);
         }}
       />

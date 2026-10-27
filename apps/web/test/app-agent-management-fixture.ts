@@ -13,10 +13,10 @@ import type { FileStorage } from "#src/server/files/file-storage.server";
 import { workspace } from "./share-link-fixture";
 
 /**
- * Shared by the Agent app-management integration tests: a Workspace (Marketplace flags on unless
- * `flag` is `off`) with an app owned by the Agent `scout`, an admin-role Agent `boss`, a plain Agent
- * `other` and a spare Agent to hand the app to, and the services acting for them. A test file calls
- * `registerShareFixture()` (`share-link-fixture.ts`) once at its top level.
+ * Shared by the Agent app-management integration tests: a Workspace (data permission and
+ * notification flags on) with an app owned by the Agent `scout`, an admin-role Agent `boss`, a
+ * plain Agent `other` and a spare Agent to hand the app to, and the services acting for them. A
+ * test file calls `registerShareFixture()` (`share-link-fixture.ts`) once at its top level.
  */
 export const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]).toString(
   "base64",
@@ -40,8 +40,8 @@ function memoryStorage() {
 
 /** A Workspace with an app owned by `scout`, an admin Agent `boss`, a plain Agent `other`, and a
  * spare Agent to hand the app to. */
-export async function fixture(db: PrismaClient, { flag = "on" as "on" | "off" } = {}) {
-  const ws = await workspace(db, "Acme Labs", { flag });
+export async function fixture(db: PrismaClient) {
+  const ws = await workspace(db, "Acme Labs");
   const suffix = crypto.randomUUID().slice(0, 8);
   const agent = (name: string, role = "member", extra: Record<string, unknown> = {}) =>
     db.agent.create({

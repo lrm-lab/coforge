@@ -9,7 +9,7 @@ import { DAY, db, refusal, registerShareFixture, scene, workspace } from "./shar
 /**
  * Private share links, against local PostgreSQL with migrations applied: who manages a link,
  * creating, regenerating and revoking it, that only its hash is stored, which statuses may get one,
- * the flag, and the logo the share page reads through the token.
+ * and the logo the share page reads through the token.
  *
  * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL.
  */
@@ -89,21 +89,6 @@ test.skipIf(!db)("a link is offered to a private or rejected app only", async ()
     await links.create(s.publisher.actor("owner"), s.key);
   } finally {
     await s.cleanup();
-  }
-});
-
-test.skipIf(!db)("the link card is refused where the flag is off", async () => {
-  const s = await scene(db!, "private");
-  const off = await workspace(db!, "Flag off", { flag: "off" });
-  try {
-    const denied = { code: "ACCESS_DENIED", errorId: "app-marketplace-off" } as const;
-    const links = createAppShareLinks(db!);
-    expect(await refusal(links.create(off.actor("owner"), s.key))).toEqual(denied);
-    expect(await refusal(links.status(off.actor("owner"), s.key))).toEqual(denied);
-    expect(await refusal(links.revoke(off.actor("owner"), s.key))).toEqual(denied);
-  } finally {
-    await s.cleanup();
-    await off.cleanup();
   }
 });
 

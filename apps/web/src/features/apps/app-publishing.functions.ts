@@ -16,7 +16,7 @@ import { APP_KEY_MAX_LENGTH } from "./app-registration";
 /**
  * Marketplace review (`server/app-marketplace/`): the developer's requests from the app editor's
  * Distribution section, and a platform operator's review queue. Thin wrappers; the module decides
- * who may do what, and refuses everything where `app-marketplace` is off.
+ * who may do what.
  */
 
 const keyInput = z.object({ key: z.string().max(APP_KEY_MAX_LENGTH) });

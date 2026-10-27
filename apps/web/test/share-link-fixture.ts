@@ -12,9 +12,9 @@ import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.ser
 
 /**
  * Shared by the private share link integration tests: the database client (undefined unless
- * `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL), a flag file that turns the Marketplace
- * flags on for the Workspaces `workspace()` makes, and Workspace and app fixtures. A test file
- * calls `registerShareFixture()` once at its top level.
+ * `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL), a flag file that turns the data
+ * permission and notification flags on for the Workspaces `workspace()` makes, and Workspace and
+ * app fixtures. A test file calls `registerShareFixture()` once at its top level.
  */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 export const db = connectionString
@@ -43,7 +43,6 @@ export function registerShareFixture() {
       JSON.stringify({
         $schema: "https://flagd.dev/schema/v0/flags.json",
         flags: {
-          "app-marketplace": flag,
           "app-data-permissions": flag,
           "app-notifications": flag,
         },
@@ -61,8 +60,8 @@ export function registerShareFixture() {
   });
 }
 
-/** A Workspace with an owner, an admin and a member; the flags are on unless `flag` is `off`. */
-export async function workspace(db: PrismaClient, name: string, { flag = "on" } = {}) {
+/** A Workspace with an owner, an admin and a member; the flags are on. */
+export async function workspace(db: PrismaClient, name: string) {
   const suffix = crypto.randomUUID().slice(0, 8);
   const roles = { owner: "owner", admin: "admin", member: "member" } as const;
   const people = {
@@ -72,7 +71,7 @@ export async function workspace(db: PrismaClient, name: string, { flag = "on" } 
   };
   const row = await db.workspace.create({
     data: {
-      slug: flag === "on" ? ON_SLUGS[nextOnSlug++]! : `msl-off-${suffix}`,
+      slug: ON_SLUGS[nextOnSlug++]!,
       name,
       members: {
         create: (Object.keys(roles) as (keyof typeof roles)[]).map((role) => ({

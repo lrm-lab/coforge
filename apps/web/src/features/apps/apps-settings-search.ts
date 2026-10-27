@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { APP_CATEGORIES } from "./app-category";
 
-/** The lists Settings → Applications shows, one per tab; the Marketplace tab only where `app-marketplace` is on. */
+/** The lists Settings → Applications shows, one per tab. */
 export const APPS_VIEWS = ["installed", "mine", "marketplace"] as const;
 export type AppsView = (typeof APPS_VIEWS)[number];
 

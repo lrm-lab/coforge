@@ -278,31 +278,6 @@ test.skipIf(!db)(
   },
 );
 
-test.skipIf(!db)(
-  "share links and publish requests are refused where the Marketplace is off",
-  async () => {
-    const f = await fixture(db!, { flag: "off" });
-    try {
-      const caller = f.caller(f.boss);
-      for (const call of [
-        () => f.management.createShareLink(caller, f.key, { expiresDays: 7, origin: ORIGIN }),
-        () => f.management.shareLinkStatus(caller, f.key),
-        () => f.management.requestPublish(caller, f.key),
-      ])
-        expect(await refusal(call())).toEqual({
-          code: "ACCESS_DENIED",
-          errorId: "app-marketplace-off",
-        });
-      // The rest of the management does not depend on it.
-      expect((await f.management.update(caller, f.key, { name: "Still works" })).name).toBe(
-        "Still works",
-      );
-    } finally {
-      await f.cleanup();
-    }
-  },
-);
-
 test.skipIf(!db)("publish requests need a description and follow the review states", async () => {
   const f = await fixture(db!);
   try {

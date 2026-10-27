@@ -59,66 +59,49 @@ test.skipIf(!db)("an owner or admin installs from a link and approves what was s
   }
 });
 
-test.skipIf(!db)(
-  "a dead link, the app's own Workspace and a flag that is off are refused",
-  async () => {
-    const s = await scene(db!, "private");
-    const off = await workspace(db!, "Flag off", { flag: "off" });
-    try {
-      const links = createAppShareLinks(db!);
-      const installs = createAppInstallations(db!);
-      const { token } = await links.create(s.publisher.actor("owner"), s.key);
-      expect(
-        await refusal(installs.installShared(s.publisher.actor("owner"), token, 1)),
-      ).toMatchObject({
+test.skipIf(!db)("a dead link and the app's own Workspace are refused", async () => {
+  const s = await scene(db!, "private");
+  try {
+    const links = createAppShareLinks(db!);
+    const installs = createAppInstallations(db!);
+    const { token } = await links.create(s.publisher.actor("owner"), s.key);
+    expect(
+      await refusal(installs.installShared(s.publisher.actor("owner"), token, 1)),
+    ).toMatchObject({
+      code: "NOT_FOUND",
+    });
+    for (const dead of ["", "cfa_share_unknown", token.slice(0, -1)]) {
+      expect(await refusal(installs.installShared(s.buyer.actor("owner"), dead, 1))).toMatchObject({
         code: "NOT_FOUND",
       });
-      expect(await refusal(installs.installShared(off.actor("owner"), token, 1))).toEqual({
-        code: "ACCESS_DENIED",
-        errorId: "app-marketplace-off",
+      expect(await refusal(installs.previewShared(s.buyer.people.owner.id, dead))).toMatchObject({
+        code: "NOT_FOUND",
       });
-      for (const dead of ["", "cfa_share_unknown", token.slice(0, -1)]) {
-        expect(
-          await refusal(installs.installShared(s.buyer.actor("owner"), dead, 1)),
-        ).toMatchObject({
-          code: "NOT_FOUND",
-        });
-        expect(await refusal(installs.previewShared(s.buyer.people.owner.id, dead))).toMatchObject({
-          code: "NOT_FOUND",
-        });
-      }
-      // An expired link is dead too.
-      await db!.appShareLink.updateMany({
-        where: { appId: s.appId },
-        data: { expiresAt: new Date(Date.now() - 1000) },
-      });
-      expect(await refusal(installs.installShared(s.buyer.actor("owner"), token, 1))).toMatchObject(
-        {
-          code: "NOT_FOUND",
-        },
-      );
-      expect(await links.status(s.publisher.actor("owner"), s.key)).toBeNull();
-      // A new link replaces the expired one.
-      await links.create(s.publisher.actor("owner"), s.key);
-      expect(await s.installation(s.buyer.id)).toBeNull();
-    } finally {
-      await s.cleanup();
-      await off.cleanup();
     }
-  },
-);
+    // An expired link is dead too.
+    await db!.appShareLink.updateMany({
+      where: { appId: s.appId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    expect(await refusal(installs.installShared(s.buyer.actor("owner"), token, 1))).toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(await links.status(s.publisher.actor("owner"), s.key)).toBeNull();
+    // A new link replaces the expired one.
+    await links.create(s.publisher.actor("owner"), s.key);
+    expect(await s.installation(s.buyer.id)).toBeNull();
+  } finally {
+    await s.cleanup();
+  }
+});
 
 test.skipIf(!db)("the share page lists the Workspaces a person may install in", async () => {
   const s = await scene(db!, "private");
-  const off = await workspace(db!, "Flag off", { flag: "off" });
   try {
     const { token } = await createAppShareLinks(db!).create(s.publisher.actor("owner"), s.key);
     const installs = createAppInstallations(db!);
     const person = s.buyer.people.admin;
-    // The person also owns a Workspace where the flag is off, and is a plain member elsewhere.
-    await db!.workspaceMembership.create({
-      data: { workspaceId: off.id, userId: person.id, role: "owner" },
-    });
+    // The person is a plain member of the publisher's Workspace, which is no target.
     await db!.workspaceMembership.create({
       data: { workspaceId: s.publisher.id, userId: person.id, role: "member" },
     });
@@ -145,7 +128,6 @@ test.skipIf(!db)("the share page lists the Workspaces a person may install in", 
     expect(owner.targets).toMatchObject([{ name: "Acme Labs", installed: true }]);
   } finally {
     await s.cleanup();
-    await off.cleanup();
   }
 });
 

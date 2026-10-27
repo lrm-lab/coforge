@@ -12,7 +12,7 @@ import { APP_KEY_MAX_LENGTH } from "./app-registration";
 /**
  * The Marketplace tab of Settings → Applications (`server/app-marketplace/`): the apps other
  * Workspaces published, and installing and uninstalling them. Thin wrappers; the module decides
- * who may do what and refuses everything where `app-marketplace` is off.
+ * who may do what.
  */
 
 const keyInput = z.object({ key: z.string().max(APP_KEY_MAX_LENGTH) });

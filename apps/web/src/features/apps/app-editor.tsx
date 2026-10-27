@@ -44,11 +44,10 @@ import type { AppDeclarations, AppSummary } from "./apps.functions";
 /**
  * Registers an app (`app` absent) or edits one, in one wide form: a section nav beside Profile,
  * Login with CoForge, Installation setup, App permissions and App notifications (each where its
- * flag is on: `declares`),
- * and, when editing, the Danger zone. One Save sends the form, the declarations included, which a
- * registration writes with the app; approving a permissions update, regenerating the secret and
- * deleting act at once. A click outside never
- * closes it; Escape and the close button do, except while a save runs.
+ * flag is on: `declares`), and, when editing, Agent access, Distribution and the Danger zone. One
+ * Save sends the form, the declarations included, which a registration writes with the app;
+ * approving a permissions update, regenerating the secret and deleting act at once. A click outside
+ * never closes it; Escape and the close button do, except while a save runs.
  */
 export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
   const [saving, guard] = useSubmitGuard();
@@ -100,7 +99,7 @@ type AppEditorProps = {
   onApprovePermissions: (app: AppSummary, revision: number) => Promise<void>;
   /** Reads the apps again for the installation's setup status; throws when it can't. */
   onRefreshSetup: () => Promise<void>;
-  /** Marketplace review requests (`declares.marketplace`); each throws when refused. */
+  /** Marketplace review requests; each throws when refused. */
   onRequestPublish: (app: AppSummary) => Promise<void>;
   onWithdrawPublish: (app: AppSummary) => Promise<void>;
   onRequestUnpublish: (app: AppSummary) => Promise<void>;
@@ -170,9 +169,7 @@ function AppEditorForm({
       : []),
     ...(declares.bot ? [{ id: ids.bot, title: m.apps_bot_section() }] : []),
     ...(editing ? [{ id: ids.agentAccess, title: m.apps_agent_access_title() }] : []),
-    ...(editing && declares.marketplace
-      ? [{ id: ids.distribution, title: m.apps_section_distribution() }]
-      : []),
+    ...(editing ? [{ id: ids.distribution, title: m.apps_section_distribution() }] : []),
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
   const [active, setActive] = useActiveSection(scroller, sections);
@@ -414,7 +411,7 @@ function AppEditorForm({
               <AgentAccessScope appKey={app.key} canManage showTitle={false} />
             </EditorSection>
           )}
-          {app && declares.marketplace && (
+          {app && (
             <DistributionSection
               id={ids.distribution}
               appKey={app.key}
@@ -437,9 +434,7 @@ function AppEditorForm({
                 isDisabled={saving}
                 onRegenerate={() => onRegenerate(app)}
                 onDelete={() => onDelete(app)}
-                onRequestUnpublish={
-                  declares.marketplace ? () => onRequestUnpublish(app) : undefined
-                }
+                onRequestUnpublish={() => onRequestUnpublish(app)}
               />
             </EditorSection>
           )}

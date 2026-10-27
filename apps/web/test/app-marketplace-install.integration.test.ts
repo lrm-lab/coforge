@@ -46,7 +46,6 @@ beforeAll(async () => {
     JSON.stringify({
       $schema: "https://flagd.dev/schema/v0/flags.json",
       flags: {
-        "app-marketplace": flag,
         "app-data-permissions": flag,
         "app-notifications": flag,
       },
@@ -63,8 +62,8 @@ afterAll(async () => {
   await db?.$disconnect();
 });
 
-/** A Workspace with an owner, an admin and a member; the flags are on unless `flag` is `off`. */
-async function workspace(db: PrismaClient, name: string, { flag = "on" } = {}) {
+/** A Workspace with an owner, an admin and a member; the flags are on. */
+async function workspace(db: PrismaClient, name: string) {
   const suffix = crypto.randomUUID().slice(0, 8);
   const roles = { owner: "owner", admin: "admin", member: "member" } as const;
   const people = {
@@ -74,7 +73,7 @@ async function workspace(db: PrismaClient, name: string, { flag = "on" } = {}) {
   };
   const row = await db.workspace.create({
     data: {
-      slug: flag === "on" ? ON_SLUGS[nextOnSlug++]! : `mki-off-${suffix}`,
+      slug: ON_SLUGS[nextOnSlug++]!,
       name,
       members: {
         create: (Object.keys(roles) as (keyof typeof roles)[]).map((role) => ({
@@ -226,22 +225,19 @@ test.skipIf(!db)("an app waiting to go offline is still installable", async () =
   }
 });
 
-test.skipIf(!db)("nothing of the Marketplace works where the flag is off", async () => {
+test.skipIf(!db)("a person who is not a member of the Workspace is refused", async () => {
   const s = await scene(db!);
-  const off = await workspace(db!, "Flag off", { flag: "off" });
   try {
     const installs = createAppInstallations(db!);
-    const denied = { code: "ACCESS_DENIED", errorId: "app-marketplace-off" } as const;
-    expect(await refusal(installs.browse(off.actor("owner")))).toEqual(denied);
-    expect(await refusal(installs.install(off.actor("owner"), s.key, 1))).toEqual(denied);
-    expect(await refusal(installs.uninstall(off.actor("owner"), s.key))).toEqual(denied);
-    // A non-member is refused as for any Workspace.
-    expect(
-      await refusal(installs.browse({ workspaceId: s.buyer.id, actorUserId: off.people.owner.id })),
-    ).toMatchObject({ code: "ACCESS_DENIED" });
+    const outsider = { workspaceId: s.buyer.id, actorUserId: s.publisher.people.owner.id };
+    for (const refused of [
+      () => installs.browse(outsider),
+      () => installs.install(outsider, s.key, 1),
+      () => installs.uninstall(outsider, s.key),
+    ])
+      expect(await refusal(refused())).toMatchObject({ code: "ACCESS_DENIED" });
   } finally {
     await s.cleanup();
-    await off.cleanup();
   }
 });
 

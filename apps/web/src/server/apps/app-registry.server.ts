@@ -200,21 +200,8 @@ export class AppRegistry {
 
   /** Changes the fields `patch` names; never the app's key or owner. */
   async updateApp(actor: AppActor, key: string, patch: AppPatch): Promise<AppView> {
-    return (await this.updateAppInWorkspace(actor, key, patch)).app;
-  }
-
-  /** `updateApp`, also answering the Workspace's slug (the member lookup already read it), for a
-   * caller that checks a flag the slug can decide. */
-  async updateAppInWorkspace(
-    actor: AppActor,
-    key: string,
-    patch: AppPatch,
-  ): Promise<{ app: AppView; workspaceSlug: string }> {
-    const { member } = await this.ownApp(actor, key);
-    return {
-      app: await this.applyPatch(actor.workspaceId, key, patch),
-      workspaceSlug: member.workspaceSlug,
-    };
+    await this.requireOwnApp(actor, key);
+    return this.applyPatch(actor.workspaceId, key, patch);
   }
 
   /** `updateApp` for an app an Agent manages (`AppOwnerAgents.manager` judged it). */
@@ -337,17 +324,13 @@ export class AppRegistry {
    * app is not confirmed to exist.
    */
   async requireOwnApp(actor: AppActor, key: string): Promise<AppView> {
-    return (await this.ownApp(actor, key)).app;
-  }
-
-  private async ownApp(actor: AppActor, key: string) {
     const [found, app] = await Promise.all([
       this.store.findMember(actor.workspaceId, actor.actorUserId),
       this.store.find(key),
     ]);
-    const member = this.appManager(found);
+    this.appManager(found);
     if (!app || app.ownerWorkspaceId !== actor.workspaceId) throw new AppError("NOT_FOUND");
-    return { app, member };
+    return app;
   }
 
   /** Moves the app's logo from the one `app` was read with to `to`, leaving the old object to the

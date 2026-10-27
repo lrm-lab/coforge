@@ -81,8 +81,8 @@ export type AppSummary = Omit<
   /** The Agent that registered the app and manages it with the Workspace's owners and admins;
    * present only for an app this Workspace owns, and only for a live public Agent. */
   ownerAgent?: { name: string };
-  /** Where the app is in Marketplace review; present only for an app this Workspace owns, where
-   * `app-marketplace` is on: an installing Workspace never sees the developer's review state. */
+  /** Where the app is in Marketplace review; present only for an app this Workspace owns: an
+   * installing Workspace never sees the developer's review state. */
   publishStatus?: AppPublishStatus;
 };
 
@@ -140,8 +140,6 @@ const summary = (
   viewerWorkspaceId: string,
   permissions?: AppPermissionsView | null,
   setup?: AppSetupView | null,
-  /** `app-marketplace` is on: the summary says where the app is in review. */
-  marketplace = false,
 ): AppSummary => ({
   ...app,
   logoUrl: appLogoUrl(ownerWorkspaceId, app.key, logoObjectKey),
@@ -151,7 +149,7 @@ const summary = (
   ...(permissions && { permissions: permissionsSummary(permissions) }),
   ...(setup && { setup: setupSummary(setup) }),
   // The developer's review state is the developer's: an installing Workspace never sees it.
-  ...(marketplace && ownerWorkspaceId === viewerWorkspaceId && { publishStatus }),
+  ...(ownerWorkspaceId === viewerWorkspaceId && { publishStatus }),
 });
 
 /** A text the registry counts in code points; zod counts UTF-16 units, at most two per code point. */
@@ -174,8 +172,7 @@ const keyInput = z.object({ key: z.string().max(APP_KEY_MAX_LENGTH) });
 
 /** Which declarations the editor shows in this Workspace: where the `app-data-permissions` and
  * `app-installation-setup` flags are on, and, with `app-data-permissions`, `app-notifications`
- * (the App notifications section and the events in the permissions); `marketplace` and `reviewer`
- * where `app-marketplace` is. */
+ * (the App notifications section and the events in the permissions). */
 export type AppDeclarations = {
   permissions: boolean;
   setup: boolean;
@@ -184,9 +181,7 @@ export type AppDeclarations = {
   agentEvents: boolean;
   /** The editor's Bot section and the installation's Enable bot (`app-bot`). */
   bot: boolean;
-  /** `app-marketplace` is on: the editor's Distribution section and the apps' publish status. */
-  marketplace: boolean;
-  /** The viewer reviews Marketplace requests (a platform operator), where it is on. */
+  /** The viewer reviews Marketplace requests (a platform operator). */
   reviewer: boolean;
 };
 
@@ -196,20 +191,16 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     declareNoStore();
     const actor = actorOf(context);
-    const [{ apps, workspaceSlug }, permissions, setups] = await Promise.all([
+    const [{ apps, workspaceSlug }, permissions, setups, reviewer] = await Promise.all([
       createAppRegistry(context.db).listWorkspaceApps(actor),
       createAppPermissions(context.db).workspacePermissions(actor),
       createAppInstallationSetup(context.db).workspaceSetups(actor),
+      createAppPublishing(context.db).isReviewer(actor.actorUserId),
     ]);
     // Only an app with an owner Agent needs its name looked up.
     const ownerAgents = apps.some((app) => app.ownerAgentId)
       ? await createAppOwnerAgents(context.db).ownerNames(actor.workspaceId)
       : new Map<string, string>();
-    // After the member check above, which read the slug.
-    const { enabled: marketplace, reviewer } = await createAppPublishing(context.db).access(
-      { workspaceId: actor.workspaceId, workspaceSlug },
-      actor.actorUserId,
-    );
     const bot = await isFeatureEnabled("app-bot", {
       workspaceId: actor.workspaceId,
       workspaceSlug,
@@ -221,13 +212,7 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
       : null;
     return {
       apps: apps.map((app) => ({
-        ...summary(
-          app,
-          actor.workspaceId,
-          permissions?.apps.get(app.key),
-          setups?.get(app.key),
-          marketplace,
-        ),
+        ...summary(app, actor.workspaceId, permissions?.apps.get(app.key), setups?.get(app.key)),
         ...(app.ownerWorkspaceId === actor.workspaceId &&
           ownerAgents.has(app.key) && { ownerAgent: { name: ownerAgents.get(app.key)! } }),
         ...(bots?.get(app.key)?.declared && { bot: botSummary(bots.get(app.key)!) }),
@@ -245,7 +230,6 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
           workspaceSlug,
         }),
         bot,
-        marketplace,
         reviewer,
       } satisfies AppDeclarations,
     };
@@ -306,7 +290,7 @@ export const updateWorkspaceApp = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     declareNoStore();
     const actor = actorOf(context);
-    const { app, permissions, setup, workspaceSlug } = await createAppEditorSave(context.db).save(
+    const { app, permissions, setup } = await createAppEditorSave(context.db).save(
       actor,
       data.key,
       {
@@ -316,11 +300,7 @@ export const updateWorkspaceApp = createServerFn({ method: "POST" })
         setup: data.setup,
       },
     );
-    const marketplace = await createAppPublishing(context.db).isEnabledIn({
-      workspaceId: actor.workspaceId,
-      workspaceSlug,
-    });
-    return summary(app, actor.workspaceId, permissions, setup, marketplace);
+    return summary(app, actor.workspaceId, permissions, setup);
   });
 
 /** Approves the data app `key` declares at `revision`, the one the approver was shown, for this

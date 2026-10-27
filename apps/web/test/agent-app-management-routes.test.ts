@@ -111,12 +111,6 @@ test("service refusals become the Agent app envelope", async () => {
       "invalid_input",
       /cannot be cleared/,
     ],
-    [
-      new AppError("ACCESS_DENIED", { errorId: "app-marketplace-off" }),
-      403,
-      "access_denied",
-      /Marketplace/,
-    ],
   ];
   for (const [error, status, errorCode, message] of cases) {
     const response = await handleAgentAppDelete(

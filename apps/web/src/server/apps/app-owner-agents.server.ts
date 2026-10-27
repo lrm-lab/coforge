@@ -34,9 +34,7 @@ type LiveAgent = { id: string; workspaceId: string; role: string };
 export type OwnerCandidate = { id: string; name: string };
 
 export interface AppOwnerAgentStore {
-  agent(
-    agentId: string,
-  ): Promise<(LiveAgent & { archived: boolean; workspaceSlug: string }) | undefined>;
+  agent(agentId: string): Promise<(LiveAgent & { archived: boolean }) | undefined>;
   /** The live public Agent of the Workspace named by `handle` (its name, `@name` or its id). */
   candidate(workspaceId: string, handle: string): Promise<OwnerCandidate | undefined>;
   /** An Agent's name and whether it is archived; none once its row is gone. */
@@ -136,7 +134,7 @@ export class AppOwnerAgents {
     const agent = await this.live(caller);
     const app = await this.store.find(clientKey);
     if (!app || !canManage(agent, app)) throw new AppError("NOT_FOUND");
-    return { workspaceId: agent.workspaceId, workspaceSlug: agent.workspaceSlug, app };
+    return { workspaceId: agent.workspaceId, app };
   }
 
   /** Makes another live Agent of the Workspace the app's owner Agent; the current owner (or an
@@ -203,7 +201,7 @@ export class AppOwnerAgents {
   }
 
   /** The calling Agent, if it is in the Workspace its key names and not archived. */
-  private async live(caller: OwnerAgentCaller): Promise<LiveAgent & { workspaceSlug: string }> {
+  private async live(caller: OwnerAgentCaller): Promise<LiveAgent> {
     const agent = await this.store.agent(caller.agentId);
     if (!agent || agent.archived || agent.workspaceId !== caller.workspaceId)
       throw new AppError("NOT_FOUND");

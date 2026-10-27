@@ -24,7 +24,7 @@ function createLabel(hasLink: boolean, busy: boolean): string {
 type Running = "create" | "revoke" | null;
 
 /**
- * The editor's "Private share link" card (inside Distribution, behind `app-marketplace`): whether
+ * The editor's "Private share link" card (inside Distribution): whether
  * a link is active and when it ends, Create or Regenerate (which revokes the old link), and Revoke.
  * The URL is shown once, when it is made, and never again, because the server keeps only its hash.
  * A private or rejected app can get a link; once it is requested or published only an existing

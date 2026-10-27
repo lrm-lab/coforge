@@ -6,8 +6,7 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 import { isAppErrorCode } from "#src/lib/app-error";
 
 export const Route = createFileRoute("/w/$workspaceSlug/app-review")({
-  // Only platform operators see this page, and only where `app-marketplace` is on: for anyone
-  // else the page does not exist.
+  // Only platform operators see this page: for anyone else it does not exist.
   loader: async () => {
     try {
       return await loadAppReviews();
