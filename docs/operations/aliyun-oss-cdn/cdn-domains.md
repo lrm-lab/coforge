@@ -65,7 +65,8 @@ EdgeScript：域名边界本身就是 fail-closed 的，一个域名请求另一
    两者都必须设置和验收。
 
    `files` 的 object key 不可变，签名 URL 在 10 分钟窗口内稳定，所以 POP 可以缓存 1 天，
-   浏览器按签名有效期缓存 30 分钟；`private` 不让共享缓存保存。client 头用 Modify
+   浏览器从收到响应起缓存 30 分钟（最多比签名过期晚 10 分钟，内容不可变且只给已授权的
+   同一用户）；`private` 不让共享缓存保存。client 头用 Modify
    Outgoing Response Header 的 `Add Cache-Control`，OSS origin 不返回该头。
    2026-10-27 生产与 staging 同时改为此配置，同一签名 URL 第二次请求返回
    `X-Cache: HIT`、`X-Swift-CacheTime: 86400`。

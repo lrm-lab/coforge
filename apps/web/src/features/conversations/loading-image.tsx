@@ -124,7 +124,7 @@ export function LoadingImage({
       src,
       fallback: false,
       status: "loading",
-      shown: state.status === "loaded" ? (state.shown ?? current) : undefined,
+      shown: state.shown ?? (state.status === "loaded" ? current : undefined),
     });
   const img = useRef<HTMLImageElement>(null);
   const onFailedRef = useRef(onFailed);
@@ -163,6 +163,7 @@ export function LoadingImage({
     return () => {
       probe.onload = null;
       probe.onerror = null;
+      probe.src = "";
     };
   }, [shown, current, src]);
   if (shown) return <ImageFrame {...frame} src={shown} status="loaded" imgRef={img} />;

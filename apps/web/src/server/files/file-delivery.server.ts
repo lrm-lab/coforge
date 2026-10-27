@@ -213,10 +213,9 @@ export function createFileDelivery(config: FileDeliveryConfig): FileDelivery | n
  *
  * `uri` is the path portion only (`/` + the object key), with every path segment run through
  * `encodeURIComponent` before it is used in either the hash input or the URL, so the hash is
- * always over exactly the string the CDN edge will see. `uid` is always `0`. `timestamp` is the
- * start of the signing window ({@link FILE_DELIVERY_URL_WINDOW_SECONDS}) and `rand` a keyed hash
- * of the path and that timestamp (the format only asks for an alphanumeric token), so one object
- * signs to one URL per window and nobody without the key can predict it.
+ * always over exactly the string the CDN edge will see. `rand` and `uid` are always `0`: the md5
+ * already covers the key, so neither adds secrecy. `timestamp` is the start of the signing window
+ * ({@link FILE_DELIVERY_URL_WINDOW_SECONDS}), so one object signs to one URL per window.
  */
 export class CdnTypeAFileDelivery implements FileDelivery {
   constructor(private readonly config: Extract<FileDeliveryConfig, object>) {}
@@ -226,12 +225,9 @@ export class CdnTypeAFileDelivery implements FileDelivery {
       .split("/")
       .map((segment) => encodeURIComponent(segment))
       .join("/")}`;
-    const window = FILE_DELIVERY_URL_WINDOW_SECONDS;
-    const timestamp = Math.floor(now.getTime() / 1000 / window) * window;
-    const rand = new Bun.CryptoHasher("sha256", this.config.key)
-      .update(`${uri}:${timestamp}`)
-      .digest("hex")
-      .slice(0, 32);
+    const windowSeconds = FILE_DELIVERY_URL_WINDOW_SECONDS;
+    const timestamp = Math.floor(now.getTime() / 1000 / windowSeconds) * windowSeconds;
+    const rand = "0";
     const uid = "0";
     const sstring = `${uri}-${timestamp}-${rand}-${uid}-${this.config.key}`;
     const md5hex = new Bun.CryptoHasher("md5").update(sstring).digest("hex");
