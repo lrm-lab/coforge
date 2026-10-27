@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 import { describe, expect, test } from "bun:test";
 
@@ -6,6 +6,7 @@ import {
   CdnTypeAFileDelivery,
   createFileDelivery,
   FILE_DELIVERY_TTL_SECONDS,
+  FILE_DELIVERY_URL_WINDOW_SECONDS,
   FileDeliveryConfigError,
   fileDeliveryStatus,
   getFileDelivery,
@@ -111,43 +112,87 @@ test("rejects http, a path/query/hash, and a missing key", async () => {
   ).rejects.toThrow(FileDeliveryConfigError);
 });
 
-test("Type A signing matches Alibaba Cloud's algorithm against a fixed clock, key, and rand", () => {
+/** The `rand` a URL carries: a keyed hash of its path and signing window, so it is fixed for both. */
+function expectedRand(uri: string, timestamp: number, key: string) {
+  return createHmac("sha256", key).update(`${uri}:${timestamp}`).digest("hex").slice(0, 32);
+}
+
+test("Type A signing matches Alibaba Cloud's algorithm against a fixed clock and key", () => {
   expect(FILE_DELIVERY_TTL_SECONDS).toBe(1800);
-  const delivery = new CdnTypeAFileDelivery(
-    { baseUrl: "https://files-staging.coforge.cn", key: "primarykey" },
-    () => "rand1234",
+  const delivery = new CdnTypeAFileDelivery({
+    baseUrl: "https://files-staging.coforge.cn",
+    key: "primarykey",
+  });
+  // On a window boundary, so the signed timestamp is the clock itself.
+  const timestamp = 1700000400;
+  expect(timestamp % FILE_DELIVERY_URL_WINDOW_SECONDS).toBe(0);
+
+  const { url, expiresAt } = delivery.signedUrl(
+    "workspaces/w/attachments/a/original",
+    new Date(timestamp * 1000),
   );
-  const now = new Date(1700000000 * 1000);
 
-  const { url, expiresAt } = delivery.signedUrl("workspaces/w/attachments/a/original", now);
-
+  const uri = "/workspaces/w/attachments/a/original";
+  const rand = expectedRand(uri, timestamp, "primarykey");
   const expectedMd5 = createHash("md5")
-    .update("/workspaces/w/attachments/a/original-1700000000-rand1234-0-primarykey")
+    .update(`${uri}-${timestamp}-${rand}-0-primarykey`)
     .digest("hex");
   expect(url).toBe(
-    "https://files-staging.coforge.cn/workspaces/w/attachments/a/original" +
-      `?auth_key=1700000000-rand1234-0-${expectedMd5}`,
+    `https://files-staging.coforge.cn${uri}?auth_key=${timestamp}-${rand}-0-${expectedMd5}`,
   );
-  expect(expiresAt).toEqual(new Date((1700000000 + FILE_DELIVERY_TTL_SECONDS) * 1000));
+  expect(expiresAt).toEqual(new Date((timestamp + FILE_DELIVERY_TTL_SECONDS) * 1000));
 });
 
 test("encodes each object-key path segment consistently for the hash input and the URL", () => {
-  const delivery = new CdnTypeAFileDelivery(
-    { baseUrl: "https://files-staging.coforge.cn", key: "k+ey/with-specials" },
-    () => "r",
-  );
-  const now = new Date(1000 * 1000);
+  const delivery = new CdnTypeAFileDelivery({
+    baseUrl: "https://files-staging.coforge.cn",
+    key: "k+ey/with-specials",
+  });
   const objectKey = "workspaces/w+1/attachments/a b/original";
 
-  const { url } = delivery.signedUrl(objectKey, now);
+  const { url } = delivery.signedUrl(objectKey, new Date(1200 * 1000));
 
   const encodedUri = "/workspaces/w%2B1/attachments/a%20b/original";
+  const rand = expectedRand(encodedUri, 1200, "k+ey/with-specials");
   const expectedMd5 = createHash("md5")
-    .update(`${encodedUri}-1000-r-0-k+ey/with-specials`)
+    .update(`${encodedUri}-1200-${rand}-0-k+ey/with-specials`)
     .digest("hex");
   expect(url).toBe(
-    `https://files-staging.coforge.cn${encodedUri}?auth_key=1000-r-0-${expectedMd5}`,
+    `https://files-staging.coforge.cn${encodedUri}?auth_key=1200-${rand}-0-${expectedMd5}`,
   );
+});
+
+describe("a signed URL is stable within its window, so the browser can reuse what it loaded", () => {
+  const delivery = new CdnTypeAFileDelivery({
+    baseUrl: "https://files-staging.coforge.cn",
+    key: "primarykey",
+  });
+  const key = "workspaces/w/attachments/a/original";
+  const windowStart = 1700000400;
+  const at = (seconds: number) => delivery.signedUrl(key, new Date(seconds * 1000));
+
+  test("the same object signed anywhere in one window gets the very same URL", () => {
+    const first = at(windowStart);
+    expect(at(windowStart + 1).url).toBe(first.url);
+    expect(at(windowStart + FILE_DELIVERY_URL_WINDOW_SECONDS - 1).url).toBe(first.url);
+    expect(at(windowStart + 250).expiresAt).toEqual(first.expiresAt);
+  });
+
+  test("the next window signs a new URL, and another object never shares one", () => {
+    expect(at(windowStart + FILE_DELIVERY_URL_WINDOW_SECONDS).url).not.toBe(at(windowStart).url);
+    expect(delivery.signedUrl(`${key}-2`, new Date(windowStart * 1000)).url).not.toBe(
+      at(windowStart).url,
+    );
+  });
+
+  test("a URL signed late in its window still has at least 15 minutes left", () => {
+    for (const offset of [0, 1, 299, FILE_DELIVERY_URL_WINDOW_SECONDS - 1]) {
+      const now = windowStart + offset;
+      const left = at(now).expiresAt.getTime() / 1000 - now;
+      expect(left).toBeGreaterThanOrEqual(15 * 60);
+      expect(left).toBeLessThanOrEqual(FILE_DELIVERY_TTL_SECONDS);
+    }
+  });
 });
 
 describe("delivery must not be the application's own origin", () => {

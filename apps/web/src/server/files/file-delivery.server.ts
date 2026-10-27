@@ -37,6 +37,14 @@ export interface FileDelivery {
 /** The Alibaba Cloud CDN console's default 鉴权URL有效时长; the console must stay at this value. */
 export const FILE_DELIVERY_TTL_SECONDS = 1800;
 
+/**
+ * Signing windows: every signature of one object within a window is the same URL, so the browser
+ * reuses the image it already loaded instead of fetching it again under a new `auth_key`. Type A
+ * counts validity from the URL's own timestamp, so a URL signed at the end of its window still
+ * has `TTL - WINDOW` (20 minutes) left, more than the 15 a page needs before it re-reads.
+ */
+export const FILE_DELIVERY_URL_WINDOW_SECONDS = 600;
+
 export type FileDeliveryConfig = { baseUrl: string; key: string } | null;
 
 export class FileDeliveryConfigError extends Error {
@@ -205,22 +213,25 @@ export function createFileDelivery(config: FileDeliveryConfig): FileDelivery | n
  *
  * `uri` is the path portion only (`/` + the object key), with every path segment run through
  * `encodeURIComponent` before it is used in either the hash input or the URL, so the hash is
- * always over exactly the string the CDN edge will see. `uid` is always `0`. `rand` defaults to
- * a random UUID with the dashes stripped, but can be injected for deterministic tests.
+ * always over exactly the string the CDN edge will see. `uid` is always `0`. `timestamp` is the
+ * start of the signing window ({@link FILE_DELIVERY_URL_WINDOW_SECONDS}) and `rand` a keyed hash
+ * of the path and that timestamp (the format only asks for an alphanumeric token), so one object
+ * signs to one URL per window and nobody without the key can predict it.
  */
 export class CdnTypeAFileDelivery implements FileDelivery {
-  constructor(
-    private readonly config: Extract<FileDeliveryConfig, object>,
-    private readonly randomToken: () => string = () => crypto.randomUUID().replace(/-/g, ""),
-  ) {}
+  constructor(private readonly config: Extract<FileDeliveryConfig, object>) {}
 
   signedUrl(objectKey: string, now: Date = new Date()): { url: string; expiresAt: Date } {
     const uri = `/${objectKey
       .split("/")
       .map((segment) => encodeURIComponent(segment))
       .join("/")}`;
-    const timestamp = Math.floor(now.getTime() / 1000);
-    const rand = this.randomToken();
+    const window = FILE_DELIVERY_URL_WINDOW_SECONDS;
+    const timestamp = Math.floor(now.getTime() / 1000 / window) * window;
+    const rand = new Bun.CryptoHasher("sha256", this.config.key)
+      .update(`${uri}:${timestamp}`)
+      .digest("hex")
+      .slice(0, 32);
     const uid = "0";
     const sstring = `${uri}-${timestamp}-${rand}-${uid}-${this.config.key}`;
     const md5hex = new Bun.CryptoHasher("md5").update(sstring).digest("hex");
