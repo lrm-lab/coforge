@@ -195,11 +195,14 @@ describe("desktop proxy", () => {
       const payload = JSON.stringify({
         fields: [{ id: "username", selector: "#user", value: "ada" }],
       });
-      const response = await fetch(`http://127.0.0.1:${proxy.port}/desktop/computer-1/agent-1/fill`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: payload,
-      });
+      const response = await fetch(
+        `http://127.0.0.1:${proxy.port}/desktop/computer-1/agent-1/fill`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: payload,
+        },
+      );
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ filled: ["username"] });
       expect(seen).toEqual([{ length: String(payload.length), body: payload }]);
