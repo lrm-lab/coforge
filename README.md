@@ -77,6 +77,7 @@ The architecture invariants every change must respect are in
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
 | [apps/web/assets/mascots/README.md](apps/web/assets/mascots/README.md) | Agent mascot Rive file: generator, runtime contract, static avatars, Rive CLI pin |
 | [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |
+| [apps/web/src/components/layout/sidebar/README.md](apps/web/src/components/layout/sidebar/README.md) | The app sidebar, copied from Untitled UI's templates and adapted |
 | [packages/computer/README.md](packages/computer/README.md) | `coforge-computer` package |
 | [packages/daemon/README.md](packages/daemon/README.md) | `coforge-daemon` package |
 | [packages/anvil/README.md](packages/anvil/README.md) | `@lrm/coforge-anvil` Agent contracts, runtime adapters and shared execution |
