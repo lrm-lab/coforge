@@ -84,20 +84,26 @@ export function isActivityCallId(value: unknown): value is string {
   return validLine(value, 128);
 }
 
+function hasAsciiControl(value: string): boolean {
+  for (const unit of value) {
+    const code = unit.codePointAt(0);
+    if (code === undefined || code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
 /** A non-empty single-line string of at most `maxCodePoints` code points. */
 function validLine(value: unknown, maxCodePoints: number): value is string {
   return (
     typeof value === "string" &&
     value.length > 0 &&
     codePointLength(value) <= maxCodePoints &&
-    !/[\x00-\x1f\x7f]/.test(value)
+    !hasAsciiControl(value)
   );
 }
 
 // `toolInput`: the short, already-redacted argument summary. Same
 // control-character rejection as `validLine`, but it may be empty.
 function validToolInput(value: unknown): value is string {
-  return (
-    typeof value === "string" && codePointLength(value) <= 200 && !/[\x00-\x1f\x7f]/.test(value)
-  );
+  return typeof value === "string" && codePointLength(value) <= 200 && !hasAsciiControl(value);
 }
