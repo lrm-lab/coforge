@@ -6,6 +6,7 @@ import { RUNTIME_AUTH_PROVIDERS, type RuntimeAuthProvider } from "@lrm/coforge-s
 
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { m } from "#src/paraglide/messages";
 import type { ComputerDetailView } from "./computer-detail";
 import { computerLabel } from "./computer-identity";
@@ -13,6 +14,7 @@ import { RuntimeChip } from "./runtime-chip";
 import { RuntimeSignInDialog, unsupportedText } from "./runtime-sign-in-dialog";
 import { RuntimeSignOutDialog } from "./runtime-sign-out-dialog";
 import { RuntimeUsage } from "./runtime-usage";
+import type { AccountState } from "./runtime-usage-status";
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
   "rounded-md outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
@@ -83,27 +85,34 @@ export function ComputerRuntimeList({
           const open = (kind: AuthDialog["kind"]) =>
             isAuthProvider(provider) &&
             setAuthDialog({ kind, provider, name: runtime.displayName });
-          const signIn =
-            signable &&
-            auth?.state === "logged_out" &&
-            (provider !== RUNTIME_PROVIDER.KIRO || computer.platform !== "win32");
-          const signOut = signable && auth?.state === "logged_in";
-          // One button in one place, signed in or out: the account band's own action.
-          const accountAction = (signIn || signOut) && (
-            <PopoverAction onPress={() => open(signIn ? "sign_in" : "sign_out")}>
-              {(press) => (
-                <Button
-                  size="sm"
-                  color="secondary"
-                  iconLeading={signIn ? LogIn01 : LogOut01}
-                  className="shrink-0"
-                  onPress={press}
-                >
-                  {signIn ? m.runtime_auth_sign_in() : m.runtime_auth_sign_out()}
-                </Button>
-              )}
-            </PopoverAction>
-          );
+          const kiroOnWindows = provider === RUNTIME_PROVIDER.KIRO && computer.platform === "win32";
+          // A login-capable runtime with no state at all runs on a Computer too old to send one:
+          // said only to someone who could sign it in, the one person an upgrade helps.
+          const account = auth?.state ?? (signable ? "unreported" : undefined);
+          // One button in one place, for the state the popover shows (`shownAccount`): Sign In when
+          // signed out, Sign Out when signed in. An icon the size of the popover's Refresh, named
+          // by its tooltip and its label (Frank, task #209); signed out, the band says why.
+          const accountAction = (shown: AccountState | undefined) => {
+            const signIn = signable && shown === "logged_out" && !kiroOnWindows;
+            if (!signIn && !(signable && shown === "logged_in")) return undefined;
+            const label = signIn ? m.runtime_auth_sign_in() : m.runtime_auth_sign_out();
+            return (
+              <PopoverAction onPress={() => open(signIn ? "sign_in" : "sign_out")}>
+                {(press) => (
+                  <Tooltip title={label}>
+                    <Button
+                      size="xs"
+                      color="secondary"
+                      iconLeading={signIn ? LogIn01 : LogOut01}
+                      aria-label={label}
+                      className="ml-auto shrink-0"
+                      onPress={press}
+                    />
+                  </Tooltip>
+                )}
+              </PopoverAction>
+            );
+          };
           const unavailable = auth?.state === "unavailable" && auth.unavailableReason && (
             <p key="account" className="px-4 py-3 text-sm text-tertiary">
               {unsupportedText(auth.unavailableReason, runtime.displayName)}
@@ -146,10 +155,11 @@ export function ComputerRuntimeList({
                 timeZone={timeZone}
                 showUsage={computer.ownedByCurrentUser}
                 auth={auth}
+                account={account}
                 triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
-                trigger={(health) => <RuntimeChip runtime={runtime} auth={auth} health={health} />}
+                trigger={(status) => <RuntimeChip runtime={runtime} status={status} />}
                 actions={(visibility || unavailable) && [visibility, unavailable]}
-                accountAction={accountAction || undefined}
+                accountAction={accountAction}
               />
             </li>
           );

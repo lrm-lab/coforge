@@ -20,11 +20,15 @@ import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark"
 import { useRuntimeUsage } from "./use-runtime-usage";
 import { RuntimeUsageWindows } from "./runtime-usage-windows-list";
 import {
-  usageBadge,
+  accountBand,
+  chipStatus,
+  shownAccount,
   usageFailureDescription,
   usageHealth,
   usageReadForAuth,
-  type UsageHealth,
+  usageStatus,
+  type AccountState,
+  type RuntimeStatus,
 } from "./runtime-usage-status";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
 
@@ -36,9 +40,7 @@ export type Runtime = {
   displayName: string;
 };
 
-export type { UsageHealth } from "./runtime-usage-status";
-
-function RuntimeIdentity({ runtime, health }: { runtime: Runtime; health?: UsageHealth }) {
+function RuntimeIdentity({ runtime, health }: { runtime: Runtime; health?: RuntimeStatus }) {
   return (
     <span className="flex min-w-0 items-center gap-3">
       <RuntimeProviderMark provider={runtime.provider} className="size-6" />
@@ -61,7 +63,7 @@ export function UsageHealthDot({
   health,
   className,
 }: {
-  health?: UsageHealth;
+  health?: RuntimeStatus;
   className?: string;
 }) {
   if (!health) return null;
@@ -102,6 +104,7 @@ export function RuntimeUsage({
   actions,
   showUsage = true,
   auth,
+  account,
   accountAction,
 }: {
   computerId: string;
@@ -109,7 +112,8 @@ export function RuntimeUsage({
   /** `undefined` means "not known", treated like online for the purpose of auto-scanning. */
   computerOnline?: boolean;
   timeZone?: string | null;
-  trigger?: (health: UsageHealth | undefined) => ReactNode;
+  /** Receives the one status the chip draws: a login state that needs saying, else the usage. */
+  trigger?: (status: RuntimeStatus | undefined) => ReactNode;
   triggerClassName?: string;
   /** A band under the usage (the Agent profile's context). With a footer, a runtime that reports
    * no usage still opens a popover, holding only the footer. */
@@ -125,8 +129,10 @@ export function RuntimeUsage({
   /** The runtime's login state on the Computer page, account fields only for those allowed them
    * (`runtimeAuthView`). With it, the popover opens even without usage, to show that account. */
   auth?: RuntimeAuthStatus;
-  /** Signs the runtime in or out: drawn on the account band, signed in or not. */
-  accountAction?: ReactNode;
+  /** The login state to name: `auth`'s, or `unreported` when the Computer is too old to send one. */
+  account?: AccountState;
+  /** Signs the runtime in or out for the login state the popover shows, if the viewer may. */
+  accountAction?: (shown: AccountState | undefined) => ReactNode;
 }) {
   const supportsUsage = showUsage && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
@@ -134,22 +140,28 @@ export function RuntimeUsage({
     computerOnline,
   });
 
-  const usageRead = usageReadForAuth(usage.data, auth);
+  const usageRead = usageReadForAuth(usage.data, account);
+  const shown = shownAccount(account, usageRead);
   const health = supportsUsage ? usageHealth(usageRead) : undefined;
+  const status = chipStatus(shown, health);
   const resolvedTrigger = trigger ? (
-    trigger(health)
+    trigger(status)
   ) : (
     <RuntimeIdentity runtime={runtime} health={health} />
   );
 
-  if (!supportsUsage && !footer && !actions && !auth) return resolvedTrigger;
+  if (!supportsUsage && !footer && !actions && !account) return resolvedTrigger;
 
-  // The health is named here too: the trigger's aria-label replaces the health dot's own name.
-  const label = supportsUsage
-    ? [runtime.displayName, m.computer_usage_title(), health?.label, footerLabel]
-        .filter(Boolean)
-        .join(" · ")
-    : [runtime.displayName, footerLabel].filter(Boolean).join(" · ");
+  // The dot is named here too: the trigger's aria-label replaces the dot's own name, a login
+  // state first, as the chip draws it.
+  const label = [
+    runtime.displayName,
+    supportsUsage && m.computer_usage_title(),
+    status?.label,
+    footerLabel,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <DialogTrigger>
@@ -175,9 +187,10 @@ export function RuntimeUsage({
               onRefresh={usage.refresh}
               onClose={close}
               auth={auth}
+              account={shown}
               footer={footer}
               actions={actions}
-              accountAction={accountAction}
+              accountAction={accountAction?.(shown)}
             />
           )}
         </Dialog>
@@ -204,6 +217,7 @@ export function RuntimeUsagePopoverContent({
   onRefresh,
   onClose,
   auth,
+  account,
   footer,
   actions,
   accountAction,
@@ -220,13 +234,14 @@ export function RuntimeUsagePopoverContent({
   /** Present when the popover opened on a press: draws its close button. */
   onClose?: () => void;
   auth?: RuntimeAuthStatus;
+  account?: AccountState;
   footer?: ReactNode;
   actions?: ReactNode;
   accountAction?: ReactNode;
 }) {
   const hydrated = useHydrated();
   const snapshot = data?.result?.snapshot;
-  const badge = data?.result ? usageBadge(data.result) : undefined;
+  const badge = data?.result ? usageStatus(data.result) : undefined;
   const reason =
     computerOnline === false
       ? m.computer_usage_offline()
@@ -235,8 +250,11 @@ export function RuntimeUsagePopoverContent({
         : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
-  // A signed-out runtime has no account to show: its band says so instead, beside Sign In.
-  const signedOut = auth?.state === "logged_out";
+  // A signed-out runtime has no account to show: its band says so instead, beside Sign In. A login
+  // state that cannot be read, or is never sent, gets the same band, its button included (#208).
+  const signedOut = account === "logged_out";
+  const warnedAccount = accountBand(account);
+  const sectionAction = warnedAccount ? undefined : accountAction;
   const planType = snapshot?.planType ?? auth?.account?.planLabel;
   const plan = planType ? formatPlan(planType) : undefined;
   const accountLabel = snapshot?.accountLabel ?? auth?.account?.maskedLabel;
@@ -248,6 +266,7 @@ export function RuntimeUsagePopoverContent({
       ? m.computer_usage_credits_available()
       : undefined;
   const accountNote = [plan && accountLabel, credits].filter(Boolean).join(" · ");
+  const title = plan || accountLabel;
   const refreshLabel = scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh();
 
   return (
@@ -273,7 +292,7 @@ export function RuntimeUsagePopoverContent({
             {auth && (
               <p className="text-xs text-tertiary">{m.computer_runtime_account_visibility()}</p>
             )}
-            {signedOut && showUsage && (scanFailed || data?.result?.status === "error") && (
+            {signedOut && showUsage && scanFailed && (
               <p role="alert" className="text-sm text-tertiary">
                 {m.computer_usage_read_failed_retry()}
               </p>
@@ -307,14 +326,12 @@ export function RuntimeUsagePopoverContent({
           )}
         </div>
 
-        {signedOut && (
+        {warnedAccount && (
           <div className="flex items-center justify-between gap-3 bg-warning-primary px-4 py-3">
             <div className="min-w-0">
-              <h3 className="text-sm font-medium text-warning-primary">
-                {m.computer_runtime_auth_logged_out()}
-              </h3>
+              <h3 className="text-sm font-medium text-warning-primary">{warnedAccount.label}</h3>
               {/* Only beside the button that does it: a viewer who may not sign in gets no hint. */}
-              {accountAction && (
+              {signedOut && accountAction && (
                 <p className="text-xs text-tertiary">
                   {m.computer_runtime_sign_in_hint({ runtime: runtime.displayName })}
                 </p>
@@ -324,25 +341,31 @@ export function RuntimeUsagePopoverContent({
           </div>
         )}
 
-        {!signedOut && (showUsage || plan || accountLabel || accountAction) && (
+        {!signedOut && (showUsage || plan || accountLabel || sectionAction) && (
           <section className="px-4 py-3">
             {/* The account band leads with the plan, then the signed-in account. A credits note
               counts too: Codex can report credits with no plan and no email, and that note used
-              to show under the fallback heading. The empty "Runtime account" line is omitted
-              only when the runtime names nothing and nothing is wrong. */}
-            {(plan || accountLabel || accountNote || badge || accountAction) && (
+              to show under a placeholder heading. With no plan and no account there is no heading
+              at all (E′): the row holds only the badge or the button. */}
+            {(title || accountNote || badge || sectionAction) && (
               <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-sm font-medium text-primary">
-                    {plan || accountLabel || m.computer_usage_account()}
-                  </h3>
-                  {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
-                </div>
+                {(title || accountNote) && (
+                  <div className="min-w-0">
+                    {title && (
+                      <h3 className="truncate text-sm font-medium text-primary">{title}</h3>
+                    )}
+                    {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
+                  </div>
+                )}
                 {/* The sign-out button takes the badge's place: the usage below already shows a
                   limit or a failed read, and a badge beside it would name a state twice. */}
-                {accountAction ??
+                {sectionAction ??
                   (badge && (
-                    <Badge color={badge.color} size="sm" className="shrink-0">
+                    <Badge
+                      color={badge.ok ? "success" : "warning"}
+                      size="sm"
+                      className="ml-auto shrink-0"
+                    >
                       {badge.label}
                     </Badge>
                   ))}

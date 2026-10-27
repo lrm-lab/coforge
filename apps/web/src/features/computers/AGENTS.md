@@ -48,16 +48,23 @@ These rules apply to `src/features/computers/`.
 - The slot's "What's new" opens the notes the release catalog (`server/release-catalog/`) holds for
   the release on offer or being installed, in the UI's language with the other as fallback. No
   notes, or a failed read, means no link and never an error; it never holds up Upgrade.
-- A runtime chip is its mark, its name and one round status dot (`runtime-chip.tsx`): green
-  when signed in or its usage is fine, orange when signed out or its usage needs
-  attention. Each state has one name wherever it shows (the dot's label is the
-  popover badge's word): "Not signed in", "Error" over "Couldn't read usage.
-  Refresh to try again." for any failed read, "Limit reached" over a quota row
-  reading "Used up · resets …", "No usage reported" (Frank, 2026-10-26; the
-  badges are Raft's). The account and plan sit in the popover and come only to the
-  Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the
-  popover says; everyone else receives the state alone. A Computer that never
-  reported shows no state.
+- A runtime chip is its mark, its name and one round status dot (`runtime-chip.tsx`). The dot
+  and the popover badge read one table (`runtime-usage-status.ts`, task #209): green for signed
+  in or usage OK (an old read too: the popover shows its age); orange for "Not signed in",
+  "Update Computer to sign in or out here" and "Limit reached". Red is kept for a state retrying
+  cannot fix; none is. A failed usage read says nothing (Frank): no dot, no badge, no usage block,
+  so the dot follows the login state. A reader not connected, or a runtime that reports no usage,
+  has no dot and no badge, one gray line. The account and plan sit in the popover and come only
+  to the Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the popover
+  says; everyone else receives the state alone. With no plan and no account the account row has
+  no heading.
+- Every login state has an outcome in the popover, never a blank (task #208), and the popover
+  never says a state could not be read (Frank, task #209): a failed login check (`unknown`) reads
+  as signed in while usage still reads (reading usage needs a signed-in account), else as signed
+  out (`shownAccount`). Signed out and unreported (a Computer too old to send one, said only to
+  those who may sign in) take the orange band, the only states the user must act on. Sign In and
+  Sign Out are icons the size of Refresh, named by tooltip and label, for the state shown.
+  Refresh rereads both login and usage.
 - Sign in and Sign out sit in a Claude Code, Codex or Kiro runtime's popover for the
   Computer's owner and Workspace owners and admins, the server's own rule
   (`computer-runtimes.tsx`). The account is the popover's last band, as on Raft:
