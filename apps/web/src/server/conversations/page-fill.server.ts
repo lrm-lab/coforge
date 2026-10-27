@@ -55,7 +55,8 @@ export async function postPageFill(input: {
   fields: readonly PageFillField[];
   values: Record<string, string>;
   cookie: string;
-  fetchImpl?: typeof fetch;
+  /** Stands in for `fetch`; only the call is needed, not its extras such as `preconnect`. */
+  fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
 }): Promise<{ filled: string[] }> {
   const url = pageFillUrl(input.origin, input.computerId, input.agentId);
   if (!url) throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "page-fill-desktop" });
