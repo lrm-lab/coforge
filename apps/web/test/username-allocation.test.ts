@@ -3,6 +3,8 @@ import { expect, test } from "bun:test";
 import { USERNAME_PATTERN } from "#src/lib/username-grammar";
 import {
   UsernameAllocator,
+  displayNameUsernameBase,
+  isFallbackUsername,
   resolveUsernameBase,
   smallestFree,
   usernameBase,
@@ -93,8 +95,64 @@ test("a candidate of 11 or more digits looks like a phone number and is never us
   expect(usernameBase({ name: "138 0013 8000", email: null })).toBe("user");
   expect(usernameBase({ email: "86.138.0013.8000@example.com" })).toBe("user");
   expect(usernameBase({ name: "+86 (138) 0013-8000" })).toBe("user");
-  // Ten digits is still a name (a QQ number, say), and takes the prefix.
-  expect(usernameBase({ email: "1546778759@qq.com" })).toBe("u1546778759");
+  // Ten digits is still a name, and takes the prefix outside a QQ mailbox.
+  expect(usernameBase({ email: "1546778759@example.com" })).toBe("u1546778759");
+});
+
+test("an all-digit email local part at a QQ mailbox is the QQ number: qq<digits>", () => {
+  expect(resolveUsernameBase({ email: "971766802@qq.com" })).toEqual({
+    base: "qq971766802",
+    source: "email",
+  });
+  expect(usernameBase({ email: "1546778759@QQ.com" })).toBe("qq1546778759");
+  expect(usernameBase({ email: "971766802@vip.qq.com" })).toBe("qq971766802");
+  expect(usernameBase({ email: "971766802@foxmail.com" })).toBe("qq971766802");
+  expect(usernameBase({ email: "971766802+news@qq.com" })).toBe("qq971766802");
+  // Only a QQ mailbox's digits are a QQ number, and only when they are all there is.
+  expect(usernameBase({ email: "971766802@example.com" })).toBe("u971766802");
+  expect(usernameBase({ email: "ada971766802@qq.com" })).toBe("ada971766802");
+  expect(usernameBase({ email: "971-766-802@qq.com" })).toBe("u971-766-802");
+  // A mailbox whose digits are a phone number is never used, QQ or not.
+  expect(usernameBase({ email: "13800138000@qq.com", name: "Ada" })).toBe("ada");
+  expect(usernameBase({ email: "13800138000@qq.com" })).toBe("user");
+});
+
+test("a fallback username is user, user-<n> or user-<8 hex>, and nothing else", () => {
+  for (const name of ["user", "user-2", "user-7", "user-123", "user-d9956ab1", "user-12345678"])
+    expect(isFallbackUsername(name)).toBe(true);
+  for (const name of ["ada", "users", "user-", "user-x", "user-2-2", "user-d9956ab1f", "ada-2"])
+    expect(isFallbackUsername(name)).toBe(false);
+});
+
+test("a display name yields a base: ASCII by the name rule, Chinese as pinyin without tones", async () => {
+  expect(await displayNameUsernameBase("Ada Lovelace")).toBe("ada-lovelace");
+  expect(await displayNameUsernameBase("安栋")).toBe("andong");
+  expect(await displayNameUsernameBase("张三")).toBe("zhangsan");
+  expect(await displayNameUsernameBase("欧阳娜娜")).toBe("ouyangnana");
+  // ü is written v, as people write it in a handle.
+  expect(await displayNameUsernameBase("吕布")).toBe("lvbu");
+});
+
+test("a mixed Chinese and Latin display name keeps both, the Chinese run as one word", async () => {
+  expect(await displayNameUsernameBase("张三 Tom")).toBe("zhangsan-tom");
+  expect(await displayNameUsernameBase("Tom 张三")).toBe("tom-zhangsan");
+  expect(await displayNameUsernameBase("张三Tom")).toBe("zhangsan-tom");
+  expect(await displayNameUsernameBase("安栋 (Dong)")).toBe("andong-dong");
+});
+
+test("a display name's base is cut to 24 characters and never ends in a separator", async () => {
+  const base = await displayNameUsernameBase("张三丰".repeat(10));
+  expect(base).toBe("zhangsanfeng".repeat(2));
+  expect(await displayNameUsernameBase(`${"a".repeat(23)} 安栋`)).toBe("a".repeat(23));
+});
+
+test("a display name that yields nothing usable yields no base", async () => {
+  for (const name of ["", "   ", "Unnamed", "😀", "!!!", "李", "13800138000", "138 0013 8000"])
+    expect(await displayNameUsernameBase(name)).toBeUndefined();
+  // Reserved words and the fallback itself name no one.
+  expect(await displayNameUsernameBase("Admin")).toBeUndefined();
+  expect(await displayNameUsernameBase("User")).toBeUndefined();
+  expect(await displayNameUsernameBase("王 admin")).toBe("wang-admin");
 });
 
 test("a phone number is not used even with letters around it", () => {

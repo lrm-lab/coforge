@@ -79,7 +79,11 @@ request. The same intersection, at redemption, is the token answer's `scope`.
 of the platform's own pictures on the issuer's origin. An uploaded avatar that only this deployment's
 signed-in route serves is left out. `email_verified` is false because CoForge keeps the address the
 sign-in provider last reported but not whether the provider verified it. `preferred_username` is the
-username although no CoForge page shows a person by it: it is the stable handle apps expect there.
+username although no CoForge page shows a person by it: it is the stable handle apps expect there. A username changes only once, at first sign-in: a new
+account's fallback `user-N` is replaced when the person confirms their name (`identity-models.md`).
+Sign-in sends an unnamed person to that step before any `returnTo`, so consent normally follows it, but
+the authorization endpoint does not itself require it: someone who opens it by hand while still unnamed
+can consent under the fallback name, which the name step then replaces.
 
 ## Codes are the grant
 

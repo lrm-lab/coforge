@@ -389,3 +389,43 @@ test.skipIf(!connectionString)(
     }
   },
 );
+
+test.skipIf(!connectionString)(
+  "a sign-in from a QQ mailbox names the account qq<number>",
+  async () => {
+    const { login, teardown } = await setup();
+    try {
+      const number = String(Math.floor(100_000_000 + Math.random() * 899_999_999));
+      const user = await login(`sub-qq-${number}`, { email: `${number}@qq.com` });
+
+      expect(user.username).toBe(`qq${number}`);
+    } finally {
+      await teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "signing in never renames an existing account, whatever its username and name",
+  async () => {
+    const { db, suffix, login, userWrites, teardown } = await setup();
+    try {
+      await db.user.create({
+        data: {
+          username: `user-${suffix}`,
+          displayName: `张三 ${suffix}`,
+          welcomedAt: new Date(),
+          identities: { create: { provider: "authing", providerSubject: `sub-old-${suffix}` } },
+        },
+      });
+
+      const before = userWrites().length;
+      const user = await login(`sub-old-${suffix}`);
+
+      expect(user.username).toBe(`user-${suffix}`);
+      expect(userWrites().length).toBe(before);
+    } finally {
+      await teardown();
+    }
+  },
+);

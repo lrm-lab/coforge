@@ -9,14 +9,41 @@ On first identity creation `UsernameAllocator`
 (`apps/web/src/server/auth/username-allocation.server.ts`) takes the first of
 these that yields a usable name: the Authing `preferred_username`, the email
 local part without a `+tag`, the ASCII slug of the profile name, the ASCII slug
-of the nickname, and finally `user`. A name that starts with a digit gets the
-prefix `u`; a name with a run of 11 or more digits, however spaced or
-surrounded (it may be a phone number), and a reserved word are never used. A taken name gets the smallest free `-N`
+of the nickname, and finally `user`. At a QQ mailbox (`qq.com`, `vip.qq.com`,
+`foxmail.com`) an all-digit local part is the QQ number and reads `qq<digits>`
+(`971766802@qq.com` is `qq971766802`); anywhere else a name that starts with a
+digit gets the prefix `u`. A name with a run of 11 or more digits, however
+spaced or surrounded (it may be a phone number, which is never a username: the
+handle is visible to the whole Workspace and to Agents), and a reserved word
+are never used. A taken name gets the smallest free `-N`
 (`N >= 2`); the unique index decides races, so the create is retried a bounded
-number of times and ends with an 8-hex suffix. The username is not changed by
-later logins. Accounts created before letter-first allocation keep their
-existing names, some digit-first or ending in an 8-hex suffix, and stay valid
-`@username` targets. `UserIdentity` maps
+number of times and ends with an 8-hex suffix. Accounts created before
+letter-first allocation keep their existing names, some digit-first or ending in
+an 8-hex suffix, and stay valid `@username` targets.
+
+A new account's fallback username (`user`, `user-<n>` or `user-<8 hex>`: a
+sign-in that told us nothing to name the person by, such as a phone-number
+sign-up) is replaced once, at the first-sign-in name step, from the display name
+being confirmed (`renameFallbackUsername`,
+`server/auth/fallback-username-rename.server.ts`). It runs before the
+enrollment transaction, so a personal Workspace whose URL comes from the
+username uses the new one, and its update is conditional on `welcomedAt` being
+null, so an account that has confirmed a name is never renamed. The name gives the
+base by the same slug rule; each run of Chinese characters is written as
+`pinyin-pro` pinyin without tones, syllables joined, `ü` as `v` (`安栋` is
+`andong`, `张三 Tom` is `zhangsan-tom`), loaded only there, then the allocator
+takes the smallest free `-N`. The rename is best effort: a name that yields
+nothing usable, or any failure (logged without the name or the username), leaves
+the username as it is and never affects the first sign-in. Existing accounts are
+never renamed, at sign-in or otherwise: a handle that has been in a Workspace,
+a message or an Agent's memory keeps pointing at the same person, and
+`preferred_username` stays stable for Login with CoForge apps. Messages and
+mentions carry the person's id (`<@human:uuid>`); the `handle`, `targetHandle`
+and `actorName` columns of `MessageMention`, `PendingMentionAction` and
+`TaskHistoryEvent` are snapshots of the handle. The signed session cookie keeps
+the username it was issued with until the next sign-in; it is only an echo and
+never a lookup key.
+`UserIdentity` maps
 an external provider and subject to that User; provider subjects are never
 business foreign keys. Membership, Agent ownership, and Computer ownership use
 the internal User UUID. Existing rows are backfilled by the migration before

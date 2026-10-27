@@ -1,6 +1,8 @@
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { nameToSlug } from "#src/lib/slug";
 import { USERNAME_PATTERN } from "#src/lib/username-grammar";
 import { isReservedWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
+import type { DatabaseScope } from "#src/server/db/transaction.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 
 /** What a sign-in tells us about a person that can name their account. */
@@ -18,6 +20,11 @@ const HEX_SUFFIXED_BASE_MAX_LENGTH = 23;
 /** Times a create that lost a race is tried again with the next free name before the hex suffix. */
 const COLLISION_RETRIES = 5;
 const FALLBACK_BASE = "user";
+
+/** Mailboxes whose address is the person's QQ number: `971766802@qq.com`, and the VIP and Foxmail
+ * domains of the same Tencent mail service. Other `qq.com` subdomains are not (`exmail.qq.com` is
+ * a company's own mail). */
+const QQ_MAIL_DOMAINS = new Set(["qq.com", "vip.qq.com", "foxmail.com"]);
 
 /** Names that would read as something other than a person in a mention or a URL. `user` is not
  * one: it is the last-resort base, and takes the same `-N` suffix as any other. */
@@ -58,7 +65,7 @@ export function resolveUsernameBase(profile: UsernameProfile): {
 } {
   const candidates: [UsernameBaseSource, string | undefined][] = [
     ["preferred_username", strictName(profile.preferredUsername)],
-    ["email", normalizedName(emailLocalPart(profile.email))],
+    ["email", emailName(profile.email)],
     ["name", asciiSlug(profile.name)],
     ["nickname", asciiSlug(profile.nickname)],
   ];
@@ -68,6 +75,39 @@ export function resolveUsernameBase(profile: UsernameProfile): {
   }
   return { base: FALLBACK_BASE, source: "fallback" };
 }
+
+/**
+ * The readable base for a person who is confirming their display name: the name by the same rule
+ * as a profile's name, with each run of Chinese characters written as pinyin (no tones, syllables
+ * joined, `ü` as `v`: 安栋 is `andong`). Undefined when nothing usable results, which includes the
+ * placeholder `Unnamed` and a name that comes down to the fallback `user`. Async because the pinyin
+ * dictionary is large and loaded only here, on the first sign-in of a person with a Chinese name.
+ */
+export async function displayNameUsernameBase(displayName: string): Promise<string | undefined> {
+  const name = displayName.trim();
+  if (name === UNNAMED_PERSON_NAME) return undefined;
+  const slug = asciiSlug(await withPinyin(name));
+  const base = slug && allowedBase(slug);
+  return base && base !== FALLBACK_BASE ? base : undefined;
+}
+
+/** The name with each run of Chinese characters replaced by its pinyin as one word. */
+async function withPinyin(name: string): Promise<string> {
+  if (!/\p{Script=Han}/u.test(name)) return name;
+  const { pinyin } = await import("pinyin-pro");
+  return name.replace(
+    /\p{Script=Han}+/gu,
+    (han) => ` ${pinyin(han, { toneType: "none", type: "array", v: true }).join("")} `,
+  );
+}
+
+/** Whether a username is what the allocator gave a sign-in that told it nothing: `user`,
+ * `user-<n>`, or `user-<8 hex>` (a name that lost every retry). Only these are ever renamed. */
+export function isFallbackUsername(username: string): boolean {
+  return FALLBACK_USERNAME.test(username);
+}
+
+const FALLBACK_USERNAME = new RegExp(`^${FALLBACK_BASE}(?:-(?:\\d+|[0-9a-f]{8}))?$`);
 
 /**
  * Hands out the smallest free readable username and runs the caller's create with it. Uniqueness
@@ -83,8 +123,12 @@ export class UsernameAllocator {
    * violation when the name was taken meanwhile; any other error is the caller's and is not
    * retried.
    */
-  async create<T>(profile: UsernameProfile, create: (username: string) => Promise<T>): Promise<T> {
-    const base = usernameBase(profile);
+  create<T>(profile: UsernameProfile, create: (username: string) => Promise<T>): Promise<T> {
+    return this.allocate(usernameBase(profile), create);
+  }
+
+  /** `create`, from a base the caller has already settled on (a rename, say). */
+  async allocate<T>(base: string, create: (username: string) => Promise<T>): Promise<T> {
     for (let attempt = 0; attempt < COLLISION_RETRIES; attempt += 1) {
       const username = smallestFree(base, await this.takenAround(base));
       try {
@@ -136,6 +180,15 @@ function emailLocalPart(email: string | null | undefined): string | undefined {
   return email?.split("@", 1)[0]?.split("+", 1)[0];
 }
 
+/** The email's local part as a name; at a QQ mailbox an all-digit one is the QQ number, `qq<digits>`,
+ * which the grammar can take where bare digits it cannot. */
+function emailName(email: string | null | undefined): string | undefined {
+  const local = emailLocalPart(email);
+  const domain = email?.slice(email.lastIndexOf("@") + 1).toLowerCase();
+  if (local && /^[0-9]+$/.test(local) && domain && QQ_MAIL_DOMAINS.has(domain)) return `qq${local}`;
+  return normalizedName(local);
+}
+
 /** The ASCII part of a name as a slug; a name with no ASCII letters or digits yields nothing.
  * Uncut, so a phone number late in a long name is still seen (`allowedBase` cuts it). */
 function asciiSlug(name: string | null | undefined): string | undefined {
@@ -161,4 +214,16 @@ function looksLikePhoneNumber(candidate: string): boolean {
 
 function isReserved(base: string): boolean {
   return RESERVED_USERNAMES.has(base) || isReservedWorkspaceSlug(base);
+}
+
+/** The allocator over the stored usernames: the ones equal to a base or starting with `base-`. */
+export function prismaUsernameAllocator(db: DatabaseScope): UsernameAllocator {
+  return new UsernameAllocator(async (base) =>
+    (
+      await db.user.findMany({
+        where: { OR: [{ username: base }, { username: { startsWith: `${base}-` } }] },
+        select: { username: true },
+      })
+    ).map((row) => row.username),
+  );
 }

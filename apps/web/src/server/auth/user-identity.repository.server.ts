@@ -1,20 +1,13 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { initialDisplayName } from "#src/features/auth/name-prefill";
-import { UsernameAllocator, type UsernameProfile } from "./username-allocation.server";
+import { prismaUsernameAllocator, type UsernameProfile } from "./username-allocation.server";
 
 export class UserIdentityRepository {
-  private readonly usernames: UsernameAllocator;
+  private readonly usernames;
 
   constructor(private readonly db: PrismaClient) {
-    this.usernames = new UsernameAllocator(async (base) =>
-      (
-        await this.db.user.findMany({
-          where: { OR: [{ username: base }, { username: { startsWith: `${base}-` } }] },
-          select: { username: true },
-        })
-      ).map((row) => row.username),
-    );
+    this.usernames = prismaUsernameAllocator(db);
   }
 
   async resolve(provider: string, providerSubject: string, profile: UsernameProfile = {}) {

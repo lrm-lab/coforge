@@ -12,6 +12,8 @@ import {
   isValidWorkspaceSlug,
   nameToWorkspaceSlug,
 } from "#src/features/workspaces/workspace-slug";
+import { renameFallbackUsername } from "#src/server/auth/fallback-username-rename.server";
+import { isFallbackUsername } from "#src/server/auth/username-allocation.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isWorkspaceSlugFree } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
@@ -49,7 +51,7 @@ export type FirstSignInStore = {
   enroll(input: FirstSignInInput): Promise<ConfirmedEnrollment>;
   /** Saves the display name alone, under the same per-User serialization as `enroll`; returns the
    * name that stands (the first one saved). */
-  confirmName(input: { userId: string; displayName: string }): Promise<string>;
+  confirmName(input: { userId: string; username: string; displayName: string }): Promise<string>;
 };
 
 /** Whether the invite token names a join link that admits people right now. */
@@ -80,8 +82,8 @@ export type FirstSignInResult =
 /** The username as a Workspace URL to start from, or "" when it is only the fallback name (`user`,
  * `user-2`, `user-<hex>`: a sign-in that told us nothing to name the person by) or not usable. */
 function workspaceSlugPrefill(username: string): string {
+  if (isFallbackUsername(username)) return "";
   const slug = nameToWorkspaceSlug(username);
-  if (/^user(?:-[0-9a-f]+)?$/.test(slug)) return "";
   return isValidWorkspaceSlug(slug) && !isReservedWorkspaceSlug(slug) ? slug : "";
 }
 
@@ -167,7 +169,11 @@ export class FirstSignIn {
       const invite = await this.inviteState(input.returnTo);
       if (invite === "unavailable") return { ok: false, problem: "invite_unavailable" };
       if (invite === "active") {
-        await this.store.confirmName({ userId: input.user.id, displayName: checked.name });
+        await this.store.confirmName({
+          userId: input.user.id,
+          username: input.user.username,
+          displayName: checked.name,
+        });
         return { ok: true, workspaceId: null };
       }
     }
@@ -209,7 +215,13 @@ export class FirstSignIn {
 class PrismaFirstSignInStore implements FirstSignInStore {
   constructor(private readonly db: PrismaClient) {}
 
-  confirmName(input: { userId: string; displayName: string }) {
+  /** The name is confirmed after the username is settled, as a taken name aborts a transaction. */
+  async confirmName(input: { userId: string; username: string; displayName: string }) {
+    await renameFallbackUsername(
+      this.db,
+      { id: input.userId, username: input.username },
+      input.displayName,
+    );
     return withFirstSignInUser(this.db, input.userId, (tx) =>
       new PrismaFirstSignInNames(tx).confirm(input.userId, input.displayName),
     );
@@ -219,7 +231,10 @@ class PrismaFirstSignInStore implements FirstSignInStore {
     return new PrismaFirstSignInNames(this.db).lookup(userId);
   }
 
-  enroll(input: FirstSignInInput) {
+  /** The username is settled first, so a personal Workspace whose URL comes from it (no
+   * `workspaceSlug`) uses the new one. */
+  async enroll(input: FirstSignInInput) {
+    const username = await renameFallbackUsername(this.db, input.user, input.displayName);
     return withFirstSignInUser(this.db, input.user.id, async (tx) => {
       const names = new PrismaFirstSignInNames(tx);
       const person = await names.lookup(input.user.id);
@@ -227,7 +242,7 @@ class PrismaFirstSignInStore implements FirstSignInStore {
       const { workspaceId } = await new WorkspaceEnrollment(
         new PrismaWorkspaceEnrollmentStore(tx),
       ).ensureForUser(
-        { ...input.user, displayName: title },
+        { ...input.user, username, displayName: title },
         input.acceptLanguage,
         input.workspaceSlug,
       );
