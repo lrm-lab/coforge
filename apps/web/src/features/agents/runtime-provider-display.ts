@@ -8,8 +8,9 @@ import kiroMark from "@lobehub/icons-static-svg/icons/kiro-color.svg";
 import grokMark from "@lobehub/icons-static-svg/icons/grok.svg";
 import opencodeMark from "@lobehub/icons-static-svg/icons/opencode.svg";
 import piMark from "@lobehub/icons-static-svg/icons/pi.svg";
-import commandaMark from "@lobehub/icons-static-svg/icons/commanda-color.svg";
 import { m } from "#src/paraglide/messages";
+// Not in @lobehub/icons: the vector mark from Command Code's own site, kept in this repo.
+import commandCodeMark from "./marks/command-code.svg";
 
 /**
  * The one display table for a RuntimeProvider: shared by the Agent runtime picker, the Agent
@@ -64,7 +65,7 @@ export const RUNTIME_PROVIDER_MARK: Record<
   [RUNTIME_PROVIDER.GROK]: grokMark,
   [RUNTIME_PROVIDER.ANTIGRAVITY]: antigravityMark,
   [RUNTIME_PROVIDER.DSH]: deepseekMark,
-  [RUNTIME_PROVIDER.COMMAND_CODE]: commandaMark,
+  [RUNTIME_PROVIDER.COMMAND_CODE]: commandCodeMark,
 };
 
 /** Whether that mark is a full-color icon rendered as an `<img>`, as opposed to a monochrome
@@ -82,5 +83,5 @@ export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<
   [RUNTIME_PROVIDER.GROK]: false,
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
   [RUNTIME_PROVIDER.DSH]: true,
-  [RUNTIME_PROVIDER.COMMAND_CODE]: true,
+  [RUNTIME_PROVIDER.COMMAND_CODE]: false,
 };
