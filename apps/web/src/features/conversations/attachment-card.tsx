@@ -9,6 +9,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
+import { ImageLightbox } from "./image-lightbox";
 import { LoadingImage } from "./loading-image";
 import {
   MESSAGE_GALLERY_MAX_WIDTH_PX,
@@ -28,56 +29,59 @@ type Attachment = MessageView["attachments"][number];
 
 const isImage = (attachment: Attachment) => attachment.contentType.startsWith("image/");
 
-/** One image as a button opening its preview: its thumbnail, else the original, else the route. */
+/** One image as a button opening the lightbox: its thumbnail, else the original, else the route. */
 function ImageThumbnail({
   attachment,
   className,
   style,
   imgClassName,
   onFailed,
+  onOpen,
 }: {
   attachment: Attachment;
   className?: string;
   style?: CSSProperties;
   imgClassName: string;
   onFailed?: () => void;
+  onOpen: () => void;
 }) {
   const href = attachmentUrl(attachment);
   return (
-    <AttachmentReviewDialog file={attachment}>
-      {() => (
-        <Button
-          color="tertiary"
-          noTextPadding
-          aria-label={attachment.fileName}
-          className={cn(
-            "block h-auto overflow-hidden border border-image-frame-border bg-image-frame p-0 hover:bg-image-frame [&>span]:block [&>span]:size-full",
-            className,
-          )}
-          style={style}
-        >
-          <LoadingImage
-            src={attachment.thumbnailUrl ?? attachment.previewUrl ?? href}
-            fallbackSrc={attachment.thumbnailUrl || attachment.previewUrl ? href : undefined}
-            onFailed={onFailed}
-            alt={attachment.fileName}
-            className="size-full"
-            imgClassName={cn("block size-full", imgClassName)}
-          />
-        </Button>
+    <Button
+      color="tertiary"
+      noTextPadding
+      aria-label={attachment.fileName}
+      className={cn(
+        "block h-auto overflow-hidden border border-image-frame-border bg-image-frame p-0 hover:bg-image-frame [&>span]:block [&>span]:size-full",
+        className,
       )}
-    </AttachmentReviewDialog>
+      style={style}
+      onClick={onOpen}
+    >
+      <LoadingImage
+        src={attachment.thumbnailUrl ?? attachment.previewUrl ?? href}
+        fallbackSrc={attachment.thumbnailUrl || attachment.previewUrl ? href : undefined}
+        onFailed={onFailed}
+        alt={attachment.fileName}
+        className="size-full"
+        imgClassName={cn("block size-full", imgClassName)}
+      />
+    </Button>
   );
 }
 
 /**
  * A message's attachments: its images first, laid out as Raft does (`attachment-image-box.ts`), a
  * lone one at its own shape and several in a grid, then a card for each other file. A lone image
- * that cannot be loaded falls back to its file card.
+ * that cannot be loaded falls back to its file card. The images open one lightbox, which pages
+ * through all of them, as on Raft.
  */
 export function MessageAttachments({ attachments }: { attachments: readonly Attachment[] }) {
   const [brokenId, setBrokenId] = useState<string>();
+  // The image open in the lightbox, by id: the message's images can change while it is open.
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const images = attachments.filter(isImage);
+  const viewing = images.findIndex((image) => image.id === viewingId);
   const files = attachments.filter((attachment) => !isImage(attachment));
   const lone = images.length === 1 ? images[0]! : undefined;
   const broken = lone !== undefined && brokenId === lone.id;
@@ -93,6 +97,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
             style={singleImageBox(lone)}
             imgClassName="object-contain"
             onFailed={() => setBrokenId(lone.id)}
+            onOpen={() => setViewingId(lone.id)}
           />
         </div>
       )}
@@ -118,11 +123,21 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
                   attachment={images[index]!}
                   className="size-full rounded-lg"
                   imgClassName={fit === "cover" ? "object-cover" : "object-contain"}
+                  onOpen={() => setViewingId(images[index]!.id)}
                 />
               ))}
             </div>
           ))}
         </div>
+      )}
+      {viewing >= 0 && (
+        <ImageLightbox
+          images={images}
+          index={viewing}
+          onIndexChange={(index) => setViewingId(images[index]!.id)}
+          isOpen
+          onOpenChange={(open) => !open && setViewingId(null)}
+        />
       )}
       {files.map((attachment) => (
         <AttachmentCard key={attachment.id} attachment={attachment} />

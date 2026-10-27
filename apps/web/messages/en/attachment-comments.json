@@ -32,5 +32,8 @@
   "attachment_comments_open_link": "Open Link",
   "attachment_comments_anchor_remove": "Comment on the Whole File Instead",
   "attachment_comments_anchor_lost": "Position not found",
-  "attachment_comments_anchor_jump": "Go to {place}"
+  "attachment_comments_anchor_jump": "Go to {place}",
+  "image_lightbox_previous": "Previous Image",
+  "image_lightbox_next": "Next Image",
+  "image_lightbox_position": "Image {index} of {count}"
 }

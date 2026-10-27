@@ -163,3 +163,101 @@ test("lone images keep their shape; several share a grid with wide ones on a row
   expect(mixed[3]!.y).toBe(mixed[4]!.y);
   expect(mixed[3]!.y).toBeGreaterThan(mixed[2]!.y);
 }, 120_000);
+
+/** What the open lightbox shows: its title, "n / count", which arrows work, and its thumbnails. */
+const lightbox = () =>
+  evaluate<{
+    title: string | null;
+    position: string | null;
+    previous: boolean | null;
+    next: boolean | null;
+    thumbnails: number;
+    current: string | null;
+  }>(`(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    const arrow = (label) => { const b = dialog?.querySelector('button[aria-label="' + label + '"]'); return b ? !b.disabled : null; };
+    return {
+      title: dialog?.getAttribute("aria-label") ?? null,
+      position: dialog?.querySelector('[data-lightbox-position] [aria-hidden]')?.textContent ?? null,
+      previous: arrow("Previous Image"),
+      next: arrow("Next Image"),
+      thumbnails: dialog?.querySelectorAll("[data-lightbox-thumbnails] button").length ?? 0,
+      current: dialog?.querySelector('button[aria-current="true"]')?.getAttribute("aria-label") ?? null,
+    };
+  })()`);
+
+/** Waits until the lightbox shows `position` ("n / count"). */
+async function at(position: string) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if ((await lightbox()).position === position) return;
+    await Bun.sleep(100);
+  }
+  expect((await lightbox()).position).toBe(position);
+}
+
+/** Points at a control, then clicks it, as a mouse does: the arrows show a tooltip on hover. */
+async function press(selector: string) {
+  await browser("hover", selector);
+  await browser("click", selector);
+}
+
+const NEXT = '[role="dialog"] button[aria-label="Next Image"]';
+
+test("a message's images page in one lightbox: arrows, keys and thumbnails, stopping at the ends", async () => {
+  await browser("set", "viewport", "1440", "900");
+  await browser("open", `${origin}/en/w/${workspaceSlug}/channel/${channelId}`);
+  await browser("wait", 'button:has(img[alt="mixed-1.png"])');
+  await browser("click", 'button:has(img[alt="mixed-1.png"])');
+  await at("1 / 5");
+  expect(await lightbox()).toMatchObject({
+    title: "mixed-1.png",
+    previous: false,
+    next: true,
+    thumbnails: 5,
+    current: "mixed-1.png",
+  });
+
+  // The keys stop at the ends rather than wrapping: a step back from the first image is ignored,
+  // so the next step forward lands on the second.
+  await browser("press", "ArrowLeft");
+  await browser("press", "ArrowRight");
+  await at("2 / 5");
+  await browser("press", "ArrowRight");
+  await at("3 / 5");
+  expect(await lightbox()).toMatchObject({ title: "mixed-3.png", previous: true, next: true });
+
+  await browser("click", '[role="dialog"] button[aria-label="mixed-5.png"]');
+  await at("5 / 5");
+  expect(await lightbox()).toMatchObject({
+    title: "mixed-5.png",
+    previous: true,
+    next: false,
+    current: "mixed-5.png",
+  });
+  await browser("press", "ArrowRight");
+  await browser("press", "ArrowLeft");
+  await at("4 / 5");
+  await press('[role="dialog"] button[aria-label="Previous Image"]');
+  await at("3 / 5");
+
+  // Clicking Next until it is disabled leaves the lightbox in control: Escape still closes it.
+  await press(NEXT);
+  await at("4 / 5");
+  await press(NEXT);
+  await at("5 / 5");
+  await browser("press", "Escape");
+  await browser("wait", "--fn", `!document.querySelector('[role="dialog"]')`);
+
+  // A lone image opens on its own: no count, arrows or thumbnails.
+  await browser("click", 'button:has(img[alt="landscape.png"])');
+  await browser("wait", '[role="dialog"]');
+  expect(await lightbox()).toMatchObject({
+    title: "landscape.png",
+    position: null,
+    previous: null,
+    next: null,
+    thumbnails: 0,
+  });
+  await browser("press", "Escape");
+  await browser("wait", "--fn", `!document.querySelector('[role="dialog"]')`);
+}, 120_000);

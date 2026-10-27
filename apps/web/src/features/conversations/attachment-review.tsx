@@ -4,7 +4,6 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Empty, EmptyTitle } from "#src/components/ui/empty";
 import { useAppToast } from "#src/components/ui/toast";
-import { fileTypeLabel } from "#src/features/files/file-meta";
 import { copyText } from "#src/lib/clipboard";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -18,7 +17,7 @@ import {
   previewKindFor,
 } from "./attachment-preview-kind";
 import { readPreviewText, type PreviewRead } from "./attachment-preview-text";
-import { LoadingImage } from "./loading-image";
+import { ImageLightbox, ReviewTitle, TOOLBAR_ICON } from "./image-lightbox";
 
 type ReviewFile = {
   id: string;
@@ -30,12 +29,9 @@ type ReviewFile = {
   largeUrl?: string;
 };
 
-// The icon bar is drawn at full text color, as on Raft; the tertiary gray reads as disabled.
-const TOOLBAR_ICON = "text-fg-primary hover:text-fg-primary";
-
 /**
- * An image's lightbox, or a previewable file filling the screen under an icon bar, its comments
- * closed until asked for, as on Raft's page. A file without a preview never opens here: its card
+ * An image's lightbox (`ImageLightbox`, the image alone), or a previewable file filling the screen
+ * under an icon bar, its comments closed until asked for, as on Raft's page. A file without a preview never opens here: its card
  * downloads it (`previewKindFor`).
  *
  * A text preview is read before the dialog opens, as in Raft: `children` (the card) shows
@@ -52,7 +48,6 @@ export function AttachmentReviewDialog({
   // A preview opens on the file alone; on an HTML page showing the comments also marks regions.
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [commentsOnPhone, setCommentsOnPhone] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
   const [pendingAnchor, setPendingAnchor] = useState<AttachmentCommentAnchor | null>(null);
   const [surface, setSurface] = useState<AnchorSurface | null>(null);
   const [jumpTo, setJumpTo] = useState<AttachmentCommentAnchor | null>(null);
@@ -109,11 +104,6 @@ export function AttachmentReviewDialog({
       () => {},
     );
   };
-  // An image opens as Raft's lightbox: the page dimmed behind it, and no comments. One that fails
-  // to load shows its "no preview" note on the plain sheet, where it can be read.
-  const isImage = file.contentType.startsWith("image/");
-  const image = isImage && !imageFailed;
-  const showComments = !isImage && commentsOnPhone;
   const commentsShown = commentsOnPhone || commentsExpanded;
   const toast = useAppToast();
   const copyLabel =
@@ -122,54 +112,41 @@ export function AttachmentReviewDialog({
       : kind === "text"
         ? m.attachment_preview_copy()
         : null;
-  const typeLabel = fileTypeLabel(file.fileName, file.contentType);
+  if (file.contentType.startsWith("image/"))
+    return (
+      <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+        {children({ loading: false })}
+        <ImageLightbox images={[file]} index={0} />
+      </DialogTrigger>
+    );
   return (
     <DialogTrigger isOpen={open} onOpenChange={onOpenChange}>
       {children({ loading })}
       <ModalOverlay
         isDismissable
-        className={cn(
-          "px-0 backdrop-blur-none sm:px-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]",
-          image && "bg-black/65",
-        )}
+        className="px-0 backdrop-blur-none sm:px-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]"
       >
-        <Modal
-          className={cn(
-            "h-dvh max-h-dvh w-full rounded-none shadow-none max-sm:h-(--visual-viewport-height) max-sm:max-h-(--visual-viewport-height) max-sm:overflow-hidden sm:rounded-none",
-            image && "bg-transparent",
-          )}
-        >
+        <Modal className="h-dvh max-h-dvh w-full rounded-none shadow-none max-sm:h-(--visual-viewport-height) max-sm:max-h-(--visual-viewport-height) max-sm:overflow-hidden sm:rounded-none">
           <Dialog aria-label={file.fileName} className="flex h-full flex-col overflow-hidden">
             {({ close }) => (
               <>
                 <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">
-                  <p className="flex min-w-0 flex-1 items-center gap-2">
-                    {typeLabel && (
-                      <span className="shrink-0 rounded-sm bg-secondary px-1 py-0.5 text-xs leading-none font-semibold text-tertiary ring-1 ring-secondary ring-inset">
-                        {typeLabel}
-                      </span>
+                  <ReviewTitle fileName={file.fileName} contentType={file.contentType} />
+                  <ButtonUtility
+                    icon={MessageSquare01}
+                    size="sm"
+                    color="tertiary"
+                    tooltip={m.attachment_comments_title()}
+                    aria-pressed={commentsShown}
+                    className={cn(
+                      TOOLBAR_ICON,
+                      commentsShown && "bg-brand-primary_alt text-fg-brand-primary",
                     )}
-                    <span className="truncate text-sm font-semibold text-primary">
-                      {file.fileName}
-                    </span>
-                  </p>
-                  {!isImage && (
-                    <ButtonUtility
-                      icon={MessageSquare01}
-                      size="sm"
-                      color="tertiary"
-                      tooltip={m.attachment_comments_title()}
-                      aria-pressed={commentsShown}
-                      className={cn(
-                        TOOLBAR_ICON,
-                        commentsShown && "bg-brand-primary_alt text-fg-brand-primary",
-                      )}
-                      onClick={() => {
-                        setCommentsOnPhone(!commentsShown);
-                        setCommentsExpanded(!commentsShown);
-                      }}
-                    />
-                  )}
+                    onClick={() => {
+                      setCommentsOnPhone(!commentsShown);
+                      setCommentsExpanded(!commentsShown);
+                    }}
+                  />
                   {copyLabel && text && (
                     <ButtonUtility
                       icon={Copy01}
@@ -208,22 +185,7 @@ export function AttachmentReviewDialog({
                       commentsOnPhone ? "hidden" : "flex",
                     )}
                   >
-                    {image ? (
-                      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                        {/* The large tier over the thumbnail the message already showed until it
-                            arrives; Download keeps the original. */}
-                        <LoadingImage
-                          src={file.largeUrl ?? file.previewUrl ?? href}
-                          placeholderSrc={file.thumbnailUrl}
-                          fallbackSrc={file.largeUrl || file.previewUrl ? href : undefined}
-                          onFailed={() => setImageFailed(true)}
-                          alt={file.fileName}
-                          className="flex size-full items-center justify-center"
-                          imgClassName="max-h-full max-w-full object-contain"
-                          skeletonClassName="m-auto size-[min(24rem,100%)]"
-                        />
-                      </div>
-                    ) : kind ? (
+                    {kind ? (
                       <AttachmentPreview
                         fileName={file.fileName}
                         kind={kind}
@@ -239,31 +201,29 @@ export function AttachmentReviewDialog({
                       </Empty>
                     )}
                   </div>
-                  {!isImage && (
-                    <div
-                      className={cn(
-                        "min-h-0 min-w-0 flex-1",
-                        "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
-                        commentsExpanded ? "lg:block" : "lg:hidden",
-                        showComments ? "block" : "hidden",
-                      )}
-                    >
-                      <AttachmentCommentsPane
-                        attachmentId={file.id}
-                        fileName={file.fileName}
-                        pendingAnchor={pendingAnchor}
-                        focusRequest={focusRequest}
-                        onClearAnchor={(anchor) =>
-                          setPendingAnchor((current) => (current === anchor ? null : current))
-                        }
-                        surface={surface}
-                        onJump={(anchor) => {
-                          setCommentsOnPhone(false);
-                          setJumpTo(anchor);
-                        }}
-                      />
-                    </div>
-                  )}
+                  <div
+                    className={cn(
+                      "min-h-0 min-w-0 flex-1",
+                      "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
+                      commentsExpanded ? "lg:block" : "lg:hidden",
+                      commentsOnPhone ? "block" : "hidden",
+                    )}
+                  >
+                    <AttachmentCommentsPane
+                      attachmentId={file.id}
+                      fileName={file.fileName}
+                      pendingAnchor={pendingAnchor}
+                      focusRequest={focusRequest}
+                      onClearAnchor={(anchor) =>
+                        setPendingAnchor((current) => (current === anchor ? null : current))
+                      }
+                      surface={surface}
+                      onJump={(anchor) => {
+                        setCommentsOnPhone(false);
+                        setJumpTo(anchor);
+                      }}
+                    />
+                  </div>
                 </div>
               </>
             )}
