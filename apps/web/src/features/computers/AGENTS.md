@@ -2,6 +2,19 @@
 
 These rules apply to `src/features/computers/`.
 
+## Module map
+
+- `computer-layout.tsx` — list/detail selection and empty state
+- `computer-detail.tsx` — one Computer's panel composition and owner actions
+- `computer-detail-view.ts` — detail panel view type and restart poll constants
+- `use-computer-detail-lifecycle.ts` — upgrade slots and restart polling
+- `computer-detail-identity.tsx` — hostname / Version / Image / added-by rows
+- `computer-detail-agent-roster.tsx` — Agents on this Computer (select + control)
+- `computer-detail-workspace-inventory.tsx` — Agent workspace scan/delete
+- `computer-detail-date.tsx` — connected-at calendar day in the viewer's zone
+- `computer-detail-header.tsx` — detail header actions (desktop / restart)
+- `computer-detail-rows.tsx` — shared DetailGroup / DetailRow
+
 - `computer-layout.tsx` owns Computer list/detail selection, the return
   control, list scroll retention, and the empty state, following the same
   list/detail rules as Chat (`docs/design/task-first-layout.md` §2.1).
