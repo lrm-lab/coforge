@@ -70,7 +70,7 @@ describe("a PDF is previewable only from a different origin", () => {
   });
 
   test("a delivery origin equal to the application's own is never framed, however it is reached", () => {
-    // The deployment the server-side guard cannot catch: `AUTHING_REDIRECT_URI` is unset, so
+    // The deployment the server-side guard cannot catch: `COFORGE_OIDC_ISSUER` is unset, so
     // `readFileDeliveryConfig` has no application origin to compare and permits the delivery URL.
     // This is then the only check left, and it refuses.
     expect(isFrameableDocumentUrl(`${APP_ORIGIN}/files/o/k`, APP_ORIGIN)).toBe(false);

@@ -92,7 +92,6 @@ describe("write_deploy_env", () => {
         authing_app_id: "staging-app-id",
         authing_app_secret: "staging-app-secret",
         authing_issuer: "https://coforge-staging.authing.cn/oidc",
-        authing_redirect_uri: "https://staging.coforge.cn/auth/callback",
         coforge_session_secret: "staging-session-secret-at-least-32-chars",
       };
       for (const [name, value] of Object.entries(files)) {

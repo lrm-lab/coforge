@@ -37,7 +37,7 @@ export function AppAuthorizationPage({
             <CoForgeMark title="CoForge" className="h-5" />
           </div>
           {account === null ? null : (
-            // Signing out goes through Authing, then back to sign-in and this request.
+            // Signing out lands on sign-in, which comes back to this request.
             <Button
               color="secondary"
               size="sm"

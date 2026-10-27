@@ -47,7 +47,7 @@ test("rejects the application's own origin", () => {
   expect(() =>
     readPublicImageDeliveryConfig({
       COFORGE_IMAGE_DELIVERY_URL: "https://app-staging.coforge.cn",
-      AUTHING_REDIRECT_URI: "https://app-staging.coforge.cn/api/auth/callback",
+      COFORGE_OIDC_ISSUER: "https://app-staging.coforge.cn/oidc",
     }),
   ).toThrow(PublicImageDeliveryConfigError);
 });

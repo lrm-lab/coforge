@@ -1,7 +1,6 @@
 import { initialDisplayName } from "#src/features/auth/name-prefill";
-import { safeReturnTo } from "#src/features/auth/return-to";
-import { atLoginStage, LoginCallbackError } from "./login-failure.server";
-import { askToSignInAgain, signInTime } from "./sign-in-time.server";
+import type { AuthingAuthentication, AuthingTokens } from "./authing-authentication.server";
+import { atSignInStage } from "./login-failure.server";
 import { readSignedValue as readSigned, signValue as sign } from "./signed-value.server";
 export type BrowserUser = {
   id: string;
@@ -32,130 +31,22 @@ export type InternalUserResolver = (input: {
   welcomedAt: Date | null;
 }>;
 
-export type AuthingConfig = {
-  appId: string;
-  appSecret: string;
-  issuer: string;
-  authorizationEndpoint: string;
-  tokenEndpoint: string;
-  userinfoEndpoint: string;
-  endSessionEndpoint: string;
-  redirectUri: string;
-};
-
-export type TokenExchanger = {
-  exchangeAuthorizationCode(input: {
-    code: string;
-    redirectUri: string;
-    codeVerifier: string;
-  }): Promise<{ accessToken: string; idToken?: string }>;
-  fetchUserInfo(accessToken: string): Promise<{
-    sub: string;
-    email?: string | null;
-    name?: string | null;
-    nickname?: string | null;
-    preferred_username?: string | null;
-  }>;
-};
-
 const SESSION_COOKIE = "coforge_session";
-const STATE_COOKIE_PREFIX = "coforge_oauth_state_";
-const LOGOUT_RETURN_COOKIE = "coforge_logout_return";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
-const STATE_TTL_SECONDS = 60 * 10;
-const LOGOUT_RETURN_TTL_SECONDS = 60 * 10;
 
-type SignedState = {
-  state: string;
-  codeVerifier: string;
-  exp: number;
-  /** The page sign-in started from; signed, so the callback can trust where it sends people. */
-  returnTo?: string;
-};
-
-type SignedSession = BrowserUser & { exp: number; idToken?: string; authTime?: number };
-
-type SignedLogoutReturn = { returnTo: string; exp: number };
-
-/** What a `state` looks like when this module made it (base64url of random bytes): the only
- * strings that are safe in a cookie name, and the only ones a callback's query can name. */
-const STATE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+type SignedSession = BrowserUser & { exp: number; authTime?: number };
 
 /**
- * Each sign-in keeps its own state cookie, named by its `state`, so several tabs can sign in at
- * once: with one shared name the last sign-in started would overwrite the rest. `null` when
- * `state` is not one this module could have issued; the callback's `state` comes from the query
- * and must not reach a cookie name unchecked.
+ * Turns the tokens of a sign-in Authing completed into a CoForge session: reads the profile they
+ * name, resolves (and on a first sign-in creates) the person, and signs the session cookie. The
+ * tail every way of signing in shares.
  */
-function stateCookieName(state: string): string | null {
-  return STATE_PATTERN.test(state) ? `${STATE_COOKIE_PREFIX}${state}` : null;
-}
-
-/** The signed state of the sign-in `state` names, or null when its cookie is missing, forged, or
- * signed for another state. Expiry is the caller's to judge. */
-function readPendingState(input: {
-  sessionSecret: string;
-  cookieHeader: string;
-  state: string;
-}): SignedState | null {
-  const name = stateCookieName(input.state);
-  if (!name) return null;
-  const signed = readSigned<SignedState>(
-    "login-state",
-    readCookie(input.cookieHeader, name),
-    input.sessionSecret,
-  );
-  return signed?.state === input.state ? signed : null;
-}
-
-export function startBrowserLogin(input: {
-  config: AuthingConfig;
-  sessionSecret: string;
-  /** Kept only when it is a page of this site (`safeReturnTo`). */
-  returnTo?: string | null;
-  /** Has Authing ask the person to sign in again, even with a session of its own. */
-  reauthenticate?: boolean;
-  now?: () => number;
-  randomBytes?: (size: number) => Uint8Array;
-}): { authorizationUrl: string; stateCookie: string } {
-  const now = input.now ?? Date.now;
-  const randomBytes = input.randomBytes ?? defaultRandomBytes;
-  const state = toBase64Url(randomBytes(16));
-  const codeVerifier = toBase64Url(randomBytes(32));
-  const returnTo = safeReturnTo(input.returnTo);
-  const payload: SignedState = {
-    state,
-    codeVerifier,
-    exp: Math.floor(now() / 1000) + STATE_TTL_SECONDS,
-    ...(returnTo ? { returnTo } : {}),
-  };
-  const url = new URL(input.config.authorizationEndpoint);
-  url.searchParams.set("client_id", input.config.appId);
-  url.searchParams.set("redirect_uri", input.config.redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "openid profile email");
-  url.searchParams.set("state", state);
-  url.searchParams.set("code_challenge", sha256Base64Url(codeVerifier));
-  url.searchParams.set("code_challenge_method", "S256");
-  if (input.reauthenticate) askToSignInAgain(url);
-  return {
-    authorizationUrl: url.toString(),
-    stateCookie: serializeCookie(
-      `${STATE_COOKIE_PREFIX}${state}`,
-      sign("login-state", payload, input.sessionSecret),
-      STATE_TTL_SECONDS,
-      input.config.redirectUri,
-    ),
-  };
-}
-
 export async function completeBrowserLogin(input: {
-  config: AuthingConfig;
   sessionSecret: string;
-  code: string;
-  state: string;
-  cookieHeader: string;
-  authing: TokenExchanger;
+  tokens: AuthingTokens;
+  authing: Pick<AuthingAuthentication, "fetchUserInfo">;
+  /** Whether the site is served over HTTPS, which the cookie then requires. */
+  secure: boolean;
   resolveUser?: InternalUserResolver;
   now?: () => number;
 }): Promise<{
@@ -166,31 +57,16 @@ export async function completeBrowserLogin(input: {
    * rather than creating anything for them. */
   welcomed: boolean;
   sessionCookie: string;
-  clearStateCookie: string;
-  /** Where sign-in started, when that was a page of this site. */
-  returnTo?: string;
 }> {
   const now = input.now ?? Date.now;
-  const signedState = readPendingState(input);
-  if (!signedState || signedState.exp * 1000 <= now()) {
-    throw new LoginCallbackError("state");
-  }
-
-  const returnTo = pendingReturnTo(signedState);
-  const tokens = await atLoginStage("token_exchange", () =>
-    input.authing.exchangeAuthorizationCode({
-      code: input.code,
-      redirectUri: input.config.redirectUri,
-      codeVerifier: signedState.codeVerifier,
-    }),
-  );
-  const profile = await atLoginStage("userinfo", () =>
+  const { tokens } = input;
+  const profile = await atSignInStage("userinfo", () =>
     input.authing.fetchUserInfo(tokens.accessToken),
   );
   const email = profile.email?.trim().toLowerCase() || null;
   const { resolveUser } = input;
   const resolved = resolveUser
-    ? await atLoginStage("user_resolution", () =>
+    ? await atSignInStage("user_resolution", () =>
         resolveUser({
           provider: "authing",
           subject: profile.sub,
@@ -215,9 +91,9 @@ export async function completeBrowserLogin(input: {
   };
   const session: SignedSession = {
     ...user,
-    authTime: signInTime(tokens.idToken, Math.floor(now() / 1000)),
+    // The password was just checked: the sign-in is now.
+    authTime: Math.floor(now() / 1000),
     exp: Math.floor(now() / 1000) + SESSION_TTL_SECONDS,
-    ...(tokens.idToken ? { idToken: tokens.idToken } : {}),
   };
   return {
     user,
@@ -227,48 +103,12 @@ export async function completeBrowserLogin(input: {
       SESSION_COOKIE,
       sign("session", session, input.sessionSecret),
       SESSION_TTL_SECONDS,
-      input.config.redirectUri,
+      input.secure,
     ),
-    clearStateCookie: clearCookie(
-      `${STATE_COOKIE_PREFIX}${signedState.state}`,
-      input.config.redirectUri,
-    ),
-    ...(returnTo ? { returnTo } : {}),
   };
 }
 
-/**
- * The page the sign-in `state` names started from, read from its signed state cookie; `undefined`
- * when that cookie is missing, forged, or names no page of this site. A failed callback uses it to
- * offer the same sign-in again.
- */
-export function pendingLoginReturnTo(input: {
-  sessionSecret: string;
-  cookieHeader: string;
-  state: string;
-}): string | undefined {
-  return pendingReturnTo(readPendingState(input));
-}
-
-function pendingReturnTo(state: SignedState | null): string | undefined {
-  return safeReturnTo(state?.returnTo);
-}
-
-/**
- * Expires the state cookie of a sign-in that did not finish, when the browser sent one for
- * `state`; other sign-ins' cookies stay. `undefined` when there is nothing of this sign-in to clear.
- */
-export function clearPendingLoginState(input: {
-  config: AuthingConfig;
-  cookieHeader: string;
-  state: string;
-}): string | undefined {
-  const name = stateCookieName(input.state);
-  if (!name || readCookie(input.cookieHeader, name) === null) return undefined;
-  return clearCookie(name, input.config.redirectUri);
-}
-
-// The real callback supplies the persistence resolver. This deterministic fallback
+// The real sign-in supplies the persistence resolver. This deterministic fallback
 // keeps the pure authentication seam usable without a database in unit tests.
 function testOnlyStableInternalUserId(provider: string, subject: string): string {
   const bytes = Array.from(sha256Bytes(`coforge-internal-user:${provider}:${subject}`));
@@ -310,134 +150,10 @@ export function readBrowserSignIn(input: {
   };
 }
 
-function buildAuthingLogoutUrl(
-  config: AuthingConfig,
-  postLogoutRedirectUri: string,
-  idTokenHint?: string,
-): string {
-  const url = new URL(config.endSessionEndpoint);
-  url.searchParams.set("client_id", config.appId);
-  url.searchParams.set("post_logout_redirect_uri", postLogoutRedirectUri);
-  if (idTokenHint) url.searchParams.set("id_token_hint", idTokenHint);
-  return url.toString();
-}
-
-export function endBrowserLogin(input: {
-  config: AuthingConfig;
-  postLogoutRedirectUri: string;
-  sessionSecret: string;
-  cookieHeader: string;
-  /**
-   * The page to sign in to again once Authing has ended its session (switching account). Kept
-   * only when it is a page of this site (`safeReturnTo`).
-   */
-  returnTo?: string | null;
-  now?: () => number;
-}): {
-  clearSessionCookie: string;
-  authingLogoutUrl: string;
-  /** Carries `returnTo` across Authing's redirect, which can only land on the registered
-   * `postLogoutRedirectUri`; `consumeLogoutReturnTo` reads it there. Without a `returnTo` it
-   * expires any earlier one, so a switch that never came back cannot redirect this sign-out. */
-  returnCookie: string;
-} {
-  const now = input.now ?? Date.now;
-  const session = readSigned<SignedSession>(
-    "session",
-    readCookie(input.cookieHeader, SESSION_COOKIE),
-    input.sessionSecret,
-  );
-  const returnTo = safeReturnTo(input.returnTo);
-  const remembered: SignedLogoutReturn | null = returnTo
-    ? { returnTo, exp: Math.floor(now() / 1000) + LOGOUT_RETURN_TTL_SECONDS }
-    : null;
-  return {
-    clearSessionCookie: clearCookie(SESSION_COOKIE, input.config.redirectUri),
-    authingLogoutUrl: buildAuthingLogoutUrl(
-      input.config,
-      input.postLogoutRedirectUri,
-      session?.idToken,
-    ),
-    returnCookie: remembered
-      ? serializeCookie(
-          LOGOUT_RETURN_COOKIE,
-          sign("logout-return", remembered, input.sessionSecret),
-          LOGOUT_RETURN_TTL_SECONDS,
-          input.config.redirectUri,
-        )
-      : clearCookie(LOGOUT_RETURN_COOKIE, input.config.redirectUri),
-  };
-}
-
-/**
- * The step where the browser lands back after signing out at Authing. Reads the cookie
- * `endBrowserLogin` left: `returnTo` is the page to sign in to again, present only while the
- * signed cookie is valid and unexpired. `clearCookie` expires it, so it is used once; a forged
- * or expired cookie is cleared too and gives no `returnTo`. `undefined` when no cookie came.
- */
-export function consumeLogoutReturnTo(input: {
-  sessionSecret: string;
-  cookieHeader: string;
-  config: AuthingConfig;
-  now?: () => number;
-}): { returnTo?: string; clearCookie: string } | undefined {
-  const now = input.now ?? Date.now;
-  const value = readCookie(input.cookieHeader, LOGOUT_RETURN_COOKIE);
-  if (value === null) return undefined;
-  const signed = readSigned<SignedLogoutReturn>("logout-return", value, input.sessionSecret);
-  const returnTo = signed && signed.exp * 1000 > now() ? safeReturnTo(signed.returnTo) : undefined;
-  return {
-    ...(returnTo ? { returnTo } : {}),
-    clearCookie: clearCookie(LOGOUT_RETURN_COOKIE, input.config.redirectUri),
-  };
-}
-
-export function createAuthingExchanger(config: AuthingConfig): TokenExchanger {
-  return {
-    async exchangeAuthorizationCode(input) {
-      const response = await fetch(config.tokenEndpoint, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code: input.code,
-          client_id: config.appId,
-          client_secret: config.appSecret,
-          redirect_uri: input.redirectUri,
-          code_verifier: input.codeVerifier,
-        }),
-      });
-      // A gateway's HTML error page is not JSON; the status still says what happened.
-      const body = (await response.json().catch(() => ({}))) as {
-        access_token?: string;
-        id_token?: string;
-        error?: unknown;
-      };
-      if (!response.ok || !body.access_token) {
-        throw new LoginCallbackError("token_exchange", {
-          status: response.status,
-          providerError: body.error,
-        });
-      }
-      return {
-        accessToken: body.access_token,
-        ...(body.id_token ? { idToken: body.id_token } : {}),
-      };
-    },
-    async fetchUserInfo(accessToken) {
-      const response = await fetch(config.userinfoEndpoint, {
-        headers: { authorization: `Bearer ${accessToken}` },
-      });
-      if (!response.ok) throw new LoginCallbackError("userinfo", { status: response.status });
-      return (await response.json()) as {
-        sub: string;
-        email?: string | null;
-        name?: string | null;
-        nickname?: string | null;
-        preferred_username?: string | null;
-      };
-    },
-  };
+/** The cookie that ends a session: CoForge's session is all there is to end, since sign-in keeps
+ * no Authing token (`signInWithPassword` revokes it once the profile is read). */
+export function sessionEndingCookie(secure: boolean): string {
+  return clearCookie(SESSION_COOKIE, secure);
 }
 
 /** Whether a signed session carries every field a `BrowserUser` needs; `id` goes straight into
@@ -455,7 +171,8 @@ function isSignedSession(value: SignedSession | null): value is SignedSession {
   );
 }
 
-function readCookie(header: string, name: string): string | null {
+/** The value of the cookie `name` in a `Cookie` header, or null. */
+export function readCookie(header: string, name: string): string | null {
   for (const part of header.split(";")) {
     const [key, ...rest] = part.trim().split("=");
     if (key === name) return rest.join("=");
@@ -463,13 +180,14 @@ function readCookie(header: string, name: string): string | null {
   return null;
 }
 
-function serializeCookie(
+/** A `Set-Cookie` value for a path-wide HttpOnly cookie that browsers send on top-level
+ * navigations from other sites (`SameSite=Lax`), as a return from GitHub is. */
+export function serializeCookie(
   name: string,
   value: string,
   maxAgeSeconds: number,
-  siteUrl: string,
+  secure: boolean,
 ): string {
-  const secure = siteUrl.startsWith("https:");
   return [
     `${name}=${value}`,
     "Path=/",
@@ -482,26 +200,13 @@ function serializeCookie(
     .join("; ");
 }
 
-function clearCookie(name: string, siteUrl: string): string {
-  return serializeCookie(name, "", 0, siteUrl);
-}
-
-function defaultRandomBytes(size: number): Uint8Array {
-  const bytes = new Uint8Array(size);
-  crypto.getRandomValues(bytes);
-  return bytes;
-}
-
-function sha256Base64Url(value: string): string {
-  return toBase64Url(sha256Bytes(value));
+/** A `Set-Cookie` value that expires the cookie `name`. */
+export function clearCookie(name: string, secure: boolean): string {
+  return serializeCookie(name, "", 0, secure);
 }
 
 function sha256Bytes(value: string): Uint8Array {
   const hasher = new Bun.CryptoHasher("sha256");
   hasher.update(value);
   return new Uint8Array(hasher.digest());
-}
-
-function toBase64Url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64url");
 }

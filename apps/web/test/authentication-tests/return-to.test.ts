@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   localizedReturnHref,
+  nextHrefAfterSignIn,
   safeReturnTo,
   signInHref,
   signOutHref,
@@ -56,16 +57,16 @@ test("the page to return to keeps the locale prefix CoForge pages carry, and non
   );
 });
 
-test("signing in starts at /auth/login and carries the page to come back to", () => {
+test("signing in starts at /login and carries the page to come back to", () => {
   expect(signInHref("/oauth/verify?user_code=AB-CD")).toBe(
-    "/auth/login?returnTo=%2Foauth%2Fverify%3Fuser_code%3DAB-CD",
+    "/login?returnTo=%2Foauth%2Fverify%3Fuser_code%3DAB-CD",
   );
-  expect(signInHref(undefined)).toBe("/auth/login");
+  expect(signInHref(undefined)).toBe("/login");
 });
 
 test("signing in again asks for prompt=login, and signing out can come back to sign in", () => {
   expect(signInHref("/oidc/auth?client_id=a", { prompt: "login" })).toBe(
-    "/auth/login?returnTo=%2Foidc%2Fauth%3Fclient_id%3Da&prompt=login",
+    "/login?returnTo=%2Foidc%2Fauth%3Fclient_id%3Da&prompt=login",
   );
   expect(signOutHref("/oidc/auth?client_id=a")).toBe(
     "/auth/logout?returnTo=%2Foidc%2Fauth%3Fclient_id%3Da",
@@ -82,4 +83,17 @@ test("a Login with CoForge authorization request comes back unchanged and unpref
   // The app's redirect URI travels inside the query; it never becomes where sign-in returns to.
   expect(safeReturnTo("//notes.acme.example/oidc/auth?client_id=acme-notes")).toBeUndefined();
   expect(safeReturnTo("/\\notes.acme.example/oidc/auth")).toBeUndefined();
+});
+
+test("a finished sign-in goes on to the page asked for, or the name step first for a new account", () => {
+  expect(nextHrefAfterSignIn(true, "/w/x/channel/1")).toBe("/en/w/x/channel/1");
+  expect(nextHrefAfterSignIn(true, undefined)).toBe("/en");
+  expect(nextHrefAfterSignIn(false, "/join/abc")).toBe("/en/welcome?returnTo=%2Fjoin%2Fabc");
+  expect(nextHrefAfterSignIn(false, undefined)).toBe("/en/welcome");
+  // What the browser sent is judged here, so no caller can forget to: nothing leaves the site.
+  expect(nextHrefAfterSignIn(true, "//evil.com")).toBe("/en");
+  expect(nextHrefAfterSignIn(false, "https://evil.com")).toBe("/en/welcome");
+  expect(nextHrefAfterSignIn(true, "/oauth/verify?user_code=AB-CD")).toBe(
+    "/oauth/verify?user_code=AB-CD",
+  );
 });

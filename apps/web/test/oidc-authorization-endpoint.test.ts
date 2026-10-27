@@ -27,7 +27,7 @@ test("someone signed out is sent to sign in and back to this exact request", asy
   const raw = `${search()}&ui_locales=zh-CN%20en`;
   expect(await endpoint.begin(raw, null)).toEqual({
     kind: "redirect",
-    location: `/auth/login?returnTo=${encodeURIComponent(`/oidc/auth?${raw}`)}`,
+    location: `/login?returnTo=${encodeURIComponent(`/oidc/auth?${raw}`)}`,
   });
 });
 

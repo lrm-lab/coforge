@@ -1,7 +1,7 @@
 # Login with CoForge
 
 CoForge is an OpenID Connect authorization server for third-party apps. People still sign
-in to CoForge through Authing; this server is a separate role in which CoForge itself
+in to CoForge with their Authing account, on CoForge's own page; this server is a separate role in which CoForge itself
 issues tokens to the apps a Workspace uses. It is hand-written on `jose` in
 `apps/web/src/server/authorization-server/`, and it shares nothing with the device-flow
 server the Computer signs in through (`/.well-known/oauth-authorization-server`,

@@ -196,7 +196,7 @@ describe("delivery must not be the application's own origin", () => {
       await readFileDeliveryConfig({
         COFORGE_FILE_DELIVERY_URL: "https://files.coforge.cn",
         COFORGE_FILE_DELIVERY_KEY: "k".repeat(32),
-        AUTHING_REDIRECT_URI: "https://app.coforge.cn/auth/callback",
+        COFORGE_OIDC_ISSUER: "https://app.coforge.cn/oidc",
       } as NodeJS.ProcessEnv),
     ).toEqual({ baseUrl: "https://files.coforge.cn", key: "k".repeat(32) });
   });
@@ -206,7 +206,7 @@ describe("delivery must not be the application's own origin", () => {
       readFileDeliveryConfig({
         COFORGE_FILE_DELIVERY_URL: "https://app.coforge.cn",
         COFORGE_FILE_DELIVERY_KEY: "k".repeat(32),
-        AUTHING_REDIRECT_URI: "https://app.coforge.cn/auth/callback",
+        COFORGE_OIDC_ISSUER: "https://app.coforge.cn/oidc",
       } as NodeJS.ProcessEnv),
     ).rejects.toThrow("must not be the application's own origin");
   });

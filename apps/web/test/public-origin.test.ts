@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { publicOrigin } from "#src/server/http/public-origin.server";
+import { clientAddress, publicOrigin } from "#src/server/http/public-origin.server";
 
 describe("publicOrigin", () => {
   test("prefers the origin the reverse proxy reports", () => {
@@ -83,5 +83,35 @@ describe("publicOrigin", () => {
     });
 
     expect(publicOrigin(request)).toBe("http://staging.coforge.cn");
+  });
+});
+
+describe("clientAddress", () => {
+  const from = (forwardedFor?: string) =>
+    new Request("http://coforge.cn/", {
+      headers: forwardedFor === undefined ? {} : { "x-forwarded-for": forwardedFor },
+    });
+
+  test("is the hop the reverse proxy appended, not one the client wrote", () => {
+    expect(clientAddress(from("198.51.100.9, 203.0.113.7"))).toBe("203.0.113.7");
+    expect(clientAddress(from("203.0.113.7"))).toBe("203.0.113.7");
+  });
+
+  test("reads an IPv6 address", () => {
+    expect(clientAddress(from("2001:db8::1"))).toBe("2001:db8::1");
+  });
+
+  test("is undefined without the header or with a last hop that is not an address", () => {
+    expect(clientAddress(from())).toBeUndefined();
+    expect(clientAddress(from(""))).toBeUndefined();
+    expect(clientAddress(from("203.0.113.7, unknown"))).toBeUndefined();
+    expect(clientAddress(from("203.0.113.7:4711"))).toBeUndefined();
+    expect(clientAddress(from("203.0.113.999"))).toBeUndefined();
+    expect(clientAddress(from("evil.example.com"))).toBeUndefined();
+    expect(clientAddress(from("1.2"))).toBeUndefined();
+    expect(clientAddress(from("0x7f.0.0.1"))).toBeUndefined();
+    expect(clientAddress(from("[2001:db8::1]"))).toBeUndefined();
+    expect(clientAddress(from("2001:db8::zz"))).toBeUndefined();
+    expect(clientAddress(from("fe80::1%eth0"))).toBeUndefined();
   });
 });

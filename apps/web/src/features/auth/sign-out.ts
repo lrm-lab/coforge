@@ -5,8 +5,9 @@ const FORGET_TIMEOUT_MS = 2_000;
 
 /**
  * Signs out of this browser: what this person's pages kept in it (`features/cache-persistence/`)
- * goes first, then a full navigation to `/auth/logout` clears the session cookie and sends the
- * browser to Authing. `href` carries a `returnTo` for signing in again as someone else.
+ * goes first, then a full navigation to `/auth/logout` clears the session cookie and lands on the sign-in
+ * page. `href` carries a `returnTo` for signing in again as
+ * someone else.
  */
 export async function signOut(href = "/auth/logout") {
   await Promise.race([

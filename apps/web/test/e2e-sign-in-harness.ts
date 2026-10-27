@@ -1,3 +1,4 @@
+import { RedisClient } from "bun";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,132 +6,48 @@ import { join } from "node:path";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
 
+import {
+  appId,
+  appSecret,
+  personPassword,
+  refusedPassword,
+  signInEmailOf,
+  registeredSubFor,
+  throttledDestination,
+  unsendableDestination,
+  startFakeAuthing,
+  type Person,
+  type SentCode,
+} from "./e2e-fake-authing";
+
 /**
  * What the browser e2es of real sign-in share (`e2e-sign-in-flow.e2e.ts`,
- * `e2e-first-sign-in-name.e2e.ts`): a stand-in for Authing's OIDC endpoints over HTTPS (a
- * throwaway self-signed certificate; the Web server trusts it through `NODE_EXTRA_CA_CERTS`, the
- * browser ignores certificate errors), a Web dev server with real sign-in
- * (`COFORGE_DEV_SKIP_AUTH=0`) pointed at it, and an `agent-browser` session. Not a test file: it
- * has no `.e2e.ts` suffix, so the e2e runner does not list it and `bun test` does not run it.
+ * `e2e-first-sign-in-name.e2e.ts`): a stand-in for the part of Authing the Web server calls (the
+ * v3 password and verification-code sign-in, the userinfo endpoint and token revocation) over HTTPS (a throwaway
+ * self-signed certificate; the Web server trusts it through `NODE_EXTRA_CA_CERTS`, the browser
+ * ignores certificate errors), a Web dev server with real sign-in (`COFORGE_DEV_SKIP_AUTH=0`)
+ * pointed at it, and an `agent-browser` session that signs in through CoForge's own form. Not a
+ * test file: it has no `.e2e.ts` suffix, so the e2e runner does not list it and `bun test` does
+ * not run it.
  */
 
-export type Person = {
-  sub: string;
-  email?: string;
-  name?: string;
-  nickname?: string;
-  refused?: true;
+export {
+  appId,
+  appSecret,
+  personPassword,
+  refusedPassword,
+  signInEmailOf,
+  registeredSubFor,
+  throttledDestination,
+  unsendableDestination,
+  startFakeAuthing,
 };
-
-export const appId = "e2e-sign-in-app";
-export const appSecret = "e2e-sign-in-app-secret";
+export type { Person, SentCode };
 
 /** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
 export function seededUuid(key: string): string {
   const hash = createHash("sha256").update(key).digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-}
-
-/**
- * The part of Authing's OIDC provider the Web server talks to. Its sign-in page lists the test
- * accounts as links, so the browser picks who signs in. Like Authing, it returns only to the app's
- * registered callback and homepage, and the token endpoint checks the client, the redirect URI and
- * the PKCE verifier.
- */
-export function startFakeAuthing<Key extends string>(input: {
-  people: Record<Key, Person>;
-  origin: string;
-  tls: { cert: string; key: string };
-}) {
-  const { people, origin, tls } = input;
-  const registeredCallback = `${origin}/auth/callback`;
-  const registeredHomepage = `${origin}/`;
-  const codes = new Map<string, { person: Key; challenge: string; redirectUri: string }>();
-  const accessTokens = new Map<string, Key>();
-  const endedSessions: (string | null)[] = [];
-
-  /** What the sign-in page's "Continue as …" link does: back to the app with a one-time code. */
-  function approve(person: Key, authorize: URLSearchParams): string {
-    const code = randomBytes(16).toString("base64url");
-    const redirectUri = authorize.get("redirect_uri") ?? "";
-    codes.set(code, { person, challenge: authorize.get("code_challenge") ?? "", redirectUri });
-    const back = new URL(redirectUri);
-    back.searchParams.set("code", code);
-    back.searchParams.set("state", authorize.get("state") ?? "");
-    return back.toString();
-  }
-
-  const server = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    tls,
-    async fetch(request) {
-      const url = new URL(request.url);
-      if (url.pathname === "/oidc/auth") {
-        const valid =
-          url.searchParams.get("client_id") === appId &&
-          url.searchParams.get("redirect_uri") === registeredCallback &&
-          url.searchParams.get("response_type") === "code" &&
-          url.searchParams.get("code_challenge_method") === "S256" &&
-          Boolean(url.searchParams.get("code_challenge") && url.searchParams.get("state"));
-        if (!valid) return new Response("invalid authorization request", { status: 400 });
-        const links = (Object.keys(people) as Key[])
-          .map((key) => {
-            const next = new URLSearchParams(url.searchParams);
-            next.set("person", key);
-            return `<li><a id="as-${key}" href="/oidc/approve?${next}">Continue as ${people[key].name ?? key}</a></li>`;
-          })
-          .join("");
-        return new Response(`<!doctype html><title>Fake Authing</title><ul>${links}</ul>`, {
-          headers: { "content-type": "text/html; charset=utf-8" },
-        });
-      }
-      if (url.pathname === "/oidc/approve") {
-        const person = url.searchParams.get("person") as Key;
-        return Response.redirect(approve(person, url.searchParams), 302);
-      }
-      if (url.pathname === "/oidc/token" && request.method === "POST") {
-        const form = new URLSearchParams(await request.text());
-        const issued = codes.get(form.get("code") ?? "");
-        codes.delete(form.get("code") ?? "");
-        const verifier = form.get("code_verifier") ?? "";
-        const challenge = createHash("sha256").update(verifier).digest("base64url");
-        if (
-          !issued ||
-          form.get("grant_type") !== "authorization_code" ||
-          form.get("client_id") !== appId ||
-          form.get("client_secret") !== appSecret ||
-          form.get("redirect_uri") !== issued.redirectUri ||
-          challenge !== issued.challenge
-        ) {
-          return Response.json({ error: "invalid_grant" }, { status: 400 });
-        }
-        const accessToken = randomBytes(16).toString("base64url");
-        accessTokens.set(accessToken, issued.person);
-        return Response.json({ access_token: accessToken, id_token: `id-${issued.person}` });
-      }
-      if (url.pathname === "/oidc/me") {
-        const token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-        const person = accessTokens.get(token);
-        const profile: Person | undefined = person && people[person];
-        return profile && !profile.refused
-          ? Response.json(profile)
-          : new Response(null, { status: 401 });
-      }
-      if (url.pathname === "/oidc/session/end") {
-        if (
-          url.searchParams.get("client_id") !== appId ||
-          url.searchParams.get("post_logout_redirect_uri") !== registeredHomepage
-        ) {
-          return new Response("invalid logout request", { status: 400 });
-        }
-        endedSessions.push(url.searchParams.get("id_token_hint"));
-        return Response.redirect(registeredHomepage, 302);
-      }
-      return new Response("not found", { status: 404 });
-    },
-  });
-  return { server, issuer: `https://127.0.0.1:${server.port}/oidc`, approve, endedSessions };
 }
 
 /** A throwaway self-signed certificate for 127.0.0.1, written into `dir`. */
@@ -197,6 +114,39 @@ export const hydrated = (element: string) =>
 export const onNameStep = (origin: string) =>
   `location.origin === ${JSON.stringify(origin)} && location.pathname.endsWith("/welcome") && ${hydrated(nameField)}`;
 
+/** The password form's fields, as the selector `click` and `setInput` take and as the page
+ * expression `evaluate` reads. */
+export const emailFieldSelector = 'main input[name="email"]';
+export const passwordFieldSelector = 'main input[name="password"]';
+export const emailField = `document.querySelector(${JSON.stringify(emailFieldSelector)})`;
+/** The code form's fields: one for the phone number or email, one for the code. */
+export const destinationFieldSelector = 'main input[name="destination"]';
+export const codeFieldSelector = 'main input[name="code"]';
+export const destinationField = `document.querySelector(${JSON.stringify(destinationFieldSelector)})`;
+/** The sign-in page's two tabs, by their labels. */
+export const signInTab = (label: string) =>
+  `[...document.querySelectorAll('main [role="tab"]')].find((tab) => tab.textContent.trim() === ${JSON.stringify(label)})`;
+export const codeTab = signInTab("Sign in with a code");
+export const passwordTab = signInTab("Sign in with a password");
+
+/** The condition "the sign-in page is up on `origin` and its tabs are ready". */
+export const onSignInPage = (origin: string) =>
+  `location.origin === ${JSON.stringify(origin)} && location.pathname.endsWith("/login") && ${hydrated(codeTab)}`;
+
+/**
+ * Forgets the sign-in attempts the Web server has counted. The limits live in Redis for 15
+ * minutes (an hour for sending codes), so without this the sign-ins of one run would count against the next one's.
+ */
+async function clearSignInRateLimits(redisUrl: string) {
+  const redis = new RedisClient(redisUrl);
+  try {
+    const keys = (await redis.send("KEYS", ["coforge:ratelimit:sign-in-*"])) as string[];
+    if (keys.length > 0) await redis.send("DEL", keys);
+  } finally {
+    redis.close();
+  }
+}
+
 /** The local PostgreSQL and Redis these e2es need, or a thrown error naming what is missing. */
 export function requireLocalServices(): { databaseUrl: string; redisUrl: string } {
   const databaseUrl = Bun.env.DATABASE_URL;
@@ -220,6 +170,10 @@ export async function startSignInStack<Key extends string>(input: {
   people: Record<Key, Person>;
   webPort: number;
   artifacts: string;
+  /** The fake Authing's GitHub exchange, for a stack that signs in with GitHub. */
+  github?: Parameters<typeof startFakeAuthing<Key>>[0]["github"];
+  /** More environment for the Web server. */
+  env?: Record<string, string>;
 }) {
   const origin = `http://127.0.0.1:${input.webPort}`;
   // A server left on the port by an interrupted run would answer in place of this run's.
@@ -231,6 +185,7 @@ export async function startSignInStack<Key extends string>(input: {
   )
     throw new Error(`${origin} is already in use; stop it or choose another port`);
 
+  await clearSignInRateLimits(requireLocalServices().redisUrl);
   const certDir = await mkdtemp(join(tmpdir(), "coforge-e2e-sign-in-"));
   let fake: ReturnType<typeof startFakeAuthing<Key>> | undefined;
   let web: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
@@ -240,8 +195,8 @@ export async function startSignInStack<Key extends string>(input: {
     const { certFile, keyFile } = writeCertificate(certDir);
     fake = startFakeAuthing({
       people: input.people,
-      origin,
       tls: { cert: await Bun.file(certFile).text(), key: await Bun.file(keyFile).text() },
+      ...(input.github ? { github: input.github } : {}),
     });
     const server = Bun.spawn(
       [
@@ -262,11 +217,11 @@ export async function startSignInStack<Key extends string>(input: {
           AUTHING_ISSUER: fake.issuer,
           AUTHING_APP_ID: appId,
           AUTHING_APP_SECRET: appSecret,
-          AUTHING_REDIRECT_URI: `${origin}/auth/callback`,
           COFORGE_DEV_SKIP_AUTH: "0",
           COFORGE_SESSION_SECRET: randomBytes(32).toString("base64url"),
           NODE_EXTRA_CA_CERTS: certFile,
           COFORGE_LOG_SERVER_ERRORS: "1",
+          ...input.env,
         },
         stdin: "ignore",
         stdout: "pipe",
@@ -316,6 +271,7 @@ export async function startSignInStack<Key extends string>(input: {
     }
     fake?.server.stop(true);
     await rm(certDir, { recursive: true, force: true });
+    await clearSignInRateLimits(requireLocalServices().redisUrl);
   }
 
   return { origin, fake: fake!, stop: stopStack };
@@ -388,5 +344,35 @@ export function openBrowser(session: string) {
     await setInput(nameFieldSelector, displayName);
     await browser("eval", `${button(label)}.click()`);
   }
-  return { browser, boundTabId, evaluate, waitFor, button, setInput, submitName };
+  /** Opens the password tab, which waits for its form, and fills it and presses its button
+   * (`Sign In`, or `登录`). */
+  async function submitSignIn(email: string, password: string, label = "Sign In") {
+    await browser("eval", `${passwordTab}.click()`);
+    await waitFor(hydrated(emailField));
+    await setInput(emailFieldSelector, email);
+    await setInput(passwordFieldSelector, password);
+    await browser("eval", `${button(label)}.click()`);
+  }
+  /** On the code tab (the page's first), asks for a code for `destination`. */
+  async function requestCode(destination: string) {
+    await setInput(destinationFieldSelector, destination);
+    await browser("eval", `${button("Send code")}.click()`);
+  }
+  /** On the code tab, types `code` and presses its button (`Sign In`). */
+  async function submitCode(code: string) {
+    await setInput(codeFieldSelector, code);
+    await browser("eval", `${button("Sign In")}.click()`);
+  }
+  return {
+    browser,
+    boundTabId,
+    evaluate,
+    waitFor,
+    button,
+    setInput,
+    submitName,
+    submitSignIn,
+    requestCode,
+    submitCode,
+  };
 }

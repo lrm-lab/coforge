@@ -78,10 +78,13 @@ test("a person who has none is asked, starting from what the provider reported",
 
 test("a session whose user is gone signs in again, and comes back to where it was going", async () => {
   step = { status: "account_gone" };
-  const options = redirectOptions(await enter({ returnTo: "/join/abc" }));
-  // A document load, not a router step: `/auth/login` is a server route.
-  expect(options.href).toBe(`/auth/login?returnTo=${encodeURIComponent("/join/abc")}`);
-  expect(options.reloadDocument).toBe(true);
-
-  expect(redirectOptions(await enter({})).href).toBe("/auth/login");
+  // The sign-in page asks even though the session still verifies (`prompt=login`).
+  expect(redirectOptions(await enter({ returnTo: "/join/abc" }))).toMatchObject({
+    to: "/login",
+    search: { returnTo: "/join/abc", prompt: "login" },
+  });
+  expect(redirectOptions(await enter({}))).toMatchObject({
+    to: "/login",
+    search: { prompt: "login" },
+  });
 });

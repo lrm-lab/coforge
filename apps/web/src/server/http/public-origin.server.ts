@@ -36,3 +36,35 @@ export function publicOrigin(request: Request): string {
 function firstHop(value: string | null): string | undefined {
   return value?.split(",")[0].trim() || undefined;
 }
+
+/**
+ * The address of the client that reached the reverse proxy, or `undefined` when the request
+ * carries none we can trust to be one.
+ *
+ * Production traffic comes only through Caddy's `reverse_proxy` without `trusted_proxies`, which
+ * discards the `X-Forwarded-*` values a client sent and writes `X-Forwarded-For` itself
+ * (https://caddyserver.com/docs/caddyfile/directives/reverse_proxy). The header therefore holds the
+ * address Caddy saw, and an intermediate hop only if a client could have forged it. Unlike
+ * `publicOrigin`, which reads the first hop, this reads the last: it is the one our own proxy
+ * appended, so it is the only entry a client cannot choose. Anything that is not an IPv4 or IPv6
+ * literal (`unknown`, a host name, an address with a port) is no address.
+ */
+export function clientAddress(request: Request): string | undefined {
+  const hops = request.headers.get("x-forwarded-for")?.split(",");
+  const last = hops?.[hops.length - 1]?.trim().toLowerCase();
+  return last && isAddress(last) ? last : undefined;
+}
+
+const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/** Whether `value` is an IPv4 or IPv6 literal. The URL parser is the strict IPv6 grammar, behind a
+ * character check that keeps brackets, ports, paths and zone ids out of its host slot. */
+function isAddress(value: string): boolean {
+  if (IPV4.test(value)) return true;
+  if (!/^[0-9a-f:.]+$/.test(value) || !value.includes(":")) return false;
+  try {
+    return new URL(`http://[${value}]/`).hostname.startsWith("[");
+  } catch {
+    return false;
+  }
+}

@@ -8,16 +8,19 @@ import {
   nameField,
   nameFieldSelector,
   onNameStep,
+  onSignInPage,
   openBrowser,
+  personPassword,
   removeSignInAccounts,
   requireLocalServices,
+  signInEmailOf,
   startSignInStack,
   type Person,
 } from "./e2e-sign-in-harness";
 
 /**
  * The first sign-in's full-name step, end to end, against real sign-in (a stand-in for Authing's
- * OIDC endpoints and a Web dev server signed in through it, `e2e-sign-in-harness.ts`).
+ * v3 sign-in API and a Web dev server signed in through it, `e2e-sign-in-harness.ts`).
  *
  * - A new person is asked for a display name at `/welcome`, starting from what the provider reported,
  *   before anything is made for them. Empty and too-long names are refused inline. Submitting
@@ -48,7 +51,11 @@ const people = {
     name: "Grace Hopper E2E",
   },
   // A phone-number sign-up: no email, and the provider's "name" is the number.
-  phone: { sub: "e2e-fsn-phone", name: "13800138000" },
+  phone: {
+    sub: "e2e-fsn-phone",
+    signInEmail: "e2e-fsn-phone@coforge.test",
+    name: "13800138000",
+  },
   // Has a Workspace and no display name: an account that predates the step. The provider reports no
   // name, only a nickname, which starts the field instead.
   existing: {
@@ -65,7 +72,7 @@ const existingWorkspaceName = "Existing Team";
 test("a first sign-in is asked for a display name once, and the personal Workspace is titled with it", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   let stack: Awaited<ReturnType<typeof startSignInStack<PersonKey>>> | undefined;
-  const { browser, evaluate, waitFor, button, setInput, submitName } = openBrowser(
+  const { browser, evaluate, waitFor, button, setInput, submitName, submitSignIn } = openBrowser(
     `first-sign-in-name-${process.pid}`,
   );
 
@@ -94,8 +101,8 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
 
   try {
     stack = await startSignInStack({ people, webPort, artifacts });
-    const { origin, fake } = stack;
-    const onAuthingPage = `location.origin === ${JSON.stringify(new URL(fake.issuer).origin)} && !!document.querySelector("#as-newcomer")`;
+    const { origin } = stack;
+    const onSignInHere = onSignInPage(origin);
     const onNameStepHere = onNameStep(origin);
     // The Workspace has rendered (its `general` channel is listed, in either language) and the page
     // is not the load-error one.
@@ -112,10 +119,10 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
       await browser("cookies", "clear");
       await browser(
         "open",
-        `${origin}/auth/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`,
+        `${origin}/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`,
       );
-      await waitFor(onAuthingPage);
-      await browser("click", `#as-${person}`);
+      await waitFor(onSignInHere);
+      await submitSignIn(signInEmailOf(people[person]), personPassword);
     }
 
     await removeSeeded();
@@ -147,15 +154,15 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     expect(await fieldValue()).toBe("Grace Hopper E2E");
     // Signed in, but nothing is made for them until they answer.
     const newcomer = await userOf("newcomer");
-    expect(newcomer.displayName).toBeNull();
+    expect(newcomer.welcomedAt).toBeNull();
     expect(await membershipsOf("newcomer")).toHaveLength(0);
-    // The page says nothing else: no subtitle, no "signed in as", no display-name field.
-    expect(await evaluate<number>(`document.querySelectorAll("main input").length`)).toBe(1);
+    // The page says nothing else: no subtitle, no "signed in as"; the name and the Workspace URL.
+    expect(await evaluate<number>(`document.querySelectorAll("main input").length`)).toBe(2);
     expect(
       await evaluate<string[]>(
         `document.querySelector("main").innerText.split("\\n").map((line) => line.trim()).filter(Boolean)`,
       ),
-    ).toEqual(["Enter your display name", "Display name", "Continue"]);
+    ).toEqual(["Enter your display name", "Display name", "Workspace URL", "/w/", "Continue"]);
     expect(await overflowsSideways()).toBe(false);
     await shoot("01-name-step-desktop-1440.png");
     passed(
@@ -174,7 +181,7 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     await submitName("@grace");
     await waitFor(`${fieldError} === "You can't use this name."`);
     await shoot("03b-refused-error-desktop.png");
-    expect((await userOf("newcomer")).displayName).toBeNull();
+    expect((await userOf("newcomer")).welcomedAt).toBeNull();
     // Typing again takes the problem away.
     await setInput(nameFieldSelector, "Grace");
     await waitFor(`${fieldError} === null`);
@@ -232,6 +239,8 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     await shoot("07-too-long-error-zh-CN-390.png");
     await submitName("@安栋", "继续");
     await waitFor(`${fieldError} === "不能使用这个名字。"`);
+    // A Chinese name has no Latin letters to make a Workspace URL from, so the person types one.
+    await setInput('main input[name="workspaceSlug"]', "an-dong-e2e");
     await submitName("安栋", "继续");
     await waitFor(inAppAt("/w/"));
     expect((await userOf("phone")).displayName).toBe("安栋");
@@ -279,7 +288,8 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
 
     // ── A session that outlived its user ────────────────────────────────────────────────────────
     // The phone account signs in again by `/welcome` alone: nothing can be saved for a user that no
-    // longer exists, so the page does not ask, it sends them to sign in (and a new user is made).
+    // longer exists, so the page does not ask, it sends them to the sign-in page, which asks again
+    // even though the session still verifies (and a new user is made).
     await signInAs("phone");
     await waitFor(inAppAt("/w/"));
     const phone = await userOf("phone");
@@ -288,8 +298,8 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     });
     await db.user.delete({ where: { id: phone.id } });
     await browser("open", `${origin}/en/welcome`);
-    await waitFor(onAuthingPage);
-    await browser("click", "#as-phone");
+    await waitFor(onSignInHere);
+    await submitSignIn(signInEmailOf(people.phone), personPassword);
     await waitFor(onNameStepHere);
     expect((await userOf("phone")).id).not.toBe(phone.id);
     passed("a session whose user is gone is sent to sign in again, not left on the name step");

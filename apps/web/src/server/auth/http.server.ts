@@ -1,115 +1,14 @@
-import {
-  clearPendingLoginState,
-  completeBrowserLogin,
-  createAuthingExchanger,
-  endBrowserLogin,
-  pendingLoginReturnTo,
-  readBrowserSession,
-  startBrowserLogin,
-  type AuthingConfig,
-  type BrowserUser,
-  type InternalUserResolver,
-  type TokenExchanger,
-} from "./browser-login.server";
-import { LoginCallbackError, reportLoginCallbackFailure } from "./login-failure.server";
-import { UserIdentityRepository } from "./user-identity.repository.server";
-import { getDatabaseClient } from "#src/server/db/client.server";
-import { publicOrigin } from "#src/server/http/public-origin.server";
-import { localizedReturnHref, welcomeHref } from "#src/features/auth/return-to";
+import { readBrowserSession, sessionEndingCookie, type BrowserUser } from "./browser-login.server";
+import { safeReturnTo, signInHref } from "#src/features/auth/return-to";
 
-export function handleLoginStart(input: {
-  config: AuthingConfig;
-  sessionSecret: string;
-  returnTo?: string | null;
-  /** `login` asks the person to sign in again (Login with CoForge's `prompt=login` and `max_age`). */
-  prompt?: string | null;
-}): Response {
-  const started = startBrowserLogin({
-    config: input.config,
-    sessionSecret: input.sessionSecret,
-    returnTo: input.returnTo,
-    reauthenticate: input.prompt === "login",
-  });
-  return redirect(started.authorizationUrl, {
-    "set-cookie": started.stateCookie,
-    "cache-control": "no-store",
-  });
-}
-
-export async function handleLoginCallback(input: {
-  request: Request;
-  config: AuthingConfig;
-  sessionSecret: string;
-  authing?: TokenExchanger;
-  resolveUser?: Parameters<typeof completeBrowserLogin>[0]["resolveUser"];
-}): Promise<Response> {
-  const url = new URL(input.request.url);
-  const code = url.searchParams.get("code") ?? "";
-  const state = url.searchParams.get("state") ?? "";
-  const origin = publicOrigin(input.request);
-  try {
-    const completed = await completeBrowserLogin({
-      config: input.config,
-      sessionSecret: input.sessionSecret,
-      code,
-      state,
-      cookieHeader: input.request.headers.get("cookie") ?? "",
-      authing: input.authing ?? createAuthingExchanger(input.config),
-      resolveUser: input.resolveUser ?? persistedIdentityResolver(),
-    });
-    const cookies = [completed.sessionCookie, completed.clearStateCookie];
-    const { welcomed } = completed;
-    // A person who has not finished first sign-in is signed in, but nothing is made for them until
-    // they confirm their name (`completeFirstSignIn`). A person who has finished it is never given
-    // a Workspace here: one in no Workspace (an invite sign-up that never joined, or who left them
-    // all) lands where `/` sends them, on "create your first Workspace".
-    if (!welcomed) {
-      return redirect(welcomeHref(completed.returnTo), {
-        "set-cookie": cookies,
-        "cache-control": "no-store",
-      });
-    }
-    return redirect(completed.returnTo ? localizedReturnHref(completed.returnTo) : "/", {
-      "set-cookie": cookies,
-      "cache-control": "no-store",
-    });
-  } catch (error) {
-    reportLoginCallbackFailure(error);
-    const failed = new URL("/login", origin);
-    failed.searchParams.set("error", "login_failed");
-    const cookieHeader = input.request.headers.get("cookie") ?? "";
-    const returnTo = pendingLoginReturnTo({
-      sessionSecret: input.sessionSecret,
-      cookieHeader,
-      state,
-    });
-    if (returnTo) failed.searchParams.set("returnTo", returnTo);
-    const clearStateCookie = clearPendingLoginState({ config: input.config, cookieHeader, state });
-    return redirect(failed.toString(), {
-      ...(clearStateCookie ? { "set-cookie": clearStateCookie } : {}),
-      "cache-control": "no-store",
-    });
-  }
-}
-
+/** Signs out: expires the session cookie and sends the browser to the sign-in page. */
 export function handleLogout(input: {
   origin: string;
-  config: AuthingConfig;
-  sessionSecret: string;
-  cookieHeader: string;
   /** The page to sign in to again afterwards, when someone is switching account. */
   returnTo?: string | null;
 }): Response {
-  const ended = endBrowserLogin({
-    config: input.config,
-    // Authing only redirects to the URI registered for the app: the homepage.
-    postLogoutRedirectUri: `${input.origin}/`,
-    sessionSecret: input.sessionSecret,
-    cookieHeader: input.cookieHeader,
-    returnTo: input.returnTo,
-  });
-  return redirect(ended.authingLogoutUrl, {
-    "set-cookie": [ended.clearSessionCookie, ended.returnCookie],
+  return redirect(signInHref(safeReturnTo(input.returnTo)), {
+    "set-cookie": sessionEndingCookie(input.origin.startsWith("https:")),
     "cache-control": "no-store",
   });
 }
@@ -129,20 +28,8 @@ function readRequestUser(request: Request, sessionSecret: string): BrowserUser |
   });
 }
 
-function persistedIdentityResolver(): InternalUserResolver {
-  const db = getDatabaseClient();
-  if (!db) throw new LoginCallbackError("user_resolution", { reason: "database is unavailable" });
-  const identities = new UserIdentityRepository(db);
-  return (identity) =>
-    identities.resolve(identity.provider, identity.subject, {
-      email: identity.email,
-      preferredUsername: identity.preferredUsername,
-      name: identity.name,
-      nickname: identity.nickname,
-    });
-}
-
-function redirect(
+/** A `302` to `location`, never cached, setting the cookies `headers` lists. */
+export function redirect(
   location: string,
   headers: { "set-cookie"?: string | string[]; "cache-control"?: string },
 ): Response {

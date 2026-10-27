@@ -41,14 +41,13 @@ must fit the 2,048 characters sign-in can return to (`MAX_RETURN_TO_LENGTH` in
 before anything else happens.
 
 `prompt=login`, and a `max_age` shorter than the time since the person last signed in, send the
-person (signed in or not) to `/auth/login?prompt=login`, which asks Authing to sign them in again
-(`prompt=login` and `max_age=0` upstream), and back to the same request with a note, signed with
+person (signed in or not) to `/login?prompt=login`, which asks for the password even when the
+person has a session, and back to the same request with a note, signed with
 the session secret, of when CoForge asked (`coforge_signed_in_after`, 15 minutes). On return a
 sign-in after that time meets both; anything else answers `login_required` rather than asking
 again, so it never loops. A note the app or anyone else wrote is ignored. With `prompt=none` both
-answer `login_required`. The session keeps when the person signed in: the `auth_time` of Authing's
-ID token, else the time the callback completed; a session from before that was kept counts from
-when it was issued. Every code records it for the ID token's `auth_time`.
+answer `login_required`. The session keeps when the person signed in: the time the password was
+checked; a session from before that was kept counts from when it was issued. Every code records it for the ID token's `auth_time`.
 
 ## Workspaces and consent
 

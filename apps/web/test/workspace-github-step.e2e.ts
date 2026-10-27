@@ -5,9 +5,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import {
   onNameStep,
+  onSignInPage,
   openBrowser,
+  personPassword,
   removeSignInAccounts,
   requireLocalServices,
+  signInEmailOf,
   startSignInStack,
   type Person,
 } from "./e2e-sign-in-harness";
@@ -40,7 +43,7 @@ const slug = "e2e-ghs-founder";
 test("creating a Workspace passes through the GitHub step, which skips itself when GitHub is not configured", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   let stack: Awaited<ReturnType<typeof startSignInStack<PersonKey>>> | undefined;
-  const { browser, evaluate, waitFor, submitName } = openBrowser(
+  const { browser, evaluate, waitFor, submitName, submitSignIn } = openBrowser(
     `workspace-github-step-${process.pid}`,
   );
   const subjects = Object.values(people).map((person) => person.sub);
@@ -50,17 +53,15 @@ test("creating a Workspace passes through the GitHub step, which skips itself wh
 
   try {
     stack = await startSignInStack({ people, webPort, artifacts });
-    const { origin, fake } = stack;
+    const { origin } = stack;
     const at = (path: string) =>
       `location.origin === ${JSON.stringify(origin)} && location.pathname === ${JSON.stringify(path)} && document.body.innerText.includes("general")`;
     await removeSeeded();
     await mkdir(artifacts, { recursive: true });
 
-    await browser("open", `${origin}/auth/login`);
-    await waitFor(
-      `location.origin === ${JSON.stringify(new URL(fake.issuer).origin)} && !!document.querySelector("#as-founder")`,
-    );
-    await browser("click", "#as-founder");
+    await browser("open", `${origin}/login`);
+    await waitFor(onSignInPage(origin));
+    await submitSignIn(signInEmailOf(people.founder), personPassword);
     await waitFor(onNameStep(origin));
     await submitName("Ghs Founder");
     // The step is passed through, never shown: the person ends in the new Workspace.

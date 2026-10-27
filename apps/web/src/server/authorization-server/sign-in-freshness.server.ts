@@ -48,7 +48,7 @@ export function signInIsRecentEnough(
   return request.maxAge === undefined || age <= request.maxAge || renewed;
 }
 
-/** Sign-in at Authing that asks again (`prompt=login`), back to the same request with a note of
+/** Sign-in that asks again (`prompt=login`), back to the same request with a note of
  * when CoForge asked. */
 export function signInAgainHref(search: string, secret: string, now: Date): string {
   const query = new URLSearchParams(search);

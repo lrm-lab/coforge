@@ -143,7 +143,7 @@ type DeliveryEnvSnapshot = {
   url: string | undefined;
   key: string | undefined;
   keyFile: string | undefined;
-  redirectUri: string | undefined;
+  oidcIssuer: string | undefined;
 };
 
 function deliveryEnvSnapshot(env: NodeJS.ProcessEnv): DeliveryEnvSnapshot {
@@ -151,7 +151,7 @@ function deliveryEnvSnapshot(env: NodeJS.ProcessEnv): DeliveryEnvSnapshot {
     url: env.COFORGE_FILE_DELIVERY_URL,
     key: env.COFORGE_FILE_DELIVERY_KEY,
     keyFile: env.COFORGE_FILE_DELIVERY_KEY_FILE,
-    redirectUri: env.AUTHING_REDIRECT_URI,
+    oidcIssuer: env.COFORGE_OIDC_ISSUER,
   };
 }
 
@@ -165,7 +165,7 @@ function sameDeliveryEnv(
     remembered.url === currentEnv.url &&
     remembered.key === currentEnv.key &&
     remembered.keyFile === currentEnv.keyFile &&
-    remembered.redirectUri === currentEnv.redirectUri
+    remembered.oidcIssuer === currentEnv.oidcIssuer
   );
 }
 

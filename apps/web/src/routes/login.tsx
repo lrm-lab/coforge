@@ -1,33 +1,55 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useLocation } from "@tanstack/react-router";
 
 import { getAuthenticationStatus } from "#src/features/auth/current-user.functions";
-import { LoginErrorPage } from "#src/features/auth/login-error-page";
-import { afterSignInHref, safeReturnTo, signInHref } from "#src/features/auth/return-to";
+import { LoginPage } from "#src/features/auth/login-page";
+import { readPasswordUpdated } from "#src/features/auth/password-updated";
+import {
+  afterSignInHref,
+  readPrompt,
+  readSignInError,
+  safeReturnTo,
+  type SignInError,
+} from "#src/features/auth/return-to";
+import { getSignInMethods } from "#src/features/auth/sign-in.functions";
 
 /**
- * Sign-in has no page of its own: `/login` goes straight to Authing's hosted page through
- * `/auth/login`, and only a sign-in that did not finish (`?error=login_failed`, from the callback)
- * renders here.
+ * CoForge's own sign-in page. A person who already has a session goes straight on, unless the page
+ * was asked to sign them in again (`prompt=login`: Login with CoForge needs a fresh sign-in, or the
+ * session's user is gone).
  */
 export const Route = createFileRoute("/login")({
   // The page to go back to after signing in; anything that is not a page of this site is dropped.
   // Both keys are always returned: the router keeps raw search keys a validator leaves out.
-  validateSearch: (search: Record<string, unknown>): { returnTo?: string; error?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { returnTo?: string; prompt?: "login"; error?: SignInError } => ({
     returnTo: safeReturnTo(search.returnTo),
-    error: typeof search.error === "string" ? search.error : undefined,
+    prompt: readPrompt(search.prompt),
+    // Why a sign-in that left the page (for GitHub) came back without completing.
+    error: readSignInError(search.error),
   }),
   beforeLoad: async ({ search }) => {
-    const returnTo = safeReturnTo(search.returnTo);
-    if (await getAuthenticationStatus()) {
-      throw redirect({ href: afterSignInHref(returnTo) });
+    if (search.prompt !== "login" && (await getAuthenticationStatus())) {
+      throw redirect({ href: afterSignInHref(search.returnTo) });
     }
-    // /auth/login is a server route, so the browser has to load it as a document.
-    if (!search.error) throw redirect({ href: signInHref(returnTo), reloadDocument: true });
   },
+  loader: () => getSignInMethods(),
   component: Login,
 });
 
 function Login() {
-  const { returnTo } = Route.useSearch();
-  return <LoginErrorPage returnTo={returnTo} />;
+  const { returnTo, prompt, error } = Route.useSearch();
+  const { github } = Route.useLoaderData();
+  const passwordUpdated = readPasswordUpdated(
+    useLocation({ select: (location) => location.state }),
+  );
+  return (
+    <LoginPage
+      returnTo={returnTo}
+      prompt={prompt}
+      github={github}
+      error={error}
+      passwordUpdated={passwordUpdated}
+    />
+  );
 }

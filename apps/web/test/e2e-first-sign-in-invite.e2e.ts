@@ -8,9 +8,12 @@ import { workspaceJoinLinks } from "#src/server/workspaces/join-links-store.serv
 import {
   hydrated,
   onNameStep,
+  onSignInPage,
   openBrowser,
+  personPassword,
   removeSignInAccounts,
   requireLocalServices,
+  signInEmailOf,
   startSignInStack,
   type Person,
 } from "./e2e-sign-in-harness";
@@ -82,7 +85,7 @@ const ownerUsername = "e2e-fsi-owner";
 test("a sign-up from a working invite is asked for a name only and joins without a personal Workspace", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   let stack: Awaited<ReturnType<typeof startSignInStack<PersonKey>>> | undefined;
-  const { browser, evaluate, waitFor, button, submitName } = openBrowser(
+  const { browser, evaluate, waitFor, button, submitName, submitSignIn } = openBrowser(
     `first-sign-in-invite-${process.pid}`,
   );
   const subjects = Object.values(people).map((person) => person.sub);
@@ -114,8 +117,8 @@ test("a sign-up from a working invite is asked for a name only and joins without
 
   try {
     stack = await startSignInStack({ people, webPort, artifacts });
-    const { origin, fake } = stack;
-    const onAuthingPage = `location.origin === ${JSON.stringify(new URL(fake.issuer).origin)} && !!document.querySelector("#as-invitee")`;
+    const { origin } = stack;
+    const onSignInHere = onSignInPage(origin);
     const onNameStepHere = onNameStep(origin);
     const fieldNames = `[...document.querySelectorAll("main input")].map((input) => input.name)`;
     const noticeText = `(document.querySelector("main form [role=status]")?.textContent ?? null)`;
@@ -125,10 +128,10 @@ test("a sign-up from a working invite is asked for a name only and joins without
       await browser("cookies", "clear");
       await browser(
         "open",
-        `${origin}/auth/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`,
+        `${origin}/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`,
       );
-      await waitFor(onAuthingPage);
-      await browser("click", `#as-${person}`);
+      await waitFor(onSignInHere);
+      await submitSignIn(signInEmailOf(people[person]), personPassword);
     }
 
     await removeSeeded();

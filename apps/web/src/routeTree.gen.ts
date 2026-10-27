@@ -20,12 +20,12 @@ import { Route as ApiAppAgentRequestsRouteImport } from './routes/api.app-agent-
 import { Route as ApiAttachmentsRouteImport } from './routes/api/attachments'
 import { Route as ApiJwksRouteImport } from './routes/api/jwks'
 import { Route as ApiMeRouteImport } from './routes/api/me'
-import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
-import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthGithubRouteImport } from './routes/auth/github'
 import { Route as AuthLogoutRouteImport } from './routes/auth/logout'
 import { Route as ComputerInstallDotps1RouteImport } from './routes/computer.install[.]ps1'
 import { Route as ComputerInstallDotshRouteImport } from './routes/computer.install[.]sh'
 import { Route as JoinTokenRouteImport } from './routes/join.$token'
+import { Route as LoginResetPasswordRouteImport } from './routes/login_.reset-password'
 import { Route as NotificationsOpenRouteImport } from './routes/notifications.open'
 import { Route as OauthDeviceRouteImport } from './routes/oauth/device'
 import { Route as OauthTokenRouteImport } from './routes/oauth/token'
@@ -53,6 +53,7 @@ import { Route as ApiInternalWeeklyReportScheduleRouteImport } from './routes/ap
 import { Route as ApiMeAvatarRouteImport } from './routes/api/me/avatar'
 import { Route as ApiWorkspacesSlugRouteImport } from './routes/api/workspaces.$slug'
 import { Route as AppsShareTokenRouteImport } from './routes/apps.share.$token'
+import { Route as AuthGithubCallbackRouteImport } from './routes/auth/github.callback'
 import { Route as OidcDotwellKnownOpenidConfigurationRouteImport } from './routes/oidc.[.]well-known.openid-configuration'
 import { Route as WWorkspaceSlugChatRouteImport } from './routes/w.$workspaceSlug/_chat'
 import { Route as WWorkspaceSlugComputersRouteImport } from './routes/w.$workspaceSlug/_computers'
@@ -217,14 +218,9 @@ const ApiMeRoute = ApiMeRouteImport.update({
   path: '/api/me',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthCallbackRoute = AuthCallbackRouteImport.update({
-  id: '/auth/callback',
-  path: '/auth/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthLoginRoute = AuthLoginRouteImport.update({
-  id: '/auth/login',
-  path: '/auth/login',
+const AuthGithubRoute = AuthGithubRouteImport.update({
+  id: '/auth/github',
+  path: '/auth/github',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthLogoutRoute = AuthLogoutRouteImport.update({
@@ -245,6 +241,11 @@ const ComputerInstallDotshRoute = ComputerInstallDotshRouteImport.update({
 const JoinTokenRoute = JoinTokenRouteImport.update({
   id: '/join/$token',
   path: '/join/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginResetPasswordRoute = LoginResetPasswordRouteImport.update({
+  id: '/login_/reset-password',
+  path: '/login/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotificationsOpenRoute = NotificationsOpenRouteImport.update({
@@ -390,6 +391,11 @@ const AppsShareTokenRoute = AppsShareTokenRouteImport.update({
   id: '/apps/share/$token',
   path: '/apps/share/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthGithubCallbackRoute = AuthGithubCallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
+  getParentRoute: () => AuthGithubRoute,
 } as any)
 const OidcDotwellKnownOpenidConfigurationRoute =
   OidcDotwellKnownOpenidConfigurationRouteImport.update({
@@ -1016,12 +1022,12 @@ export interface FileRoutesByFullPath {
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
-  '/auth/callback': typeof AuthCallbackRoute
-  '/auth/login': typeof AuthLoginRoute
+  '/auth/github': typeof AuthGithubRouteWithChildren
   '/auth/logout': typeof AuthLogoutRoute
   '/computer/install.ps1': typeof ComputerInstallDotps1Route
   '/computer/install.sh': typeof ComputerInstallDotshRoute
   '/join/$token': typeof JoinTokenRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/notifications/open': typeof NotificationsOpenRoute
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
@@ -1049,6 +1055,7 @@ export interface FileRoutesByFullPath {
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
   '/apps/share/$token': typeof AppsShareTokenRoute
+  '/auth/github/callback': typeof AuthGithubCallbackRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
@@ -1167,12 +1174,12 @@ export interface FileRoutesByTo {
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
-  '/auth/callback': typeof AuthCallbackRoute
-  '/auth/login': typeof AuthLoginRoute
+  '/auth/github': typeof AuthGithubRouteWithChildren
   '/auth/logout': typeof AuthLogoutRoute
   '/computer/install.ps1': typeof ComputerInstallDotps1Route
   '/computer/install.sh': typeof ComputerInstallDotshRoute
   '/join/$token': typeof JoinTokenRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/notifications/open': typeof NotificationsOpenRoute
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
@@ -1200,6 +1207,7 @@ export interface FileRoutesByTo {
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
   '/apps/share/$token': typeof AppsShareTokenRoute
+  '/auth/github/callback': typeof AuthGithubCallbackRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
@@ -1317,12 +1325,12 @@ export interface FileRoutesById {
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
-  '/auth/callback': typeof AuthCallbackRoute
-  '/auth/login': typeof AuthLoginRoute
+  '/auth/github': typeof AuthGithubRouteWithChildren
   '/auth/logout': typeof AuthLogoutRoute
   '/computer/install.ps1': typeof ComputerInstallDotps1Route
   '/computer/install.sh': typeof ComputerInstallDotshRoute
   '/join/$token': typeof JoinTokenRoute
+  '/login_/reset-password': typeof LoginResetPasswordRoute
   '/notifications/open': typeof NotificationsOpenRoute
   '/oauth/device': typeof OauthDeviceRoute
   '/oauth/token': typeof OauthTokenRoute
@@ -1350,6 +1358,7 @@ export interface FileRoutesById {
   '/api/me/avatar': typeof ApiMeAvatarRoute
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
   '/apps/share/$token': typeof AppsShareTokenRoute
+  '/auth/github/callback': typeof AuthGithubCallbackRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/_chat': typeof WWorkspaceSlugChatRouteWithChildren
   '/w/$workspaceSlug/_computers': typeof WWorkspaceSlugComputersRouteWithChildren
@@ -1472,12 +1481,12 @@ export interface FileRouteTypes {
     | '/api/attachments'
     | '/api/jwks'
     | '/api/me'
-    | '/auth/callback'
-    | '/auth/login'
+    | '/auth/github'
     | '/auth/logout'
     | '/computer/install.ps1'
     | '/computer/install.sh'
     | '/join/$token'
+    | '/login/reset-password'
     | '/notifications/open'
     | '/oauth/device'
     | '/oauth/token'
@@ -1505,6 +1514,7 @@ export interface FileRouteTypes {
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
     | '/apps/share/$token'
+    | '/auth/github/callback'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
@@ -1623,12 +1633,12 @@ export interface FileRouteTypes {
     | '/api/attachments'
     | '/api/jwks'
     | '/api/me'
-    | '/auth/callback'
-    | '/auth/login'
+    | '/auth/github'
     | '/auth/logout'
     | '/computer/install.ps1'
     | '/computer/install.sh'
     | '/join/$token'
+    | '/login/reset-password'
     | '/notifications/open'
     | '/oauth/device'
     | '/oauth/token'
@@ -1656,6 +1666,7 @@ export interface FileRouteTypes {
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
     | '/apps/share/$token'
+    | '/auth/github/callback'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
@@ -1772,12 +1783,12 @@ export interface FileRouteTypes {
     | '/api/attachments'
     | '/api/jwks'
     | '/api/me'
-    | '/auth/callback'
-    | '/auth/login'
+    | '/auth/github'
     | '/auth/logout'
     | '/computer/install.ps1'
     | '/computer/install.sh'
     | '/join/$token'
+    | '/login_/reset-password'
     | '/notifications/open'
     | '/oauth/device'
     | '/oauth/token'
@@ -1805,6 +1816,7 @@ export interface FileRouteTypes {
     | '/api/me/avatar'
     | '/api/workspaces/$slug'
     | '/apps/share/$token'
+    | '/auth/github/callback'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/_chat'
     | '/w/$workspaceSlug/_computers'
@@ -1926,12 +1938,12 @@ export interface RootRouteChildren {
   ApiAttachmentsRoute: typeof ApiAttachmentsRouteWithChildren
   ApiJwksRoute: typeof ApiJwksRoute
   ApiMeRoute: typeof ApiMeRouteWithChildren
-  AuthCallbackRoute: typeof AuthCallbackRoute
-  AuthLoginRoute: typeof AuthLoginRoute
+  AuthGithubRoute: typeof AuthGithubRouteWithChildren
   AuthLogoutRoute: typeof AuthLogoutRoute
   ComputerInstallDotps1Route: typeof ComputerInstallDotps1Route
   ComputerInstallDotshRoute: typeof ComputerInstallDotshRoute
   JoinTokenRoute: typeof JoinTokenRoute
+  LoginResetPasswordRoute: typeof LoginResetPasswordRoute
   NotificationsOpenRoute: typeof NotificationsOpenRoute
   OauthDeviceRoute: typeof OauthDeviceRoute
   OauthTokenRoute: typeof OauthTokenRoute
@@ -2108,18 +2120,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/callback': {
-      id: '/auth/callback'
-      path: '/auth/callback'
-      fullPath: '/auth/callback'
-      preLoaderRoute: typeof AuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth/login': {
-      id: '/auth/login'
-      path: '/auth/login'
-      fullPath: '/auth/login'
-      preLoaderRoute: typeof AuthLoginRouteImport
+    '/auth/github': {
+      id: '/auth/github'
+      path: '/auth/github'
+      fullPath: '/auth/github'
+      preLoaderRoute: typeof AuthGithubRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/logout': {
@@ -2148,6 +2153,13 @@ declare module '@tanstack/react-router' {
       path: '/join/$token'
       fullPath: '/join/$token'
       preLoaderRoute: typeof JoinTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login_/reset-password': {
+      id: '/login_/reset-password'
+      path: '/login/reset-password'
+      fullPath: '/login/reset-password'
+      preLoaderRoute: typeof LoginResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notifications/open': {
@@ -2338,6 +2350,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/apps/share/$token'
       preLoaderRoute: typeof AppsShareTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/auth/github/callback': {
+      id: '/auth/github/callback'
+      path: '/callback'
+      fullPath: '/auth/github/callback'
+      preLoaderRoute: typeof AuthGithubCallbackRouteImport
+      parentRoute: typeof AuthGithubRoute
     }
     '/oidc/.well-known/openid-configuration': {
       id: '/oidc/.well-known/openid-configuration'
@@ -3124,6 +3143,18 @@ const ApiMeRouteChildren: ApiMeRouteChildren = {
 
 const ApiMeRouteWithChildren = ApiMeRoute._addFileChildren(ApiMeRouteChildren)
 
+interface AuthGithubRouteChildren {
+  AuthGithubCallbackRoute: typeof AuthGithubCallbackRoute
+}
+
+const AuthGithubRouteChildren: AuthGithubRouteChildren = {
+  AuthGithubCallbackRoute: AuthGithubCallbackRoute,
+}
+
+const AuthGithubRouteWithChildren = AuthGithubRoute._addFileChildren(
+  AuthGithubRouteChildren,
+)
+
 interface WWorkspaceSlugChatRouteChildren {
   WWorkspaceSlugChatSavedRoute: typeof WWorkspaceSlugChatSavedRoute
   WWorkspaceSlugChatIndexRoute: typeof WWorkspaceSlugChatIndexRoute
@@ -3299,12 +3330,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAttachmentsRoute: ApiAttachmentsRouteWithChildren,
   ApiJwksRoute: ApiJwksRoute,
   ApiMeRoute: ApiMeRouteWithChildren,
-  AuthCallbackRoute: AuthCallbackRoute,
-  AuthLoginRoute: AuthLoginRoute,
+  AuthGithubRoute: AuthGithubRouteWithChildren,
   AuthLogoutRoute: AuthLogoutRoute,
   ComputerInstallDotps1Route: ComputerInstallDotps1Route,
   ComputerInstallDotshRoute: ComputerInstallDotshRoute,
   JoinTokenRoute: JoinTokenRoute,
+  LoginResetPasswordRoute: LoginResetPasswordRoute,
   NotificationsOpenRoute: NotificationsOpenRoute,
   OauthDeviceRoute: OauthDeviceRoute,
   OauthTokenRoute: OauthTokenRoute,

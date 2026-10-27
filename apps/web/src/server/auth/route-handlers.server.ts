@@ -1,40 +1,12 @@
-import { AuthConfigError, readAuthingConfig, readSessionSecret } from "./config.server";
-import {
-  handleCurrentUser,
-  handleLoginCallback,
-  handleLoginStart,
-  handleLogout,
-} from "./http.server";
+import { AuthConfigError, readSessionSecret } from "./config.server";
+import { handleCurrentUser, handleLogout } from "./http.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 
-export function loginStartHandler({ request }: { request: Request }): Promise<Response> {
-  const query = new URL(request.url).searchParams;
-  return withAuthConfig(request, (config, sessionSecret) =>
-    handleLoginStart({
-      config,
-      sessionSecret,
-      returnTo: query.get("returnTo"),
-      prompt: query.get("prompt"),
-    }),
-  );
-}
-
-export function loginCallbackHandler({ request }: { request: Request }): Promise<Response> {
-  return withAuthConfig(request, (config, sessionSecret) =>
-    handleLoginCallback({ request, config, sessionSecret }),
-  );
-}
-
-export function logoutHandler({ request }: { request: Request }): Promise<Response> {
-  return withAuthConfig(request, (config, sessionSecret) =>
-    handleLogout({
-      origin: publicOrigin(request),
-      config,
-      sessionSecret,
-      cookieHeader: request.headers.get("cookie") ?? "",
-      returnTo: new URL(request.url).searchParams.get("returnTo"),
-    }),
-  );
+export function logoutHandler({ request }: { request: Request }): Response {
+  return handleLogout({
+    origin: publicOrigin(request),
+    returnTo: new URL(request.url).searchParams.get("returnTo"),
+  });
 }
 
 export async function currentUserHandler({ request }: { request: Request }): Promise<Response> {
@@ -43,26 +15,6 @@ export async function currentUserHandler({ request }: { request: Request }): Pro
       request,
       sessionSecret: await readSessionSecret(process.env),
     });
-  } catch (error) {
-    if (error instanceof AuthConfigError) {
-      return authUnavailableResponse();
-    }
-    throw error;
-  }
-}
-
-async function withAuthConfig(
-  request: Request,
-  handle: (
-    config: Awaited<ReturnType<typeof readAuthingConfig>>,
-    sessionSecret: string,
-  ) => Response | Promise<Response>,
-): Promise<Response> {
-  try {
-    return handle(
-      await readAuthingConfig(process.env, publicOrigin(request)),
-      await readSessionSecret(process.env),
-    );
   } catch (error) {
     if (error instanceof AuthConfigError) {
       return authUnavailableResponse();

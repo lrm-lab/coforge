@@ -25,11 +25,6 @@ await mockModuleForFile("#src/features/profiles/profile.functions", () => ({
 await mockModuleForFile("#src/features/workspaces/last-location.functions", () => ({
   getStartPage: async () => startPage,
 }));
-await mockModuleForFile("#src/features/auth/logout-return.functions", () => ({
-  // The switch-account resume read: the tests only judge the signed-in and plain signed-out
-  // landings, so the cookie is always absent.
-  takeLogoutReturn: async () => null,
-}));
 const workspaceFunctions = await import("#src/features/workspaces/workspaces.functions");
 await mockModuleForFile("#src/features/workspaces/workspaces.functions", () => ({
   ...workspaceFunctions,

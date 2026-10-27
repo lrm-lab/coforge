@@ -16,9 +16,8 @@ export async function runNitro(port: number): Promise<void> {
     process.exit(1);
   }
 
-  // Default to localhost so the printed origin matches AUTHING_REDIRECT_URI
-  // (http://localhost:<port>/auth/callback). Binding 127.0.0.1 while Authing
-  // redirects to localhost breaks the host-only OAuth state cookie.
+  // Default to localhost: the printed origin is the one people open, and a session cookie is
+  // host-only, so the host they type must be the host they signed in on.
   const host = process.env.HOST?.trim() || "localhost";
   console.log(`==> Starting production Nitro server on http://${host}:${port}`);
 

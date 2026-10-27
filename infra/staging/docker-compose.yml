@@ -60,7 +60,8 @@ services:
       AUTHING_APP_ID_FILE: /run/secrets/authing_app_id
       AUTHING_APP_SECRET_FILE: /run/secrets/authing_app_secret
       AUTHING_ISSUER: https://coforge-staging.authing.cn/oidc
-      AUTHING_REDIRECT_URI: https://staging.coforge.cn/auth/callback
+      AUTHING_GITHUB_CONNECTION: github-mobile
+      COFORGE_GITHUB_SIGN_IN_CLIENT_ID: Ov23lig3ZSmcMqA97yAN
       COFORGE_SESSION_SECRET_FILE: /run/secrets/coforge_session_secret
       COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_agent_credential_encryption_key
       COFORGE_GITHUB_APP_ID: "5261083"

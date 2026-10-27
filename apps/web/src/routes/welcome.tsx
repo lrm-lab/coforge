@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { getNameStep } from "#src/features/auth/first-sign-in.functions";
 import { NameStepPage } from "#src/features/auth/name-step-page";
-import { afterSignInHref, safeReturnTo, signInHref } from "#src/features/auth/return-to";
+import { afterSignInHref, safeReturnTo } from "#src/features/auth/return-to";
 
 /**
  * The one question of first sign-in: a person's display name. Outside the Workspace layout on
@@ -19,10 +19,10 @@ export const Route = createFileRoute("/welcome")({
   beforeLoad: async ({ search }) => {
     const step = await getNameStep({ data: { returnTo: search.returnTo } });
     if (step.status === "named") throw redirect({ href: afterSignInHref(search.returnTo) });
-    // The session outlived its user: nothing can be saved for them, so they sign in again (a
-    // document load, `/auth/login` being a server route), which makes the user and a new session.
+    // The session outlived its user: nothing can be saved for them, so they sign in again (the
+    // page asks even though the session still verifies), which makes the user and a new session.
     if (step.status === "account_gone") {
-      throw redirect({ href: signInHref(search.returnTo), reloadDocument: true });
+      throw redirect({ to: "/login", search: { returnTo: search.returnTo, prompt: "login" } });
     }
     return { prefill: step.prefill, slugPrefill: step.slugPrefill, invite: step.invite };
   },

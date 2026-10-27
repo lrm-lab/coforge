@@ -14,16 +14,52 @@ Internationalization follows TanStack Start's official Paraglide integration.
 English and Simplified Chinese messages live under `messages`; locale-aware
 URLs, SSR request handling, and `<html lang>` are generated through Paraglide.
 
-Browser login uses Authing as the hosted OpenID Connect IdP. Copy
-`apps/web/.env.example` to `apps/web/.env` and set `AUTHING_APP_SECRET` plus a
-random `COFORGE_SESSION_SECRET` of at least 32 characters. Do not commit the
-secret. In the Authing console, register the callback URL
-`http://localhost:8788/auth/callback` exactly, and the logout redirect URL
-`http://localhost:8788/`. Keep the application type as a standard web app,
-and use authorization-code mode. Computer CLI login is a separate Device Flow
-client and is unchanged. Each deployed environment must likewise allow its
-public origin with a trailing slash as a logout redirect URL, such as
-`https://staging.coforge.cn/` or `https://coforge.cn/`.
+Browser login is CoForge's own page at `/login`, and the Web server signs people in against the
+Authing user pool through Authing's Authentication API (v3); the browser never goes to an Authing
+page. A person signs in with a verification code sent by SMS (a mainland China mobile number) or
+email, or with their email and password. The first code sign-in for a phone number or email makes
+the account (Authing's `autoRegister`), which then goes to the name step: there is no separate
+sign-up form. A person who has no password (an account made with a code) or forgot it sets one on
+`/login/reset-password`, reached by "Forgot password?" under the password form: a code sent to the
+phone number or email (the same send limits as a sign-in code) and the new password, 8 to 128
+characters, go to Authing in one server call, so its reset token never reaches the browser. Asking
+for the code answers the same whether or not an account has the destination (Authing's refusal of an
+unknown one is only logged), and nobody is signed in by it. A password signs in by email; a phone
+number signs in with a code. Copy `apps/web/.env.example` to `apps/web/.env` and set
+`AUTHING_APP_SECRET` plus a random `COFORGE_SESSION_SECRET` of at least 32 characters. Do not
+commit the secret. `AUTHING_ISSUER` is the app's OIDC issuer (`https://<app>.authing.cn/oidc`);
+the API host, the profile read and token revocation are derived from it. Keep the application type
+as a standard web app with a client secret sent in the request body (`client_secret_post`) and
+allow the password and verification-code (SMS and email) sign-in methods and the password reset
+by SMS and email code, with the sign-up
+(auto-register) and SMS/email login templates enabled in the Authing console; it needs no callback
+or logout redirect URL.
+Authing sees every sign-in from the Web server's address, so the Web server limits attempts itself
+before calling it: in 15 minutes 20 per client address, 10 per email or phone number from one
+address, and 50 per email or phone number from all addresses together (an address refused at its
+own limits is not counted against the account, so one address cannot lock an account out); and,
+for sending a code, in an hour 20 per client address and 10 per phone number or email. Every
+count is in Redis, keyed by a hash of the destination or account (and of the address, for the
+pair); with no Redis nothing is limited. The client address is the
+last `X-Forwarded-For` hop, the one Caddy appends, and is passed to Authing as `options.clientIp`.
+Computer CLI login is a separate Device Flow client and is unchanged.
+
+`/login` also offers "Continue with GitHub", off unless `COFORGE_GITHUB_SIGN_IN_CLIENT_ID` and
+`AUTHING_GITHUB_CONNECTION` are both set (both environments set them in their compose files). The
+browser stays on CoForge's domain: `/auth/github` sends it to GitHub's authorize page with
+`<origin>/auth/github/callback` as the redirect URI and a random `state` held in a short-lived
+signed cookie, and the callback has Authing exchange the returned code (`signin-by-mobile`, through
+the connection `AUTHING_GITHUB_CONNECTION`), then signs in like any other method; a first GitHub
+sign-in goes to the name step. The client id is that of the GitHub OAuth app `CoForge` in the
+`lrm-lab` organization, shared by staging and production; the connection is the Authing "GitHub
+Mobile" connection `github-mobile` in both user pools. The app registers two kinds of callback
+URL (verified live 2026-10-27): `https://coforge.cn/auth/github/callback` and
+`https://staging.coforge.cn/auth/github/callback`, where the browser returns, and each pool's
+`https://core.authing.cn/connection/social/github-mobile/<pool id>/callback`, which Authing
+presents when it exchanges the code at GitHub (GitHub refuses the exchange without it). Its
+client secret lives in the Authing console, never here. These settings are not the `COFORGE_GITHUB_*`
+GitHub App integration's. `COFORGE_GITHUB_SIGN_IN_AUTHORIZE_URL` (default GitHub's authorize page)
+exists only so the browser e2e can stand in for GitHub; a deployment leaves it unset.
 
 For local UI work without Authing, uncomment `COFORGE_DEV_SKIP_AUTH=1` in
 `apps/web/.env`. This returns a fixed dev user on the server and is ignored when

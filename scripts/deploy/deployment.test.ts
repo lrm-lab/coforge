@@ -1414,7 +1414,6 @@ describe("staging Authing runtime injection", () => {
       expect(webBlock).not.toContain(`${key}: \${`);
     }
     expect(webBlock).toContain("AUTHING_ISSUER: https://coforge-staging.authing.cn/oidc");
-    expect(webBlock).toContain("AUTHING_REDIRECT_URI: https://staging.coforge.cn/auth/callback");
     expect(webBlock).toContain("source: authing_app_id");
     expect(webBlock).toContain("source: authing_app_secret");
     expect(webBlock).toContain("source: coforge_session_secret");

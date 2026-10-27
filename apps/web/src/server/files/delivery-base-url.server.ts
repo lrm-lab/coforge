@@ -37,23 +37,23 @@ export function normalizeDeliveryBaseUrl(rawUrl: string, rule: DeliveryUrlRule):
 /**
  * Refuses a delivery URL that is this deployment's own origin.
  *
- * The origin is taken from the configured OAuth redirect URI, the one setting that already has to
- * name this deployment's public origin. `AUTHING_REDIRECT_URI` is optional — the auth config
- * otherwise derives the callback from the request — so a deployment can reach here with nothing to
- * compare, and the check then permits the URL. That is why it is not the only gate at either call
- * site: each one refuses its dangerous case in the browser too (see `file-delivery.server.ts` on
- * framing a sender's document, and `public-image-delivery.server.ts` on the signed domain).
+ * The origin is taken from `COFORGE_OIDC_ISSUER` (`<origin>/oidc`), the one setting that already
+ * has to name this deployment's public origin. It is optional (Login with CoForge is off without
+ * it), so a deployment can reach here with nothing to compare, and the check then permits the URL.
+ * That is why it is not the only gate at either call site: each one refuses its dangerous case in
+ * the browser too (see `file-delivery.server.ts` on framing a sender's document, and
+ * `public-image-delivery.server.ts` on the signed domain).
  */
 export function assertDeliveryNotApplicationOrigin(
   baseUrl: string,
   env: NodeJS.ProcessEnv,
   rule: DeliveryUrlRule,
 ): void {
-  const redirectUri = env.AUTHING_REDIRECT_URI?.trim();
-  if (!redirectUri) return;
+  const issuer = env.COFORGE_OIDC_ISSUER?.trim();
+  if (!issuer) return;
   let applicationOrigin: string;
   try {
-    applicationOrigin = new URL(redirectUri).origin;
+    applicationOrigin = new URL(issuer).origin;
   } catch {
     return;
   }

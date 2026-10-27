@@ -8,10 +8,10 @@ import { NOW_SECONDS, SIGNED_IN, query, search, storeWith } from "./oidc-authori
  * the app gets `login_required`, never a loop.
  */
 
-/** Where sign-in sends the person back to, from a `/auth/login?prompt=login` location. */
+/** Where sign-in sends the person back to, from a `/login?prompt=login` location. */
 function signInAgain(location: string): string {
   const url = new URL(location, "https://coforge.example");
-  expect(url.pathname).toBe("/auth/login");
+  expect(url.pathname).toBe("/login");
   expect(url.searchParams.get("prompt")).toBe("login");
   const returnTo = url.searchParams.get("returnTo")!;
   expect(returnTo.startsWith("/oidc/auth?")).toBe(true);
@@ -67,7 +67,7 @@ test("max_age lets a recent enough session through, and prompt=none never sends 
   expect(query(silent.location)).toMatchObject({ error: "login_required", state: "s-1" });
 });
 
-test("signed out, prompt=login and max_age ask Authing to sign in afresh, once", async () => {
+test("signed out, prompt=login and max_age ask to sign in afresh, once", async () => {
   const { endpoint, clock } = storeWith({ consents: { "ws-acme": ["openid", "profile"] } });
   for (const overrides of [{ prompt: "login" }, { max_age: "60" }]) {
     const first = await endpoint.begin(search(overrides), null);

@@ -1,12 +1,8 @@
 import { expect, test } from "bun:test";
 
-import {
-  currentUserHandler,
-  loginStartHandler,
-  logoutHandler,
-} from "#src/server/auth/route-handlers.server";
+import { currentUserHandler, logoutHandler } from "#src/server/auth/route-handlers.server";
 
-test("login start returns a safe 503 when Authing config is missing", async () => {
+test("logout signs out without any Authing config: it needs none", () => {
   const previous = {
     AUTHING_APP_ID: process.env.AUTHING_APP_ID,
     AUTHING_APP_SECRET: process.env.AUTHING_APP_SECRET,
@@ -19,15 +15,12 @@ test("login start returns a safe 503 when Authing config is missing", async () =
   delete process.env.COFORGE_SESSION_SECRET;
 
   try {
-    const response = await loginStartHandler({
-      request: new Request("http://localhost:3000/auth/login"),
+    const response = logoutHandler({
+      request: new Request("http://localhost:3000/auth/logout"),
     });
-    expect(response).toBeInstanceOf(Response);
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      code: "TEMPORARILY_UNAVAILABLE",
-    });
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(response.headers.getSetCookie()[0]).toContain("Max-Age=0");
   } finally {
     restoreEnv(previous);
   }
@@ -49,7 +42,7 @@ test("current user returns a safe 503 when the session secret is missing", async
   }
 });
 
-test("logout returns through Authing to the public HTTPS homepage behind the proxy", async () => {
+test("behind the proxy, sign-out expires a Secure cookie and returns to sign-in on the same site", async () => {
   const previous = {
     AUTHING_APP_ID: process.env.AUTHING_APP_ID,
     AUTHING_APP_SECRET: process.env.AUTHING_APP_SECRET,
@@ -62,51 +55,15 @@ test("logout returns through Authing to the public HTTPS homepage behind the pro
   process.env.COFORGE_SESSION_SECRET = "test-session-secret-at-least-32-characters";
 
   try {
-    const response = await logoutHandler({
-      request: new Request("http://staging.coforge.cn/auth/logout", {
-        headers: {
-          "x-forwarded-proto": "https",
-          "x-forwarded-host": "staging.coforge.cn",
-        },
+    const logout = await logoutHandler({
+      request: new Request("http://staging.coforge.cn/auth/logout?returnTo=/join/abc", {
+        headers: { "x-forwarded-proto": "https", "x-forwarded-host": "staging.coforge.cn" },
       }),
     });
-    const authingLogout = new URL(response.headers.get("location") ?? "");
-    expect(authingLogout.searchParams.get("post_logout_redirect_uri")).toBe(
-      "https://staging.coforge.cn/",
-    );
-  } finally {
-    restoreEnv(previous);
-  }
-});
-
-test("behind the proxy, sign-in and sign-out cookies are Secure without a configured redirect URI", async () => {
-  const previous = {
-    AUTHING_APP_ID: process.env.AUTHING_APP_ID,
-    AUTHING_APP_SECRET: process.env.AUTHING_APP_SECRET,
-    AUTHING_ISSUER: process.env.AUTHING_ISSUER,
-    AUTHING_REDIRECT_URI: process.env.AUTHING_REDIRECT_URI,
-    COFORGE_SESSION_SECRET: process.env.COFORGE_SESSION_SECRET,
-  };
-  process.env.AUTHING_APP_ID = "6a8fde6fa804dd3bea560bac";
-  process.env.AUTHING_APP_SECRET = "test-app-secret";
-  process.env.AUTHING_ISSUER = "https://coforge.authing.cn/oidc";
-  delete process.env.AUTHING_REDIRECT_URI;
-  process.env.COFORGE_SESSION_SECRET = "test-session-secret-at-least-32-characters";
-  const proxied = (path: string) =>
-    new Request(`http://staging.coforge.cn${path}`, {
-      headers: { "x-forwarded-proto": "https", "x-forwarded-host": "staging.coforge.cn" },
-    });
-
-  try {
-    const login = await loginStartHandler({ request: proxied("/auth/login?returnTo=/join/abc") });
-    const authorization = new URL(login.headers.get("location") ?? "");
-    expect(authorization.searchParams.get("redirect_uri")).toBe(
-      "https://staging.coforge.cn/auth/callback",
-    );
-    const logout = await logoutHandler({ request: proxied("/auth/logout?returnTo=/join/abc") });
-    const cookies = [...login.headers.getSetCookie(), ...logout.headers.getSetCookie()];
-    expect(cookies).toHaveLength(3);
-    for (const cookie of cookies) expect(cookie).toContain("; Secure");
+    expect(logout.headers.get("location")).toBe("/login?returnTo=%2Fjoin%2Fabc");
+    const cookies = logout.headers.getSetCookie();
+    expect(cookies).toHaveLength(1);
+    expect(cookies[0]).toContain("; Secure");
   } finally {
     restoreEnv(previous);
   }

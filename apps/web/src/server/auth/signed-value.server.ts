@@ -4,16 +4,15 @@ import { utf8Decoder, utf8Encoder } from "@lrm/coforge-sdk/internal";
 
 /**
  * What a signed value is for. It is part of what the signature covers, so one value never reads
- * as another's: all are signed with the same session secret, and without it a sign-in state cookie
- * replayed as `coforge_session` would pass as a session.
+ * as another's: all are signed with the same session secret, and without it a value signed for one
+ * purpose replayed as `coforge_session` would pass as a session.
  */
 type SignedPurpose =
   | "session"
-  | "login-state"
-  | "logout-return"
   | "authorization-request"
   | "authorization-query"
-  | "sign-in-requested";
+  | "sign-in-requested"
+  | "github-sign-in";
 
 /** `payload` as JSON, base64url, then `.` and its HMAC-SHA256 under `secret` for `purpose`. */
 export function signValue(purpose: SignedPurpose, payload: object, secret: string): string {
