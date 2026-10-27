@@ -78,10 +78,12 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   line shows those for the open conversation's top level or the open thread's root, and
   `replying-agents-summary.ts` (pure) picks the Agents the roster knows and words the names as Raft
   does: "Atlas, Ben and Cam" with no serial comma, "Atlas，Ben，Cam" in Chinese, and "正在输入"
-  with no ellipsis. Above the composer it is a pill, as Frank drew it: a hairline-bordered rounded
-  capsule, left-aligned, led by the first Agent's 20px moving mascot (`AgentMascotView` in an
-  `AvatarSticker`, acting out `working`); the sentence names everyone and carries no activity
-  label. Everyone who can read the place sees it, whether or not they can write there. It overlays
+  with no ellipsis. Both lines are one component, as on Raft (task #210): up to three 16px moving
+  mascots overlapping by 5px (`AgentMascotView` in an `AvatarSticker`, acting out `working`), each
+  sliding and fading in over 200ms on Raft's slide easing as it joins (`starting:`, the slide only
+  without reduced motion), then the sentence, which names everyone and carries no activity label; only the verb differs. Above the
+  composer the two sit in a pill, as Frank drew it: a hairline-bordered rounded capsule,
+  left-aligned. Everyone who can read the place sees it, whether or not they can write there. It overlays
   the history's bottom padding (`pb-9`, the pill and its gap) and shares that row with the jump
   group, so the newest message is never covered while the pane follows it (scrolled up, it covers
   that strip) and the sentence truncates before the group; it renders nothing (and reads no roster)

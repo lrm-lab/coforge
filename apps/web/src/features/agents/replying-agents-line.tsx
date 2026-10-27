@@ -98,9 +98,11 @@ const SENTENCES = {
 };
 
 /**
- * One sentence names everyone. Above the composer it is a pill led by the first Agent's moving
- * mascot, as Frank drew it; under a root up to three mascots overlap. The mascots are decorative;
- * the sentence is a polite status for screen readers.
+ * One component for both places, as on Raft (task #210): up to three 16px moving mascots
+ * overlapping by 5px, each sliding and fading in over 200ms as it joins, then one sentence naming
+ * everyone. Only the verb differs ("typing…" in the place, "replying" under a root), and above the
+ * composer the two sit in a pill so they read over the history. The mascots are decorative; the sentence is a polite status for
+ * screen readers.
  */
 function ReplyingAgents({
   replyingIds,
@@ -134,30 +136,32 @@ function ReplyingAgents({
       : names.plural
         ? messages.many({ names: names.text })
         : messages.one({ names: names.text });
-  if (kind === "typing")
-    return (
-      <div
-        data-leaving={leaving || undefined}
-        onAnimationEnd={(event) => {
-          if (leaving && event.target === event.currentTarget) onLeft?.();
-        }}
-        className="replying-line mb-1.5 inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-secondary bg-primary pr-3 pl-1.5 text-xs shadow-xs"
-      >
-        <span aria-hidden="true" className="flex shrink-0">
-          <AvatarSticker size="xs" className="size-5">
-            <AgentMascotView mascot={replying[0]!.mascot} activity="working" />
-          </AvatarSticker>
-        </span>
-        <p role="status" className="min-w-0 truncate text-tertiary">
-          {sentence}
-        </p>
-      </div>
-    );
+  const pill = kind === "typing";
   return (
-    <div className={cx("replying-line flex min-h-6 items-center gap-2 px-1 text-xs", className)}>
+    <div
+      data-leaving={leaving || undefined}
+      onAnimationEnd={(event) => {
+        if (leaving && event.target === event.currentTarget) onLeft?.();
+      }}
+      className={cx(
+        "replying-line max-w-full items-center gap-1.5 text-xs",
+        pill
+          ? "mb-1.5 inline-flex h-7 rounded-full border border-secondary bg-primary pr-3 pl-1.5 shadow-xs"
+          : "flex min-h-6 px-1",
+        className,
+      )}
+    >
       <span aria-hidden="true" className="flex shrink-0 items-center">
         {replying.slice(0, MAX_REPLYING_FACES).map((agent, index) => (
-          <AvatarSticker key={agent.id} size="xs" className={index > 0 ? "-ml-2" : undefined}>
+          // Keyed by Agent, so one joining mounts and slides in while the others stay put.
+          <AvatarSticker
+            key={agent.id}
+            size="xs"
+            className={cx(
+              "size-4 transition-[translate,opacity] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] starting:opacity-0 motion-safe:starting:-translate-x-1",
+              index > 0 && "-ml-[5px]",
+            )}
+          >
             <AgentMascotView mascot={agent.mascot} activity="working" />
           </AvatarSticker>
         ))}

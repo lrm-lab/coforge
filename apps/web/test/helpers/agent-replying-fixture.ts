@@ -11,6 +11,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { sameOriginProxy } from "./same-origin-proxy";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { ManageAgents } from "#src/server/agents/manage-agents.server";
+import { PUBLICATION_REROUTED_CODE } from "#src/server/agents/agent-activity-relay.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import {
   PrismaComputerRegistrationRepository,
@@ -134,6 +135,12 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     workspaceId: "",
     computerId: "",
     agentId: "",
+    /** Three more Agents in every channel, for lines naming several (task #210), in start order. */
+    otherAgents: [] as { id: string; name: string }[],
+    /** The Agent and the other Agents, in start order. */
+    get agentIds() {
+      return [fx.agentId, ...fx.otherAgents.map((agent) => agent.id)];
+    },
     writerUserId: "",
     joinedId: "",
     unjoinedId: "",
@@ -163,9 +170,7 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     async createChannel(name: string) {
       const channel = await channels.create(fx.workspaceId, DEV_BROWSER_USER.id, name);
       createdConversations.push(channel.id);
-      await db.conversationMember.create({
-        data: { workspaceId: fx.workspaceId, conversationId: channel.id, agentId: fx.agentId },
-      });
+      await addAgents(channel.id);
       return channel.id;
     },
     sendFrame,
@@ -175,13 +180,13 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
 
   /** One frame as Centrifugo's publish proxy would post it to the Web; what the Web answers with is
    * published on the Activity channel. A denial fails the test loudly. */
-  async function sendFrame(intent: AgentReplyIntent["intent"]) {
+  async function sendFrame(intent: AgentReplyIntent["intent"], agentId = fx.agentId) {
     const channel = `agent:activity:${fx.workspaceId}`;
     const frame = encodeAgentReplyIntent({
       protocolMajor: 1,
       requestId: crypto.randomUUID(),
       workspaceId: fx.workspaceId,
-      agentId: fx.agentId,
+      agentId,
       observedAtMs: Date.now(),
       intent,
     });
@@ -198,35 +203,38 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
         meta: { workspace_id: fx.workspaceId, computer_id: fx.computerId },
       }),
     });
-    const answer = (await response.json()) as {
-      result?: { b64data?: string };
-      error?: { code?: number; message?: string };
-      disconnect?: unknown;
-    };
-    const relayed = answer.result?.b64data;
-    if (!response.ok || !relayed)
+    const answer = (await response.json()) as { error?: { code?: number } };
+    // The Web publishes a reply intent to its conversation's channel itself and answers the
+    // activity channel's publish with a re-route; anything else means it was not delivered.
+    if (!response.ok || answer.error?.code !== PUBLICATION_REROUTED_CODE)
       throw new Error(
-        `the Web did not relay the reply intent: ${response.status} ${JSON.stringify(answer)}`,
+        `the Web did not re-route the reply intent: ${response.status} ${JSON.stringify(answer)}`,
       );
-    await centrifugo.publish(
-      channel,
-      Uint8Array.from(atob(relayed), (c) => c.charCodeAt(0)),
-      { skipHistory: true },
-    );
+  }
+
+  /** Makes every Agent a member of the conversation. */
+  async function addAgents(conversationId: string) {
+    await db.conversationMember.createMany({
+      data: fx.agentIds.map((agentId) => ({
+        workspaceId: fx.workspaceId,
+        conversationId,
+        agentId,
+      })),
+    });
   }
 
   /** An announced call: its start is repeated while it lasts, as the daemon does, since a browser
    * drops a start that is not repeated. */
-  async function announce(target: string) {
+  async function announce(target: string, agentId = fx.agentId) {
     const callId = crypto.randomUUID();
-    const start = () => sendFrame({ phase: REPLY_INTENT_PHASE.START, callId, target });
+    const start = () => sendFrame({ phase: REPLY_INTENT_PHASE.START, callId, target }, agentId);
     await start();
     const timer = setInterval(() => void start().catch(() => undefined), 5_000);
     return {
       stop: () => clearInterval(timer),
       end: async () => {
         clearInterval(timer);
-        await sendFrame({ phase: REPLY_INTENT_PHASE.END, callId, target });
+        await sendFrame({ phase: REPLY_INTENT_PHASE.END, callId, target }, agentId);
       },
     };
   }
@@ -279,24 +287,32 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
       { userId: DEV_BROWSER_USER.id },
     );
     fx.computerId = registration.computerId;
-    const created = await new ManageAgents(
+    const agents = new ManageAgents(
       new PrismaAgentRepository(db),
       { start: async () => undefined, stop: async () => undefined },
       { canRun: async () => true },
       { run: async (_agentId, callback) => callback() },
-    ).create(
-      { userId: DEV_BROWSER_USER.id, workspaceId, role: "admin" },
-      {
-        name: agentName,
-        description: "Replying E2E Agent",
-        provider: "pi",
-        computerId: fx.computerId,
-        model: "e2e",
-        modelProvider: "e2e",
-        reasoning: "balanced",
-      },
     );
-    fx.agentId = created.agent.id;
+    const createAgent = async (name: string) =>
+      (
+        await agents.create(
+          { userId: DEV_BROWSER_USER.id, workspaceId, role: "admin" },
+          {
+            name,
+            description: "Replying E2E Agent",
+            provider: "pi",
+            computerId: fx.computerId,
+            model: "e2e",
+            modelProvider: "e2e",
+            reasoning: "balanced",
+          },
+        )
+      ).agent.id;
+    fx.agentId = await createAgent(agentName);
+    for (const letter of ["b", "c", "d"]) {
+      const name = `${agentName}${letter}`;
+      fx.otherAgents.push({ id: await createAgent(name), name });
+    }
 
     channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), centrifugo);
     // The dev user joined this channel and can write in it; the Agent is a member.
@@ -305,9 +321,7 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     const unjoined = await channels.create(workspaceId, writer.id, fx.unjoinedName);
     fx.unjoinedId = unjoined.id;
     createdConversations.push(unjoined.id);
-    await db.conversationMember.create({
-      data: { workspaceId, conversationId: unjoined.id, agentId: fx.agentId },
-    });
+    await addAgents(unjoined.id);
     fx.rootId = (await fx.send(fx.joinedId, DEV_BROWSER_USER.id, `Thread root ${suffix}`)).id;
     await fx.send(fx.joinedId, DEV_BROWSER_USER.id, `First reply ${suffix}`, fx.rootId);
     await fx.send(fx.unjoinedId, writer.id, `Read-only channel message ${suffix}`);
@@ -326,7 +340,9 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     await db.conversation.deleteMany({ where: { id: { in: createdConversations } } });
     // The second member's own assistant goes with them.
     await db.agent.deleteMany({
-      where: { OR: [{ id: fx.agentId }, { ownerId: fx.writerUserId }] },
+      where: {
+        OR: [{ id: { in: fx.agentIds } }, { ownerId: fx.writerUserId }],
+      },
     });
     await db.computer.deleteMany({ where: { id: fx.computerId } });
     await db.workspaceMembership.deleteMany({ where: { userId: fx.writerUserId } });

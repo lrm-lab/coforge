@@ -36,8 +36,9 @@ export const publicationDenied = () => refusal(403, "activity publication is not
 
 /** The least noisy refusal Centrifugo has for a frame that was delivered some other way: unlike
  * a `disconnect` result, it does not drop the Daemon's entire WSS connection over one Agent. */
+export const PUBLICATION_REROUTED_CODE = 1000;
 export const publicationRerouted = (where: string) =>
-  refusal(1000, `activity re-routed to ${where}`);
+  refusal(PUBLICATION_REROUTED_CODE, `activity re-routed to ${where}`);
 
 /** Whether the Agent belongs to the Workspace and to the Computer whose connection published. */
 export async function agentInPublicationScope(

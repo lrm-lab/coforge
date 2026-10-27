@@ -93,7 +93,7 @@ test("on a phone the typing line shares the composer's top edge with the jump gr
         const line = [...document.querySelectorAll('[role="status"]')]
           .find((node) => node.textContent === ${JSON.stringify(typingSentence)})
           .closest(".replying-line");
-        const group = line.parentElement.querySelector('[role="group"]');
+        const group = line.closest(':has([role="group"])')?.querySelector('[role="group"]');
         return group && group.getBoundingClientRect().left - line.getBoundingClientRect().right;
       })()`);
       expect(gap).not.toBeNull();
