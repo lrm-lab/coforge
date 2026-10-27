@@ -34,6 +34,9 @@ export type DaemonStarted = { lifecycleUnderWay?: boolean };
 export type DaemonServiceDefinition = {
   manager: DaemonServiceManager;
   contents: string;
+  /** Where the host writes the file, for a manager that keeps one on disk (launchd, systemd
+   * user); absent for Task Scheduler, which registers the XML without a file of its own. */
+  path?: string;
 };
 
 /** The platform service managers a Coordinator service definition is written for. */

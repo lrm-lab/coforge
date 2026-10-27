@@ -4,6 +4,8 @@ import { collectComputerStatus } from "#src/status/collect-status";
 import type { StatusBinding, StatusPorts, WorkspaceAgents } from "#src/status/types";
 
 const NOW = new Date("2026-01-01T00:00:00.000Z");
+const PLIST_PATH = "/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist";
+const PLIST = "<plist>rendered by this Computer</plist>\n";
 
 function healthyBinding(overrides: Partial<StatusBinding> = {}): StatusBinding {
   return { workspaceId: "ws-1", serverHttpUrl: "https://coforge.cn", enabled: true, ...overrides };
@@ -24,6 +26,8 @@ function fakePorts(overrides: Partial<StatusPorts> = {}): StatusPorts {
     resolveRealPath: async () =>
       "/home/user/.coforge/computer/install/versions/1.4.2/coforge-computer",
     probeCoordinator: async () => ({ loaded: true, pid: 4821 }),
+    expectedServiceDefinition: () => ({ path: PLIST_PATH, contents: PLIST }),
+    readServiceDefinitionFile: async () => PLIST,
     probeDaemonSnapshot: async () => ({
       reachable: true,
       runtimes: [{ workspaceId: "ws-1", processId: 111 }],
@@ -67,6 +71,7 @@ test("healthy machine reports every section as readable and reachable", async ()
     pid: 4821,
     socketPath: "/home/user/.coforge/daemon/daemon.sock",
     rpc: { reachable: true, runtimeCount: 1 },
+    serviceDefinition: { state: "matches", path: PLIST_PATH },
   });
   expect(report.workspaces).toEqual({
     readable: true,
@@ -136,6 +141,7 @@ test("Coordinator missing: not loaded, no PID, RPC unreachable", async () => {
     pid: null,
     socketPath: "/home/user/.coforge/daemon/daemon.sock",
     rpc: { reachable: false, error: "connect ENOENT daemon.sock" },
+    serviceDefinition: { state: "matches", path: PLIST_PATH },
   });
   // The Coordinator being down does not fail the report; other sections still read normally.
   expect(report.install.readable).toBe(true);
@@ -488,4 +494,55 @@ test("a Workspace's start or restart under way and its last failed lifecycle com
       },
     ],
   });
+});
+
+test("a service file that is gone is missing even though the job is still loaded", async () => {
+  const report = await collectComputerStatus(
+    fakePorts({ readServiceDefinitionFile: async () => null }),
+  );
+
+  expect(report.supervisor.loaded).toBe(true);
+  expect(report.supervisor.serviceDefinition).toEqual({ state: "missing", path: PLIST_PATH });
+});
+
+test("a service file with other contents than this Computer would register differs", async () => {
+  const report = await collectComputerStatus(
+    fakePorts({ readServiceDefinitionFile: async () => PLIST.replace("rendered", "edited") }),
+  );
+
+  expect(report.supervisor.serviceDefinition).toEqual({ state: "differs", path: PLIST_PATH });
+});
+
+test("a service file that cannot be read degrades only the service definition", async () => {
+  const report = await collectComputerStatus(
+    fakePorts({
+      readServiceDefinitionFile: async () => {
+        throw new Error("EACCES: permission denied");
+      },
+    }),
+  );
+
+  expect(report.supervisor.serviceDefinition).toEqual({
+    state: "unreadable",
+    path: PLIST_PATH,
+    error: "EACCES: permission denied",
+  });
+  expect(report.supervisor.loaded).toBe(true);
+});
+
+test("a platform whose manager keeps no service file is not checked", async () => {
+  let read = false;
+  const report = await collectComputerStatus(
+    fakePorts({
+      platform: "win32",
+      expectedServiceDefinition: () => null,
+      readServiceDefinitionFile: async () => {
+        read = true;
+        return null;
+      },
+    }),
+  );
+
+  expect(report.supervisor.serviceDefinition).toEqual({ state: "not_checked" });
+  expect(read).toBe(false);
 });

@@ -63,6 +63,7 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
     "Supervisor",
     `  Coordinator job:       ${terminalText(supervisor.label)}`,
     `  Loaded:                ${supervisor.loaded ? "yes" : "no"}`,
+    ...renderServiceDefinition(supervisor.serviceDefinition),
     `  PID:                   ${supervisor.pid ?? "-"}`,
     `  Socket:                ${terminalText(supervisor.socketPath)}`,
     `  Local RPC:             ${
@@ -72,6 +73,14 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
     }`,
     `  PATH source:           ${renderLoginShellPath(report.loginShellPath)}`,
   ];
+}
+
+/** Nothing where the platform keeps no service file to compare. */
+function renderServiceDefinition(status: ComputerStatusReport["supervisor"]["serviceDefinition"]) {
+  const label = "  Service definition:    ";
+  if (status.state === "not_checked") return [];
+  if (status.state === "unreadable") return [`${label}unreadable (${terminalText(status.error)})`];
+  return [`${label}${status.state}`];
 }
 
 function renderLoginShellPath(status: ComputerStatusReport["loginShellPath"]): string {

@@ -27,12 +27,20 @@ export type SupervisorRpcStatus =
   | { reachable: true; runtimeCount: number }
   | { reachable: false; error: string };
 
+/** Whether the service file on disk is what this Computer would register. `not_checked` where the
+ * platform manager keeps no file (Windows Task Scheduler). */
+export type ServiceDefinitionStatus =
+  | { state: "not_checked" }
+  | { state: "matches" | "missing" | "differs"; path: string }
+  | { state: "unreadable"; path: string; error: string };
+
 export type SupervisorStatus = {
   label: string;
   loaded: boolean;
   pid: number | null;
   socketPath: string;
   rpc: SupervisorRpcStatus;
+  serviceDefinition: ServiceDefinitionStatus;
 };
 
 export type PendingRequest =
@@ -188,6 +196,11 @@ export interface StatusPorts {
   activeBinaryPath: string;
   coordinatorLabel: string;
   probeCoordinator(): Promise<{ loaded: boolean; pid: number | null }>;
+  /** The service file this Computer would register, or null where the platform manager keeps no
+   * file. */
+  expectedServiceDefinition(): { path: string; contents: string } | null;
+  /** The service file's text, or null when it does not exist. */
+  readServiceDefinitionFile(path: string): Promise<string | null>;
   probeDaemonSnapshot(): Promise<DaemonSnapshotProbe>;
   loadBindings(): Promise<BindingsLoad>;
   listWorkspaceAgents: {

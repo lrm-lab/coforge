@@ -363,6 +363,7 @@ test("a failed launchctl command carries its stderr diagnostic in the thrown err
 
 test("the launchd service definition is the plist the host writes before bootstrap", async () => {
   const written: string[] = [];
+  const paths: string[] = [];
   const service = new LaunchdDaemonHost({
     label: "cn.coforge.computer.daemon",
     executablePath: "/install/coforge-computer",
@@ -371,12 +372,18 @@ test("the launchd service definition is the plist the host writes before bootstr
     daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
     homeDirectory: "/Users/alice",
     uid: 501,
-    writeFile: async (_path, content) => {
+    writeFile: async (path, content) => {
+      paths.push(path);
       written.push(content);
     },
     run: async (command) => ({ code: command[1] === "print" ? 1 : 0, stdout: "", stderr: "" }),
   });
   await service.ensureInstalled();
 
-  expect(service.serviceDefinition()).toEqual({ manager: "launchd", contents: written[0]! });
+  expect(service.serviceDefinition()).toEqual({
+    manager: "launchd",
+    contents: written[0]!,
+    path: paths[0]!,
+  });
+  expect(paths[0]).toBe("/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist");
 });

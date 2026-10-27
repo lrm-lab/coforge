@@ -61,7 +61,7 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
 
   /** The unit `ensureStarted` writes, for a caller that registers it itself. */
   serviceDefinition(): DaemonServiceDefinition {
-    return { manager: "systemd-user", contents: this.#unit };
+    return { manager: "systemd-user", contents: this.#unit, path: this.#unitPath };
   }
 
   async ensureStarted(config: DaemonWorkspaceConfig): Promise<DaemonStarted> {

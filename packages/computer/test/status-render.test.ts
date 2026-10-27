@@ -3,6 +3,8 @@ import { expect, test } from "bun:test";
 import { renderStatusHuman, renderStatusJson } from "#src/status/render-status";
 import type { ComputerStatusReport } from "#src/status/types";
 
+const PLIST_PATH = "/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist";
+
 const REPORT: ComputerStatusReport = {
   schemaVersion: 1,
   generatedAt: "2026-01-01T00:00:00.000Z",
@@ -20,6 +22,7 @@ const REPORT: ComputerStatusReport = {
     pid: 4821,
     socketPath: "/home/user/.coforge/daemon/daemon.sock",
     rpc: { reachable: true, runtimeCount: 1 },
+    serviceDefinition: { state: "matches", path: PLIST_PATH },
   },
   loginShellPath: { state: "imported", shell: "/bin/zsh", entryCount: 7 },
   workspaces: {
@@ -86,6 +89,7 @@ test("renderStatusHuman prints short aligned sections, one fact per line", () =>
   expect(text).toContain("PID:                   4821");
   expect(text).toContain("Local RPC:             reachable (1 workspace runtime(s))");
   expect(text).toContain("PATH source:           imported from /bin/zsh (7 entries)");
+  expect(text).toContain("Service definition:    matches");
   expect(text).toContain("Workspaces (1)");
   expect(text).toContain("ws-1");
   expect(text).toContain("pid=111 (daemon-snapshot)  cloud=connected");
@@ -422,4 +426,28 @@ test("each Workspace's detail lines stay under its own summary line", () => {
     "    last restart failed: ws-2 failed  at=2026-01-01T00:00:00.000Z",
     "      retry: coforge-computer restart --workspace ws-2",
   ]);
+});
+
+test("renderStatusHuman states whether the service file matches, is missing, or differs", () => {
+  const line = (serviceDefinition: ComputerStatusReport["supervisor"]["serviceDefinition"]) =>
+    renderStatusHuman({ ...REPORT, supervisor: { ...REPORT.supervisor, serviceDefinition } }).find(
+      (candidate) => candidate.includes("Service definition"),
+    );
+
+  expect(line({ state: "matches", path: PLIST_PATH })).toBe("  Service definition:    matches");
+  expect(line({ state: "missing", path: PLIST_PATH })).toBe("  Service definition:    missing");
+  expect(line({ state: "differs", path: PLIST_PATH })).toBe("  Service definition:    differs");
+  expect(line({ state: "unreadable", path: PLIST_PATH, error: "EACCES" })).toBe(
+    "  Service definition:    unreadable (EACCES)",
+  );
+});
+
+test("renderStatusHuman leaves out the service definition where nothing is checked", () => {
+  const text = renderStatusHuman({
+    ...REPORT,
+    platform: "win32",
+    supervisor: { ...REPORT.supervisor, serviceDefinition: { state: "not_checked" } },
+  }).join("\n");
+
+  expect(text).not.toContain("Service definition");
 });

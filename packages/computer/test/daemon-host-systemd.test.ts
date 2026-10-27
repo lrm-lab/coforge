@@ -186,13 +186,15 @@ test("systemd host rejects unsafe injected service names", () => {
 
 test("the systemd service definition is the unit text the host writes", async () => {
   const written: string[] = [];
+  const paths: string[] = [];
   const service = new SystemdUserDaemonHost({
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-computer",
     socketPath: "/state/daemon.sock",
     stateDirectory: "/state",
     daemonConnectionEndpoint: "wss://coforge.test/connection/websocket",
-    writeFile: async (_path, content) => {
+    writeFile: async (path, content) => {
+      paths.push(path);
       written.push(content);
     },
     run: async () => failed("stop here"),
@@ -206,5 +208,10 @@ test("the systemd service definition is the unit text the host writes", async ()
     }),
   );
 
-  expect(service.serviceDefinition()).toEqual({ manager: "systemd-user", contents: written[0]! });
+  expect(service.serviceDefinition()).toEqual({
+    manager: "systemd-user",
+    contents: written[0]!,
+    path: paths[0]!,
+  });
+  expect(paths[0]).toBe("/home/alice/.config/systemd/user/coforge-daemon.service");
 });

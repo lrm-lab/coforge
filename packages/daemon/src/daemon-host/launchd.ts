@@ -94,7 +94,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
 
   /** The plist `ensureInstalled` and `restart` write, for a caller that registers it itself. */
   serviceDefinition(): DaemonServiceDefinition {
-    return { manager: "launchd", contents: launchdPlist(this.#options) };
+    return { manager: "launchd", contents: launchdPlist(this.#options), path: this.#plistPath };
   }
 
   async ensureStarted(config: DaemonWorkspaceConfig): Promise<DaemonStarted> {

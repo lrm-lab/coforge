@@ -25,7 +25,8 @@ export type DaemonHostMachine = {
   windowsUserId?: string;
 };
 
-function currentMachine(): DaemonHostMachine {
+/** The user and process facts of the machine this process runs on. */
+export function currentMachine(): DaemonHostMachine {
   return { homeDirectory: homedir(), uid: process.getuid?.() ?? 0, environment: process.env };
 }
 

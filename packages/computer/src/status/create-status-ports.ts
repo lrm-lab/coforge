@@ -13,6 +13,11 @@ import {
   workspaceStateDirectory,
   WorkspaceHealthJournal,
 } from "@lrm/coforge-daemon";
+import {
+  currentMachine,
+  resolveServiceDefinition,
+  type DaemonHostMachine,
+} from "#src/daemon-service/daemon-host";
 import type { FileComputerConfig } from "#src/local-config";
 import { resolveDaemonSocketPath } from "#src/paths";
 import { MACHINE_MUTATION_LOCK_FILE } from "#src/updater";
@@ -47,6 +52,8 @@ export type CreateStatusPortsInput = {
   /** The local Workspace registrations, read only for each binding's slug. */
   registrations: Pick<FileComputerConfig, "listRegistrations">;
   environment?: NodeJS.ProcessEnv;
+  /** The user whose service definition is expected; the current machine's by default. */
+  machine?: DaemonHostMachine;
 };
 
 /** Wires the real, read-only adapters `coforge-computer status` runs against on this machine.
@@ -111,6 +118,18 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
           }
         },
       });
+    },
+    expectedServiceDefinition() {
+      const { path, contents } = resolveServiceDefinition({
+        ...(input.machine ?? currentMachine()),
+        platform: input.platform,
+        serverUrl: input.serverUrl,
+      });
+      return path === undefined ? null : { path, contents };
+    },
+    async readServiceDefinitionFile(path) {
+      const file = Bun.file(path);
+      return (await file.exists()) ? file.text() : null;
     },
     async probeDaemonSnapshot(): Promise<DaemonSnapshotProbe> {
       const launcher = new LocalDaemonLauncher({

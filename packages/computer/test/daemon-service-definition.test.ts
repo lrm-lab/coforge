@@ -58,6 +58,7 @@ test("macOS: the launchd plist runs the active executable with this user's state
       stateDirectory: "/Users/example/.coforge/daemon",
       daemonConnectionEndpoint: ENDPOINT,
     }),
+    path: "/Users/example/Library/LaunchAgents/cn.coforge.computer.daemon.plist",
   });
 });
 
@@ -72,6 +73,7 @@ test("Linux: the systemd user unit runs the active executable with this user's s
       "/home/example/.coforge/daemon",
       ENDPOINT,
     ),
+    path: "/home/example/.config/systemd/user/coforge-daemon.service",
   });
 });
 
