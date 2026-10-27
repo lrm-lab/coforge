@@ -20,6 +20,7 @@ import {
   commitAppRecoverOwnerActionCard,
   commitAppRegisterActionCard,
   commitChannelCreateActionCard,
+  commitPageFillActionCard,
   denyAppGrantActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
@@ -67,6 +68,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const denyAppGrant = useServerFn(denyAppGrantActionCard);
   const registerApp = useServerFn(commitAppRegisterActionCard);
   const recoverOwner = useServerFn(commitAppRecoverOwnerActionCard);
+  const commitFill = useServerFn(commitPageFillActionCard);
+  const [fillValues, setFillValues] = useState<Record<string, string>>({});
+  const isPageFill = view.kind === "page:fill";
   const [approving, setApproving] = useState(false);
   const isAppGrant = view.kind === "app:grant_agent";
   const isAppRegister = view.kind === "app:register";
@@ -118,6 +122,28 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     }
   }
 
+  async function fillPage() {
+    if (view.kind !== "page:fill") return;
+    setApproving(true);
+    setError("");
+    try {
+      await commitFill({ data: { messageId: view.messageId, values: fillValues } });
+      setFillValues({});
+      await refetch();
+    } catch (cause) {
+      if (
+        isAppErrorCode(cause, "TEMPORARILY_UNAVAILABLE") &&
+        cause.errorId === "page-fill-browser"
+      ) {
+        setError(m.action_card_page_fill_browser());
+      } else if (isAppErrorCode(cause, "INVALID_INPUT") && cause.errorId === "page-fill-field") {
+        setError(m.action_card_page_fill_field());
+      } else setError(m.action_card_error());
+    } finally {
+      setApproving(false);
+    }
+  }
+
   async function register() {
     setApproving(true);
     setError("");
@@ -151,11 +177,12 @@ export function ActionCard({ card }: { card: ActionCardView }) {
       ? Hash
       : view.kind === "agent:create"
         ? Cpu
-        : isAppGrant || isAppRegister || isRecoverOwner
+        : isPageFill || isAppGrant || isAppRegister || isRecoverOwner
           ? Key
           : UserPlus;
-  const title =
-    view.kind === "channel:create"
+  const title = isPageFill
+    ? m.action_card_title_page_fill()
+    : view.kind === "channel:create"
       ? m.action_card_title_channel_create()
       : view.kind === "agent:create"
         ? m.action_card_title_agent_create()
@@ -166,8 +193,11 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             : isRecoverOwner
               ? m.app_recover_card_title()
               : m.action_card_title_add_member();
-  const commitLabel =
-    view.kind === "channel:create"
+  const commitLabel = isPageFill
+    ? approving
+      ? m.action_card_page_fill_filling()
+      : m.action_card_commit_page_fill()
+    : view.kind === "channel:create"
       ? m.action_card_commit_channel_create()
       : view.kind === "agent:create"
         ? m.action_card_commit_agent_create()
@@ -193,9 +223,11 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           ? m.app_card_denied_reason()
           : isAppRegister
             ? m.app_register_card_denied_reason()
-            : isRecoverOwner
-              ? m.app_recover_card_denied_reason()
-              : undefined;
+        : isRecoverOwner
+          ? m.app_recover_card_denied_reason()
+          : isPageFill
+            ? m.action_card_denied_page_fill()
+            : undefined;
 
   const Icon = icon;
   return (
@@ -299,6 +331,30 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             </p>
           </>
         )}
+        {view.kind === "page:fill" && (
+          <>
+            {view.prompt && <p>{view.prompt}</p>}
+            <p className="text-tertiary">{m.action_card_page_fill_note()}</p>
+            {view.state === "pending" && view.canCommit && (
+              <div className="flex flex-col gap-2 pt-1">
+                {view.fields.map((field) => (
+                  <label key={field.id} className="flex flex-col gap-1">
+                    <span className="text-xs text-tertiary">{field.label}</span>
+                    <input
+                      type={field.input === "password" ? "password" : "text"}
+                      autoComplete="off"
+                      value={fillValues[field.id] ?? ""}
+                      onChange={(event) =>
+                        setFillValues((current) => ({ ...current, [field.id]: event.target.value }))
+                      }
+                      className="w-full rounded-md border border-secondary bg-primary px-2.5 py-1.5 text-sm text-primary outline-none"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+          </>
+        )}
         {view.draftHint && <p className="text-xs text-tertiary italic">{view.draftHint}</p>}
       </div>
 
@@ -311,7 +367,20 @@ export function ActionCard({ card }: { card: ActionCardView }) {
       {view.state === "pending" && (
         <div className="flex flex-wrap items-center gap-2">
           {view.canCommit ? (
-            <Button size="sm" isDisabled={approving} onPress={() => void openDialog()}>
+            <Button
+              size="sm"
+              isDisabled={
+                approving ||
+                (view.kind === "page:fill" &&
+                  view.fields.some(
+                    (field) => field.input === "password" && !(fillValues[field.id] ?? "").length,
+                  ))
+              }
+              onPress={() => {
+                if (isPageFill) void fillPage();
+                else void openDialog();
+              }}
+            >
               {commitLabel}
             </Button>
           ) : (
@@ -341,6 +410,12 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             name: view.committedBy?.displayName ?? m.action_card_unknown(),
             time: view.committedAt ? new Date(view.committedAt).toLocaleString() : "",
           })}
+          {view.kind === "page:fill" && view.result && (
+            <>
+              {" · "}
+              {m.action_card_page_fill_done()}
+            </>
+          )}
           {view.kind === "channel:create" && view.result && (
             <>
               {" · "}

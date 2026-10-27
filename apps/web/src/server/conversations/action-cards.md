@@ -17,5 +17,8 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
 - `ActionCards.cancel` (the preparing Agent's owner or a Workspace owner/admin) only moves `pending
 → cancelled`; it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
 - Card state changes publish the existing `ConversationRealtime.messageAvailable`; do not add a card-specific realtime channel.
+- A `page:fill` card stores field labels and selectors only. Commit types the submitted values
+  into that Agent's browser through the desktop proxy and marks the card executed with the field
+  names. The values are not written to the card, the message, or the result.
 - Agent-facing message reads append ` [action card: <state>]` to a card message's body so an Agent never claims a
   resource exists before a human commits it.

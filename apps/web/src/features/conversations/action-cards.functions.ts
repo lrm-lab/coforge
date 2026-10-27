@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 
@@ -121,6 +122,25 @@ export const commitAppRecoverOwnerActionCard = createServerFn({ method: "POST" }
       new CentrifugoConversationRealtime(createCentrifugoServerApi()),
     ).commit({ workspaceId, userId: user.id }, data.messageId),
   );
+
+/** `page:fill`: type the submitted values into the Agent's browser. They are not stored. */
+export const commitPageFillActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    messageIdInput.extend({
+      values: z.record(z.string().max(32), z.string().max(2000)),
+    }),
+  )
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    return actionCards(db).commitPageFill(
+      { workspaceId, actorUserId: user.id },
+      {
+        messageId: data.messageId,
+        values: data.values,
+        cookie: getRequest().headers.get("cookie") ?? "",
+      },
+    );
+  });
 
 export const cancelActionCard = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

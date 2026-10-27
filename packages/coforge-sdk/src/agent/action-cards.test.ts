@@ -5,6 +5,7 @@ import {
   agentCreateActionSchema,
   channelAddMemberActionSchema,
   channelCreateActionSchema,
+  pageFillActionSchema,
   validateActionCardAction,
 } from "./action-cards";
 
@@ -206,6 +207,50 @@ describe("validateActionCardAction", () => {
     expect(validateActionCardAction(action)).toBe(
       "channel:add_member must include at least one human or agent",
     );
+  });
+});
+
+describe("pageFillActionSchema", () => {
+  test("keeps field names and drops a value", () => {
+    const parsed = pageFillActionSchema.parse({
+      type: "page:fill",
+      prompt: "Sign in",
+      fields: [
+        { id: "username", label: "Username", input: "text", selector: "#user", value: "ada" },
+        {
+          id: "password",
+          label: "Password",
+          input: "password",
+          selector: "input[type=password]",
+          value: "secret",
+        },
+      ],
+    });
+    expect(parsed.fields).toEqual([
+      { id: "username", label: "Username", input: "text", selector: "#user" },
+      { id: "password", label: "Password", input: "password", selector: "input[type=password]" },
+    ]);
+    expect(JSON.stringify(parsed)).not.toContain("secret");
+    expect(validateActionCardAction(parsed)).toBeNull();
+  });
+
+  test("rejects a repeated field id", () => {
+    const action = pageFillActionSchema.parse({
+      type: "page:fill",
+      fields: [
+        { id: "password", label: "Password", input: "password", selector: "#a" },
+        { id: "password", label: "Again", input: "password", selector: "#b" },
+      ],
+    });
+    expect(validateActionCardAction(action)).toBe("page:fill field ids must be unique");
+  });
+
+  test("rejects a password field with no selector", () => {
+    const parsed = actionCardActionSchema.safeParse({
+      type: "page:fill",
+      fields: [{ id: "password", label: "Password", input: "password" }],
+    });
+    expect(parsed.success).toBe(false);
   });
 });
 

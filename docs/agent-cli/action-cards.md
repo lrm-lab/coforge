@@ -16,7 +16,7 @@ COFORGEACTION
 As with `message send`, stdin redirected from a regular file another user owns
 fails with `STDIN_FILE_NOT_OWNED` before any request.
 
-An Agent prepares four kinds; the other `integration:*` kinds are not implemented
+An Agent prepares these kinds; the other `integration:*` kinds are not implemented
 yet:
 
 - **`channel:create`**: `name` (1-32 chars, `^[a-z0-9][a-z0-9_-]{0,31}$` after
@@ -28,6 +28,11 @@ yet:
   `description?`, `suggestedComputer?`, `requiredComputer?` (handle or
   UUID; at most one of the two), `draftHint?`. No `runtime`, `model`, or
   `reasoning` field — those stay human-picked.
+- **`page:fill`**: `prompt?`, `fields` (1–8). Each field is `id` (`^[a-z][a-z0-9_]{0,31}$`),
+  `label`, `input` (`text` or `password`), and `selector` (a CSS selector). A `password`
+  selector must match an `input` whose type is `password`. Do not include a value. The person
+  types into the card; the values are written into Chromium on that Agent's screen and are not
+  stored on the card or returned to the Agent. The page has to be open first.
 - **`channel:add_member`**: `channel` (handle or UUID), `humans?`,
   `agents?` (at least one of the two non-empty), `draftHint?`.
 - **`app:register`**: `name`, `clientKey?`, `redirectUrls?`, `homepageUrl?`, `description?`,

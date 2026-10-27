@@ -45,3 +45,24 @@ To check whether a card has been committed, read the card message again, for exa
 `executed` means the channel, Agent, or membership now exists; `pending` means still waiting on a
 human, and `cancelled` means it was dismissed and nothing was created. Do not claim the resource
 exists on the strength of having posted the card alone.
+
+## Filling a page
+
+When a page on this Agent's computer needs something the person must type, such as a username
+and password, post a `page:fill` card. Do not ask them to paste the value into chat, and do not
+type it yourself.
+
+Open the page in Chromium on this Agent's screen first. Every field needs a CSS selector. A
+`password` field's selector must match an `input` whose type is `password`. There is no `value`
+field. Example:
+
+```
+coforge action prepare --target "@owner" <<'COFORGEACTION'
+{"type":"page:fill","prompt":"Sign in","fields":[{"id":"username","label":"Username","input":"text","selector":"#user"},{"id":"password","label":"Password","input":"password","selector":"input[type=password]"}]}
+COFORGEACTION
+```
+
+The person types into the card. The values are written into the page and are not stored on the
+card. Read the message again: `[action card: executed]` means the fields were filled. Then
+continue, for example by submitting the form. `[action card: pending]` means they have not
+filled it yet.

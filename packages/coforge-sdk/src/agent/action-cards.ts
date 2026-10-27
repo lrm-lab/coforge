@@ -20,8 +20,8 @@ export * from "./app-recover-owner-card";
 
 /**
  * Agent-prepared action card contract (`coforge action prepare`). An Agent
- * prepares exactly five card kinds: `channel:create`, `agent:create`,
- * `channel:add_member`, `app:register`, `app:recover_owner`. A sixth, `app:grant_agent`, only the server posts: it
+ * prepares exactly six card kinds: `channel:create`, `agent:create`,
+ * `channel:add_member`, `app:register`, `app:recover_owner`, `page:fill`. A seventh, `app:grant_agent`, only the server posts: it
  * asks a person to approve an Agent's use of an app (`coforge app token`).
  *
  * An Agent identifies humans, Agents, channels, and computers by handle
@@ -91,12 +91,42 @@ export const channelAddMemberActionSchema = z.object({
 });
 export type ChannelAddMemberAction = z.infer<typeof channelAddMemberActionSchema>;
 
+const pageFillSelectorSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .refine((value) => !/[\u0000-\u001F\u007F]/.test(value), "control characters");
+
+const pageFillFieldSchema = z.object({
+  id: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{0,31}$/),
+  label: z.string().trim().min(1).max(80),
+  input: z.enum(["text", "password"]),
+  selector: pageFillSelectorSchema,
+});
+
+/**
+ * Ask a person to type into a page on this Agent's computer. The card names the
+ * fields only. Values are typed later and are not part of this action.
+ */
+export const pageFillActionSchema = z.object({
+  type: z.literal("page:fill"),
+  prompt: z.string().trim().min(1).max(200).optional(),
+  fields: z.array(pageFillFieldSchema).min(1).max(8),
+  draftHint: draftHintSchema,
+});
+export type PageFillAction = z.infer<typeof pageFillActionSchema>;
+
 export const actionCardActionSchema = z.discriminatedUnion("type", [
   channelCreateActionSchema,
   agentCreateActionSchema,
   channelAddMemberActionSchema,
   appRegisterActionSchema,
   appRecoverOwnerActionSchema,
+  pageFillActionSchema,
 ]);
 export type ActionCardAction = z.infer<typeof actionCardActionSchema>;
 /** The server-posted approval card for an Agent's use of an app; never an Agent's action. */
@@ -116,6 +146,10 @@ export function validateActionCardAction(action: ActionCardAction): string | nul
   if (action.type === "channel:add_member") {
     const total = (action.humans?.length ?? 0) + (action.agents?.length ?? 0);
     if (total === 0) return "channel:add_member must include at least one human or agent";
+  }
+  if (action.type === "page:fill") {
+    const ids = action.fields.map((field) => field.id);
+    if (new Set(ids).size !== ids.length) return "page:fill field ids must be unique";
   }
   return null;
 }
@@ -152,13 +186,21 @@ export type ResolvedAppGrantAgentPayload = {
   appName: string;
   scopes: string[];
 };
+/** Selectors stay here so the page can be filled. Values never do. */
+export type ResolvedPageFillPayload = {
+  type: "page:fill";
+  prompt?: string;
+  agentId: string;
+  fields: { id: string; label: string; input: "text" | "password"; selector: string }[];
+};
 export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload
   | ResolvedAgentCreatePayload
   | ResolvedChannelAddMemberPayload
   | ResolvedAppGrantAgentPayload
   | ResolvedAppRegisterPayload
-  | ResolvedAppRecoverOwnerPayload;
+  | ResolvedAppRecoverOwnerPayload
+  | ResolvedPageFillPayload;
 
 /** `POST /api/agent/v1/actions/prepare` request body. */
 export type AgentActionPrepareRequest = {

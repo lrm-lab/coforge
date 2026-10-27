@@ -74,6 +74,13 @@ export type ActionCardView =
     })
   /** The Agent that posted it asks to make `toAgent` the owner Agent of `app`, which has none
    * alive; committing does, as a Workspace owner or admin may. */
+  /** Fields to type into the Agent's browser. Values are not on the card. */
+  | (ActionCardViewBase & {
+      kind: "page:fill";
+      prompt?: string;
+      fields: { id: string; label: string; input: "text" | "password" }[];
+      result?: { filled: string[] };
+    })
   | (ActionCardViewBase & {
       kind: "app:recover_owner";
       app: { key: string; name: string };

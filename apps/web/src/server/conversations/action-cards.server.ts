@@ -21,6 +21,11 @@ import { appRegisterView, resolveAppRegisterPayload } from "./app-register-actio
 import { PublicChannels } from "./public-channels.server";
 import { ConversationHistory } from "./conversation-history.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
+import {
+  commitPageFillCard,
+  pageFillActionCardView,
+  resolvePageFillPayload,
+} from "./action-card-page-fill.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import {
   createActionCardMessage,
@@ -287,6 +292,11 @@ export class ActionCards {
           canCommit: pending && roleCan(viewerRole, "manageApps"),
           result: card.result as { clientKey: string; noOwnerAgent?: boolean } | undefined,
         });
+      } else if (payload.type === "page:fill") {
+        views.set(
+          card.messageId,
+          pageFillActionCardView(base, card, payload, viewerUserId, pending),
+        );
       } else if (payload.type === "app:recover_owner") {
         views.set(card.messageId, {
           ...base,
@@ -494,11 +504,19 @@ export class ActionCards {
     await publishActionCardUpdate(this.db, this.realtime, conversationId, messageId);
   }
 
+  async commitPageFill(
+    principal: { workspaceId: string; actorUserId: string },
+    input: { messageId: string; values: Record<string, string>; cookie: string },
+  ): Promise<{ filled: string[] }> {
+    return commitPageFillCard(this.db, this.realtime, principal, input);
+  }
+
   private async resolvePayload(
     workspaceId: string,
     agentId: string,
     action: ActionCardAction,
   ): Promise<ResolvedActionCardPayload> {
+    if (action.type === "page:fill") return resolvePageFillPayload(this.db, workspaceId, agentId, action);
     if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
     if (action.type === "app:recover_owner")
       return resolveAppRecoverOwnerPayload(this.db, { workspaceId, agentId }, action);
@@ -574,27 +592,4 @@ export class ActionCards {
 }
 
 export { ActionCardError } from "./action-card-error.server";
-
-/**
- * Attaches `actionCard` to every message in a page that has one, in one batched
- * `ActionCards.viewsFor` lookup. Shared by the channel and direct-conversation message-page
- * Server Functions (`channels.functions.ts`, `conversations.functions.ts`) so the merge logic
- * lives in exactly one place instead of being repeated at each call site.
- */
-export async function attachActionCardViews<T extends { id: string }>(
-  db: PrismaClient,
-  workspaceId: string,
-  viewerUserId: string,
-  messages: readonly T[],
-): Promise<(T & { actionCard?: ActionCardView })[]> {
-  if (!messages.length) return messages as (T & { actionCard?: ActionCardView })[];
-  const views = await new ActionCards(db).viewsFor(
-    workspaceId,
-    viewerUserId,
-    messages.map((message) => message.id),
-  );
-  if (!views.size) return messages as (T & { actionCard?: ActionCardView })[];
-  return messages.map((message) =>
-    views.has(message.id) ? { ...message, actionCard: views.get(message.id) } : message,
-  );
-}
+export { attachActionCardViews } from "./action-card-attach.server";

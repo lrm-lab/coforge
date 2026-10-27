@@ -38,6 +38,14 @@ describe("desktop route", () => {
       computerId: "computer-1",
       upstreamPath: "/screen/agent-1/desktop.html",
     });
+    expect(parseDesktopRoute("/desktop/computer-1/fill")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/fill",
+    });
+    expect(parseDesktopRoute("/desktop/computer-1/agent-1/fill")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/screen/agent-1/fill",
+    });
     expect(parseDesktopRoute("/desktop/computer-1/agent-1/websockify")).toEqual({
       computerId: "computer-1",
       upstreamPath: "/screen/agent-1/websockify",
