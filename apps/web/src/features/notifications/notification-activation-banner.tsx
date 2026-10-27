@@ -146,6 +146,8 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
       <Button
         size="xs"
         color="tertiary"
+        // Raft's Dismiss is in the body's ink, not the borderless button's grey.
+        className="text-primary hover:text-primary"
         onPress={() => {
           writeDismissed();
           setError(null);
