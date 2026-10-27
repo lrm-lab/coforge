@@ -282,3 +282,53 @@ fn install_from_a_directory_activates_the_version_in_a_scratch_home() {
     let shim = scratch.home().join(".local/bin/coforge-computer");
     assert!(shim.symlink_metadata().is_ok(), "the PATH shim at {shim:?}");
 }
+
+#[test]
+fn start_on_an_empty_home_fails_because_nothing_is_installed() {
+    let scratch = Scratch::new("start-empty");
+
+    let output = installer(&scratch.home(), &["start"]);
+
+    assert_eq!(exit_code(&output), 1);
+    let stderr = text(&output.stderr);
+    assert!(
+        stderr.starts_with("coforge-installer: no CoForge Computer is installed"),
+        "{stderr}"
+    );
+    assert!(text(&output.stdout).is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn start_refuses_a_computer_that_cannot_report_its_service_definition_before_touching_the_service()
+{
+    let version = "0.2.0";
+    let target =
+        coforge_installer::paths::release_target().expect("this machine has a release target");
+    let scratch = Scratch::new("start-older-computer");
+    let package = scratch.0.join("package");
+    fs::create_dir_all(&package).unwrap();
+    write_stand_in_release(&package, version, target);
+    let install = installer(
+        &scratch.home(),
+        &[
+            "install",
+            "--version",
+            version,
+            "--from-directory",
+            package.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(exit_code(&install), 0, "{}", text(&install.stderr));
+
+    let output = installer(&scratch.home(), &["start"]);
+
+    assert_eq!(exit_code(&output), 1);
+    let stderr = text(&output.stderr);
+    assert!(
+        stderr.starts_with("coforge-installer: the installed CoForge Computer 0.2.0 cannot report"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("coforge-computer upgrade"), "{stderr}");
+    assert!(text(&output.stdout).is_empty());
+}

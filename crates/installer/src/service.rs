@@ -52,6 +52,15 @@ pub enum ServiceState {
     Running { pid: Option<u32> },
 }
 
+/// What [`SupervisorService::install`] did to the registration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Installed {
+    /// The manager's registration was written or replaced.
+    Written,
+    /// The registration already held exactly this definition; nothing was written.
+    AlreadyInPlace,
+}
+
 /// What [`SupervisorService::stop`] found and did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StopOutcome {
@@ -88,8 +97,8 @@ pub trait SupervisorService {
     /// earlier registration. The definition must be for this backend's manager. launchd and
     /// systemd leave a definition file that already holds exactly these bytes alone, so a
     /// registration that is current changes nothing; a Windows task has no file to compare and
-    /// is always replaced.
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError>;
+    /// is always replaced. [`Installed`] says which happened.
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError>;
 
     /// Whether [`SupervisorService::install`] may end a running service when it replaces its
     /// registration. launchd and systemd only write what they read at the next bootstrap or

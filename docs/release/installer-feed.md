@@ -53,7 +53,9 @@ installer's `file`, `size`, `checksum`, and its `gzip` `file`, `size`,
 `install.sh` and `install.ps1` read `installer/latest` for a first install. Each
 `coforge-computer install`, `upgrade`, and server-triggered upgrade fetches it
 fresh for every operation (`release/installer-launch.ts`), so a moved pointer
-applies to the next operation without a Computer release. The installer then
+applies to the next operation without a Computer release; when the feed is
+unreachable, the Computer uses its most recently used verified cached installer.
+The installer then
 installs Computer versions from the Computer feed described in
 [Local Computer distribution model](local-distribution.md).
 

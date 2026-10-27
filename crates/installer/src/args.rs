@@ -30,6 +30,9 @@ pub(crate) enum Command {
         allow_downgrade: bool,
         json: bool,
     },
+    Start {
+        caller_pid: Option<u32>,
+    },
     Status {
         json: bool,
     },
@@ -46,12 +49,14 @@ pub(crate) fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Command,
             "upgrade" => parse_upgrade(parser),
             "recover" => parse_recover(parser),
             "repair" => parse_repair(parser),
+            "start" => parse_start(parser),
             "status" => parse_status(parser),
             other => Err(format!("unknown command: {other}")),
         },
         Some(other) => Err(other.unexpected().to_string()),
         None => Err(
-            "expected a command: install, upgrade, recover, repair, status, or --version".into(),
+            "expected a command: install, upgrade, recover, repair, start, status, or --version"
+                .into(),
         ),
     }
 }
@@ -165,6 +170,19 @@ fn parse_recover(mut parser: lexopt::Parser) -> Result<Command, String> {
         }
     }
     Ok(Command::Recover { caller_pid, json })
+}
+
+fn parse_start(mut parser: lexopt::Parser) -> Result<Command, String> {
+    use lexopt::prelude::*;
+
+    let mut caller_pid = None;
+    while let Some(arg) = parser.next().map_err(|error| error.to_string())? {
+        match arg {
+            Long("caller-pid") => caller_pid = Some(caller_pid_value(&mut parser)?),
+            other => return Err(other.unexpected().to_string()),
+        }
+    }
+    Ok(Command::Start { caller_pid })
 }
 
 fn parse_repair(mut parser: lexopt::Parser) -> Result<Command, String> {
@@ -320,6 +338,23 @@ mod tests {
             })
         ));
         assert!(parse(args(&["recover", "--caller-pid", "x"])).is_err());
+    }
+
+    #[test]
+    fn start_takes_only_a_caller_pid() {
+        assert!(matches!(
+            parse(args(&["start"])),
+            Ok(Command::Start { caller_pid: None })
+        ));
+        assert!(matches!(
+            parse(args(&["start", "--caller-pid", "42"])),
+            Ok(Command::Start {
+                caller_pid: Some(42)
+            })
+        ));
+        assert!(parse(args(&["start", "--caller-pid", "x"])).is_err());
+        assert!(parse(args(&["start", "--json"])).is_err());
+        assert!(parse(args(&["start", "--version", "0.2.0"])).is_err());
     }
 
     #[test]

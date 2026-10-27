@@ -22,7 +22,8 @@ use crate::prepare::prepare_version;
 use crate::processes::ProcessTable;
 use crate::service::fakes::definition;
 use crate::service::{
-    ServiceError, ServiceState, StartOutcome, StopOutcome, SupervisorService, coordinator_service,
+    Installed, ServiceError, ServiceState, StartOutcome, StopOutcome, SupervisorService,
+    coordinator_service,
 };
 use crate::store::VersionStore;
 use crate::switch::Ports;
@@ -301,11 +302,11 @@ impl SupervisorService for FakeService {
         Ok(StopOutcome { before })
     }
 
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError> {
         self.calls.borrow_mut().push("install");
         self.installed.borrow_mut().push(definition.clone());
         self.registered.set(true);
-        Ok(())
+        Ok(Installed::Written)
     }
 
     fn install_may_end_running_service(&self) -> bool {

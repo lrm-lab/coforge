@@ -31,8 +31,8 @@
 use std::time::Duration;
 
 use super::{
-    Attempt, CommandLine, CommandRunner, ServiceError, ServiceState, StartOutcome, StopOutcome,
-    SupervisorService,
+    Attempt, CommandLine, CommandRunner, Installed, ServiceError, ServiceState, StartOutcome,
+    StopOutcome, SupervisorService,
     definition::{self, TemporaryDefinition},
     execute,
 };
@@ -197,7 +197,7 @@ impl SupervisorService for WindowsTask<'_> {
         }
     }
 
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError> {
         definition::require_manager("windows-task", definition)?;
         let xml = TemporaryDefinition::utf16(&std::env::temp_dir(), &definition.contents)?;
         let path = xml.path().to_string_lossy();
@@ -210,7 +210,7 @@ impl SupervisorService for WindowsTask<'_> {
             COMMAND_BOUND,
         )?;
         if create.succeeded() {
-            Ok(())
+            Ok(Installed::Written)
         } else {
             Err(self.refused(&create))
         }

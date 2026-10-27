@@ -19,7 +19,8 @@ For each operation, `release/upgrade-runner.ts` then:
 1. obtains `coforge-installer` fresh from the feed's `installer/latest`
    (`release/installer-launch.ts`). The download is verified and kept under
    `<install root>/installer/<sha256>/`, so an installer fix reaches the next
-   upgrade without a Computer release;
+   upgrade without a Computer release. When the feed is unreachable, Computer
+   uses its most recently used verified cached installer instead;
 2. runs `coforge-installer upgrade --request-id <id> --version <selection>
    --caller-pid <pid>`, adding `--allow-downgrade` only when a CLI operation was
    given it. The caller pid is verified by the installer as the parent and is never
@@ -103,6 +104,23 @@ definition of the version it is about to switch to before it stops anything (a v
 print it fails that attempt, so recovery falls back to restoring the previous version), and
 registers it before it starts the service. While the journal exists, every other
 installer operation exits 3 without a receipt and names `coforge-computer recover`.
+
+## Repair and start
+
+`coforge-installer repair` always reconciles the active version's service definition, as the
+upgrade does before a start, but never stops or starts the service (and on Windows leaves a
+running task's registration as it is). A healthy installation whose definition was missing gets it
+written and reports a repair; one whose definition is already in place stays
+`REPAIR_NOT_NEEDED`.
+
+When the service is not registered with the service manager, Computer's start paths run
+`coforge-installer start [--caller-pid <pid>]` instead of registering it themselves. Under the
+machine lock, with no request id or receipt, it reads the active version's service definition
+from its stored executable, registers it, starts the service, and waits until the manager reports
+it running; Computer then does its own handshake. The recovery journal does not block it. Exit 0
+started; 2 another operation holds the lock; 1 for a refusal inside the service's own unit,
+nothing installed, a Computer that cannot report its service definition (run
+`coforge-computer upgrade`), or a registration or start failure.
 
 ## Daemon settlement
 

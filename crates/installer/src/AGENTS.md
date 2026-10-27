@@ -103,8 +103,9 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/clock.rs`: the clock and sleep port the bounded waits run through (virtual in tests).
 - `src/service.rs`: OS service control of the Computer supervisor: state (not installed, stopped,
   running with the manager's pid), stop (waits until the manager has dropped it), install (registers
-  the service definition the Computer reports, without starting it; launchd and systemd leave a
-  file that already holds the same bytes alone), `install_may_end_running_service` (whether
+  the service definition the Computer reports, without starting it, and says whether it wrote
+  (`Installed::Written`) or found the same bytes already in place (`Installed::AlreadyInPlace`,
+  launchd and systemd; a Windows task is always written)), `install_may_end_running_service` (whether
   replacing a registration may end a running service: Windows only), start (waits for a process).
   One backend per manager in `src/service/` behind the `CommandRunner` port.
 - `src/service/definition.rs`: what the backends share to register a definition: the manager
@@ -156,8 +157,9 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   lifecycle and service, and an install root with versions `0.1.0` and `0.2.0` served by a
   loopback feed.
 - `src/installation.rs`: the installation a command acts on. `Setup` (install root, release target,
-  compiled feed) and the use cases `transaction`, `recover`, and `status`, which build the real ports
-  (service manager, process table, clock, release source) for this machine. `ReleaseOrigin` picks
+  compiled feed) and the use cases `transaction`, `recover`, `repair`, `start`, and `status`,
+  which build the real ports (service manager, process table, clock, release source) for this
+  machine. `ReleaseOrigin` picks
   the release source of a transaction: the feed, or a `--from-directory`.
 - `src/status.rs`: the read-only status report (`status --json` field names) and its human lines.
 - `src/compiled_feed.rs`: the release feed compiled into this build and the rule that accepts it
@@ -173,7 +175,20 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   the activation, and quarantines and redownloads a damaged payload without touching service
   processes; writes a repair receipt. Tests live with the module.
 - `src/repair/service_definition.rs`: repair's registration of the active version's service
-  definition after the activation is repaired; it never stops or starts the service.
+  definition, whether or not the activation needed repair; it never stops or starts the service.
+  What it did (`Registration`) decides whether a healthy installation is `REPAIR_NOT_NEEDED`
+  (definition in place, unreported, or a running Windows task left alone) or repaired (written).
+- `src/start.rs`: `coforge-installer start [--caller-pid <pid>]`. Refuses inside the service's
+  unit (exit 1), takes the machine lock (busy: exit 2), reads `active.json` (nothing installed:
+  exit 1), reads the active version's definition from its stored executable (a Computer that
+  lists no `service-definition`: exit 1, run `coforge-computer upgrade`), registers it (a
+  running service whose manager would replace it is left as it is), starts the service and waits
+  for the manager to report it running (exit 0). It prints `==> Registering the Computer
+  supervisor service definition`, `==> Starting Computer supervisor <v>`, `==> Computer
+  supervisor <v> started`; a failure is `coforge-installer: <message>` on stderr, no receipt. The
+  recovery journal does not block it, and it does not probe `__lifecycle status`: the Computer
+  does its own handshake. `--caller-pid` is verified as for `recover` and stops nothing. Tests in
+  `src/start/tests.rs`.
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
   scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,
   which can script a path's first answers), a tiny release tree, and runners

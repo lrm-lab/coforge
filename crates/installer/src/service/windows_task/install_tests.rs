@@ -36,13 +36,13 @@ impl CommandRunner for Capturing {
 }
 
 /// What an installation did.
-struct Installed {
-    result: Result<(), ServiceError>,
+struct Registration {
+    result: Result<Installed, ServiceError>,
     /// The commands the runner saw, each with the file its `/XML` argument named.
     seen: Vec<(CommandLine, Option<Vec<u8>>)>,
 }
 
-impl Installed {
+impl Registration {
     /// The file the registration named with `/XML`, if it named one.
     fn xml_path(&self) -> Option<PathBuf> {
         self.seen.iter().find_map(|(command, _)| {
@@ -54,7 +54,7 @@ impl Installed {
 }
 
 /// Installs against a runner that answers `code`.
-fn install(manager: &str, code: i32) -> Installed {
+fn install(manager: &str, code: i32) -> Registration {
     let runner = Capturing {
         code,
         seen: RefCell::new(Vec::new()),
@@ -63,7 +63,7 @@ fn install(manager: &str, code: i32) -> Installed {
     let result = WindowsTask::new(&runner, &clock, &coordinator_service(), SYSTEM_ROOT)
         .unwrap()
         .install(&definition(manager, XML));
-    Installed {
+    Registration {
         result,
         seen: runner.seen.into_inner(),
     }
@@ -73,7 +73,8 @@ fn install(manager: &str, code: i32) -> Installed {
 fn installing_registers_the_xml_as_utf16_with_a_byte_order_mark_and_does_not_run_the_task() {
     let installed = install("windows-task", 0);
     let path = installed.xml_path().unwrap();
-    installed.result.as_ref().unwrap();
+    // A task has no file to compare, so a registration is always written.
+    assert_eq!(installed.result, Ok(Installed::Written));
     let [(command, file)] = installed.seen.as_slice() else {
         panic!("expected one command, saw {:?}", installed.seen);
     };

@@ -20,6 +20,7 @@ use crate::lock::{BUSY_ERROR_CODE, LockError, MachineMutationLock};
 use crate::prepare::prepare_version;
 use crate::private_fs;
 use crate::receipts::{Begin, ReceiptStore};
+use crate::repair::service_definition::Registration;
 use crate::service::ServiceState;
 use crate::switch::Ports;
 use crate::upgrade::Outcome;
@@ -137,22 +138,19 @@ pub fn repair(
             Some(ERROR_CODE_DOWNGRADE_REFUSED),
         );
     }
-    let activation;
+    // `None`: the activation was healthy and nothing was activated.
+    let activation: Option<Activation>;
     let active_is_target = active.as_ref().is_some_and(|state| state.current == target);
     if active_is_target && ports.store.verify_installed(&target).is_ok() {
         let state = active.as_ref().expect("active_is_target implies active");
-        if active::is_activated(ports.store, ports.binary_directory, &target) {
-            return held(
-                &receipts,
-                &lock,
-                request_id,
-                "This installation does not need repair. Use install or upgrade.",
-            );
-        }
-        stage(&format!("Verifying active CoForge Computer {target}"));
-        activation = match activate(ports, state) {
-            Ok(activation) => activation,
-            Err(error) => return failed(&receipts, &lock, request_id, error.to_string(), None),
+        activation = if active::is_activated(ports.store, ports.binary_directory, &target) {
+            None
+        } else {
+            stage(&format!("Verifying active CoForge Computer {target}"));
+            match activate(ports, state) {
+                Ok(activation) => Some(activation),
+                Err(error) => return failed(&receipts, &lock, request_id, error.to_string(), None),
+            }
         };
     } else {
         let target_is_damaged = ports.store.version_directory(&target).exists()
@@ -183,7 +181,7 @@ pub fn repair(
             previous: active.as_ref().and_then(|old| old.previous.clone()),
         };
         activation = match activate(ports, &state) {
-            Ok(activation) => activation,
+            Ok(activation) => Some(activation),
             Err(error) => {
                 restore_quarantine(quarantined_version);
                 restore_active(ports, active.as_ref());
@@ -194,9 +192,40 @@ pub fn repair(
         drop(quarantined_active_metadata.take());
     }
     // The activation is repaired for good: a service definition that cannot be registered fails
-    // the receipt but undoes nothing.
-    let definition = service_definition::register(ports, &target, stage);
-    if activation == Activation::ExecutableSpared {
+    // the receipt but undoes nothing. A healthy activation still has its definition reconciled:
+    // only a definition that was missing makes that a repair.
+    let definition = service_definition::register(ports, &target);
+    if activation.is_none() {
+        match &definition {
+            Ok(Registration::Written) => {}
+            Ok(_) => {
+                return held(
+                    &receipts,
+                    &lock,
+                    request_id,
+                    "This installation does not need repair. Use install or upgrade.",
+                );
+            }
+            Err(error) => {
+                return failed(
+                    &receipts,
+                    &lock,
+                    request_id,
+                    format!(
+                        "CoForge Computer {target} needed no repair, but its service definition \
+                         could not be registered: {error}"
+                    ),
+                    None,
+                );
+            }
+        }
+    }
+    if let Ok(registration) = &definition
+        && let Some(line) = registration.stage_line()
+    {
+        stage(line);
+    }
+    if activation == Some(Activation::ExecutableSpared) {
         return executable_spared(
             ports,
             &receipts,

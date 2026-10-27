@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{
-    Attempt, CommandLine, CommandRunner, ServiceError, ServiceState, StartOutcome, StopOutcome,
-    SupervisorService, definition, execute,
+    Attempt, CommandLine, CommandRunner, Installed, ServiceError, ServiceState, StartOutcome,
+    StopOutcome, SupervisorService, definition, execute,
 };
 use crate::clock::{Clock, poll_until};
 use crate::contract::{CoordinatorService, LifecycleServiceDefinition};
@@ -239,13 +239,13 @@ impl SupervisorService for SystemdUser<'_> {
         }
     }
 
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<(), ServiceError> {
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError> {
         definition::require_manager("systemd-user", definition)?;
         // A unit file that already holds the definition is the registration: the Computer wrote
         // it with its own reload and enable, so neither is repeated, and a `systemctl --user
         // disable` a person ran since stays theirs.
         if definition::is_in_place(&self.unit_file, &definition.contents) {
-            return Ok(());
+            return Ok(Installed::AlreadyInPlace);
         }
         definition::write_private(&self.unit_file, &definition.contents)?;
         let reload = execute(
@@ -260,7 +260,7 @@ impl SupervisorService for SystemdUser<'_> {
         if !enable.succeeded() {
             return Err(self.refused(&enable));
         }
-        Ok(())
+        Ok(Installed::Written)
     }
 
     fn install_may_end_running_service(&self) -> bool {

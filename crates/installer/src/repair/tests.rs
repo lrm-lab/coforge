@@ -89,6 +89,8 @@ fn a_healthy_active_installation_is_held_without_reactivating() {
     let table = FakeTable::new(&clock);
     let service = FakeService::new(ServiceState::NotInstalled);
     let lifecycle = FakeLifecycle::default();
+    // A Computer that predates the service-definition command: nothing to register.
+    fixture.answers_protocol(&lifecycle, OLD);
     let ports = fixture.ports(&lifecycle, &service, &table, &clock);
 
     let mut stages = Vec::new();

@@ -9,6 +9,7 @@
 //!   coforge-installer recover [--caller-pid <pid>]
 //!   coforge-installer repair [--version <latest|X.Y.Z> | --channel main|latest] [--yes]
 //!                             [--allow-downgrade] [--json]
+//!   coforge-installer start [--caller-pid <pid>]
 //!   coforge-installer status [--json]
 //!
 //! Exit status (`contract.rs`): 0 succeeded, 1 failed (a receipt, or a usage error that wrote
@@ -29,6 +30,7 @@ use coforge_installer::contract::{EXIT_FAILED, ReceiptStatus, UpgradeReceipt};
 use coforge_installer::installation::{self, ReleaseOrigin, Setup};
 use coforge_installer::recover::RecoverOutcome;
 use coforge_installer::request_id::new_request_id;
+use coforge_installer::start::Outcome as StartOutcome;
 use coforge_installer::upgrade::Outcome;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -93,6 +95,7 @@ fn main() -> ExitCode {
             allow_downgrade,
             json,
         ),
+        Command::Start { caller_pid } => start(&setup, caller_pid),
         Command::Status { json } => status(&setup, json),
     }
 }
@@ -199,6 +202,21 @@ fn recover(setup: &Setup, caller_pid: Option<u32>, json: bool) -> ExitCode {
                 }
             }
             ExitCode::from(exit)
+        }
+        Err(message) => fail(&message),
+    }
+}
+
+fn start(setup: &Setup, caller_pid: Option<u32>) -> ExitCode {
+    match installation::start(setup, caller_pid, &mut stage) {
+        Ok(outcome) => {
+            if let StartOutcome::Held { message }
+            | StartOutcome::Refused { message }
+            | StartOutcome::Failed { message } = &outcome
+            {
+                eprintln!("coforge-installer: {message}");
+            }
+            ExitCode::from(outcome.exit_code())
         }
         Err(message) => fail(&message),
     }

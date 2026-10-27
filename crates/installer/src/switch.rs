@@ -150,6 +150,7 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
         self.ports
             .service
             .install(definition)
+            .map(|_| ())
             .map_err(|error| error.to_string())
     }
 
