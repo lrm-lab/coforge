@@ -7,6 +7,7 @@ import {
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { lockConversation } from "./conversation-lock.server";
+import { resolveChannelAuthority } from "./channel-authority.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 
@@ -71,15 +72,19 @@ export async function readChannelCoordination(
   );
 }
 
-/** Caller has already authorized a channel settings update. */
+/** A channel settings update: only a user who may update the channel changes its coordinator. */
 export async function changeChannelCoordinator(
   db: PrismaClient,
   publisher: CentrifugoServerApi,
   realtime: ConversationRealtime | undefined,
   workspaceId: string,
-  channelId: string,
+  userId: string,
+  channel: { id: string; channelName: string | null },
   coordinatorAgentId: string | null,
 ) {
+  const authority = await resolveChannelAuthority(db, workspaceId, { userId }, channel);
+  if (!authority.capabilities.update) throw new AppError("ACCESS_DENIED");
+  const channelId = channel.id;
   const change = await db.$transaction(async (tx) => {
     await lockConversation(tx, channelId);
     const current = await tx.conversation.findUniqueOrThrow({
