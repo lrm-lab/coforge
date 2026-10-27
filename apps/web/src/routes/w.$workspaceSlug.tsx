@@ -25,6 +25,7 @@ import { InPageNotifications } from "#src/features/notifications/in-page-notific
 import { NotificationActivationContext } from "#src/features/notifications/notification-activation-banner";
 import { getBrowserNotificationSettings } from "#src/features/notifications/notifications.functions";
 import { listAgents } from "#src/features/agents/agents.functions";
+import { loadExtraAgents } from "#src/features/agents/extra-agents.functions";
 import { WorkspaceAgentsProvider } from "#src/features/agents/workspace-agents-realtime";
 import { WorkspacePresenceProvider } from "#src/features/workspaces/member-presence";
 import { getUserPreferences } from "#src/features/settings/settings.functions";
@@ -70,12 +71,14 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       });
   },
   loader: async ({ location }) => {
-    const [user, switcher, notifications, agents, preferences, tabOrders, recordsNav] =
+    const [user, switcher, notifications, agents, extraAgents, preferences, tabOrders, recordsNav] =
       await Promise.all([
         getUserProfile(),
         loadWorkspaceSwitcher(),
         getBrowserNotificationSettings(),
         listAgents(),
+        // The other members' Agents are an addition: without them the browser reads them itself.
+        loadExtraAgents({ data: { heldAgentIds: [] } }).catch(() => undefined),
         getUserPreferences(),
         getPanelTabOrders(),
         loadRecordsNavAttention().catch(() => ({ preview: false })),
@@ -89,6 +92,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       currentWorkspace: switcher.current,
       notifications,
       agents,
+      extraAgents,
       timeZone: preferences.timeZone,
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
@@ -105,6 +109,7 @@ function AppLayout() {
     workspaces,
     currentWorkspace,
     agents,
+    extraAgents,
     recordsPreview,
     notifications,
     timeZone,
@@ -142,6 +147,7 @@ function AppLayout() {
                 workspaceId={currentWorkspace.id}
                 viewerId={user.id}
                 agents={agents}
+                extraAgents={extraAgents}
               >
                 <PanelTabOrderProvider workspaceId={currentWorkspace.id} orders={tabOrders}>
                   {/* Every open page leaves a Workspace its owner deleted. */}

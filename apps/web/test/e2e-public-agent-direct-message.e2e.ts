@@ -9,7 +9,8 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * Browser E2E (task #226): a DM with another member's public Agent is listed in the viewer's
  * sidebar. Any member may message a public Agent, but the sidebar used to match a DM's Agent among
  * the viewer's own Agents only, so the DM opened and took messages yet never showed in the list.
- * The row shows as soon as the DM opens, and again after a reload.
+ * The row shows as soon as the DM opens, and again after a reload, where the other members' Agents
+ * come with the page rather than from a read after it, so the row is not late.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database. It seeds one member with a public Agent and deletes what it created.
@@ -24,7 +25,6 @@ const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/public-agent-direct-message");
-
 test("a DM with another member's public Agent is listed in the sidebar", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `public-agent-dm-${process.pid}`;
@@ -40,6 +40,9 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
     ]);
     if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
     return stdout;
+  }
+  async function evaluate<T>(expression: string): Promise<T> {
+    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
   }
   /** Waits for a page condition, failing with the condition after 15 s. */
   const waitFor = (condition: string) => {
@@ -62,6 +65,7 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
   let peerId: string | undefined;
   let agentId: string | undefined;
   try {
+    await mkdir(artifacts, { recursive: true });
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
       include: { workspace: { select: { slug: true } } },
@@ -90,7 +94,6 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
       },
     });
     agentId = agent.id;
-    await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
     // The Agent's card on the Members page opens the viewer's DM with it.
@@ -114,6 +117,12 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
     await waitFor(sidebarRow(dm.id));
     expect(await browser("eval", sidebarRow(dm.id))).toContain("true");
     await browser("screenshot", join(artifacts, "reloaded.png"));
+    // The other members' Agents come with the page, beside the viewer's own, so the sidebar can
+    // list this DM on its first render instead of after a read of its own.
+    const loadedExtras = await evaluate<string[]>(
+      `(window.__TSR_ROUTER__.state.matches.find((match) => match.routeId === "/w/$workspaceSlug")?.loaderData?.extraAgents ?? []).map((agent) => agent.id)`,
+    );
+    expect(loadedExtras).toContain(agent.id);
   } finally {
     await browser("close").catch(() => undefined);
     if (agentId) {

@@ -136,12 +136,16 @@ export function WorkspaceAgentsProvider({
   workspaceId,
   viewerId,
   agents,
+  extraAgents: loadedExtras,
   children,
 }: {
   workspaceId?: string;
   /** The signed-in person, whose own channel carries the reply intents of their direct messages. */
   viewerId?: string;
   agents: LiveAgent[];
+  /** The extras the page loaded with the roster, so the first paint already lists a DM with
+   * another member's Agent; absent when that read failed, and the browser reads them then. */
+  extraAgents?: ExtraAgent[];
   children: ReactNode;
 }) {
   const refreshAgents = useServerFn(listAgents);
@@ -192,6 +196,7 @@ export function WorkspaceAgentsProvider({
   const extraAgentsQuery = useQuery({
     queryKey: extraAgentsQueryKey(workspaceId),
     queryFn: workspaceId ? () => readExtraAgents() : skipToken,
+    initialData: loadedExtras,
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
     notifyOnChangeProps: ["data"],
