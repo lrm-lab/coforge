@@ -21,11 +21,7 @@ import { appRegisterView, resolveAppRegisterPayload } from "./app-register-actio
 import { PublicChannels } from "./public-channels.server";
 import { ConversationHistory } from "./conversation-history.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
-import {
-  commitPageFillCard,
-  pageFillActionCardView,
-  resolvePageFillPayload,
-} from "./action-card-page-fill.server";
+import { pageFillActionCardView, resolvePageFillPayload } from "./action-card-page-fill.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import {
   createActionCardMessage,
@@ -504,19 +500,13 @@ export class ActionCards {
     await publishActionCardUpdate(this.db, this.realtime, conversationId, messageId);
   }
 
-  async commitPageFill(
-    principal: { workspaceId: string; actorUserId: string },
-    input: { messageId: string; values: Record<string, string>; cookie: string },
-  ): Promise<{ filled: string[] }> {
-    return commitPageFillCard(this.db, this.realtime, principal, input);
-  }
-
   private async resolvePayload(
     workspaceId: string,
     agentId: string,
     action: ActionCardAction,
   ): Promise<ResolvedActionCardPayload> {
-    if (action.type === "page:fill") return resolvePageFillPayload(this.db, workspaceId, agentId, action);
+    if (action.type === "page:fill")
+      return resolvePageFillPayload(this.db, workspaceId, agentId, action);
     if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
     if (action.type === "app:recover_owner")
       return resolveAppRecoverOwnerPayload(this.db, { workspaceId, agentId }, action);

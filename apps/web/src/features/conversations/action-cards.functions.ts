@@ -9,6 +9,7 @@ import { AppRegisterActionCards } from "#src/server/conversations/app-register-a
 import { createAppRegistrationNotices } from "#src/server/apps/app-registration-notices-composition.server";
 import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-cards.server";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
+import { commitPageFillCard } from "#src/server/conversations/action-card-page-fill.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { createAppAgentAccess } from "#src/server/app-agent-access/app-agent-access-composition.server";
@@ -132,7 +133,10 @@ export const commitPageFillActionCard = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { db, workspaceId, user } }) => {
-    return actionCards(db).commitPageFill(
+    const centrifugo = createCentrifugoServerApi();
+    return commitPageFillCard(
+      db,
+      new CentrifugoConversationRealtime(centrifugo),
       { workspaceId, actorUserId: user.id },
       {
         messageId: data.messageId,

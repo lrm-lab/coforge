@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import { AppError } from "#src/lib/app-error";
-import { pageFillRequestFields, pageFillUrl, postPageFill } from "#src/server/conversations/page-fill.server";
+import {
+  pageFillRequestFields,
+  pageFillUrl,
+  postPageFill,
+} from "#src/server/conversations/page-fill.server";
 
 const fields = [
   { id: "username", selector: "#user", input: "text" as const },
@@ -22,7 +26,9 @@ describe("page fill", () => {
       { id: "username", selector: "#user", value: "ada" },
       { id: "password", selector: "#pass", value: "secret" },
     ]);
-    expect(() => pageFillRequestFields(fields, { username: "ada", password: "" })).toThrow(AppError);
+    expect(() => pageFillRequestFields(fields, { username: "ada", password: "" })).toThrow(
+      AppError,
+    );
     expect(() => pageFillRequestFields(fields, { username: "ada" })).toThrow(AppError);
   });
 
@@ -52,7 +58,8 @@ describe("page fill", () => {
         fields,
         values: { username: "ada", password: "secret" },
         cookie: "session=1",
-        fetchImpl: async () => new Response(JSON.stringify({ error: "browser_not_open" }), { status: 409 }),
+        fetchImpl: async () =>
+          new Response(JSON.stringify({ error: "browser_not_open" }), { status: 409 }),
       }),
     ).rejects.toMatchObject({ code: "TEMPORARILY_UNAVAILABLE", errorId: "page-fill-browser" });
   });

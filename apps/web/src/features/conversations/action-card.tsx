@@ -223,11 +223,11 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           ? m.app_card_denied_reason()
           : isAppRegister
             ? m.app_register_card_denied_reason()
-        : isRecoverOwner
-          ? m.app_recover_card_denied_reason()
-          : isPageFill
-            ? m.action_card_denied_page_fill()
-            : undefined;
+            : isRecoverOwner
+              ? m.app_recover_card_denied_reason()
+              : isPageFill
+                ? m.action_card_denied_page_fill()
+                : undefined;
 
   const Icon = icon;
   return (
