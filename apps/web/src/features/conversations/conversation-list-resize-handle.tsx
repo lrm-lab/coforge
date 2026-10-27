@@ -2,11 +2,11 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import {
-  applyListLayout,
-  commitListLayout,
-  getListLayout,
+  applyListWidth,
+  commitListWidth,
+  getListWidth,
   setListWidth,
-  useListLayout,
+  useListWidth,
 } from "./conversation-list-layout";
 import {
   LIST_WIDTH_DEFAULT,
@@ -18,12 +18,11 @@ import {
 
 /**
  * The drag handle on the list column's right edge, from `lg`. A drag shows its width live and
- * keeps it on release; dragging far under the minimum collapses the list until the pointer comes
- * back out. The drag follows the pointer on the window as well as by capture, because the handle
- * itself is hidden along with the list while it is collapsed.
+ * keeps it on release. The drag follows the pointer on the window as well as by capture, so it
+ * keeps going when the pointer leaves the handle.
  */
 export function ConversationListResizeHandle() {
-  const { width } = useListLayout();
+  const width = useListWidth();
   const [dragging, setDragging] = useState(false);
   const stopDrag = useRef<AbortController | undefined>(undefined);
 
@@ -33,7 +32,7 @@ export function ConversationListResizeHandle() {
       if (!stopDrag.current) return;
       stopDrag.current.abort();
       stopDrag.current = undefined;
-      commitListLayout();
+      commitListWidth();
     },
     [],
   );
@@ -52,7 +51,7 @@ export function ConversationListResizeHandle() {
     event.preventDefault();
     const handle = event.currentTarget;
     const { pointerId, clientX: startX } = event;
-    const startWidth = getListLayout().width;
+    const startWidth = getListWidth();
     try {
       handle.setPointerCapture(pointerId);
     } catch {
@@ -63,9 +62,7 @@ export function ConversationListResizeHandle() {
     stopDrag.current = abort;
     const move = (moved: globalThis.PointerEvent) => {
       if (moved.pointerId !== pointerId) return;
-      const next = dragListWidth(startWidth, startX, moved.clientX);
-      // A collapsed list keeps the width it had, so expanding it again restores that.
-      applyListLayout(next.collapsed ? { width: startWidth, collapsed: true } : next);
+      applyListWidth(dragListWidth(startWidth, startX, moved.clientX));
     };
     const end = (ended: globalThis.PointerEvent) => {
       if (ended.pointerId !== pointerId) return;
@@ -77,7 +74,7 @@ export function ConversationListResizeHandle() {
         // Already released.
       }
       setDragging(false);
-      commitListLayout();
+      commitListWidth();
     };
     window.addEventListener("pointermove", move, { signal: abort.signal });
     window.addEventListener("pointerup", end, { signal: abort.signal });

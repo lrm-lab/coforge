@@ -6,14 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * The Chat page's conversation list column can be resized and collapsed. It starts at 288px; a
- * drag on its right-edge handle sets any width from 200 to 400 and keeps it; dragging far under
- * 200 collapses the list, and the expand button in the conversation's header brings it back;
- * double-click resets the width, the arrow keys, Home and End step it, a reload keeps it, and
- * Cmd/Ctrl+\ toggles the list even while typing in the composer.
+ * The Chat page's conversation list column can be resized. It starts at 288px; a drag on its
+ * right-edge handle sets any width from 200 to 400 and keeps it, and the list never hides;
+ * double-click resets the width, the arrow keys, Home and End step it, and a reload keeps it.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
- * against the dev database. It creates nothing and clears the two preference keys it sets.
+ * against the dev database. It creates nothing and clears the preference key it sets.
  * Screenshots are written under `.amp/e2e/conversation-list-resize/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
@@ -26,7 +24,7 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/conversation-list-resize");
 
-test("the conversation list resizes, collapses, and remembers both", async () => {
+test("the conversation list resizes and remembers its width", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `conversation-list-resize-${process.pid}`;
   async function browser(...args: string[]) {
@@ -67,8 +65,7 @@ test("the conversation list resizes, collapses, and remembers both", async () =>
 
   const LIST = "main > section";
   const HANDLE = '[role="separator"][aria-orientation="vertical"]';
-  const EXPAND = 'main button[aria-label="Expand conversation list"]';
-  /** Waits for the list column's rendered width: 0 while it is hidden. */
+  /** Waits for the list column's rendered width. */
   const waitForWidth = (width: number) =>
     waitFor(
       `Math.round(document.querySelector('${LIST}').getBoundingClientRect().width) === ${width}`,
@@ -104,25 +101,12 @@ test("the conversation list resizes, collapses, and remembers both", async () =>
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;
-    // Any channel the viewer is in, to have a composer to type in.
-    const { conversationId: channelId } = await db.conversationMember.findFirstOrThrow({
-      where: {
-        userId: DEV_BROWSER_USER.id,
-        workspaceId: membership.workspaceId,
-        leftAt: null,
-        conversation: { channelName: { not: null } },
-      },
-      select: { conversationId: true },
-    });
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
     // A clean device: the list is 288px wide and shown.
     await browser("open", `${origin}${workspacePath}`);
-    await browser(
-      "eval",
-      `localStorage.removeItem("coforge-conversation-list-width"); localStorage.removeItem("coforge-conversation-list-visible")`,
-    );
+    await browser("eval", `localStorage.removeItem("coforge-conversation-list-width")`);
     await browser("reload");
     await waitFor(`document.querySelector('${HANDLE}') !== null`);
     await waitForWidth(288);
@@ -133,21 +117,15 @@ test("the conversation list resizes, collapses, and remembers both", async () =>
     ).toBe("288");
     await browser("screenshot", join(artifacts, "default.png"));
 
-    // Dragging far past the minimum collapses the list; the expand button brings it back.
-    await dragListTo(40);
-    await waitForWidth(0);
-    expect(await stored("coforge-conversation-list-visible")).toBe("hide");
-    await browser("screenshot", join(artifacts, "collapsed.png"));
-    await waitFor(`document.querySelector('${EXPAND}')?.getBoundingClientRect().width > 0`);
-    await browser("click", EXPAND);
-    await waitForWidth(288);
-    expect(await stored("coforge-conversation-list-visible")).toBe("show");
-    await browser("screenshot", join(artifacts, "expanded.png"));
-
-    // Dragging to the narrowest stops at 200, and a width in between follows the pointer.
+    // A width in between follows the pointer; dragging far under the minimum stops at 200 and
+    // the list stays.
     await dragListTo(330);
     await waitForWidth(330);
-    await dragListTo(190);
+    expect(await stored("coforge-conversation-list-width")).toBe("330");
+    await dragListTo(500);
+    await waitForWidth(400);
+    await browser("screenshot", join(artifacts, "widest.png"));
+    await dragListTo(40);
     await waitForWidth(200);
     expect(await stored("coforge-conversation-list-width")).toBe("200");
     await browser("screenshot", join(artifacts, "narrowest.png"));
@@ -169,23 +147,10 @@ test("the conversation list resizes, collapses, and remembers both", async () =>
     await browser("reload");
     await waitFor(`document.querySelector('${HANDLE}') !== null`);
     await waitForWidth(400);
-
-    // Cmd/Ctrl+\ toggles the list, even with the caret in the composer.
-    const apple = await evaluate<boolean>(`/Mac|iPhone|iPad/i.test(navigator.platform)`);
-    const shortcut = `${apple ? "Meta" : "Control"}+\\`;
-    await browser("open", `${origin}${workspacePath}/channel/${channelId}`);
-    await waitFor(`document.querySelector('main textarea:not([disabled])') !== null`);
-    await browser("focus", "main textarea");
-    await browser("press", shortcut);
-    await waitForWidth(0);
-    expect(await evaluate<boolean>(`document.activeElement?.tagName === "TEXTAREA"`)).toBe(true);
-    await browser("press", shortcut);
-    await waitForWidth(400);
   } finally {
-    await browser(
-      "eval",
-      `localStorage.removeItem("coforge-conversation-list-width"); localStorage.removeItem("coforge-conversation-list-visible")`,
-    ).catch(() => undefined);
+    await browser("eval", `localStorage.removeItem("coforge-conversation-list-width")`).catch(
+      () => undefined,
+    );
     await browser("close").catch(() => undefined);
     await db.$disconnect();
   }

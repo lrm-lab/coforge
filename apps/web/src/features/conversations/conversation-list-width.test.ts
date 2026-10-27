@@ -3,7 +3,6 @@ import {
   CONVERSATION_LIST_BOOT,
   clampListWidth,
   dragListWidth,
-  isListToggleShortcut,
   keyListWidth,
   parseListWidth,
 } from "./conversation-list-width";
@@ -29,12 +28,10 @@ describe("conversation list width", () => {
     expect(parseListWidth("-5")).toBeUndefined();
   });
 
-  test("drag is continuous, clamped, and collapses past the snap distance", () => {
-    expect(dragListWidth(288, 300, 310.5)).toEqual({ width: 298.5, collapsed: false });
-    expect(dragListWidth(288, 300, 190)).toEqual({ width: 200, collapsed: false });
-    expect(dragListWidth(288, 300, 500)).toEqual({ width: 400, collapsed: false });
-    expect(dragListWidth(288, 300, 172).collapsed).toBe(false);
-    expect(dragListWidth(288, 300, 171).collapsed).toBe(true);
+  test("drag is continuous and clamped", () => {
+    expect(dragListWidth(288, 300, 310.5)).toBe(298.5);
+    expect(dragListWidth(288, 300, 100)).toBe(200);
+    expect(dragListWidth(288, 300, 500)).toBe(400);
   });
 
   test("keys step, jump, and stay clamped", () => {
@@ -49,43 +46,17 @@ describe("conversation list width", () => {
     expect(keyListWidth(key("ArrowLeft", { metaKey: true }), 288)).toBeUndefined();
   });
 
-  test("shortcut is Cmd+\\ on Apple, Ctrl+\\ elsewhere", () => {
-    const press = (extra: Record<string, unknown> = {}) => ({
-      key: "\\",
-      code: "Backslash",
-      metaKey: false,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-      repeat: false,
-      isComposing: false,
-      defaultPrevented: false,
-      ...extra,
-    });
-    expect(isListToggleShortcut(press({ metaKey: true }), true)).toBe(true);
-    expect(isListToggleShortcut(press({ ctrlKey: true }), true)).toBe(false);
-    expect(isListToggleShortcut(press({ ctrlKey: true }), false)).toBe(true);
-    expect(isListToggleShortcut(press({ metaKey: true }), false)).toBe(false);
-    expect(isListToggleShortcut(press({ ctrlKey: true, shiftKey: true }), false)).toBe(false);
-    expect(isListToggleShortcut(press({ ctrlKey: true, repeat: true }), false)).toBe(false);
-    expect(
-      isListToggleShortcut(press({ ctrlKey: true, key: "\\", code: "IntlBackslash" }), false),
-    ).toBe(true);
-  });
-
   test("boot script clamps a stored width and ignores garbage", () => {
     const run = (stored: Record<string, string>) => {
-      const classes = new Set<string>();
       const props: Record<string, string> = {};
       const documentElement = {
-        classList: { add: (name: string) => classes.add(name) },
         style: { setProperty: (name: string, value: string) => (props[name] = value) },
       };
       new Function("localStorage", "document", CONVERSATION_LIST_BOOT)(
         { getItem: (name: string) => stored[name] ?? null },
         { documentElement },
       );
-      return { classes: [...classes], props };
+      return { props };
     };
     expect(run({ "coforge-conversation-list-width": "350" }).props).toEqual({
       "--conversation-list-width": "350px",
@@ -95,8 +66,5 @@ describe("conversation list width", () => {
     });
     expect(run({ "coforge-conversation-list-width": "junk" }).props).toEqual({});
     expect(run({}).props).toEqual({});
-    expect(run({ "coforge-conversation-list-visible": "hide" }).classes).toEqual([
-      "conversation-list-collapsed",
-    ]);
   });
 });
