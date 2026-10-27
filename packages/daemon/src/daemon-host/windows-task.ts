@@ -145,33 +145,17 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
     // Prefer the user logon task. When it cannot be registered or run, fall back to an
     // already-running foreground supervisor - never detach an unmanaged process.
     try {
-      await this.#startTask();
+      await this.#startOrExplain();
     } catch (startFailure) {
-      try {
-        return await this.#local.ensureStarted(config);
-      } catch {
-        throw new Error(
-          `The Windows user task could not start CoForge Daemon. ${FOREGROUND_ADVICE}`,
-          {
-            cause: startFailure,
-          },
-        );
-      }
+      return this.#local.ensureStarted(config).catch(() => {
+        throw startFailure;
+      });
     }
     return this.#local.ensureStarted(config);
   }
 
   async ensureRunning(): Promise<void> {
-    try {
-      await this.#startTask();
-    } catch (startFailure) {
-      throw new Error(
-        `The Windows user task could not start CoForge Daemon. ${FOREGROUND_ADVICE}`,
-        {
-          cause: startFailure,
-        },
-      );
-    }
+    await this.#startOrExplain();
     await this.#local.ensureRunning();
   }
 
@@ -193,12 +177,21 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
    * Scheduler does not know) is the actual restart. */
   async restart(): Promise<void> {
     await this.#run(["schtasks.exe", "/End", "/TN", this.#taskName]);
+    await this.#startOrExplain();
+    await this.#local.ensureRunning();
+  }
+
+  /** `#startTask`, with its failure explained: the error names the foreground supervisor as the
+   * way to run without the task and carries the underlying failure as its `cause`. */
+  async #startOrExplain(): Promise<void> {
     try {
       await this.#startTask();
     } catch (startFailure) {
-      throw new Error("could not restart the CoForge Daemon user task", { cause: startFailure });
+      throw new Error(
+        `The Windows user task could not start CoForge Daemon. ${FOREGROUND_ADVICE}`,
+        { cause: startFailure },
+      );
     }
-    await this.#local.ensureRunning();
   }
 
   /** Runs the registered task, or asks the registrar to register and start one Task Scheduler

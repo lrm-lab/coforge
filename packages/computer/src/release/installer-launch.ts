@@ -21,7 +21,16 @@ import type { z } from "zod";
 import { UpdateError } from "#src/updater";
 import { InstallationDownloadError, runInstallationSource } from "./installation-source";
 import { InstallerManifestSchema } from "./installer-contract";
-import { CHECKSUM_DIRECTORY, cachedInstaller, sha256OfFile, usedAtOfCopy } from "./installer-cache";
+import {
+  cacheLocation,
+  cachedInstaller,
+  installerBinaryName,
+  listCachedCopies,
+  markUsed,
+  sha256OfFile,
+  type CacheLocation,
+  type CachedCopy,
+} from "./installer-cache";
 
 /** The same ceilings as the install scripts and the installer crate: a manifest is at most 1 MiB;
  * neither the compressed nor the expanded installer may be recorded above 512 MiB. */
@@ -77,47 +86,16 @@ type InstallerEntry = z.infer<typeof InstallerManifestSchema>["platforms"][strin
  * as themselves. Nothing unverified is left in the install root, and nothing is pruned on failure.
  */
 export async function obtainInstaller(options: InstallerLaunchOptions): Promise<VerifiedInstaller> {
-  const baseUrl = `${options.feedUrl.replace(/\/+$/, "")}/installer`;
-  const delays = options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
   const work = await mkdtemp(join(tmpdir(), "coforge-installer-download-"));
   try {
-    const prepare = (phase: "manifest" | "installer") =>
-      runSource(delays, {
-        baseUrl,
-        target: options.target,
-        selection: version,
-        directory: work,
-        quietHeader: true,
-        phase,
-      });
-    let version: string;
-    let entry: InstallerEntry;
+    let latest: LatestInstaller;
     try {
-      version = await runSource(delays, {
-        baseUrl,
-        target: options.target,
-        selection: "latest",
-        quietHeader: true,
-      });
-      if (version === "latest" || !isValidReleaseVersion(version)) {
-        throw feedInvalid("installer/latest does not name a valid version");
-      }
-      await prepare("manifest");
-      entry = await readInstallerEntry(work, version, options.target);
+      latest = await readLatestInstaller(options, work);
     } catch (error) {
-      // Only an unreachable feed falls back to a copy already on this machine.
-      const cached =
-        error instanceof UpdateError && error.code === "UPDATE_DOWNLOAD_FAILED"
-          ? await cachedInstaller(options.installRoot, options.target)
-          : undefined;
-      if (!cached) throw error;
-      logger.warn("The release feed is unreachable; using the cached installer", {
-        path: cached.path,
-        message: thrownMessage(error),
-      });
-      return cached;
+      return await cachedInstallerOrThrow(options, error);
     }
-    const cache = cacheLocation(options.installRoot, entry);
+    const { version, entry } = latest;
+    const cache = cacheLocation(options.installRoot, options.target, entry.checksum);
     const cached = await inspectCachedCopy(cache, entry);
     if (cached === "damaged") {
       logger.warn("A cached installer failed verification; downloading it again", {
@@ -125,15 +103,79 @@ export async function obtainInstaller(options: InstallerLaunchOptions): Promise<
       });
     }
     if (cached !== "verified") {
-      await prepare("installer");
+      await fetchFromFeed(options, work, version, "installer");
       await placeVerifiedCopy(cache, join(work, entry.gzip.file), entry);
     }
     await markUsed(cache);
-    await pruneCache(cache, entry.checksum);
+    await pruneCache(options, entry.checksum);
     return { path: cache.path, version };
   } finally {
     await rm(work, { recursive: true, force: true });
   }
+}
+
+type LatestInstaller = { version: string; entry: InstallerEntry };
+
+/** Reads `installer/latest` and the manifest of the version it names, into `work`, and returns that
+ * version with this target's entry in the manifest. */
+async function readLatestInstaller(
+  options: InstallerLaunchOptions,
+  work: string,
+): Promise<LatestInstaller> {
+  const version = await runSource(retryDelays(options), {
+    ...feedSource(options),
+    selection: "latest",
+  });
+  if (version === "latest" || !isValidReleaseVersion(version)) {
+    throw feedInvalid("installer/latest does not name a valid version");
+  }
+  await fetchFromFeed(options, work, version, "manifest");
+  return { version, entry: await readInstallerEntry(work, version, options.target) };
+}
+
+/** Only an unreachable feed falls back to a copy already on this machine; anything else, and an
+ * unreachable feed with nothing intact cached, is `failure` itself. */
+async function cachedInstallerOrThrow(
+  options: InstallerLaunchOptions,
+  failure: unknown,
+): Promise<VerifiedInstaller> {
+  const cached =
+    failure instanceof UpdateError && failure.code === "UPDATE_DOWNLOAD_FAILED"
+      ? await cachedInstaller(options.installRoot, options.target)
+      : undefined;
+  if (!cached) throw failure;
+  logger.warn("The release feed is unreachable; using the cached installer", {
+    path: cached.path,
+    message: thrownMessage(failure),
+  });
+  return cached;
+}
+
+function feedSource(options: InstallerLaunchOptions) {
+  return {
+    baseUrl: `${options.feedUrl.replace(/\/+$/, "")}/installer`,
+    target: options.target,
+    quietHeader: true,
+  };
+}
+
+function retryDelays(options: InstallerLaunchOptions): readonly number[] {
+  return options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+}
+
+/** Fetches one phase of `version` from the feed into `directory`. */
+function fetchFromFeed(
+  options: InstallerLaunchOptions,
+  directory: string,
+  version: string,
+  phase: "manifest" | "installer",
+): Promise<string> {
+  return runSource(retryDelays(options), {
+    ...feedSource(options),
+    selection: version,
+    directory,
+    phase,
+  });
 }
 
 function feedInvalid(message: string): UpdateError {
@@ -203,8 +245,7 @@ async function readInstallerEntry(
   // The file names are pinned to the feed's fixed layout, not accepted as "some allowed name": the
   // install script derives the same gzip name from the target, so a manifest naming the other one
   // describes an object this module never fetches.
-  const windows = target.startsWith("windows-");
-  const binaryName = windows ? "coforge-installer.exe" : "coforge-installer";
+  const binaryName = installerBinaryName(target);
   const gzipName = `${binaryName}.gz`;
   if (installer.file !== binaryName || installer.gzip.file !== gzipName) {
     throw feedInvalid(
@@ -221,22 +262,13 @@ async function readInstallerEntry(
   return installer;
 }
 
-/** Where the installer with one checksum is kept: `<install root>/installer/<sha256>/<file>`. */
-type CacheLocation = { root: string; directory: string; path: string };
-
-function cacheLocation(installRoot: string, entry: InstallerEntry): CacheLocation {
-  const root = join(installRoot, "installer");
-  const directory = join(root, entry.checksum);
-  return { root, directory, path: join(directory, entry.file) };
-}
-
-type CachedCopy = "verified" | "missing" | "damaged";
+type CopyState = "verified" | "missing" | "damaged";
 
 /** What the cache holds for this manifest entry, checked by hashing the file every time. A copy
  * that is missing or damaged is a miss like any other: the download that replaces it is verified
  * against the manifest whatever the cache held, so refusing to continue would only strand the
  * machine until someone cleared the directory. */
-async function inspectCachedCopy(cache: CacheLocation, entry: InstallerEntry): Promise<CachedCopy> {
+async function inspectCachedCopy(cache: CacheLocation, entry: InstallerEntry): Promise<CopyState> {
   const info = await lstat(cache.path).catch(() => undefined);
   if (!info) return "missing";
   try {
@@ -294,14 +326,6 @@ async function placeVerifiedCopy(
   }
 }
 
-/** Stamps the installer as used now. A copy's time of use is its installer file's modification
- * time, whether it was just downloaded or just found in the cache; only the order of use depends
- * on it, so a failure to stamp is not worth failing the run. */
-async function markUsed(cache: CacheLocation): Promise<void> {
-  const now = new Date();
-  await utimes(cache.path, now, now).catch(() => {});
-}
-
 /**
  * Keeps the current installer and the most recently used other copies, and removes what a killed
  * run left behind. Only directories named by a checksum are the cache's own; anything else there
@@ -322,26 +346,16 @@ async function markUsed(cache: CacheLocation): Promise<void> {
  * or a directory holding nothing verified, that has not changed for an hour belongs to no run.
  * A run's own partial file is always fresh, and is gone before this runs.
  */
-async function pruneCache(cache: CacheLocation, current: string): Promise<void> {
+async function pruneCache(options: InstallerLaunchOptions, current: string): Promise<void> {
   try {
     const now = Date.now();
-    const copies: Array<{ name: string; usedAt: number }> = [];
-    for (const entry of await readdir(cache.root, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !CHECKSUM_DIRECTORY.test(entry.name)) continue;
-      const directory = join(cache.root, entry.name);
-      if (entry.name === current) {
-        await removeStalePartials(directory, now);
-        continue;
-      }
-      const modifiedAt = (await stat(directory).catch(() => undefined))?.mtimeMs;
-      if (modifiedAt === undefined) continue;
-      const usedAt = await usedAtOfCopy(directory);
-      if (usedAt !== undefined) copies.push({ name: entry.name, usedAt });
-      else if (now - modifiedAt > STALE_AFTER_MS) await removeAbandoned(directory, modifiedAt);
+    const others: CachedCopy[] = [];
+    for (const copy of await listCachedCopies(options.installRoot, options.target)) {
+      if (copy.checksum === current) await removeStalePartials(copy.directory, now);
+      else if (copy.usedAt !== undefined) others.push(copy);
+      else await removeIfAbandoned(copy.directory, now);
     }
-    copies.sort((a, b) => b.usedAt - a.usedAt || a.name.localeCompare(b.name));
-    for (const [index, { name }] of copies.entries()) {
-      const directory = join(cache.root, name);
+    for (const [index, { directory }] of others.entries()) {
       if (index < KEEP_OTHER_INSTALLERS) await removeStalePartials(directory, now);
       else await removeDirectory(directory);
     }
@@ -350,9 +364,11 @@ async function pruneCache(cache: CacheLocation, current: string): Promise<void> 
   }
 }
 
-/** Removes a directory that held nothing verified and had not changed since `modifiedAt`, unless
- * a run has begun using it in the meantime: it is looked at once more just before it goes. */
-async function removeAbandoned(directory: string, modifiedAt: number): Promise<void> {
+/** Removes a directory that holds no installer file and has not changed for `STALE_AFTER_MS`,
+ * unless a run has begun using it in the meantime: it is looked at once more just before it goes. */
+async function removeIfAbandoned(directory: string, now: number): Promise<void> {
+  const modifiedAt = (await stat(directory).catch(() => undefined))?.mtimeMs;
+  if (modifiedAt === undefined || now - modifiedAt <= STALE_AFTER_MS) return;
   if ((await stat(directory).catch(() => undefined))?.mtimeMs === modifiedAt) {
     await removeDirectory(directory);
   }

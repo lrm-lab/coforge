@@ -48,17 +48,38 @@ export function daemonExecutablePathFor(
 
 /** The platform host (launchd, systemd user, or Windows task) of the Coordinator service, built
  * from the install and state directories and the server this Computer talks to. A service the
- * platform manager does not know is registered and started by `registrar`, which by default runs
- * the installer's `start` against `installDirectory`. */
+ * platform manager does not know is registered and started through the installer's `start`
+ * against `installDirectory`. */
 export function createDaemonLauncher(
   platform: SupportedPlatform,
   installDirectory: string,
   stateDirectory: string,
   serverUrl: string,
   machine: DaemonHostMachine = currentMachine(),
-  registrar: CoordinatorServiceRegistrar = createCoordinatorServiceRegistrar({
-    installRoot: installDirectory,
-  }),
+) {
+  return buildDaemonHost(
+    platform,
+    installDirectory,
+    stateDirectory,
+    serverUrl,
+    machine,
+    createCoordinatorServiceRegistrar({ installRoot: installDirectory }),
+  );
+}
+
+/** Stands in for the registrar of a host that is only asked what it would register. */
+const READ_ONLY_REGISTRAR: CoordinatorServiceRegistrar = {
+  registerAndStart: () =>
+    Promise.reject(new Error("this host only renders its service definition")),
+};
+
+function buildDaemonHost(
+  platform: SupportedPlatform,
+  installDirectory: string,
+  stateDirectory: string,
+  serverUrl: string,
+  machine: DaemonHostMachine,
+  registrar: CoordinatorServiceRegistrar,
 ) {
   return createDaemonHost({
     platform,
@@ -90,12 +111,13 @@ export function resolveServiceDefinition(
     platform,
     homeDirectory: machine.homeDirectory,
   });
-  return createDaemonLauncher(
+  return buildDaemonHost(
     platform,
     installDirectory,
     stateDirectory,
     machine.serverUrl,
     machine,
+    READ_ONLY_REGISTRAR,
   ).serviceDefinition();
 }
 

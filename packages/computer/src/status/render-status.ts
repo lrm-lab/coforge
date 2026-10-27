@@ -78,7 +78,7 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
 /** Nothing where the platform keeps no service file to compare. */
 function renderServiceDefinition(status: ComputerStatusReport["supervisor"]["serviceDefinition"]) {
   const label = "  Service definition:    ";
-  if (status.state === "not_checked") return [];
+  if (!status) return [];
   if (status.state === "unreadable") return [`${label}unreadable (${terminalText(status.error)})`];
   if (status.state === "matches") return [`${label}matches`];
   return [`${label}${status.state} — run coforge-computer repair`];

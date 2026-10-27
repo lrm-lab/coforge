@@ -54,11 +54,29 @@ pub enum ServiceState {
 
 /// What [`SupervisorService::install`] did to the registration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Installed {
+pub enum Registered {
     /// The manager's registration was written or replaced.
     Written,
     /// The registration already held exactly this definition; nothing was written.
     AlreadyInPlace,
+    /// The service is running and replacing its registration might end it, so the registration
+    /// was left as it was. Only a Windows task answers this.
+    LeftRunning,
+}
+
+impl Registered {
+    /// The stage line that tells a person what the registration did, for the operations that
+    /// register a definition without stopping the service (`start` and `repair`). A registration
+    /// that was already current has nothing to say.
+    pub fn stage_line(self) -> Option<&'static str> {
+        match self {
+            Self::Written => Some("Registered the Computer supervisor service definition"),
+            Self::LeftRunning => Some(
+                "The Computer supervisor service is running; its registration is left as it is",
+            ),
+            Self::AlreadyInPlace => None,
+        }
+    }
 }
 
 /// What [`SupervisorService::stop`] found and did.
@@ -96,17 +114,11 @@ pub trait SupervisorService {
     /// Registers `definition` with the manager without starting the service, replacing any
     /// earlier registration. The definition must be for this backend's manager. launchd and
     /// systemd leave a definition file that already holds exactly these bytes alone, so a
-    /// registration that is current changes nothing; a Windows task has no file to compare and
-    /// is always replaced. [`Installed`] says which happened.
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError>;
-
-    /// Whether [`SupervisorService::install`] may end a running service when it replaces its
-    /// registration. launchd and systemd only write what they read at the next bootstrap or
-    /// reload, so they answer no. Windows answers yes: `schtasks /Create /F` is documented only
-    /// as suppressing the warning for an existing task, and nothing documents what it does to a
-    /// running instance. A caller that must not disturb a running service registers only when
-    /// this is false.
-    fn install_may_end_running_service(&self) -> bool;
+    /// registration that is current changes nothing, and they only write what they read at the
+    /// next bootstrap or reload, so a running service is undisturbed. A Windows task has no file
+    /// to compare and nothing documents what replacing it does to a running instance, so it
+    /// registers only while the task is not running. [`Registered`] says which happened.
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Registered, ServiceError>;
 
     /// Starts the service and waits, bounded, until the manager reports it running. Already
     /// running is not an error. A service that is not installed is [`ServiceError::NotInstalled`]:

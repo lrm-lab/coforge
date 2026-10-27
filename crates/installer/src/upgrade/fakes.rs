@@ -22,7 +22,7 @@ use crate::prepare::prepare_version;
 use crate::processes::ProcessTable;
 use crate::service::fakes::definition;
 use crate::service::{
-    Installed, ServiceError, ServiceState, StartOutcome, StopOutcome, SupervisorService,
+    Registered, ServiceError, ServiceState, StartOutcome, StopOutcome, SupervisorService,
     coordinator_service,
 };
 use crate::store::VersionStore;
@@ -234,8 +234,9 @@ pub(crate) struct FakeService {
     inside: Cell<bool>,
     /// Whether the manager holds a definition; `start` of a service without one is refused.
     registered: Cell<bool>,
-    /// Whether `install` may end a running service, as a Windows task's may.
-    install_ends_running: Cell<bool>,
+    /// Whether `install` leaves a running service's registration as it is, as a Windows task's
+    /// does.
+    keeps_running_registration: Cell<bool>,
     installed: RefCell<Vec<LifecycleServiceDefinition>>,
 }
 
@@ -247,7 +248,7 @@ impl FakeService {
             next_pid: Cell::new(9000),
             inside: Cell::new(false),
             registered: Cell::new(true),
-            install_ends_running: Cell::new(false),
+            keeps_running_registration: Cell::new(false),
             installed: RefCell::new(Vec::new()),
         }
     }
@@ -259,9 +260,10 @@ impl FakeService {
         self
     }
 
-    /// Installing over a running service may end it, as it may on Windows. Not a call.
-    pub(crate) fn whose_install_may_end_a_running_service(self) -> Self {
-        self.install_ends_running.set(true);
+    /// `install` leaves the registration of a running service as it is and says so
+    /// ([`Registered::LeftRunning`]), as the Windows backend does. Not a call.
+    pub(crate) fn keeping_a_running_registration(self) -> Self {
+        self.keeps_running_registration.set(true);
         self
     }
 
@@ -302,15 +304,16 @@ impl SupervisorService for FakeService {
         Ok(StopOutcome { before })
     }
 
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError> {
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Registered, ServiceError> {
         self.calls.borrow_mut().push("install");
+        if self.keeps_running_registration.get()
+            && matches!(self.state.get(), ServiceState::Running { .. })
+        {
+            return Ok(Registered::LeftRunning);
+        }
         self.installed.borrow_mut().push(definition.clone());
         self.registered.set(true);
-        Ok(Installed::Written)
-    }
-
-    fn install_may_end_running_service(&self) -> bool {
-        self.install_ends_running.get()
+        Ok(Registered::Written)
     }
 
     fn start(&self) -> Result<StartOutcome, ServiceError> {

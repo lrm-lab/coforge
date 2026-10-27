@@ -19,7 +19,7 @@ fn plist_in(home: &Scratch) -> PathBuf {
 fn install(
     home: &Scratch,
     definition: &LifecycleServiceDefinition,
-) -> Result<Installed, ServiceError> {
+) -> Result<Registered, ServiceError> {
     let runner = ScriptedRunner::new(Vec::new());
     let clock = VirtualClock::new();
     Launchd::new(&runner, &clock, &coordinator_service(), home.path(), 501)
@@ -31,7 +31,7 @@ fn install(
 fn installing_writes_the_plist_and_runs_nothing() {
     let home = Scratch::new("launchd-install");
     let installed = install(&home, &definition("launchd", "<plist>new</plist>")).unwrap();
-    assert_eq!(installed, Installed::Written);
+    assert_eq!(installed, Registered::Written);
     assert_eq!(
         fs::read_to_string(plist_in(&home)).unwrap(),
         "<plist>new</plist>"
@@ -44,7 +44,7 @@ fn a_plist_that_already_holds_the_definition_is_not_rewritten() {
     let plist = plist_in(&home);
     let placed = place_dated(&plist, "<plist>same</plist>");
     let installed = install(&home, &definition("launchd", "<plist>same</plist>")).unwrap();
-    assert_eq!(installed, Installed::AlreadyInPlace);
+    assert_eq!(installed, Registered::AlreadyInPlace);
     assert_eq!(modified(&plist), placed);
 }
 
@@ -54,7 +54,7 @@ fn a_plist_that_differs_is_rewritten() {
     let plist = plist_in(&home);
     let placed = place_dated(&plist, "<plist>old</plist>");
     let installed = install(&home, &definition("launchd", "<plist>new</plist>")).unwrap();
-    assert_eq!(installed, Installed::Written);
+    assert_eq!(installed, Registered::Written);
     assert_eq!(fs::read_to_string(&plist).unwrap(), "<plist>new</plist>");
     assert_ne!(modified(&plist), placed);
 }

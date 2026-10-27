@@ -122,6 +122,29 @@ fn only_a_protocol_listing_the_command_gets_its_service_definition_asked() {
     assert!(reported(None).is_err());
 }
 
+#[test]
+fn a_protocol_that_was_already_read_is_not_asked_for_again() {
+    let computer = Path::new("/install/current/coforge-computer");
+    // The protocol is answered once: a second `protocol` call would fail.
+    let lifecycle = FakeLifecycle::default();
+    lifecycle.answers_protocol(
+        computer,
+        vec![Some(protocol_with_service_definition("0.2.0")), None],
+    );
+    lifecycle.answers_service_definition(computer, vec![Some(service_definition("0.2.0"))]);
+    let read = lifecycle.protocol(computer).unwrap();
+
+    assert_eq!(
+        service_definition_if_listed(&lifecycle, computer, &read).unwrap(),
+        Some(service_definition("0.2.0"))
+    );
+    assert_eq!(
+        service_definition_if_listed(&lifecycle, computer, &protocol("0.2.0")).unwrap(),
+        None
+    );
+    assert!(lifecycle.protocol(computer).is_err());
+}
+
 #[cfg(unix)]
 #[test]
 fn a_failed_call_carries_the_computers_own_message() {

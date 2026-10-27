@@ -7,7 +7,7 @@ use crate::processes::fakes::FakeTable;
 use crate::service::ServiceState;
 use crate::upgrade::fakes::{FakeLifecycle, FakeService, Fixture, NEW, OLD, service_definition};
 
-const REGISTERING: &str = "Registering the Computer supervisor service definition";
+const REGISTERED: &str = "Registered the Computer supervisor service definition";
 const STARTING: &str = "Starting Computer supervisor 0.1.0";
 const STARTED: &str = "Computer supervisor 0.1.0 started";
 
@@ -51,7 +51,7 @@ fn start_registers_the_active_definition_then_starts_the_service() {
     assert_eq!(outcome.exit_code(), EXIT_SUCCEEDED);
     assert_eq!(service.calls(), ["install", "start"]);
     assert_eq!(service.installed(), [service_definition(OLD)]);
-    assert_eq!(stages, [REGISTERING, STARTING, STARTED]);
+    assert_eq!(stages, [REGISTERED, STARTING, STARTED]);
 }
 
 #[test]
@@ -172,29 +172,29 @@ fn inside_the_service_unit_the_start_is_refused() {
 
     let (outcome, stages) = run_start(&fixture, &service, &lifecycle);
 
-    let Outcome::Refused { message } = &outcome else {
-        panic!("expected a refusal, got {outcome:?}");
-    };
-    assert!(message.contains("coforge-daemon.service"), "{message}");
-    assert!(message.contains("Nothing was changed"), "{message}");
     assert_eq!(outcome.exit_code(), EXIT_FAILED);
-    assert!(service.calls().is_empty());
+    let message = failure_message(outcome);
+    assert!(message.contains("coforge-daemon.service"), "{message}");
+    assert!(message.contains("coforge-computer start"), "{message}");
+    assert!(message.contains("Nothing was changed"), "{message}");
+    // Only the inside-the-unit check read the state: nothing was registered or started.
+    assert_eq!(service.calls(), ["state"]);
     assert!(stages.is_empty());
 }
 
 #[test]
-fn a_manager_whose_install_may_end_a_running_service_keeps_its_registration() {
+fn a_registration_the_manager_leaves_as_it_is_is_reported_and_the_service_still_started() {
     let fixture = Fixture::new("start-windows-running");
     fixture.install_old();
-    let service = FakeService::new(ServiceState::Running { pid: None })
-        .whose_install_may_end_a_running_service();
+    let service =
+        FakeService::new(ServiceState::Running { pid: None }).keeping_a_running_registration();
     let lifecycle = FakeLifecycle::default();
     fixture.reports_service_definition(&lifecycle, OLD);
 
     let (outcome, stages) = run_start(&fixture, &service, &lifecycle);
 
     assert_eq!(outcome.exit_code(), EXIT_SUCCEEDED, "{outcome:?}");
-    assert_eq!(service.calls(), ["state", "start"]);
+    assert_eq!(service.calls(), ["install", "start"]);
     assert!(service.installed().is_empty());
     assert_eq!(
         stages,

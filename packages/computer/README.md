@@ -84,7 +84,9 @@ supervisor, each Workspace binding, its Agents, and the locks in one place. It i
 read-only. A Workspace that needs attention shows a detail line under it (a cloud
 connection error, a pending or unsettled upgrade, a failed start or restart with the
 command that retries it, or a degraded or parked state with how to recover).
-`status --json` prints the same report as a single JSON object. An unhealthy
+`status --json` prints the same report as a single JSON object; its `supervisor.serviceDefinition`
+(`matches`, `missing`, `differs`, or `unreadable`) is absent on Windows, where Task Scheduler keeps no
+file to compare. An unhealthy
 machine still exits 0; the one exception is an unreadable or corrupt
 `~/.coforge/computer/install/active.json`, which exits 1 with
 `STATUS_INSTALL_UNREADABLE`.

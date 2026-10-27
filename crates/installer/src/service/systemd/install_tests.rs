@@ -22,7 +22,7 @@ fn install(
     home: &Path,
     definition: &LifecycleServiceDefinition,
     script: Vec<Step>,
-) -> (Result<Installed, ServiceError>, Vec<String>) {
+) -> (Result<Registered, ServiceError>, Vec<String>) {
     let runner = ScriptedRunner::new(script);
     let clock = VirtualClock::new();
     let result = SystemdUser::new(
@@ -45,7 +45,7 @@ fn installing_writes_the_unit_then_reloads_and_enables_without_starting() {
         &definition("systemd-user", "[Service]\nExecStart=/x\n"),
         vec![ok(RELOAD, ""), ok(ENABLE, "")],
     );
-    assert_eq!(result.unwrap(), Installed::Written);
+    assert_eq!(result.unwrap(), Registered::Written);
     assert_eq!(ran, [RELOAD, ENABLE]);
     assert_eq!(
         fs::read_to_string(unit_in(home.path())).unwrap(),
@@ -63,7 +63,7 @@ fn a_unit_that_already_holds_the_definition_is_left_alone_and_nothing_is_run() {
         &definition("systemd-user", "[Service]\nExecStart=/x\n"),
         Vec::new(),
     );
-    assert_eq!(result.unwrap(), Installed::AlreadyInPlace);
+    assert_eq!(result.unwrap(), Registered::AlreadyInPlace);
     assert!(ran.is_empty(), "{ran:?}");
     assert_eq!(modified(&unit), placed);
 }
@@ -78,7 +78,7 @@ fn a_unit_that_differs_is_rewritten_then_reloaded_and_enabled() {
         &definition("systemd-user", "[Service]\nExecStart=/new\n"),
         vec![ok(RELOAD, ""), ok(ENABLE, "")],
     );
-    assert_eq!(result.unwrap(), Installed::Written);
+    assert_eq!(result.unwrap(), Registered::Written);
     assert_eq!(ran, [RELOAD, ENABLE]);
     assert_eq!(
         fs::read_to_string(&unit).unwrap(),

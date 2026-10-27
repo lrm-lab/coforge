@@ -30,7 +30,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::{
-    Attempt, CommandLine, CommandRunner, Installed, ServiceError, ServiceState, StartOutcome,
+    Attempt, CommandLine, CommandRunner, Registered, ServiceError, ServiceState, StartOutcome,
     StopOutcome, SupervisorService, definition, execute,
 };
 use crate::clock::{Clock, poll_until};
@@ -338,18 +338,14 @@ impl SupervisorService for Launchd<'_> {
         }
     }
 
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError> {
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Registered, ServiceError> {
         definition::require_manager("launchd", definition)?;
+        // A plist is read at the next bootstrap; the loaded job is untouched.
         if definition::is_in_place(&self.plist, &definition.contents) {
-            return Ok(Installed::AlreadyInPlace);
+            return Ok(Registered::AlreadyInPlace);
         }
         definition::write_private(&self.plist, &definition.contents)?;
-        Ok(Installed::Written)
-    }
-
-    fn install_may_end_running_service(&self) -> bool {
-        // A plist is read at the next bootstrap; the loaded job is untouched.
-        false
+        Ok(Registered::Written)
     }
 
     fn start(&self) -> Result<StartOutcome, ServiceError> {

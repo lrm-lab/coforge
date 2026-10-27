@@ -104,9 +104,10 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/service.rs`: OS service control of the Computer supervisor: state (not installed, stopped,
   running with the manager's pid), stop (waits until the manager has dropped it), install (registers
   the service definition the Computer reports, without starting it, and says whether it wrote
-  (`Installed::Written`) or found the same bytes already in place (`Installed::AlreadyInPlace`,
-  launchd and systemd; a Windows task is always written)), `install_may_end_running_service` (whether
-  replacing a registration may end a running service: Windows only), start (waits for a process).
+  (`Registered::Written`), found the same bytes already in place (`Registered::AlreadyInPlace`,
+  launchd and systemd), or left a running service's registration as it is
+  (`Registered::LeftRunning`, a Windows task only: the backend decides, no caller asks first);
+  `Registered::stage_line` words the result for `start` and `repair`), start (waits for a process).
   One backend per manager in `src/service/` behind the `CommandRunner` port.
 - `src/service/definition.rs`: what the backends share to register a definition: the manager
   check, the byte comparison with the file already in place, the atomic owner-only write, and the
@@ -137,7 +138,8 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   on the virtual clock.
 - `src/lifecycle.rs`: the `ComputerLifecycle` port (protocol, status, and service-definition
   answers of a Computer executable), `reported_service_definition` (asks for the definition only
-  when `protocol`'s `commands` lists it), and `Lifecycle`, which runs `coforge-computer
+  when `protocol`'s `commands` lists it; `service_definition_if_listed` does so for a protocol
+  already read), and `Lifecycle`, which runs `coforge-computer
   __lifecycle` bounded and reads its versioned JSON. Tests in `src/lifecycle/tests.rs`.
 - `src/switch.rs`: the switch of the active version, shared by upgrade and recovery: `Ports` (every
   port a transaction touches), `Target`, `Plan`, and `ActiveSwitch` (stop the supervisor and its
@@ -151,8 +153,8 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   `src/upgrade/tests/service_definition.rs`.
 - `src/upgrade/preparation.rs`: everything an upgrade checks before its first change (the active
   version's health, supervisor management, the candidate, and, while the supervisor runs, the
-  service definitions of both versions, read from their stored executables); a failure is a
-  refusal with nothing changed.
+  service definitions of both versions, read from their stored executables, the candidate's after
+  the one `protocol` probe it already made); a failure is a refusal with nothing changed.
 - `src/upgrade/fakes.rs`: test doubles and fixture for the upgrade and recovery tests: scripted
   lifecycle and service, and an install root with versions `0.1.0` and `0.2.0` served by a
   loopback feed.
@@ -176,19 +178,20 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   processes; writes a repair receipt. Tests live with the module.
 - `src/repair/service_definition.rs`: repair's registration of the active version's service
   definition, whether or not the activation needed repair; it never stops or starts the service.
-  What it did (`Registration`) decides whether a healthy installation is `REPAIR_NOT_NEEDED`
-  (definition in place, unreported, or a running Windows task left alone) or repaired (written).
-- `src/start.rs`: `coforge-installer start [--caller-pid <pid>]`. Refuses inside the service's
-  unit (exit 1), takes the machine lock (busy: exit 2), reads `active.json` (nothing installed:
-  exit 1), reads the active version's definition from its stored executable (a Computer that
-  lists no `service-definition`: exit 1, run `coforge-computer upgrade`), registers it (a
-  running service whose manager would replace it is left as it is), starts the service and waits
-  for the manager to report it running (exit 0). It prints `==> Registering the Computer
-  supervisor service definition`, `==> Starting Computer supervisor <v>`, `==> Computer
-  supervisor <v> started`; a failure is `coforge-installer: <message>` on stderr, no receipt. The
-  recovery journal does not block it, and it does not probe `__lifecycle status`: the Computer
-  does its own handshake. `--caller-pid` is verified as for `recover` and stops nothing. Tests in
-  `src/start/tests.rs`.
+  What `install` answered (`Registered`; `None` is a Computer that reports no definition)
+  decides whether a healthy installation is `REPAIR_NOT_NEEDED` (definition in place, unreported,
+  or a running Windows task left alone) or repaired (written). A definition failure is one
+  message suffix on whichever receipt applies.
+- `src/start.rs`: `coforge-installer start`, no arguments. Refuses inside the service's unit
+  while it runs (`switch::refusal_inside_service`, exit 1), takes the machine lock (busy: exit 2),
+  reads `active.json` (nothing installed: exit 1), reads the active version's definition from its
+  stored executable (a Computer that lists no `service-definition`: exit 1, run `coforge-computer
+  upgrade`), registers it (a running service whose manager would replace it is left as it is),
+  starts the service and waits for the manager to report it running (exit 0). It prints
+  `Registered::stage_line` when the registration did something, `==> Starting Computer supervisor
+  <v>`, `==> Computer supervisor <v> started`; a failure is `coforge-installer: <message>` on
+  stderr, no receipt. The recovery journal does not block it, and it does not probe `__lifecycle
+  status`: the Computer does its own handshake. Tests in `src/start/tests.rs`.
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
   scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,
   which can script a path's first answers), a tiny release tree, and runners

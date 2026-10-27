@@ -82,6 +82,7 @@ async function collectSupervisor(
   snapshot: DaemonSnapshotProbe,
 ): Promise<SupervisorStatus> {
   const coordinator = await ports.probeCoordinator();
+  const serviceDefinition = await collectServiceDefinition(ports);
   return {
     label: ports.coordinatorLabel,
     loaded: coordinator.loaded,
@@ -90,21 +91,24 @@ async function collectSupervisor(
     rpc: snapshot.reachable
       ? { reachable: true, runtimeCount: snapshot.runtimes.length }
       : { reachable: false, error: snapshot.error },
-    serviceDefinition: await collectServiceDefinition(ports),
+    ...(serviceDefinition ? { serviceDefinition } : {}),
   };
 }
 
 /** Compares the service file on disk with the one this Computer would register: a launchd job
- * stays loaded after its plist is deleted, so `Loaded` alone cannot show the file went missing. */
-async function collectServiceDefinition(ports: StatusPorts): Promise<ServiceDefinitionStatus> {
-  const expected = ports.expectedServiceDefinition();
-  if (!expected) return { state: "not_checked" };
+ * stays loaded after its plist is deleted, so `Loaded` alone cannot show the file went missing.
+ * Undefined where the platform keeps no such file. */
+async function collectServiceDefinition(
+  ports: StatusPorts,
+): Promise<ServiceDefinitionStatus | undefined> {
   try {
-    const onDisk = await ports.readServiceDefinitionFile(expected.path);
-    if (onDisk === null) return { state: "missing", path: expected.path };
-    return { state: onDisk === expected.contents ? "matches" : "differs", path: expected.path };
+    const definition = await ports.readServiceDefinition();
+    if (!definition) return undefined;
+    const { path, expected, onDisk } = definition;
+    if (onDisk === null) return { state: "missing", path };
+    return { state: onDisk === expected ? "matches" : "differs", path };
   } catch (error) {
-    return { state: "unreadable", path: expected.path, error: thrownMessage(error) };
+    return { state: "unreadable", error: thrownMessage(error) };
   }
 }
 

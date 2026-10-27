@@ -97,7 +97,17 @@ pub fn reported_service_definition(
     lifecycle: &dyn ComputerLifecycle,
     executable: &Path,
 ) -> Result<Option<LifecycleServiceDefinition>, LifecycleFailure> {
-    if supports_service_definition(&lifecycle.protocol(executable)?) {
+    service_definition_if_listed(lifecycle, executable, &lifecycle.protocol(executable)?)
+}
+
+/// [`reported_service_definition`] for a caller that has already read the `protocol` of
+/// `executable`: the definition when `protocol` lists the command, `None` when it does not.
+pub fn service_definition_if_listed(
+    lifecycle: &dyn ComputerLifecycle,
+    executable: &Path,
+    protocol: &LifecycleProtocol,
+) -> Result<Option<LifecycleServiceDefinition>, LifecycleFailure> {
+    if supports_service_definition(protocol) {
         lifecycle.service_definition(executable).map(Some)
     } else {
         Ok(None)

@@ -26,8 +26,7 @@ function fakePorts(overrides: Partial<StatusPorts> = {}): StatusPorts {
     resolveRealPath: async () =>
       "/home/user/.coforge/computer/install/versions/1.4.2/coforge-computer",
     probeCoordinator: async () => ({ loaded: true, pid: 4821 }),
-    expectedServiceDefinition: () => ({ path: PLIST_PATH, contents: PLIST }),
-    readServiceDefinitionFile: async () => PLIST,
+    readServiceDefinition: async () => ({ path: PLIST_PATH, expected: PLIST, onDisk: PLIST }),
     probeDaemonSnapshot: async () => ({
       reachable: true,
       runtimes: [{ workspaceId: "ws-1", processId: 111 }],
@@ -498,7 +497,9 @@ test("a Workspace's start or restart under way and its last failed lifecycle com
 
 test("a service file that is gone is missing even though the job is still loaded", async () => {
   const report = await collectComputerStatus(
-    fakePorts({ readServiceDefinitionFile: async () => null }),
+    fakePorts({
+      readServiceDefinition: async () => ({ path: PLIST_PATH, expected: PLIST, onDisk: null }),
+    }),
   );
 
   expect(report.supervisor.loaded).toBe(true);
@@ -507,7 +508,13 @@ test("a service file that is gone is missing even though the job is still loaded
 
 test("a service file with other contents than this Computer would register differs", async () => {
   const report = await collectComputerStatus(
-    fakePorts({ readServiceDefinitionFile: async () => PLIST.replace("rendered", "edited") }),
+    fakePorts({
+      readServiceDefinition: async () => ({
+        path: PLIST_PATH,
+        expected: PLIST,
+        onDisk: PLIST.replace("rendered", "edited"),
+      }),
+    }),
   );
 
   expect(report.supervisor.serviceDefinition).toEqual({ state: "differs", path: PLIST_PATH });
@@ -516,7 +523,7 @@ test("a service file with other contents than this Computer would register diffe
 test("a service file that cannot be read degrades only the service definition", async () => {
   const report = await collectComputerStatus(
     fakePorts({
-      readServiceDefinitionFile: async () => {
+      readServiceDefinition: async () => {
         throw new Error("EACCES: permission denied");
       },
     }),
@@ -524,25 +531,16 @@ test("a service file that cannot be read degrades only the service definition", 
 
   expect(report.supervisor.serviceDefinition).toEqual({
     state: "unreadable",
-    path: PLIST_PATH,
     error: "EACCES: permission denied",
   });
   expect(report.supervisor.loaded).toBe(true);
 });
 
-test("a platform whose manager keeps no service file is not checked", async () => {
-  let read = false;
+test("a platform whose manager keeps no service file reports no service definition", async () => {
   const report = await collectComputerStatus(
-    fakePorts({
-      platform: "win32",
-      expectedServiceDefinition: () => null,
-      readServiceDefinitionFile: async () => {
-        read = true;
-        return null;
-      },
-    }),
+    fakePorts({ platform: "win32", readServiceDefinition: async () => null }),
   );
 
-  expect(report.supervisor.serviceDefinition).toEqual({ state: "not_checked" });
-  expect(read).toBe(false);
+  expect("serviceDefinition" in report.supervisor).toBe(false);
+  expect(JSON.parse(JSON.stringify(report)).supervisor).not.toHaveProperty("serviceDefinition");
 });

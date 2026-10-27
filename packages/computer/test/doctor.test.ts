@@ -26,7 +26,6 @@ const HEALTHY_REPORT: ComputerStatusReport = {
     pid: 4821,
     socketPath: "/home/user/.coforge/daemon/daemon.sock",
     rpc: { reachable: true, runtimeCount: 1 },
-    serviceDefinition: { state: "not_checked" },
   },
   loginShellPath: { state: "imported", shell: "/bin/zsh", entryCount: 7 },
   workspaces: {

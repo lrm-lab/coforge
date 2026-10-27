@@ -193,9 +193,6 @@ struct Installed {
     supervisor_running: bool,
     /// The supervisor's id before the switch: a restarted one must have another.
     supervisor_id: Option<String>,
-    /// The service definition its rollback registers, read before anything stopped. Read only
-    /// when the supervisor runs; `None` also for a Computer that predates the command.
-    definition: Option<LifecycleServiceDefinition>,
     runtimes: Vec<RuntimeState>,
 }
 
@@ -209,11 +206,17 @@ impl Installed {
 }
 
 /// The version being replaced (if any) and the candidate, once both are verified.
+///
+/// Both service definitions are read before anything stops, so that neither the switch nor its
+/// rollback depends on a Computer that has not started yet. They are read only when the
+/// supervisor runs (a stopped one is not restarted, so nothing registers a definition); `None`
+/// is also a Computer that predates `__lifecycle service-definition`.
 struct Prepared {
     from: Option<Installed>,
     to: String,
-    /// The candidate's service definition, read before anything stopped (see
-    /// [`Installed::definition`]).
+    /// The definition the rollback registers: the replaced version's.
+    from_definition: Option<LifecycleServiceDefinition>,
+    /// The definition the switch registers: the candidate's.
     to_definition: Option<LifecycleServiceDefinition>,
 }
 
@@ -318,7 +321,7 @@ impl Run<'_, '_> {
         let target = Target {
             version: &from.version,
             previous: from.previous.as_deref(),
-            definition: from.definition.as_ref(),
+            definition: prepared.from_definition.as_ref(),
         };
         match self.switch.switch(&target, &plan) {
             Ok(()) => {

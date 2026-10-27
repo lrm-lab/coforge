@@ -27,12 +27,10 @@ export type SupervisorRpcStatus =
   | { reachable: true; runtimeCount: number }
   | { reachable: false; error: string };
 
-/** Whether the service file on disk is what this Computer would register. `not_checked` where the
- * platform manager keeps no file (Windows Task Scheduler). */
+/** Whether the service file on disk is what this Computer would register. */
 export type ServiceDefinitionStatus =
-  | { state: "not_checked" }
   | { state: "matches" | "missing" | "differs"; path: string }
-  | { state: "unreadable"; path: string; error: string };
+  | { state: "unreadable"; error: string };
 
 export type SupervisorStatus = {
   label: string;
@@ -40,7 +38,8 @@ export type SupervisorStatus = {
   pid: number | null;
   socketPath: string;
   rpc: SupervisorRpcStatus;
-  serviceDefinition: ServiceDefinitionStatus;
+  /** Absent where the platform manager keeps no service file (Windows Task Scheduler). */
+  serviceDefinition?: ServiceDefinitionStatus;
 };
 
 export type PendingRequest =
@@ -196,11 +195,14 @@ export interface StatusPorts {
   activeBinaryPath: string;
   coordinatorLabel: string;
   probeCoordinator(): Promise<{ loaded: boolean; pid: number | null }>;
-  /** The service file this Computer would register, or null where the platform manager keeps no
-   * file. */
-  expectedServiceDefinition(): { path: string; contents: string } | null;
-  /** The service file's text, or null when it does not exist. */
-  readServiceDefinitionFile(path: string): Promise<string | null>;
+  /** The service file this Computer would register (`expected`) beside the text on disk (`onDisk`,
+   * null when the file does not exist), or null where the platform manager keeps no file.
+   * Rejects when the file cannot be read. */
+  readServiceDefinition(): Promise<{
+    path: string;
+    expected: string;
+    onDisk: string | null;
+  } | null>;
   probeDaemonSnapshot(): Promise<DaemonSnapshotProbe>;
   loadBindings(): Promise<BindingsLoad>;
   listWorkspaceAgents: {

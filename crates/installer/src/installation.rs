@@ -153,18 +153,12 @@ pub fn recover(
     .and_then(std::convert::identity)
 }
 
-/// Registers the active version's service definition and starts the service. `caller_pid` is the
-/// `coforge-computer` process that launched this installer and waits for it; it is verified as
-/// for `recover` and never stopped (starting stops nothing).
-pub fn start(
-    setup: &Setup,
-    caller_pid: Option<u32>,
-    stage: &mut dyn FnMut(&str),
-) -> Result<start::Outcome, String> {
+/// Registers the active version's service definition and starts the service. Starting stops
+/// nothing, so there is no launching process to spare and no caller pid to verify.
+pub fn start(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<start::Outcome, String> {
     with_ports(setup, &ReleaseOrigin::Feed, |ports| {
-        verify_caller(ports, caller_pid).map(|_| start_service(ports, stage))
+        start_service(ports, stage)
     })
-    .and_then(std::convert::identity)
 }
 
 /// Repairs activation links or quarantines and redownloads a damaged immutable payload. The

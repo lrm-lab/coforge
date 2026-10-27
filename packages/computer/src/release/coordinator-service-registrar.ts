@@ -1,9 +1,11 @@
 import type { CoordinatorServiceRegistrar } from "@lrm/coforge-daemon";
 
-import { defaultUpgradeRunnerOptions, lastLine, type UpgradeRunnerOptions } from "./upgrade-runner";
-
-/** What an installer too old to have a `start` command says (crates/installer/src/args.rs). */
-const UNKNOWN_START = /unknown command: start/;
+import {
+  defaultUpgradeRunnerOptions,
+  lastLine,
+  runInstaller,
+  type UpgradeRunnerOptions,
+} from "./upgrade-runner";
 
 /**
  * Registers and starts the Coordinator service by running the installer's `start`: the installer
@@ -17,24 +19,17 @@ export function createCoordinatorServiceRegistrar(
   return {
     async registerAndStart() {
       const options = { ...defaultUpgradeRunnerOptions(), ...overrides };
-      const installer = await options.obtainInstaller({
-        feedUrl: options.feedUrl,
-        target: options.target,
-        installRoot: options.installRoot,
-      });
-      // `--caller-pid` is this process, the installer's parent, which it verifies and never stops.
-      const run = await options.spawnInstaller({
-        path: installer.path,
-        args: ["start", "--caller-pid", String(process.pid)],
-        stdin: "ignore",
+      const { run, installer } = await runInstaller(options, ["start"], {
         stdout: "inherit",
         stderr: "pipe",
       });
       if (run.exitCode === 0) return;
       const reason = lastLine(run.stderr) ?? `coforge-installer start exited ${run.exitCode}`;
+      // Without a version the installer is the cached copy used while the feed was unreachable,
+      // which may predate `start`.
       throw new Error(
-        UNKNOWN_START.test(run.stderr)
-          ? `${reason}. Connect to the network so the current installer can be fetched.`
+        installer.version === undefined
+          ? `${reason} (ran the cached installer; connect to the network so the current installer can be fetched)`
           : reason,
       );
     },

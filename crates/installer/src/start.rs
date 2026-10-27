@@ -6,14 +6,14 @@
 //! when `coforge-computer recover` cannot yet run. The definition is the active version's own,
 //! read from its stored executable (`__lifecycle service-definition`); a Computer that cannot
 //! report one cannot be started this way. The Computer checks that the supervisor answers after
-//! this returns.
+//! this returns. Whether a manager keeps a running service's registration as it is, is the
+//! backend's decision (`Registered::LeftRunning`), not this command's.
 
 use crate::active::read_active;
 use crate::contract::{EXIT_FAILED, EXIT_HELD, EXIT_SUCCEEDED};
 use crate::lifecycle::reported_service_definition;
 use crate::lock::{LockError, MachineMutationLock};
-use crate::service::ServiceState;
-use crate::switch::Ports;
+use crate::switch::{Ports, refusal_inside_service};
 
 /// How a start ended, for the CLI to print and exit with.
 #[derive(Debug, PartialEq, Eq)]
@@ -22,9 +22,8 @@ pub enum Outcome {
     Started { version: String },
     /// Another install, upgrade, recovery, or repair holds the lock. Nothing changed.
     Held { message: String },
-    /// This process runs inside the service's own unit. Nothing changed.
-    Refused { message: String },
-    /// The service could not be registered or started.
+    /// The service could not be registered or started, or this process runs inside the service's
+    /// own unit.
     Failed { message: String },
 }
 
@@ -33,25 +32,15 @@ impl Outcome {
         match self {
             Self::Started { .. } => EXIT_SUCCEEDED,
             Self::Held { .. } => EXIT_HELD,
-            Self::Refused { .. } | Self::Failed { .. } => EXIT_FAILED,
+            Self::Failed { .. } => EXIT_FAILED,
         }
     }
 }
 
 pub fn start(ports: &Ports<'_>, stage: &mut dyn FnMut(&str)) -> Outcome {
-    match ports.service.caller_is_inside_unit() {
-        Ok(false) => {}
-        Ok(true) => {
-            return Outcome::Refused {
-                message: format!(
-                    "this process runs inside {}, the service it would register and start. Run \
-                     `coforge-computer start` from a normal terminal, not from inside the \
-                     service. Nothing was changed.",
-                    ports.service.display_name()
-                ),
-            };
-        }
-        Err(error) => return failed(error),
+    match refusal_inside_service(ports.service, "Start", "coforge-computer start") {
+        Ok(None) => {}
+        Ok(Some(message)) | Err(message) => return failed(message),
     }
     let _lock = match MachineMutationLock::acquire(ports.install_root) {
         Ok(lock) => lock,
@@ -86,19 +75,13 @@ pub fn start(ports: &Ports<'_>, stage: &mut dyn FnMut(&str)) -> Outcome {
         }
         Err(error) => return failed(error),
     };
-    // A manager whose registration may end a running service keeps a running one as it is.
-    let replaces_running = ports.service.install_may_end_running_service()
-        && match ports.service.state() {
-            Ok(state) => matches!(state, ServiceState::Running { .. }),
-            Err(error) => return failed(error),
-        };
-    if replaces_running {
-        stage("The Computer supervisor service is running; its registration is left as it is");
-    } else {
-        stage("Registering the Computer supervisor service definition");
-        if let Err(error) = ports.service.install(&definition) {
-            return failed(error);
+    match ports.service.install(&definition) {
+        Ok(registered) => {
+            if let Some(line) = registered.stage_line() {
+                stage(line);
+            }
         }
+        Err(error) => return failed(error),
     }
     stage(&format!("Starting Computer supervisor {version}"));
     if let Err(error) = ports.service.start() {

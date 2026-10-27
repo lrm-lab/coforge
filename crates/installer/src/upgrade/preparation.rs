@@ -7,8 +7,8 @@ use super::{
     INTEGRITY_CODE, Installed, Prepared, Refusal, Run, downgrade_refusal, refuse, unhealthy_message,
 };
 use crate::active::read_active;
-use crate::contract::{ActiveState, LifecycleServiceDefinition, RuntimeState};
-use crate::lifecycle::reported_service_definition;
+use crate::contract::{ActiveState, LifecycleProtocol, LifecycleServiceDefinition, RuntimeState};
+use crate::lifecycle::{reported_service_definition, service_definition_if_listed};
 use crate::prepare::prepare_version;
 use crate::service::{ServiceError, ServiceState};
 use crate::switch::refusal_inside_service;
@@ -69,22 +69,24 @@ impl Run<'_, '_> {
                 code: Some(INTEGRITY_CODE),
             });
         }
-        let mut from = match active {
+        let from = match active {
             None => None,
             Some(active) => Some(self.inspect(active)?),
         };
+        let mut from_definition = None;
         let mut to_definition = None;
         if let Some(installed) = from
-            .as_mut()
+            .as_ref()
             .filter(|installed| installed.supervisor_running)
         {
             self.require_managed_supervisor()?;
-            installed.definition = self.read_service_definition(&installed.version)?;
-            to_definition = self.read_service_definition(&to)?;
+            from_definition = self.read_service_definition(&installed.version)?;
+            to_definition = self.read_candidate_service_definition(&to, &probe)?;
         }
         Ok(Prepared {
             from,
             to,
+            from_definition,
             to_definition,
         })
     }
@@ -104,7 +106,6 @@ impl Run<'_, '_> {
             previous: active.previous,
             supervisor_running: status.supervisor.running,
             supervisor_id: status.supervisor.id.clone(),
-            definition: None,
             runtimes: status
                 .bindings
                 .iter()
@@ -136,9 +137,8 @@ impl Run<'_, '_> {
     }
 
     /// The service definition of `version`, read from its stored executable before anything
-    /// stops: the switch registers the candidate's, and its rollback the active version's, and
-    /// neither may depend on a Computer that has not started yet. `None` is a Computer that
-    /// predates the command, which has none to read.
+    /// stops (see [`Prepared`]). `None` is a Computer that predates the command, which has none
+    /// to read.
     fn read_service_definition(
         &self,
         version: &str,
@@ -146,6 +146,21 @@ impl Run<'_, '_> {
         reported_service_definition(
             self.ports.lifecycle,
             &self.ports.store.computer_path(version),
+        )
+        .map_err(|error| refuse(error.to_string()))
+    }
+
+    /// [`Run::read_service_definition`] for the candidate, whose `protocol` the preparation has
+    /// already read as `probe`: the candidate costs one more spawn, for the definition itself.
+    fn read_candidate_service_definition(
+        &self,
+        to: &str,
+        probe: &LifecycleProtocol,
+    ) -> Result<Option<LifecycleServiceDefinition>, Refusal> {
+        service_definition_if_listed(
+            self.ports.lifecycle,
+            &self.ports.store.computer_path(to),
+            probe,
         )
         .map_err(|error| refuse(error.to_string()))
     }

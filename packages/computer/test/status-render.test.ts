@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { renderStatusHuman, renderStatusJson } from "#src/status/render-status";
-import type { ComputerStatusReport } from "#src/status/types";
+import type { ComputerStatusReport, ServiceDefinitionStatus } from "#src/status/types";
 
 const PLIST_PATH = "/Users/alice/Library/LaunchAgents/cn.coforge.computer.daemon.plist";
 
@@ -429,7 +429,7 @@ test("each Workspace's detail lines stay under its own summary line", () => {
 });
 
 test("renderStatusHuman states whether the service file matches, is missing, or differs", () => {
-  const line = (serviceDefinition: ComputerStatusReport["supervisor"]["serviceDefinition"]) =>
+  const line = (serviceDefinition: ServiceDefinitionStatus) =>
     renderStatusHuman({ ...REPORT, supervisor: { ...REPORT.supervisor, serviceDefinition } }).find(
       (candidate) => candidate.includes("Service definition"),
     );
@@ -441,17 +441,14 @@ test("renderStatusHuman states whether the service file matches, is missing, or 
   expect(line({ state: "differs", path: PLIST_PATH })).toBe(
     "  Service definition:    differs — run coforge-computer repair",
   );
-  expect(line({ state: "unreadable", path: PLIST_PATH, error: "EACCES" })).toBe(
+  expect(line({ state: "unreadable", error: "EACCES" })).toBe(
     "  Service definition:    unreadable (EACCES)",
   );
 });
 
-test("renderStatusHuman leaves out the service definition where nothing is checked", () => {
-  const text = renderStatusHuman({
-    ...REPORT,
-    platform: "win32",
-    supervisor: { ...REPORT.supervisor, serviceDefinition: { state: "not_checked" } },
-  }).join("\n");
+test("renderStatusHuman leaves out the service definition where the report has none", () => {
+  const { serviceDefinition: _kept, ...supervisor } = REPORT.supervisor;
+  const text = renderStatusHuman({ ...REPORT, platform: "win32", supervisor }).join("\n");
 
   expect(text).not.toContain("Service definition");
 });

@@ -11,7 +11,7 @@ use crate::service::{
 /// installer says to PowerShell. It names the state by the `ScheduledTask.State` enum, which
 /// PowerShell prints the same in every Windows language (`schtasks /Query` translates its
 /// labels and values), and exits 3 for a task that is not there.
-const QUERY: &str = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NonInteractive -Command \"$ErrorActionPreference = \
+pub(super) const QUERY: &str = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NonInteractive -Command \"$ErrorActionPreference = \
 'Stop'; $task = Get-ScheduledTask -TaskPath '\\' | Where-Object { $_.TaskName -eq 'CoForge Daemon' \
 }; if ($null -eq $task) { exit 3 }; $task.State.ToString()\"";
 const END: &str = "C:\\Windows\\System32\\schtasks.exe /End /TN \"CoForge Daemon\"";

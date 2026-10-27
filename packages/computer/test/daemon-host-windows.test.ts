@@ -114,7 +114,9 @@ test("restart ends then runs the registered scheduled task", async () => {
     // Fail /Run so this exercises only the command sequence, not the local handshake.
     run: schtasks({ "/Run": 1 }, commands),
   });
-  await expect(host.restart()).rejects.toThrow("could not restart the CoForge Daemon user task");
+  await expect(host.restart()).rejects.toThrow(
+    "Run `coforge-computer foreground` under an external supervisor",
+  );
   expect(registrar.calls).toBe(0);
   expect(commands).toEqual([end, query, run]);
 });
@@ -141,7 +143,9 @@ test("restart ignores /End's own exit code (the task may already be stopped)", a
     registrar: recordingRegistrar(),
     run: schtasks({ "/End": 1, "/Run": 1 }, commands),
   });
-  await expect(host.restart()).rejects.toThrow("could not restart the CoForge Daemon user task");
+  await expect(host.restart()).rejects.toThrow(
+    "Run `coforge-computer foreground` under an external supervisor",
+  );
   expect(commands).toEqual([end, query, run]);
 });
 

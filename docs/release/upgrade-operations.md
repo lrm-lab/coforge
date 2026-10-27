@@ -114,7 +114,7 @@ written and reports a repair; one whose definition is already in place stays
 `REPAIR_NOT_NEEDED`.
 
 When the service is not registered with the service manager, Computer's start paths run
-`coforge-installer start [--caller-pid <pid>]` instead of registering it themselves. Under the
+`coforge-installer start` instead of registering it themselves. Under the
 machine lock, with no request id or receipt, it reads the active version's service definition
 from its stored executable, registers it, starts the service, and waits until the manager reports
 it running; Computer then does its own handshake. The recovery journal does not block it. Exit 0

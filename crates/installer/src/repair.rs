@@ -20,8 +20,7 @@ use crate::lock::{BUSY_ERROR_CODE, LockError, MachineMutationLock};
 use crate::prepare::prepare_version;
 use crate::private_fs;
 use crate::receipts::{Begin, ReceiptStore};
-use crate::repair::service_definition::Registration;
-use crate::service::ServiceState;
+use crate::service::{Registered, ServiceState};
 use crate::switch::Ports;
 use crate::upgrade::Outcome;
 use crate::version::precedence;
@@ -195,9 +194,15 @@ pub fn repair(
     // the receipt but undoes nothing. A healthy activation still has its definition reconciled:
     // only a definition that was missing makes that a repair.
     let definition = service_definition::register(ports, &target);
+    // What every receipt message below ends with when the definition could not be registered.
+    let definition_failure = definition
+        .as_ref()
+        .err()
+        .map(|error| format!(" Its service definition could not be registered: {error}"))
+        .unwrap_or_default();
     if activation.is_none() {
         match &definition {
-            Ok(Registration::Written) => {}
+            Ok(Some(Registered::Written)) => {}
             Ok(_) => {
                 return held(
                     &receipts,
@@ -206,44 +211,40 @@ pub fn repair(
                     "This installation does not need repair. Use install or upgrade.",
                 );
             }
-            Err(error) => {
+            Err(_) => {
                 return failed(
                     &receipts,
                     &lock,
                     request_id,
-                    format!(
-                        "CoForge Computer {target} needed no repair, but its service definition \
-                         could not be registered: {error}"
-                    ),
+                    format!("CoForge Computer {target} needed no repair.{definition_failure}"),
                     None,
                 );
             }
         }
     }
-    if let Ok(registration) = &definition
-        && let Some(line) = registration.stage_line()
+    if let Ok(Some(registered)) = &definition
+        && let Some(line) = registered.stage_line()
     {
         stage(line);
     }
     if activation == Some(Activation::ExecutableSpared) {
-        return executable_spared(
-            ports,
-            &receipts,
-            &lock,
-            request_id,
-            &target,
-            definition.err(),
-        );
-    }
-    if let Err(error) = definition {
         return failed(
             &receipts,
             &lock,
             request_id,
             format!(
-                "CoForge Computer {target} was repaired, but its service definition could not be \
-                 registered: {error}"
+                "{}{definition_failure}",
+                executable_spared_message(ports, &target)
             ),
+            Some(BUSY_ERROR_CODE),
+        );
+    }
+    if definition.is_err() {
+        return failed(
+            &receipts,
+            &lock,
+            request_id,
+            format!("CoForge Computer {target} was repaired.{definition_failure}"),
             None,
         );
     }
@@ -332,30 +333,15 @@ fn activate(ports: &Ports<'_>, state: &ActiveState) -> Result<Activation, Active
     active::activate(ports.store, ports.binary_directory, state, spare_executable)
 }
 
-/// The failed receipt of a repair that fixed everything but the executable of a running service.
-/// It carries `UPDATE_BUSY`, the SDK's "not now" code (an installer-only code is not allowed).
-fn executable_spared(
-    ports: &Ports<'_>,
-    receipts: &ReceiptStore,
-    lock: &MachineMutationLock,
-    request_id: &str,
-    version: &str,
-    definition_error: Option<String>,
-) -> Outcome {
+/// The message of the failed receipt of a repair that fixed everything but the executable of a
+/// running service. That receipt carries `UPDATE_BUSY`, the SDK's "not now" code (an
+/// installer-only code is not allowed).
+fn executable_spared_message(ports: &Ports<'_>, version: &str) -> String {
     let service = ports.service.display_name();
-    let definition = definition_error.map_or_else(String::new, |error| {
-        format!(" Its service definition could not be registered either: {error}")
-    });
-    failed(
-        receipts,
-        lock,
-        request_id,
-        format!(
-            "{service} is running CoForge Computer {version} from a file that differs from the \
-             installed version, so repair left that file as it is and repaired everything else. \
-             Stop {service}, then run the repair again.{definition}"
-        ),
-        Some(BUSY_ERROR_CODE),
+    format!(
+        "{service} is running CoForge Computer {version} from a file that differs from the \
+         installed version, so repair left that file as it is and repaired everything else. \
+         Stop {service}, then run the repair again."
     )
 }
 

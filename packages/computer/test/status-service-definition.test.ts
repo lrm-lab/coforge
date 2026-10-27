@@ -32,29 +32,29 @@ async function portsFor(platform: SupportedStatusPlatform) {
 
 test("the launchd plist is expected under the home's LaunchAgents and read back as written", async () => {
   const { home, ports } = await portsFor("darwin");
-  const expected = ports.expectedServiceDefinition()!;
+  const absent = (await ports.readServiceDefinition())!;
 
-  expect(expected.path).toBe(
+  expect(absent.path).toBe(
     join(home, "Library", "LaunchAgents", "cn.coforge.computer.daemon.plist"),
   );
-  expect(expected.contents).toContain("cn.coforge.computer.daemon");
-  expect(await ports.readServiceDefinitionFile(expected.path)).toBeNull();
+  expect(absent.expected).toContain("cn.coforge.computer.daemon");
+  expect(absent.onDisk).toBeNull();
 
-  await mkdir(dirname(expected.path), { recursive: true });
-  await writeFile(expected.path, expected.contents);
-  expect(await ports.readServiceDefinitionFile(expected.path)).toBe(expected.contents);
+  await mkdir(dirname(absent.path), { recursive: true });
+  await writeFile(absent.path, absent.expected);
+  expect((await ports.readServiceDefinition())!.onDisk).toBe(absent.expected);
 });
 
 test("the systemd user unit is expected under the home's config directory", async () => {
   const { home, ports } = await portsFor("linux");
-  const expected = ports.expectedServiceDefinition()!;
+  const definition = (await ports.readServiceDefinition())!;
 
-  expect(expected.path).toBe(join(home, ".config", "systemd", "user", "coforge-daemon.service"));
-  expect(expected.contents).toContain("ExecStart=");
+  expect(definition.path).toBe(join(home, ".config", "systemd", "user", "coforge-daemon.service"));
+  expect(definition.expected).toContain("ExecStart=");
 });
 
 test("the Windows Scheduled Task keeps no service file to compare", async () => {
   const { ports } = await portsFor("win32");
 
-  expect(ports.expectedServiceDefinition()).toBeNull();
+  expect(await ports.readServiceDefinition()).toBeNull();
 });

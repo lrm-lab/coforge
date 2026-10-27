@@ -119,17 +119,15 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
         },
       });
     },
-    expectedServiceDefinition() {
+    async readServiceDefinition() {
       const { path, contents } = resolveServiceDefinition({
         ...(input.machine ?? currentMachine()),
         platform: input.platform,
         serverUrl: input.serverUrl,
       });
-      return path === undefined ? null : { path, contents };
-    },
-    async readServiceDefinitionFile(path) {
+      if (path === undefined) return null;
       const file = Bun.file(path);
-      return (await file.exists()) ? file.text() : null;
+      return { path, expected: contents, onDisk: (await file.exists()) ? await file.text() : null };
     },
     async probeDaemonSnapshot(): Promise<DaemonSnapshotProbe> {
       const launcher = new LocalDaemonLauncher({

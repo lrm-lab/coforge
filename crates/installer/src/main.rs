@@ -9,7 +9,7 @@
 //!   coforge-installer recover [--caller-pid <pid>]
 //!   coforge-installer repair [--version <latest|X.Y.Z> | --channel main|latest] [--yes]
 //!                             [--allow-downgrade] [--json]
-//!   coforge-installer start [--caller-pid <pid>]
+//!   coforge-installer start
 //!   coforge-installer status [--json]
 //!
 //! Exit status (`contract.rs`): 0 succeeded, 1 failed (a receipt, or a usage error that wrote
@@ -95,7 +95,7 @@ fn main() -> ExitCode {
             allow_downgrade,
             json,
         ),
-        Command::Start { caller_pid } => start(&setup, caller_pid),
+        Command::Start => start(&setup),
         Command::Status { json } => status(&setup, json),
     }
 }
@@ -207,13 +207,10 @@ fn recover(setup: &Setup, caller_pid: Option<u32>, json: bool) -> ExitCode {
     }
 }
 
-fn start(setup: &Setup, caller_pid: Option<u32>) -> ExitCode {
-    match installation::start(setup, caller_pid, &mut stage) {
+fn start(setup: &Setup) -> ExitCode {
+    match installation::start(setup, &mut stage) {
         Ok(outcome) => {
-            if let StartOutcome::Held { message }
-            | StartOutcome::Refused { message }
-            | StartOutcome::Failed { message } = &outcome
-            {
+            if let StartOutcome::Held { message } | StartOutcome::Failed { message } = &outcome {
                 eprintln!("coforge-installer: {message}");
             }
             ExitCode::from(outcome.exit_code())

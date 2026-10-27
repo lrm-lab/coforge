@@ -61,6 +61,7 @@ Read this overview first, then the topic files the task needs.
 | [Local Computer distribution model](local-distribution.md)          | Feed layout, schema 2 manifest, gzip transport, checksum sidecar, write-once versions, and version strings |
 | [Feed hosting and installation entry points](local-feed-hosting.md) | Release and file CDN domains, per-deployment installer URLs, origin privacy, and cache policy              |
 | [Installer feed and release workflow](installer-feed.md)            | The `installer/` feed layout, its write-once versions, the installer's manual release workflow, `pointer_only`, and the product gate |
+| [Installer command line](installer-commands.md) | The `coforge-installer` commands, their output, and exit status |
 | [Per-user installation](per-user-installation.md)                   | Installation paths, PATH shims, version store, launchers, selection modes, and environment-bound builds    |
 | [Release notes](release-notes.md)                                   | The required English and Chinese notes of every Computer publication, the release catalog, and editing them later |
 | [Reading GitHub Actions](github-actions.md)                         | The CI, Web deploy, and Computer publish workflows, check selection, and version naming                    |

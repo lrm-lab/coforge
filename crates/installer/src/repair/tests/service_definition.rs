@@ -110,17 +110,17 @@ fn a_computer_that_predates_the_command_gets_no_registration() {
 }
 
 #[test]
-fn a_manager_whose_install_may_end_a_running_service_keeps_its_running_registration() {
+fn a_manager_that_keeps_a_running_registration_is_told_so_in_the_stage_lines() {
     let fixture = damaged("repair-definition-windows-running");
-    let service = FakeService::new(ServiceState::Running { pid: None })
-        .whose_install_may_end_a_running_service();
+    let service =
+        FakeService::new(ServiceState::Running { pid: None }).keeping_a_running_registration();
     let lifecycle = FakeLifecycle::default();
     fixture.reports_service_definition(&lifecycle, OLD);
 
     let (outcome, stages) = run_repair(&fixture, &service, &lifecycle);
 
     assert_eq!(exit_code(&outcome), 0);
-    assert_eq!(service.calls(), ["state", "state"]);
+    assert_eq!(service.calls(), ["state", "install"]);
     assert!(service.installed().is_empty());
     assert_eq!(
         stages,
@@ -133,17 +133,16 @@ fn a_manager_whose_install_may_end_a_running_service_keeps_its_running_registrat
 }
 
 #[test]
-fn a_manager_whose_install_may_end_a_running_service_still_registers_a_missing_one() {
+fn a_manager_that_keeps_a_running_registration_still_registers_a_missing_one() {
     let fixture = damaged("repair-definition-windows-missing");
-    let service =
-        FakeService::new(ServiceState::NotInstalled).whose_install_may_end_a_running_service();
+    let service = FakeService::new(ServiceState::NotInstalled).keeping_a_running_registration();
     let lifecycle = FakeLifecycle::default();
     fixture.reports_service_definition(&lifecycle, OLD);
 
     let (outcome, _) = run_repair(&fixture, &service, &lifecycle);
 
     assert_eq!(exit_code(&outcome), 0);
-    assert_eq!(service.calls(), ["state", "state", "install"]);
+    assert_eq!(service.calls(), ["state", "install"]);
     assert_eq!(service.installed(), [service_definition(OLD)]);
 }
 
@@ -166,7 +165,7 @@ fn a_definition_that_cannot_be_read_fails_the_receipt_but_keeps_the_repaired_act
     let message = receipt.error().unwrap();
     assert!(message.contains("service-definition"), "{message}");
     assert!(
-        message.contains("repaired") && message.contains("0.1.0"),
+        message.contains("0.1.0 was repaired.") && message.contains("could not be registered"),
         "{message}"
     );
     assert!(fixture.root().join("active").exists());
@@ -252,15 +251,15 @@ fn a_healthy_installation_with_its_plist_in_place_is_not_repaired() {
 #[test]
 fn a_healthy_installation_keeps_a_running_registration_a_manager_would_replace() {
     let fixture = healthy("repair-healthy-windows-running");
-    let service = FakeService::new(ServiceState::Running { pid: None })
-        .whose_install_may_end_a_running_service();
+    let service =
+        FakeService::new(ServiceState::Running { pid: None }).keeping_a_running_registration();
     let lifecycle = FakeLifecycle::default();
     fixture.reports_service_definition(&lifecycle, OLD);
 
     let (outcome, stages) = run_repair(&fixture, &service, &lifecycle);
 
     assert_eq!(exit_code(&outcome), 2);
-    assert_eq!(service.calls(), ["state"]);
+    assert_eq!(service.calls(), ["install"]);
     assert!(service.installed().is_empty());
     assert!(stages.is_empty(), "{stages:?}");
 }
@@ -282,6 +281,7 @@ fn a_healthy_installation_whose_definition_cannot_be_read_fails_the_receipt() {
     assert_eq!(receipt.status(), ReceiptStatus::Failed);
     let message = receipt.error().unwrap();
     assert!(message.contains("service-definition"), "{message}");
+    assert!(message.contains("needed no repair"), "{message}");
     assert!(message.contains("could not be registered"), "{message}");
     assert!(service.calls().is_empty());
     assert!(stages.is_empty(), "{stages:?}");

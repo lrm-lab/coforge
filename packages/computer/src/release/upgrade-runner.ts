@@ -169,6 +169,18 @@ async function runInstallerOnTerminal(
   options: UpgradeRunnerOptions,
   args: string[],
 ): Promise<number> {
+  const { run } = await runInstaller(options, args, { stdout: "inherit", stderr: "inherit" });
+  return run.exitCode;
+}
+
+/** Obtains the current installer and runs it once with `args`. Whatever either step throws
+ * reaches the caller; `installer.version` is absent when the cached copy was used because the feed
+ * could not be reached. */
+export async function runInstaller(
+  options: UpgradeRunnerOptions,
+  args: string[],
+  stdio: Pick<InstallerSpawn, "stdout" | "stderr">,
+): Promise<{ run: InstallerRun; installer: VerifiedInstaller }> {
   const installer = await options.obtainInstaller({
     feedUrl: options.feedUrl,
     target: options.target,
@@ -178,10 +190,9 @@ async function runInstallerOnTerminal(
     path: installer.path,
     args,
     stdin: "ignore",
-    stdout: "inherit",
-    stderr: "inherit",
+    ...stdio,
   });
-  return run.exitCode;
+  return { run, installer };
 }
 
 /** The receipt the operation ends with: the one the installer wrote, or a failed one written now

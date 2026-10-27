@@ -163,3 +163,32 @@ fn a_stopped_supervisor_gets_its_tampered_executable_replaced() {
         inode
     );
 }
+
+#[test]
+fn a_spared_executable_and_an_unreadable_definition_are_both_in_the_one_receipt() {
+    let fixture = Fixture::new("repair-spared-definition-unreadable");
+    fixture.install_old();
+    tamper(&fixture, "coforge-computer");
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = FakeService::new(ServiceState::Running { pid: Some(7) });
+    let lifecycle = FakeLifecycle::default();
+    fixture.reports_service_definition(&lifecycle, OLD);
+    lifecycle.answers_service_definition(&fixture.computer(OLD), vec![None]);
+    let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+
+    let outcome = repair(&ports, REQUEST, None, false, &mut |_| {});
+
+    let Outcome::Receipt(receipt) = &outcome else {
+        panic!("repair did not write a receipt");
+    };
+    assert_eq!(receipt.error_code(), Some("UPDATE_BUSY"));
+    let error = receipt.error().unwrap();
+    assert!(error.contains("Stop coforge-daemon.service,"), "{error}");
+    assert!(
+        error.contains("Its service definition could not be registered:")
+            && error.contains("service-definition"),
+        "{error}"
+    );
+    assert!(!error.contains("  "), "{error}");
+}

@@ -31,7 +31,7 @@
 use std::time::Duration;
 
 use super::{
-    Attempt, CommandLine, CommandRunner, Installed, ServiceError, ServiceState, StartOutcome,
+    Attempt, CommandLine, CommandRunner, Registered, ServiceError, ServiceState, StartOutcome,
     StopOutcome, SupervisorService,
     definition::{self, TemporaryDefinition},
     execute,
@@ -197,8 +197,14 @@ impl SupervisorService for WindowsTask<'_> {
         }
     }
 
-    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Installed, ServiceError> {
+    fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Registered, ServiceError> {
         definition::require_manager("windows-task", definition)?;
+        // `schtasks /Create /F` is documented only as suppressing the warning for an existing
+        // task; nothing documents what it does to a running instance. A running task keeps its
+        // registration, so replacing it never ends the service.
+        if matches!(state_of(self.read()?), ServiceState::Running { .. }) {
+            return Ok(Registered::LeftRunning);
+        }
         let xml = TemporaryDefinition::utf16(&std::env::temp_dir(), &definition.contents)?;
         let path = xml.path().to_string_lossy();
         let create = execute(
@@ -210,15 +216,10 @@ impl SupervisorService for WindowsTask<'_> {
             COMMAND_BOUND,
         )?;
         if create.succeeded() {
-            Ok(Installed::Written)
+            Ok(Registered::Written)
         } else {
             Err(self.refused(&create))
         }
-    }
-
-    fn install_may_end_running_service(&self) -> bool {
-        // Not established: see the trait.
-        true
     }
 
     fn start(&self) -> Result<StartOutcome, ServiceError> {

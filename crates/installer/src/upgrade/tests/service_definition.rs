@@ -63,6 +63,30 @@ fn an_upgrade_installs_the_new_definition_before_it_starts_a_service_whose_defin
 }
 
 #[test]
+fn the_candidate_is_asked_for_its_protocol_once_before_the_upgrade() {
+    let fixture = Fixture::new("upgrade-definition-one-probe");
+    fixture.install_old();
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    table.spawn(100, 1, &fixture.canonical_computer(OLD));
+    let service = FakeService::new(ServiceState::Running { pid: Some(100) });
+    let lifecycle = FakeLifecycle::default();
+    script_reporting_upgrade(&fixture, &lifecycle);
+    // The candidate's protocol answers once and then fails: a second spawn to learn whether it
+    // lists `service-definition` would refuse the upgrade.
+    lifecycle.answers_protocol(
+        &fixture.computer(NEW),
+        vec![Some(protocol_with_service_definition(NEW)), None],
+    );
+    let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+
+    let (outcome, _) = run(&ports, REQUEST, NEW, None);
+
+    assert_eq!(exit_of(&outcome), 0, "{outcome:?}");
+    assert_eq!(service.installed(), [service_definition(NEW)]);
+}
+
+#[test]
 fn a_rollback_installs_the_definition_of_the_version_it_restores() {
     let fixture = Fixture::new("upgrade-definition-rollback");
     fixture.install_old();

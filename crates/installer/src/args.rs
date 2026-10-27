@@ -30,9 +30,7 @@ pub(crate) enum Command {
         allow_downgrade: bool,
         json: bool,
     },
-    Start {
-        caller_pid: Option<u32>,
-    },
+    Start,
     Status {
         json: bool,
     },
@@ -172,17 +170,8 @@ fn parse_recover(mut parser: lexopt::Parser) -> Result<Command, String> {
     Ok(Command::Recover { caller_pid, json })
 }
 
-fn parse_start(mut parser: lexopt::Parser) -> Result<Command, String> {
-    use lexopt::prelude::*;
-
-    let mut caller_pid = None;
-    while let Some(arg) = parser.next().map_err(|error| error.to_string())? {
-        match arg {
-            Long("caller-pid") => caller_pid = Some(caller_pid_value(&mut parser)?),
-            other => return Err(other.unexpected().to_string()),
-        }
-    }
-    Ok(Command::Start { caller_pid })
+fn parse_start(parser: lexopt::Parser) -> Result<Command, String> {
+    finish(parser, Command::Start)
 }
 
 fn parse_repair(mut parser: lexopt::Parser) -> Result<Command, String> {
@@ -341,18 +330,9 @@ mod tests {
     }
 
     #[test]
-    fn start_takes_only_a_caller_pid() {
-        assert!(matches!(
-            parse(args(&["start"])),
-            Ok(Command::Start { caller_pid: None })
-        ));
-        assert!(matches!(
-            parse(args(&["start", "--caller-pid", "42"])),
-            Ok(Command::Start {
-                caller_pid: Some(42)
-            })
-        ));
-        assert!(parse(args(&["start", "--caller-pid", "x"])).is_err());
+    fn start_takes_no_arguments() {
+        assert!(matches!(parse(args(&["start"])), Ok(Command::Start)));
+        assert!(parse(args(&["start", "--caller-pid", "42"])).is_err());
         assert!(parse(args(&["start", "--json"])).is_err());
         assert!(parse(args(&["start", "--version", "0.2.0"])).is_err());
     }
