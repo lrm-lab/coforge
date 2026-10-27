@@ -117,9 +117,10 @@ When the service is not registered with the service manager, Computer's start pa
 `coforge-installer start` instead of registering it themselves. Under the
 machine lock, with no request id or receipt, it reads the active version's service definition
 from its stored executable, registers it, starts the service, and waits until the manager reports
-it running; Computer then does its own handshake. The recovery journal does not block it. Exit 0
-started; 2 another operation holds the lock; 1 for a refusal inside the service's own unit,
-nothing installed, a Computer that cannot report its service definition (run
+it running; Computer then does its own handshake. The recovery journal does not block it, and it
+stops nothing, so it also runs from inside the service's own unit (there it registers without
+restarting and finds the service running). Exit 0 started; 2 another operation holds the lock; 1
+for nothing installed, a Computer that cannot report its service definition (run
 `coforge-computer upgrade`), or a registration or start failure.
 
 ## Daemon settlement

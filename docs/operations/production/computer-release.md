@@ -110,7 +110,10 @@ title names the exact version and commit.
    `curl -s https://releases-staging.coforge.cn/0.1.5-dev.3/manifest.json | jq -r .commit`.
 3. Ensure a compatible installer is already published to production, because
    `install.sh` reads `installer/latest` from the same feed. If a new installer
-   is required, publish it first. Its version is `crates/installer/Cargo.toml`'s at the
+   is required, publish it first. A Computer whose daemon hosts call `coforge-installer start`
+   needs the installer release that adds `start` published to this feed's `installer/latest`
+   first: an older cached installer fails with an unknown command and the "ran the cached
+   installer" hint. The installer's version is `crates/installer/Cargo.toml`'s at the
    commit staging published it from
    (`curl -s https://releases-staging.coforge.cn/installer/latest`):
 

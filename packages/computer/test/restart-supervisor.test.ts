@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { SystemdUserDaemonHost, WindowsUserDaemonHost } from "@lrm/coforge-daemon";
+import { recordingRegistrar } from "./recording-registrar";
 import { rejection } from "./rejection";
 import {
   restartSupervisor,
@@ -28,6 +30,7 @@ test("restart --supervisor holds runners, restarts, then releases the hold, in t
   const output: string[] = [];
   const local = fakeLocal();
   const host: RestartSupervisorHost = {
+    async assertRestartable() {},
     async restart() {
       local.calls.push("restart");
     },
@@ -52,6 +55,7 @@ test("restart --supervisor skips the hold and restarts anyway when the Coordinat
     },
   };
   const host: RestartSupervisorHost = {
+    async assertRestartable() {},
     async restart() {
       calls.push("restart");
     },
@@ -83,9 +87,10 @@ test("restart --supervisor refuses a foreground externally supervised Computer w
   expect(local.calls).toEqual([]);
 });
 
-test("restart --supervisor keeps the reason a host without an in-place restartability check reported", async () => {
+test("restart --supervisor keeps the reason a restartable host's own restart reported", async () => {
   const local = fakeLocal();
   const host: RestartSupervisorHost = {
+    async assertRestartable() {},
     async restart() {
       throw new Error(
         "`systemctl --user restart coforge-daemon.service` failed (1): Failed to connect to bus: No medium found. This shell has no systemd user session.",
@@ -97,6 +102,53 @@ test("restart --supervisor keeps the reason a host without an in-place restartab
   expect(error.message).toContain("Failed to connect to bus: No medium found");
   expect(error.message).toContain("no systemd user session");
   expect(error.message).not.toContain("foreground externally supervised");
+});
+
+test("restart --supervisor refuses a systemd Computer with no unit, registering nothing", async () => {
+  const local = fakeLocal();
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const host = new SystemdUserDaemonHost({
+    homeDirectory: "/home/alice",
+    executablePath: "/install/coforge-computer",
+    socketPath: "/run/user/501/coforge/daemon.sock",
+    registrar,
+    run: async (command) => {
+      commands.push(command);
+      return { code: 0, stdout: "not-found\n", stderr: "" };
+    },
+  });
+
+  const error = await rejection(restartSupervisor(host, local, { stdout: () => {} }));
+
+  expect(error.message).toContain("foreground externally supervised Computer");
+  expect(error.message).toContain("coforge-daemon.service");
+  expect(registrar.calls).toBe(0);
+  expect(commands.map((command) => command[2])).toEqual(["show"]);
+  expect(local.calls).toEqual([]);
+});
+
+test("restart --supervisor refuses a Windows Computer with no scheduled task, registering nothing", async () => {
+  const local = fakeLocal();
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const host = new WindowsUserDaemonHost({
+    executablePath: "C:\\Coforge\\coforge-computer.exe",
+    socketPath: "C:\\Users\\alice\\.coforge\\daemon\\daemon.sock",
+    userId: "DESKTOP\\alice",
+    registrar,
+    run: async (command) => {
+      commands.push(command);
+      return 1;
+    },
+  });
+
+  const error = await rejection(restartSupervisor(host, local, { stdout: () => {} }));
+
+  expect(error.message).toContain("foreground externally supervised Computer");
+  expect(registrar.calls).toBe(0);
+  expect(commands.map((command) => command[1])).toEqual(["/Query"]);
+  expect(local.calls).toEqual([]);
 });
 
 test("restart --supervisor on a launchd host rethrows a restart failure unchanged once restartability is confirmed", async () => {

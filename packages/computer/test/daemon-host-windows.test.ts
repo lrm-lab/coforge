@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { WindowsUserDaemonHost, windowsDaemonTaskXml } from "@lrm/coforge-daemon";
 import { acceptingConnect } from "./accepting-connect";
 import { recordingRegistrar } from "./recording-registrar";
+import { rejection } from "./rejection";
 
 const config = {
   workspaceId: "w",
@@ -134,6 +135,34 @@ test("restart of an unregistered task asks the registrar after /End", async () =
   await host.restart();
   expect(registrar.calls).toBe(1);
   expect(commands).toEqual([end, query]);
+});
+
+test("assertRestartable refuses a task Task Scheduler does not know, without registering anything", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar,
+    run: schtasks({ "/Query": 1 }, commands),
+  });
+
+  const error = await rejection(host.assertRestartable());
+
+  expect(error.message).toContain("CoForge Daemon");
+  expect(registrar.calls).toBe(0);
+  expect(commands).toEqual([query]);
+});
+
+test("assertRestartable resolves for a registered task", async () => {
+  const commands: string[][] = [];
+  const host = new WindowsUserDaemonHost({
+    ...options,
+    registrar: recordingRegistrar(),
+    run: schtasks({}, commands),
+  });
+
+  await expect(host.assertRestartable()).resolves.toBeUndefined();
+  expect(commands).toEqual([query]);
 });
 
 test("restart ignores /End's own exit code (the task may already be stopped)", async () => {

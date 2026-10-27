@@ -163,7 +163,7 @@ fn nothing_installed_fails_without_touching_the_service() {
 }
 
 #[test]
-fn inside_the_service_unit_the_start_is_refused() {
+fn inside_the_service_unit_the_start_registers_and_finds_the_service_running() {
     let fixture = Fixture::new("start-inside-unit");
     fixture.install_old();
     let service = FakeService::new(ServiceState::Running { pid: Some(7) }).inside_unit();
@@ -172,14 +172,10 @@ fn inside_the_service_unit_the_start_is_refused() {
 
     let (outcome, stages) = run_start(&fixture, &service, &lifecycle);
 
-    assert_eq!(outcome.exit_code(), EXIT_FAILED);
-    let message = failure_message(outcome);
-    assert!(message.contains("coforge-daemon.service"), "{message}");
-    assert!(message.contains("coforge-computer start"), "{message}");
-    assert!(message.contains("Nothing was changed"), "{message}");
-    // Only the inside-the-unit check read the state: nothing was registered or started.
-    assert_eq!(service.calls(), ["state"]);
-    assert!(stages.is_empty());
+    assert_eq!(outcome.exit_code(), EXIT_SUCCEEDED, "{outcome:?}");
+    // Nothing is stopped: the definition is registered and the running service is only started.
+    assert_eq!(service.calls(), ["install", "start"]);
+    assert_eq!(stages, [REGISTERED, STARTING, STARTED]);
 }
 
 #[test]

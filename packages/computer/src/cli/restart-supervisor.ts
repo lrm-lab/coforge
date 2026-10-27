@@ -7,7 +7,8 @@ import { resolveDaemonSocketPath } from "#src/paths";
 
 /** Platform and local control seams used by `restartSupervisor`. */
 export type RestartSupervisorHost = {
-  assertRestartable?(): Promise<void>;
+  /** Rejects unless the platform manager already runs this Computer's Coordinator service. */
+  assertRestartable(): Promise<void>;
   restart(): Promise<void>;
 };
 export type RestartSupervisorLocal = {
@@ -29,15 +30,12 @@ export async function restartSupervisor(
       `Cannot restart the supervisor of a foreground externally supervised Computer while it is running: ${thrownMessage(cause)} Restart it through its external supervisor, or install the supported user service with \`coforge-computer start\`.`,
       { cause },
     );
-  // launchd only: refuse outright rather than silently falling back to bootstrapping a fresh
-  // user agent, which `restart()`'s own recovery branch would otherwise do for a Computer that
-  // never installed one.
-  if (host.assertRestartable) {
-    try {
-      await host.assertRestartable();
-    } catch (error) {
-      throw foregroundRefusal(error);
-    }
+  // Refuse outright rather than let `restart()`'s recovery branch register a second Coordinator
+  // for a Computer whose platform manager never installed one.
+  try {
+    await host.assertRestartable();
+  } catch (error) {
+    throw foregroundRefusal(error);
   }
   let held = false;
   try {

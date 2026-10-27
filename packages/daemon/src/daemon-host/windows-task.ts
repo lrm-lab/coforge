@@ -171,6 +171,14 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
     if (result !== 0) throw new Error("could not stop the CoForge Daemon user task");
   }
 
+  /** Throws unless Task Scheduler knows the task, as a foreground, externally supervised Computer
+   * never registered one. `restart()` would otherwise ask the registrar for a second Coordinator
+   * beside the supervised one. */
+  async assertRestartable(): Promise<void> {
+    if ((await this.#run(["schtasks.exe", "/Query", "/TN", this.#taskName])) !== 0)
+      throw new Error(`Task Scheduler has no "${this.#taskName}" task.`);
+  }
+
   /** The in-place replacement `coforge-computer restart --supervisor` uses to restart the
    * Coordinator process itself. `/End`'s exit code is ignored - the task may already be
    * stopped, which is not a restart failure - and `/Run` (or the registrar, for a task Task

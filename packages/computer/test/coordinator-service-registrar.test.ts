@@ -1,10 +1,14 @@
 import { expect, test } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { rejection } from "./rejection";
 import { UpdateError } from "#src/updater";
 import { createCoordinatorServiceRegistrar } from "#src/release/coordinator-service-registrar";
 import type { VerifiedInstaller } from "#src/release/installer-launch";
 import type { InstallerRun, InstallerSpawn } from "#src/release/upgrade-runner";
+import { subprocessTest } from "./subprocess-test";
 
 function registrarWith(
   run: Partial<InstallerRun>,
@@ -26,7 +30,7 @@ function registrarWith(
   });
 }
 
-test("registerAndStart runs the installer's plain start with the terminal attached", async () => {
+test("registerAndStart runs the installer's plain start, its progress sent to stderr", async () => {
   const spawned: InstallerSpawn[] = [];
   await registrarWith({ exitCode: 0 }, spawned).registerAndStart();
 
@@ -35,7 +39,7 @@ test("registerAndStart runs the installer's plain start with the terminal attach
       path: "/install-root/installer/abc/coforge-installer",
       args: ["start"],
       stdin: "ignore",
-      stdout: "inherit",
+      stdout: "stderr",
       stderr: "pipe",
     },
   ]);
@@ -98,3 +102,33 @@ test("an installer that cannot be obtained fails with that error and spawns noth
   await expect(registrar.registerAndStart()).rejects.toBe(unreachable);
   expect(spawned).toEqual([]);
 });
+
+subprocessTest(
+  "the installer's progress reaches the Computer's stderr and nothing reaches its stdout",
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "coforge-registrar-"));
+    try {
+      const installer = join(directory, "installer.sh");
+      await writeFile(installer, '#!/bin/sh\necho "==> Registering the service"\nexit 0\n');
+      await chmod(installer, 0o755);
+
+      const child = Bun.spawn({
+        cmd: [process.execPath, join(import.meta.dir, "registrar-subprocess.ts"), installer],
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("==> Registering the service");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

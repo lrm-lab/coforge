@@ -90,6 +90,16 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
     await this.#systemctl("stop");
   }
 
+  /** Throws when systemd reports that it has no such unit (`LoadState=not-found`), as a
+   * foreground, externally supervised Computer never installed one. `restart()` would otherwise
+   * ask the registrar for a second Coordinator beside the supervised one. An answer that is not
+   * `not-found`, or none (no user bus), is left to the `restart()` that follows, which reports
+   * systemd's own reason. */
+  async assertRestartable(): Promise<void> {
+    if (await this.#unregistered())
+      throw new Error(`systemd has no ${this.#serviceName} unit (LoadState=not-found).`);
+  }
+
   /**
    * The in-place replacement `coforge-computer restart --supervisor` uses to restart the
    * Coordinator process itself (not a Workspace runtime). `reset-failed` clears any earlier

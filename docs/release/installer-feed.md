@@ -54,7 +54,11 @@ installer's `file`, `size`, `checksum`, and its `gzip` `file`, `size`,
 `coforge-computer install`, `upgrade`, and server-triggered upgrade fetches it
 fresh for every operation (`release/installer-launch.ts`), so a moved pointer
 applies to the next operation without a Computer release; when the feed is
-unreachable, the Computer uses its most recently used verified cached installer.
+unreachable, or its installer download fails, the Computer uses its most recently used verified
+cached installer. A Computer whose daemon hosts call `coforge-installer start` needs the installer
+release that adds `start` published to this feed's `installer/latest` before that Computer is
+released; an older cached installer rejects `start`, and the Computer's error says it "ran the
+cached installer" so the current one can be fetched once the feed is reachable.
 The installer then
 installs Computer versions from the Computer feed described in
 [Local Computer distribution model](local-distribution.md).

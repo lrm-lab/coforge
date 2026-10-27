@@ -13,12 +13,14 @@ import type { UpgradeOperation } from "./upgrade-operation";
 import { UpgradeFailedError, writeFallbackReceipt } from "./upgrade-receipt";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
-/** How one run of the installer is started. Stdin is always ignored. */
+/** How one run of the installer is started. Stdin is always ignored. `stdout: "stderr"` forwards
+ * the installer's stdout to this process's stderr as it arrives: progress is diagnostics, and a
+ * command that prints one JSON object on stdout must not carry it. */
 export type InstallerSpawn = {
   path: string;
   args: string[];
   stdin: "ignore";
-  stdout: "inherit" | "ignore" | "pipe";
+  stdout: "inherit" | "ignore" | "pipe" | "stderr";
   stderr: "inherit" | "pipe";
 };
 
@@ -63,7 +65,7 @@ export async function defaultSpawnInstaller(spawn: InstallerSpawn): Promise<Inst
   const child = Bun.spawn({
     cmd: [spawn.path, ...spawn.args],
     stdin: spawn.stdin,
-    stdout: spawn.stdout,
+    stdout: spawn.stdout === "stderr" ? "pipe" : spawn.stdout,
     stderr: spawn.stderr,
     windowsHide: true,
   });
@@ -71,8 +73,14 @@ export async function defaultSpawnInstaller(spawn: InstallerSpawn): Promise<Inst
     spawn.stdout === "pipe" ? new Response(child.stdout).text() : Promise.resolve(""),
     spawn.stderr === "pipe" ? new Response(child.stderr).text() : Promise.resolve(""),
     child.exited,
+    spawn.stdout === "stderr" ? forwardToStderr(child.stdout) : Promise.resolve(),
   ]);
   return { exitCode, stdout, stderr };
+}
+
+async function forwardToStderr(stream: ReadableStream<Uint8Array> | undefined): Promise<void> {
+  if (!stream) return;
+  for await (const chunk of stream) process.stderr.write(chunk);
 }
 
 /**

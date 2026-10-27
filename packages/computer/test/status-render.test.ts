@@ -429,12 +429,14 @@ test("each Workspace's detail lines stay under its own summary line", () => {
 });
 
 test("renderStatusHuman states whether the service file matches, is missing, or differs", () => {
-  const line = (serviceDefinition: ServiceDefinitionStatus) =>
-    renderStatusHuman({ ...REPORT, supervisor: { ...REPORT.supervisor, serviceDefinition } }).find(
-      (candidate) => candidate.includes("Service definition"),
-    );
+  const line = (serviceDefinition: ServiceDefinitionStatus, loaded = true) =>
+    renderStatusHuman({
+      ...REPORT,
+      supervisor: { ...REPORT.supervisor, loaded, serviceDefinition },
+    }).find((candidate) => candidate.includes("Service definition"));
 
   expect(line({ state: "matches", path: PLIST_PATH })).toBe("  Service definition:    matches");
+  // The service manager holds the job (a launchd job outlives its deleted plist): repair fixes it.
   expect(line({ state: "missing", path: PLIST_PATH })).toBe(
     "  Service definition:    missing — run coforge-computer repair",
   );
@@ -444,6 +446,22 @@ test("renderStatusHuman states whether the service file matches, is missing, or 
   expect(line({ state: "unreadable", error: "EACCES" })).toBe(
     "  Service definition:    unreadable (EACCES)",
   );
+});
+
+test("renderStatusHuman names repair only where the service manager has the service", () => {
+  const line = (state: "missing" | "differs") =>
+    renderStatusHuman({
+      ...REPORT,
+      supervisor: {
+        ...REPORT.supervisor,
+        loaded: false,
+        serviceDefinition: { state, path: PLIST_PATH },
+      },
+    }).find((candidate) => candidate.includes("Service definition"));
+
+  // A foreground or container Computer, or one not set up, has no service for repair to fix.
+  expect(line("missing")).toBe("  Service definition:    missing");
+  expect(line("differs")).toBe("  Service definition:    differs");
 });
 
 test("renderStatusHuman leaves out the service definition where the report has none", () => {

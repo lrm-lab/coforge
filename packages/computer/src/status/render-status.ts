@@ -63,7 +63,7 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
     "Supervisor",
     `  Coordinator job:       ${terminalText(supervisor.label)}`,
     `  Loaded:                ${supervisor.loaded ? "yes" : "no"}`,
-    ...renderServiceDefinition(supervisor.serviceDefinition),
+    ...renderServiceDefinition(supervisor),
     `  PID:                   ${supervisor.pid ?? "-"}`,
     `  Socket:                ${terminalText(supervisor.socketPath)}`,
     `  Local RPC:             ${
@@ -75,13 +75,16 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
   ];
 }
 
-/** Nothing where the platform keeps no service file to compare. */
-function renderServiceDefinition(status: ComputerStatusReport["supervisor"]["serviceDefinition"]) {
+/** Nothing where the platform keeps no service file to compare. `repair` is named only where the
+ * service manager holds the service: for a foreground or container Computer, or one not set up,
+ * there is no registration for it to fix. */
+function renderServiceDefinition(supervisor: ComputerStatusReport["supervisor"]) {
   const label = "  Service definition:    ";
+  const status = supervisor.serviceDefinition;
   if (!status) return [];
   if (status.state === "unreadable") return [`${label}unreadable (${terminalText(status.error)})`];
   if (status.state === "matches") return [`${label}matches`];
-  return [`${label}${status.state} — run coforge-computer repair`];
+  return [`${label}${status.state}${supervisor.loaded ? " — run coforge-computer repair" : ""}`];
 }
 
 function renderLoginShellPath(status: ComputerStatusReport["loginShellPath"]): string {

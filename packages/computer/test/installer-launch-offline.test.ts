@@ -92,6 +92,44 @@ test("a manifest that cannot be fetched falls back the same way", async () => {
   expect(installer.path).toBe(cached);
 });
 
+test("an installer download that cannot be fetched falls back the same way", async () => {
+  const root = await installRoot();
+  const cached = await seed(root, "0.1.0");
+  const feed = startFixtureFeed(servers);
+  const published = feed.publish("0.2.0");
+  const gzip = published.manifest.platforms[feed.target]!.installer.gzip.file;
+  feed.route(`0.2.0/${feed.target}/${gzip}`, () => new Response("gone", { status: 503 }));
+
+  const installer = await obtainInstaller({
+    feedUrl: feed.url,
+    target: feed.target,
+    installRoot: root,
+    retryDelaysMs: noDelays,
+  });
+
+  expect(installer.path).toBe(cached);
+  expect(installer.version).toBeUndefined();
+});
+
+test("an installer download that cannot be fetched, with nothing cached, is the download failure", async () => {
+  const root = await installRoot();
+  const feed = startFixtureFeed(servers);
+  const published = feed.publish("0.2.0");
+  const gzip = published.manifest.platforms[feed.target]!.installer.gzip.file;
+  feed.route(`0.2.0/${feed.target}/${gzip}`, () => new Response("gone", { status: 503 }));
+
+  const failure = await failureOf(
+    obtainInstaller({
+      feedUrl: feed.url,
+      target: feed.target,
+      installRoot: root,
+      retryDelaysMs: noDelays,
+    }),
+  );
+
+  expect(failure.code).toBe("UPDATE_DOWNLOAD_FAILED");
+});
+
 test("the most recently used intact copy wins over a newer-looking damaged one", async () => {
   const root = await installRoot();
   const first = await seed(root, "0.1.0");

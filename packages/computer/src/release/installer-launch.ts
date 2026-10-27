@@ -103,7 +103,11 @@ export async function obtainInstaller(options: InstallerLaunchOptions): Promise<
       });
     }
     if (cached !== "verified") {
-      await fetchFromFeed(options, work, version, "installer");
+      try {
+        await fetchFromFeed(options, work, version, "installer");
+      } catch (error) {
+        return await cachedInstallerOrThrow(options, error);
+      }
       await placeVerifiedCopy(cache, join(work, entry.gzip.file), entry);
     }
     await markUsed(cache);
@@ -133,7 +137,9 @@ async function readLatestInstaller(
   return { version, entry: await readInstallerEntry(work, version, options.target) };
 }
 
-/** Only an unreachable feed falls back to a copy already on this machine; anything else, and an
+/** Only an unreachable feed falls back to a copy already on this machine, whether it is the
+ * pointer, the manifest, or the installer download itself that cannot be fetched (the wanted
+ * checksum has no intact copy by then, so what is used is an older one); anything else, and an
  * unreachable feed with nothing intact cached, is `failure` itself. */
 async function cachedInstallerOrThrow(
   options: InstallerLaunchOptions,

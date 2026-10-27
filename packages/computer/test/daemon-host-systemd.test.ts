@@ -229,6 +229,51 @@ test("restart of an unregistered unit asks the registrar and changes nothing its
   expect(commands).toEqual([[...show, "coforge-daemon.service"]]);
 });
 
+function systemdHostAnswering(
+  state: ReturnType<typeof loadState> | ReturnType<typeof failed>,
+  commands: string[][],
+  registrar = recordingRegistrar(),
+) {
+  return new SystemdUserDaemonHost({
+    homeDirectory: "/home/alice",
+    executablePath: "/install/coforge-daemon",
+    socketPath: "/run/user/501/coforge/daemon.sock",
+    registrar,
+    run: async (command) => {
+      commands.push(command);
+      return state;
+    },
+  });
+}
+
+test("assertRestartable refuses a unit systemd does not know, without registering anything", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const service = systemdHostAnswering(loadState("not-found"), commands, registrar);
+
+  const error = await rejection(service.assertRestartable());
+
+  expect(error.message).toContain("coforge-daemon.service");
+  expect(error.message).toContain("not-found");
+  expect(registrar.calls).toBe(0);
+  expect(commands).toEqual([[...show, "coforge-daemon.service"]]);
+});
+
+test("assertRestartable resolves for a loaded unit", async () => {
+  await expect(
+    systemdHostAnswering(loadState("loaded"), []).assertRestartable(),
+  ).resolves.toBeUndefined();
+});
+
+test("assertRestartable leaves a systemctl that cannot answer to the restart that follows", async () => {
+  await expect(
+    systemdHostAnswering(
+      failed("Failed to connect to bus: No medium found"),
+      [],
+    ).assertRestartable(),
+  ).resolves.toBeUndefined();
+});
+
 test("a validated injected service name isolates native lifecycle integration", async () => {
   const commands: string[][] = [];
   const service = new SystemdUserDaemonHost({

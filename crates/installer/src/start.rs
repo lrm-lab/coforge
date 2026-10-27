@@ -8,12 +8,17 @@
 //! report one cannot be started this way. The Computer checks that the supervisor answers after
 //! this returns. Whether a manager keeps a running service's registration as it is, is the
 //! backend's decision (`Registered::LeftRunning`), not this command's.
+//!
+//! `start` stops nothing, so it has no caller to spare and needs no refusal from inside the
+//! service's own unit: there it registers without restarting (launchd writes the file only,
+//! systemd writes it and reloads without restarting, Windows leaves a running task) and finds
+//! the service running.
 
 use crate::active::read_active;
 use crate::contract::{EXIT_FAILED, EXIT_HELD, EXIT_SUCCEEDED};
 use crate::lifecycle::reported_service_definition;
 use crate::lock::{LockError, MachineMutationLock};
-use crate::switch::{Ports, refusal_inside_service};
+use crate::switch::Ports;
 
 /// How a start ended, for the CLI to print and exit with.
 #[derive(Debug, PartialEq, Eq)]
@@ -22,8 +27,7 @@ pub enum Outcome {
     Started { version: String },
     /// Another install, upgrade, recovery, or repair holds the lock. Nothing changed.
     Held { message: String },
-    /// The service could not be registered or started, or this process runs inside the service's
-    /// own unit.
+    /// The service could not be registered or started.
     Failed { message: String },
 }
 
@@ -38,10 +42,6 @@ impl Outcome {
 }
 
 pub fn start(ports: &Ports<'_>, stage: &mut dyn FnMut(&str)) -> Outcome {
-    match refusal_inside_service(ports.service, "Start", "coforge-computer start") {
-        Ok(None) => {}
-        Ok(Some(message)) | Err(message) => return failed(message),
-    }
     let _lock = match MachineMutationLock::acquire(ports.install_root) {
         Ok(lock) => lock,
         Err(LockError::Busy) => {

@@ -19,3 +19,7 @@ Rules for login-session startup in `src/daemon-host/`. They extend
 - The service-control calls the hosts keep: `stop()`, systemd `start`/`restart`, Windows `/Run` and
   `/End` of a registered task, and launchd `restart()`'s `kickstart -k` of a loaded label, which
   restarts in place and registers nothing - the one such call the Computer still makes itself.
+- Every host exposes `assertRestartable()`, which `coforge-computer restart --supervisor` calls
+  before it restarts anything: it rejects when the manager does not know the service (launchd not
+  loaded; systemd `LoadState=not-found`; Windows `schtasks /Query` fails), so a foreground,
+  externally supervised Computer is refused instead of getting a second Coordinator registered.
