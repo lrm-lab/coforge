@@ -222,7 +222,9 @@ export function useRangeSurface(
           const marked = Array.from({ length: last - range.start + 1 }, (_, i) =>
             element(range.start + i),
           ).filter((found): found is Element => found !== null);
-          marked[0]?.scrollIntoView({ block: "center", behavior: "smooth" });
+          // Instant, not smooth: rows a smooth scroll passes over render on the way at their real
+          // height, not the estimated one, so its precomputed end lands far from the range.
+          marked[0]?.scrollIntoView({ block: "center" });
           for (const found of marked) found.classList.add(RANGE_HIGHLIGHT);
           setTimeout(() => {
             for (const found of marked) found.classList.remove(RANGE_HIGHLIGHT);
