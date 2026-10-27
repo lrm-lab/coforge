@@ -8,7 +8,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { m } from "#src/paraglide/messages";
-import type { ComputerDetailView } from "./computer-detail";
+import type { ComputerDetailView } from "./computer-detail-view";
 import { computerLabel } from "./computer-identity";
 import { RuntimeChip } from "./runtime-chip";
 import { RuntimeSignInDialog, unsupportedText } from "./runtime-sign-in-dialog";

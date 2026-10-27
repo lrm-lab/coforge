@@ -2,23 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   Edit01 as Pencil,
-  Plus,
-  FolderSearch,
   RefreshCw01 as RotateCw,
   Terminal,
   Trash01 as Trash,
 } from "@untitledui/icons";
-import { useHydrated } from "@tanstack/react-router";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { Checkbox as AriaCheckbox } from "react-aria-components";
-import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
-import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
-import { formatCalendarDate, formatDateForDisplay } from "#src/lib/dates";
-import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useAppToast } from "#src/components/ui/toast";
@@ -27,13 +19,11 @@ import { m } from "#src/paraglide/messages";
 import { TerminalCommand } from "./terminal-command";
 import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
 import { ComputerDetailHeader } from "./computer-detail-header";
-import { formatWorkspaceSize } from "./workspace-size";
 import {
   computerImageVersionLabel,
   computerLabel,
   computerVersionLabel,
   operatingSystemLabel,
-  type ComputerIdentity,
 } from "./computer-identity";
 import { DetailGroup, DetailRow } from "./computer-detail-rows";
 import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
@@ -52,71 +42,24 @@ import {
   type ComputerUpgradeRequest,
 } from "./computer-upgrade-slot";
 import { ComputerRuntimeList } from "./computer-runtimes";
-import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil";
-import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
-import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
 import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
-import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
-import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
-import { AgentControlDialogs } from "#src/features/agents/agent-control-dialogs";
-import {
-  useAgentRuntimeControls,
-  type AgentControlExecute,
-} from "#src/features/agents/agent-runtime-controls";
-import type {
-  ComputerAgentWorkspaceScan,
-  ComputerRestartStatus,
-  ComputerUpgradeStatus,
-} from "./computer.schemas";
+import type { AgentControlExecute } from "#src/features/agents/agent-runtime-controls";
+import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { ComputerRemoveAction } from "./computer-remove-action";
+import { ComputerDetailAgentRoster } from "./computer-detail-agent-roster";
+import { ComputerDate } from "./computer-detail-date";
+import {
+  RESTART_MAX_POLLS,
+  RESTART_POLL_INTERVAL_MS,
+  type ComputerDetailView,
+} from "./computer-detail-view";
+import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
 
-export const RESTART_POLL_INTERVAL_MS = 2_000;
-export const RESTART_MAX_POLLS = 31;
-
-export type ComputerDetailView = ComputerIdentity & {
-  id: string;
-  ownedByCurrentUser: boolean;
-  canManageAgents: boolean;
-  online: boolean;
-  /** A rescan of its runtimes is in flight; the runtimes listed are the last confirmed ones. */
-  runtimeDetecting?: boolean;
-  connectedAt: Date | string;
-  computerVersion?: string | null;
-  /** The cloud image this computer is running. Absent for a local computer. */
-  imageVersion?: string | null;
-  imageUpdate?: { version: string } | null;
-  /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
-  upgrade?: ComputerUpgradeStatus | null;
-  platform?: string | null;
-  osVersion?: string | null;
-  creator?: {
-    displayName: string | null;
-    username: string;
-    avatarUrl: string | null;
-  };
-  /** Each visible login-capable runtime's status, account fields only for those allowed them. */
-  runtimeAuth?: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>>;
-  runtimes: {
-    id: string;
-    provider: RuntimeProvider;
-    version: string;
-    displayName: string;
-    isPublic: boolean;
-  }[];
-  agents: {
-    id: string;
-    name: string;
-    displayName: string;
-    avatarUrl: string | null;
-    provider: RuntimeProvider;
-    runtimeConfig: { model?: string; modelProvider?: string };
-    display?: AgentDisplaySnapshot;
-  }[];
-};
+export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
 
 /**
  * One Computer's detail panel: what this machine is, which Code Agents it
@@ -538,7 +481,7 @@ export function ComputerDetail({
             </div>
           </DetailGroup>
 
-          <AgentRoster
+          <ComputerDetailAgentRoster
             agents={computer.agents}
             onCreateAgent={
               onCreateAgent && onLoadRuntimeCatalog ? () => setCreateAgentOpen(true) : undefined
@@ -549,7 +492,7 @@ export function ComputerDetail({
             computerOnline={computer.online}
             computerName={label}
           />
-          <WorkspaceInventory
+          <ComputerDetailWorkspaceInventory
             snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
             status={workspaceScanStatus}
             timeZone={timeZone}
@@ -686,414 +629,5 @@ export function ComputerDetail({
         />
       )}
     </>
-  );
-}
-
-function AgentRoster({
-  agents,
-  onCreateAgent,
-  onSelectAgent,
-  onExecute,
-  canFullReset,
-  computerOnline,
-  computerName,
-}: {
-  agents: ComputerDetailView["agents"];
-  onCreateAgent?: () => void;
-  onSelectAgent?: (agentId: string) => void;
-  onExecute?: AgentControlExecute;
-  canFullReset: boolean;
-  computerOnline: boolean;
-  computerName: string;
-}) {
-  const [selecting, setSelecting] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-  const [failedNames, setFailedNames] = useState<string[]>([]);
-  const selectedAgents = agents.filter((agent) => selectedIds.has(agent.id));
-  const selectionName = selectedAgents.map((agent) => agent.displayName).join(", ");
-  const control = useAgentRuntimeControls({
-    agentId: selectedAgents[0]?.id ?? "",
-    agentName: selectionName,
-    canFullReset,
-    computerOnline,
-    computerLabel: computerName,
-    onExecute: async (request) => {
-      if (!onExecute || !selectedAgents.length || busy) return;
-      setBusy(true);
-      setFailedNames([]);
-      try {
-        const results = await Promise.allSettled(
-          selectedAgents.map((agent) =>
-            onExecute({ ...request, agentId: agent.id, requestId: crypto.randomUUID() }),
-          ),
-        );
-        const failed = selectedAgents.filter(
-          (_agent, index) => results[index]?.status === "rejected",
-        );
-        setFailedNames(failed.map((agent) => agent.displayName));
-        if (failed.length) throw new Error("Some Agent control requests failed");
-      } finally {
-        setBusy(false);
-      }
-    },
-  });
-  const locked = busy || control.stopConfirmOpen || control.restartOpen;
-  return (
-    <>
-      <DetailGroup
-        heading={`${m.computer_agents_on_computer()} (${agents.length})`}
-        headingId="computer-agents-on-computer"
-        action={
-          <div className="flex flex-wrap justify-end gap-2">
-            {selecting ? (
-              <>
-                <Button
-                  size="sm"
-                  color="secondary"
-                  isDisabled={locked}
-                  onPress={() =>
-                    setSelectedIds(
-                      selectedAgents.length === agents.length
-                        ? new Set()
-                        : new Set(agents.map((agent) => agent.id)),
-                    )
-                  }
-                >
-                  {selectedAgents.length === agents.length
-                    ? m.computer_agents_clear_all()
-                    : m.computer_agents_select_all()}
-                </Button>
-                <Button
-                  size="sm"
-                  color="tertiary"
-                  isDisabled={locked}
-                  onPress={() => {
-                    setSelecting(false);
-                    setSelectedIds(new Set());
-                    setFailedNames([]);
-                  }}
-                >
-                  {m.controls_cancel()}
-                </Button>
-              </>
-            ) : (
-              <>
-                {onExecute && agents.length > 0 && (
-                  <Button size="sm" color="secondary" onPress={() => setSelecting(true)}>
-                    {m.computer_agent_select()}
-                  </Button>
-                )}
-                {onCreateAgent && (
-                  <Button size="sm" color="secondary" iconLeading={Plus} onPress={onCreateAgent}>
-                    {m.computer_agent_create()}
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        }
-      >
-        {selecting && selectedAgents.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 py-3">
-            <span className="mr-auto text-sm text-tertiary">
-              {m.computer_agents_selected({ count: String(selectedAgents.length) })}
-            </span>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={locked}
-              onPress={control.pressStartOrStop}
-            >
-              {m.agent_control_start()}
-            </Button>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={locked}
-              onPress={() => control.setStopConfirmOpen(true)}
-            >
-              {m.agent_control_stop()}
-            </Button>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={locked}
-              onPress={() => control.openRestart()}
-            >
-              {m.agent_control_restart_reset_tooltip()}
-            </Button>
-          </div>
-        )}
-        {failedNames.length > 0 && (
-          <p role="alert" className="py-2 text-sm text-error-primary">
-            {m.computer_agents_control_failed({ names: failedNames.join(", ") })}
-          </p>
-        )}
-        {control.startDeferred && (
-          <p className="py-2 text-sm text-tertiary">
-            {m.agent_control_start_deferred_notice({ computer: computerName })}
-          </p>
-        )}
-        {agents.length ? (
-          <ul className="divide-y divide-secondary">
-            {agents.map((agent) => {
-              const handle = (
-                <span className="ml-auto shrink-0 text-xs text-tertiary">@{agent.name}</span>
-              );
-              const toggle = (selected: boolean) =>
-                setSelectedIds((current) => {
-                  const next = new Set(current);
-                  if (selected) next.add(agent.id);
-                  else next.delete(agent.id);
-                  return next;
-                });
-              return (
-                <li key={agent.id}>
-                  {selecting ? (
-                    // While selecting, the whole row is the checkbox's own label: one control, so a
-                    // click anywhere toggles selection and nothing interactive nests inside
-                    // anything else interactive. Same shape as the channel member picker.
-                    <AriaCheckbox
-                      aria-label={m.computer_agent_select_named({ name: agent.displayName })}
-                      isDisabled={locked}
-                      isSelected={selectedIds.has(agent.id)}
-                      onChange={toggle}
-                      className="flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed"
-                    >
-                      {({ isSelected, isDisabled, isFocusVisible }) => (
-                        <>
-                          <CheckboxBase
-                            isSelected={isSelected}
-                            isDisabled={isDisabled}
-                            isFocusVisible={isFocusVisible}
-                          />
-                          <AgentRosterIdentity agent={agent} />
-                          {handle}
-                        </>
-                      )}
-                    </AriaCheckbox>
-                  ) : onSelectAgent ? (
-                    // Otherwise the row itself opens the Agent — no trailing "Open" button to aim
-                    // at. Its accessible name is its own content (name, runtime, handle). The
-                    // official Button carries the row: `h-auto`/`py-3` keep the list's rhythm,
-                    // `rounded-none px-0` let the hover fill the row, and `font-normal` leaves the
-                    // runtime line at its own weight instead of the Button's semibold.
-                    <Button
-                      color="tertiary"
-                      size="sm"
-                      onPress={() => onSelectAgent(agent.id)}
-                      className="h-auto w-full justify-start rounded-none px-0 py-3 text-left font-normal *:data-text:w-full *:data-text:min-w-0"
-                    >
-                      <span className="flex w-full min-w-0 items-center gap-3">
-                        <AgentRosterIdentity agent={agent} />
-                        {handle}
-                      </span>
-                    </Button>
-                  ) : (
-                    <span className="flex w-full items-center gap-3 py-3 text-sm">
-                      <AgentRosterIdentity agent={agent} />
-                      {handle}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="py-6 text-center text-sm text-tertiary">
-            {m.computer_no_agents_on_computer()}
-          </p>
-        )}
-      </DetailGroup>
-      <AgentControlDialogs agentName={selectionName} control={control} />
-    </>
-  );
-}
-
-function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][number] }) {
-  const display = useLiveAgentDisplay(agent.id) ?? agent.display;
-  return (
-    <>
-      <AgentDisplayAvatar
-        agentId={agent.id}
-        name={agent.displayName}
-        src={agent.avatarUrl}
-        display={display}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium text-primary">{agent.displayName}</span>
-        <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-tertiary">
-          <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
-          <span className="truncate">
-            {runtimeProviderLabel(agent.provider)}
-            {agent.runtimeConfig.model ? ` · ${agent.runtimeConfig.model}` : ""}
-          </span>
-        </span>
-      </span>
-    </>
-  );
-}
-
-function WorkspaceInventory({
-  snapshot,
-  status,
-  timeZone,
-  canScan,
-  onScan,
-  canDelete,
-  onDelete,
-}: {
-  snapshot: AgentWorkspaceScanSnapshot | null;
-  status: "idle" | "scanning" | "error";
-  timeZone: string | null;
-  canScan: boolean;
-  onScan: () => void;
-  canDelete: boolean;
-  onDelete: (agentId: string) => Promise<void>;
-}) {
-  const [deleteTarget, setDeleteTarget] = useState<ComputerAgentWorkspaceScan | undefined>();
-  const hydrated = useHydrated();
-  const deletedCount = snapshot
-    ? snapshot.workspaces.filter((item) => item.state === "deleted").length
-    : 0;
-  return (
-    <DetailGroup
-      heading={m.computer_agent_workspaces()}
-      headingId="computer-agent-workspaces"
-      action={
-        canScan ? (
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            iconLeading={FolderSearch}
-            isLoading={status === "scanning"}
-            showTextWhileLoading
-            onPress={onScan}
-          >
-            {status === "scanning"
-              ? m.computer_agent_workspaces_scanning()
-              : m.computer_agent_workspaces_scan()}
-          </Button>
-        ) : undefined
-      }
-    >
-      {status === "error" && (
-        <p role="alert" className="py-4 text-sm text-error-primary">
-          {m.computer_agent_workspaces_error()}
-        </p>
-      )}
-      {snapshot && (
-        <p className="pt-3 text-xs text-tertiary">
-          <time dateTime={new Date(snapshot.scannedAt).toISOString()}>
-            {m.computer_agent_workspaces_scanned_at({
-              // The viewer's saved zone and the UI language (`lib/AGENTS.md`); the server render
-              // knows neither, so the time appears once the page is hydrated.
-              date: hydrated
-                ? formatDateForDisplay(new Date(snapshot.scannedAt), timeZone, getLocale())
-                : "",
-            })}
-          </time>
-        </p>
-      )}
-      {!snapshot ? (
-        status === "scanning" ? (
-          <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_scanning()}</p>
-        ) : status === "idle" ? (
-          <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_prompt()}</p>
-        ) : null
-      ) : snapshot.workspaces.length ? (
-        <>
-          {deletedCount > 0 && (
-            <p className="py-3 text-sm text-tertiary">
-              {m.computer_agent_workspaces_deleted_summary({ count: String(deletedCount) })}
-            </p>
-          )}
-          <ul className="divide-y divide-secondary">
-            {snapshot.workspaces.map((workspace) => (
-              <li
-                key={workspace.agentId}
-                className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-primary">
-                      {workspace.displayName}
-                    </span>
-                    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-tertiary">
-                      {workspace.state === "deleted"
-                        ? m.computer_agent_workspace_deleted()
-                        : m.computer_agent_workspace_active()}
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate font-mono text-xs text-tertiary">
-                    {workspace.rootPath}
-                  </p>
-                  <p className="mt-1 text-xs text-tertiary">
-                    {workspace.status === "present"
-                      ? m.computer_agent_workspace_stats({
-                          files: String(workspace.fileCount),
-                          size: formatWorkspaceSize(workspace.totalSizeBytes),
-                        })
-                      : workspace.status === "missing"
-                        ? m.computer_agent_workspace_missing()
-                        : workspace.status === "partial"
-                          ? m.computer_agent_workspace_partial()
-                          : m.computer_agent_workspace_unavailable()}
-                  </p>
-                  {workspace.modifiedAtMs > 0 && (
-                    <p className="mt-1 text-xs text-tertiary">
-                      {m.computer_agent_workspace_modified({
-                        date: new Date(workspace.modifiedAtMs).toLocaleString(),
-                      })}
-                    </p>
-                  )}
-                </div>
-                {canDelete && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    color="tertiary-destructive"
-                    isDisabled={workspace.status !== "present" && workspace.status !== "partial"}
-                    onPress={() => setDeleteTarget(workspace)}
-                  >
-                    {m.computer_agent_workspace_delete()}
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
-      )}
-      <ConfirmDialog
-        open={deleteTarget !== undefined}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(undefined);
-        }}
-        title={m.computer_agent_workspace_delete_title({ name: deleteTarget?.displayName ?? "" })}
-        description={m.computer_agent_workspace_delete_description()}
-        confirmLabel={m.computer_agent_workspace_delete()}
-        errorMessage={m.computer_agent_workspace_delete_error()}
-        onConfirm={async () => {
-          if (!deleteTarget) return;
-          await onDelete(deleteTarget.agentId);
-          setDeleteTarget(undefined);
-        }}
-      />
-    </DetailGroup>
-  );
-}
-
-/** The day this Computer joined the Workspace, in the viewer's zone once the page is hydrated. */
-function ComputerDate({ value, timeZone }: { value: Date | string; timeZone: string | null }) {
-  const hydrated = useHydrated();
-  const instant = new Date(value).toISOString();
-  return (
-    <time dateTime={instant}>
-      {hydrated ? formatCalendarDate(value, timeZone, getLocale()) : " "}
-    </time>
   );
 }
