@@ -1,15 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { AppError } from "#src/lib/app-error";
-import { humanLabel } from "#src/lib/human-label";
-import { VISIBLE_CONVERSATION_WHERE } from "#src/server/conversations/active-member.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import {
-  attachmentView,
-  ATTACHMENT_VIEW_SELECT,
-} from "#src/server/attachments/attachment-view.server";
-import { isInlineImage } from "#src/server/attachments/attachment-response.server";
+import { listConversationFiles } from "#src/server/conversations/conversation-files.server";
 
 export type ConversationFile = {
   id: string;
@@ -36,41 +29,10 @@ export type ConversationFile = {
 export const loadConversationFiles = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ conversationId: z.uuid() }))
-  .handler(async ({ context, data }) => {
-    const { user, db, workspaceId } = context;
-    // Files carry no per-attachment ACL of their own: the visibility boundary is the
-    // conversation's membership, the same one that gates the messages the files ride on.
-    // A channel hidden from the Workspace shows its files to nobody until it is restored.
-    const member = await db.conversationMember.findFirst({
-      where: {
-        conversationId: data.conversationId,
-        userId: user.id,
-        conversation: VISIBLE_CONVERSATION_WHERE,
-      },
-      select: { id: true },
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    return listConversationFiles(db, {
+      workspaceId,
+      userId: user.id,
+      conversationId: data.conversationId,
     });
-    if (!member) throw new AppError("ACCESS_DENIED");
-    const attachments = await db.attachment.findMany({
-      where: { conversationId: data.conversationId, workspaceId },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-      select: {
-        ...ATTACHMENT_VIEW_SELECT,
-        createdAt: true,
-        message: { select: { id: true } },
-        uploader: { select: { username: true, displayName: true } },
-        uploaderAgent: { select: { displayName: true, name: true } },
-      },
-    });
-    return {
-      files: attachments.map((attachment) => ({
-        ...attachmentView(attachment),
-        createdAt: attachment.createdAt.toISOString(),
-        inlineImage: isInlineImage(attachment.contentType),
-        sender: attachment.uploader
-          ? humanLabel(attachment.uploader)
-          : attachment.uploaderAgent?.displayName || attachment.uploaderAgent?.name || "",
-        messageId: attachment.message?.id ?? null,
-      })),
-    };
   });
