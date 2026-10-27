@@ -126,6 +126,11 @@ export function dockerActivateRuntimeArgs(containerId: string, version: string):
   return args;
 }
 
+/** Asks the in-container supervisor to replace the running program. */
+export function dockerRestartRuntimeArgs(containerId: string): string[] {
+  return ["exec", containerId, "/usr/local/bin/restart-computer-runtime.sh"];
+}
+
 export function dockerServiceUpdateArgs(computerId: string, image: string): string[] {
   return [
     "service",
@@ -255,7 +260,7 @@ export interface ContainerRuntime {
   attachWorkspace(input: { computerId: string; env: Record<string, string> }): Promise<void>;
   /** Replaces the running image. The named volume stays mounted. */
   updateServiceImage(computerId: string, image: string): Promise<void>;
-  /** Installs a published runtime onto the volume, then restarts the same image. */
+  /** Installs a published runtime onto the volume, then restarts that program. */
   activateRuntime(computerId: string, version: string): Promise<void>;
   inspectPlacement(image: string): Promise<HostImagePlacement>;
   /** Address of the browser desktop inside a running cloud computer. */
@@ -328,7 +333,13 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       );
       if (!containerId) throw new Error("cloud computer task is not running");
       await run(spawn, dockerActivateRuntimeArgs(containerId, version), "docker exec failed");
-      await run(spawn, dockerServiceRestartArgs(computerId), "docker service update failed");
+      const restarted = await spawn(dockerRestartRuntimeArgs(containerId));
+      if (restarted.exitCode === 0) return;
+      if (runtimeSupervisorMissing(restarted.stderr, restarted.stdout)) {
+        await run(spawn, dockerServiceRestartArgs(computerId), "docker service update failed");
+        return;
+      }
+      throw new Error(restarted.stderr || restarted.stdout || "runtime restart failed");
     },
     async desktopEndpoint(computerId) {
       const listed = await spawn(dockerTaskFindArgs(computerId));
@@ -385,6 +396,11 @@ async function localImageReference(spawn: DockerSpawn, image: string): Promise<s
       );
   await keepPinnedImageTagged(spawn, pinned);
   return pinned;
+}
+
+function runtimeSupervisorMissing(stderr: string, stdout: string): boolean {
+  const text = `${stderr}\n${stdout}`;
+  return /no such file or directory/i.test(text) || /not the runtime supervisor/.test(text);
 }
 
 async function keepPinnedImageTagged(spawn: DockerSpawn, image: string): Promise<void> {
