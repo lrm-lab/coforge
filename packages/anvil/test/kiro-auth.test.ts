@@ -208,6 +208,53 @@ test("a long native waiting spinner does not exhaust a healthy enterprise login"
   expect(x.events).toHaveLength(1);
 });
 
+test("Kiro logout accepts whoami's explicit null account response", async () => {
+  const logout = child();
+  const probe = child();
+  const adapter = new KiroRuntimeAuthAdapter({
+    enterpriseLoginSupported: true,
+    maskAccountLabel: () => undefined,
+    spawn(args) {
+      if (args[0] === "logout") {
+        logout.end();
+        return logout.process;
+      }
+      probe.send('{"account":null}\n');
+      probe.end(1);
+      return probe.process;
+    },
+  });
+
+  await expect(adapter.logout({ workingDirectory: "/test" })).resolves.toEqual({
+    status: "logged_out",
+    authStatus: { provider: "kiro", state: "logged_out" },
+  });
+});
+
+for (const [exitCode, account, state] of [
+  [0, null, "logged_out"],
+  [1, null, "logged_out"],
+  [0, {}, "logged_in"],
+  [1, {}, "logged_in"],
+] as const)
+  test(`Kiro whoami account structure wins over exit code (${exitCode}, ${state})`, async () => {
+    const probe = child();
+    const adapter = new KiroRuntimeAuthAdapter({
+      enterpriseLoginSupported: true,
+      maskAccountLabel: () => undefined,
+      spawn() {
+        probe.send(JSON.stringify({ account }) + "\n");
+        probe.end(exitCode);
+        return probe.process;
+      },
+    });
+
+    await expect(adapter.readStatus({ workingDirectory: "/test" })).resolves.toMatchObject({
+      provider: "kiro",
+      state,
+    });
+  });
+
 for (const missingExecutable of [true, false]) {
   test(`Kiro host failure classifies ${missingExecutable ? "missing executable" : "missing cwd"} correctly`, async () => {
     const adapter = new KiroRuntimeAuthAdapter({

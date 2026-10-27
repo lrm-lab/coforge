@@ -66,13 +66,22 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
         () => new KiroAuthFailure("timed_out"),
       );
       const data = identity(text);
-      if (code !== 0)
+      if (data && "account" in data) {
+        if (data.account === null)
+          return { status: { provider: this.provider, state: "logged_out" } };
         return {
+          data,
           status: {
             provider: this.provider,
-            state: /not logged in|not signed in/iu.test(text) ? "logged_out" : "unknown",
+            state: "logged_in",
+            ...runtimeAuthAccount({
+              maskedLabel:
+                typeof data.email === "string" ? this.host.maskAccountLabel(data.email) : undefined,
+            }),
           },
         };
+      }
+      if (code !== 0) return { status: { provider: this.provider, state: "unknown" } };
       if (!data || typeof data.accountType !== "string")
         return { status: { provider: this.provider, state: "unknown" } };
       return {
