@@ -28,19 +28,20 @@ export type RuntimeSelection = {
 };
 
 /**
- * Whether the Reasoning field renders and which value the form submits for it. The field shows
- * only when the selected model is in the loaded catalog and reports at least one reasoning level.
- * A catalog model with no levels submits "" so a saved level it cannot accept is cleared. While the
- * model is not in the catalog (loading, load failed, configured model missing) the saved value is
- * submitted unchanged.
+ * Whether the Reasoning field renders and which value the form submits for it. `efforts` are the
+ * selected model's levels: from the loaded catalog, or for Command Code, whose catalog carries
+ * none, from the read for that model. The field shows only when they include at least one level,
+ * and a level they do not list submits "" (the provider default). While they are unknown (catalog
+ * loading or failed, model missing, Command Code read running or failed) the field stays hidden
+ * and the current value is submitted unchanged: the saved level for the Agent's own model, the
+ * model default for any other.
  */
 export function reasoningFieldState(
-  selectedModel: CodeAgentModelMetadata | undefined,
+  efforts: readonly string[] | undefined,
   reasoning: string,
 ): { visible: boolean; submitted: string } {
-  if (!selectedModel) return { visible: false, submitted: reasoning };
-  const visible = selectedModel.reasoningEfforts.length > 0;
-  return { visible, submitted: visible ? reasoning : "" };
+  if (!efforts) return { visible: false, submitted: reasoning };
+  return { visible: efforts.length > 0, submitted: efforts.includes(reasoning) ? reasoning : "" };
 }
 
 /**

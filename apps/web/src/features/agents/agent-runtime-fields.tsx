@@ -35,6 +35,7 @@ import {
 } from "./agent-runtime-fields-state";
 import { RUNTIME_PROVIDER_DISPLAY_ORDER, runtimeProviderLabel } from "./runtime-provider-display";
 import { RuntimeProviderMark } from "./runtime-provider-mark";
+import { useCommandCodeEfforts } from "./use-command-code-efforts";
 import { useRuntimeCatalogRefresh } from "./use-runtime-catalog-refresh";
 
 export * from "./agent-runtime-fields-state";
@@ -202,8 +203,13 @@ export function AgentRuntimeFields({
   const modelValue = customModelActive
     ? (customSplit?.model ?? "")
     : (selectedModel?.id ?? (modelKey === initialModelKey ? initial?.model : ""));
+  // Command Code's catalog carries no efforts; they are read for the selected model.
+  const effortModelId =
+    provider === RUNTIME_PROVIDER.COMMAND_CODE && !failed ? (modelValue ?? "").trim() : "";
+  const readEfforts = useCommandCodeEfforts({ open, computerId, modelId: effortModelId });
+  const efforts = effortModelId ? readEfforts : selectedModel?.reasoningEfforts;
   const { visible: reasoningVisible, submitted: submittedReasoning } = reasoningFieldState(
-    selectedModel,
+    efforts,
     reasoning,
   );
   const { visible: fastModeVisible, submitted: submittedFastMode } = fastModeFieldState(
@@ -363,7 +369,12 @@ export function AgentRuntimeFields({
                   if (model?.modelProvider !== modelProvider) setApiKey("");
                   setModelProvider(model?.modelProvider ?? "");
                 }
-                setReasoning(model?.defaultReasoning ?? "");
+                // The Agent's own model comes back with its saved level, not the model default.
+                setReasoning(
+                  value === initialModelKey && provider === initial?.provider
+                    ? initial.reasoning
+                    : (model?.defaultReasoning ?? ""),
+                );
               }}
             >
               <Select.Item
@@ -473,8 +484,8 @@ export function AgentRuntimeFields({
       <input type="hidden" name="fastMode" value={submittedFastMode ? "true" : ""} />
       {reasoningVisible && (
         <AgentReasoningField
-          efforts={selectedModel?.reasoningEfforts ?? []}
-          value={reasoning}
+          efforts={efforts ?? []}
+          value={submittedReasoning}
           onChange={setReasoning}
         />
       )}

@@ -91,6 +91,10 @@ function modelMatches(value: unknown, config: AgentRuntimeSelection): boolean {
   return (
     id === config.model &&
     modelProvider === config.modelProvider &&
-    (!config.reasoning || (Array.isArray(efforts) && efforts.includes(config.reasoning)))
+    (!config.reasoning ||
+      // Command Code reports a model's efforts only after a session switches to it
+      // (`readCommandCodeReasoningEfforts`), so its catalog cannot list them.
+      config.provider === RUNTIME_PROVIDER.COMMAND_CODE ||
+      (Array.isArray(efforts) && efforts.includes(config.reasoning)))
   );
 }

@@ -83,4 +83,26 @@ describe("agentRuntimeSelectionIsAvailable", () => {
       ),
     ).toBe(false);
   });
+
+  test("accepts a Command Code level its catalog cannot list", () => {
+    // Command Code reports a model's efforts only after a session switches to it, so its catalog
+    // models carry none.
+    const commandCodeModel = { id: "claude-opus", modelProvider: "", reasoningEfforts: [] };
+    expect(
+      agentRuntimeSelectionIsAvailable(
+        {
+          provider: RUNTIME_PROVIDER.COMMAND_CODE,
+          model: "claude-opus",
+          modelProvider: "",
+          reasoning: "high",
+          hasApiKey: false,
+        },
+        {
+          connected: true,
+          providers: new Set([RUNTIME_PROVIDER.COMMAND_CODE]),
+          models: [commandCodeModel],
+        },
+      ),
+    ).toBe(true);
+  });
 });

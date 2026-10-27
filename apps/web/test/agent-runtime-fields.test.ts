@@ -45,16 +45,14 @@ test("model unknown (no catalog match yet): field hidden, current reasoning subm
 });
 
 test("model known with no reasoning levels: field hidden, submitted reasoning forced to empty", () => {
-  const known = model({ reasoningEfforts: [] });
-  expect(reasoningFieldState(known, "medium")).toEqual({
+  expect(reasoningFieldState([], "medium")).toEqual({
     visible: false,
     submitted: "",
   });
 });
 
 test("model known with reasoning levels: field shown, current reasoning submitted as-is", () => {
-  const known = model({ reasoningEfforts: ["low", "medium", "high"] });
-  expect(reasoningFieldState(known, "high")).toEqual({
+  expect(reasoningFieldState(["low", "medium", "high"], "high")).toEqual({
     visible: true,
     submitted: "high",
   });
@@ -249,4 +247,8 @@ test("opens not-dirty: a saved custom model absent from the Pi catalog preselect
       initial,
     }),
   ).toBe(false);
+});
+
+test("a level the model does not list falls back to the provider default", () => {
+  expect(reasoningFieldState(["off", "high", "max"], "low").submitted).toBe("");
 });
