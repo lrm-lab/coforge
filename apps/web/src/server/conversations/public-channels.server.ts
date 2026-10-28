@@ -51,8 +51,8 @@ import { agentMessageSender } from "./sender-display.server";
 import { channelListPreviews } from "./channel-list-preview.server";
 import {
   browserMessageFields,
+  browserMessageUpdates,
   mapBrowserMessage,
-  messagesArrivedWhere,
 } from "./conversation-history.server";
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
@@ -1911,12 +1911,12 @@ export class PublicChannels {
     afterReplySequence?: number,
   ) {
     await this.channel(workspaceId, userId, channelId);
-    const messages = await this.db.message.findMany({
-      where: messagesArrivedWhere(channelId, afterSequence, afterReplySequence),
-      orderBy: { sequence: "asc" },
-      take: 100,
-      select: browserMessageFields,
-    });
+    const messages = await browserMessageUpdates(
+      this.db,
+      channelId,
+      afterSequence,
+      afterReplySequence,
+    );
     return messages.map((message) => mapBrowserMessage(message, workspaceId));
   }
 

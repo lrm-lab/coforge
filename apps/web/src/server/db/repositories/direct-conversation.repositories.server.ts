@@ -105,8 +105,8 @@ import {
 } from "#src/server/attachments/attachment-view.server";
 import {
   browserMessageFields,
+  browserMessageUpdates,
   mapBrowserMessage,
-  messagesArrivedWhere,
 } from "#src/server/conversations/conversation-history.server";
 import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
 import { windowPageFlags } from "#src/lib/conversation-window";
@@ -1010,12 +1010,12 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     afterSequence: number,
     afterReplySequence?: number,
   ) {
-    const messages = await this.db.message.findMany({
-      where: messagesArrivedWhere(conversationId, afterSequence, afterReplySequence),
-      orderBy: { sequence: "asc" },
-      take: 100,
-      select: browserMessageFields,
-    });
+    const messages = await browserMessageUpdates(
+      this.db,
+      conversationId,
+      afterSequence,
+      afterReplySequence,
+    );
     return messages.map((message) => mapBrowserMessage(message, workspaceId));
   }
 
