@@ -35,6 +35,11 @@ test("a declaration is found with the kind and the line it starts on", () => {
   ]);
 });
 
+test("a declaration inside a comment is not an export", () => {
+  const text = "/*\nexport function dead() {}\n*/\nexport function live() {}\n";
+  expect(declaredExports(text).map((entry) => entry.name)).toEqual(["live"]);
+});
+
 test("a const enum is one declaration, not a declaration named enum", () => {
   expect(declaredExports("export const enum Mode {\n  A,\n}\n")).toEqual([
     { name: "Mode", kind: "value", line: 1 },
@@ -198,6 +203,32 @@ test("a regex containing a quote does not blank the rest of the file", () => {
   expect(functionBodies(text)[0]!.body).toContain("return ok;");
 });
 
+test("an astral character does not shift the body scanner", () => {
+  const text = [
+    "// 🎉 a comment before the function",
+    "export function alpha(input: string) {",
+    '  const json = "}";',
+    "  return input.length > 0 ? json : input;",
+    "}",
+  ].join("\n");
+  expect(stripNoise(text)).toHaveLength(text.length);
+  const [parsed] = functionBodies(text);
+  expect(parsed!.body.startsWith("const json")).toBe(true);
+  expect(parsed!.body.endsWith("json : input;")).toBe(true);
+});
+
+test("a duplicate is found when only one side has an astral character", () => {
+  const body = `export function parse(input: string) {\n${longBody}\n}`;
+  const report = analyze(
+    new Map([
+      ["packages/x/src/a.ts", body],
+      ["packages/x/src/b.ts", `// 🎉 before the function\n${body}`],
+    ]),
+  );
+  expect(report.duplicates).toHaveLength(1);
+  expect(report.duplicates[0]!.name).toBe("parse");
+});
+
 test("noise stripping keeps every newline and every code character", () => {
   const text = 'const a = "x\\ny";\n// comment\nconst b = `z`;\nconst c = /[\\]]/;\n';
   const stripped = stripNoise(text);
@@ -250,6 +281,31 @@ test("the report names each section with its count", () => {
   expect(markdown).toContain("`Hidden` (type) - `packages/x/src/b.ts:3`");
   expect(markdown).toContain("## Identical function bodies in more than one file (1)");
   expect(markdown).toContain("`parse` (2 copies)");
+});
+
+test("a long section is capped and says how many it left out", () => {
+  const internal = Array.from({ length: 60 }, (_, index) => ({
+    name: `n${index}`,
+    kind: "value" as const,
+    path: "packages/x/src/a.ts",
+    line: index + 1,
+    sameFileUses: 2,
+  }));
+  const markdown = renderMarkdown({
+    files: 1,
+    candidates: 1,
+    modules: [],
+    unused: [],
+    internal,
+    duplicates: [],
+  });
+  expect(markdown).toContain("and 10 more (run with --all)");
+  expect(
+    renderMarkdown(
+      { files: 1, candidates: 1, modules: [], unused: [], internal, duplicates: [] },
+      { limit: Number.POSITIVE_INFINITY },
+    ),
+  ).not.toContain("more (run with --all)");
 });
 
 test("the whole work tree is scanned when the script runs from a subdirectory", () => {

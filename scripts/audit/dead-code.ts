@@ -14,7 +14,13 @@
 // - A module whose name appears in any import counts as used, so an unrelated same-named import
 //   can hide it (a missed finding, never a wrong removal).
 //
-// usage: bun scripts/audit/dead-code.ts [--json]
+// Why not knip or jscpd: knip reports unused files and exports for a whole workspace, and jscpd
+// finds duplicated blocks, but neither knows this repository's candidate rules (apps/*/src and
+// packages/*/src, route and entry-point files, generated output, a plugin named by a path string),
+// and adopting one adds a pinned tool to a toolchain kept deliberately small. The gap is three
+// lists over one `git ls-files` read in one tested file; revisit if the rules outgrow this file.
+//
+// usage: bun scripts/audit/dead-code.ts [--json] [--all]
 import { readFileSync } from "node:fs";
 
 export type ExportKind = "value" | "type";
@@ -56,7 +62,7 @@ export function isCandidatePath(path: string): boolean {
 }
 
 /** The characters after which a `/` opens a regex rather than dividing. */
-const REGEX_AFTER_CHAR = new Set("(,=:[!&|?{};+-*%~^<>".split(""));
+const REGEX_AFTER_CHAR = new Set("(,=:[!&|?{};+-*%~^<>)".split(""));
 const REGEX_AFTER_WORD = new Set([
   "return",
   "typeof",
@@ -100,7 +106,8 @@ function regexEnd(text: string, start: number): number | undefined {
  * them can then not be mistaken for code.
  */
 export function stripNoise(text: string): string {
-  const out = [...text];
+  // Code units, not code points: every offset in this module is a UTF-16 index.
+  const out = text.split("");
   const blank = (from: number, to: number) => {
     for (let index = from; index < to && index < out.length; index += 1)
       if (out[index] !== "\n") out[index] = " ";
@@ -164,7 +171,7 @@ function lineOf(text: string, index: number): number {
 export function declaredExports(text: string): { name: string; kind: ExportKind; line: number }[] {
   const declaration =
     /^export\s+(?:declare\s+)?(?:async\s+)?(function|const\s+enum|const|let|class|type|interface|enum)\s+([A-Za-z_$][\w$]*)/gm;
-  return [...text.matchAll(declaration)].map((match) => ({
+  return [...stripNoise(text).matchAll(declaration)].map((match) => ({
     name: match[2]!,
     kind: match[1] === "type" || match[1] === "interface" ? "type" : "value",
     line: lineOf(text, match.index!),
@@ -321,7 +328,20 @@ function exportLine(entry: DeadExport): string {
   return `- \`${entry.name}\`${kind} - \`${entry.path}:${entry.line}\``;
 }
 
-export function renderMarkdown(report: AuditReport): string {
+const DEFAULT_SECTION_LIMIT = 50;
+
+function section<T>(entries: T[], line: (entry: T) => string, limit: number): string[] {
+  if (entries.length === 0) return ["None."];
+  const shown = entries.slice(0, limit).map(line);
+  if (entries.length > shown.length)
+    shown.push(`- … and ${entries.length - shown.length} more (run with --all)`);
+  return shown;
+}
+
+export function renderMarkdown(
+  report: AuditReport,
+  { limit = DEFAULT_SECTION_LIMIT }: { limit?: number } = {},
+): string {
   const lines = [
     "# Dead-code audit",
     "",
@@ -330,30 +350,28 @@ export function renderMarkdown(report: AuditReport): string {
     "",
     `## Modules nothing imports (${report.modules.length})`,
     "",
-    ...(report.modules.length
-      ? report.modules.map((module) => `- \`${module.path}\` (${module.lines} lines)`)
-      : ["None."]),
+    ...section(report.modules, (module) => `- \`${module.path}\` (${module.lines} lines)`, limit),
     "",
     `## Exports nothing references anywhere (${report.unused.length})`,
     "",
-    ...(report.unused.length ? report.unused.map(exportLine) : ["None."]),
+    ...section(report.unused, exportLine, limit),
     "",
     `## Exports only their own file uses (${report.internal.length})`,
     "",
     "An un-export candidate: the declaration stays, the `export` may go.",
     "",
-    ...(report.internal.length ? report.internal.map(exportLine) : ["None."]),
+    ...section(report.internal, exportLine, limit),
     "",
     `## Identical function bodies in more than one file (${report.duplicates.length})`,
     "",
-    ...(report.duplicates.length
-      ? report.duplicates.map(
-          (duplicate) =>
-            `- \`${duplicate.name}\` (${duplicate.copies.length} copies): ${duplicate.copies
-              .map((copy) => `\`${copy.path}:${copy.line}\``)
-              .join(", ")}`,
-        )
-      : ["None."]),
+    ...section(
+      report.duplicates,
+      (duplicate) =>
+        `- \`${duplicate.name}\` (${duplicate.copies.length} copies): ${duplicate.copies
+          .map((copy) => `\`${copy.path}:${copy.line}\``)
+          .join(", ")}`,
+      limit,
+    ),
     "",
   ];
   return lines.join("\n");
@@ -410,7 +428,9 @@ if (import.meta.main) {
     process.stdout.write(
       process.argv.includes("--json")
         ? `${JSON.stringify(report, null, 2)}\n`
-        : renderMarkdown(report),
+        : renderMarkdown(report, {
+            limit: process.argv.includes("--all") ? Number.POSITIVE_INFINITY : undefined,
+          }),
     );
   } catch (error) {
     process.stderr.write(

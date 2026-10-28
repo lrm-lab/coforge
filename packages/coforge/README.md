@@ -35,5 +35,6 @@ The command reference lives in [`docs/agent-cli/`](../../docs/agent-cli/README.m
 | `src/attachment-upload.ts`                  | `attachment upload`'s MIME type and target checks                                              |
 | `src/attachment-comments.ts`                | `attachment comments`'s arguments and text renderer                                            |
 | `src/reminder-duration.ts`                  | `reminder` duration literals                                                                   |
+| `src/short-id.ts`                           | The short message-id form the CLI prints and accepts: twelve hex and the first dash            |
 | `src/*-format.ts`, `src/message-summary.ts` | Text renderers for each command family's stdout                                                |
 | `src/version.ts`                            | The CLI's own version                                                                          |
