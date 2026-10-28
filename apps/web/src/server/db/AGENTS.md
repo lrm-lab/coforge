@@ -2,6 +2,11 @@
 
 These rules apply to `src/server/db/`.
 
+- `repositories/agent-pending-deliveries.server.ts` owns canonical daemon delivery replay,
+  preserving immutable task execution controls and the existing visibility/membership checks.
+- `agent-attention.repositories.server.ts` excludes terminal execution controls from model attention;
+  replay still retains them until daemon acknowledgement.
+
 - `conversation-signal.repositories.server.ts` reads real DM participants for signal destinations; `reminder-anchor.repositories.server.ts` resolves reminder anchors through actual channel/DM authority.
 - Use parameterized Prisma queries. Use `$queryRaw`/`$executeRaw` only for a
   reviewed PostgreSQL-specific requirement, and keep that SQL in a server-only

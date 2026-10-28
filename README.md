@@ -132,3 +132,5 @@ Every change goes through a short-lived branch and an approved PR; see
 [AGENTS.md](AGENTS.md#collaboration-and-delivery).
 
 - [docs/eval-memory-requests.md](docs/eval-memory-requests.md): Task 主动 @memory 的评测协议、IR 数据准备与冻结 test。
+
+- [Task sessions](docs/architecture/task-scoped-agent-sessions.md): Coordinator task handoff, isolated native histories, execution events and rollout.

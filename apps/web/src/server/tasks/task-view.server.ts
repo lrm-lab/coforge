@@ -62,9 +62,8 @@ export const taskSelection = {
   owner: { select: TASK_MEMBER_SELECT },
   creator: { select: TASK_MEMBER_SELECT },
   executionSessions: {
-    select: { id: true },
+    select: { id: true, attempt: true, requestId: true, agentId: true },
     orderBy: { createdAt: "desc" },
-    take: 1,
   },
   // The backing message's sequence, so realtime signals need no second read, and its mention rows
   // with the names they are shown by, which a title converted from that message needs to read its
@@ -158,6 +157,9 @@ export function readTaskText(
 
 export function taskView(task: SelectedTask, reader: TaskReader = "people"): TaskView {
   const resourceReceipt = task.resourceReceipt;
+  const execution = task.executionSessions.find(
+    (session) => session.agentId === task.owner?.agentId,
+  );
   return {
     messageId: task.messageId,
     conversationId: task.conversationId,
@@ -170,6 +172,9 @@ export function taskView(task: SelectedTask, reader: TaskReader = "people"): Tas
     revision: task.revision,
     claimedAt: task.claimedAt?.toISOString() ?? null,
     executionSessionId: task.executionSessions[0]?.id ?? null,
+    ...(execution?.requestId
+      ? { execution: { id: execution.id, attempt: execution.attempt } }
+      : {}),
     requiresResourceReceipt: task.createsResource,
     resourceReceiptRecordedAt: task.resourceReceiptRecordedAt?.toISOString() ?? null,
     ...(isRecord(resourceReceipt) && {

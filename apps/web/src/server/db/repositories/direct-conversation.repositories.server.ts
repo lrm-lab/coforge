@@ -1,3 +1,4 @@
+import { readPendingAgentDeliveries } from "./agent-pending-deliveries.server";
 import { readDirectConversationMessagesPage } from "./agent-message-history-adapter.server";
 import { findAgentScopedMessage } from "./agent-message-lookup.repositories.server";
 import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
@@ -5,8 +6,6 @@ import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-a
 import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
 import {
   AGENT_MESSAGE_WITH_TARGET_INCLUDE,
-  CONVERSATION_TARGET_MEMBERS,
-  conversationTarget,
   deliveryTarget,
   messageDeliveryTarget,
   toAgentMessage,
@@ -118,7 +117,6 @@ import {
   agentAttentionMaxSql,
   agentRecentContextSql,
   NOTIFIED_AGENT_WHERE,
-  pendingDeliveryWhere,
   unreadAgentMessagesFragment,
   type AgentAttentionScope,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
@@ -182,6 +180,7 @@ export type AgentRecoveryContext = {
       memoryHint?: import("@lrm/coforge-sdk/agent").MemoryHintDelivery;
       /** The Agent was notified of this channel message without being a member of the channel. */
       nonMemberMention?: boolean;
+      taskExecutionSignal?: import("@lrm/coforge-sdk/internal").TaskExecutionSignal;
     } & LatestSenderFields
   >;
   unreadSummary: Readonly<Record<string, number>>;
@@ -1220,97 +1219,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
      * `orUnreceived` every unreceived one too. Without it, only the unreceived ones. */
     select?: { deliveryIds: readonly string[]; orUnreceived?: boolean },
   ): Promise<AgentFacing<PendingAgentDelivery>[]> {
-    const unreceived = { receivedAt: null } satisfies Prisma.AgentMessageDeliveryWhereInput;
-    const chosen = { deliveryId: { in: [...(select?.deliveryIds ?? [])] } };
-    const selected = !select
-      ? unreceived
-      : { AND: [select.orUnreceived ? { OR: [unreceived, chosen] } : chosen] };
-    const deliveries = await this.db.agentMessageDelivery.findMany({
-      // Hidden-channel deliveries wait for restore. Left/removed/private-transition channel
-      // memberships never replay; DMs and notified non-member channel messages still do.
-      where: await pendingDeliveryWhere(this.db, { workspaceId, agentId }, selected),
-      orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
-      select: {
-        deliveryId: true,
-        messageId: true,
-        conversationId: true,
-        conversation: {
-          select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
-        },
-        sequence: true,
-        message: {
-          select: {
-            body: true,
-            createdAt: true,
-            threadRootId: true,
-            sender: MESSAGE_SENDER_SELECT,
-            mentions: MESSAGE_MENTIONS_SELECT,
-            pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
-            memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
-          },
-        },
-      },
-    });
-    // A notified delivery reaches the Agent as a non-member only while it is not in the channel.
-    const memberOf = new Set(
-      (
-        await this.db.conversationMember.findMany({
-          where: {
-            agentId,
-            ...ACTIVE_MEMBER_WHERE,
-            conversationId: { in: [...new Set(deliveries.map((d) => d.conversationId))] },
-          },
-          select: { conversationId: true },
-        })
-      ).map((member) => member.conversationId),
-    );
-    const coordination = await readChannelCoordination(
-      this.db,
-      workspaceId,
-      agentId,
-      deliveries
-        .filter((delivery) => delivery.conversation.channelName !== null)
-        .map((delivery) => delivery.conversationId),
-    );
-    const targetOf = await directTargets(
-      this.db,
-      workspaceId,
-      agentId,
-      deliveries.map((delivery) => delivery.conversation),
-    );
-    return deliveries.map((delivery) => {
-      // agentMessageSender handles both human and Agent authors and validates the handle;
-      // reading sender.user alone produces a bare @ for Agent messages.
-      const sender = agentMessageSender(delivery.message.sender);
-      const target = deliveryTarget(
-        conversationTarget(delivery.conversation, targetOf),
-        delivery.message.threadRootId,
-      );
-      return {
-        messageId: delivery.messageId,
-        deliveryId: delivery.deliveryId,
-        conversationId: delivery.conversationId,
-        sequence: delivery.sequence,
-        createdAtMs: delivery.message.createdAt.getTime(),
-        target,
-        latestSenderKind: sender.kind,
-        latestSenderHandle: sender.handle,
-        latestSenderDescription: sender.description,
-        ...agentMessageView(delivery.message, agentId, coordination.get(delivery.conversationId)),
-        ...(delivery.message.memoryHint?.deliveredAt &&
-        delivery.message.memoryHint.targetAgentId === agentId
-          ? {
-              memoryHint: {
-                hint_id: delivery.message.memoryHint.id,
-                tool: "memory_disposition" as const,
-              },
-            }
-          : {}),
-        ...(delivery.message.pendingMentionActions.length && !memberOf.has(delivery.conversationId)
-          ? { nonMemberMention: true }
-          : {}),
-      };
-    });
+    return readPendingAgentDeliveries(this.db, workspaceId, agentId, select);
   }
 
   async readMessages(

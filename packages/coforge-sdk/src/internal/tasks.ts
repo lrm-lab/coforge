@@ -41,6 +41,27 @@ export type TaskView = {
   claimedAt?: string | null;
   /** The current or most recent isolated runtime attempt for an Agent-owned Task. */
   executionSessionId?: string | null;
+  /** Opted-in isolated execution; absent on tasks already running in a standing session. */
+  execution?: { id: string; attempt: number };
+};
+
+export type TaskExecutionScope = {
+  requestId?: string;
+  executionSessionId: string;
+  attempt: number;
+  conversationId: string;
+  messageId: string;
+  number: number;
+  title: string;
+  description?: string | null;
+  revision: number;
+  target: string;
+};
+
+export type TaskExecutionSignal = {
+  executionSessionId: string;
+  attempt: number;
+  kind: "changed" | "ended";
 };
 
 export type TaskResourceReceipt = {
@@ -105,6 +126,7 @@ export type TaskCommand = {
     | "unassign"
     | "amend"
     | "history"
+    | "execution"
     | "delete"
     | "receipt";
   idempotencyKey: string;
@@ -126,6 +148,14 @@ export type TaskCommand = {
   attachmentId?: string;
   status?: TaskStatus | "all";
   expectedRevision?: number;
+  /** Daemon capability on new claims, not a request to migrate an existing execution. */
+  isolatedExecution?: boolean;
+  executionReport?: {
+    id: string;
+    attempt: number;
+    status: "starting" | "running" | "waiting" | "failed";
+    nativeSessionId?: string;
+  };
 };
 
 /** The conversation kinds an Agent's own Task list reads: channels and direct messages. */
@@ -150,6 +180,8 @@ export type TaskListPagination = { mode: "complete"; truncated: false };
 
 export type TaskResult = {
   tasks: TaskView[];
+  /** The caller must end its standing turn; these tasks run in independent native sessions. */
+  executionHandoffs?: TaskExecutionScope[];
   /** Set only on an Agent's own (`mine`) list. */
   coverage?: TaskListCoverage;
   /** Set only on an Agent's own (`mine`) list. */

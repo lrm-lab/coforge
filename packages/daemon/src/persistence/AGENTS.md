@@ -16,3 +16,5 @@ Rules for durable local state in `src/persistence/`. They extend
 
 - `conversation-session-store.ts` atomically stores Memory conversation identities outside
   Agent workspaces, namespaced by the control session so a Session Reset starts fresh.
+- `task-session-bindings.ts` stores task scope bindings, not messages or external jobs; an ended
+  attempt removes only bindings matching its execution id and attempt.

@@ -20,3 +20,10 @@ removed from one, or goes private, the server also publishes a best-effort
 `AgentInboxPurge` on its daemon control channel so the daemon drops, and ACKs,
 what it still holds for those channels. The replay rule is the backstop for a
 missed purge, which is not retried.
+
+Task execution deliveries may carry `taskExecutionSignal`: an immutable execution id, attempt and
+`changed | ended` kind. Its attempt fence survives replay even after a task is retried. Ending
+a task clears its native scope without a model turn. It grants no new Agent permissions.
+
+Terminal task execution controls remain eligible for daemon replay until ACK, but never count
+as model unread attention, freshness context or startup recovery messages.

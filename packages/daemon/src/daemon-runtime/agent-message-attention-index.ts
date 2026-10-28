@@ -1,3 +1,4 @@
+import { scopedDeliveryBatches, scopedRecoveryBatches } from "./agent-message-scope";
 import type {
   AgentMessageDelivery,
   AgentMessageDeliveryAck,
@@ -415,14 +416,8 @@ export class AgentMessageAttentionIndex {
     // One notice for the whole coalesced batch, carrying the batch itself: the queue is per Agent,
     // so a batch legitimately spans channels, DMs and threads, and each target needs its own line.
     if (announced.length) {
-      if (this.#isMemory(agentId)) {
-        const groups = new Map<string, AgentMessageDelivery[]>();
-        for (const message of announced) {
-          const batch = groups.get(message.conversationId) ?? [];
-          batch.push(message);
-          groups.set(message.conversationId, batch);
-        }
-        for (const batch of groups.values()) {
+      if (this.#isMemory(agentId) || this.#runtimes.session(agentId)?.handoffTask) {
+        for (const batch of scopedDeliveryBatches(announced, this.#isMemory(agentId))) {
           await this.#notify(batch.at(-1)!, undefined, batch);
           if (this.#generations.get(agentId) !== generation) return;
         }
@@ -441,35 +436,31 @@ export class AgentMessageAttentionIndex {
     unreadConversationIds: Readonly<Record<string, string>> = {},
     conversation?: AgentConversationScope,
   ): Promise<void> {
-    if (this.#isMemory(agentId) && !conversation) {
-      const scopes = new Map<string, string>();
-      for (const message of messages) scopes.set(message.conversationId, message.target);
-      for (const [target, count] of Object.entries(unreadSummary)) {
-        if (count < 1) continue;
-        const id =
-          unreadConversationIds[target] ??
-          messages.find((message) => message.target === target)?.conversationId ??
-          this.#consumedByAgent.get(agentId)?.targets.get(target)?.conversationId;
-        if (!id) throw new Error("Memory recovery requires a canonical conversation id");
-        scopes.set(id, target);
-      }
-      for (const [conversationId, target] of scopes) {
+    const conversationOf = (target: string) =>
+      unreadConversationIds[target] ??
+      messages.find((message) => message.target === target)?.conversationId ??
+      this.#consumedByAgent.get(agentId)?.targets.get(target)?.conversationId;
+    const scoped =
+      this.#isMemory(agentId) ||
+      (this.#runtimes.session(agentId)?.handoffTask &&
+        Object.entries(unreadSummary).every(
+          ([target, count]) => count < 1 || conversationOf(target),
+        ));
+    if (scoped && !conversation) {
+      const batches = scopedRecoveryBatches(
+        messages,
+        unreadSummary,
+        conversationOf,
+        this.#isMemory(agentId),
+      );
+      for (const batch of batches)
         await this.recover(
           agentId,
-          messages.filter((message) => message.conversationId === conversationId),
-          Object.fromEntries(
-            Object.entries(unreadSummary).filter(
-              ([name]) =>
-                (unreadConversationIds[name] ??
-                  messages.find((message) => message.target === name)?.conversationId ??
-                  this.#consumedByAgent.get(agentId)?.targets.get(name)?.conversationId) ===
-                conversationId,
-            ),
-          ),
+          batch.messages,
+          batch.summary,
           unreadConversationIds,
-          { conversationId, target },
+          batch.scope,
         );
-      }
       return;
     }
     const generation = this.#generation(agentId);
@@ -654,18 +645,20 @@ export class AgentMessageAttentionIndex {
     // these messages are unread — a delivery notice can race a `check` or `read` that already
     // advanced that cursor. Only those commands answer what is left, and either may answer
     // "nothing".
-    const queued = (this.hold.queued?.(message.agentId) ?? []).filter(
-      (delivery) =>
-        !this.#isMemory(message.agentId) || delivery.conversationId === message.conversationId,
+    const queued = (this.hold.queued?.(message.agentId) ?? []).filter((delivery) =>
+      session.handoffTask
+        ? delivery.target === message.target
+        : !this.#isMemory(message.agentId) || delivery.conversationId === message.conversationId,
     );
     const rows = this.#renderLocalViewRows(this.#localViewRows(announced, queued));
     const totalCount = countDistinctMessages([...announced, ...queued]);
     const notice = inboxNoticeText(rows);
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
-    const conversation = this.#isMemory(message.agentId)
-      ? { conversationId: message.conversationId, target: message.target }
-      : undefined;
+    const conversation =
+      this.#isMemory(message.agentId) || session.handoffTask
+        ? { conversationId: message.conversationId, target: message.target }
+        : undefined;
     const notification = Promise.resolve()
       .then(() => {
         if (this.#generations.get(message.agentId) !== generation)

@@ -16,6 +16,27 @@ import {
   formatTasksCreated,
 } from "#src/task-format";
 
+test("an isolated claim tells the standing session to end its turn", () => {
+  const text = formatClaimResults("#project", {
+    tasks: [],
+    claims: [],
+    executionHandoffs: [
+      {
+        executionSessionId: "execution",
+        attempt: 1,
+        conversationId: "channel",
+        messageId: "root",
+        number: 7,
+        title: "Diagnostic",
+        revision: 0,
+        target: "#project:root",
+      },
+    ],
+  });
+  expect(text).toContain("independent session");
+  expect(text).toContain("End this turn");
+});
+
 const person = (handle: string, fields: Partial<TaskMember> = {}): TaskMember => ({
   memberId: `member-${handle}`,
   kind: "user",

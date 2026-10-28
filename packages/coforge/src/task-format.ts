@@ -32,8 +32,13 @@ function resourceReceipt(task: TaskView): string {
 }
 
 function times(task: TaskView): string {
-  return ` created=${formatUtcTimestamp(task.createdAt)} updated=${formatUtcTimestamp(task.updatedAt)}`;
+  return `${task.execution ? " execution=isolated" : ""} created=${formatUtcTimestamp(task.createdAt)} updated=${formatUtcTimestamp(task.updatedAt)}`;
 }
+
+const isolatedTaskHint = (result: TaskResult) =>
+  result.tasks.some((task) => task.execution)
+    ? "\nTasks marked execution=isolated belong to independent sessions. Use task claim to recover their routing; end the standing turn after handoff.\n"
+    : "";
 
 function boardRow(task: TaskView): string {
   const ownerMark = task.owner && departure(task.owner);
@@ -52,7 +57,7 @@ export function formatTaskBoard(
 ): string {
   if (result.tasks.length === 0)
     return `No${status && status !== "all" ? ` ${status}` : ""} tasks in ${target}.`;
-  return `## Task Board for ${target} (${result.tasks.length} tasks)\n\n${result.tasks.map(boardRow).join("\n")}`;
+  return `## Task Board for ${target} (${result.tasks.length} tasks)\n${isolatedTaskHint(result)}\n${result.tasks.map(boardRow).join("\n")}`;
 }
 
 function ownRow(task: TaskView): string {
@@ -73,6 +78,7 @@ export function formatMyTaskList(result: TaskResult, status: TaskListStatus): st
     coverage === undefined ? "unknown" : coverage.includesArchived ? "included" : "not included";
   const header = [
     `## My assigned tasks in this Workspace (${status ? `status=${status}` : "unfinished"})`,
+    ...(isolatedTaskHint(result) ? [isolatedTaskHint(result).trim()] : []),
     "",
     [
       `Coverage: ${coverage?.status ?? "unknown"}`,
@@ -105,7 +111,7 @@ function threadReply(target: string, task: TaskView): string {
 export function formatTasksCreated(target: string, result: TaskResult): string {
   const rows = result.tasks.map(
     (task) =>
-      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} msg=${shortId(task.messageId)}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
+      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"}${task.execution ? " execution=isolated" : ""} msg=${shortId(task.messageId)}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
   );
   const receipt = result.assignmentReceipt
     ? [
@@ -125,6 +131,11 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
     `Created ${result.tasks.length} task(s) in ${target}:`,
     ...rows,
     ...receipt,
+    ...(result.executionHandoffs?.length
+      ? [
+          "Accepted by an independent session. End this turn; do not execute these tasks in the standing chat session.",
+        ]
+      : []),
     "",
     "To follow up in each task's thread:",
     ...result.tasks.map((task) => `#${task.number} → ${threadReply(target, task)}`),
@@ -229,6 +240,11 @@ export function formatClaimResults(target: string, result: TaskResult): string {
     `Claim results (${claims.length - failed} claimed${failed ? `, ${failed} failed` : ""}):`,
     ...claims.map(claimRow),
   ];
+  if (result.executionHandoffs?.length)
+    lines.push(
+      "",
+      `Tasks ${result.executionHandoffs.map((task) => `#${task.number}`).join(", ")} accepted by an independent session. End this turn; do not execute these tasks in the standing chat session. Further updates belong in each task's thread.`,
+    );
   if (claimed.length)
     lines.push(
       "",

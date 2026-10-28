@@ -31,6 +31,7 @@ const operations = new Set<TaskCommand["operation"]>([
   "history",
   "delete",
   "receipt",
+  "execution",
 ]);
 const statuses = new Set<string>(TASK_STATUSES);
 const modes = new Set(["inline", "withheld"]);
@@ -73,6 +74,22 @@ export function validateTaskRequest(value: TaskRequest): void {
   if (!value || typeof value !== "object" || !isNonblank(value.idempotencyKey))
     throw new Error("invalid Task request");
   if (!operations.has(value.operation)) throw new Error("invalid Task request");
+  if (
+    value.isolatedExecution !== undefined &&
+    (typeof value.isolatedExecution !== "boolean" || !["claim", "create"].includes(value.operation))
+  )
+    throw new Error("invalid Task isolation");
+  if ((value.operation === "execution") !== (value.executionReport !== undefined))
+    throw new Error("invalid Task execution report");
+  if (
+    value.executionReport &&
+    (!isNonblank(value.executionReport.id) ||
+      !isPgPositive(value.executionReport.attempt) ||
+      !["starting", "running", "waiting", "failed"].includes(value.executionReport.status) ||
+      (value.executionReport.nativeSessionId !== undefined &&
+        !isNonblank(value.executionReport.nativeSessionId)))
+  )
+    throw new Error("invalid Task execution report");
   if (
     value.conversationId !== undefined ||
     (value.target ? 1 : 0) + (value.mine === true ? 1 : 0) !== 1 ||
@@ -139,6 +156,10 @@ export function validateTaskRequest(value: TaskRequest): void {
   const numeric = value.number !== undefined || value.numbers !== undefined;
   const messages = value.messageId !== undefined || value.messageIds !== undefined;
   const valid =
+    (value.operation === "execution" &&
+      value.number !== undefined &&
+      !messages &&
+      value.numbers === undefined) ||
     (value.operation === "list" &&
       value.title === undefined &&
       value.titles === undefined &&

@@ -61,7 +61,7 @@ model TaskExecutionSession {
   agent          Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([taskMessageId, agentId])
+  @@unique([taskMessageId, agentId, attempt])
   @@index([agentId, status])
   @@index([workspaceId, status, createdAt])
   @@map("task_execution_sessions")

@@ -41,7 +41,7 @@ import {
   stalledTurnSilenceMs,
 } from "./stalled-turn-indicator";
 import { interruptAgentTurn } from "./turn-interrupt";
-import { heldTaskResult } from "./held-task-result";
+import { AgentTaskOperations } from "./agent-task-operations";
 import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
 import {
   OutstandingBackgroundTasks,
@@ -283,6 +283,7 @@ export class DaemonRuntime {
   readonly #agentControl: AgentControl;
   readonly #agentSessions: AgentSessions;
   readonly #messageAttention: AgentMessageAttentionIndex;
+  readonly #taskOperations: AgentTaskOperations;
   readonly #messageOperations: AgentMessageOperations;
   /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
   readonly agentRequests: AgentRequestForwarder;
@@ -566,6 +567,7 @@ export class DaemonRuntime {
         new FileConversationSessionStore(
           `${stateDirectory}/conversation-sessions/${escapePathIdentity(connection.workspaceId)}/${escapePathIdentity(agentId)}.json`,
         ),
+      (agentId) => this.#taskOperations.sessionConfiguration(agentId),
     );
     this.#credentials = credentials;
     this.#transportFactory = transportFactory;
@@ -666,6 +668,18 @@ export class DaemonRuntime {
       },
       connection,
       authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
+    });
+    this.#taskOperations = new AgentTaskOperations({
+      stateDirectory,
+      workspaceId: connection.workspaceId,
+      attention: this.#messageAttention,
+      get transport() {
+        return runtime.#transport;
+      },
+      session: (agentId) => this.#agentProcessManager.session(agentId),
+      apiKey: (agentId) => this.#agentApiKeys.get(agentId),
+      authorizedAgent: (context, key) => this.#authorizedAgent(context, key),
+      acknowledge: (message) => this.#messageAttention.acknowledge(message),
     });
     this.#messageOperations = new AgentMessageOperations({
       connection,
@@ -1512,9 +1526,12 @@ export class DaemonRuntime {
           continue;
         }
         if (item.kind === "delivery") {
-          await (isTrackedMention(item.message)
-            ? this.#mentionDeliveries.deliver(item.message)
-            : this.#messageAttention.receive(item.message));
+          if (item.message.taskExecutionSignal?.kind === "ended")
+            await this.#taskOperations.signal(item.message);
+          else
+            await (isTrackedMention(item.message)
+              ? this.#mentionDeliveries.deliver(item.message)
+              : this.#messageAttention.receive(item.message));
           logger.info("Agent delivery indexed", {
             event: "agent.message.delivery_indexed",
             agent_id: agentId,
@@ -2935,6 +2952,8 @@ export class DaemonRuntime {
     if (isTrackedMention(message)) return this.#handleTrackedMention(message);
     if (this.#stoppingAgents.has(message.agentId))
       throw new Error(`Agent runtime is stopping: ${message.agentId}`);
+    if (this.#runnerHold === undefined && message.taskExecutionSignal?.kind === "ended")
+      return this.#taskOperations.signal(message);
     // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
     if (this.#runnerHold === undefined) {
       const recovering = this.#runtimeRelease.isRecovering(message.agentId);
@@ -3505,30 +3524,8 @@ export class DaemonRuntime {
     );
   }
 
-  /** Dispatches one task command to the cloud task route over its HTTPS path. The body is the
-   * plain command — the route derives its principal from the Agent API key, so no envelope
-   * travels with it. */
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
-    this.#assertRunning();
-    const agentId = this.#agentIdForContext(context);
-    if (!this.#transport.agentTask) throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    const freshnessAction = command.operation === "claim" || command.operation === "update";
-    if (freshnessAction && command.target) {
-      const held = await heldTaskResult(
-        {
-          messageAttention: this.#messageAttention,
-          agentMessage: this.#transport.agentMessage?.bind(this.#transport),
-          workspaceId: this.#connection.workspaceId,
-        },
-        agentId,
-        command,
-        command.target,
-        agentApiKey,
-      );
-      if (held) return held;
-    }
-    return this.#transport.agentTask({ ...command }, agentApiKey);
+    return this.#taskOperations.handle(context, command, agentApiKey);
   }
 
   #canonicalAgentMessageTarget(

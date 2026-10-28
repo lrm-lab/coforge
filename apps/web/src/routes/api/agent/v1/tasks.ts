@@ -23,6 +23,7 @@ const taskOperations = [
   "history",
   "delete",
   "receipt",
+  "execution",
 ] as const;
 const taskStatuses = [...TASK_STATUSES, "all"] as const;
 
@@ -67,6 +68,16 @@ const taskRequestSchema = z
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
+    isolatedExecution: z.boolean().optional(),
+    executionReport: z
+      .object({
+        id: z.uuid(),
+        attempt: z.number().int().positive(),
+        status: z.enum(["starting", "running", "waiting", "failed"]),
+        nativeSessionId: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -119,7 +130,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
     middleware: [agentAuthMiddleware],
     handlers: {
       // An Agent's Task writes reach open pages like a person's: their notices and Task changes
-      // are signalled (never delivered or pushed from here).
+      // are signalled, and assignment/execution events are delivered. No human push from here.
       POST: ({ request, context: { principal, db } }) =>
         handleAgentTaskPost(
           request,
@@ -127,6 +138,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
           new TaskBoard(db, {
             // The Agent reads its results: a person mentioned in a title reads as their @handle.
             reader: "agent",
+            publisher: createCentrifugoServerApi(),
             realtime: new CentrifugoConversationRealtime(createCentrifugoServerApi()),
           }),
         ),
