@@ -242,6 +242,21 @@ export class RuntimeVersionUnsupportedError extends Error {
   }
 }
 
+/** The runtime's CLI could not start at all — a spawn failure, a non-zero exit, or a timeout —
+ * which is not a version judgement. `diagnostic` is the redacted first stderr line when there is
+ * one, so a person reads "No version is set for shim: node" instead of "version too old". */
+export class RuntimeStartFailedError extends Error {
+  readonly code = "runtime_start_failed";
+  constructor(
+    message: string,
+    readonly diagnostic?: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "RuntimeStartFailedError";
+  }
+}
+
 /** The runtime on this Computer does not offer the Agent's configured model. */
 export class RuntimeModelNotFoundError extends Error {
   readonly code = "model_not_found";

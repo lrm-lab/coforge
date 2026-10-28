@@ -4,7 +4,7 @@ import {
   thrownMessage,
   truncateCodePoints,
 } from "@lrm/coforge-sdk/internal";
-import { RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
+import { RuntimeModelNotFoundError, RuntimeStartFailedError } from "@lrm/coforge-anvil";
 import { fingerprintRuntimeError } from "./runtime-error-activity";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { RUNTIME_ERROR_CLASS } from "./runtime-error-classification";
@@ -66,6 +66,8 @@ export const LAUNCH_FAILURE_REASON = {
   RUNTIME_NOT_FOUND: "runtime_not_found",
   /** The runtime's CLI is older than the version CoForge supports. */
   RUNTIME_VERSION_TOO_OLD: "runtime_version_too_old",
+  /** The CLI could not start at all: a spawn failure, a non-zero exit, or a timeout. */
+  RUNTIME_START_FAILED: "runtime_start_failed",
   /** The runtime on this Computer does not offer the Agent's configured model. */
   MODEL_NOT_FOUND: "model_not_found",
   /** The runtime cannot use the Agent's model provider setting. */
@@ -82,6 +84,7 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED,
   LAUNCH_FAILURE_REASON.RUNTIME_NOT_FOUND,
   LAUNCH_FAILURE_REASON.RUNTIME_VERSION_TOO_OLD,
+  LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED,
   LAUNCH_FAILURE_REASON.MODEL_NOT_FOUND,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
@@ -149,6 +152,18 @@ function launchFailureDetail(
         error instanceof Error ? error.message : "An Agent environment variable is invalid";
       const stem = message.endsWith(".") ? message : `${message}.`;
       return `${stem} Correct it in the Agent's environment variables, then start the Agent again.`;
+    }
+    case LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED: {
+      // The CLI's own first stderr line, redacted where it was read: it says what the launcher hit
+      // ("No version is set for shim: node") far better than "could not be started" alone.
+      const diagnostic =
+        error instanceof RuntimeStartFailedError && error.diagnostic
+          ? ` (${error.diagnostic})`
+          : "";
+      return (
+        `${runtimeName} could not be started${diagnostic}. Check that its executable runs on this ` +
+        "Computer (its own `--version` is the quickest check), then start the Agent again."
+      );
     }
     case LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED:
       return (

@@ -1,7 +1,7 @@
 import { createDshLaunchContents, type DshRuntimeHost } from "@lrm/coforge-anvil/dsh";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { processSpawner } from "#src/code-agent/process-host";
-import { readVersionOutput } from "#src/code-agent/version-probe";
+import { readDshVersionOutput } from "./version-probe";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
 import { isShellToolName } from "#src/code-agent/send-command-target";
@@ -10,7 +10,7 @@ import { prepareDshLaunchFiles } from "./launch-files";
 export const dshRuntimeHost: DshRuntimeHost = {
   clientInfo: { name: "coforge-daemon", version: COFORGE_DAEMON_VERSION },
   processTreeSpawner: processSpawner,
-  versionReader: readVersionOutput,
+  versionReader: readDshVersionOutput,
   prepareLaunch: (instructions) => prepareDshLaunchFiles(instructions, createDshLaunchContents),
   createReplyIntentScanner: () => new ReplyIntentScanner(),
   isShellToolName,

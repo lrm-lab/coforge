@@ -8,6 +8,7 @@ export * from "./src/interrupt-tracker";
 export * from "./src/json-record";
 export * from "./src/line-buffer";
 export * from "./src/stderr-tail";
+export { scrubStderrHint } from "./src/stderr-hint";
 export * from "./src/transcript-tail";
 export * from "./src/runtime-auth-status";
 export * from "./src/deadline";

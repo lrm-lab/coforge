@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { launchFailureTrace } from "#src/agent-runtime/launch-failure";
+import { RuntimeStartFailedError } from "@lrm/coforge-anvil";
+import { launchFailureActivity, launchFailureTrace } from "#src/agent-runtime/launch-failure";
 
 test("launchFailureTrace extracts classified launch evidence from a PiLaunchError", () => {
   const error = {
@@ -44,4 +45,18 @@ test("launchFailureTrace keeps only exactly-typed members", () => {
       trace: { provider: "x", providerPresent: "yes" },
     }).launchCategory,
   ).toBeUndefined();
+});
+
+test("a runtime that cannot start is its own reason, never read as too old", () => {
+  const activity = launchFailureActivity(
+    new RuntimeStartFailedError(
+      "DeepSeek Harness exited 1 when asked for its version",
+      "No version is set for shim: node",
+    ),
+    "DeepSeek Harness",
+  );
+  expect(activity.runtimeError.errorReason).toBe("runtime_start_failed");
+  // The CLI's own first stderr line is what tells a person what to fix.
+  expect(activity.detail).toContain("No version is set for shim: node");
+  expect(activity.detail).not.toContain("too old");
 });

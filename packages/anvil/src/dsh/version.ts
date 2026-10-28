@@ -1,4 +1,4 @@
-import { RuntimeVersionUnsupportedError } from "#src/contract";
+import { RuntimeStartFailedError, RuntimeVersionUnsupportedError } from "#src/contract";
 import type { CliVersionReader } from "#src/version-gate";
 
 /** Preview ACP is deliberately pinned: unknown/newer releases require native acceptance. */
@@ -16,8 +16,15 @@ export async function assertDshVersion(
   let version: string | undefined;
   try {
     version = await versionReader(command, dshVersionFromOutput);
-  } catch {
-    // Unlike the shared minimum-version policy, unreadable preview versions fail closed.
+  } catch (error) {
+    // Unlike the shared minimum-version policy, unreadable preview versions fail closed — but a
+    // CLI that could not start at all is reported as that, never as a version judgement.
+    if (error instanceof RuntimeStartFailedError) throw error;
+    throw new RuntimeStartFailedError(
+      "DeepSeek Harness could not be started; check that its executable runs on this Computer",
+      undefined,
+      { cause: error },
+    );
   }
   if (version === DSH_ACP_VERSION) return;
   throw new RuntimeVersionUnsupportedError(

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { RuntimeVersionUnsupportedError } from "#src/contract";
+import { RuntimeStartFailedError, RuntimeVersionUnsupportedError } from "#src/contract";
 import { assertDshVersion, dshVersionFromOutput, DSH_ACP_VERSION } from "#src/dsh/version";
 import { createDshLaunchContents, DSH_INSTRUCTIONS_PLUGIN } from "#src/dsh/launch-contents";
 
@@ -13,11 +13,21 @@ test("DSH accepts only its verified preview and fails closed on unknown versions
       RuntimeVersionUnsupportedError,
     );
   await expect(assertDshVersion(["fixture"], async () => DSH_ACP_VERSION)).resolves.toBeUndefined();
+  // A CLI that cannot start at all is a start failure, not a version judgement.
   await expect(
     assertDshVersion(["fixture"], async () => {
       throw new Error("probe unavailable");
     }),
-  ).rejects.toBeInstanceOf(RuntimeVersionUnsupportedError);
+  ).rejects.toBeInstanceOf(RuntimeStartFailedError);
+  const startFailure = new RuntimeStartFailedError(
+    "DeepSeek Harness exited 1 when asked for its version",
+    "No version is set for shim: node",
+  );
+  await expect(
+    assertDshVersion(["fixture"], async () => {
+      throw startFailure;
+    }),
+  ).rejects.toBe(startFailure);
   expect(dshVersionFromOutput("0.2.1-rc.2\n")).toBe(DSH_ACP_VERSION);
   expect(dshVersionFromOutput("unexpected output 0.2.1-rc.2")).toBeUndefined();
 });
