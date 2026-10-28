@@ -30,6 +30,7 @@ export const RUNTIME_PROVIDER_DISPLAY_ORDER: readonly RuntimeProvider[] = [
   RUNTIME_PROVIDER.GROK,
   RUNTIME_PROVIDER.ANTIGRAVITY,
   RUNTIME_PROVIDER.COMMAND_CODE,
+  RUNTIME_PROVIDER.DSH,
 ];
 
 /** The label shown in the runtime picker and the Agent detail page. CoForge's own built-in

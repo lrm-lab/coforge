@@ -9,7 +9,6 @@ import {
 
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { DSH_RUNTIME_SELECTION_REFUSAL } from "./runtime-provider-selection";
 import type { UpdateAgentInput } from "./agent.schemas";
 
 /**
@@ -57,7 +56,6 @@ const AGENT_ENVIRONMENT_ERROR_MESSAGES: Record<AgentEnvironmentViolation, () => 
  * surfaces never drift.
  */
 const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
-  [DSH_RUNTIME_SELECTION_REFUSAL, m.agent_form_dsh_not_yet_available],
   ["agent-api-key-required", m.agent_form_api_key_required],
   ["agent-runtime-unavailable", m.agent_form_runtime_unavailable],
   ["agent-migrating", m.agent_form_migrating],
