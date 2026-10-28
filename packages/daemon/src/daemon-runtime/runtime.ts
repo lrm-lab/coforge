@@ -17,7 +17,6 @@ import { readOperatingSystem } from "#src/platform/operating-system";
 import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
-import type { ReplyIntentTracker } from "./reply-intent-tracker";
 import { PhaseTracker } from "#src/agent-runtime/phase-tracker";
 import {
   inferredCompactionFinish,
@@ -28,10 +27,7 @@ import {
   type PhaseActivity,
   type RuntimePhase,
 } from "#src/agent-runtime/runtime-phases";
-import {
-  type RuntimeErrorClassFence,
-  runtimeErrorRecoverySignal,
-} from "#src/agent-runtime/runtime-error-recovery";
+import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import {
   endsStalledTurn,
@@ -48,11 +44,9 @@ import {
   subagentProgressDetail,
 } from "#src/agent-runtime/subagent-progress-activity";
 import {
-  buildRuntimeErrorActivity,
   buildRuntimeErrorFenceActivity,
   buildRuntimeCrashedActivity,
   buildRuntimeReconnectingActivity,
-  type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
@@ -181,6 +175,7 @@ import {
   type PublishedActivityLaunch,
 } from "./agent-activity-publisher";
 import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
+import type { ActivityLaunch } from "./activity-launch";
 import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
 import { AgentUsageReport } from "./agent-usage-report";
@@ -235,31 +230,6 @@ export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
 const NOT_RUNNING = "daemon runtime is not running";
 const CLEANUP_UNCONFIRMED =
   "Agent process cleanup could not be confirmed. Replacement launch is blocked.";
-
-type ActivityLaunch = PublishedActivityLaunch & {
-  startup?: AgentStartup;
-  trajectory?: Pick<ActivityTrajectory, "flush" | "dispose">;
-  /** When the provider last reported anything (`stalled-recovery.ts`). */
-  progress?: ProviderProgress;
-  /** The launch's open tool calls, and the outcome each one's end reports. */
-  toolCalls?: ToolCallLedger;
-  /** The busy turn's silence clock: one visible stalled notice per turn. */
-  stalled?: StalledTurnTracker;
-  /** Reply intents this launch announced; a turn interrupt clears them. */
-  replyIntents?: ReplyIntentTracker;
-  backgroundTasks?: OutstandingBackgroundTasks;
-  // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
-  // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
-  // — `AgentSession.onExit` itself carries no exit code or signal, so this is the only fact the
-  // core has for it (see agent-runtime/runtime-error-activity.ts).
-  crashDetail?: RuntimeErrorEvent;
-  runtimeErrorClassFence?: RuntimeErrorClassFence;
-  /** Set when a runtime error took this launch's Agent offline (`#takeAgentOffline`): the exit
-   * handler republishes this Activity — never a bare `runtime_crashed` — a launch that then
-   * fails reports it instead of a generic launch failure, and a delivery to the offline Agent is
-   * kept (queued and ACKed) with this Activity restated. */
-  offlineError?: ReturnType<typeof buildRuntimeErrorActivity>;
-};
 
 function generateRuntimeInstanceId(): string {
   return crypto.randomUUID();
