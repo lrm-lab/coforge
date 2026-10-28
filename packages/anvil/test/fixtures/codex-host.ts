@@ -36,6 +36,9 @@ export const fixtureCodexHost: CodexRuntimeHost = {
   },
   processTreeSpawner: fixturePerTurnHost.processTreeSpawner,
   maskAccountLabel: (value) => labels[value],
+  async readFileText(): Promise<string> {
+    throw new Error("fixture has no settings file");
+  },
   buildSessionEnvironment: (options) => ({
     ...defined(Bun.env),
     FORCE_COLOR: "0",

@@ -10,6 +10,7 @@ import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
 import { rejectServerRequests } from "./server-requests";
 import { openCodexThread } from "./thread-open";
+import { codexReasoningSummary } from "./reasoning-summary";
 import { codexTurnOutcome } from "./turn-outcome";
 import { CodexTurnSignals } from "./turn-signals";
 import { readCodexRecycleBriefing } from "./recycle-briefing";
@@ -62,10 +63,11 @@ export class CodexProvider implements CodeAgentProvider {
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
+    const environment = this.#host.buildSessionEnvironment(options);
     const process = new JsonlProcess(
       this.#command,
       options.agentWorkspaceDirectory,
-      this.#host.buildSessionEnvironment(options),
+      environment,
       this.#host.processTreeSpawner,
     );
     rejectServerRequests(process, options.agentId, options.runtimeId);
@@ -83,7 +85,12 @@ export class CodexProvider implements CodeAgentProvider {
         params: { cwds: [options.agentWorkspaceDirectory], forceReload: true },
       });
       assertSkillsLoaded(skillsResponse, options.agentWorkspaceDirectory);
-      const { threadId, result, replacedSessionId } = await openCodexThread(process, options);
+      const reasoningSummary = await codexReasoningSummary(environment, this.#host);
+      const { threadId, result, replacedSessionId } = await openCodexThread(
+        process,
+        options,
+        reasoningSummary,
+      );
       await options.onSessionId?.(threadId, replacedSessionId);
       logger.info("Codex thread received standing instructions", {
         event: "codex.instructions.injected",

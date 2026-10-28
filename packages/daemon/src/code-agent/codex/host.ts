@@ -28,6 +28,7 @@ export const codexRuntimeHost: CodexRuntimeHost = {
   },
   processTreeSpawner: processSpawner,
   maskAccountLabel: maskEmail,
+  readFileText: (path) => Bun.file(path).text(),
   buildSessionEnvironment: (options: AgentSessionOptions) =>
     agentEnvironment(options.environment, Bun.env, undefined, {
       envVars: options.runtime?.envVars,

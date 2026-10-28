@@ -28,6 +28,9 @@
 - Resume recovery (`thread-open.ts`): archived -> `thread/unarchive` once, then resume, else a fresh
   thread reported as replaced; active writer -> `session_in_use`; the missing-rollout match stays
   exact. An unnamed thread is named `CoForge · <agent name>`, best effort.
+- Reasoning summaries (`reasoning-summary.ts`): a launch asks for `model_reasoning_summary: "auto"`
+  unless the user's `$CODEX_HOME/config.toml` assigns the key, top level or in a profile. Several
+  models default to `none`, and their thinking then arrives with no readable text.
 - `turn-signals.ts`: a completed turn with no evidence and a `systemError` status are errors
   (`codex_zero_evidence_turn_completed`); warnings, waiting and blank answers are logged only.
 - Idle recycle reads `$CODEX_HOME/sessions/**/rollout-*-<threadId>.jsonl` through the history host.

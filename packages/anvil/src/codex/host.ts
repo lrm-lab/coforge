@@ -38,6 +38,8 @@ export interface CodexHistoryHost {
 /** Native session and usage policies consume distinct host environment compositions. */
 export interface CodexRuntimeHost extends CodexConnectionHost, CodexUsageHost, CodexHistoryHost {
   buildSessionEnvironment(options: AgentSessionOptions): Record<string, string>;
+  /** A Codex settings file's text. A rejection means the file is absent or unreadable. */
+  readFileText(path: string): Promise<string>;
 }
 
 /** Native cache layout is Codex policy; actual file reads belong to the host. */

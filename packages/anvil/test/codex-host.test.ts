@@ -10,6 +10,9 @@ test("Codex evaluates each required host environment at its public operation and
     clientInfo: { name: "fixture", title: "Fixture", version: "fixture" },
     usageClientInfo: { name: "fixture-usage", title: "Fixture Usage", version: "fixture" },
     maskAccountLabel: (label) => label,
+    async readFileText() {
+      return "";
+    },
     buildSessionEnvironment(options) {
       expect(this).toBe(host);
       expect(options.agentWorkspaceDirectory).toBe("/session");

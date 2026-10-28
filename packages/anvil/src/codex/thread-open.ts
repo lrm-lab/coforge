@@ -20,13 +20,18 @@ export interface OpenedCodexThread {
 /**
  * Starts or resumes the Codex thread for a launch, recovering a thread that will not resume
  * (archived, missing, in use) instead of failing every attempt, then names it after the Agent.
+ *
+ * `reasoningSummary` is the reasoning-summary setting to request; `undefined` leaves it to
+ * Codex, which is what the user's own configuration asks for when it chooses one.
  */
 export async function openCodexThread(
   process: JsonlProcess,
   options: AgentSessionOptions,
+  reasoningSummary?: string,
 ): Promise<OpenedCodexThread> {
   const sessionId = options.sessionId;
-  const open = (resume?: string) => process.request(threadRequest(options, resume));
+  const open = (resume?: string) =>
+    process.request(threadRequest(options, resume, reasoningSummary));
   const log = { agent_id: options.agentId, runtime_id: options.runtimeId };
   // The resumed thread, or why it could not be: any error that is not a known one is thrown.
   const resume = (id: string) =>
@@ -119,7 +124,11 @@ async function nameThread(
   }
 }
 
-function threadRequest(options: AgentSessionOptions, sessionId?: string) {
+function threadRequest(
+  options: AgentSessionOptions,
+  sessionId?: string,
+  reasoningSummary?: string,
+) {
   return {
     method: sessionId ? "thread/resume" : "thread/start",
     params: {
@@ -135,6 +144,7 @@ function threadRequest(options: AgentSessionOptions, sessionId?: string) {
         ...(options.runtime?.reasoning
           ? { model_reasoning_effort: options.runtime.reasoning }
           : {}),
+        ...(reasoningSummary ? { model_reasoning_summary: reasoningSummary } : {}),
         // Retain the existing global-config override surface; the approved
         // danger-full-access policy does not use workspace-write restrictions.
         "sandbox_workspace_write.network_access": true,
