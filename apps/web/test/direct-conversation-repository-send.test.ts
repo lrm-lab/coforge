@@ -184,13 +184,13 @@ describe("PrismaDirectConversationRepository sending", () => {
   });
 
   test("sendAgentMessage degrades a --mention binding to a removed member to a pending action", async () => {
-    const created: { data: { mentions?: { create?: unknown[] } } }[] = [];
+    const created: { data: Record<string, unknown> }[] = [];
     const pendingRows: { data: unknown[] }[] = [];
     const tx = {
       $queryRaw: async () => [{ first: 1 }],
       message: {
         findMany: async () => [],
-        create: async ({ data }: { data: { body: string } }) => {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
           created.push({ data });
           return {
             id: "message-new",
