@@ -8,6 +8,4 @@ search, real account menu, resizable width). They were copied into
 `src/components/layout/sidebar/` and adapted there, then removed from this
 repository; `npx untitledui@latest add` fetches them again for a future copy.
 Once copied, they're CoForge's own code, no longer bound by "official source
-unmodified". Everything they call into stays untouched: `app-navigation/
-base-components/**` (`NavItemBase`, `NavButton`, `NavList`,
-`MobileNavigationHeader`, `NavAccountCard`) and `components/base/**`.
+unmodified". Everything they call into stays untouched: `components/base/**`.
