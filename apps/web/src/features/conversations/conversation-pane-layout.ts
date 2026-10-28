@@ -16,6 +16,17 @@ export function outboxContinuesRun(
   );
 }
 
+/** What a conversation's own messages read their ticks from. */
+export type ReadPositions = {
+  /** How far the furthest-reading other member has read the top-level messages. */
+  othersReadThroughSequence: number;
+  /** The viewer's newest top-level message: its ticks always show, the others' on hover. */
+  latestOwnSequence?: number;
+};
+
+/** An own message's ticks: two once read, and whether they show without a hover. */
+export type ReadState = { read: boolean; latest: boolean };
+
 /**
  * The ticks an own message carries (Telegram's): one once it is sent, two once another member — a
  * person or an Agent — has read through it. None where there is no read position to go by: a
@@ -24,8 +35,16 @@ export function outboxContinuesRun(
 export function ownMessageReadState(
   own: boolean,
   sequence: number,
-  othersReadThroughSequence: number | undefined,
-): "sent" | "read" | undefined {
-  if (!own || othersReadThroughSequence === undefined) return undefined;
-  return sequence <= othersReadThroughSequence ? "read" : "sent";
+  ticks: ReadPositions | undefined,
+): ReadState | undefined {
+  if (!own || !ticks) return undefined;
+  return READ_STATES[Number(sequence <= ticks.othersReadThroughSequence)]![
+    Number(sequence === ticks.latestOwnSequence)
+  ];
 }
+
+/** Every `ReadState`, made once: a row keeps the same object while its ticks do not change, so a
+ * memoized message row is not re-rendered by every pane render. */
+const READ_STATES = [false, true].map((read) =>
+  [false, true].map((latest) => Object.freeze({ read, latest })),
+);

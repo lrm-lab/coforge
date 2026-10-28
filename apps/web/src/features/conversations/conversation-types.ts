@@ -13,6 +13,7 @@ import type { ThreadSummary } from "./thread-summary-model";
 import type { ChipMention } from "./message-markdown";
 import type { OwnMessageIndexEntry } from "./own-messages-menu";
 import type { ChannelSuggestion } from "./reference-completion";
+import type { ReadPositions } from "./conversation-pane-layout";
 
 /** The browser's projection of a direct conversation or a public channel. */
 export type DirectConversationView = {
@@ -23,9 +24,8 @@ export type DirectConversationView = {
    * first message past it is the first unread; the initial view positions there and draws the
    * divider. Absent for a non-member, a fully-read fresh seed, or an unvisited thread. */
   readThroughSequence?: number;
-  /** How far the furthest-reading other member has read the top-level messages: the viewer's
-   * own messages up to it show two ticks, later ones one. */
-  othersReadThroughSequence?: number;
+  /** What the viewer's own messages read their ticks from (`ownMessageReadState`). */
+  readTicks?: ReadPositions;
   threadReadThrough?: Record<string, number>;
   /** Each thread of the loaded window as a summary, by its root's id: the messages are top-level
    * only, and a thread's replies are read when its pane opens (`thread-pane.tsx`). */

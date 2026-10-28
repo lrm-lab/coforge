@@ -311,7 +311,7 @@ export function ConversationPane({
     () => conversation.messages.filter((message) => message.weeklyReportHidden !== true),
     [conversation.messages],
   );
-  const readThrough = root ? undefined : conversation.othersReadThroughSequence;
+  const readTicks = root ? undefined : conversation.readTicks;
   const streamItems = useMemo(
     () =>
       groupSystemMessages(
@@ -896,7 +896,7 @@ export function ConversationPane({
                       onOpenTask={openTaskReference}
                       channelNames={channelNames}
                       onQuoteSelection={canCompose ? quoteSelection : undefined}
-                      readState={ownMessageReadState(own, message.sequence, readThrough)}
+                      readState={ownMessageReadState(own, message.sequence, readTicks)}
                     />
                   );
                 })}

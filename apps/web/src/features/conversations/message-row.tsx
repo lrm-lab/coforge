@@ -31,6 +31,7 @@ import { MessageRowFooter } from "./message-row-footer";
 import { MessageSenderGutter } from "./message-sender-gutter";
 import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
 import type { MessageView } from "./message-view";
+import type { ReadState } from "./conversation-pane-layout";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
@@ -133,7 +134,7 @@ export const MessageRow = memo(function MessageRow({
    * conversation has no composer to put it in), no affordance is offered and no selection is
    * read at all. */
   onQuoteSelection?: (quote: string) => void;
-  readState?: "sent" | "read";
+  readState?: ReadState;
 }) {
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
@@ -294,7 +295,7 @@ export const MessageRow = memo(function MessageRow({
           gutterTime={gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
           fullTime={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
         />
-        <div className="relative flex min-w-0 flex-1 flex-col gap-0.5 has-[[data-read-state]]:pr-5">
+        <div className="relative flex min-w-0 flex-1 flex-col gap-0.5 has-[[data-read-ticks=latest]]:pr-5 lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[data-read-ticks]]:pr-5">
           {!grouped && (
             <MessageSenderLine
               message={message}

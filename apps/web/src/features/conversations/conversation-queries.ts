@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   queryOptions,
   useQueryClient,
@@ -50,7 +50,7 @@ import {
   updateLoadedReply,
 } from "./thread-cache";
 import { mergeWindowThreads, newestReflectedSequence } from "./thread-summary-model";
-import type { ConversationReadEvent } from "./conversation-realtime";
+import { useReadTicks } from "./use-read-ticks";
 
 export const directConversationQuery = (conversationId: string) =>
   conversationPages(["conversation", "direct", conversationId], (page) =>
@@ -185,41 +185,23 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   const latestPage = data.pages.at(-1)!;
   const conversationId = latestPage.conversationId;
 
-  // Other members' reads heard live since the page was read. Kept apart from the cached pages and
-  // merged by max, so a refetch that raced a read event cannot take a tick back.
-  const [liveOthersRead, setLiveOthersRead] = useState<{
-    conversationId: string;
-    sequence: number;
-  }>();
-  const senderMemberId = latestPage.senderMemberId;
-  const onRead = useCallback(
-    (event: ConversationReadEvent) => {
-      if (event.memberId === senderMemberId) return;
-      setLiveOthersRead((current) => {
-        const heard = current?.conversationId === event.conversationId ? current.sequence : 0;
-        return event.readThroughSequence > heard
-          ? { conversationId: event.conversationId, sequence: event.readThroughSequence }
-          : current;
-      });
-    },
-    [senderMemberId],
+  const messages = useMemo(
+    () => data.pages.reduce<M[]>((all, page) => mergeMessages(all, page.messages), []),
+    [data],
   );
-  const othersReadThroughSequence = Math.max(
-    latestPage.othersReadThroughSequence ?? 0,
-    liveOthersRead?.conversationId === conversationId ? liveOthersRead.sequence : 0,
-  );
+  const { readTicks, onRead } = useReadTicks(latestPage, messages);
 
   const conversation = useMemo(
     () => ({
       ...latestPage,
-      othersReadThroughSequence,
+      readTicks,
       hasOlder: hasPreviousPage,
       hasNewer: latestPage.hasNewer ?? false,
-      messages: data.pages.reduce<M[]>((all, page) => mergeMessages(all, page.messages), []),
+      messages,
       // Each page holds the threads, reads and follows of its own roots: the window's are all of them.
       ...mergeWindowThreads(data.pages),
     }),
-    [data, hasPreviousPage, latestPage, othersReadThroughSequence],
+    [data, hasPreviousPage, latestPage, messages, readTicks],
   );
 
   const setPages = (update: (pages: Pages<T>) => Pages<T>) =>

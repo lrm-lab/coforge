@@ -5,6 +5,8 @@ import { ReadTicks, SavedMessageMarker } from "./message-status-markers";
 import { RootThread } from "./thread-summary";
 import { MessageTask } from "#src/features/tasks/message-task";
 import type { MessageView } from "./message-view";
+import type { ReadState } from "./conversation-pane-layout";
+import { cn } from "#src/lib/utils";
 
 export function MessageRowFooter({
   message,
@@ -20,7 +22,7 @@ export function MessageRowFooter({
   showsTask: boolean;
   onOpenThread?: (rootId: string) => void;
   /** An own message's ticks (`ownMessageReadState`); absent for everyone else's. */
-  readState?: "sent" | "read";
+  readState?: ReadState;
 }) {
   const saveSaved = useIsMessageSaved(message.id);
   return (
@@ -38,11 +40,19 @@ export function MessageRowFooter({
       {saveSaved && <SavedMessageMarker />}
       {showsTask && <MessageTask messageId={message.id} />}
       {onOpenThread && <RootThread rootId={message.id} onOpen={onOpenThread} />}
-      {/* Bottom right of the message, as on a Telegram bubble; the row's column keeps room for them
-          (`has-[[data-read-state]]:pr-5`), so the last line never runs underneath. */}
+      {/* Bottom right of the message, as on a Telegram bubble; the row's column keeps room for them,
+          so the last line never runs underneath. Only the newest own message shows them outright
+          (Frank); the others on a desktop hover or focus, the same gate as the action toolbar. */}
       {readState && (
-        <div className="absolute right-0 bottom-0">
-          <ReadTicks state={readState} />
+        <div
+          data-read-ticks={readState.latest ? "latest" : "hover"}
+          className={cn(
+            "absolute right-0 bottom-0",
+            !readState.latest &&
+              "hidden lg:[@media(hover:hover)_and_(pointer:fine)]:flex lg:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100 lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
+          )}
+        >
+          <ReadTicks state={readState.read ? "read" : "sent"} />
         </div>
       )}
     </>
