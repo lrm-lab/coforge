@@ -62,3 +62,15 @@ test("back online reconnects only a connection that still says it is connected",
   down.wake.online();
   expect(down.reconnects()).toBe(0);
 });
+
+test("a connection the client is already reconnecting is left to it, whatever woke the page", () => {
+  const page = setup(false);
+  page.wake.hidden();
+  page.at(5 * 60_000);
+  page.wake.visible();
+  page.wake.tick();
+  page.at(10 * 60_000);
+  page.wake.tick();
+  page.wake.online();
+  expect(page.reconnects()).toBe(0);
+});

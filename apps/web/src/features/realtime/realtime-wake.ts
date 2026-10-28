@@ -8,7 +8,11 @@
  * - the page comes back after `hiddenMs` hidden;
  * - a tick every `tickMs` while the page is visible lands `sleptMs` late: the computer slept.
  *   Ticks are not counted while hidden, where the browser slows timers to one a minute;
- * - the browser is back online and the connection still says it is connected.
+ * - the browser is back online.
+ * Only a connection that still says it is connected is reconnected: one the client already knows
+ * is down, it is reconnecting itself, and a second connect would cut that one off (a wake from
+ * sleep fired the client's own reconnect and this one together: two sockets, the first dropped
+ * 24ms in, and every channel's subscribe failing with it).
  */
 export const REALTIME_WAKE = { hiddenMs: 30_000, tickMs: 5_000, sleptMs: 15_000 };
 
@@ -25,6 +29,9 @@ export function createRealtimeWake({
 }) {
   let hiddenAt: number | undefined;
   let lastTick: number | undefined;
+  const reconnectIfConnected = () => {
+    if (connected()) reconnect();
+  };
   return {
     hidden() {
       hiddenAt = now();
@@ -34,18 +41,16 @@ export function createRealtimeWake({
       const away = hiddenAt === undefined ? 0 : now() - hiddenAt;
       hiddenAt = undefined;
       lastTick = now();
-      if (away >= timing.hiddenMs) reconnect();
+      if (away >= timing.hiddenMs) reconnectIfConnected();
     },
     tick() {
       if (hiddenAt !== undefined) return;
       const at = now();
       const slept = lastTick !== undefined && at - lastTick >= timing.sleptMs;
       lastTick = at;
-      if (slept) reconnect();
+      if (slept) reconnectIfConnected();
     },
-    online() {
-      if (connected()) reconnect();
-    },
+    online: reconnectIfConnected,
   };
 }
 
