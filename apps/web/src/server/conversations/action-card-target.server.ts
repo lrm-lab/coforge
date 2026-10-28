@@ -1,7 +1,7 @@
 import { isChannelMessageTarget } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { getAgentChannel, resolveChannelThreadRoot } from "./public-channels.server";
+import { getAgentChannel, resolveChannelThreadRoot } from "./channel-access.server";
 
 /**
  * The narrow slice of `DirectConversationRepository` an action card needs to resolve a `@user` DM

@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import {
-  PublicChannels,
-  channelAgentRecipients,
-} from "#src/server/conversations/public-channels.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { channelAgentRecipients } from "#src/server/conversations/channel-agent-recipients.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { unreadAgentMessagesFragment } from "#src/server/db/repositories/agent-attention.repositories.server";
 

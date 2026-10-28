@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
-import type { ChannelActor } from "./public-channels.server";
+import type { ChannelActor } from "./channel-access.server";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 

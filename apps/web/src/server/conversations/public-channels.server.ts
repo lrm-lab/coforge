@@ -1,229 +1,84 @@
-import { deleteChannelRows } from "#src/server/db/repositories/channel-deletion.repositories.server";
-import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
-import { compareChannelNames } from "#src/features/conversations/channel-signals";
-import type { SentMessageHook } from "./sent-message-hook.server";
-import { lockConversation } from "./conversation-lock.server";
-import { createChannel } from "./channel-creation.server";
-import {
-  setChannelArchived,
-  softLeaveMember,
-  updateChannelInfo,
-  upsertChannelMembers,
-} from "./channel-changes.server";
-import {
-  recordChannelMembersAdded,
-  recordThreadCreatedByReply,
-} from "#src/server/app-notifications/channel-events.server";
-import { changeChannelCoordinator } from "./channel-coordination.server";
-import { channelAgentRecipients } from "./channel-agent-recipients.server";
-
-export { channelAgentRecipients };
-import { lockMemberPins, setConversationPin } from "./conversation-pins.server";
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import { AppError, isAppError } from "#src/lib/app-error";
-import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
-import { CHANNEL_NAME_PATTERN, type MentionSelectorInput } from "@lrm/coforge-sdk/internal";
-import { windowPageFlags } from "#src/lib/conversation-window";
-import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
-import { HUMAN_UNREAD_MESSAGE_SQL, humanReadState, markUnreadAnchor } from "./human-unread.server";
-import { markPublicChannelRead } from "./channel-read.server";
-import { othersReadThroughSequence } from "./conversation-read-state.server";
-import {
-  channelActorMemberWhere,
-  deriveChannelAdminBasis,
-  deriveChannelAuthority,
-  deriveChannelCapabilities,
-  isChannelRole,
-  resolveActorServerRole,
-  resolveChannelAuthority,
-  canDeleteChannel,
-  canHideGeneralChannel,
-  canListArchivedChannels,
-} from "./channel-authority.server";
-import { canCreateAgents } from "#src/server/workspaces/member-role.server";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import { AppError } from "#src/lib/app-error";
+import type { MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
-import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
-import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
-import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
-import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
-import { agentMessageSender } from "./sender-display.server";
-import { channelListPreviews } from "./channel-list-preview.server";
-import {
-  browserMessageFields,
-  browserMessageUpdates,
-  mapBrowserMessage,
-} from "./conversation-history.server";
-import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
-import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
-import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
-import { isClosedAndUnpinned } from "./channel-closed.server";
-import { AgentDeliveryPublisher } from "./agent-delivery.server";
-import { MentionDeliveryIssuer } from "./mention-deliveries.server";
-import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
+import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
+import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import {
   createCentrifugoServerApi,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
+import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
+import type { BulkFileRemoval } from "#src/server/files/file-storage.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
-import { channelMentionTargets, storeMessageBody } from "./message-references.server";
-import { unresolvedMentionHandles } from "./unresolved-mentions.server";
-import {
-  claimMentionActions,
-  notifyMentionTargets,
-  pendingMentionActionsForMessage,
-  publishNonMemberDeliveries,
-  announceNotifiedPeople,
-  recordPendingMentionActions,
-  releaseMentionActions,
-  type MentionActionResult,
-} from "./pending-mention-actions.server";
-import {
-  deliveryMentionsAgent,
-  mentionAffinityScores,
-  type RecentMentionRow,
-} from "./mentions.server";
-import { toggleUserMessageReaction } from "./user-message-reactions.server";
-import {
-  announceChannelTasksDeleted,
-  announceChannelCreated,
-  announceChannelUpdated,
-  channelInfoOf,
-  announceJoinedOrLeft,
-  announceViewerEvent,
-  type ConversationRealtime,
-} from "./conversation-realtime.server";
+import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { getFileStorage, type BulkFileRemoval } from "#src/server/files/file-storage.server";
-import { attachmentKeys, removeAttachmentFiles } from "#src/server/attachments/attachment.server";
+import { memberChannel, type ChannelActor, type PublicChannelPorts } from "./channel-access.server";
+import { channelAgentRecipients } from "./channel-agent-recipients.server";
+import { changeChannelCoordinator } from "./channel-coordination.server";
+import { archivedChannels, channelNames, listChannels } from "./channel-directory.server";
 import {
-  agentVisibilityViewerForUser,
-  canSeeAgent,
-  visibleAgentWhere,
-} from "#src/server/agents/agent-visibility.server";
-import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
-
-/** A channel actor is either a human (by Workspace `userId`) or an Agent (by `agentId`); the
- * human/Web UI and the Agent CLI share `PublicChannels.members`/`addMembers` through this. */
-export type ChannelActor = { userId: string } | { agentId: string };
-
-/**
- * Sets fields on a person's active membership row unless they already hold `unless` (always,
- * without it), and says whether anything changed, so an unchanged write announces nothing. A person who is not an active
- * member is refused with `ACCESS_DENIED`.
- */
-async function changeMemberRow(
-  tx: Prisma.TransactionClient,
-  member: { conversationId: string; userId: string },
-  change: {
-    unless?: Prisma.ConversationMemberWhereInput;
-    data: Prisma.ConversationMemberUpdateManyMutationInput;
-  },
-): Promise<boolean> {
-  const where = { ...member, ...ACTIVE_MEMBER_WHERE };
-  const updated = await tx.conversationMember.updateMany({
-    where: change.unless ? { ...where, NOT: change.unless } : where,
-    data: change.data,
-  });
-  if (updated.count > 0) return true;
-  if ((await tx.conversationMember.count({ where })) === 0) throw new AppError("ACCESS_DENIED");
-  return false;
-}
-
-export async function getAgentChannel(
-  db: PrismaClient,
-  workspaceId: string,
-  agentId: string,
-  target: string,
-) {
-  if (!/^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target)) throw new AppError("INVALID_INPUT");
-  const channel = await db.conversation.findFirst({
-    where: {
-      workspaceId,
-      channelName: target.slice(1),
-      ...VISIBLE_CONVERSATION_WHERE,
-      members: { some: { agentId, agent: { workspaceId }, ...ACTIVE_MEMBER_WHERE } },
-    },
-  });
-  if (!channel) throw new AppError("ACCESS_DENIED");
-  return channel;
-}
-
-/**
- * Resolves a thread anchor (an eight-hex prefix or a full UUID) to its top-level root Message in
- * `conversationId`. Shared by `PublicChannels.threadRoot` and `ActionCards.prepare`
- * (`action-cards.server.ts`) so a channel thread target resolves identically everywhere.
- */
-export async function resolveChannelThreadRoot(
-  db: Pick<PrismaClient, "message">,
-  conversationId: string,
-  anchor: string,
-) {
-  const rows = await db.message.findMany({
-    where: channelThreadRootWhere(conversationId, anchor),
-    take: 2,
-    select: { id: true },
-  });
-  if (rows.length > 1)
-    throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
-  if (!rows[0])
-    throw new AgentMessageValidationError("message anchor not found in this conversation");
-  return rows[0];
-}
+  changeChannelArchived,
+  changeChannelInfo,
+  createChannelWithMembers,
+  createUserChannel,
+  deleteChannel,
+  isGeneralHidden,
+  setChannelRole,
+  setGeneralHidden,
+} from "./channel-lifecycle.server";
+import { mentionDirectory, mentionOutsiders } from "./channel-mentionables.server";
+import { channelUpdates, openChannel } from "./channel-page.server";
+import {
+  setAgentMuted,
+  setCollapseLongMessages,
+  setUserHidden,
+  setUserMuted,
+  setUserPinned,
+  setUserUnread,
+} from "./channel-preferences.server";
+import { markPublicChannelRead } from "./channel-read.server";
+import {
+  addChannelMembers,
+  channelMembers,
+  executeMentionActions,
+  joinChannel,
+  leaveChannel,
+  removeChannelMember,
+} from "./channel-roster.server";
+import {
+  enrollThreadReplyFollowers,
+  markThreadReadForUser,
+  setAgentThreadFollowed,
+  setUserThreadFollowed,
+  threadFollowingAgents,
+  unfollowAgentFromThread,
+} from "./channel-threads.server";
+import { lockConversation } from "./conversation-lock.server";
+import { browserMessageFields } from "./conversation-history.server";
+import type { ConversationRealtime } from "./conversation-realtime.server";
+import { MentionDeliveryIssuer } from "./mention-deliveries.server";
+import { deliveryMentionsAgent } from "./mentions.server";
+import { channelMentionTargets, storeMessageBody } from "./message-references.server";
+import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
+import {
+  pendingMentionActionsForMessage,
+  recordPendingMentionActions,
+} from "./pending-mention-actions.server";
+import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
+import { agentMessageSender } from "./sender-display.server";
+import type { SentMessageHook } from "./sent-message-hook.server";
+import { unresolvedMentionHandles } from "./unresolved-mentions.server";
+import { toggleUserMessageReaction } from "./user-message-reactions.server";
 
 /**
- * Enrolls the followers a channel thread reply makes, whether a person or an Agent sent it:
- * everyone who takes part (the replier and every member the reply mentions or binds) and, the
- * first time the thread gets a reply, the author of the message replied to. Without that last
- * one, a reply under someone's own message never enrolls them, and since a thread reply is not a
- * parent-channel post, nothing would ever notify them of the discussion started under it. Only
- * while the thread is brand new: an explicit unfollow is a decision, and a later reply must not
- * silently enroll the root author back. Runs before `channelAgentRecipients`, which reads these
- * follows.
+ * Workspace-visible history with per-Agent notification preferences. The facade every caller
+ * holds: each operation lives in the channel module that owns it (`channel-*.server.ts`), and
+ * this class hands it the ports it was built with. Sending stays here.
  */
-export async function enrollThreadReplyFollowers(
-  tx: Prisma.TransactionClient,
-  reply: {
-    workspaceId: string;
-    conversationId: string;
-    root: { id: string; senderMemberId: string | null };
-    participantMemberIds: readonly string[];
-  },
-): Promise<void> {
-  const { workspaceId, conversationId, root } = reply;
-  const followerIds = new Set(reply.participantMemberIds);
-  const existingFollower = await tx.threadFollow.findFirst({
-    where: { rootMessageId: root.id },
-    select: { memberId: true },
-  });
-  if (root.senderMemberId && !existingFollower) followerIds.add(root.senderMemberId);
-  await tx.threadFollow.createMany({
-    data: [...followerIds].map((memberId) => ({
-      memberId,
-      rootMessageId: root.id,
-      conversationId,
-      workspaceId,
-    })),
-    skipDuplicates: true,
-  });
-}
-
-/** The Workspace's channels as every read here sees them: channels only (not DMs), and not hidden
- * from the Workspace. A caller narrows it further (`id`, `archivedAt`) by spreading it. */
-function visibleChannelWhere(workspaceId: string) {
-  return {
-    workspaceId,
-    channelName: { not: null },
-    ...VISIBLE_CONVERSATION_WHERE,
-  } satisfies Prisma.ConversationWhereInput;
-}
-
-/** Workspace-visible history with per-Agent notification preferences. */
 export class PublicChannels {
-  private readonly inboxPurge: Pick<AgentInboxPurgePublisher, "purge">;
+  private readonly ports: PublicChannelPorts;
 
   constructor(
     private readonly db: PrismaClient,
@@ -233,22 +88,16 @@ export class PublicChannels {
     private readonly realtime?: ConversationRealtime,
     inboxPurge?: Pick<AgentInboxPurgePublisher, "purge">,
   ) {
-    this.inboxPurge = inboxPurge ?? new AgentInboxPurgePublisher(db, publisher);
+    this.ports = {
+      db,
+      publisher,
+      realtime,
+      inboxPurge: inboxPurge ?? new AgentInboxPurgePublisher(db, publisher),
+    };
   }
 
-  async setAgentMuted(workspaceId: string, agentId: string, target: string, muted: boolean) {
-    const channel = await getAgentChannel(this.db, workspaceId, agentId, target);
-    await this.db.$transaction(async (tx) => {
-      // The same conversation lock orders preference changes against message creation.
-      await lockConversation(tx, channel.id);
-      await tx.conversationMember.update({
-        where: {
-          conversationId_agentId: { conversationId: channel.id, agentId },
-        },
-        data: { channelMuted: muted },
-      });
-    });
-    return { muted };
+  setAgentMuted(workspaceId: string, agentId: string, target: string, muted: boolean) {
+    return setAgentMuted(this.ports, workspaceId, agentId, target, muted);
   }
 
   /** Routes new, unmentioned top-level channel messages to one Agent first. */
@@ -264,1660 +113,248 @@ export class PublicChannels {
       this.realtime,
       workspaceId,
       userId,
-      await this.channel(workspaceId, userId, channelId),
+      await memberChannel(this.db, workspaceId, userId, channelId),
       coordinatorAgentId,
     );
   }
 
-  async setAgentThreadFollowed(
-    workspaceId: string,
-    agentId: string,
-    target: string,
-    followed: boolean,
-  ) {
-    const [parentTarget, anchor] = target.split(":");
-    if (!parentTarget || !anchor) throw new AppError("INVALID_INPUT");
-    const channel = await getAgentChannel(this.db, workspaceId, agentId, parentTarget);
-    const member = await this.db.conversationMember.findUniqueOrThrow({
-      where: { conversationId_agentId: { conversationId: channel.id, agentId } },
-      select: { id: true },
-    });
-    const root = await this.threadRoot(channel.id, anchor);
-    await this.setThreadFollowed(member.id, workspaceId, channel.id, root.id, followed);
-    return { followed };
+  setAgentThreadFollowed(workspaceId: string, agentId: string, target: string, followed: boolean) {
+    return setAgentThreadFollowed(this.ports, workspaceId, agentId, target, followed);
   }
 
-  async setUserMuted(workspaceId: string, userId: string, channelId: string, muted: boolean) {
-    const channel = await this.channel(workspaceId, userId, channelId);
-    const changed = await this.db.$transaction(async (tx) => {
-      await lockConversation(tx, channel.id);
-      return changeMemberRow(
-        tx,
-        { conversationId: channel.id, userId },
-        {
-          unless: { channelMuted: muted },
-          data: { channelMuted: muted },
-        },
-      );
-    });
-    if (changed)
-      await announceViewerEvent(this.realtime, {
-        userIds: [userId],
-        event: { type: "pref.changed.v1", workspaceId, name: "muted" },
-      });
-    return { muted };
+  setUserMuted(workspaceId: string, userId: string, channelId: string, muted: boolean) {
+    return setUserMuted(this.ports, workspaceId, userId, channelId, muted);
   }
 
-  /** Whether long messages fold behind "Show more" in this channel, for this member only. A
-   * display preference: nothing else reads it, so it takes no conversation lock. */
-  async setCollapseLongMessages(
+  setCollapseLongMessages(
     workspaceId: string,
     userId: string,
     channelId: string,
     collapseLongMessages: boolean,
   ) {
-    const channel = await this.channel(workspaceId, userId, channelId);
-    const updated = await this.db.conversationMember.updateMany({
-      where: { conversationId: channel.id, userId, ...ACTIVE_MEMBER_WHERE },
-      data: { collapseLongMessages },
-    });
-    if (updated.count !== 1) throw new AppError("ACCESS_DENIED");
-    return { collapseLongMessages };
+    return setCollapseLongMessages(
+      this.ports,
+      workspaceId,
+      userId,
+      channelId,
+      collapseLongMessages,
+    );
   }
 
-  /** Pins this conversation for this member only (see `setConversationPin` for the order).
-   * Unpinning removes the row rather than zeroing it, so membership and pin state stay
-   * independent of archive/leave (see `ConversationPin`). */
-  async setUserPinned(
+  setUserPinned(
     workspaceId: string,
     userId: string,
     channelId: string,
     pinned: boolean,
     sortOrder?: number,
   ) {
-    const channel = await this.channel(workspaceId, userId, channelId);
-    const changed = await this.db.$transaction(async (tx) => {
-      await lockMemberPins(tx, workspaceId, userId);
-      await lockConversation(tx, channel.id);
-      const member = await tx.conversationMember.findFirst({
-        where: { conversationId: channel.id, userId, ...ACTIVE_MEMBER_WHERE },
-        select: { id: true },
-      });
-      if (!member) throw new AppError("ACCESS_DENIED");
-      return setConversationPin(
-        tx,
-        { workspaceId, userId, conversationId: channel.id, memberId: member.id },
-        pinned,
-        sortOrder,
-      );
-    });
-    if (changed)
-      await announceViewerEvent(this.realtime, {
-        userIds: [userId],
-        event: { type: "pref.changed.v1", workspaceId, name: "pins" },
-      });
-    return { pinned };
+    return setUserPinned(this.ports, workspaceId, userId, channelId, pinned, sortOrder);
   }
 
-  /** Marks the conversation unread for this member, or clears the marker. Marking is anchored on
-   * the newest top-level message someone else sent, so the badge is at least one; a conversation
-   * where only this member has spoken has nothing to mark. */
-  async setUserUnread(workspaceId: string, userId: string, channelId: string, unread: boolean) {
-    const channel = await this.channel(workspaceId, userId, channelId);
-    let marker: number | null = null;
-    const changed = await this.db.$transaction(async (tx) => {
-      await lockConversation(tx, channel.id);
-      const member = await tx.conversationMember.findFirst({
-        where: { conversationId: channel.id, userId, ...ACTIVE_MEMBER_WHERE },
-        select: { id: true, unreadFromSequence: true },
-      });
-      if (!member) throw new AppError("ACCESS_DENIED");
-      if (unread) marker = await markUnreadAnchor(tx, channel.id, member.id);
-      // Re-checks membership: leaving does not take the conversation lock.
-      const updated = await tx.conversationMember.updateMany({
-        where: { id: member.id, ...ACTIVE_MEMBER_WHERE },
-        data: { unreadFromSequence: marker },
-      });
-      if (updated.count !== 1) throw new AppError("ACCESS_DENIED");
-      return member.unreadFromSequence !== marker;
-    });
-    if (changed)
-      await announceViewerEvent(this.realtime, {
-        userIds: [userId],
-        event: {
-          type: "channel.marked.v1",
-          workspaceId,
-          conversationId: channel.id,
-          ...(await humanReadState(this.db, channel.id, userId)),
-        },
-      });
-    return { unread: marker !== null };
+  setUserUnread(workspaceId: string, userId: string, channelId: string, unread: boolean) {
+    return setUserUnread(this.ports, workspaceId, userId, channelId, unread);
   }
 
-  /** Closes (hides) the conversation for this member only, or brings it back. Distinct from
-   * `archivedAt` (whole conversation) and `leftAt` (membership ended): nothing else changes and
-   * the conversations stays readable. */
-  async setUserHidden(workspaceId: string, userId: string, channelId: string, hidden: boolean) {
-    const channel = await this.channel(workspaceId, userId, channelId);
-    const changed = await this.db.$transaction(async (tx) => {
-      await lockConversation(tx, channel.id);
-      return changeMemberRow(
-        tx,
-        { conversationId: channel.id, userId },
-        {
-          // Closing always stamps the time: a closed chat that someone's newer message brought
-          // back still has an old `hiddenAt`, and closing it again must move it past that message.
-          ...(hidden ? {} : { unless: { hiddenAt: null } }),
-          data: { hiddenAt: hidden ? new Date() : null },
-        },
-      );
-    });
-    if (changed)
-      await announceViewerEvent(this.realtime, {
-        userIds: [userId],
-        event: {
-          type: hidden ? "channel.closed.v1" : "channel.opened.v1",
-          workspaceId,
-          conversationId: channel.id,
-        },
-      });
-    return { hidden };
+  setUserHidden(workspaceId: string, userId: string, channelId: string, hidden: boolean) {
+    return setUserHidden(this.ports, workspaceId, userId, channelId, hidden);
   }
 
-  async setUserThreadFollowed(
+  setUserThreadFollowed(
     workspaceId: string,
     userId: string,
     channelId: string,
     rootMessageId: string,
     followed: boolean,
   ) {
-    await this.channel(workspaceId, userId, channelId);
-    // A soft-left member (`leftAt` set) may no longer follow threads, matching `send`'s own
-    // ACTIVE_MEMBER_WHERE check: leaving stops all delivery, not just ordinary channel posts.
-    const member = await this.db.conversationMember.findFirst({
-      where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
-      select: { id: true },
-    });
-    if (!member) throw new AppError("ACCESS_DENIED");
-    const root = await this.threadRoot(channelId, rootMessageId);
-    await this.setThreadFollowed(member.id, workspaceId, channelId, root.id, followed);
-    return { followed };
+    return setUserThreadFollowed(
+      this.ports,
+      workspaceId,
+      userId,
+      channelId,
+      rootMessageId,
+      followed,
+    );
   }
 
-  /**
-   * Agents currently following this channel Thread that the viewer may see.
-   * Workspace members can read the list with the parent channel; only an active channel
-   * member may later unfollow one of them.
-   */
-  async threadFollowingAgents(
+  threadFollowingAgents(
     workspaceId: string,
     userId: string,
     channelId: string,
     rootMessageId: string,
   ) {
-    await this.channel(workspaceId, userId, channelId);
-    const root = await this.threadRoot(channelId, rootMessageId);
-    const viewer = await agentVisibilityViewerForUser(this.db, workspaceId, userId);
-    const [actor, follows] = await Promise.all([
-      this.db.conversationMember.findFirst({
-        where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
-        select: { id: true },
-      }),
-      this.db.threadFollow.findMany({
-        where: {
-          rootMessageId: root.id,
-          conversationId: channelId,
-          member: {
-            agentId: { not: null },
-            ...ACTIVE_MEMBER_WHERE,
-            agent: {
-              workspaceId,
-              ...ACTIVE_AGENT_WHERE,
-              ...visibleAgentWhere(viewer),
-            },
-          },
-        },
-        select: {
-          member: {
-            select: {
-              agent: {
-                select: { id: true, name: true, displayName: true, avatarMascot: true },
-              },
-            },
-          },
-        },
-      }),
-    ]);
-    const agents = follows
-      .flatMap((follow) => {
-        const agent = follow.member.agent;
-        if (!agent) return [];
-        return [
-          {
-            id: agent.id,
-            name: agent.name,
-            displayName: agent.displayName.trim() || agent.name,
-            avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
-          },
-        ];
-      })
-      .sort(
-        (left, right) =>
-          left.displayName.localeCompare(right.displayName) || left.name.localeCompare(right.name),
-      );
-    return { canUnfollow: Boolean(actor), agents };
+    return threadFollowingAgents(this.ports, workspaceId, userId, channelId, rootMessageId);
   }
 
-  /**
-   * A human channel member removes an Agent from this Thread's follow set. The Agent stays a
-   * channel member; only subsequent ordinary thread notices stop. The viewer must be allowed
-   * to see that Agent — a private Agent they cannot see is `NOT_FOUND`.
-   */
-  async unfollowAgentFromThread(
+  unfollowAgentFromThread(
     workspaceId: string,
     userId: string,
     channelId: string,
     rootMessageId: string,
     agentId: string,
   ) {
-    await this.channel(workspaceId, userId, channelId);
-    const actor = await this.db.conversationMember.findFirst({
-      where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
-      select: { id: true },
-    });
-    if (!actor) throw new AppError("ACCESS_DENIED");
-    const root = await this.threadRoot(channelId, rootMessageId);
-    const agentMember = await this.db.conversationMember.findFirst({
-      where: {
-        conversationId: channelId,
-        agentId,
-        ...ACTIVE_MEMBER_WHERE,
-        agent: { workspaceId, ...ACTIVE_AGENT_WHERE },
-      },
-      select: {
-        id: true,
-        agent: { select: { visibility: true, systemKind: true, ownerId: true } },
-      },
-    });
-    const viewer = await agentVisibilityViewerForUser(this.db, workspaceId, userId);
-    // Same answer for a missing Agent and a private Agent the viewer cannot see, so the
-    // unfollow path cannot be used to probe private-Agent visibility.
-    if (!agentMember?.agent || !canSeeAgent(viewer, agentMember.agent))
-      throw new AppError("NOT_FOUND");
-    await this.setThreadFollowed(agentMember.id, workspaceId, channelId, root.id, false);
-    return { followed: false };
+    return unfollowAgentFromThread(
+      this.ports,
+      workspaceId,
+      userId,
+      channelId,
+      rootMessageId,
+      agentId,
+    );
   }
 
-  private async setThreadFollowed(
-    memberId: string,
+  markThreadReadForUser(
     workspaceId: string,
-    conversationId: string,
+    userId: string,
+    channelId: string,
     rootMessageId: string,
-    followed: boolean,
+    throughSequence: number,
   ) {
-    await this.db.$transaction(async (tx) => {
-      await lockConversation(tx, conversationId);
-      if (followed) {
-        await tx.threadFollow.upsert({
-          where: { memberId_rootMessageId: { memberId, rootMessageId } },
-          create: { memberId, workspaceId, conversationId, rootMessageId },
-          update: {},
-        });
-      } else {
-        await tx.threadFollow.deleteMany({ where: { memberId, rootMessageId } });
-      }
-    });
-  }
-
-  private async threadRoot(conversationId: string, anchor: string) {
-    return resolveChannelThreadRoot(this.db, conversationId, anchor);
-  }
-
-  private authorize(workspaceId: string, userId: string) {
-    return requireWorkspaceMember(this.db, workspaceId, userId);
-  }
-
-  /** The `ChannelActor` equivalent of `authorize`: a human must be a Workspace member, an Agent
-   * must belong to the Workspace. */
-  private async authorizeActor(workspaceId: string, actor: ChannelActor) {
-    if ("userId" in actor) return this.authorize(workspaceId, actor.userId);
-    const agent = await this.db.agent.findFirst({
-      where: { id: actor.agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-      select: { id: true },
-    });
-    if (!agent) throw new AppError("ACCESS_DENIED");
-  }
-
-  /**
-   * Every channel of the Workspace by id and current name, closed and archived ones included: the
-   * authority a body's channel references are checked against before they link (see
-   * `rehypeReferenceChips`), and what the composer's `#` list offers, with each channel's
-   * description and archived flag for its row. Every channel is public, so every member can open
-   * each one.
-   */
-  async names(workspaceId: string, userId: string) {
-    await this.authorize(workspaceId, userId);
-    const channels = await this.db.conversation.findMany({
-      where: visibleChannelWhere(workspaceId),
-      select: { id: true, channelName: true, description: true, archivedAt: true },
-    });
-    return channels.map((channel) => ({ id: channel.id, ...channelInfoOf(channel) }));
-  }
-
-  async list(workspaceId: string, userId: string) {
-    await this.authorize(workspaceId, userId);
-    const channelRows = this.db.conversation.findMany({
-      where: visibleChannelWhere(workspaceId),
-      orderBy: { channelName: "asc" },
-      select: {
-        id: true,
-        channelName: true,
-        archivedAt: true,
-        members: {
-          where: { userId, ...ACTIVE_MEMBER_WHERE },
-          select: {
-            id: true,
-            channelMuted: true,
-            // Slack-style unread cursor. Thread replies belong to their thread
-            // target and never advance it, so they never count in the channel badge.
-            readThroughSequence: true,
-            // Forced unread (`mark as unread`) and per-member hide/close, plus this member's
-            // pin order — the three member-level facts the conversation list renders (#121/#122).
-            unreadFromSequence: true,
-            hiddenAt: true,
-            pins: { select: { sortOrder: true } },
-          },
-        },
-      },
-    });
-    // One query for every channel's unread: other-authored top-level messages past the
-    // member's own read cursor, or from their mark-as-unread marker when that is lower.
-    // System messages (no sender member) and the viewer's own messages are already-read by
-    // definition; a soft-left membership has no badge. The count is a LATERAL per membership
-    // with a single lower bound, so it is an index range on `messages(conversationId,
-    // sequence)` covering only the unread tail; a plain join (or an OR of the two bounds)
-    // lets the planner hash-join every message in the Workspace's channels instead.
-    // `arrivedSinceClosed` counts the unread ones posted after the member closed the chat:
-    // any of them brings a closed chat back to the list.
-    // `mentioned` is true when one of those unread top-level messages mentions this member row.
-    const unreadRows = this.db.$queryRaw<
-      {
-        conversationId: string;
-        unread: number;
-        arrivedSinceClosed: number;
-        mentioned: boolean;
-      }[]
-    >`
-        SELECT cm."conversationId" AS "conversationId", unread."count" AS "unread",
-          unread."arrivedSinceClosed" AS "arrivedSinceClosed",
-          unread."mentioned" AS "mentioned"
-        FROM "conversation_members" cm
-        JOIN "conversations" c
-          ON c."id" = cm."conversationId"
-         AND c."workspaceId" = ${workspaceId}::uuid
-         AND c."channelName" IS NOT NULL
-         AND c."hiddenFromWorkspaceAt" IS NULL
-        CROSS JOIN LATERAL (
-          SELECT COUNT(*)::int AS "count",
-            COUNT(*) FILTER (WHERE m."createdAt" > cm."hiddenAt")::int AS "arrivedSinceClosed",
-            COALESCE(BOOL_OR(EXISTS (
-              SELECT 1 FROM "message_mentions" mm
-              WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
-            )), false) AS "mentioned"
-          FROM "messages" m
-          WHERE m."conversationId" = cm."conversationId"
-            AND m."threadRootId" IS NULL
-            AND ${HUMAN_UNREAD_MESSAGE_SQL}
-        ) unread
-        WHERE cm."userId" = ${userId}::uuid
-          AND cm."leftAt" IS NULL
-          AND cm."workspaceId" = ${workspaceId}::uuid
-    `;
-    // The channel previews need only the channel ids. A channel the viewer closed and did not pin
-    // is listed only when a newer message reopens it, so the other channels' previews load in
-    // parallel with the unread read, and the reopened closed ones are read after it.
-    const [channels, unread, previews] = await Promise.all([
-      channelRows,
-      unreadRows,
-      channelRows.then((rows) =>
-        channelListPreviews(
-          this.db,
-          workspaceId,
-          rows.filter((row) => !isClosedAndUnpinned(row)).map((row) => row.id),
-          userId,
-        ),
-      ),
-    ]);
-    const unreadByConversation = new Map(unread.map((row) => [row.conversationId, row.unread]));
-    const mentionedConversations = new Set(
-      unread.filter((row) => row.mentioned).map((row) => row.conversationId),
+    return markThreadReadForUser(
+      this.ports,
+      workspaceId,
+      userId,
+      channelId,
+      rootMessageId,
+      throughSequence,
     );
-    const reopenedByActivity = new Set(
-      unread.filter((row) => row.arrivedSinceClosed > 0).map((row) => row.conversationId),
-    );
-    const reopenedIds = channels
-      .filter((channel) => isClosedAndUnpinned(channel) && reopenedByActivity.has(channel.id))
-      .map((channel) => channel.id);
-    if (reopenedIds.length) {
-      const reopened = await channelListPreviews(this.db, workspaceId, reopenedIds, userId);
-      for (const [id, preview] of reopened) previews.set(id, preview);
-    }
-    return channels
-      .map((channel) => {
-        const member = channel.members[0];
-        // `.at(0)`, not `[0]`: the pinned row is genuinely optional and the type has to say so,
-        // or the row's `pinSortOrder` narrows to `number` and cannot hold "not pinned".
-        const pin = member?.pins.at(0);
-        const preview = previews.get(channel.id);
-        // A non-member (or soft-left viewer) sees no unread badge: the channel's history is
-        // readable, but nothing new is "for them" until they join.
-        return {
-          id: channel.id,
-          name: channel.channelName!,
-          joined: Boolean(member),
-          archived: channel.archivedAt !== null,
-          muted: member?.channelMuted ?? false,
-          unreadCount: member ? (unreadByConversation.get(channel.id) ?? 0) : 0,
-          mentioned: member ? mentionedConversations.has(channel.id) : false,
-          lastMessage: preview?.lastMessage ?? null,
-          members: preview?.members ?? [],
-          /// A closed chat disappears from this member's list only (see `hiddenAt` in the schema);
-          /// the conversation itself stays readable, including through its own URL. A new message
-          /// from someone else brings it back.
-          hidden: member?.hiddenAt != null && !reopenedByActivity.has(channel.id),
-          pinned: Boolean(member?.pins.length),
-          pinSortOrder: pin ? pin.sortOrder : null,
-        };
-      })
-      .filter(
-        // A closed chat leaves the list unless it is pinned: Pinned keeps every pin.
-        (channel) => !channel.hidden || channel.pinned,
-      )
-      .sort(
-        // #general first, then by name, as the sidebar keeps a channel event's row
-        // (`compareChannelNames`). Pinned rows are ordered by `pinSortOrder` in the sidebar's
-        // Pinned section, which merges them with pinned DMs.
-        (a, b) => compareChannelNames(a.name, b.name),
-      );
   }
 
-  async create(
+  names(workspaceId: string, userId: string) {
+    return channelNames(this.ports, workspaceId, userId);
+  }
+
+  list(workspaceId: string, userId: string) {
+    return listChannels(this.ports, workspaceId, userId);
+  }
+
+  archived(workspaceId: string, userId: string) {
+    return archivedChannels(this.ports, workspaceId, userId);
+  }
+
+  create(
     workspaceId: string,
     userId: string,
     name: string,
     projectId?: string,
     description?: string,
   ) {
-    await this.authorize(workspaceId, userId);
-    if (!CHANNEL_NAME_PATTERN.test(name)) throw new AppError("INVALID_INPUT");
-    // #general is the Workspace's own channel, created with the Workspace.
-    if (name === "general") throw new AppError("CONFLICT");
-    if (projectId) {
-      const project = await this.db.project.findFirst({
-        where: { id: projectId, workspaceId },
-        select: { id: true },
-      });
-      if (!project) throw new AppError("INVALID_INPUT");
-    }
-    let created: {
-      id: string;
-      channelName: string | null;
-      description: string;
-      archivedAt: Date | null;
-    };
-    try {
-      created = await createChannel(this.db, {
-        workspaceId,
-        name,
-        creator: { userId },
-        ...(projectId ? { projectId } : {}),
-        ...(description !== undefined ? { description } : {}),
-      });
-    } catch (error) {
-      if (isUniqueViolation(error)) throw new AppError("CONFLICT");
-      throw error;
-    }
-    await attachDefaultMemoryAgent(this.db, {
-      workspaceId,
-      conversationId: created.id,
-      actorUserId: userId,
-      now: new Date(),
-      gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
-    });
-    await Promise.all([
-      announceChannelCreated(this.realtime, {
-        workspaceId,
-        conversationId: created.id,
-        channel: channelInfoOf(created),
-      }),
-      announceViewerEvent(this.realtime, {
-        userIds: [userId],
-        event: { type: "channel.joined.v1", workspaceId, conversationId: created.id },
-      }),
-    ]);
-    return { id: created.id };
+    return createUserChannel(this.ports, workspaceId, userId, name, projectId, description);
   }
 
-  /**
-   * Creates a channel, then adds the people and Agents picked for it through `addMembers`, under
-   * the creator's own authority. The channel is not rolled back when the add is refused: the
-   * caller gets its id and `membersAddFailed`, and an add refused as a whole adds nobody.
-   */
-  async createWithMembers(
+  createWithMembers(
     workspaceId: string,
     userId: string,
     input: { name: string; projectId?: string; userIds: string[]; agentIds: string[] },
-  ): Promise<{ id: string; membersAddFailed: boolean }> {
-    const { id } = await this.create(workspaceId, userId, input.name, input.projectId);
-    if (input.userIds.length === 0 && input.agentIds.length === 0)
-      return { id, membersAddFailed: false };
-    try {
-      await this.addMembers(workspaceId, { userId }, id, {
-        userIds: input.userIds,
-        agentIds: input.agentIds,
-      });
-      return { id, membersAddFailed: false };
-    } catch (error) {
-      console.warn(
-        JSON.stringify({
-          event: "channel_create:members_add_failed",
-          channelId: id,
-          code: isAppError(error) ? error.code : "unknown",
-        }),
-      );
-      return { id, membersAddFailed: true };
-    }
+  ) {
+    return createChannelWithMembers(this.ports, workspaceId, userId, input);
   }
 
-  /**
-   * Promotes/demotes a channel member's stored `channelRole`. Human-only: there is
-   * no Agent command for changing channel roles (stated in `agent-instructions.ts`). The actor
-   * needs `manage_roles` — Workspace owner/admin, or channel
-   * admin of this specific channel — and `#general`'s roles are fixed (nobody can be its
-   * channel admin), so any role change there is rejected outright.
-   */
-  async setChannelRole(
+  setChannelRole(
     workspaceId: string,
     actorUserId: string,
     channelId: string,
     member: ChannelActor,
     role: string,
   ) {
-    const channel = await this.channel(workspaceId, actorUserId, channelId);
-    if (channel.channelName === "general") throw new AppError("CONFLICT");
-    if (!isChannelRole(role)) throw new AppError("INVALID_INPUT");
-    const authority = await resolveChannelAuthority(
-      this.db,
-      workspaceId,
-      { userId: actorUserId },
-      channel,
-    );
-    if (!authority.capabilities.manage_roles) throw new AppError("ACCESS_DENIED");
-    const updated = await this.db.conversationMember.updateMany({
-      where: {
-        conversationId: channelId,
-        ...channelActorMemberWhere(member),
-        ...ACTIVE_MEMBER_WHERE,
-      },
-      data: { channelRole: role },
-    });
-    if (updated.count !== 1) throw new AppError("NOT_FOUND");
-    return { channelId, channelRole: role };
+    return setChannelRole(this.ports, workspaceId, actorUserId, channelId, member, role);
   }
 
-  /**
-   * Read the viewer's latest 50 messages carrying mentions for mentionAffinityScores, keyed by
-   * their membership (including soft-left rows). No membership means no prior mentions.
-   * Walk messages(senderMemberId, sequence) with LATERAL mention lookups by message key;
-   * filtering mention rows or using a relation filter makes PostgreSQL scan/hash the channel's
-   * whole mention set. Message ordering is mention ordering because both are written together.
-   */
-  private async viewerRecentMentions(memberId: string | undefined): Promise<RecentMentionRow[]> {
-    if (!memberId) return [];
-    return this.db.$queryRaw<RecentMentionRow[]>`
-      SELECT mm."kind", mm."actorId"::text AS "actorId", mm."createdAt"
-      FROM "messages" m
-      CROSS JOIN LATERAL (
-        SELECT mm."kind", mm."actorId", mm."createdAt" FROM "message_mentions" mm
-        WHERE mm."messageId" = m."id" AND mm."conversationId" = m."conversationId"
-        -- No message contributes more than the outer LIMIT anyway; this one keeps PostgreSQL
-        -- from pulling the subquery up into the hash join the relation filter got.
-        LIMIT 50
-      ) mm
-      WHERE m."senderMemberId" = ${memberId}::uuid
-      ORDER BY m."sequence" DESC
-      LIMIT 50`;
-  }
-
-  /**
-   * Renames a channel or changes its description, for a human from the channel settings panel
-   * and for an Agent's `channel update`. Needs the `update` capability (Workspace owner/admin or
-   * this channel's admin). The name follows the creation rule and stays unique; `#general` keeps
-   * its name but its description can change. An archived channel's info is frozen.
-   */
-  async updateInfo(
+  updateInfo(
     workspaceId: string,
     actor: ChannelActor,
     channelId: string,
     patch: { name?: string; description?: string },
   ) {
-    const channel = await this.findChannelById(workspaceId, channelId);
-    const authority = await resolveChannelAuthority(this.db, workspaceId, actor, channel);
-    if (!authority.capabilities.update) throw new AppError("ACCESS_DENIED");
-    if (channel.archivedAt) throw new AppError("CONFLICT");
-    const rename = patch.name !== undefined && patch.name !== channel.channelName;
-    const redescribe = patch.description !== undefined && patch.description !== channel.description;
-    if (!rename && !redescribe)
-      return { id: channel.id, name: channel.channelName!, description: channel.description };
-    if (rename) {
-      if (channel.channelName === "general") throw new AppError("CONFLICT");
-      if (!CHANNEL_NAME_PATTERN.test(patch.name!)) throw new AppError("INVALID_INPUT");
-      if (patch.name === "general") throw new AppError("CONFLICT");
-    }
-    try {
-      const updated = await updateChannelInfo(
-        this.db,
-        workspaceId,
-        channel.id,
-        {
-          ...(rename ? { channelName: patch.name } : {}),
-          ...(redescribe ? { description: patch.description } : {}),
-        },
-        {
-          ...(rename ? { name: patch.name } : {}),
-          ...(redescribe ? { description: patch.description } : {}),
-        },
-      );
-      await announceChannelUpdated(this.realtime, {
-        workspaceId,
-        conversationId: channel.id,
-        channel: channelInfoOf(updated),
-      });
-      return { id: updated.id, name: updated.channelName!, description: updated.description };
-    } catch (error) {
-      if (isUniqueViolation(error)) throw new AppError("CONFLICT");
-      throw error;
-    }
+    return changeChannelInfo(this.ports, workspaceId, actor, channelId, patch);
   }
 
-  /**
-   * Whether `#general` is hidden from the whole Workspace, for the Workspace settings toggle.
-   * Owner/admin only, like the change itself.
-   */
-  async generalHidden(workspaceId: string, userId: string): Promise<boolean> {
-    const general = await this.generalForSettings(workspaceId, userId);
-    return general.hiddenFromWorkspaceAt !== null;
+  generalHidden(workspaceId: string, userId: string) {
+    return isGeneralHidden(this.ports, workspaceId, userId);
   }
 
-  /**
-   * Hides `#general` from the whole Workspace, or restores it. A Workspace owner or admin does
-   * this; while it is hidden nobody, themselves included, sees, reads or posts in it, and its
-   * history is kept. Enrollment keeps running meanwhile, so a restore brings everyone back in.
-   * Every open sidebar and page hears of the change; a call that changes nothing announces
-   * nothing.
-   */
-  async setGeneralHidden(workspaceId: string, userId: string, hidden: boolean) {
-    const general = await this.generalForSettings(workspaceId, userId);
-    if ((general.hiddenFromWorkspaceAt !== null) === hidden) return { id: general.id, hidden };
-    const restored = await this.db.conversation.update({
-      where: { id: general.id },
-      data: { hiddenFromWorkspaceAt: hidden ? new Date() : null },
-      select: { channelName: true, description: true, archivedAt: true },
-    });
-    await announceChannelUpdated(
-      this.realtime,
-      hidden
-        ? { workspaceId, conversationId: general.id, gone: true }
-        : { workspaceId, conversationId: general.id, channel: channelInfoOf(restored) },
-    );
-    return { id: general.id, hidden };
+  setGeneralHidden(workspaceId: string, userId: string, hidden: boolean) {
+    return setGeneralHidden(this.ports, workspaceId, userId, hidden);
   }
 
-  /** `#general` as a Workspace setting sees it, hidden or not; only a role that manages every
-   * channel may, as `canHideGeneralChannel` says. */
-  private async generalForSettings(workspaceId: string, userId: string) {
-    const role = await resolveActorServerRole(this.db, workspaceId, { userId });
-    if (!canHideGeneralChannel("general", role)) throw new AppError("ACCESS_DENIED");
-    const general = await this.db.conversation.findUnique({
-      where: { workspaceId_channelName: { workspaceId, channelName: "general" } },
-      select: { id: true, hiddenFromWorkspaceAt: true },
-    });
-    if (!general) throw new AppError("NOT_FOUND");
-    return general;
-  }
-
-  /**
-   * Deletes a channel for good: its messages, Tasks, files, memberships and everything else in it
-   * go, and Reminders aimed at it (or at its threads) are canceled. A Workspace owner or admin does
-   * this — not even the channel's own admin may — and `#general` is never deleted. Its Agents'
-   * daemons are told to drop what they hold for it before it goes (the purge resolves the channel
-   * by name); afterwards every open sidebar and page hears of it, and its stored files are removed,
-   * best effort.
-   */
-  async deleteChannel(
+  deleteChannel(
     workspaceId: string,
     userId: string,
     channelId: string,
-    storage: () => Promise<BulkFileRemoval> = getFileStorage,
+    storage?: () => Promise<BulkFileRemoval>,
   ) {
-    const [channel, serverRole] = await Promise.all([
-      this.findChannelById(workspaceId, channelId),
-      resolveActorServerRole(this.db, workspaceId, { userId }),
-    ]);
-    const name = channel.channelName!;
-    if (name === "general") throw new AppError("CONFLICT");
-    if (!canDeleteChannel(name, serverRole)) throw new AppError("ACCESS_DENIED");
-    const [agentMembers, tasks, objectKeys] = await Promise.all([
-      this.db.conversationMember.findMany({
-        where: { conversationId: channel.id, agentId: { not: null }, ...ACTIVE_MEMBER_WHERE },
-        select: { agentId: true },
-      }),
-      this.db.task.findMany({ where: { conversationId: channel.id }, select: { messageId: true } }),
-      attachmentKeys(this.db, { conversationId: channel.id }),
-    ]);
-    await Promise.all(
-      agentMembers.map(({ agentId }) =>
-        this.inboxPurge.purge({
-          workspaceId,
-          agentId: agentId!,
-          conversationIds: [channel.id],
-          reason: "member_removed",
-        }),
-      ),
-    );
-    await deleteChannelRows(this.db, {
-      workspaceId,
-      conversationId: channel.id,
-      channelName: name,
-    });
-    await Promise.all([
-      announceChannelUpdated(this.realtime, {
-        workspaceId,
-        conversationId: channel.id,
-        gone: true,
-      }),
-      announceChannelTasksDeleted(this.realtime, {
-        workspaceId,
-        conversationId: channel.id,
-        deleted: tasks.map(({ messageId }) => messageId),
-      }),
-    ]);
-    await removeAttachmentFiles(objectKeys, storage);
-    return { id: channel.id, deleted: true as const };
+    return deleteChannel(this.ports, workspaceId, userId, channelId, storage);
   }
 
-  /**
-   * Archives or unarchives a channel. Needs the `archive`/`unarchive` capability, which
-   * `#general` never grants. Members keep reading an archived channel, but nobody posts in it or
-   * joins it until it is unarchived.
-   */
-  async setArchived(
-    workspaceId: string,
-    actor: ChannelActor,
-    channelId: string,
-    archived: boolean,
-  ) {
-    const channel = await this.findChannelById(workspaceId, channelId);
-    if (channel.channelName === "general") throw new AppError("CONFLICT");
-    const authority = await resolveChannelAuthority(this.db, workspaceId, actor, channel);
-    if (!authority.capabilities[archived ? "archive" : "unarchive"])
-      throw new AppError("ACCESS_DENIED");
-    // Already in the asked-for state: nothing to write or announce.
-    if ((channel.archivedAt !== null) === archived) return { id: channel.id, archived };
-    const changed = await setChannelArchived(this.db, workspaceId, channel.id, archived);
-    await announceChannelUpdated(this.realtime, {
-      workspaceId,
-      conversationId: channel.id,
-      channel: channelInfoOf(changed),
-    });
-    return { id: channel.id, archived };
+  setArchived(workspaceId: string, actor: ChannelActor, channelId: string, archived: boolean) {
+    return changeChannelArchived(this.ports, workspaceId, actor, channelId, archived);
   }
 
-  /**
-   * Every archived channel of the Workspace, for Workspace settings: the most recently archived
-   * first, then by name. Owner/admin only (`canListArchivedChannels`); each one is unarchived
-   * through `setArchived`.
-   */
-  async archived(workspaceId: string, userId: string) {
-    const serverRole = await resolveActorServerRole(this.db, workspaceId, { userId });
-    if (!canListArchivedChannels(serverRole)) throw new AppError("ACCESS_DENIED");
-    const channels = await this.db.conversation.findMany({
-      where: { ...visibleChannelWhere(workspaceId), archivedAt: { not: null } },
-      orderBy: [{ archivedAt: "desc" }, { channelName: "asc" }],
-      select: { id: true, channelName: true, archivedAt: true },
-    });
-    return channels.map((channel) => ({
-      id: channel.id,
-      name: channel.channelName!,
-      archivedAt: channel.archivedAt!,
-    }));
+  join(workspaceId: string, userId: string, channelId: string) {
+    return joinChannel(this.ports, workspaceId, userId, channelId);
   }
 
-  private async findChannelById(workspaceId: string, channelId: string) {
-    const channel = await this.db.conversation.findFirst({
-      where: { id: channelId, ...visibleChannelWhere(workspaceId) },
-      select: { id: true, channelName: true, description: true, archivedAt: true },
-    });
-    if (!channel) throw new AppError("NOT_FOUND");
-    return channel;
+  leave(workspaceId: string, userId: string, channelId: string) {
+    return leaveChannel(this.ports, workspaceId, userId, channelId);
   }
 
-  private async channel(workspaceId: string, userId: string, channelId: string) {
-    return (await this.viewerChannel(workspaceId, userId, channelId)).channel;
+  removeMember(workspaceId: string, actorUserId: string, channelId: string, target: ChannelActor) {
+    return removeChannelMember(this.ports, workspaceId, actorUserId, channelId, target);
   }
 
-  /** `channel`, with the viewer's Workspace role. The membership and the channel are read at once;
-   * a non-member is still refused before a missing channel is reported. */
-  private async viewerChannel(workspaceId: string, userId: string, channelId: string) {
-    const [membership, channel] = await Promise.all([
-      this.db.workspaceMembership.findUnique({
-        where: { workspaceId_userId: { workspaceId, userId } },
-        select: { role: true },
-      }),
-      this.db.conversation.findFirst({
-        where: { id: channelId, ...visibleChannelWhere(workspaceId) },
-        include: {
-          project: {
-            select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },
-          },
-          coordinatorAgent: { select: { id: true, name: true, displayName: true } },
-        },
-      }),
-    ]);
-    if (!membership) throw new AppError("ACCESS_DENIED");
-    if (!channel) throw new AppError("NOT_FOUND");
-    return { channel, serverRole: membership.role };
+  members(workspaceId: string, actor: ChannelActor, channelId: string) {
+    return channelMembers(this.ports, workspaceId, actor, channelId);
   }
 
-  /** The viewer's own member row in a channel, whether or not they left it, with everything an
-   * open shows them from it. `open` reads it alongside the channel, not after it. */
-  private viewerMemberRow(channelId: string, userId: string) {
-    return this.db.conversationMember.findUnique({
-      where: { conversationId_userId: { conversationId: channelId, userId } },
-      include: {
-        // Every thread the viewer ever read or followed here, so only the columns the page sends.
-        threadReads: { select: { rootMessageId: true, readThroughSequence: true } },
-        threadFollows: { select: { rootMessageId: true } },
-        user: { select: { username: true } },
-        pins: { select: { sortOrder: true } },
-      },
-    });
-  }
-
-  async join(workspaceId: string, userId: string, channelId: string) {
-    const channel = await this.channel(workspaceId, userId, channelId);
-    // Nobody joins an archived channel; its members keep reading it.
-    if (channel.archivedAt) throw new AppError("CONFLICT");
-    // Upsert (not createMany/skipDuplicates): a human previously removed from this channel by
-    // an admin Agent has a row with `leftAt` set, which re-joining must clear rather than skip.
-    // (Re-)joining starts already-read at the channel's current top-level end: the badge
-    // counts what arrives *after* you joined, never the backlog that existed before.
-    const alreadyIn = await this.db.$transaction(async (tx) => {
-      const active = await tx.conversationMember.count({
-        where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
-      });
-      await tx.conversationMember.upsert({
-        where: { conversationId_userId: { conversationId: channelId, userId } },
-        create: { workspaceId, userId, conversationId: channelId },
-        update: { leftAt: null },
-      });
-      const latest = await tx.message.findFirst({
-        where: { conversationId: channelId },
-        orderBy: { sequence: "desc" },
-        select: { sequence: true },
-      });
-      await tx.conversationMember.updateMany({
-        where: { conversationId: channelId, userId },
-        data: { readThroughSequence: latest?.sequence ?? 0 },
-      });
-      if (active === 0) await recordChannelMembersAdded(tx, workspaceId, channelId, [{ userId }]);
-      return active > 0;
-    });
-    if (!alreadyIn)
-      await announceJoinedOrLeft(this.realtime, {
-        workspaceId,
-        conversationId: channelId,
-        change: "joined",
-        userIds: [userId],
-      });
-  }
-
-  /**
-   * Advances the human member's top-level read cursor. Monotone and clamped to the
-   * conversation's current maximum sequence: a stale client cannot move the boundary backwards,
-   * and an over-eager client cannot push it past the conversation (which would swallow future
-   * messages into "already read").
-   */
-  async markRead(workspaceId: string, userId: string, channelId: string, throughSequence: number) {
-    await markPublicChannelRead({
-      db: this.db,
-      realtime: this.realtime,
-      authorize: () => this.channel(workspaceId, userId, channelId),
-      workspaceId,
-      userId,
-      conversationId: channelId,
-      throughSequence,
-    });
-  }
-
-  /**
-   * A human leaves a public channel they are an active member of themselves ("Leave a channel",
-   * Slack: any member may leave a channel they belong to). Never `#general` (`CONFLICT`, Slack:
-   * "It's not possible to leave the default #general channel"). Soft-left (`leftAt` set), not
-   * deleted: the same row's mute preference and read boundary survive a later `join`, which clears
-   * `leftAt` again.
-   */
-  async leave(workspaceId: string, userId: string, channelId: string) {
-    const channel = await this.channel(workspaceId, userId, channelId);
-    if (channel.channelName === "general") throw new AppError("CONFLICT");
-    const wasMember = await softLeaveMember(this.db, workspaceId, channel.id, { userId });
-    if (!wasMember) throw new AppError("ACCESS_DENIED");
-    await announceJoinedOrLeft(this.realtime, {
-      workspaceId,
-      conversationId: channel.id,
-      change: "left",
-      userIds: [userId],
-    });
-    return { left: true };
-  }
-
-  /**
-   * A channel admin (either basis) removes a human or Agent from a public channel — originally
-   * Slack's "Workspace Owners and Admins can remove people from public channels", now
-   * generalized to the `remove_member` capability so a channel admin via stored
-   * `channelRole` may also remove members from a channel it administers, the same authority the
-   * Agent CLI's `remove-member` already has. Never `#general` (`CONFLICT`, Slack:
-   * "It's not possible to remove people from the #general … channel"). A plain member without
-   * either admin basis is denied `ACCESS_DENIED` before any row is touched. Soft-left, same as
-   * `leave`: messages, tasks and thread history stay; the row (mute preference, read boundary)
-   * survives for a later re-add/rejoin.
-   */
-  async removeMember(
-    workspaceId: string,
-    actorUserId: string,
-    channelId: string,
-    target: ChannelActor,
-  ) {
-    const channel = await this.findChannelById(workspaceId, channelId);
-    if (channel.channelName === "general") throw new AppError("CONFLICT");
-    const authority = await resolveChannelAuthority(
-      this.db,
-      workspaceId,
-      { userId: actorUserId },
-      channel,
-    );
-    if (!authority.capabilities.remove_member) throw new AppError("ACCESS_DENIED");
-    const wasMember = await softLeaveMember(this.db, workspaceId, channel.id, target);
-    if (wasMember)
-      await announceJoinedOrLeft(this.realtime, {
-        workspaceId,
-        conversationId: channel.id,
-        change: "left",
-        userIds: "userId" in target ? [target.userId] : [],
-      });
-    if (wasMember && "agentId" in target)
-      await this.inboxPurge.purge({
-        workspaceId,
-        agentId: target.agentId,
-        conversationIds: [channel.id],
-        reason: "member_removed",
-      });
-    return { removed: true, wasMember };
-  }
-
-  /**
-   * Current members split into humans and Agents, plus candidates (Workspace
-   * humans and Agents not yet members) and whether the actor may add members
-   * (has an active ConversationMember row in this channel). Any Workspace
-   * member or Agent may read this; channels are public within the Workspace.
-   * Shared by the human "Members" dialog and the Agent CLI's `channel
-   * members`/`add-member`; a soft-left row (`leftAt` set)
-   * never counts as a current member.
-   */
-  async members(workspaceId: string, actor: ChannelActor, channelId: string) {
-    await this.authorizeActor(workspaceId, actor);
-    const channel = await this.findChannelById(workspaceId, channelId);
-    const isGeneral = channel.channelName === "general";
-
-    const [memberRows, workspaceUsers, workspaceAgents, actorServerRole] = await Promise.all([
-      this.db.conversationMember.findMany({
-        where: { conversationId: channelId, ...ACTIVE_MEMBER_WHERE },
-        select: {
-          channelRole: true,
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              description: true,
-              avatarObjectKey: true,
-            },
-          },
-          agent: {
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-              description: true,
-              role: true,
-              computerId: true,
-              avatarMascot: true,
-            },
-          },
-        },
-      }),
-      this.db.user.findMany({
-        where: { memberships: { some: { workspaceId } } },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          avatarObjectKey: true,
-        },
-      }),
-      // A private Agent can never join a channel, so it is never an add-candidate
-      // either — unconditionally, the same "channels never contain a private Agent" invariant
-      // `addMembers` enforces, not a viewer-scoped visibility read.
-      this.db.agent.findMany({
-        where: {
-          workspaceId,
-          weeklyReportAssistant: null,
-          visibility: AGENT_VISIBILITY.PUBLIC,
-          ...ACTIVE_AGENT_WHERE,
-        },
-        select: {
-          id: true,
-          name: true,
-          displayName: true,
-          description: true,
-          avatarMascot: true,
-        },
-        orderBy: [{ name: "asc" }, { id: "asc" }],
-      }),
-      // The actor's own server role (Workspace role for a human, Agent.role for an Agent),
-      // independent of whether they are a member of *this* channel: an owner/admin who has
-      // never joined a channel may still archive/remove-member/manage-roles on it.
-      resolveActorServerRole(this.db, workspaceId, actor),
-    ]);
-
-    const memberUserIds = new Set(memberRows.flatMap((row) => (row.user ? [row.user.id] : [])));
-    const memberAgentIds = new Set(memberRows.flatMap((row) => (row.agent ? [row.agent.id] : [])));
-    const humanRoles = memberUserIds.size
-      ? await this.db.workspaceMembership.findMany({
-          where: { workspaceId, userId: { in: [...memberUserIds] } },
-          select: { userId: true, role: true },
-        })
-      : [];
-    const roleByUserId = new Map(humanRoles.map((row) => [row.userId, row.role]));
-
-    const actorRow = memberRows.find((row) =>
-      "userId" in actor ? row.user?.id === actor.userId : row.agent?.id === actor.agentId,
-    );
-    const isActiveMember = Boolean(actorRow);
-    const actorAdminBasis = deriveChannelAdminBasis(actorServerRole, actorRow?.channelRole);
-    const capabilities = deriveChannelCapabilities({
-      isHuman: "userId" in actor,
-      isActiveMember,
-      isGeneral,
-      adminBasis: actorAdminBasis,
-    });
-
-    return {
-      // Nobody adds members to an archived channel.
-      canAddMembers: isActiveMember && channel.archivedAt === null,
-      // The actor's own channel role/admin basis/capabilities on this channel.
-      channelRole: actorRow?.channelRole,
-      channelAdminBasis: actorAdminBasis,
-      channelCapabilities: capabilities,
-      // Alias of the capability matrix above for the members page's Remove action: a channel
-      // admin via `channelRole` (not just a Workspace owner/admin) may also remove members from a
-      // channel it administers.
-      canRemoveMembers: capabilities.remove_member,
-      humans: memberRows
-        .filter((row) => row.user)
-        .map((row) => {
-          const serverRole = roleByUserId.get(row.user!.id) ?? "member";
-          return {
-            id: row.user!.id,
-            // The browser lists a person by `displayName`; the handle is for the Agent-facing
-            // roster (`agent-channel-management.server.ts`), which names people by it.
-            username: row.user!.username,
-            displayName: humanLabel(row.user!),
-            description: row.user!.description,
-            avatarUrl: workspaceUserAvatarUrl(workspaceId, row.user!.id, row.user!.avatarObjectKey),
-            serverRole,
-            channelRole: row.channelRole,
-            channelAdminBasis: deriveChannelAdminBasis(serverRole, row.channelRole),
-          };
-        }),
-      agents: memberRows
-        .filter((row) => row.agent)
-        .map((row) => ({
-          id: row.agent!.id,
-          name: row.agent!.name,
-          displayName: row.agent!.displayName?.trim() || row.agent!.name,
-          description: row.agent!.description,
-          avatarUrl: agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
-          serverRole: row.agent!.role,
-          channelRole: row.channelRole,
-          channelAdminBasis: deriveChannelAdminBasis(row.agent!.role, row.channelRole),
-          computerId: row.agent!.computerId,
-        })),
-      candidates: {
-        humans: workspaceUsers
-          .filter((user) => !memberUserIds.has(user.id))
-          .sort(compareHumanLabels)
-          .map((user) => ({
-            id: user.id,
-            displayName: humanLabel(user),
-            avatarUrl: workspaceUserAvatarUrl(workspaceId, user.id, user.avatarObjectKey),
-          })),
-        agents: workspaceAgents
-          .filter((agent) => !memberAgentIds.has(agent.id))
-          .map((agent) => ({
-            id: agent.id,
-            name: agent.name,
-            displayName: agent.displayName?.trim() || agent.name,
-            description: agent.description,
-            avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
-          })),
-      },
-    };
-  }
-
-  /**
-   * A channel member adds Workspace humans and/or Agents as channel members
-   * (Slack: you add people to channels you belong to). Membership alone never
-   * creates attention: delivery eligibility is computed at message time.
-   * Adding someone whose row exists but is soft-left (`leftAt` set) clears
-   * `leftAt` rather than being a no-op, and keeps their prior read boundary
-   * and mute preference (upsert, not `createMany`/`skipDuplicates`).
-   */
-  async addMembers(
+  addMembers(
     workspaceId: string,
     actor: ChannelActor,
     channelId: string,
     input: { userIds: string[]; agentIds: string[] },
   ) {
-    await this.authorizeActor(workspaceId, actor);
-    const channel = await this.findChannelById(workspaceId, channelId);
-    // Nobody joins an archived channel, including by being added.
-    if (channel.archivedAt) throw new AppError("CONFLICT");
-
-    const actorMembership = await this.db.conversationMember.findFirst({
-      where: {
-        conversationId: channelId,
-        ...channelActorMemberWhere(actor),
-        ...ACTIVE_MEMBER_WHERE,
-      },
-      select: { id: true },
-    });
-    if (!actorMembership) throw new AppError("ACCESS_DENIED");
-
-    const userIds = [...new Set(input.userIds)];
-    const agentIds = [...new Set(input.agentIds)];
-    if (userIds.length) {
-      const validUsers = await this.db.workspaceMembership.count({
-        where: { workspaceId, userId: { in: userIds } },
-      });
-      if (validUsers !== userIds.length) throw new AppError("INVALID_INPUT");
-    }
-    if (agentIds.length) {
-      const targetAgents = await this.db.agent.findMany({
-        where: { workspaceId, id: { in: agentIds }, ...ACTIVE_AGENT_WHERE },
-        select: { id: true, visibility: true },
-      });
-      if (targetAgents.length !== agentIds.length) throw new AppError("INVALID_INPUT");
-      // A private Agent is never an active channel member — reject the whole add
-      // rather than silently drop it, with a stable code + explanation for the caller.
-      if (targetAgents.some((agent) => agent.visibility !== AGENT_VISIBILITY.PUBLIC))
-        throw new AppError("INVALID_INPUT", { errorId: "agent-private" });
-    }
-
-    // Read who was already an active member before writing, so a caller (the Agent CLI) can
-    // report "already in #channel" instead of a bare success for a no-op add.
-    const alreadyActive = await this.db.conversationMember.findMany({
-      where: {
-        conversationId: channelId,
-        ...ACTIVE_MEMBER_WHERE,
-        OR: [
-          ...(userIds.length ? [{ userId: { in: userIds } }] : []),
-          ...(agentIds.length ? [{ agentId: { in: agentIds } }] : []),
-        ],
-      },
-      select: { userId: true, agentId: true },
-    });
-    const alreadyMemberUserIds = alreadyActive.flatMap((row) => (row.userId ? [row.userId] : []));
-    const alreadyMemberAgentIds = alreadyActive.flatMap((row) =>
-      row.agentId ? [row.agentId] : [],
-    );
-
-    // (Re-)added members start already-read at the channel's current end: the badge counts
-    // what arrives after the add, never the backlog that existed before (mirrors `join`). An
-    // already-active member keeps the read position they had — re-adding is a no-op.
-    const cursor = await this.db.message.findFirst({
-      where: { conversationId: channelId },
-      orderBy: { sequence: "desc" },
-      select: { sequence: true },
-    });
-    const readThroughSequence = cursor?.sequence ?? 0;
-    await upsertChannelMembers(
-      this.db,
-      { workspaceId, channelId, readThroughSequence },
-      {
-        userIds,
-        agentIds,
-        alreadyMemberUserIds,
-        alreadyMemberAgentIds,
-      },
-    );
-    const alreadyActiveUserIds = new Set(alreadyMemberUserIds);
-    const added =
-      userIds.length - alreadyMemberUserIds.length + agentIds.length - alreadyMemberAgentIds.length;
-    if (added > 0)
-      await announceJoinedOrLeft(this.realtime, {
-        workspaceId,
-        conversationId: channelId,
-        change: "joined",
-        userIds: userIds.filter((userId) => !alreadyActiveUserIds.has(userId)),
-      });
-
-    const result = await this.members(workspaceId, actor, channelId);
-    return { ...result, alreadyMemberUserIds, alreadyMemberAgentIds };
+    return addChannelMembers(this.ports, workspaceId, actor, channelId, input);
   }
 
-  /**
-   * The sender acts on mentions of their messages that did not reach their target: `notify` has
-   * each target read that one message (see `notifyMentionTargets`); `add` makes each target a
-   * member of the channel it was mentioned in, under the sender's own authority to add members.
-   * Results come back in request order, one per distinct resolution id.
-   */
-  async executeMentionActions(
+  executeMentionActions(
     workspaceId: string,
     userId: string,
     action: "notify" | "add",
     resolutionIds: readonly string[],
-  ): Promise<MentionActionResult[]> {
-    await this.authorize(workspaceId, userId);
-    if (action === "notify") {
-      const { results, deliveries, notifiedUserIds } = await notifyMentionTargets(
-        this.db,
-        workspaceId,
-        { userId },
-        resolutionIds,
-      );
-      await publishNonMemberDeliveries(
-        this.db,
-        this.publisher ?? createCentrifugoServerApi(),
-        workspaceId,
-        deliveries,
-      );
-      await announceNotifiedPeople(this.realtime, workspaceId, notifiedUserIds);
-      return results;
-    }
-    const { refused, claimed } = await claimMentionActions(
-      this.db,
-      workspaceId,
-      { userId },
-      resolutionIds,
-    );
-    const results = new Map(refused.map((result) => [result.resolutionId, result]));
-    const byChannel = new Map<string, typeof claimed>();
-    for (const claim of claimed)
-      byChannel.set(claim.conversationId, [...(byChannel.get(claim.conversationId) ?? []), claim]);
-    for (const [channelId, claims] of byChannel) {
-      try {
-        await this.addMembers(workspaceId, { userId }, channelId, {
-          userIds: claims.flatMap((claim) => (claim.targetType === "user" ? [claim.targetId] : [])),
-          agentIds: claims.flatMap((claim) =>
-            claim.targetType === "agent" ? [claim.targetId] : [],
-          ),
-        });
-        for (const claim of claims)
-          results.set(claim.resolutionId, {
-            resolutionId: claim.resolutionId,
-            status: "delivered",
-            targetType: claim.targetType,
-            targetId: claim.targetId,
-            targetHandle: claim.targetHandle,
-          });
-      } catch (error) {
-        await releaseMentionActions(this.db, claims);
-        if (!isAppError(error)) throw error;
-        for (const claim of claims)
-          results.set(claim.resolutionId, {
-            resolutionId: claim.resolutionId,
-            status: "no_permission",
-            reason: "could_not_apply",
-            targetType: claim.targetType,
-            targetId: claim.targetId,
-            targetHandle: claim.targetHandle,
-          });
-      }
-    }
-    return [...new Set(resolutionIds)].map((id) => results.get(id)!);
+  ) {
+    return executeMentionActions(this.ports, workspaceId, userId, action, resolutionIds);
   }
 
-  async open(
+  open(
     workspaceId: string,
     userId: string,
     channelId: string,
-    page: { beforeSequence?: number; afterSequence?: number; limit?: number } = {},
+    page?: { beforeSequence?: number; afterSequence?: number; limit?: number },
   ) {
-    const [{ channel, serverRole }, viewerRow] = await Promise.all([
-      this.viewerChannel(workspaceId, userId, channelId),
-      this.viewerMemberRow(channelId, userId),
-    ]);
-    // Only an active row (ACTIVE_MEMBER_WHERE): a human who left or was removed sees the read-only
-    // preview (`senderMemberId` empty) like anyone who never joined, not their old member state.
-    // The row itself survives untouched for a later rejoin.
-    const member = viewerRow?.leftAt === null ? viewerRow : undefined;
-    // What the settings panel offers this viewer: edit, archive, leave.
-    const authority = deriveChannelAuthority({ userId }, channel, serverRole, member);
-    const limit = Math.min(page.limit ?? 50, 100);
-    // A forward fetch reads towards the live end from the newest sequence the retained window still
-    // holds; a backward fetch reads history upwards. Neither is the initial (uncursored) load,
-    // which lands on the newest page (see `lib/conversation-window.ts`).
-    const forward = page.afterSequence !== undefined;
-    const [messages, mentionRows, viewerRecentMentions] = await Promise.all([
-      this.db.message.findMany({
-        where: {
-          conversationId: channelId,
-          threadRootId: null,
-          sequence: forward
-            ? { gt: page.afterSequence }
-            : page.beforeSequence
-              ? { lt: page.beforeSequence }
-              : undefined,
-        },
-        // Both directions take `limit + 1` rows to learn whether one more remains; the page is
-        // re-sorted by sequence below, so only the overflow row's presence matters.
-        orderBy: { sequence: forward ? ("asc" as const) : ("desc" as const) },
-        take: limit + 1,
-        select: browserMessageFields,
-      }),
-      // The composer's @-completion source: every other active member's public profile.
-      this.db.conversationMember.findMany({
-        where: { conversationId: channelId, ...ACTIVE_MEMBER_WHERE },
-        select: {
-          id: true,
-          readThroughSequence: true,
-          agentReadThroughSequence: true,
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              description: true,
-              avatarObjectKey: true,
-            },
-          },
-          agent: {
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-              description: true,
-              avatarMascot: true,
-            },
-          },
-        },
-      }),
-      // Scores each completion candidate by the viewer's own recent mentions here.
-      this.viewerRecentMentions(viewerRow?.id),
-    ]);
-    const mentionScores = mentionAffinityScores(viewerRecentMentions);
-    const activeCoordinator =
-      channel.coordinatorAgent &&
-      mentionRows.some((row) => row.agent?.id === channel.coordinatorAgent?.id)
-        ? channel.coordinatorAgent
-        : undefined;
-    const overflow = messages.length > limit;
-    const { hasOlder, hasNewer } = windowPageFlags(
-      forward ? "forward" : page.beforeSequence ? "backward" : "initial",
-      overflow,
-    );
-    // The overflow row is always the newest of the fetched rows, so dropping the tail of the
-    // ordered list keeps the reader's side of the window and drops the row that only proved there
-    // was more.
-    const fetched = messages.slice(0, limit);
-    const pageMessages = forward ? fetched : fetched.reverse();
-    // Each thread of the page as a summary, and the viewer's cursors and follows for these roots
-    // only: a long-lived channel's whole history of them never rides along with a page.
-    const rootIds = pageMessages.map((message) => message.id);
-    const [{ threads, threadReadThrough }, followedRootIds] = await Promise.all([
-      readWindowThreads(this.db, {
-        workspaceId,
-        conversationId: channelId,
-        rootIds,
-        viewerMemberId: member?.id,
-      }),
-      followedThreadRootIds(this.db, { viewerMemberId: member?.id, rootIds }),
-    ]);
-    return {
-      conversationId: channel.id,
-      name: channel.channelName!,
-      description: channel.description,
-      archived: channel.archivedAt !== null,
-      project: channel.project ?? undefined,
-      coordinatorAgent: activeCoordinator,
-      senderMemberId: member?.id ?? "",
-      viewerId: member ? userId : undefined,
-      muted: member?.channelMuted ?? false,
-      collapseLongMessages: member?.collapseLongMessages ?? true,
-      pinned: Boolean(member?.pins.length),
-      channelCapabilities: authority.capabilities,
-      // Only a Workspace owner or admin hides #general (`setGeneralHidden`), whatever their role in it.
-      canHideGeneral: canHideGeneralChannel(channel.channelName!, authority.serverRole),
-      canDelete: canDeleteChannel(channel.channelName!, authority.serverRole),
-      // The add view's "Create Agent" (`ManageAgents.create`'s rule).
-      canCreateAgents: canCreateAgents(authority.serverRole),
-      // Any member of a live channel stops its Agents (`ChannelAgentControl.stopAll`).
-      canStopAgents: authority.isActiveMember && channel.archivedAt === null,
-      // The viewer's conversation-level read cursor over top-level messages:
-      // the client positions the initial view at the first unread message and draws the
-      // divider there. Undefined for a non-member (nothing is "unread for them").
-      readThroughSequence: member?.readThroughSequence,
-      ...(member
-        ? {
-            othersReadThroughSequence: othersReadThroughSequence(member.id, mentionRows),
-          }
-        : {}),
-      threads,
-      threadReadThrough,
-      followedThreadRootIds: followedRootIds,
-      // Every active member, the viewer included: this list is what *resolves* a stored mention
-      // token, and a mention of the viewer is the most common one to render — leaving their row
-      // out leaked the raw `<@human:uuid>` token in their own view. The composer's rule that you
-      // never mention yourself is applied where it belongs, in the composer's candidate list.
-      mentionables: mentionRows
-        .map((row) =>
-          row.user
-            ? {
-                kind: "user" as const,
-                id: row.user.id,
-                handle: row.user.username,
-                label: humanLabel(row.user),
-                description: row.user.description.trim(),
-                avatarUrl: workspaceUserAvatarUrl(
-                  workspaceId,
-                  row.user.id,
-                  row.user.avatarObjectKey,
-                ),
-                mentionScore: mentionScores.get(`user:${row.user.id}`) ?? 0,
-              }
-            : {
-                kind: "agent" as const,
-                id: row.agent!.id,
-                handle: row.agent!.name,
-                label: row.agent!.displayName?.trim() || row.agent!.name,
-                description: row.agent!.description.trim(),
-                avatarUrl: agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
-                mentionScore: mentionScores.get(`agent:${row.agent!.id}`) ?? 0,
-              },
-        )
-        .sort((left, right) => left.handle.localeCompare(right.handle)),
-      hasOlder,
-      hasNewer,
-      messages: pageMessages.map((message) => mapBrowserMessage(message, workspaceId)),
-    };
+    return openChannel(this.ports, workspaceId, userId, channelId, page);
   }
 
-  /**
-   * The composer's @-completion directory for one channel, fetched on demand: every active
-   * member (the viewer included, per #574 — this list also resolves stored mention tokens)
-   * scored by the viewer's recent mentions. The conversation payload carries it once per
-   * load, so members who join while the page is open would otherwise only appear after a
-   * full refresh; the composer refetches this while the conversation stays open.
-   */
-  async mentionDirectory(workspaceId: string, userId: string, channelId: string) {
-    const [, viewerRow] = await Promise.all([
-      this.channel(workspaceId, userId, channelId),
-      this.db.conversationMember.findUnique({
-        where: { conversationId_userId: { conversationId: channelId, userId } },
-        select: { id: true },
-      }),
-    ]);
-    const [mentionRows, viewerRecentMentions] = await Promise.all([
-      this.db.conversationMember.findMany({
-        where: { conversationId: channelId, ...ACTIVE_MEMBER_WHERE },
-        select: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              description: true,
-              avatarObjectKey: true,
-            },
-          },
-          agent: {
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-              description: true,
-              avatarMascot: true,
-            },
-          },
-        },
-      }),
-      this.viewerRecentMentions(viewerRow?.id),
-    ]);
-    const mentionScores = mentionAffinityScores(viewerRecentMentions);
-    return mentionRows
-      .map((row) =>
-        row.user
-          ? {
-              kind: "user" as const,
-              id: row.user.id,
-              handle: row.user.username,
-              label: humanLabel(row.user),
-              description: row.user.description.trim(),
-              avatarUrl: workspaceUserAvatarUrl(workspaceId, row.user.id, row.user.avatarObjectKey),
-              mentionScore: mentionScores.get(`user:${row.user.id}`) ?? 0,
-            }
-          : {
-              kind: "agent" as const,
-              id: row.agent!.id,
-              handle: row.agent!.name,
-              label: row.agent!.displayName?.trim() || row.agent!.name,
-              description: row.agent!.description.trim(),
-              avatarUrl: agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
-              mentionScore: mentionScores.get(`agent:${row.agent!.id}`) ?? 0,
-            },
-      )
-      .sort((left, right) => left.handle.localeCompare(right.handle));
+  mentionDirectory(workspaceId: string, userId: string, channelId: string) {
+    return mentionDirectory(this.ports, workspaceId, userId, channelId);
   }
 
-  /**
-   * The composer's other @-completion group for one channel: the Workspace's people and public
-   * Agents who are not active members, for the viewer to mention on purpose. Such a mention does
-   * not notify them; the send records it as the viewer's pending mention action. Never the viewer,
-   * a private Agent (it cannot join a channel) or a deleted one. People first, by label, then
-   * Agents by handle; the composer ranks them against the query.
-   */
-  async mentionOutsiders(workspaceId: string, userId: string, channelId: string) {
-    await this.channel(workspaceId, userId, channelId);
-    const notMember = { conversationId: channelId, ...ACTIVE_MEMBER_WHERE };
-    const [memberships, agents] = await Promise.all([
-      this.db.workspaceMembership.findMany({
-        where: {
-          workspaceId,
-          userId: { not: userId },
-          user: { conversationMembers: { none: notMember } },
-        },
-        select: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              description: true,
-              avatarObjectKey: true,
-            },
-          },
-        },
-      }),
-      this.db.agent.findMany({
-        where: {
-          workspaceId,
-          visibility: AGENT_VISIBILITY.PUBLIC,
-          ...ACTIVE_AGENT_WHERE,
-          conversations: { none: notMember },
-        },
-        select: {
-          id: true,
-          name: true,
-          displayName: true,
-          description: true,
-          avatarMascot: true,
-        },
-        orderBy: { name: "asc" },
-      }),
-    ]);
-    return [
-      ...memberships
-        .map(({ user }) => user)
-        .sort(compareHumanLabels)
-        .map((user) => ({
-          kind: "user" as const,
-          id: user.id,
-          handle: user.username,
-          label: humanLabel(user),
-          description: user.description.trim(),
-          avatarUrl: workspaceUserAvatarUrl(workspaceId, user.id, user.avatarObjectKey),
-          mentionScore: 0,
-          outsider: true as const,
-        })),
-      ...agents.map((agent) => ({
-        kind: "agent" as const,
-        id: agent.id,
-        handle: agent.name,
-        label: agent.displayName?.trim() || agent.name,
-        description: agent.description.trim(),
-        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
-        mentionScore: 0,
-        outsider: true as const,
-      })),
-    ];
+  mentionOutsiders(workspaceId: string, userId: string, channelId: string) {
+    return mentionOutsiders(this.ports, workspaceId, userId, channelId);
   }
 
-  async updates(
+  updates(
     workspaceId: string,
     userId: string,
     channelId: string,
     afterSequence: number,
     afterReplySequence?: number,
   ) {
-    await this.channel(workspaceId, userId, channelId);
-    const messages = await browserMessageUpdates(
-      this.db,
+    return channelUpdates(
+      this.ports,
+      workspaceId,
+      userId,
       channelId,
       afterSequence,
       afterReplySequence,
     );
-    return messages.map((message) => mapBrowserMessage(message, workspaceId));
   }
 
   async send(input: {
@@ -1937,7 +374,7 @@ export class PublicChannels {
     // This key is also the daemon delivery's request_id. A missing one is omitted on the wire
     // and the daemon drops the frame, so the Agent never sees the message.
     if (!idempotencyKey?.trim()) throw new AppError("INVALID_INPUT");
-    const channel = await this.channel(workspaceId, userId, channelId);
+    const channel = await memberChannel(this.db, workspaceId, userId, channelId);
     if (channel.archivedAt) throw new AppError("CONFLICT");
     const member = await this.db.conversationMember.findFirst({
       where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
@@ -2212,7 +649,7 @@ export class PublicChannels {
     emoji: string,
     active: boolean,
   ) {
-    await this.channel(workspaceId, userId, channelId);
+    await memberChannel(this.db, workspaceId, userId, channelId);
     return toggleUserMessageReaction(this.db, this.realtime, {
       workspaceId,
       conversationId: channelId,
@@ -2223,40 +660,21 @@ export class PublicChannels {
     });
   }
 
-  async markThreadReadForUser(
-    workspaceId: string,
-    userId: string,
-    channelId: string,
-    rootMessageId: string,
-    throughSequence: number,
-  ) {
-    await this.channel(workspaceId, userId, channelId);
-    const root = await this.db.message.findFirst({
-      where: { id: rootMessageId, conversationId: channelId, threadRootId: null },
-      select: { id: true },
+  /**
+   * Advances the human member's top-level read cursor. Monotone and clamped to the
+   * conversation's current maximum sequence: a stale client cannot move the boundary backwards,
+   * and an over-eager client cannot push it past the conversation (which would swallow future
+   * messages into "already read").
+   */
+  async markRead(workspaceId: string, userId: string, channelId: string, throughSequence: number) {
+    await markPublicChannelRead({
+      db: this.db,
+      realtime: this.realtime,
+      authorize: () => memberChannel(this.db, workspaceId, userId, channelId),
+      workspaceId,
+      userId,
+      conversationId: channelId,
+      throughSequence,
     });
-    if (!root)
-      throw new AgentMessageValidationError("message anchor not found in this conversation");
-    const [member, latest] = await Promise.all([
-      this.db.conversationMember.findUnique({
-        where: { conversationId_userId: { conversationId: channelId, userId } },
-        select: { id: true },
-      }),
-      this.db.message.findFirst({
-        where: {
-          conversationId: channelId,
-          threadRootId: root.id,
-          sequence: { lte: throughSequence },
-        },
-        orderBy: { sequence: "desc" },
-        select: { sequence: true },
-      }),
-    ]);
-    if (!member || !latest) return;
-    await this.db.$executeRaw`INSERT INTO "thread_reads"
-      ("memberId", "conversationId", "workspaceId", "rootMessageId", "readThroughSequence")
-      VALUES (${member.id}::uuid, ${channelId}::uuid, ${workspaceId}::uuid, ${root.id}::uuid, ${latest.sequence})
-      ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
-        GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence")`;
   }
 }

@@ -8,7 +8,7 @@ import {
 } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { channelActorMemberWhere } from "./channel-authority.server";
-import type { ChannelActor } from "./public-channels.server";
+import type { ChannelActor } from "./channel-access.server";
 
 /**
  * The writes that change an existing channel or its roster, each recording its app notification
