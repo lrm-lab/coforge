@@ -4,6 +4,7 @@ import {
   diagnosticErrorCode,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
+import { scrubStderrHint } from "#src/stderr-hint";
 import { bounded, KiroConnection, record } from "./connection";
 import type { KiroRuntimeHost } from "./host";
 
@@ -70,14 +71,4 @@ export async function discoverKiroCatalog(
   } finally {
     await transport?.dispose();
   }
-}
-
-/** A short, single-line, bounded excerpt of a CLI diagnostic; redacts anything that looks like a
- * token or credential before it ever reaches a log. */
-function scrubStderrHint(line: string): string {
-  return line
-    .trim()
-    .replace(/(?:sk|pk|api|token|key|secret)[_-]?[A-Za-z0-9_-]{8,}/gi, "[redacted]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
-    .slice(0, 200);
 }

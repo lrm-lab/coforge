@@ -12,32 +12,33 @@
 
 ## Module map
 
-| Path | Responsibility |
-| --- | --- |
-| `src/contract.ts` | Provider-neutral sessions, provider and auth contracts |
-| `src/runtime-auth-status.ts` | Shared runtime auth status values |
-| `src/execution.ts` | Explicit public entry for JSONL catalog execution, per-turn sessions and process cleanup |
-| `src/jsonl-error.ts` | Pure JSONL protocol/request errors, shared by neutral projections and execution |
-| `src/jsonl-process.ts` | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership |
-| `src/process-tree.ts` | Host process ownership ports, optional terminal transport and shared cleanup deadline policy |
-| `src/catalog-discovery.ts` | Catalog wait deadlines and trusted discovery error projection |
-| `src/catalog-process.ts` | JSONL catalog execution and diagnostics with required host environment and process ports |
-| `src/catalog-command.ts` | Host catalog command execution port |
-| `src/per-turn/` | Shared per-turn session and process execution |
-| `src/version-gate.ts` | Shared version policy and required host version-reader port |
-| `src/pi/` | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities |
-| `src/antigravity/` | Antigravity per-turn protocol, tool events, version/catalog policy and usage parsing |
-| `src/dsh/` | DSH ACP, pinned preview version, native catalogs and literal instruction content behind host ports |
-| `src/grok/` | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities |
-| `src/command-code/` | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge |
-| `src/kiro/` | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
-| `src/opencode/` | OpenCode turns, version policy, catalog, and private instruction overlay |
-| `src/cursor/` | Cursor turn protocol, provider and model catalog parsing |
-| `src/codex/` | Codex sessions, native events, auth, usage, catalog and idle-recycle rollout reads through required host capabilities |
-| `src/claude-code/` | Claude sessions, native events, auth, usage, history and catalog through required host capabilities |
-| `src/inline-text.ts` | Pure whitespace normalization for inline text projections |
-| `src/subagent-type.ts` | SDK-bounded display-safe subagent type projection |
-| Other `src/` modules | Shared runtime Activity, error, JSON, stream and deadline utilities |
+| Path                         | Responsibility                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `src/contract.ts`            | Provider-neutral sessions, provider and auth contracts                                                                        |
+| `src/runtime-auth-status.ts` | Shared runtime auth status values                                                                                             |
+| `src/execution.ts`           | Explicit public entry for JSONL catalog execution, per-turn sessions and process cleanup                                      |
+| `src/jsonl-error.ts`         | Pure JSONL protocol/request errors, shared by neutral projections and execution                                               |
+| `src/jsonl-process.ts`       | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership                         |
+| `src/process-tree.ts`        | Host process ownership ports, optional terminal transport and shared cleanup deadline policy                                  |
+| `src/catalog-discovery.ts`   | Catalog wait deadlines and trusted discovery error projection                                                                 |
+| `src/catalog-process.ts`     | JSONL catalog execution and diagnostics with required host environment and process ports                                      |
+| `src/catalog-command.ts`     | Host catalog command execution port                                                                                           |
+| `src/stderr-hint.ts`         | The bounded, credential-redacted single-line stderr excerpt a catalog logs                                                    |
+| `src/per-turn/`              | Shared per-turn session and process execution                                                                                 |
+| `src/version-gate.ts`        | Shared version policy and required host version-reader port                                                                   |
+| `src/pi/`                    | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities                   |
+| `src/antigravity/`           | Antigravity per-turn protocol, tool events, version/catalog policy and usage parsing                                          |
+| `src/dsh/`                   | DSH ACP, pinned preview version, native catalogs and literal instruction content behind host ports                            |
+| `src/grok/`                  | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities                                 |
+| `src/command-code/`          | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge                                      |
+| `src/kiro/`                  | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
+| `src/opencode/`              | OpenCode turns, version policy, catalog, and private instruction overlay                                                      |
+| `src/cursor/`                | Cursor turn protocol, provider and model catalog parsing                                                                      |
+| `src/codex/`                 | Codex sessions, native events, auth, usage, catalog and idle-recycle rollout reads through required host capabilities         |
+| `src/claude-code/`           | Claude sessions, native events, auth, usage, history and catalog through required host capabilities                           |
+| `src/inline-text.ts`         | Pure whitespace normalization for inline text projections                                                                     |
+| `src/subagent-type.ts`       | SDK-bounded display-safe subagent type projection                                                                             |
+| Other `src/` modules         | Shared runtime Activity, error, JSON, stream and deadline utilities                                                           |
 
 ## Runtime instructions
 

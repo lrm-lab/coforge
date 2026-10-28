@@ -5,6 +5,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { catalogErrorMessage, within } from "#src/catalog-discovery";
+import { scrubStderrHint } from "#src/stderr-hint";
 import { CommandCodeConnection, commandCodeBounded } from "./connection";
 import type { CommandCodeRuntimeHost } from "./host";
 
@@ -88,12 +89,4 @@ export async function discoverCommandCodeCatalog(
     }
     await transport?.dispose();
   }
-}
-
-function scrubStderrHint(line: string): string {
-  return line
-    .trim()
-    .replace(/(?:sk|pk|api|token|key|secret)[_-]?[A-Za-z0-9_-]{8,}/gi, "[redacted]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
-    .slice(0, 200);
 }
