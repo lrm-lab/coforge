@@ -48,6 +48,7 @@ function host(overrides: Partial<CommandCodeAuthHost> = {}): CommandCodeAuthHost
   return {
     runStatus: async () => ({ output: '{"authenticated":true}', exitCode: 0 }),
     spawn: () => fakeProcess([], 0),
+    apiKeyEnvironmentSet: () => false,
     ...overrides,
   };
 }
@@ -179,13 +180,43 @@ test("Command Code logout runs cmd logout and reports logged_out", async () => {
   });
 });
 
-test("Command Code logout reports still_logged_in when an environment key survives logout", async () => {
-  const adapter = new CommandCodeRuntimeAuthAdapter(host({ spawn: () => fakeProcess([], 0) }));
-  await expect(adapter.logout({ workingDirectory: "/tmp" })).resolves.toEqual({
+test("Command Code logout names the environment key only when COMMAND_CODE_API_KEY is set", async () => {
+  const fromEnv = new CommandCodeRuntimeAuthAdapter(
+    host({ spawn: () => fakeProcess([], 0), apiKeyEnvironmentSet: () => true }),
+  );
+  await expect(fromEnv.logout({ workingDirectory: "/tmp" })).resolves.toEqual({
     status: "failed",
     reason: "still_logged_in",
     detail: COMMAND_CODE_API_KEY_ENV_DETAIL,
   });
+  const notFromEnv = new CommandCodeRuntimeAuthAdapter(
+    host({ spawn: () => fakeProcess([], 0), apiKeyEnvironmentSet: () => false }),
+  );
+  await expect(notFromEnv.logout({ workingDirectory: "/tmp" })).resolves.toEqual({
+    status: "failed",
+    reason: "still_logged_in",
+  });
+});
+
+test("Command Code login still detects the paste prompt when ANSI color codes split it", async () => {
+  let child: (CommandCodeAuthProcess & { disposed: boolean }) | undefined;
+  const adapter = new CommandCodeRuntimeAuthAdapter(
+    host({
+      spawn: () => {
+        child = fakeProcess(
+          ["\u001b[33mPaste your \u001b[0m", "\u001b[1mAPI key\u001b[0m below.\n"],
+          0,
+        );
+        return child;
+      },
+    }),
+  );
+  await expect(adapter.startLogin({ workingDirectory: "/tmp" }, interaction)).resolves.toEqual({
+    status: "failed",
+    reason: "interaction_failed",
+    detail: COMMAND_CODE_BROWSER_UNAVAILABLE_DETAIL,
+  });
+  expect(child?.disposed).toBe(true);
 });
 
 test("Command Code submitCode is rejected because login completes in the browser", async () => {

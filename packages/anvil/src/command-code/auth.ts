@@ -36,6 +36,8 @@ export interface CommandCodeAuthProcess {
 export interface CommandCodeAuthHost {
   runStatus(cwd: string, timeoutMs: number): Promise<{ output: string; exitCode: number }>;
   spawn(args: readonly string[], cwd: string): CommandCodeAuthProcess;
+  /** Presence only: whether the daemon environment sets COMMAND_CODE_API_KEY. The value is never read. */
+  apiKeyEnvironmentSet(): boolean;
 }
 
 /** Native Command Code login policy; the CLI writes the key itself, so the daemon never reads it. */
@@ -116,7 +118,7 @@ export class CommandCodeRuntimeAuthAdapter implements RuntimeAuthAdapter {
     let text = "";
     for await (const chunk of child.output) {
       text += decoder.decode(chunk, { stream: true });
-      if (MANUAL_KEY_PROMPT.test(text))
+      if (MANUAL_KEY_PROMPT.test(Bun.stripANSI(text)))
         return {
           status: "failed",
           reason: "interaction_failed",
@@ -156,11 +158,13 @@ export class CommandCodeRuntimeAuthAdapter implements RuntimeAuthAdapter {
       const authStatus = await this.readStatus(options);
       if (authStatus.state === "logged_out") return { status: "logged_out", authStatus };
       if (authStatus.state === "logged_in")
-        return {
-          status: "failed",
-          reason: "still_logged_in",
-          detail: COMMAND_CODE_API_KEY_ENV_DETAIL,
-        };
+        return this.host.apiKeyEnvironmentSet()
+          ? {
+              status: "failed",
+              reason: "still_logged_in",
+              detail: COMMAND_CODE_API_KEY_ENV_DETAIL,
+            }
+          : { status: "failed", reason: "still_logged_in" };
       return { status: "failed", reason: "process_failed" };
     } catch {
       return { status: "failed", reason: timedOut ? "timed_out" : "process_failed" };

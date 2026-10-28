@@ -37,5 +37,6 @@ export function createCommandCodeAuthHost(command: readonly string[]): CommandCo
       });
       return commandCodeAuthProcess(processSpawner.spawn([...command, ...args], cwd, env));
     },
+    apiKeyEnvironmentSet: () => Boolean(Bun.env.COMMAND_CODE_API_KEY),
   };
 }
