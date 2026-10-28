@@ -1,4 +1,6 @@
 export { discoverDevinCatalog, DEVIN_CATALOG_TIMEOUT_MS } from "./catalog";
+export { devinEffortValues, readDevinModelEfforts } from "./efforts";
+export type { DevinEffortRead, DevinEffortFailureCode } from "./efforts";
 export { DevinProvider } from "./provider";
 export { DevinTurnEvents } from "./update-events";
 export {

@@ -34,7 +34,7 @@ test("inventory refresh reads the Devin model catalog and display name", async (
       models: [
         expect.objectContaining({
           id: "gpt-6-sol-high",
-          reasoningEfforts: [],
+          reasoningEfforts: ["none", "low", "high", "max"],
           defaultReasoning: "",
           recommended: true,
         }),

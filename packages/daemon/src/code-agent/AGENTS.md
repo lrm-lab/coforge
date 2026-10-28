@@ -78,7 +78,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - The model catalog is `session/new`'s `model` config option, read by Anvil and cached with the
   other CLI catalogs. Effort is not on that list. After one model is selected, the daemon reads
   that model's `thought_level` options, drops `default` (stored as an empty string), and caches
-  the rest by Command Code version and model id for the catalog TTL. A version change drops the
+  the rest by provider version and model id for the catalog TTL through the shared
+  `code-agent/effort-cache.ts` (Devin caches the same way). A version change drops the
   cache. Failures are not cached. A missing effort option leaves the model's own default. There
   is no usage scan. Permission requests are allow-once only for the active session, and all other
   requests are cancelled.

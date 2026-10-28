@@ -16,8 +16,10 @@ export const DEVIN_CATALOG_TIMEOUT_MS = 30_000;
 
 /**
  * The model list is `session/new`'s `model` select, exactly as `devin acp` reports it: every
- * variant (the variant name already carries its effort and priority). Effort choices
- * (`thought_level`) depend on the selected model and are applied by a session, not listed here.
+ * variant (the variant name already carries its effort and priority). Each model's effort
+ * choices come from `readDevinModelEfforts` (`efforts.ts`): the `thought_level` select changes
+ * after a model switch, so it is read once per model in one session, and a session applies
+ * `runtime.reasoning` through it at launch.
  */
 export async function discoverDevinCatalog(
   command: readonly string[],

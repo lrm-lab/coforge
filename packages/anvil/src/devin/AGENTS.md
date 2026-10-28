@@ -5,7 +5,10 @@
 - The model list is `session/new`'s `model` config select: one option per variant, `value` the
   `model_uid`. Effort is the separate `thought_level` select, and its choices change after a model
   switch, so a session sets the model first and applies `runtime.reasoning` only when the returned
-  select contains it. Models are not re-read from `devin models list`.
+  select contains it. The catalog's per-model effort lists come from `readDevinModelEfforts`
+  (`efforts.ts`): one `devin acp` session switches to each model and reads its select back; a model
+  with no `thought_level` select reports an empty list, an unread model is a failure and never a
+  fake empty. Models are not re-read from `devin models list`.
 - Resume uses `session/load`. A session Devin no longer has (`-32016` with
   `data["cognition.ai/errorKind"]: "session_not_found"`) starts a fresh one and reports it as
   replaced (`onSessionId(newId, oldId)`); any other load failure surfaces. `sessionMode: "create"`

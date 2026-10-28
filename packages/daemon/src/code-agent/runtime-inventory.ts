@@ -13,7 +13,8 @@ import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
 import { discoverCommandCodeCatalog } from "@lrm/coforge-anvil/command-code";
-import { discoverDevinCatalog } from "@lrm/coforge-anvil/devin";
+import { discoverDevinCatalog, readDevinModelEfforts } from "@lrm/coforge-anvil/devin";
+import { readDevinEffortsForCatalog } from "#src/code-agent/devin/effort-read";
 import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
 import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
 import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
@@ -406,11 +407,43 @@ export async function discoverCodeAgentCatalogs(
       discoveries.push(
         discoverDevinCatalog(commands.devin ?? [executable], cwd, environment, devinRuntimeHost)
           .catch(() => undefined)
-          .then((catalog) => ({
-            provider: RUNTIME_PROVIDER.DEVIN,
-            keyPaths: [executable],
-            catalog,
-          })),
+          .then(async (catalog) => {
+            // A model whose efforts are unread is withheld, not published as effort-less:
+            // the catalog reports again once every model's `thought_level` is known.
+            if (!catalog)
+              return { provider: RUNTIME_PROVIDER.DEVIN, keyPaths: [executable], catalog };
+            const read = await readDevinEffortsForCatalog({
+              modelIds: catalog.models.map((model) => model.id),
+              stateDirectory: options.cacheDirectory,
+              version: runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)
+                ?.version,
+              live: (modelIds) =>
+                readDevinModelEfforts(
+                  commands.devin ?? [executable],
+                  cwd,
+                  environment,
+                  devinRuntimeHost,
+                  modelIds,
+                ),
+            });
+            if (!read.complete)
+              return {
+                provider: RUNTIME_PROVIDER.DEVIN,
+                keyPaths: [executable],
+                catalog: undefined,
+              };
+            return {
+              provider: RUNTIME_PROVIDER.DEVIN,
+              keyPaths: [executable],
+              catalog: {
+                ...catalog,
+                models: catalog.models.map((model) => ({
+                  ...model,
+                  reasoningEfforts: [...(read.efforts.get(model.id) ?? [])],
+                })),
+              },
+            };
+          }),
       );
   }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DSH)) {
