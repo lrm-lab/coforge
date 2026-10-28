@@ -1,12 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { readDeadline } from "#src/lib/read-deadline";
 import { searchMessages } from "#src/server/conversations/message-search.server";
 import { messageSearchInputSchema } from "./search.schemas";
 
-/** One page of the messages the viewer may read in the current Workspace that match a search. */
+/** One page of the messages the viewer may read in the current Workspace that match a search. A
+ * full-text search of a large Workspace can take longer than other reads. */
 export const searchWorkspaceMessages = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([readDeadline(30_000), workspaceUserMiddleware])
   .validator(messageSearchInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;

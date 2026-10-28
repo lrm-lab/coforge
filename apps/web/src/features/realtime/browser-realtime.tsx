@@ -11,6 +11,7 @@ import {
   type ConnectionEvent,
 } from "./connection-status";
 import type { StreamPosition, SubscribedRecovery } from "./subscription-gap";
+import { watchRealtimeWake } from "./realtime-wake";
 
 /** The one realtime subscription type for the shared Workspace connection. */
 export type BrowserRealtimeSubscription = Subscription;
@@ -38,7 +39,9 @@ export function BrowserRealtimeProvider({
     });
     setClient(next);
     next.connect();
+    const stopWake = watchRealtimeWake(next);
     return () => {
+      stopWake();
       setClient(null);
       next.disconnect();
     };

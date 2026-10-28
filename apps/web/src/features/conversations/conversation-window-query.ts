@@ -48,13 +48,13 @@ const beforeFirstMessage = (messages: PageMessage[]) => messages[0]?.sequence;
 
 export function conversationPages<M extends PageMessage, T extends ConversationPage<M>>(
   queryKey: readonly unknown[],
-  loadPage: (page: PageRequest) => Promise<T>,
+  loadPage: (page: PageRequest, signal?: AbortSignal) => Promise<T>,
 ) {
   // The bounded window: `maxPages` keeps the loaded pages from growing with every page of history
   // read, dropping the page at the far end from the fetch (see `lib/conversation-window.ts`).
   const query = infiniteQueryOptions({
     queryKey,
-    queryFn: ({ client, queryKey, pageParam, meta }) => {
+    queryFn: ({ client, queryKey, pageParam, meta, signal }) => {
       const cursor = pageParam as ConversationWindowCursor;
       // While a fetch runs, the query's state still holds the window from before it, and its
       // `fetchMeta` already says whether this is a page more (`fetchMore`) or a full refetch.
@@ -68,15 +68,18 @@ export function conversationPages<M extends PageMessage, T extends ConversationP
       // tail that realtime has grown without bound. Restart from the uncursored newest page only
       // while the viewport is following it; an active reader keeps the retained cursors and rows.
       const requestCursor = fullRefetch && windowAtTail && followingLatest ? undefined : cursor;
-      return loadPage({
-        beforeSequence: requestCursor?.before,
-        afterSequence: requestCursor?.after,
-        limit: windowPageLimit({
-          forward: requestCursor?.after !== undefined,
-          fullRefetch,
-          windowAtTail,
-        }),
-      });
+      return loadPage(
+        {
+          beforeSequence: requestCursor?.before,
+          afterSequence: requestCursor?.after,
+          limit: windowPageLimit({
+            forward: requestCursor?.after !== undefined,
+            fullRefetch,
+            windowAtTail,
+          }),
+        },
+        signal,
+      );
     },
     initialPageParam: undefined as ConversationWindowCursor,
     maxPages: CONVERSATION_WINDOW_MAX_PAGES,

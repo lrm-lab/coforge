@@ -97,7 +97,7 @@ export function useChannelConversation(channelId: string) {
         });
         page.mergeUpdates([message]);
         if (threadRootId) page.setThreadFollowed(threadRootId, true);
-        void page.reconciliation.reconcile().catch(() => {});
+        void page.reconciliation.reconcile();
         return message;
       },
       onToggleReaction: (messageId: string, emoji: string, active: boolean) =>
@@ -175,7 +175,7 @@ export function useDirectConversation(conversationId: string) {
           data: { conversationId, idempotencyKey, body, attachmentIds, threadRootId, asTask },
         });
         page.mergeUpdates([message]);
-        void page.reconciliation.reconcile().catch(() => {});
+        void page.reconciliation.reconcile();
         return message;
       },
       onToggleReaction: (messageId: string, emoji: string, active: boolean) =>

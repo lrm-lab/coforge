@@ -11,7 +11,8 @@ import { conversationThreadQueryKey } from "./thread-cache";
 export const conversationThreadQuery = (conversationId: string, rootId: string) =>
   queryOptions({
     queryKey: conversationThreadQueryKey(conversationId, rootId),
-    queryFn: () => loadConversationThread({ data: { conversationId, threadRootId: rootId } }),
+    queryFn: ({ signal }) =>
+      loadConversationThread({ data: { conversationId, threadRootId: rootId }, signal }),
   });
 
 /** A thread's replies, and where their read stands. */

@@ -53,13 +53,13 @@ import { mergeWindowThreads, newestReflectedSequence } from "./thread-summary-mo
 import { useReadTicks } from "./use-read-ticks";
 
 export const directConversationQuery = (conversationId: string) =>
-  conversationPages(["conversation", "direct", conversationId], (page) =>
-    loadDirectConversation({ data: { conversationId, ...page } }),
+  conversationPages(["conversation", "direct", conversationId], (page, signal) =>
+    loadDirectConversation({ data: { conversationId, ...page }, signal }),
   );
 
 export const publicChannelQuery = (channelId: string) =>
-  conversationPages(["conversation", "channel", channelId], (page) =>
-    loadPublicChannel({ data: { channelId, ...page } }),
+  conversationPages(["conversation", "channel", channelId], (page, signal) =>
+    loadPublicChannel({ data: { channelId, ...page }, signal }),
   );
 
 /** The window an around read answers, without `anchorThreadRootId`, which only its caller needs:
@@ -75,7 +75,8 @@ export function aroundWindow<A extends { anchorThreadRootId?: string }>({
 export const conversationAroundQuery = (conversationId: string, messageId: string) =>
   queryOptions({
     queryKey: ["conversation", "around", conversationId, messageId],
-    queryFn: () => loadConversationAround({ data: { conversationId, messageId } }),
+    queryFn: ({ signal }) =>
+      loadConversationAround({ data: { conversationId, messageId }, signal }),
     staleTime: 0,
   });
 
@@ -106,11 +107,12 @@ function namesOfRead(read: Awaited<ReturnType<typeof listChannelNames>>) {
 }
 
 export const directConversationUpdates =
-  (conversationId: string) => (cursor: ConversationUpdatesCursor) =>
-    loadDirectConversationUpdates({ data: { conversationId, ...cursor } });
+  (conversationId: string) => (cursor: ConversationUpdatesCursor, signal: AbortSignal) =>
+    loadDirectConversationUpdates({ data: { conversationId, ...cursor }, signal });
 
-export const publicChannelUpdates = (channelId: string) => (cursor: ConversationUpdatesCursor) =>
-  loadPublicChannelUpdates({ data: { channelId, ...cursor } });
+export const publicChannelUpdates =
+  (channelId: string) => (cursor: ConversationUpdatesCursor, signal: AbortSignal) =>
+    loadPublicChannelUpdates({ data: { channelId, ...cursor }, signal });
 
 type Pages<T> = InfiniteData<T, ConversationWindowCursor>;
 
@@ -156,7 +158,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   query: ReturnType<typeof conversationPages<M, T>>["query"];
   /** The newest page on its own: how "back to latest" recovers a tail the window evicted. */
   loadInitialPage: () => Promise<T>;
-  loadUpdates: (cursor: ConversationUpdatesCursor) => Promise<M[]>;
+  loadUpdates: (cursor: ConversationUpdatesCursor, signal: AbortSignal) => Promise<M[]>;
   /** Extra work per realtime event, run alongside reconciliation. */
   onRealtime?: () => Promise<unknown>;
   /** The messages `mergeUpdates` folds in, as they arrive. */
@@ -270,12 +272,13 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
           afterSequence: latestPage.messages.at(-1)?.sequence ?? 0,
           afterReplySequence: newestReflectedSequence(latestPage),
         },
-        (cursor) => loadUpdatesRef.current(cursor),
+        (cursor, signal) => loadUpdatesRef.current(cursor, signal),
         (updates) => mergeUpdatesRef.current(updates),
       ),
     // A new conversation starts a new reconciler; later pages of the same one keep it.
     [conversationId],
   );
+  useEffect(() => reconciliation.stop, [reconciliation]);
   // The window's own network read moves the reconciler past what it holds (see `advance`); the
   // page's own writes to the window (a sent message merged in) do not, since messages from others
   // that arrived before it may still be unread.
@@ -343,9 +346,9 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   );
   useConversationRealtime(
     conversationId,
-    async () => {
+    async (options) => {
       await Promise.all([
-        reconciliation.reconcile(),
+        reconciliation.reconcile(options),
         onRealtimeRef.current?.(),
         refreshPendingActionCards(loadedRef.current(), updateMessageRef.current),
       ]);

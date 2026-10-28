@@ -1,6 +1,7 @@
 import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/react-start";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
+import { readDeadline } from "#src/lib/read-deadline";
 import { toPublicServerError } from "#src/server/errors/public-error.server";
 import { withServerTiming } from "#src/server/observability/server-timing.server";
 
@@ -63,5 +64,5 @@ const agentRequestLogger = createMiddleware().server(async ({ next, request }) =
 
 export const startInstance = createStart(() => ({
   requestMiddleware: [csrfMiddleware, serverTiming, agentRequestLogger],
-  functionMiddleware: [publicServerFunctionErrors],
+  functionMiddleware: [publicServerFunctionErrors, readDeadline()],
 }));

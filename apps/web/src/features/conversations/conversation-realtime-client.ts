@@ -28,7 +28,10 @@ export function subscribeToConversationRealtime(
   input: {
     conversationId: string;
     getToken: () => Promise<string>;
-    reconcile: () => void;
+    /** `restart`: the page came back (visible, online, or a resubscribe that could not replay
+     * what it missed), so a read in flight may be stuck on a connection that died meanwhile
+     * (`createConversationReconciler`). */
+    reconcile: (options?: { restart?: boolean }) => void;
     /** A membership change in this conversation (join/leave/add/remove) may have gone unseen:
      * the member directory (composer candidates, plain-@handle resolution) must be refetched.
      * `"page-payload"`: the first subscribe, which covers what changed while the page loaded, so
@@ -55,8 +58,8 @@ export function subscribeToConversationRealtime(
   },
 ) {
   const channel = conversationRealtimeChannel(input.conversationId);
-  const requestReconciliation = () => {
-    if (document.visibilityState === "visible") input.reconcile();
+  const requestReconciliation = (options?: { restart?: boolean }) => {
+    if (document.visibilityState === "visible") input.reconcile(options);
   };
   const releaseSubscription = subscribeToSharedRealtime(client, {
     channel,
@@ -68,7 +71,7 @@ export function subscribeToConversationRealtime(
       // resubscribe that lost publications — may include a member change as well as messages.
       const gap = subscriptionGap(context);
       if (gap === "none") return;
-      requestReconciliation();
+      requestReconciliation({ restart: true });
       if (gap === "lost") input.onPublicationsLost?.();
       input.onMemberChanged?.(gap === "unrecovered" ? "page-payload" : "all");
     },
@@ -104,22 +107,21 @@ export function subscribeToConversationRealtime(
       } catch {}
     },
   });
-  const onVisibilityChange = () => requestReconciliation();
-  const onOnline = () => requestReconciliation();
-  const safetyTimer = window.setInterval(requestReconciliation, 30_000);
-  document.addEventListener("visibilitychange", onVisibilityChange);
-  window.addEventListener("online", onOnline);
+  const onBack = () => requestReconciliation({ restart: true });
+  const safetyTimer = window.setInterval(() => requestReconciliation(), 30_000);
+  document.addEventListener("visibilitychange", onBack);
+  window.addEventListener("online", onBack);
   return () => {
     window.clearInterval(safetyTimer);
-    document.removeEventListener("visibilitychange", onVisibilityChange);
-    window.removeEventListener("online", onOnline);
+    document.removeEventListener("visibilitychange", onBack);
+    window.removeEventListener("online", onBack);
     releaseSubscription();
   };
 }
 
 export function useConversationRealtime(
   conversationId: string,
-  reconcile: () => Promise<void>,
+  reconcile: (options?: { restart?: boolean }) => Promise<void>,
   onMemberChanged?: (stale: MemberDirectoryStale) => void,
   onChannelUpdated?: () => void,
   onReaction?: (event: MessageReactionEvent) => void,
@@ -146,7 +148,7 @@ export function useConversationRealtime(
     return subscribeToConversationRealtime(client, {
       conversationId,
       getToken: () => getToken({ data: { conversationId } }),
-      reconcile: () => void reconcileRef.current().catch(() => {}),
+      reconcile: (options) => void reconcileRef.current(options).catch(() => {}),
       onMemberChanged: (stale) => memberChangedRef.current?.(stale),
       onChannelUpdated: () => channelUpdatedRef.current?.(),
       onSentMessage: (idempotencyKey, messageId) =>

@@ -10,32 +10,83 @@ export type ConversationMessage = { id: string; sequence: number };
  */
 export type ConversationUpdatesCursor = { afterSequence: number; afterReplySequence?: number };
 
+/** How long a failed catch-up waits before it tries again: doubling from `firstMs` up to `maxMs`,
+ * with jitter so the pages that lost the server together do not come back together. */
+export const RECONCILE_RETRY = { firstMs: 1_000, maxMs: 30_000 };
+
+/**
+ * Keeps a conversation caught up with what arrived past its cursor. One read runs at a time; a
+ * read has the deadline every read from the browser has (`lib/read-deadline.ts`), so one stuck on
+ * a dead connection fails instead of holding every later catch-up (task #253). A failure is
+ * retried after `RECONCILE_RETRY`, and only while the page is visible: coming back restarts it.
+ */
 export function createConversationReconciler<T extends ConversationMessage>(
   start: ConversationUpdatesCursor,
-  loadPage: (cursor: ConversationUpdatesCursor) => Promise<T[]>,
+  loadPage: (cursor: ConversationUpdatesCursor, signal: AbortSignal) => Promise<T[]>,
   mergePage: (messages: T[]) => void,
+  {
+    retry = RECONCILE_RETRY,
+    canRetry = () => typeof document === "undefined" || document.visibilityState === "visible",
+    random = Math.random,
+  } = {},
 ) {
   let cursor = start;
   let requested = false;
   let active: Promise<void> | undefined;
+  let reading: AbortController | undefined;
+  let failures = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const readToTheEnd = async (signal: AbortSignal) => {
+    let page: T[];
+    do {
+      page = await loadPage(cursor, signal);
+      if (page.length) {
+        // A page holds everything past the cursor up to its newest message, so one cursor
+        // stands for both from here on.
+        cursor = {
+          afterSequence: Math.max(cursor.afterSequence, ...page.map((m) => m.sequence)),
+        };
+        mergePage(page);
+      }
+    } while (page.length === 100);
+  };
 
   const drain = async () => {
-    do {
+    while (requested) {
       requested = false;
-      let page: T[];
-      do {
-        page = await loadPage(cursor);
-        if (page.length) {
-          // A page holds everything past the cursor up to its newest message, so one cursor
-          // stands for both from here on.
-          cursor = {
-            afterSequence: Math.max(cursor.afterSequence, ...page.map((m) => m.sequence)),
-          };
-          mergePage(page);
-        }
-      } while (page.length === 100);
-    } while (requested);
+      const controller = new AbortController();
+      reading = controller;
+      try {
+        await readToTheEnd(controller.signal);
+        failures = 0;
+      } catch (error) {
+        // Abandoned by a restart, which asked for the read that follows, or by `stop`.
+        if (controller.signal.aborted) continue;
+        failures += 1;
+        console.warn("conversation catch-up failed", failures, error);
+        const delay = Math.min(retry.maxMs, retry.firstMs * 2 ** (failures - 1));
+        retryTimer = setTimeout(
+          () => {
+            retryTimer = undefined;
+            requested = true;
+            if (canRetry()) run();
+          },
+          delay * (0.5 + random() / 2),
+        );
+        return;
+      } finally {
+        reading = undefined;
+      }
+    }
   };
+
+  const run = (): Promise<void> =>
+    (active ??= drain().finally(() => {
+      active = undefined;
+      // Asked for between the last read and here, after `drain` stopped looking.
+      if (requested && retryTimer === undefined) void run();
+    }));
 
   return {
     /**
@@ -49,12 +100,31 @@ export function createConversationReconciler<T extends ConversationMessage>(
     advance(to: ConversationUpdatesCursor) {
       if (to.afterSequence > cursor.afterSequence) cursor = to;
     },
-    reconcile() {
+    /**
+     * Reads what arrived past the cursor; the promise settles when the page is caught up or the
+     * read failed (and its retry is scheduled). A call made while a read runs asks for one more
+     * after it, and one made while a failure waits out its retry waits with it. `restart` (the
+     * page came back: visible, online, or a resubscribe that could not replay what it missed)
+     * abandons the read in flight, which may be stuck on a connection that died meanwhile, and the
+     * retry's wait, and reads again at once.
+     */
+    reconcile({ restart = false }: { restart?: boolean } = {}): Promise<void> {
       requested = true;
-      active ??= drain().finally(() => {
-        active = undefined;
-      });
-      return active;
+      if (retryTimer !== undefined) {
+        if (!restart) return Promise.resolve();
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
+      }
+      if (restart) reading?.abort();
+      return run();
+    },
+    /** The conversation was left: the read in flight and a pending retry are dropped. A later
+     * call reads again (React runs an effect's cleanup and the effect again on a remount). */
+    stop() {
+      requested = false;
+      clearTimeout(retryTimer);
+      retryTimer = undefined;
+      reading?.abort();
     },
   };
 }
