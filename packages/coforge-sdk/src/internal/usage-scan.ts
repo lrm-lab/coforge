@@ -14,22 +14,9 @@ export type UsageScanResponse = {
   message?: string;
   snapshotJson?: Uint8Array;
 };
-export const encodeUsageScanRequest = (v: UsageScanRequest) =>
-  toBinary(UsageScanRequestSchema, create(UsageScanRequestSchema, v));
 export const decodeUsageScanRequest = (b: Uint8Array): UsageScanRequest => {
   const v = fromBinary(UsageScanRequestSchema, b);
   return { protocolMajor: v.protocolMajor, requestId: v.requestId, provider: v.provider };
 };
 export const encodeUsageScanResponse = (v: UsageScanResponse) =>
   toBinary(UsageScanResponseSchema, create(UsageScanResponseSchema, v));
-export const decodeUsageScanResponse = (b: Uint8Array): UsageScanResponse => {
-  const v = fromBinary(UsageScanResponseSchema, b);
-  return {
-    protocolMajor: v.protocolMajor,
-    requestId: v.requestId,
-    accepted: v.accepted,
-    status: v.status,
-    message: v.message || undefined,
-    snapshotJson: v.snapshotJson.length ? v.snapshotJson : undefined,
-  };
-};

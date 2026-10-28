@@ -1,5 +1,6 @@
 import { channelSummaryBody } from "./message-summary";
 import { fenceMessageBody } from "./message-body-format";
+import { shortId } from "./short-id";
 import {
   renderMessageSender,
   threadParentTarget,
@@ -13,10 +14,6 @@ export function messageSender(message: AgentMessageRecord): string {
 
 export function isThreadTarget(target: string): boolean {
   return threadParentTarget(target) !== undefined;
-}
-
-export function shortId(id: string): string {
-  return id.slice(0, 13);
 }
 
 function pad(value: number): string {

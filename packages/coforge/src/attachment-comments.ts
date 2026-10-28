@@ -8,7 +8,8 @@ import {
 import { renderMessageSender, UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 import { fenceMessageBody } from "#src/message-body-format";
-import { formatUtcTimestamp, shortId } from "#src/message-format";
+import { formatUtcTimestamp } from "#src/message-format";
+import { shortId } from "#src/short-id";
 
 export type AttachmentCommentsInvocation = {
   command: "attachment-comments";

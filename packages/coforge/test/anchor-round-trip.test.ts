@@ -8,7 +8,7 @@ describe("the short thread form the CLI prints round-trips through its own gramm
   // Task #88: the v7 collision moved the printed short id from eight hex to twelve hex with the
   // uuid's first dash. Every display that prints a short form and every parser that accepts one
   // must agree, or an Agent that copies a printed `replyTarget` gets a Usage error and thread
-  // replies break. The display format lives in message-format's `shortId`; the target grammars
+  // replies break. The display format lives in `src/short-id.ts`; the target grammars
   // are the parse branches and the SDK's channel-target check.
   for (const short of [
     "01a1332b-2592", // first two uuid groups: the twelve hex + dash the CLI prints

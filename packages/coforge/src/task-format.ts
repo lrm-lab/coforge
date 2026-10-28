@@ -9,15 +9,11 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 import { formatUtcTimestamp } from "#src/message-format";
+import { shortId } from "#src/short-id";
 import { fenceMessageBody } from "#src/message-body-format";
 
 /** The status filter a `task list` was given; `undefined` when none was passed. */
 export type TaskListStatus = TaskStatus | "all" | undefined;
-
-/** The same short form as message-format's `shortId`: first twelve hex characters with the dash. */
-function shortId(id: string): string {
-  return id.slice(0, 13);
-}
 
 /** Why a named member no longer acts in the conversation, if they do not. */
 function departure(member: TaskMember): "deleted" | "left" | undefined {

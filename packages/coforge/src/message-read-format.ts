@@ -7,9 +7,9 @@ import {
   isThreadTarget,
   memoryHintSuffix,
   messageSender,
-  shortId,
   taskSuffix,
 } from "./message-format";
+import { shortId } from "./short-id";
 import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 
 export type ReadWindowResponse = {
