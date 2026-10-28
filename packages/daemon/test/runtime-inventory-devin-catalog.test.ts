@@ -34,7 +34,6 @@ test("inventory refresh reads the Devin model catalog and display name", async (
       models: [
         expect.objectContaining({
           id: "gpt-6-sol-high",
-          reasoningEfforts: [],
           defaultReasoning: "",
           recommended: true,
         }),
@@ -42,6 +41,10 @@ test("inventory refresh reads the Devin model catalog and display name", async (
         expect.objectContaining({ id: "claude-opus-5-5-medium" }),
       ],
     });
+    // The catalog publishes at discovery speed — no model's  sweep has run, so
+    // efforts are unread (absent), never an empty list that would claim no reasoning control.
+    for (const model of inventory.catalogs.find((catalog) => catalog.provider === "devin")!.models)
+      expect(model.reasoningEfforts).toBeUndefined();
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

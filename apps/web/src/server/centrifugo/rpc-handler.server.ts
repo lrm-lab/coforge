@@ -13,6 +13,7 @@ import {
 } from "#src/server/errors/request-error-handler.server";
 import { getComputerStatusCache, type ComputerStatusCache } from "./computer-status.server";
 import { requireDaemonPrincipal } from "./daemon-rpc-principal.server";
+import { validModelCatalogs } from "./rpc-handler-catalog-validation.server";
 import { WorkspaceQueryError, WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { decodeWorkspaceGetRequest, decodeWorkspaceListRequest } from "@lrm/coforge-sdk/internal";
 import {
@@ -1022,23 +1023,6 @@ function usageStatus(
   if (value === "unavailable" || value === "reauth" || value === "unsupported" || value === "error")
     return value;
   return "error";
-}
-
-function validModelCatalogs(catalogs: CodeAgentModelCatalog[]): boolean {
-  if (new Set(catalogs.map((catalog) => catalog.provider)).size !== catalogs.length) return false;
-  return catalogs.every((catalog) =>
-    catalog.models.every(
-      (model) =>
-        model.id.length > 0 &&
-        model.id.length <= 200 &&
-        model.displayName.length <= 200 &&
-        model.description.length <= 2_000 &&
-        model.modelProvider.length <= 100 &&
-        model.defaultReasoning.length <= 100 &&
-        model.reasoningEfforts.length <= 20 &&
-        model.reasoningEfforts.every((effort) => effort.length > 0 && effort.length <= 100),
-    ),
-  );
 }
 
 /** The signed-in user an RPC acts for, when its principal names one. */

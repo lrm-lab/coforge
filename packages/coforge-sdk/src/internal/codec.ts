@@ -1,4 +1,10 @@
 import { memoryHintMessage, readMemoryHint } from "./memory-hint";
+import {
+  decodedModelCatalog,
+  decodedRuntimeMetadata,
+  modelCatalog,
+  runtimeMetadata,
+} from "./codec-runtime-inventory";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { isMemoryAgentToolProfile } from "../agent/memory-tool-fences";
 import { assertValidMessageSender, isValidMessageSender } from "./message-sender";
@@ -11,9 +17,9 @@ import {
   AGENT_SESSION_INVALIDATE_REASONS,
   UPGRADE_ERROR_CODE_PATTERN,
   isChannelMessageTarget,
+  requireRuntimeProvider,
   type ComputerRegisterRequest,
   type ComputerRegisterResponse,
-  type CodeAgentModelCatalog,
   type RuntimeProvider,
 } from "./index";
 import { safeUint64 } from "./agent-observation-codec";
@@ -76,7 +82,6 @@ import { AGENT_MESSAGE_ACK_METHOD, AGENT_MESSAGE_REJECT_METHOD } from "./index";
 import { isSeenExactSeqs } from "./freshness-decision";
 import { mentionDeliveryEnvelopeMessage, readMentionDeliveryEnvelope } from "./mention-delivery";
 import type {
-  RuntimeMetadata,
   DaemonRuntimeCodeAgentsUpdateRequest,
   DaemonRuntimeReadyRequest,
   ComputerRestartIntent,
@@ -89,53 +94,10 @@ import {
   COMPUTER_UPGRADE_RESULT_MESSAGE_TYPE,
 } from "./index";
 
-const runtimeMetadata = (runtime: RuntimeMetadata) => ({
-  ...runtime,
-});
-
 export function assertUint(value: number, maximum: number, field: string): void {
   if (!Number.isSafeInteger(value) || value < 0 || value > maximum)
     throw new Error(`invalid ${field}`);
 }
-
-const decodedRuntimeMetadata = (runtime: {
-  provider: string;
-  version: string;
-  displayName: string;
-}): RuntimeMetadata => ({
-  provider: parseRuntimeProvider(runtime.provider),
-  version: runtime.version,
-  displayName: runtime.displayName,
-});
-
-const modelCatalog = (catalog: CodeAgentModelCatalog) => ({
-  provider: catalog.provider,
-  models: catalog.models,
-});
-
-const decodedModelCatalog = (catalog: {
-  provider: string;
-  models: Array<{
-    id: string;
-    displayName: string;
-    description: string;
-    modelProvider: string;
-    reasoningEfforts: string[];
-    defaultReasoning: string;
-    recommended: boolean;
-  }>;
-}): CodeAgentModelCatalog => ({
-  provider: parseRuntimeProvider(catalog.provider),
-  models: catalog.models.map((model) => ({
-    id: model.id,
-    displayName: model.displayName,
-    description: model.description,
-    modelProvider: model.modelProvider,
-    reasoningEfforts: [...model.reasoningEfforts],
-    defaultReasoning: model.defaultReasoning,
-    recommended: model.recommended,
-  })),
-});
 
 const MAX_AGENT_SESSION_REPORT_BYTES = 32_768;
 const MAX_AGENT_SESSION_INVALIDATE_BYTES = 32_768;
@@ -675,8 +637,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     throw new Error("invalid agent start intent");
   // The provider vocabulary has one owner. A second literal list here went stale when Kiro was
   // added: every start intent for a Kiro Agent was rejected at this boundary, so it never started.
-  if (!parseRuntimeProvider(v.provider))
-    throw new Error(`unsupported runtime provider: ${v.provider}`);
+  requireRuntimeProvider(v.provider, `unsupported runtime provider: ${v.provider}`);
   if (v.controlEpoch !== undefined)
     assertPositiveControlCounter(v.controlEpoch, "Agent control epoch");
   // A managed start (one carrying controlEpoch) must carry the server-minted
@@ -824,7 +785,14 @@ export function decodeAgentStopIntent(bytes: Uint8Array): AgentStopIntent {
     workspaceId: value.workspaceId,
     computerId: value.computerId,
     agentId: value.agentId,
-    ...(value.provider !== undefined ? { provider: parseRuntimeProvider(value.provider) } : {}),
+    ...(value.provider !== undefined
+      ? {
+          provider: requireRuntimeProvider(
+            value.provider,
+            `unsupported runtime provider: ${value.provider}`,
+          ),
+        }
+      : {}),
     ...(value.controlEpoch !== undefined ? { controlEpoch: value.controlEpoch } : {}),
     messageType: value.messageType,
   };
@@ -1188,15 +1156,6 @@ export function decodeComputerRegisterRequest(bytes: Uint8Array): ComputerRegist
     computerVersion: value.computerVersion,
     registrationIdempotencyKey: value.registrationIdempotencyKey,
   };
-}
-
-function parseRuntimeProvider(value: string): RuntimeProvider {
-  if (isRuntimeProvider(value)) return value;
-  throw new Error(`unsupported runtime provider: ${value}`);
-}
-
-function isRuntimeProvider(value: string): value is RuntimeProvider {
-  return Object.values(RUNTIME_PROVIDER).some((provider) => provider === value);
 }
 
 export function decodeComputerRegisterResponse(bytes: Uint8Array): ComputerRegisterResponse {

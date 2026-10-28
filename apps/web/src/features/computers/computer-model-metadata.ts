@@ -17,8 +17,9 @@ export function modelMetadata(value: unknown): CodeAgentModelMetadata[] | undefi
       typeof displayName !== "string" ||
       typeof description !== "string" ||
       typeof modelProvider !== "string" ||
-      !Array.isArray(reasoningEfforts) ||
-      !reasoningEfforts.every((effort) => typeof effort === "string") ||
+      (reasoningEfforts !== undefined &&
+        (!Array.isArray(reasoningEfforts) ||
+          !reasoningEfforts.every((effort) => typeof effort === "string"))) ||
       typeof defaultReasoning !== "string" ||
       typeof recommended !== "boolean"
     )

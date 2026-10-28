@@ -194,6 +194,9 @@ message CodeAgentModelMetadata {
   // Fast support is decided by runtime, not per model; an older daemon may still send this field.
   reserved 8;
   reserved "supports_fast_mode";
+  // The model's reasoning levels are not yet read (Devin's per-model `thought_level` sweep still
+  // pending): `reasoning_efforts` is meaningless then, and decodes as absent rather than empty.
+  bool reasoning_efforts_pending = 9;
 }
 
 // Daemon -> server notice, method `daemon:v1:runtime_auth:status_report`: the login status of

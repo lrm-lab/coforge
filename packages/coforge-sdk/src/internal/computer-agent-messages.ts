@@ -26,7 +26,8 @@ export type CodeAgentModelMetadata = {
   displayName: string;
   description: string;
   modelProvider: string;
-  reasoningEfforts: string[];
+  /** Absent while the runtime has not yet read this model's levels (Devin's sweep). */
+  reasoningEfforts?: string[];
   defaultReasoning: string;
   recommended: boolean;
 };

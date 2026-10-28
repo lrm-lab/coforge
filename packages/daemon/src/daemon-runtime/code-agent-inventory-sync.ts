@@ -393,7 +393,11 @@ export class CodeAgentInventorySync {
       const efforts = read.efforts.get(model.id);
       if (!efforts) return model;
       const current = model.reasoningEfforts;
-      if (efforts.length !== current.length || efforts.some((value, i) => value !== current[i]))
+      if (
+        !current ||
+        efforts.length !== current.length ||
+        efforts.some((value, i) => value !== current[i])
+      )
         changed = true;
       return { ...model, reasoningEfforts: [...efforts] };
     });

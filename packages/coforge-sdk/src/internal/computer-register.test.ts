@@ -113,6 +113,28 @@ test("daemon runtime code-agent inventory round trips as a complete external sna
           },
         ],
       },
+      {
+        provider: RUNTIME_PROVIDER.DEVIN,
+        models: [
+          {
+            id: "unread-model",
+            displayName: "Unread",
+            description: "",
+            modelProvider: "devin",
+            defaultReasoning: "",
+            recommended: false,
+          },
+          {
+            id: "empty-model",
+            displayName: "Empty",
+            description: "",
+            modelProvider: "devin",
+            reasoningEfforts: [],
+            defaultReasoning: "",
+            recommended: false,
+          },
+        ],
+      },
     ],
   };
 

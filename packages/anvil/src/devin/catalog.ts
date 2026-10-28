@@ -66,7 +66,6 @@ export async function discoverDevinCatalog(
           displayName: entry.name,
           description: entry.description ?? "",
           modelProvider: "",
-          reasoningEfforts: [],
           defaultReasoning: "",
           recommended: entry.value === option.currentValue,
         },

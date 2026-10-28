@@ -37,7 +37,7 @@ test("native Kiro v3 instructions, permissions, recovery and busy steering", asy
       Bun.env,
       kiroRuntimeHost,
     );
-    const model = catalog?.models.find((model) => model.reasoningEfforts.includes("low"));
+    const model = catalog?.models.find((model) => model.reasoningEfforts?.includes("low"));
     expect(model).toBeDefined();
     session = await kiroProvider().createAgentSession({
       ...options,

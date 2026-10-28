@@ -45,7 +45,7 @@ test("parses the real 1.2.13 output: one `<slug><TAB><label>` model per line", a
     defaultReasoning: "",
     recommended: false,
   });
-  expect(models.every((model) => !model.recommended && model.reasoningEfforts.length === 0)).toBe(
+  expect(models.every((model) => !model.recommended && model.reasoningEfforts?.length === 0)).toBe(
     true,
   );
   expect(models.at(-1)).toMatchObject({

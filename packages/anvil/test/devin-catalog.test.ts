@@ -36,8 +36,10 @@ test("the Devin catalog is session/new's model select", async () => {
       displayName: "GPT-6 Sol High",
       description: "Thinking high",
       recommended: true,
-      reasoningEfforts: [],
     });
+    // `thought_level` options are read by a later sweep — unread models must not carry an empty
+    // list, which downstream reads as "no reasoning choices" rather than "not yet read".
+    expect(catalog?.models.every((model) => model.reasoningEfforts === undefined)).toBe(true);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
