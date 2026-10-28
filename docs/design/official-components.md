@@ -15,10 +15,10 @@
     只有指示器本身延后出现，所以按钮在等待期间不会变空。
 
   这不是任意修改官方源码的许可；升级或重新 init 时保留这四处限定修补并重新验证。
-- 例外：`application/app-navigation/sidebar-navigation/` 下的 `sidebar-simple.tsx`、`sidebar-slim.tsx`
-  和 `base-components/mobile-header.tsx` 是官方的**演示模板**（写死 Untitled 自己的 logo、搜索框、假账号卡片、固定像素宽度），不是可参数化的
-  组件。这两个文件允许复制到 `src/components/layout/sidebar/` 后按需修改；复制之后就是 CoForge 自己
-  的代码，不再受"源码不改"约束。复制体内部继续调用的 `app-navigation/base-components/**`
+- 例外：`base-components/mobile-header.tsx` 和官方的 `sidebar-simple.tsx`、`sidebar-slim.tsx`
+  是**演示模板**（写死 Untitled 自己的 logo、搜索框、假账号卡片、固定像素宽度），不是可参数化的
+  组件。两个侧栏模板已复制到 `src/components/layout/sidebar/`，复制后从本仓库移除（再次复制时用
+  CLI 取回）；复制之后就是 CoForge 自己的代码，不再受"源码不改"约束。复制体内部继续调用的 `app-navigation/base-components/**`
   （`NavItemBase`、`NavButton`、`NavList`、`MobileNavigationHeader` 等）和 `components/base/**`
   仍然原样不改。
 - 升级用 `npx untitledui@latest upgrade`，升级后跑 `bun run check` 和 `mise run test:web`。
