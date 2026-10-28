@@ -214,7 +214,6 @@ function SignInAttempt({
           state={state}
           computerId={computerId}
           computerName={computerName}
-          provider={provider}
           runtimeName={runtimeName}
           dispatch={dispatch}
         />
@@ -241,14 +240,12 @@ function SignInBody({
   state,
   computerId,
   computerName,
-  provider,
   runtimeName,
   dispatch,
 }: {
   state: LoginState;
   computerId: string;
   computerName: string;
-  provider: RuntimeAuthProvider;
   runtimeName: string;
   dispatch: (action: Parameters<typeof loginReducer>[1]) => void;
 }): ReactNode {
@@ -269,7 +266,7 @@ function SignInBody({
     case "failed":
       return (
         <p role="alert" className="text-error-primary">
-          {failureText(state.failure, runtimeName, computerName)}
+          {failureText(state.failure, runtimeName)}
         </p>
       );
     case "running":
@@ -290,11 +287,7 @@ function SignInBody({
           )}
           {state.checking && <p role="status">{m.runtime_auth_checking()}</p>}
           {!state.link && !state.info && state.prompt === undefined && (
-            <p role="status">
-              {provider === RUNTIME_PROVIDER.COMMAND_CODE
-                ? m.runtime_auth_command_code_browser({ computer: computerName })
-                : m.runtime_auth_starting({ computer: computerName })}
-            </p>
+            <p role="status">{m.runtime_auth_starting({ computer: computerName })}</p>
           )}
         </>
       );
@@ -436,7 +429,7 @@ function CodeForm({
   );
 }
 
-function failureText(failure: LoginFailure, runtime: string, computer: string): string {
+function failureText(failure: LoginFailure, runtime: string): string {
   switch (failure.kind) {
     case "offline":
       return m.runtime_auth_failed_offline();
@@ -457,8 +450,6 @@ function failureText(failure: LoginFailure, runtime: string, computer: string): 
         return m.runtime_auth_kiro_device_disabled();
       if (failure.detail === "kiro_external_idp_unsupported")
         return m.runtime_auth_kiro_external_idp();
-      if (failure.detail === "command_code_browser_unavailable")
-        return m.runtime_auth_command_code_no_browser({ computer });
       switch (failure.reason) {
         case "timed_out":
           return m.runtime_auth_failed_timed_out();

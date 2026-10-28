@@ -123,9 +123,7 @@ export function RuntimeSignOutDialog({
           outcome.kind === "unsupported"
             ? unsupportedText(outcome.reason, runtimeName)
             : outcome.reason === "still_logged_in"
-              ? outcome.detail === "command_code_api_key_env"
-                ? m.runtime_auth_command_code_api_key_env()
-                : m.runtime_auth_sign_out_still()
+              ? m.runtime_auth_sign_out_still()
               : outcome.reason === "timed_out"
                 ? m.runtime_auth_sign_out_timed_out()
                 : m.runtime_auth_sign_out_failed({ runtime: runtimeName }),

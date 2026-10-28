@@ -15,7 +15,11 @@ import { RuntimeSignInDialog, unsupportedText } from "./runtime-sign-in-dialog";
 import { RuntimeSignOutDialog } from "./runtime-sign-out-dialog";
 import { RuntimeUsage } from "./runtime-usage";
 import type { AccountState } from "./runtime-usage-status";
-import { isSignableRuntimeProvider, runtimeLoginChip } from "./runtime-login-chip";
+import {
+  isRuntimeLoginStateProvider,
+  isSignableRuntimeProvider,
+  runtimeLoginChip,
+} from "./runtime-login-chip";
 import { useRuntimeAuthStatusRefresh } from "./use-runtime-auth-signals";
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
@@ -81,7 +85,7 @@ export function ComputerRuntimeList({
           const provider = runtime.provider;
           const login = runtimeLoginChip({
             provider,
-            status: isSignableRuntimeProvider(provider)
+            status: isRuntimeLoginStateProvider(provider)
               ? computer.runtimeAuth?.[provider]
               : undefined,
             canSignIn,
