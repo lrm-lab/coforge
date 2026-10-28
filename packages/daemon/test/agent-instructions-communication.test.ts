@@ -18,3 +18,9 @@ test("retains reply instructions and thread addressing without provider tool nam
   );
   expect(instructions).not.toContain("Bash tool");
 });
+
+test("system notices stay silent except for tasks assigned to this Agent", () => {
+  expect(instructions).toContain(
+    "system notices announce state changes and need no reply or acknowledgement, except a task assigned to you: take it over and reply in its Task thread.",
+  );
+});
