@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 import { CodexProvider, type CodexRuntimeHost } from "@lrm/coforge-anvil/codex";
+import { fixtureCodexHistory } from "./fixtures/codex-host";
 
 test("Codex evaluates each required host environment at its public operation and preserves spawn failures", async () => {
   const calls: string[] = [];
   const marker = new Error("host spawn failed");
   const host: CodexRuntimeHost = {
+    ...fixtureCodexHistory,
     clientInfo: { name: "fixture", title: "Fixture", version: "fixture" },
     usageClientInfo: { name: "fixture-usage", title: "Fixture Usage", version: "fixture" },
     maskAccountLabel: (label) => label,

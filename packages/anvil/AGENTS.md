@@ -33,7 +33,7 @@
 | `src/kiro/` | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
 | `src/opencode/` | OpenCode turns, version policy, catalog, and private instruction overlay |
 | `src/cursor/` | Cursor turn protocol, provider and model catalog parsing |
-| `src/codex/` | Codex sessions, native events, auth, usage and catalog policy through required host capabilities |
+| `src/codex/` | Codex sessions, native events, auth, usage, catalog and idle-recycle rollout reads through required host capabilities |
 | `src/claude-code/` | Claude sessions, native events, auth, usage, history and catalog through required host capabilities |
 | `src/inline-text.ts` | Pure whitespace normalization for inline text projections |
 | `src/subagent-type.ts` | SDK-bounded display-safe subagent type projection |

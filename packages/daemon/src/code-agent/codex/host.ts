@@ -10,6 +10,7 @@ import { processSpawner } from "#src/code-agent/process-host";
 import { jsonlCatalogHost } from "#src/code-agent/catalog-host";
 import { maskEmail } from "#src/code-agent/mask-email";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
+import { codexHistoryHost } from "./history-host";
 
 export const codexClientInfo = {
   name: "coforge_daemon",
@@ -18,6 +19,7 @@ export const codexClientInfo = {
 };
 
 export const codexRuntimeHost: CodexRuntimeHost = {
+  ...codexHistoryHost,
   clientInfo: codexClientInfo,
   usageClientInfo: {
     name: "coforge-daemon-usage",

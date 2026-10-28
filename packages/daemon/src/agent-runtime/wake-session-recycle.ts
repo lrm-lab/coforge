@@ -48,13 +48,19 @@ function disabledFlag(value: string | undefined): boolean {
   return normalized === "0" || normalized === "false" || normalized === "off";
 }
 
+function positiveGap(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
 /**
  * On by default. An Agent's own runtime variables override the daemon's process environment, as
- * the reference client's `pick` does; an unparseable value falls back to the default.
+ * the reference client's `pick` does; an unparseable value falls back to the default. The cold
+ * gap falls through to the provider's declared prompt-cache lifetime, then to 60 minutes.
  */
 export function resolveWakeRecycleConfig(
   agentEnvVars?: Environment,
   processEnv: Environment = Bun.env,
+  providerMinColdGapMs?: number,
 ): WakeRecycleConfig {
   // An empty value counts as unset, at either level.
   const set = (value: string | undefined) => (value?.trim() ? value : undefined);
@@ -65,7 +71,9 @@ export function resolveWakeRecycleConfig(
       positiveInteger(pick(WAKE_RECYCLE_ENV.minContextTokens)) ??
       DEFAULT_WAKE_RECYCLE_MIN_CONTEXT_TOKENS,
     minColdGapMs:
-      positiveInteger(pick(WAKE_RECYCLE_ENV.minColdGapMs)) ?? DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_MS,
+      positiveInteger(pick(WAKE_RECYCLE_ENV.minColdGapMs)) ??
+      positiveGap(providerMinColdGapMs) ??
+      DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_MS,
     panelTokens:
       positiveInteger(pick(WAKE_RECYCLE_ENV.panelTokens)) ?? DEFAULT_WAKE_RECYCLE_PANEL_TOKENS,
     memoryTokens:
@@ -176,6 +184,8 @@ export type ColdIdleSweepView = Readonly<{
   busyReason: string | undefined;
   /** The provider can read a session's facts. */
   supported: boolean;
+  /** The provider's prompt-cache lifetime, when it declares one. */
+  providerMinColdGapMs?: number;
   sessionId: string | undefined;
   /** When the runtime last reported an event; the clock from which its silence is measured. */
   lastEventAtMs: number | undefined;
@@ -208,7 +218,11 @@ export async function selectColdIdleStops(
   const stops: ColdIdleStop[] = [];
   for (const view of views) {
     const skip = (reason: string) => options.onSkip?.(view.agentId, reason);
-    const config = resolveWakeRecycleConfig(view.envVars, options.processEnv);
+    const config = resolveWakeRecycleConfig(
+      view.envVars,
+      options.processEnv,
+      view.providerMinColdGapMs,
+    );
     if (!config.enabled) skip("disabled");
     else if (view.busyReason !== undefined) skip(view.busyReason);
     else if (!view.supported) skip("unsupported");

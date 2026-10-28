@@ -139,15 +139,22 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 ## Idle recycle of a cold, large session
 
-- Reference-client behaviour (`wakeSessionRecycle`, 1.0.51), on by default: a native session idle for
-  more than 60 minutes whose last context exceeds 128k tokens is not resumed. `wake-session-recycle.ts`
-  holds the provider-neutral decision and the env knobs (listed in
-  `docs/observability/agent-status-and-activity/runtime-lifecycle.md`); an Agent's runtime variables
-  override the daemon's environment, and only the sweep period is daemon-wide.
+- On by default. A native session whose last context exceeds 128k tokens is not resumed once it
+  has been idle past that runtime's prompt-cache lifetime. The provider declares the lifetime
+  (`idleRecycleMinColdGapMs`): Claude Code 60 minutes, Codex 30 minutes. A provider that does not
+  declare one uses 60 minutes. `wake-session-recycle.ts` holds the provider-neutral decision and the
+  env knobs (listed in `docs/observability/agent-status-and-activity/runtime-lifecycle.md`). An
+  Agent's runtime variables override the daemon environment and the provider's declaration. Only
+  the sweep period is daemon-wide.
+- Codex's 30 minutes is shorter on purpose. On this Mac, over three to four days of Codex use,
+  cache hits were nearly complete inside 35 minutes and about half gone after one to three hours.
+  The models were gpt-6.1-sol and gpt-6.1-terra; OpenAI's default prompt cache is at least 30
+  minutes. Raft 1.0.53 names codex in the same recycle, but it only reads Claude's session record,
+  so a Codex session was not actually replaced. Reading the Codex rollout is the extra step.
 - A provider recycles only through the optional `readSessionResumeFacts` /
-  `readRecycleBriefing` seam in `code-agent/contract.ts`; a provider without it never does. Any
+  `readRecycleBriefing` seam on the provider contract; a provider without it never does. Any
   fact the seam cannot supply means resume, never recycle. Provider transcript parsing stays in the
-  provider's own directory.
+  provider's own directory. The cold-idle sweep uses the same declared lifetime.
 - `daemon-runtime/cold-idle-sweep.ts` stops a live runtime every sweep period only when every guard
   of the daemon's own state holds (no live turn, queued delivery or input, open tool call, background
   task, launch, stop, stalled recovery, runner hold or migration) and the runtime's last event and the

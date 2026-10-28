@@ -173,7 +173,16 @@ export class ColdIdleSweep {
     return this.#ports.agentIds().flatMap((agentId) => {
       const agent = this.#ports.agent(agentId);
       if (!agent) return [];
-      return [{ ...agent, supported: supportsSessionResume(this.#ports.provider(agent.provider)) }];
+      const provider = this.#ports.provider(agent.provider);
+      return [
+        {
+          ...agent,
+          supported: supportsSessionResume(provider),
+          ...(provider.idleRecycleMinColdGapMs !== undefined
+            ? { providerMinColdGapMs: provider.idleRecycleMinColdGapMs }
+            : {}),
+        },
+      ];
     });
   }
 

@@ -30,3 +30,10 @@
   exact. An unnamed thread is named `CoForge · <agent name>`, best effort.
 - `turn-signals.ts`: a completed turn with no evidence and a `systemError` status are errors
   (`codex_zero_evidence_turn_completed`); warnings, waiting and blank answers are logged only.
+- Idle recycle reads `$CODEX_HOME/sessions/**/rollout-*-<threadId>.jsonl` through the history host.
+  An absolute `CODEX_HOME` on the Agent wins; a relative one is ignored. Facts are the last
+  record's timestamp and the last `event_msg` `token_count`'s `info.last_token_usage.input_tokens`.
+  The briefing is recent `response_item` messages and tool calls, inside the caller's token budget.
+  Anything unreadable resumes the old session. The cold gap is 30 minutes
+  (`CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS`). The JSONL shape is Codex's internal rollout
+  (`RolloutLine` / `RolloutItemWire`, openai/codex main on 2026-10-28), not a stable API.

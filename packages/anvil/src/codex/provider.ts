@@ -12,6 +12,8 @@ import { rejectServerRequests } from "./server-requests";
 import { openCodexThread } from "./thread-open";
 import { codexTurnOutcome } from "./turn-outcome";
 import { CodexTurnSignals } from "./turn-signals";
+import { readCodexRecycleBriefing } from "./recycle-briefing";
+import { CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS, readCodexSessionResumeFacts } from "./session-rollout";
 import { readCodexUsage } from "./usage";
 import type { CodexRuntimeHost } from "./host";
 import {
@@ -31,6 +33,8 @@ const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CO
 
 export class CodexProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CODEX;
+  /** OpenAI's default prompt cache is at least 30 minutes, shorter than Claude's hour. */
+  readonly idleRecycleMinColdGapMs = CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS;
   readonly #command: readonly string[];
   readonly #host: CodexRuntimeHost;
 
@@ -49,6 +53,11 @@ export class CodexProvider implements CodeAgentProvider {
       timeoutMs: options.timeoutMs,
     });
   }
+
+  readonly readSessionResumeFacts = (options: Parameters<typeof readCodexSessionResumeFacts>[0]) =>
+    readCodexSessionResumeFacts(options, this.#host);
+  readonly readRecycleBriefing = (options: Parameters<typeof readCodexRecycleBriefing>[0]) =>
+    readCodexRecycleBriefing(options, this.#host);
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())

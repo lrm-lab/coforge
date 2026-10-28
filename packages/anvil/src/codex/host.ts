@@ -17,8 +17,26 @@ export interface CodexUsageHost {
   maskAccountLabel(value: string): string | undefined;
 }
 
+export interface CodexDirectoryEntry {
+  readonly name: string;
+  isDirectory(): boolean;
+  isFile(): boolean;
+  isSymbolicLink(): boolean;
+}
+
+/**
+ * Rollout reads stay in the Codex driver. The host performs the file IO and supplies
+ * `CODEX_HOME` / `HOME` without the driver reading the process environment itself.
+ */
+export interface CodexHistoryHost {
+  readHostEnvironment(name: "CODEX_HOME" | "HOME" | "USERPROFILE"): string | undefined;
+  homeDirectory(): string;
+  readDirectoryEntries(path: string): Promise<readonly CodexDirectoryEntry[]>;
+  readFileTail(path: string, tailBytes: number): Promise<{ text: string; startOffset: number }>;
+}
+
 /** Native session and usage policies consume distinct host environment compositions. */
-export interface CodexRuntimeHost extends CodexConnectionHost, CodexUsageHost {
+export interface CodexRuntimeHost extends CodexConnectionHost, CodexUsageHost, CodexHistoryHost {
   buildSessionEnvironment(options: AgentSessionOptions): Record<string, string>;
 }
 

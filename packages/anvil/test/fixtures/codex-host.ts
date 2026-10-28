@@ -15,8 +15,19 @@ const labels: Record<string, string> = {
   "codexuser@example.com": "cod****er@example.com",
 };
 
+/** History reads a test replaces. The default answers "no rollout". */
+export const fixtureCodexHistory = {
+  readHostEnvironment: () => undefined,
+  homeDirectory: () => "/home/fixture",
+  readDirectoryEntries: async () => [],
+  async readFileTail(): Promise<{ text: string; startOffset: number }> {
+    throw new Error("fixture has no rollout");
+  },
+};
+
 /** Fixture subprocesses only; daemon tests exercise real environment and masking policies. */
 export const fixtureCodexHost: CodexRuntimeHost = {
+  ...fixtureCodexHistory,
   clientInfo,
   usageClientInfo: {
     name: "coforge-daemon-usage",

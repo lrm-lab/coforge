@@ -123,6 +123,18 @@ test.each<[string, Partial<WakeRecycleInput>, WakeResumeReason]>([
   expect(decideWakeRecycle(wake(overrides))).toEqual({ action: "resume", reason });
 });
 
+test("a provider's cold gap is the default, and the environment still overrides it", () => {
+  expect(resolveWakeRecycleConfig({}, {}, 30 * MINUTE).minColdGapMs).toBe(30 * MINUTE);
+  expect(resolveWakeRecycleConfig({}, {}, 0).minColdGapMs).toBe(60 * MINUTE);
+  expect(
+    resolveWakeRecycleConfig(
+      { COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS: String(45 * MINUTE) },
+      {},
+      30 * MINUTE,
+    ).minColdGapMs,
+  ).toBe(45 * MINUTE);
+});
+
 test("the cold gap and context threshold come from the config", () => {
   const tuned = resolveWakeRecycleConfig({
     COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS: String(5 * MINUTE),
@@ -163,6 +175,27 @@ async function select(views: ColdIdleSweepView[], facts = {}, processEnv = {}) {
   });
   return { stops, skipped, reads };
 }
+
+test("a provider-declared 30 minute gap stops a session the 60 minute default keeps", async () => {
+  const codex = view({
+    provider: "codex",
+    providerMinColdGapMs: 30 * MINUTE,
+    lastEventAtMs: NOW - 31 * MINUTE,
+  });
+  const facts = { lastActivityAtMs: NOW - 31 * MINUTE, lastContextTokens: 200_000 };
+  const stopped = await select([codex], facts);
+  expect(stopped.stops.map((stop) => stop.idleMs)).toEqual([31 * MINUTE]);
+  const overridden = await select([codex], facts, {
+    COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS: String(60 * MINUTE),
+  });
+  expect(overridden.stops).toEqual([]);
+  expect(overridden.skipped).toEqual([["agent-a", "recent_event"]]);
+  const claude = await select([
+    view({ provider: "claude-code", lastEventAtMs: NOW - 31 * MINUTE }),
+  ]);
+  expect(claude.stops).toEqual([]);
+  expect(claude.skipped).toEqual([["agent-a", "recent_event"]]);
+});
 
 test("a cold idle Agent with a large context is selected, idle since its latest activity", async () => {
   const { stops, skipped } = await select([view()]);

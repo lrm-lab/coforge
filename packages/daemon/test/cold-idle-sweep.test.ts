@@ -136,6 +136,47 @@ test("a provider without the seam is never stopped, and its session is never rea
   ).toMatchObject({ agents: 1, stops: 0, skipped_unsupported: 1 });
 });
 
+test("a sweep stops at the provider's cold gap when the 60 minute default would keep the session", async () => {
+  const previousGap = Bun.env.COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS;
+  delete Bun.env.COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS;
+  const agent: ColdIdleAgent = {
+    agentId: "codex",
+    provider: "codex",
+    busyReason: undefined,
+    sessionId: "session-codex",
+    lastEventAtMs: NOW - 31 * MINUTE,
+  };
+  const stops: ColdIdleStop[] = [];
+  const provider = {
+    provider: "codex",
+    idleRecycleMinColdGapMs: 30 * MINUTE,
+    async readSessionResumeFacts() {
+      return { lastActivityAtMs: NOW - 31 * MINUTE, lastContextTokens: 200_000 };
+    },
+  } as unknown as CodeAgentProvider;
+  const sweep = new ColdIdleSweep({
+    agentIds: () => ["codex"],
+    agent: () => agent,
+    provider: () => provider,
+    stop: async (stop) => void stops.push(stop),
+    now: () => NOW,
+  });
+  try {
+    await captureDaemonLogs(() => sweep.sweep());
+  } finally {
+    if (previousGap === undefined) delete Bun.env.COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS;
+    else Bun.env.COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS = previousGap;
+  }
+  expect(stops).toEqual([
+    {
+      agentId: "codex",
+      sessionId: "session-codex",
+      idleMs: 31 * MINUTE,
+      priorContextTokens: 200_000,
+    },
+  ]);
+});
+
 test("an Agent that turned busy while its session was read is left running", async () => {
   const { stops, state } = fixture({ a: {} });
   const provider = {

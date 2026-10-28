@@ -11,6 +11,8 @@ import { ClaudeCodeAgentSession } from "./session";
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
+  /** Claude's prompt cache is counted on for an hour, the recycle default before per-provider gaps. */
+  readonly idleRecycleMinColdGapMs = 60 * 60_000;
   readonly #host: ClaudeRuntimeHost;
   readonly #command: readonly string[];
 

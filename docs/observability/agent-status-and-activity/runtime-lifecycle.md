@@ -13,11 +13,12 @@
 
 ## 冷空闲回收
 
-与参考客户端 1.0.51 的 `wakeSessionRecycle` 一致，默认开启。空闲超过冷却间隔（默认 60 分钟，
-超过 prompt cache 的寿命）且最近一次上下文超过阈值（默认 128k token）的 native session 不再
-恢复：恢复会按全价重读整个上下文。只有实现了 `code-agent/contract.ts` 中可选 seam
-`readSessionResumeFacts` 的 provider（目前是 Claude Code）会被回收；seam 给不出的任何事实都按
-恢复处理。Memory Agent 不参与。
+与参考客户端 1.0.51 的 `wakeSessionRecycle` 一致，默认开启。空闲超过该运行时的 prompt cache
+寿命，且最近一次上下文超过阈值（默认 128k token）的 native session 不再恢复：恢复会按全价重读
+整个上下文。冷却间隔由 provider 声明：Claude Code 60 分钟，Codex 30 分钟（这台 Mac 上 35 分钟内
+缓存几乎全中，OpenAI 默认缓存至少 30 分钟；Raft 1.0.53 虽把 codex 列进同一机制，但只读 Claude
+的会话记录）。未声明的 provider 仍是 60 分钟。只有实现了 `readSessionResumeFacts` 的 provider
+会被回收；seam 给不出的任何事实都按恢复处理。Memory Agent 不参与。
 
 - **停止**：`daemon-runtime/cold-idle-sweep.ts` 每个 sweep 周期（默认 10 分钟）检查一次运行中的
   Agent。Daemon 自身状态的每个空闲条件都成立（没有 live turn、排队投递或输入、未结束的工具调用、
@@ -49,9 +50,9 @@
 | --- | --- | --- |
 | `COFORGE_WAKE_RECYCLE` | 开 | `0`、`false`、`off` 关闭回收；空值视为未设置 |
 | `COFORGE_WAKE_RECYCLE_MIN_CONTEXT_TOKENS` | `128000` | 上下文阈值 |
-| `COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS` | `3600000` | 冷却间隔 |
+| `COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS` | provider 声明，否则 `3600000` | 冷却间隔。覆盖 provider 的声明。Codex 声明 `1800000`，Claude Code 声明 `3600000` |
 | `COFORGE_WAKE_RECYCLE_SWEEP_MS` | `600000` | sweep 周期；只读 Daemon 自身环境 |
 | `COFORGE_WAKE_RECYCLE_PANEL_TOKENS` | `8000` | provider 简报的 token 预算 |
 | `COFORGE_WAKE_RECYCLE_MEMORY_TOKENS` | `4000` | `MEMORY.md` 段的 token 预算 |
 
-除 sweep 周期外，Agent 自己的 runtime 环境变量覆盖 Daemon 的环境；空值在两级都视为未设置，无法解析的值回落为默认。
+除 sweep 周期外，Agent 自己的 runtime 环境变量覆盖 Daemon 的环境，两者都覆盖 provider 声明的冷却间隔；空值在两级都视为未设置，无法解析的值回落为默认。

@@ -48,6 +48,12 @@ export interface CodeAgentProvider {
     budgetTokens: number;
     envVars?: Readonly<Record<string, string>>;
   }): Promise<string | undefined>;
+  /**
+   * How long this runtime's prompt cache stays warm, in milliseconds. Idle recycle uses it as the
+   * cold gap when `COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS` is unset. A provider that omits it keeps
+   * the 60 minute default. The value is a vendor property, not a per-Agent setting.
+   */
+  readonly idleRecycleMinColdGapMs?: number;
 }
 export type SessionResumeFacts = {
   lastActivityAtMs?: number;

@@ -77,8 +77,12 @@ export class WakeRecycle {
     const { agentId, sessionId } = request;
     // A `create` launch pins a session id it is given; there is nothing to resume.
     if (!sessionId || request.sessionMode === "create" || request.memoryAgent) return undefined;
-    const config = resolveWakeRecycleConfig(request.envVars);
     const provider = this.#ports.provider(request.provider);
+    const config = resolveWakeRecycleConfig(
+      request.envVars,
+      Bun.env,
+      provider.idleRecycleMinColdGapMs,
+    );
     const supported = supportsSessionResume(provider);
     const facts =
       config.enabled && supported && !request.hasResumePrompt
