@@ -1,5 +1,6 @@
 import { HostDirectory, HostDirectoryError } from "./host-directory.server";
 import { parseHostImageReport, type CloudImageInventory } from "./cloud-image-inventory.server";
+import { bearerToken, readJson } from "./host-request.server";
 
 export function createHostHttpHandler(dependencies: {
   directory: HostDirectory;
@@ -56,21 +57,6 @@ async function heartbeatHost(
     return Response.json(host);
   } catch (error) {
     return hostError(error);
-  }
-}
-
-function bearerToken(request: Request): string | undefined {
-  const match = /^Bearer (.+)$/.exec(request.headers.get("authorization") ?? "");
-  return match?.[1];
-}
-
-async function readJson(request: Request): Promise<Record<string, unknown> | undefined> {
-  try {
-    const body = (await request.json()) as unknown;
-    if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
-    return body as Record<string, unknown>;
-  } catch {
-    return undefined;
   }
 }
 

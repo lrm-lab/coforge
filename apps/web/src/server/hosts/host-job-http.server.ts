@@ -1,4 +1,5 @@
 import { HostJobError, HostJobs } from "./host-jobs.server";
+import { bearerToken, readJson } from "./host-request.server";
 
 export function createHostJobHttpHandler(dependencies: { jobs: HostJobs; now: () => Date }) {
   return {
@@ -40,21 +41,6 @@ async function reportJob(
     return Response.json({ ok: true });
   } catch (cause) {
     return jobError(cause);
-  }
-}
-
-function bearerToken(request: Request): string | undefined {
-  const match = /^Bearer (.+)$/.exec(request.headers.get("authorization") ?? "");
-  return match?.[1];
-}
-
-async function readJson(request: Request): Promise<Record<string, unknown> | undefined> {
-  try {
-    const body = (await request.json()) as unknown;
-    if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
-    return body as Record<string, unknown>;
-  } catch {
-    return undefined;
   }
 }
 
