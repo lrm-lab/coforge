@@ -1,4 +1,6 @@
-import { useMemo, useState, type Key } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type Key } from "react";
+import { SearchLg } from "@untitledui/icons";
+import { ComboBoxStateContext } from "react-aria-components";
 
 import { ComboBox } from "#src/components/base/select/combobox";
 import { SelectItem } from "#src/components/base/select/select-item";
@@ -6,6 +8,48 @@ import { m } from "#src/paraglide/messages";
 import { searchModelChoices, type ModelChoice } from "./model-search";
 
 const showEverything = () => true;
+
+/**
+ * The field's search icon, which also lets a press on the field toggle its list as a select's
+ * does: the combobox opens only when the field gains focus, so a press on the field that already
+ * has it (after choosing a model) would otherwise do nothing. While the viewer is searching, a press
+ * only opens the list, so placing the caret mid-search keeps the results. Rendered in the combobox's
+ * icon slot, the one place inside it a caller can reach its state.
+ */
+function SearchIconToggle({ searching }: { searching: boolean }) {
+  const state = useContext(ComboBoxStateContext);
+  const latest = useRef({ state, searching });
+  latest.current = { state, searching };
+  const anchor = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const field = anchor.current?.parentElement;
+    const input = field?.querySelector("input");
+    if (!field || !input) return;
+    // A press that gives the field focus already opened the list; only one on a focused field toggles.
+    let hadFocus = false;
+    const down = () => {
+      hadFocus = document.activeElement === input;
+    };
+    const press = () => {
+      const { state: combobox, searching } = latest.current;
+      if (!hadFocus || !combobox) return;
+      if (!combobox.isOpen) combobox.open(null, "manual");
+      else if (!searching) combobox.close();
+    };
+    field.addEventListener("pointerdown", down);
+    field.addEventListener("click", press);
+    return () => {
+      field.removeEventListener("pointerdown", down);
+      field.removeEventListener("click", press);
+    };
+  }, []);
+  return (
+    <>
+      <SearchLg data-icon className="pointer-events-none" aria-hidden="true" />
+      <span ref={anchor} hidden />
+    </>
+  );
+}
 
 /**
  * The model field: the runtime's models in its own order, filtered as the viewer types (a runtime
@@ -44,6 +88,7 @@ export function ModelComboBox({
       label={label}
       size="md"
       shortcut={false}
+      icon={<SearchIconToggle searching={query !== null} />}
       placeholder={m.agent_form_model_search()}
       className={className}
       popoverClassName={popoverClassName}
