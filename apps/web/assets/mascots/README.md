@@ -69,8 +69,8 @@ auto-bind: it creates a new `Mascot` view model instance for each canvas (`autoB
   the middle of the body's round mass and a little down, short of any front accessory it would
   crowd, and turns it most of the way level (`face.ts`). Every line mouth sits under the eyes.
   Only thinking glances up, a little, toward its bubble.
-- Idle: both eyes open round, blinks at uneven gaps (2.2 s, 4.5 s, a quick double, 3.5 s over a
-  12 s loop), a faint float. Thinking ("pondering"): a small white-edged thought bubble within
+- Idle: both eyes open round, a quick double blink every 4–5 s at uneven gaps (4.2 s, 4.8 s,
+  4.5 s over a 13.5 s loop), a faint float. Thinking ("pondering"): a small white-edged thought bubble within
   the avatar's box, above the head and a little right (`thought.ts`; the build fails if it
   leaves the circle inscribed in the box, though no circle is drawn), three neutral dark-grey dots lighting in turn every 2 s, one trail circle
   toward the head; the eyes glance up a little and wander slowly, the right brow arches, the mouth is a

@@ -66,7 +66,7 @@ const POSES: Record<MascotActivity, Pose> = {
 
 /** Loop lengths in frames at 60 fps; all are 4 s or longer so nothing flickers. */
 const DURATION: Record<MascotActivity, number> = {
-  idle: sec(12),
+  idle: sec(13.5),
   thinking: DOT_CYCLE * 3,
   working: sec(8),
   error: sec(8),
@@ -85,10 +85,11 @@ const BEAT = {
   sway: DURATION.error / 2,
 };
 
-/** When each loop blinks, in frames. Idle's gaps differ (2.2 s, 4.5 s, a quick double, 3.5 s)
- * so the rhythm never reads as a metronome; the busy states blink once in a while. */
+/** When each loop blinks, in frames. Idle blinks twice in quick succession every 4–5 s, its
+ * gaps differing (4.2 s, 4.8 s, 4.5 s) so the rhythm never reads as a metronome (Frank,
+ * 2026-10-26); the busy states blink once in a while. */
 const BLINKS: Record<MascotActivity, number[]> = {
-  idle: [130, 400, 424, 610],
+  idle: [sec(1), sec(1.4), sec(5.2), sec(5.6), sec(10), sec(10.4)],
   thinking: [250],
   working: [205],
   error: [300],
@@ -126,7 +127,7 @@ function mascotMotion(tracks: Tracks, rig: Rig, state: MascotActivity): void {
   let sy: Key[] = still(1);
   let rot: Key[] = still(0);
   if (state === "idle") {
-    // A faint float, 0.4 units every 4 s.
+    // A faint float, 0.4 units every 4.5 s.
     y = [...repeat((s) => [k(s, 0), k(s + 120, -0.4)], BEAT.float, length), k(length, 0, "hold")];
   } else if (state === "thinking") {
     // The head tilts toward the thought bubble and settles, twice per loop.
