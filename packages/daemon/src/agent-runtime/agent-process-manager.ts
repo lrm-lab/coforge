@@ -1,4 +1,6 @@
 import { AgentStateMachine, type AgentStatus } from "./agent-state-machine";
+import { TaskExecutionSessions, type TaskSessionBindings } from "./task-execution-sessions";
+import type { TaskExecutionScope } from "@lrm/coforge-sdk/internal";
 import {
   MemoryConversationSessions,
   type ConversationSessionStore,
@@ -90,6 +92,14 @@ export class AgentProcessManager {
     createProvider: CodeAgentProviderFactory,
     resolveGitHooks: typeof resolveGitHookInjectionForLaunch = resolveGitHookInjectionForLaunch,
     private readonly conversationStore?: (agentId: string) => ConversationSessionStore,
+    private readonly taskSessions?: (agentId: string) => {
+      bindings: TaskSessionBindings;
+      report(
+        task: TaskExecutionScope,
+        status: "starting" | "running" | "waiting" | "failed",
+        nativeSessionId?: string,
+      ): Promise<void>;
+    },
   ) {
     this.#createProvider = createProvider;
     this.#resolveGitHooks = resolveGitHooks;
@@ -177,6 +187,24 @@ export class AgentProcessManager {
           create: (options) => provider.createAgentSession(options),
           store: this.conversationStore?.(agentId),
         });
+      else if (
+        this.taskSessions &&
+        (options.sessionId || (await session.readSessionIdentity?.())?.sessionId)
+      ) {
+        const primary = session;
+        try {
+          session = await TaskExecutionSessions.open({
+            primary,
+            options,
+            create: (childOptions) => provider.createAgentSession(childOptions),
+            store: this.conversationStore?.(agentId),
+            ...this.taskSessions(agentId),
+          });
+        } catch (error) {
+          await primary.dispose();
+          throw error;
+        }
+      }
     } catch (error) {
       if (error instanceof AgentProcessCleanupError) this.#stopping.add(agentId);
       throw error;

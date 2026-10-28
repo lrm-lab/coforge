@@ -9,6 +9,7 @@ import { assertValidMessageSender, isValidMessageSender } from "./message-sender
 
 /** One message the server delivers to an Agent's daemon (`AgentMessageDelivery`). */
 export type AgentMessageDelivery = {
+  taskExecutionSignal?: import("./tasks").TaskExecutionSignal;
   memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
   protocolMajor: number;
   requestId: string;
@@ -38,6 +39,7 @@ export type AgentMessageDelivery = {
 };
 
 export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
+  if (value.taskExecutionSignal) readTaskExecutionSignal(value.taskExecutionSignal);
   // Protobuf omits an empty string, and the daemon rejects a delivery with no request_id.
   if (!value.requestId?.trim()) throw new Error("agent message delivery requires requestId");
   assertUint(value.sequence, Number.MAX_SAFE_INTEGER, "Agent message sequence");
@@ -72,6 +74,13 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       mentionDelivery: mentionDeliveryEnvelopeMessage(value.mentionDelivery),
       memoryHint: memoryHintMessage(value.memoryHint),
       createdAtMs: value.createdAtMs === undefined ? undefined : BigInt(value.createdAtMs),
+      taskExecutionSignal: value.taskExecutionSignal
+        ? {
+            executionSessionId: value.taskExecutionSignal.executionSessionId,
+            attempt: value.taskExecutionSignal.attempt,
+            kind: value.taskExecutionSignal.kind,
+          }
+        : undefined,
     }),
   );
 }
@@ -90,6 +99,8 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
   )
     throw new Error("invalid agent message delivery");
   const mentionDelivery = readMentionDeliveryEnvelope(value.mentionDelivery);
+  const signal = value.taskExecutionSignal;
+  if (signal) readTaskExecutionSignal(signal);
   return {
     protocolMajor: value.protocolMajor,
     requestId: value.requestId,
@@ -101,6 +112,15 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
     agentId: value.agentId,
     body: value.body,
     method: AGENT_MESSAGE_METHOD,
+    ...(signal
+      ? {
+          taskExecutionSignal: {
+            executionSessionId: signal.executionSessionId,
+            attempt: signal.attempt,
+            kind: signal.kind as "changed" | "ended",
+          },
+        }
+      : {}),
     ...(value.target ? { target: value.target } : {}),
     ...(value.latestSenderKind
       ? {
@@ -120,4 +140,23 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
       ? { createdAtMs: safeUint64(value.createdAtMs, "Agent message creation time") }
       : {}),
   };
+}
+
+export function readTaskExecutionSignal(value: unknown): import("./tasks").TaskExecutionSignal {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("executionSessionId" in value) ||
+    typeof value.executionSessionId !== "string" ||
+    !value.executionSessionId ||
+    !("attempt" in value) ||
+    typeof value.attempt !== "number" ||
+    !Number.isSafeInteger(value.attempt) ||
+    value.attempt < 1 ||
+    value.attempt > 4_294_967_295 ||
+    !("kind" in value) ||
+    (value.kind !== "changed" && value.kind !== "ended")
+  )
+    throw new Error("invalid task execution signal");
+  return { executionSessionId: value.executionSessionId, attempt: value.attempt, kind: value.kind };
 }

@@ -19,6 +19,8 @@ import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
  * replying to one Agent woke every unmuted Agent in it (reported 2026-09-21). A root author who
  * explicitly unfollowed stays out, which is why this reads follows and not authorship.
  *
+ * In a coordinated channel, unaddressed Agent progress wakes nobody except the Memory observer.
+ * Human replies to a Task route to its current Agent owner; actionable Task events route separately.
  * An Agent sender never wakes itself. Read after the send enrolls its thread followers.
  */
 export async function channelAgentRecipients(
@@ -35,17 +37,16 @@ export async function channelAgentRecipients(
     .map((mention) => mention.id);
   // A member's Agent is always in the conversation's Workspace (both foreign keys carry it), so
   // no Agent join is needed here.
-  const coordinator =
-    !mentioned.length && !message.threadRootId
-      ? await tx.conversation.findFirst({
-          where: {
-            id: message.conversationId,
-            coordinatorAgentId: { not: null },
-            coordinatorAgent: ACTIVE_AGENT_WHERE,
-          },
-          select: { coordinatorAgentId: true },
-        })
-      : null;
+  const coordinator = !mentioned.length
+    ? await tx.conversation.findFirst({
+        where: {
+          id: message.conversationId,
+          coordinatorAgentId: { not: null },
+          coordinatorAgent: ACTIVE_AGENT_WHERE,
+        },
+        select: { coordinatorAgentId: true },
+      })
+    : null;
   const activeCoordinator = coordinator?.coordinatorAgentId
     ? await tx.conversationMember.findFirst({
         where: {
@@ -56,10 +57,31 @@ export async function channelAgentRecipients(
         select: { agentId: true },
       })
     : null;
+  let coordinated: string[] | undefined;
+  if (activeCoordinator?.agentId) {
+    if (message.senderAgentId) coordinated = [];
+    else if (!message.threadRootId) coordinated = [activeCoordinator.agentId];
+    else {
+      const task = await tx.task.findUnique({
+        where: { messageId: message.threadRootId },
+        select: {
+          owner: {
+            select: { agentId: true, leftAt: true, agent: { select: { deletedAt: true } } },
+          },
+        },
+      });
+      if (
+        task?.owner?.agentId &&
+        task.owner.leftAt === null &&
+        task.owner.agent?.deletedAt === null
+      )
+        coordinated = [task.owner.agentId];
+    }
+  }
   const ids = mentioned.length
     ? mentioned
-    : activeCoordinator?.agentId
-      ? [activeCoordinator.agentId]
+    : coordinated !== undefined
+      ? coordinated
       : (
           await tx.conversationMember.findMany({
             where: {

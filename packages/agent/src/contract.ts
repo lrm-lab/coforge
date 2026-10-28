@@ -272,6 +272,11 @@ export type AgentNoticeOptions = {
   conversation?: AgentConversationScope;
 };
 export interface AgentSession {
+  /** Accept a claimed task for an isolated session after the current turn releases the workspace. */
+  handoffTask?(
+    task: import("@lrm/coforge-sdk/internal").TaskExecutionScope,
+  ): Promise<boolean | void>;
+  endTask?(executionSessionId: string, attempt: number): Promise<void>;
   /** Provider-observed work, including pending admission and interruption.
    * Undefined means the adapter cannot determine it; never infer idle from silence. */
   readonly hasLiveTurn?: boolean;

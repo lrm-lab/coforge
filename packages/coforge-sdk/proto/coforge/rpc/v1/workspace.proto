@@ -314,6 +314,13 @@ message AgentMessageDelivery {
   // When the server created the message, in epoch milliseconds. Unset from a server that predates
   // it. Not when the daemon received it: a message replayed after a reconnect differs.
   optional uint64 created_at_ms = 20;
+  TaskExecutionSignal task_execution_signal = 21;
+}
+
+message TaskExecutionSignal {
+  string execution_session_id = 1;
+  uint32 attempt = 2;
+  string kind = 3;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.

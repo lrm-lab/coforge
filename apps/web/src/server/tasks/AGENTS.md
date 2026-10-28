@@ -3,6 +3,11 @@
 These rules apply to `src/server/tasks/`. The framework-free shared Task
 contract is `packages/coforge-sdk/src/internal/tasks.ts`.
 
+- `task-conversation-scope.server.ts` owns task conversation lookup and current membership authority.
+- `task-execution.server.ts` owns isolated execution opt-in and attempt-fenced native reports;
+  `task-execution-events.server.ts` owns atomic task transition deliveries and their publication.
+  A native turn ending means waiting, never business completion. Existing legacy work remains legacy.
+
 - A comment author seat is never a Task destination. Task scopes keep `TASK_SCOPE_WHERE` (channel or DM only), including create and conversion; a comment Conversation id is refused exactly like a missing one.
 - `TaskBoard.execute(principal, command)` is the single place for Task
   authorization, atomic message and Task creation, numbering, exclusive claims,
@@ -13,7 +18,7 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
 - `task-command-validation.server.ts` (`validateTaskCommand`) owns the shape
   a `TaskCommand` must have, which `execute` checks before it reads anything:
   a malformed one is `INVALID_INPUT`. It reads no database and decides no
-  authorization; who may act on which conversation stays in TaskBoard.
+  authorization; TaskBoard uses the task conversation scope module for membership authority.
 - `task-view.server.ts` owns how a stored Task reads: its selection, its
   `TaskView`, and its stored status. `task-history.server.ts` owns which
   history events a Task write records and how they read back. TaskBoard and
@@ -39,8 +44,7 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   pages after the commit. Creation, conversion and assignment post in the
   conversation; claims, status moves and unassignment post in the Task's own
   thread. `unclaim`, `delete`, `amend`, the resource `receipt`, `history`,
-  `list` and no-op writes post nothing. Only the assignment receipt is delivered
-  and pushed, and a person assigned hears of it through `activity.changed.v1`
+  `list` and no-op writes post nothing. Assignment receipts and actionable isolated-task events are delivered; only assignment receipts are pushed, and a person assigned hears of it through `activity.changed.v1`
   (it is their Activity mention). No notice counts unread, so every notice's
   message signal reaches only the conversation's own realtime channel.
 - Every Task write also announces the new copies of the Tasks it changed, or
@@ -53,7 +57,7 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   differs from the message signal's on the same channel, which Centrifugo would
   drop as a duplicate. The
   browser and Agent task routes both give TaskBoard the realtime port; the Agent
-  route gives it no delivery publisher or push notifier.
+  route gives it a delivery publisher for assignment and actionable execution events, but no push notifier.
 - A null Message sender is the server identity, never a fabricated member.
   Authenticated send adapters always supply their member identity. Message
   reads and browser projections expose the server identity as `system` without

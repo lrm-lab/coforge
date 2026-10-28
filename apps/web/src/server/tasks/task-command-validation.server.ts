@@ -20,8 +20,25 @@ export function validateTaskCommand(command: TaskCommand) {
     "history",
     "delete",
     "receipt",
+    "execution",
   ];
   if (!operations.includes(command.operation) || !command.idempotencyKey)
+    throw new AppError("INVALID_INPUT");
+  if (
+    command.isolatedExecution !== undefined &&
+    (typeof command.isolatedExecution !== "boolean" ||
+      !["claim", "create"].includes(command.operation))
+  )
+    throw new AppError("INVALID_INPUT");
+  if ((command.operation === "execution") !== (command.executionReport !== undefined))
+    throw new AppError("INVALID_INPUT");
+  if (
+    command.executionReport &&
+    (!command.executionReport.id ||
+      !Number.isSafeInteger(command.executionReport.attempt) ||
+      command.executionReport.attempt < 1 ||
+      !["starting", "running", "waiting", "failed"].includes(command.executionReport.status))
+  )
     throw new AppError("INVALID_INPUT");
   if ((command.conversationId ? 1 : 0) + (command.target ? 1 : 0) + (command.mine ? 1 : 0) !== 1)
     throw new AppError("INVALID_INPUT");
@@ -87,9 +104,17 @@ export function validateTaskCommand(command: TaskCommand) {
       throw new AppError("INVALID_INPUT");
   }
   if (
-    ["unclaim", "update", "assign", "unassign", "amend", "history", "delete", "receipt"].includes(
-      command.operation,
-    ) &&
+    [
+      "unclaim",
+      "update",
+      "assign",
+      "unassign",
+      "amend",
+      "history",
+      "delete",
+      "receipt",
+      "execution",
+    ].includes(command.operation) &&
     !command.number
   )
     throw new AppError("INVALID_INPUT");

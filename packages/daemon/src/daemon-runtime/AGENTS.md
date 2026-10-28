@@ -44,6 +44,10 @@ Read the [message attention and delivery rules](../../../../docs/agents/daemon-m
 
 ## Agent HTTPS forwarding
 
+- `agent-task-operations.ts` owns task freshness, isolated claim handoff and execution reports.
+- `agent-message-scope.ts` groups scoped deliveries; different task threads never share one
+  model notice. A terminal task control is processed without waking the model.
+
 - `agent-message-operations.ts` owns the Agent's `coforge message` operations
   (check, send, the forwarded rest, and Memory's pending-thread read guard). `runtime.ts` only validates the
   request and resolves its canonical target.
@@ -76,8 +80,8 @@ Read the [message attention and delivery rules](../../../../docs/agents/daemon-m
   `code-agent/agent-instructions.ts`.
 - Apply the attention/model-visible preflight to Task `claim` and status
   `update` only; `amend` gets no local preflight. After the preflight, forward
-  without storing Task state or interpreting claims, status transitions, or
-  human approval. Reviewer-isolation holds expose counts only.
+  without interpreting business completion or human approval. Opted-in claims hand their task
+  brief to the isolated runtime. Reviewer-isolation holds expose counts only.
 
 ## Skills metadata
 

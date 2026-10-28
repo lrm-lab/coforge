@@ -5,6 +5,8 @@ model AgentMessageDelivery {
   conversationId String       @db.Uuid
   agentId        String       @db.Uuid
   taskExecutionSessionId String? @db.Uuid
+  /// Immutable attempt fence for a targeted task amendment or cancellation signal.
+  taskExecutionSignal Json?
   sequence       Int
   receivedAt     DateTime?
   /// A tracked @mention's outcome for this Agent: null when the delivery is not tracked, else

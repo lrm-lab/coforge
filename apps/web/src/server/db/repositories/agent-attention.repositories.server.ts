@@ -32,6 +32,10 @@ export const NOTIFIED_AGENT_WHERE = (agentId: string) =>
 export const liveDeliverySql = (alias: string) =>
   Prisma.raw(`(${alias}."expiresAt" IS NULL OR ${alias}."expiresAt" > (now() AT TIME ZONE 'UTC'))`);
 
+/** Terminal task controls remain replayable until ACK but never require model attention. */
+const modelDeliverySql = (alias: string) =>
+  Prisma.sql`${liveDeliverySql(alias)} AND ${Prisma.raw(`COALESCE(${alias}."taskExecutionSignal"->>'kind', '') <> 'ended'`)}`;
+
 /**
  * The `where` of the Agent's unreplayed deliveries, from `selected` (which deliveries), less the
  * stale ones (`liveDeliverySql`'s counterpart: Prisma cannot compare to the database clock).
@@ -109,10 +113,10 @@ function agentAttentionSource(scope: AgentAttentionScope) {
       from: Prisma.sql`FROM "agent_message_deliveries" d
         JOIN "messages" m ON m."id" = d."messageId" AND m."threadRootId" IS NULL
         WHERE d."agentId" = ${scope.agentId}::uuid AND d."conversationId" = ${scope.conversationId}::uuid
-          AND ${liveDeliverySql("d")}${bounds}`,
+          AND ${modelDeliverySql("d")}${bounds}`,
     };
   const delivered = Prisma.sql`EXISTS (SELECT 1 FROM "agent_message_deliveries" d
-    WHERE d."messageId" = m."id" AND d."agentId" = ${scope.agentId}::uuid AND ${liveDeliverySql("d")})`;
+    WHERE d."messageId" = m."id" AND d."agentId" = ${scope.agentId}::uuid AND ${modelDeliverySql("d")})`;
   return {
     sequence,
     from: Prisma.sql`FROM "messages" m
@@ -305,7 +309,7 @@ export function unreadAgentMessagesFragment(
     LEFT JOIN "users" su ON su."id" = sm."userId"
     LEFT JOIN "agents" sa ON sa."id" = sm."agentId"
     LEFT JOIN "agent_message_deliveries" d ON d."messageId" = m."id" AND d."agentId" = ${agentId}::uuid
-      AND ${liveDeliverySql("d")}
+      AND ${modelDeliverySql("d")}
     WHERE (am."id" IS NULL OR m."sequence" > CASE WHEN m."threadRootId" IS NULL
         THEN am."agentReadThroughSequence" ELSE COALESCE(tr."readThroughSequence", 0) END)
       AND (sm."userId" IS NOT NULL OR d."deliveryId" IS NOT NULL)

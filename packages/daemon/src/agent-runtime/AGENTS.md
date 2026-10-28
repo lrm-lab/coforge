@@ -112,6 +112,10 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 ## Session state and records
 
+- `scoped-agent-sessions.ts` owns serialized native scope admission, cancellation and cleanup.
+- `task-execution-sessions.ts` owns task-native histories and claim handoff. Task turns never
+  replace the standing identity; recovery never opts existing legacy work into isolation.
+
 - `agent-session.ts` owns current native Session snapshots, launch-scoped
   updates, and cloud snapshot replay. Session reports go through the Session
   acceptance path; sequenced snapshots validate their upstream launch fence

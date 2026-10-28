@@ -25,8 +25,9 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   evidence (`busyAgents`, probes), a quiet turn's `Waiting for N background task(s)` included until
   its last task ends. A probe reply is never busy evidence. Reply intents ([reply-intent.md](../observability/reply-intent.md)) are no Activity: `reply-intent-publisher.ts` sends them.
 - `runtime.ts` routes thread targets to the existing Agent session and
-  canonicalizes short channel/DM thread targets. Threads never create sessions
-  or processes.
+  canonicalizes short channel/DM thread targets. Only opted-in coordinator Tasks route to
+  task-native sessions; other threads never create sessions or processes. Live, held and restart
+  notices preserve each task target; Memory Agent notices remain scoped to the conversation.
 - A delivery counts as consumed when its sequence is at or below its target's
   frontier, or is one of the target's exact seen sequences (`exactSeqs`:
   durable beside the frontier, at most 2500 per target, pruned as the
