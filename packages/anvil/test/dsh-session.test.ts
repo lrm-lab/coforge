@@ -220,6 +220,23 @@ test(
   TEST_BUDGET_MS,
 );
 
+test(
+  "DSH reports a missing provider key as an unset API key, without its own text",
+  async () => {
+    const f = await fixture();
+    try {
+      const failed = f.nextCompleted();
+      await f.session.notify!("no-key");
+      await failed;
+      const errors = f.events.filter((event) => event.type === "error");
+      expect(errors).toEqual([{ type: "error", message: "DeepSeek API key is not set" }]);
+    } finally {
+      await f.close();
+    }
+  },
+  TEST_BUDGET_MS,
+);
+
 for (const input of ["refuse", "model-failed"]) {
   test(
     `DSH submitted RPC error (${input}) fails the turn without rejecting or re-sending input`,

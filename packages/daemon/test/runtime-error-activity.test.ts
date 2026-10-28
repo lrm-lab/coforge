@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildRuntimeActionRequiredActivity,
   buildRuntimeErrorActivity,
   buildRuntimeCrashedActivity,
   buildRuntimeErrorFingerprintFenceActivity,
@@ -9,6 +10,8 @@ import {
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
+import { DSH_MISSING_KEY_MESSAGE } from "@lrm/coforge-anvil/dsh";
+import { classifyRuntimeErrorText } from "#src/agent-runtime/runtime-error-classification";
 
 test("builds a runtime_error activity from the provider's message as reported, with an Error: entry and structured fields", () => {
   const long = "x".repeat(600);
@@ -226,4 +229,36 @@ test("class fence uses reference wording and redacts the visible error", () => {
   expect(activity.detail).not.toContain("topsecret-token-value");
   expect(activity.detail).toContain("Check the configured model and endpoint, then restart.");
   expect(activity.runtimeError?.errorReason).toBe("runtime_error_fenced");
+});
+
+test("DSH's unset key is a sign-in failure whose wording names only dsh web and DEEPSEEK_API_KEY", () => {
+  const event = { type: "error", message: DSH_MISSING_KEY_MESSAGE } as const;
+  const classified = classifyRuntimeErrorText(event.message);
+  expect(classified).toMatchObject({ errorClass: "AuthError", requiredAction: "user_reauth" });
+  const activity = buildRuntimeActionRequiredActivity(event, classified, {
+    provider: "dsh",
+    model: "deepseek-v4-pro",
+    providerLabel: "DeepSeek Harness",
+    agentProviderKey: false,
+  });
+  expect(activity.detail).toContain("`dsh web`");
+  expect(activity.detail).toContain("DEEPSEEK_API_KEY");
+  expect(activity.detail).not.toContain("not logged in");
+  expect(activity.runtimeError?.requiredAction).toBe("user_reauth");
+});
+
+test("a DSH key it has but the provider rejects is reported as rejected, not missing", () => {
+  const event = { type: "error", message: "HTTP 401: invalid api key" } as const;
+  const activity = buildRuntimeActionRequiredActivity(
+    event,
+    classifyRuntimeErrorText(event.message),
+    {
+      provider: "dsh",
+      model: "deepseek-v4-pro",
+      providerLabel: "DeepSeek Harness",
+      agentProviderKey: false,
+    },
+  );
+  expect(activity.detail).toContain("was rejected");
+  expect(activity.detail).not.toContain("has no DeepSeek API key");
 });

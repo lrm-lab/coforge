@@ -85,6 +85,18 @@ for await (const line of console) {
         });
         break;
       }
+      if (text === "no-key") {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: {
+            code: -32603,
+            message:
+              'Internal error: turn failed: fixture-llm: no API key for provider route "fixture-route"; see fixture-credentials',
+          },
+        });
+        break;
+      }
       if (text === "refuse") {
         write({
           jsonrpc: "2.0",

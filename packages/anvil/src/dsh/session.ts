@@ -26,6 +26,12 @@ type Input = {
   updates: DshTurnEvents;
 };
 
+/** DSH's turn failure when no DeepSeek key is configured. It is reported as a plain unset key, which
+ * the Computer files with every other runtime that needs a person to sign in; DSH's own text names
+ * its internal credential service and is not shown. */
+const DSH_MISSING_KEY = /\bno API key for provider route\b/i;
+export const DSH_MISSING_KEY_MESSAGE = "DeepSeek API key is not set";
+
 /** One native prompt at a time; local queue custody is never native acceptance. */
 export class DshSession implements AgentSession {
   readonly #transport: DshConnection;
@@ -193,13 +199,17 @@ export class DshSession implements AgentSession {
         nonEmptyString(data?.message) ??
         (rpcFailure ? nonEmptyString(error.data) : undefined) ??
         (error instanceof Error ? error.message : "DSH prompt failed");
+      // A missing key carries no JSON-RPC code: its generic "internal error" code would stand in
+      // for the class the Computer derives from the message.
       if (!this.#disposed)
         this.#emit(
-          {
-            type: "error",
-            message: scrubRuntimeErrorText(detail),
-            ...(rpcFailure ? { providerErrorCode: String(error.code) } : {}),
-          },
+          DSH_MISSING_KEY.test(detail)
+            ? { type: "error", message: DSH_MISSING_KEY_MESSAGE }
+            : {
+                type: "error",
+                message: scrubRuntimeErrorText(detail),
+                ...(rpcFailure ? { providerErrorCode: String(error.code) } : {}),
+              },
           input,
         );
       if (!(error instanceof RequestError)) this.#failed = true;

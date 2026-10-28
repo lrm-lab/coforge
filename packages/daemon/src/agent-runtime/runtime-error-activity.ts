@@ -11,6 +11,7 @@ import {
   type RuntimeErrorClassification,
 } from "./runtime-error-classification";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
+import { DSH_MISSING_KEY_MESSAGE } from "@lrm/coforge-anvil/dsh";
 import type {
   RuntimeErrorClassFenceState,
   RuntimeErrorFingerprintFenceState,
@@ -150,6 +151,7 @@ function runtimeActionRequiredSubtype(
  * Computer's `formatRuntimeActionRequiredMessage`. */
 function runtimeActionRequiredMessage(
   requiredAction: ClassifiedRuntimeErrorAction,
+  message: string,
   context: RuntimeActionRequiredContext,
 ): string {
   if (requiredAction === "user_model_access") {
@@ -162,6 +164,11 @@ function runtimeActionRequiredMessage(
     return "Built-in provider authentication failed. Check this Agent's provider API key and region/provider selection, then retry starting this Agent.";
   if (context.provider === RUNTIME_PROVIDER.PI)
     return "Pi's model provider rejected the API key, or no key is set for it on this machine. Check the API key for this Agent's provider, then retry starting this Agent.";
+  // DSH reports a missing key as `DSH_MISSING_KEY_MESSAGE`; any other sign-in failure is a key it has.
+  if (context.provider === RUNTIME_PROVIDER.DSH)
+    return message === DSH_MISSING_KEY_MESSAGE
+      ? "DeepSeek Harness has no DeepSeek API key on this machine. Add one with `dsh web`, or set DEEPSEEK_API_KEY for the Computer, then retry starting this Agent."
+      : "DeepSeek Harness's DeepSeek API key was rejected. Replace it with `dsh web`, or set DEEPSEEK_API_KEY for the Computer, then retry starting this Agent.";
   return `${context.providerLabel} is not logged in on this machine. Please log in to ${context.providerLabel} locally, then retry starting this Agent.`;
 }
 
@@ -173,7 +180,7 @@ export function buildRuntimeActionRequiredActivity(
   classified: RuntimeErrorClassification,
   context: RuntimeActionRequiredContext,
 ): AgentActivity {
-  const detail = runtimeActionRequiredMessage(classified.requiredAction, context);
+  const detail = runtimeActionRequiredMessage(classified.requiredAction, event.message, context);
   const subtype = runtimeActionRequiredSubtype(event.message, context);
   const diagnosticLabel =
     subtype === "provider_plan_access_error"
