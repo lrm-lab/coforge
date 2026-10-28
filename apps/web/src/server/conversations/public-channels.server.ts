@@ -53,7 +53,7 @@ import { toggleUserMessageReaction } from "./user-message-reactions.server";
 /**
  * Workspace-visible history with per-Agent notification preferences. The facade every caller
  * holds: each operation lives in the channel module that owns it (`channel-*.server.ts`), and
- * this class hands it the ports it was built with. Sending stays here.
+ * this class hands it the ports it was built with.
  */
 export class PublicChannels {
   private readonly ports: PublicChannelPorts;

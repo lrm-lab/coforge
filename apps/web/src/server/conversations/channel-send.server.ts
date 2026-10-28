@@ -177,7 +177,8 @@ export async function sendChannel(
             messageId: message.id,
           });
         // A mention of someone outside the channel reached nobody; the sender may still act on it.
-        // A binding that stored no mention — the member left before the lock — degrades the same.
+        // A binding that stored no mention — its member left before the active-member read —
+        // degrades the same.
         await recordPendingMentionActions(
           tx,
           {

@@ -12,7 +12,8 @@ const uuid = z.uuid();
 /** The members a browser send names by id, beside the `@handle`s in its body: the shape and bounds
  * of the Agent API's `mentions` (`MentionSelectorInput`, `isValidMentionSelectorArray`), built from
  * the same constants so the handle grammar has one owner. Whether each names a member of the
- * channel is the send's to decide; a binding that names no member is ignored. */
+ * channel is the send's to decide; a binding that names no member degrades like an
+ * unresolvable `@handle` — plain text plus a pending mention action. */
 export const mentionSelectorsSchema = z
   .array(
     z.object({

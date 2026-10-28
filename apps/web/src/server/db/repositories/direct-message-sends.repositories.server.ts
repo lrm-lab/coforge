@@ -341,7 +341,6 @@ export async function sendAgentMessage(
         throw new AgentSendRejectedError(403, "attachment is not available for this message");
       attachments.push(attachment);
     }
-    const mentionedMemberIds: string[] = [];
     if (mentions?.length) {
       for (const mention of mentions) {
         const match = members.find((member) =>
@@ -354,8 +353,6 @@ export async function sendAgentMessage(
             400,
             `mention binding does not match a conversation member: @${mention.name}`,
           );
-        // A member who already left keeps no follow — their binding degrades below.
-        if (!match.leftAt) mentionedMemberIds.push(match.id);
       }
     }
     // Channel member mentions (structured or plain) become <@kind:uuid> plus MessageMention;
@@ -384,11 +381,7 @@ export async function sendAgentMessage(
         workspaceId: conversation.workspaceId,
         conversationId,
         root,
-        participantMemberIds: [
-          sender.id,
-          ...stored.mentions.map((mention) => mention.key),
-          ...mentionedMemberIds,
-        ],
+        participantMemberIds: [sender.id, ...stored.mentions.map((mention) => mention.key)],
       });
     // A person's DM wakes no Agent (its only Agent is the sender); a DM between two Agents wakes
     // the other, whatever its state.
@@ -447,8 +440,8 @@ export async function sendAgentMessage(
     }
     // A channel mention of someone outside the channel reached nobody; the sending Agent may
     // still act on it. A DM stores every `@handle` as text, so it records nothing. A binding that
-    // matched a member but stored no mention — the member left before the lock — degrades the
-    // same way: no token, no mention row, just the pending action.
+    // matched a member but stored no mention — the member left before the in-transaction
+    // resolution — degrades the same way: no token, no mention row, just the pending action.
     if (conversation.channelName) {
       await recordPendingMentionActions(
         tx,

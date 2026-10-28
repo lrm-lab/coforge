@@ -2,7 +2,7 @@ import type { Prisma } from "#src/generated/prisma/client";
 
 /**
  * Take the conversation's row lock for the rest of the transaction. Every writer that
- * allocates a message sequence or Task number, or changes membership, serializes here.
+ * allocates a message sequence or Task number serializes here.
  * FOR NO KEY UPDATE: the row's key never changes under the lock, and the weaker level lets a
  * concurrent write's foreign-key check (FOR KEY SHARE — an upload referencing the conversation)
  * proceed instead of waiting for the whole send to commit.

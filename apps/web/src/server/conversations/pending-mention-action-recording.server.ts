@@ -21,8 +21,10 @@ export async function recordPendingMentionActions(
     body: string;
     createdAt: Date;
   },
-  /** Bindings the send could not resolve to a member mention — a member who left before the
-   * send committed — given the same pending action as an unresolvable `@handle`. */
+  /** Bindings the send could not resolve to a member mention — a member who left between the
+   * caller's read and the send's — given the same pending action as an unresolvable `@handle`.
+   * Ids the caller shaped but this Workspace does not have are dropped: a binding can name
+   * anything, and a row it does not belong to would break the FK or leak another Workspace. */
   unboundTargets: readonly {
     targetUserId?: string;
     targetAgentId?: string;
@@ -31,7 +33,13 @@ export async function recordPendingMentionActions(
 ): Promise<void> {
   const handles = leftoverMentionHandles(message.body);
   if (!handles.length && !unboundTargets.length) return;
-  const [humans, agents] = await Promise.all([
+  const unboundUserIds = unboundTargets.flatMap((target) =>
+    target.targetUserId ? [target.targetUserId] : [],
+  );
+  const unboundAgentIds = unboundTargets.flatMap((target) =>
+    target.targetAgentId ? [target.targetAgentId] : [],
+  );
+  const [humans, agents, unboundUsers, unboundAgents] = await Promise.all([
     tx.workspaceMembership.findMany({
       where: { workspaceId: message.workspaceId, user: { username: { in: handles } } },
       select: { user: { select: { id: true, username: true } } },
@@ -45,6 +53,18 @@ export async function recordPendingMentionActions(
       },
       select: { id: true, name: true },
     }),
+    unboundUserIds.length
+      ? tx.workspaceMembership.findMany({
+          where: { workspaceId: message.workspaceId, userId: { in: unboundUserIds } },
+          select: { userId: true },
+        })
+      : [],
+    unboundAgentIds.length
+      ? tx.agent.findMany({
+          where: { workspaceId: message.workspaceId, id: { in: unboundAgentIds } },
+          select: { id: true },
+        })
+      : [],
   ]);
   const agentByHandle = new Map(agents.map((agent) => [agent.name, agent.id]));
   const userByHandle = new Map(humans.map(({ user }) => [user.username, user.id]));
@@ -66,7 +86,11 @@ export async function recordPendingMentionActions(
       },
     ];
   });
+  const unboundUserOk = new Set(unboundUsers.map((row) => row.userId));
+  const unboundAgentOk = new Set(unboundAgents.map((row) => row.id));
   for (const target of unboundTargets) {
+    if (target.targetUserId && !unboundUserOk.has(target.targetUserId)) continue;
+    if (target.targetAgentId && !unboundAgentOk.has(target.targetAgentId)) continue;
     rows.push({
       messageId: message.id,
       conversationId: message.conversationId,
@@ -82,7 +106,8 @@ export async function recordPendingMentionActions(
 }
 
 /** The `unboundTargets` a send's mention `bindings` leave: every binding that stored no member
- * mention (its member left before the lock), as the pending-action target shape. */
+ * mention (its member left before the in-transaction resolution), as the pending-action
+ * target shape. */
 export function unboundMentionTargets(
   bindings: readonly { type: string; id: string; name: string }[],
   mentions: readonly { type: string; id: string }[],
@@ -90,7 +115,10 @@ export function unboundMentionTargets(
   return bindings
     .filter(
       (binding) =>
-        !mentions.some((mention) => mention.type === binding.type && mention.id === binding.id),
+        !mentions.some(
+          (mention) =>
+            mention.type === binding.type && mention.id.toLowerCase() === binding.id.toLowerCase(),
+        ),
     )
     .map((binding) => ({
       targetUserId: binding.type === "user" ? binding.id : undefined,

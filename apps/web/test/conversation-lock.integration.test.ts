@@ -78,10 +78,10 @@ test("an attachment insert is not blocked while the conversation lock is held", 
       new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 10_000)),
     ]);
     expect(probeResult).toBe("blocked");
-    releaseLock();
+    releaseLock?.();
     expect(await probe.then(() => "taken")).toBe("taken");
   } finally {
-    releaseLock();
+    releaseLock?.();
     await holdLock.catch(() => {});
     await db.$disconnect();
     await second.$disconnect();

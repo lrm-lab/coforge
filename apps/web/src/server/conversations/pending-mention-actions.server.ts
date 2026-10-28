@@ -57,9 +57,7 @@ export async function pendingMentionActionsForMessage(
   channel: { archived: boolean; name: string },
   now: Date = new Date(),
 ): Promise<PendingMentionActionView[]> {
-  // A body with no `@handle` still written as text has no row: no query.
   const order = leftoverMentionHandles(message.body);
-  if (!order.length) return [];
   const rows = await db.pendingMentionAction.findMany({
     where: {
       messageId: message.id,
@@ -83,7 +81,11 @@ export async function pendingMentionActionsForMessage(
   });
   const memberIds = new Set(members.map((member) => member.userId ?? member.agentId));
   return rows
-    .sort((left, right) => order.indexOf(left.targetHandle) - order.indexOf(right.targetHandle))
+    .sort(
+      (left, right) =>
+        (order.indexOf(left.targetHandle) + 1 || order.length + 1) -
+        (order.indexOf(right.targetHandle) + 1 || order.length + 1),
+    )
     .map((row) => pendingMentionActionView(row, message.workspaceId, channel, memberIds));
 }
 
