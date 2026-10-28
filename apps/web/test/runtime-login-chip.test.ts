@@ -1,59 +1,16 @@
 import { expect, test } from "bun:test";
 import { RUNTIME_AUTH_PROVIDERS } from "@lrm/coforge-anvil";
 
-import {
-  RUNTIME_LOGIN_STATE_PROVIDERS,
-  runtimeLoginChip,
-} from "#src/features/computers/runtime-login-chip";
+import { RUNTIME_AUTH_PROVIDERS as SDK_RUNTIME_AUTH_PROVIDERS } from "@lrm/coforge-sdk/internal";
 
-test("the chip shows every Anvil auth-status provider, and signs in only the SDK set", () => {
-  expect([...RUNTIME_LOGIN_STATE_PROVIDERS]).toEqual([...RUNTIME_AUTH_PROVIDERS]);
-});
+import { runtimeLoginChip } from "#src/features/computers/runtime-login-chip";
 
-test("Command Code shows logged in and logged out with no Sign in", () => {
-  expect(
-    runtimeLoginChip({
-      provider: "command-code",
-      status: { provider: "command-code", state: "logged_in" },
-      canSignIn: true,
-    }),
-  ).toEqual({
-    auth: { provider: "command-code", state: "logged_in" },
-    account: "logged_in",
-    signable: false,
-  });
-  expect(
-    runtimeLoginChip({
-      provider: "command-code",
-      status: { provider: "command-code", state: "logged_out" },
-      canSignIn: true,
-    }),
-  ).toEqual({
-    auth: { provider: "command-code", state: "logged_out" },
-    account: "logged_out",
-    signable: false,
-  });
-});
-
-test("an untrustworthy Command Code probe is not shown as logged out", () => {
-  expect(
-    runtimeLoginChip({
-      provider: "command-code",
-      status: { provider: "command-code", state: "unknown" },
-      canSignIn: true,
-    }),
-  ).toEqual({
-    auth: { provider: "command-code", state: "unknown" },
-    account: undefined,
-    signable: false,
-  });
-  expect(
-    runtimeLoginChip({ provider: "command-code", status: undefined, canSignIn: true }),
-  ).toEqual({ auth: undefined, account: undefined, signable: false });
+test("the chip signs in every Anvil auth-status provider", () => {
+  expect([...SDK_RUNTIME_AUTH_PROVIDERS]).toEqual([...RUNTIME_AUTH_PROVIDERS]);
 });
 
 test("a sign-in provider keeps unknown for a viewer who cannot press Sign in", () => {
-  for (const provider of ["claude-code", "codex", "kiro"] as const) {
+  for (const provider of ["claude-code", "codex", "kiro", "command-code"] as const) {
     expect(
       runtimeLoginChip({
         provider,

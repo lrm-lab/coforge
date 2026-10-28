@@ -44,5 +44,8 @@
   "runtime_auth_kiro_region": "AWS Region",
   "runtime_auth_kiro_invalid_target": "Enter an HTTPS Start URL and a valid AWS Region.",
   "runtime_auth_kiro_device_disabled": "Your organization has disabled device-code sign-in. Sign in on the Computer itself.",
-  "runtime_auth_kiro_external_idp": "This external identity provider does not support device-code sign-in. Sign in on the Computer itself."
+  "runtime_auth_kiro_external_idp": "This external identity provider does not support device-code sign-in. Sign in on the Computer itself.",
+  "runtime_auth_command_code_browser": "Use the browser that opened on {computer} to finish signing in.",
+  "runtime_auth_command_code_no_browser": "{computer} can't open a browser. Run cmd login in a terminal on {computer}.",
+  "runtime_auth_command_code_api_key_env": "Still signed in: COMMAND_CODE_API_KEY is set in the Computer's environment."
 }
