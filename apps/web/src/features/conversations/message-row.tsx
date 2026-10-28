@@ -1,8 +1,5 @@
 import { memo, useCallback, useState } from "react";
-import {
-  WeeklyReportMessageCard,
-  type WeeklyReportMessageSuggestion,
-} from "#src/features/records/weekly-report-message-card";
+import { WeeklyReportMessageCard } from "#src/features/records/weekly-report-message-card";
 
 import { useAppToast } from "#src/components/ui/toast";
 import type {
@@ -17,13 +14,10 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import { MessageSenderLine } from "./message-sender-line";
-import type { ActionCardView } from "#src/server/conversations/action-cards.server";
-import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import { useIsMessageSaved } from "./conversation-host";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-markdown";
-import type { ReactionSummary } from "./message-reactions";
 import { messagePlainText } from "./selection-copy";
 import { QuoteSelectionBar, useQuoteSelection } from "./message-quote-selection";
 import { copyText } from "#src/lib/clipboard";
@@ -33,83 +27,14 @@ import { clockLabel } from "#src/lib/dates";
 import { gutterClockLabel } from "./gutter-clock-label";
 import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { SystemMessageRow } from "./system-message-row";
-import { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
 import { MessageRowFooter } from "./message-row-footer";
 import { MessageSenderGutter } from "./message-sender-gutter";
 import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
+import type { MessageView } from "./message-view";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
-
-export type MessageView = {
-  id: string;
-  sequence: number;
-  threadRootId?: string;
-  senderKind: "user" | "agent" | "system";
-  senderMemberId?: string | null;
-  /** What the reader sees: a display name, falling back to the handle (Slack's convention). */
-  senderName: string;
-  /** The handle behind that name, kept separate because a display name is not an identity.
-   * Absent for a server-authored message. */
-  senderHandle?: string;
-  /** The sender's Agent id, present only when `senderKind === "agent"`; opens the Agent profile
-   * panel (`features/agents/profile-panel/`) from the avatar or the sender name. */
-  senderAgentId?: string;
-  /** The sender's user id, present only when `senderKind === "user"`; opens their profile panel. */
-  senderUserId?: string;
-  /** True when the sending Agent has since been archived (deleted): the sender renders greyed
-   * with an `ARCHIVED` marker, and opens its read-only profile. */
-  senderDeleted?: boolean;
-  senderAvatarUrl?: string | null;
-  body: string;
-  createdAt: Date | string;
-  /** Always present, possibly empty; order matches send/upload order. */
-  attachments: AttachmentView[];
-  /** Resolved mention rows for the body's embedded `<@kind:uuid>` tokens; absent/empty for
-   * DMs and pre-token history, which render as written (token-only highlight by design). */
-  mentions?: {
-    kind: "user" | "agent";
-    actorId: string;
-    handle: string;
-    label: string;
-  }[];
-  reactions?: ReactionSummary[];
-  /** Present when this message is the summary posted for an Agent-prepared action card.
-   * Replaces the plain-text draft hint line with the interactive card; the
-   * underlying `body` stays available to assistive technology. */
-  actionCard?: ActionCardView;
-  weeklyReportSuggestion?: WeeklyReportMessageSuggestion;
-  weeklyReportDisplayBody?: string;
-  /** Platform wake stored for the Agent. The conversation pane omits the row. */
-  weeklyReportHidden?: boolean;
-};
-
-export { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
-
-/** Whether two consecutive messages collapse into one visual group. */
-export function groupsWithPrevious(
-  message: MessageView,
-  previous: MessageView | undefined,
-  own: boolean,
-  previousOwn: boolean,
-  locale?: string,
-  timeZone?: string,
-) {
-  if (!previous) return { dayChanged: true, grouped: false };
-  const dayChanged =
-    dayLabel(previous.createdAt, locale, timeZone) !==
-    dayLabel(message.createdAt, locale, timeZone);
-  const sameSender =
-    !dayChanged &&
-    previousOwn === own &&
-    (previous.senderMemberId ?? previous.senderName) ===
-      (message.senderMemberId ?? message.senderName);
-  const grouped =
-    sameSender &&
-    Math.abs(new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime()) <=
-      GROUPING_WINDOW_MS;
-  return { dayChanged, grouped };
-}
+export { groupsWithPrevious } from "./message-view";
 
 /** A row is a plain flow item: its height is whatever its content needs, and nothing — neither
  * this file nor the conversation around it — estimates that height in advance.

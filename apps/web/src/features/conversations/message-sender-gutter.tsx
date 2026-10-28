@@ -3,7 +3,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { m } from "#src/paraglide/messages";
-import type { MessageView } from "./message-row";
+import type { MessageView } from "./message-view";
 
 export function MessageSenderGutter({
   message,

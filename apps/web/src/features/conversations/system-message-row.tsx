@@ -4,7 +4,8 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
 import { DayDivider, UnreadDivider } from "./message-dividers";
-import { ROW_CLASS, type MessageView } from "./message-row";
+import { ROW_CLASS } from "./message-row";
+import type { MessageView } from "./message-view";
 
 /**
  * A system message (task/membership notices, etc.) is not a person talking: it carries no avatar

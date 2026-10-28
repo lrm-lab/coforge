@@ -4,7 +4,7 @@ import { MessageReactionBadges } from "./message-reaction-badges";
 import { ReadTicks, SavedMessageMarker } from "./message-status-markers";
 import { RootThread } from "./thread-summary";
 import { MessageTask } from "#src/features/tasks/message-task";
-import type { MessageView } from "./message-row";
+import type { MessageView } from "./message-view";
 
 export function MessageRowFooter({
   message,

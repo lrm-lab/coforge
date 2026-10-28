@@ -2,7 +2,8 @@ import { useHydrated } from "@tanstack/react-router";
 import { useMemo } from "react";
 
 import type { ChipMention } from "#src/features/conversations/message-markdown";
-import { MessageRow, type MessageView } from "#src/features/conversations/message-row";
+import { MessageRow } from "#src/features/conversations/message-row";
+import type { MessageView } from "#src/features/conversations/message-view";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 

@@ -16,7 +16,7 @@ import {
   galleryRows,
   singleImageBox,
 } from "#src/lib/attachment-image-box";
-import type { MessageView } from "./message-row";
+import type { MessageView } from "./message-view";
 
 /** The authenticated backend fallback: forced downloads, and inline images once their signed
  * CDN preview URL has expired or fails to load (the route then redirects to a fresh one, or

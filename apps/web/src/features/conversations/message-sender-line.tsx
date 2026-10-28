@@ -2,7 +2,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { AgentModelLabel } from "#src/features/agents/agent-model-label";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 
-import type { MessageView } from "./message-row";
+import type { MessageView } from "./message-view";
 
 /**
  * The line over a message that starts a group: who sent it (a link to their profile when there
