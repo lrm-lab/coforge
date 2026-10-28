@@ -3,11 +3,11 @@ import {
   readClaudeRecycleBriefing as readNativeBriefing,
   readClaudeSessionResumeFacts as readNativeFacts,
   findClaudeSessionTranscript as findNativeTranscript,
-  readTranscriptTailLines as readNativeTail,
   readTranscriptActions as readNativeActions,
   collectRecentMessages as collectNativeMessages,
   readClaudeCodeUsage as readNativeUsage,
 } from "@lrm/coforge-anvil/claude-code";
+import { readTailLines } from "@lrm/coforge-anvil";
 import { claudeRuntimeHost } from "#src/code-agent/claude-code/host";
 export * from "@lrm/coforge-anvil/claude-code";
 
@@ -22,7 +22,7 @@ export const findClaudeSessionTranscript = (
   envVars: Parameters<typeof findNativeTranscript>[1],
 ) => findNativeTranscript(sessionId, envVars, claudeRuntimeHost);
 export const readTranscriptTailLines = (path: string, tailBytes: number) =>
-  readNativeTail(path, tailBytes, claudeRuntimeHost);
+  readTailLines(path, tailBytes, claudeRuntimeHost);
 export const readTranscriptActions = (path: string) => readNativeActions(path, claudeRuntimeHost);
 export const collectRecentMessages = (path: string, max: number) =>
   collectNativeMessages(path, max, claudeRuntimeHost);
