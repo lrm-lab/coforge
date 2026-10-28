@@ -19,6 +19,7 @@ import {
   within,
 } from "@lrm/coforge-anvil";
 import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "@lrm/coforge-anvil/kiro";
+import { DSH_ACP_VERSION, dshVersionFromOutput } from "@lrm/coforge-anvil/dsh";
 import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "@lrm/coforge-anvil/grok";
 import {
   isCommandCodeVersionUnsupported,
@@ -137,7 +138,10 @@ async function probeRuntimeVersion(
           .trim()
           .split(/\s+/)
           .find((token) => /^\d+(\.\d+)*$/.test(token))
-      : lastWord(output);
+      : provider === RUNTIME_PROVIDER.DSH
+        ? // Read exactly as DSH's launch reads it, so the two never disagree on the pin below.
+          (dshVersionFromOutput(output) ?? output.trim())
+        : lastWord(output);
   if (!version) return { kind: "unavailable" };
   if (provider === RUNTIME_PROVIDER.KIRO && isKiroVersionUnsupported(version)) {
     logKiroVersionUnsupported(name, version);
@@ -158,6 +162,18 @@ async function probeRuntimeVersion(
   if (provider === RUNTIME_PROVIDER.COMMAND_CODE && isCommandCodeVersionUnsupported(version)) {
     logCommandCodeVersionUnsupported(name, version);
     return { kind: "unavailable" };
+  }
+  // The preview ACP is pinned to one release: any other version is refused, never offered.
+  if (provider === RUNTIME_PROVIDER.DSH && version !== DSH_ACP_VERSION) {
+    logger.warning("DeepSeek Harness version is not the pinned release", {
+      event: "code_agent_runtime:version_unsupported",
+      provider,
+      executable_name: name,
+      version,
+      required_version: DSH_ACP_VERSION,
+      outcome: "unavailable",
+    });
+    return { kind: "rejected" };
   }
   return {
     kind: "runtime",
@@ -409,6 +425,8 @@ function externalRuntimeDisplayName(provider: ExternalCodeAgentProvider): string
       return "Antigravity CLI";
     case RUNTIME_PROVIDER.COMMAND_CODE:
       return "Command Code";
+    case RUNTIME_PROVIDER.DSH:
+      return "DeepSeek Harness";
     default: {
       const unreachable: never = provider;
       throw new Error(`Unhandled external Code Agent provider: ${unreachable}`);

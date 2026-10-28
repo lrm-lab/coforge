@@ -9,6 +9,7 @@ import {
   discoverCodeAgentCatalogs,
   loadCachedCodeAgentCatalogs,
 } from "#src/code-agent/runtime-inventory";
+import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 const ACP_TIMEOUT_MS = 10_000;
@@ -16,7 +17,7 @@ const TEST_BUDGET_MS =
   VERSION_PROBE_TIMEOUT_MS + 3 * ACP_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
 
 test(
-  "DSH inventory uses the native exchange and process cache without advertising or persisting it",
+  "DSH inventory advertises the pinned release and keeps its catalog in the process cache only",
   async () => {
     const cwd = await mkdtemp(join(tmpdir(), "dsh-inventory-"));
     const log = join(cwd, "rpc.jsonl");
@@ -34,9 +35,7 @@ test(
       commands: { dsh: [process.execPath, anvilRuntimeFixtures.dsh] },
       probe: {
         which: (name: string) => (name === "dsh" ? process.execPath : undefined),
-        spawn: () => {
-          throw new Error("hidden DSH must not be version-probed at startup");
-        },
+        spawn: () => ({ stdout: new Blob(["0.2.1-rc.2\n"]).stream(), exited: Promise.resolve(0) }),
       },
       piModels: async () => [],
       cacheDirectory: join(cwd, "daemon-cache"),
@@ -44,8 +43,8 @@ test(
     };
     try {
       expect(
-        (await discoverCodeAgentRuntimes(options)).some((runtime) => runtime.provider === "dsh"),
-      ).toBe(false);
+        (await discoverCodeAgentRuntimes(options)).find((runtime) => runtime.provider === "dsh"),
+      ).toEqual(runtimes[0]);
       expect(
         (await loadCachedCodeAgentCatalogs(runtimes, options)).catalogs.some(
           (entry) => entry.provider === "dsh",
@@ -73,7 +72,8 @@ test(
       const probeCwd = requests.find((request) => request.method === "session/new").params.cwd;
       await expect(stat(probeCwd)).rejects.toMatchObject({ code: "ENOENT" });
       const disk = Bun.file(join(options.cacheDirectory, "code-agent-inventory-cache.json"));
-      if (await disk.exists()) expect(await disk.text()).not.toContain('"dsh"');
+      // The runtime's version probe is cached like any CLI's; its model catalog is not.
+      if (await disk.exists()) expect(await disk.text()).not.toContain("native-model");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -152,3 +152,17 @@ test(
   },
   TEST_BUDGET_MS,
 );
+
+test("DSH inventory refuses any release other than the pinned one", async () => {
+  const probe = (version: string) => ({
+    which: (name: string) => (name === "dsh" ? "/bin/dsh" : undefined),
+    spawn: () => ({ stdout: new Blob([`${version}\n`]).stream(), exited: Promise.resolve(0) }),
+  });
+  await expect(discoverExternalCodeAgents(probe("0.2.1-rc.2"))).resolves.toEqual([
+    { provider: "dsh", version: "0.2.1-rc.2", displayName: "DeepSeek Harness" },
+  ]);
+  await expect(discoverExternalCodeAgents(probe("0.2.1"))).resolves.toEqual([]);
+  await expect(discoverExternalCodeAgents(probe("0.2.0"))).resolves.toEqual([]);
+  // Launch accepts only the bare version, so the inventory must not offer decorated output.
+  await expect(discoverExternalCodeAgents(probe("dsh 0.2.1-rc.2"))).resolves.toEqual([]);
+});

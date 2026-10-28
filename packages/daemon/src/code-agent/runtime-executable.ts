@@ -76,7 +76,9 @@ function grokInstalledExecutableCandidates(
   ];
 }
 
-/** Kept outside advertised inventory until native/UI acceptance opens the rollout. */
+/** DeepSeek Harness: advertised like any external CLI once it is on PATH. Its key lives in the
+ * user's own `~/.dsh`, so the Computer reports no sign-in state for it, as for OpenCode; the
+ * version is pinned exactly by the inventory probe (`DSH_ACP_VERSION`). */
 export const dshCodeAgent = {
   provider: RUNTIME_PROVIDER.DSH,
   executable: "dsh",
@@ -139,6 +141,7 @@ export const externalCodeAgents = [
     installedExecutableCandidates: noInstalledExecutableCandidates,
   },
   commandCodeAgent,
+  dshCodeAgent,
 ] as const;
 
 export type ExternalCodeAgentProvider = (typeof externalCodeAgents)[number]["provider"];
