@@ -41,6 +41,13 @@ export function failureReason(error: unknown) {
   return "error";
 }
 
+/** The headers every GitHub REST call carries. */
+export const GITHUB_REST_HEADERS = {
+  accept: "application/vnd.github+json",
+  "x-github-api-version": "2026-03-10",
+  "user-agent": "CoForge",
+} as const;
+
 /** The HTTP transport to GitHub: every call's 401/403/404/timeout semantics live here. */
 export class GitHubApi {
   constructor(
@@ -72,12 +79,34 @@ export class GitHubApi {
     return tokensSchema.parse(result);
   }
 
+  /**
+   * Revokes one user access token GitHub issued to this App
+   * (https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token). Best effort:
+   * never throws. A failure is logged with a short reason, never the token or GitHub's response.
+   */
+  async revoke(token: string) {
+    const { clientId, clientSecret } = this.config;
+    try {
+      await this.send(`https://api.github.com/applications/${encodeURIComponent(clientId)}/token`, {
+        method: "DELETE",
+        headers: {
+          ...GITHUB_REST_HEADERS,
+          authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ access_token: token }),
+      });
+    } catch (error) {
+      console.warn(
+        JSON.stringify({ event: "github.token_revoke_failed", reason: failureReason(error) }),
+      );
+    }
+  }
+
   restHeaders(token: string) {
     return {
-      accept: "application/vnd.github+json",
+      ...GITHUB_REST_HEADERS,
       authorization: `Bearer ${token}`,
-      "x-github-api-version": "2026-03-10",
-      "user-agent": "CoForge",
     };
   }
 
@@ -93,7 +122,7 @@ export class GitHubApi {
         accept: "application/json",
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
-        "user-agent": "CoForge",
+        "user-agent": GITHUB_REST_HEADERS["user-agent"],
       },
       body: JSON.stringify({ query, variables }),
     });

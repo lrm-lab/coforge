@@ -2,7 +2,13 @@ import { z } from "zod";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { GitHubAuthorizationResult } from "#src/features/integrations/github-callback";
-import { GitHubApi, GitHubUnauthorized, failureReason, type Http } from "./github-api.server";
+import {
+  GITHUB_REST_HEADERS,
+  GitHubApi,
+  GitHubUnauthorized,
+  failureReason,
+  type Http,
+} from "./github-api.server";
 import {
   pageSchema,
   idSchema,
@@ -133,65 +139,53 @@ export class GitHubConnection {
       return attempt.verifier;
     });
     if (!verifier) return authorizationFailed("attempt", rejection);
-    const result = await this.tokens.locked(userId, async (tx) => {
-      const attempt = await tx.gitHubAuthorization.findUnique({ where: { userId } });
-      // A disconnect or new begin between transactions cancels finalization.
-      if (!attempt || attempt.stateHash !== hash(state) || attempt.verifier)
-        return authorizationFailed("attempt", "cancelled");
-      await tx.gitHubAuthorization.delete({ where: { userId } });
-      if (attempt.expiresAt.getTime() <= this.now() || !code)
-        return authorizationFailed("attempt", code ? "expired" : "no_code");
-      // Consume failed exchanges too. Never replay a code after an ambiguous network result.
-      let authorized;
-      let stage = "open";
-      try {
-        const stored = JSON.parse(await this.sealed.open(userId, "oauth", verifier)) as {
-          verifier?: string;
-          expectedGithubUserId?: string;
-        };
-        stage = "exchange";
-        const tokens = await this.github.exchange({
-          code,
-          redirect_uri: this.config.callbackUrl,
-          code_verifier: stored.verifier ?? verifier,
+    // GitHub is called outside any transaction, so a slow exchange holds no lock and a transaction
+    // that expires cannot lose the token: it is a plain value that the revokes below can see.
+    const authorized = await this.authorize(userId, verifier, code);
+    if (!authorized) return false;
+    const { tokens, user, expectedGithubUserId } = authorized;
+    const result = await this.tokens
+      .locked(userId, async (tx) => {
+        const attempt = await tx.gitHubAuthorization.findUnique({ where: { userId } });
+        // A disconnect or new begin between transactions cancels finalization.
+        if (!attempt || attempt.stateHash !== hash(state) || attempt.verifier)
+          return authorizationFailed("attempt", "cancelled");
+        await tx.gitHubAuthorization.delete({ where: { userId } });
+        if (attempt.expiresAt.getTime() <= this.now())
+          return authorizationFailed("attempt", "expired");
+        if (expectedGithubUserId && expectedGithubUserId !== String(user.id))
+          return "wrong_account" as const;
+        // Two people finishing OAuth for one GitHub account queue here, so the second one reads the
+        // first one's connection below. The User's lock is already held: the order is User, account.
+        await this.tokens.lockAccount(tx, String(user.id));
+        const existing = await tx.gitHubConnection.findUnique({
+          where: {
+            clientId_githubUserId: {
+              clientId: this.config.clientId,
+              githubUserId: String(user.id),
+            },
+          },
         });
-        stage = "user";
-        const user = userSchema.parse(await this.github.api("/user", tokens.access_token));
-        authorized = { tokens, user };
-      } catch (error) {
-        return authorizationFailed(stage, failureReason(error));
-      }
-      const { tokens, user } = authorized;
-      const storedAuthorization = JSON.parse(await this.sealed.open(userId, "oauth", verifier)) as {
-        expectedGithubUserId?: string;
-      };
-      if (
-        storedAuthorization.expectedGithubUserId &&
-        storedAuthorization.expectedGithubUserId !== String(user.id)
-      )
-        return "wrong_account" as const;
-      const existing = await tx.gitHubConnection.findUnique({
-        where: {
-          clientId_githubUserId: { clientId: this.config.clientId, githubUserId: String(user.id) },
-        },
+        if (existing && existing.userId !== userId) return accountTaken();
+        const data = {
+          clientId: this.config.clientId,
+          githubUserId: String(user.id),
+          login: user.login,
+          ...(await this.tokens.storedTokens(userId, tokens)),
+        };
+        await tx.gitHubConnection.upsert({
+          where: { userId },
+          create: { userId, ...data },
+          update: data,
+        });
+        return true;
+      })
+      .catch((error: unknown) => {
+        void this.github.revoke(tokens.access_token);
+        throw error;
       });
-      if (existing && existing.userId !== userId) {
-        authorizationFailed("owner", "github_account_taken");
-        return "account_taken" as const;
-      }
-      const data = {
-        clientId: this.config.clientId,
-        githubUserId: String(user.id),
-        login: user.login,
-        ...(await this.tokens.storedTokens(userId, tokens)),
-      };
-      await tx.gitHubConnection.upsert({
-        where: { userId },
-        create: { userId, ...data },
-        update: data,
-      });
-      return true;
-    });
+    // Not awaited and never throwing: the person sees the outcome whether or not GitHub revokes.
+    if (result !== true) void this.github.revoke(tokens.access_token);
     if (result === true) {
       try {
         // The connection is already saved. A failed sync just leaves the
@@ -202,6 +196,35 @@ export class GitHubConnection {
       }
     }
     return result;
+  }
+
+  /**
+   * Opens the consumed attempt and trades the code for tokens and the GitHub user. Consume failed
+   * exchanges too: never replay a code after an ambiguous network result. A token issued before a
+   * failed `/user` read is revoked here; the caller revokes it if the connection is not stored.
+   */
+  private async authorize(userId: string, sealedAttempt: string, code: string) {
+    let stage = "open";
+    let issuedToken = "";
+    try {
+      const stored = JSON.parse(await this.sealed.open(userId, "oauth", sealedAttempt)) as {
+        verifier?: string;
+        expectedGithubUserId?: string;
+      };
+      stage = "exchange";
+      const tokens = await this.github.exchange({
+        code,
+        redirect_uri: this.config.callbackUrl,
+        code_verifier: stored.verifier ?? sealedAttempt,
+      });
+      issuedToken = tokens.access_token;
+      stage = "user";
+      const user = userSchema.parse(await this.github.api("/user", tokens.access_token));
+      return { tokens, user, expectedGithubUserId: stored.expectedGithubUserId };
+    } catch (error) {
+      if (issuedToken) void this.github.revoke(issuedToken);
+      return authorizationFailed(stage, failureReason(error));
+    }
   }
 
   async status(userId: string) {
@@ -334,11 +357,7 @@ export class GitHubConnection {
     try {
       const metadata = publicRepositorySchema.parse(
         await this.github.request(`https://api.github.com/repos/${name}`, {
-          headers: {
-            accept: "application/vnd.github+json",
-            "x-github-api-version": "2026-03-10",
-            "user-agent": "CoForge",
-          },
+          headers: GITHUB_REST_HEADERS,
         }),
       );
       if (metadata.private || metadata.full_name !== name) throw new AppError("ACCESS_DENIED");
@@ -451,6 +470,11 @@ function credentialFailed(
   const outcome = code === "ACCESS_DENIED" ? "reconnect" : "unavailable";
   console.warn(JSON.stringify({ event: "github.credential_failed", userId, outcome, reason }));
   return new AppError(code);
+}
+
+function accountTaken() {
+  authorizationFailed("owner", "github_account_taken");
+  return "account_taken" as const;
 }
 
 function randomValue() {

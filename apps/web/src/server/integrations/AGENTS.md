@@ -24,6 +24,9 @@ These rules apply to `src/server/integrations/`.
   project browse reads (`repositoryTree`, `repositoryObject`,
   `repositoryDirectoryCommits`, `repositoryRaw`) rely on the user token's scope
   and must check repository identity in every request.
+- A token GitHub issues during an authorization that ends up not stored is revoked, best effort,
+  never delaying or changing the outcome. Connects of one GitHub account are serialized; lock
+  order is User, then account.
 - The raw OAuth callback route is a thin adapter over this module.
 - `credential()` throws `ACCESS_DENIED` only when `withToken` answers that
   the person must reconnect GitHub (`disconnected`, `reauthorize`; the Agent

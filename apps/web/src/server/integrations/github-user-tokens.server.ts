@@ -117,6 +117,15 @@ export class GitHubUserTokens {
     );
   }
 
+  /**
+   * Serializes the transactions that connect one GitHub account, whichever User finishes first.
+   * Take it after the User's own lock (`locked`) and before reading who owns the account; nothing
+   * else takes it.
+   */
+  async lockAccount(tx: Prisma.TransactionClient, githubUserId: string) {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-account:${this.config.clientId}:${githubUserId}`}, 0))::text`;
+  }
+
   async storedTokens(userId: string, tokens: z.infer<typeof tokensSchema>) {
     return {
       credentials: await this.sealed.seal(
