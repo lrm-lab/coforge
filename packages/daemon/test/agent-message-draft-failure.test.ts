@@ -7,6 +7,7 @@ import { startAgentProxy } from "#src/agent-proxy";
 import { AgentInboxStateMachine } from "#src/daemon-runtime/agent-inbox-state-machine";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentMessageOperations } from "#src/daemon-runtime/agent-message-operations";
+import { AgentStateDb } from "#src/persistence/agent-state-db";
 import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 
 test.each([
@@ -20,30 +21,22 @@ test.each([
   const root = await mkdtemp(join(tmpdir(), "coforge-draft-failure-"));
   let proxy: ReturnType<typeof startAgentProxy> | undefined;
   try {
-    const identity = encodeURIComponent(
-      String(process.geteuid?.() ?? userInfo().username),
-    ).replaceAll(".", "%2E");
-    const path = join(
-      root,
-      `coforge-cli-attested-send-${identity}`,
-      "agent",
-      "continue-state.json",
-    );
+    // The store fails the same way a damaged table would: `DROP TABLE` makes every draft
+    // operation throw. Recreating it is the repair the "ordinary send" path relies on.
+    const db = AgentStateDb.open(root, "agent");
+    const breakDrafts = () => db.database.exec("DROP TABLE drafts");
+    const repairDrafts = () =>
+      db.database.exec(`CREATE TABLE IF NOT EXISTS drafts (
+        target TEXT PRIMARY KEY, content TEXT NOT NULL, attachment_ids TEXT,
+        idempotency_key TEXT NOT NULL, mentions TEXT, saved_at INTEGER NOT NULL,
+        rehold_count INTEGER NOT NULL DEFAULT 0, seen_up_to_seq INTEGER, seen_exact_seqs TEXT
+      )`);
     const reading = scenario.endsWith("lookup");
     const afterTransport =
       scenario === "accepted send cleanup" || scenario === "held draft refresh";
-    if (afterTransport) {
-      await mkdir(dirname(path), { recursive: true });
-    } else if (reading) {
-      await mkdir(dirname(path), { recursive: true });
-      await Bun.write(path, "invalid saved draft data");
-    } else {
-      // A directory at the file destination makes replacement fail on every OS,
-      // while the initial lookup still reports no file.
-      await mkdir(path, { recursive: true });
-    }
-    const inbox = new AgentInboxStateMachine(new AgentMessageDraftStore("agent", root));
-    if (!reading) expect(await inbox.draft("@ada")).toBeUndefined();
+    const inbox = new AgentInboxStateMachine(new AgentMessageDraftStore(db));
+    if (reading) breakDrafts();
+    else expect(await inbox.draft("@ada")).toBeUndefined();
     const attention = new AgentMessageAttentionIndex(
       "workspace",
       { session: () => undefined },
@@ -59,7 +52,7 @@ test.each([
       transport: {
         agentMessage: async (request) => {
           sends += 1;
-          if (afterTransport) await Bun.write(path, "invalid saved draft data");
+          if (afterTransport) breakDrafts();
           if (scenario === "held draft refresh")
             return {
               protocolMajor: 1,
@@ -88,6 +81,7 @@ test.each([
     });
     const token = proxy.issue("agent", `sk_agent_${"a".repeat(43)}`);
     const client = connectLocal("", token, proxy.url, "");
+    if (!reading && !afterTransport) breakDrafts();
     const error = await client
       .send("@ada", "new reply", { sendDraft: scenario === "saved draft lookup" })
       .catch((error: unknown) => error);
@@ -113,7 +107,7 @@ test.each([
     }
     expect(String(error)).not.toContain(root);
     if (scenario === "ordinary send") {
-      await rm(path, { recursive: true });
+      repairDrafts();
       expect(await client.send("@ada", "reply after storage repair")).toMatchObject({
         accepted: true,
       });

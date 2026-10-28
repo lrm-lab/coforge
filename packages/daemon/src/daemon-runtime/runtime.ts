@@ -395,8 +395,8 @@ export class DaemonRuntime {
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = generateRuntimeInstanceId();
-  /** The consumed cursor, durable for the reasons its store gives; stopping flushes its writes. */
-  readonly #consumedSeqs = new AgentConsumedSeqStore();
+  /** The consumed cursor and each Agent's draft ledger, durable for the reasons its store gives. */
+  readonly #consumedSeqs: AgentConsumedSeqStore;
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
   readonly #agentProxyTokens = new Map<string, string>();
@@ -520,6 +520,7 @@ export class DaemonRuntime {
     ) => RuntimeAuthAdapter = createRuntimeAuthAdapter,
   ) {
     const runtime = this;
+    this.#consumedSeqs = new AgentConsumedSeqStore(this.stateDirectory);
     this.#activityPublisher = new AgentActivityPublisher<ActivityLaunch>({
       currentLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
       get transport() {
@@ -3652,11 +3653,10 @@ export class DaemonRuntime {
   #agentInbox(agentId: string): AgentInboxStateMachine {
     const existing = this.#agentInboxes.get(agentId);
     if (existing) return existing;
-    // The local draft state (`continue-state.json`): one file per Agent under the OS temp
-    // directory, with `COFORGE_CLI_DRAFT_STATE_DIR` as the documented override. Deliberately not
-    // the daemon's state directory: this is short-lived continuation state, not daemon state, and
-    // tests point it at their own directory.
-    const inbox = new AgentInboxStateMachine(new AgentMessageDraftStore(agentId));
+    // The held-send draft lives in the Agent's state.db next to its consumed cursor.
+    const inbox = new AgentInboxStateMachine(
+      new AgentMessageDraftStore(this.#consumedSeqs.stateDb(agentId)),
+    );
     this.#agentInboxes.set(agentId, inbox);
     return inbox;
   }
@@ -4001,7 +4001,6 @@ export class DaemonRuntime {
     // past the service manager's grace period. The transport bounds it and never throws. Reminder
     // work already running settles alongside too, on the same bound, before the transport closes.
     await Promise.all([
-      this.#consumedSeqs.flush(),
       this.#settleReminders(),
       piChatClosed,
       this.#settleMigrations(),
@@ -4020,6 +4019,8 @@ export class DaemonRuntime {
     ]);
     const transportError = await this.#replaceTransport();
     shutdownError ??= transportError;
+    // Every write already committed; closing releases the WAL and the file handles.
+    this.#consumedSeqs.close();
     if (shutdownError !== undefined) throw shutdownError;
   }
 }

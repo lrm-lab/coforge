@@ -1,7 +1,10 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
-import { chmod, mkdir, readFile, rm, stat, symlink } from "node:fs/promises";
-import { tmpdir, userInfo } from "node:os";
+import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdir, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
+import { AgentStateDb } from "#src/persistence/agent-state-db";
 import {
   AgentMessageDraftStore,
   AGENT_MESSAGE_DRAFT_TTL_MS,
@@ -15,52 +18,41 @@ afterEach(async () => {
   );
 });
 
+const temporaryStateDirectory = () => {
+  const path = join(tmpdir(), `coforge-agent-drafts-${crypto.randomUUID()}`);
+  directories.push(path);
+  return path;
+};
+
+const storeFor = (
+  root: string,
+  agentId = "agent-a",
+  now: () => number = () => 1_000,
+): AgentMessageDraftStore => new AgentMessageDraftStore(AgentStateDb.open(root, agentId), now);
+
 /** The draft `lookup` found, or `undefined` for any other status. */
 async function found(store: AgentMessageDraftStore, target: string) {
   const lookup = await store.lookup(target);
   return lookup.status === "found" ? lookup.draft : undefined;
 }
 
-test("draft roots capture the environment at construction while explicit and empty roots keep their meaning", async () => {
-  const firstRoot = temporaryStateDirectory();
-  const secondRoot = temporaryStateDirectory();
-  const explicitRoot = temporaryStateDirectory();
-  const previous = Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
-  const agentId = "environment-draft-agent";
+const dbPath = (root: string, agentId = "agent-a") =>
+  join(root, "agent-state", agentId, "state.db");
+
+const draftRow = (root: string, target: string, agentId = "agent-a") => {
+  const db = new Database(dbPath(root, agentId), { readonly: true });
   try {
-    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = firstRoot;
-    const first = new AgentMessageDraftStore(agentId, undefined, () => 1_000);
-    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = secondRoot;
-    const second = new AgentMessageDraftStore(agentId, undefined, () => 1_000);
-    const explicit = new AgentMessageDraftStore(agentId, explicitRoot, () => 1_000);
-
-    await first.save("@ada", { content: "first root", idempotencyKey: "key-first" });
-    await second.save("@ada", { content: "second root", idempotencyKey: "key-second" });
-    await explicit.save("@ada", { content: "explicit root", idempotencyKey: "key-explicit" });
-    expect(
-      (await found(new AgentMessageDraftStore(agentId, firstRoot, () => 1_000), "@ada"))?.content,
-    ).toBe("first root");
-    expect(
-      (await found(new AgentMessageDraftStore(agentId, secondRoot, () => 1_000), "@ada"))?.content,
-    ).toBe("second root");
-
-    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = "";
-    expect(() => new AgentMessageDraftStore(agentId)).toThrow(
-      "Agent message draft state directory is required",
-    );
-    expect(
-      (await found(new AgentMessageDraftStore(agentId, explicitRoot, () => 1_000), "@ada"))
-        ?.content,
-    ).toBe("explicit root");
+    return db.prepare(`SELECT * FROM drafts WHERE target = ?`).get(target) as
+      | Record<string, unknown>
+      | undefined;
   } finally {
-    if (previous === undefined) delete Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
-    else Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = previous;
+    db.close();
   }
-});
+};
 
-test("saves and looks up one Agent message draft in the continue-state shape", async () => {
+test("saves and looks up one Agent message draft as its row", async () => {
   const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent/a", stateDirectory, () => 1_000);
+  const store = storeFor(stateDirectory);
 
   await store.save("@ada", { content: "draft reply", idempotencyKey: "key-1" });
 
@@ -74,36 +66,19 @@ test("saves and looks up one Agent message draft in the continue-state shape", a
       savedAt: 1_000,
     },
   });
-  // The file: a `targets` map keyed by target, the text as `content`, and the field names
-  // (`attachmentIds`, `idempotencyKey`, `mentions`, `savedAt`, `reholdCount`, `seenUpToSeq`).
-  expect(
-    JSON.parse(
-      await readFile(
-        join(
-          stateDirectory,
-          `coforge-cli-attested-send-${process.geteuid?.() ?? encodeURIComponent(userInfo().username).replaceAll(".", "%2E")}`,
-          "agent%2Fa",
-          "continue-state.json",
-        ),
-        "utf8",
-      ),
-    ),
-  ).toEqual({
-    targets: {
-      "@ada": {
-        content: "draft reply",
-        attachmentIds: [],
-        idempotencyKey: "key-1",
-        savedAt: 1_000,
-        reholdCount: 0,
-      },
-    },
+  // The row: one per target, the text in `content`, the send's key in `idempotency_key`.
+  expect(draftRow(stateDirectory, "@ada")).toMatchObject({
+    target: "@ada",
+    content: "draft reply",
+    idempotency_key: "key-1",
+    saved_at: 1_000,
+    rehold_count: 0,
   });
 });
 
 test("keeps each target's draft under its own key and clears one without the other", async () => {
   const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
+  const store = storeFor(stateDirectory);
   await store.save("@ada", { content: "to ada", idempotencyKey: "key-ada" });
   await store.save("#general", { content: "to the channel", idempotencyKey: "key-general" });
 
@@ -117,133 +92,114 @@ test("keeps each target's draft under its own key and clears one without the oth
 
 test("saves and looks up a held draft's attachmentIds, mentions and seenUpToSeq", async () => {
   const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
-  const mentions = [{ type: "user" as const, id: "actor-1", name: "ada" }];
-
-  await store.replace("@ada", {
-    content: "draft reply",
+  const store = storeFor(stateDirectory);
+  await store.save("@ada", {
+    content: "draft with parts",
     idempotencyKey: "key-1",
-    reholdCount: 1,
     attachmentIds: ["attachment-1", "attachment-2"],
-    mentions,
+    mentions: [{ type: "user", id: "user-1", name: "ada" }],
     seenUpToSeq: 9,
+    seenExactSeqs: [11, 12],
   });
 
   expect(await found(store, "@ada")).toEqual({
     target: "@ada",
-    content: "draft reply",
+    content: "draft with parts",
     idempotencyKey: "key-1",
-    reholdCount: 1,
     attachmentIds: ["attachment-1", "attachment-2"],
-    mentions,
+    mentions: [{ type: "user", id: "user-1", name: "ada" }],
     seenUpToSeq: 9,
-    savedAt: 1_000,
-  });
-});
-
-test("reads a draft file the store did not write, including its key and seenUpToSeq", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
-  await writeDraftFile(stateDirectory, {
-    targets: {
-      "@ada": {
-        content: "foreign reply",
-        attachmentIds: [],
-        idempotencyKey: "key-foreign",
-        savedAt: 1_000,
-        reholdCount: 2,
-        seenUpToSeq: 12,
-      },
-    },
-  });
-
-  expect(await found(store, "@ada")).toEqual({
-    target: "@ada",
-    content: "foreign reply",
-    idempotencyKey: "key-foreign",
-    reholdCount: 2,
-    seenUpToSeq: 12,
-    savedAt: 1_000,
-  });
-});
-
-test("keeps a draft's exact seen sequences, in the `seenExactSeqs` field, deduplicated and bounded", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
-
-  await store.save("@ada", { content: "reply", idempotencyKey: "key-1", seenExactSeqs: [6, 9] });
-  expect((await found(store, "@ada"))?.seenExactSeqs).toEqual([6, 9]);
-  expect(
-    JSON.parse(await readFile(draftFile(stateDirectory), "utf8")).targets["@ada"],
-  ).toMatchObject({
-    seenExactSeqs: [6, 9],
-  });
-
-  // The reader keeps the distinct positive integers, the newest 2500.
-  await writeDraftFile(stateDirectory, {
-    targets: {
-      "@ada": {
-        content: "foreign reply",
-        idempotencyKey: "key-foreign",
-        savedAt: 1_000,
-        seenExactSeqs: [4, 4, 0, 2.5, ...Array.from({ length: 2600 }, (_, index) => index + 10)],
-      },
-    },
-  });
-  const read = (await found(store, "@ada"))?.seenExactSeqs ?? [];
-  expect(read).toHaveLength(2500);
-  expect(read.at(-1)).toBe(2609);
-});
-
-test("a draft without an idempotency key names no logical send and reads as missing", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
-  await writeDraftFile(stateDirectory, {
-    targets: {
-      "@ada": { content: "keyless", attachmentIds: [], savedAt: 1_000, reholdCount: 1 },
-      "#general": { content: "blank key", idempotencyKey: " ", savedAt: 1_000 },
-    },
-  });
-
-  expect(await store.lookup("@ada")).toEqual({ status: "missing" });
-  expect(await store.lookup("#general")).toEqual({ status: "missing" });
-});
-
-test("a revised send replaces the draft and resets its hold count", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
-  await store.replace("@ada", {
-    content: "first reply",
-    idempotencyKey: "key-1",
-    reholdCount: 1,
-    seenUpToSeq: 9,
-  });
-
-  await store.save("@ada", { content: "changed reply", idempotencyKey: "key-2" });
-
-  expect(await found(store, "@ada")).toEqual({
-    target: "@ada",
-    content: "changed reply",
-    idempotencyKey: "key-2",
+    seenExactSeqs: [11, 12],
     reholdCount: 0,
     savedAt: 1_000,
   });
 });
 
+test("reads a row the store did not write, including its key and seenUpToSeq", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = storeFor(stateDirectory);
+  // Rows can also arrive through the legacy import or a hand edit: they read like stored ones.
+  new Database(dbPath(stateDirectory))
+    .prepare(
+      `INSERT INTO drafts
+         (target, content, idempotency_key, saved_at, rehold_count, seen_up_to_seq, seen_exact_seqs)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run("@ada", "hand-written", "key-7", 500, 2, 12, "[14,15]");
+
+  expect(await found(store, "@ada")).toEqual({
+    target: "@ada",
+    content: "hand-written",
+    idempotencyKey: "key-7",
+    reholdCount: 2,
+    savedAt: 500,
+    seenUpToSeq: 12,
+    seenExactSeqs: [14, 15],
+  });
+});
+
+test("keeps a draft's exact seen sequences deduplicated and bounded", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = storeFor(stateDirectory);
+  new Database(dbPath(stateDirectory))
+    .prepare(
+      `INSERT INTO drafts
+         (target, content, idempotency_key, saved_at, rehold_count, seen_up_to_seq, seen_exact_seqs)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run("@ada", "with seqs", "key-1", 500, 0, 4, JSON.stringify([9, 6, 6, 3, 4, 2.5, "7"]));
+
+  expect((await found(store, "@ada"))?.seenExactSeqs).toEqual([6, 9]);
+});
+
+test("a draft without an idempotency key names no logical send and reads as missing", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = storeFor(stateDirectory);
+  new Database(dbPath(stateDirectory))
+    .prepare(
+      `INSERT INTO drafts (target, content, idempotency_key, saved_at, rehold_count)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run("@ada", "no key", "", 500, 0);
+
+  expect(await store.lookup("@ada")).toEqual({ status: "missing" });
+});
+
+test("a revised send replaces the draft and resets its hold count", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = storeFor(stateDirectory);
+  await store.save("@ada", { content: "first", idempotencyKey: "key-1" });
+  await store.replace("@ada", {
+    content: "first",
+    idempotencyKey: "key-1",
+    reholdCount: 3,
+  });
+  expect((await found(store, "@ada"))?.reholdCount).toBe(3);
+
+  await store.save("@ada", { content: "revised", idempotencyKey: "key-2" });
+  expect(await found(store, "@ada")).toMatchObject({
+    content: "revised",
+    idempotencyKey: "key-2",
+    reholdCount: 0,
+  });
+});
+
 test("keeps the logical send's idempotency key through a held refresh", async () => {
   const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
-  await store.save("@ada", { content: "draft reply", idempotencyKey: "key-1" });
-
-  await store.replace("@ada", { content: "draft reply", reholdCount: 1, idempotencyKey: "key-1" });
-
+  const store = storeFor(stateDirectory);
+  await store.save("@ada", { content: "held", idempotencyKey: "key-1" });
+  await store.replace("@ada", {
+    content: "held",
+    idempotencyKey: "key-1",
+    reholdCount: 1,
+  });
   expect((await found(store, "@ada"))?.idempotencyKey).toBe("key-1");
 });
 
 test("an expired draft is reported once with its last body; only the looked-up target is removed", async () => {
   const stateDirectory = temporaryStateDirectory();
   let now = 1_000;
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => now);
+  const store = storeFor(stateDirectory, "agent-a", () => now);
   await store.save("@ada", { content: "stale reply", idempotencyKey: "key-1" });
   await store.save("#general", { content: "other stale reply", idempotencyKey: "key-2" });
 
@@ -255,7 +211,7 @@ test("an expired draft is reported once with its last body; only the looked-up t
     savedAt: 1_000,
   });
   expect(await store.lookup("@ada")).toEqual({ status: "missing" });
-  // Looking up an expired draft removes only its own target: another target's expired draft
+  // Looking up an expired draft removes only its own row: another target's expired draft
   // still reports itself, with its last body.
   expect(await store.lookup("#general")).toEqual({
     status: "expired",
@@ -267,7 +223,7 @@ test("an expired draft is reported once with its last body; only the looked-up t
 test("writing one target's draft never drops another target's expired draft", async () => {
   const stateDirectory = temporaryStateDirectory();
   let now = 1_000;
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => now);
+  const store = storeFor(stateDirectory, "agent-a", () => now);
   await store.save("@ada", { content: "draft for ada", idempotencyKey: "key-ada" });
 
   now += AGENT_MESSAGE_DRAFT_TTL_MS + 1;
@@ -289,10 +245,13 @@ test("writing one target's draft never drops another target's expired draft", as
 
 test("an idempotency key is kept exactly as written; only a blank one reads as missing", async () => {
   const stateDirectory = temporaryStateDirectory();
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => 1_000);
-  await writeDraftFile(stateDirectory, {
-    targets: { "@ada": { content: "spaced", idempotencyKey: " key-1 ", savedAt: 1_000 } },
-  });
+  const store = storeFor(stateDirectory);
+  new Database(dbPath(stateDirectory))
+    .prepare(
+      `INSERT INTO drafts (target, content, idempotency_key, saved_at, rehold_count)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run("@ada", "spaced", " key-1 ", 500, 0);
 
   expect((await found(store, "@ada"))?.idempotencyKey).toBe(" key-1 ");
   expect(await store.clearIfIdempotencyKeyMatches("@ada", "key-1")).toBe(false);
@@ -301,7 +260,7 @@ test("an idempotency key is kept exactly as written; only a blank one reads as m
 test("clears a draft only for the send whose idempotency key it holds, and never an expired one", async () => {
   const stateDirectory = temporaryStateDirectory();
   let now = 1_000;
-  const store = new AgentMessageDraftStore("agent-a", stateDirectory, () => now);
+  const store = storeFor(stateDirectory, "agent-a", () => now);
   await store.save("@ada", { content: "newer draft", idempotencyKey: "key-new" });
 
   expect(await store.clearIfIdempotencyKeyMatches("@ada", "key-old")).toBe(false);
@@ -315,121 +274,84 @@ test("clears a draft only for the send whose idempotency key it holds, and never
   expect(await store.clearIfIdempotencyKeyMatches("@ada", "key-stale")).toBe(false);
 });
 
-function temporaryStateDirectory() {
-  const path = join(tmpdir(), `coforge-agent-drafts-${crypto.randomUUID()}`);
-  directories.push(path);
-  return path;
-}
-
-function draftFile(root: string) {
-  return join(userDirectory(root), "agent-a", "continue-state.json");
-}
-
-async function writeDraftFile(root: string, contents: unknown) {
-  await mkdir(join(userDirectory(root), "agent-a"), { recursive: true, mode: 0o700 });
-  await Bun.write(draftFile(root), JSON.stringify(contents));
-}
-
-// Effective UID is an OS boundary; both users share the same temporary root.
-test.skipIf(!process.geteuid)("isolates drafts belonging to different system users", async () => {
+test("the first open imports the legacy draft file and deletes it", async () => {
   const stateDirectory = temporaryStateDirectory();
-  const uid = process.geteuid!();
-  const identity = spyOn(process, "geteuid");
+  const legacyRoot = temporaryStateDirectory();
+  const legacyDirectory = join(
+    legacyRoot,
+    `coforge-cli-attested-send-${encodeURIComponent(String(process.geteuid?.() ?? "")).replaceAll(".", "%2E")}`,
+    "agent-a",
+  );
+  const legacyPath = join(legacyDirectory, "continue-state.json");
+  await mkdir(legacyDirectory, { recursive: true });
+  await Bun.write(
+    legacyPath,
+    JSON.stringify({
+      targets: {
+        "@ada": {
+          content: "legacy draft",
+          idempotencyKey: "key-legacy",
+          savedAt: 500,
+          reholdCount: 2,
+          seenUpToSeq: 8,
+        },
+      },
+    }),
+  );
+  const previous = Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
   try {
-    identity.mockReturnValue(1001);
-    const first = new AgentMessageDraftStore("shared-agent", stateDirectory);
-    identity.mockReturnValue(uid);
-    await first.save("@ada", { content: "first user's reply", idempotencyKey: "key-1" });
-    identity.mockReturnValue(1009);
-    const second = new AgentMessageDraftStore("shared-agent", stateDirectory);
-    identity.mockReturnValue(uid);
-    expect(await second.lookup("@ada")).toEqual({ status: "missing" });
-    await second.save("@ada", { content: "second user's reply", idempotencyKey: "key-2" });
-    expect((await found(first, "@ada"))?.content).toBe("first user's reply");
-    expect((await found(second, "@ada"))?.content).toBe("second user's reply");
-    await second.clear("@ada");
-    expect((await found(first, "@ada"))?.content).toBe("first user's reply");
+    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = legacyRoot;
+    const store = storeFor(stateDirectory);
+    expect(await found(store, "@ada")).toEqual({
+      target: "@ada",
+      content: "legacy draft",
+      idempotencyKey: "key-legacy",
+      reholdCount: 2,
+      savedAt: 500,
+      seenUpToSeq: 8,
+    });
+    expect(existsSync(legacyPath)).toBe(false);
   } finally {
-    identity.mockRestore();
+    if (previous === undefined) delete Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
+    else Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = previous;
   }
 });
 
-function userDirectory(root: string) {
-  return join(
-    root,
-    `coforge-cli-attested-send-${process.geteuid?.() ?? encodeURIComponent(userInfo().username).replaceAll(".", "%2E")}`,
+test("a legacy draft with no savedAt is expired at once, and reported once", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const legacyRoot = temporaryStateDirectory();
+  const legacyDirectory = join(
+    legacyRoot,
+    `coforge-cli-attested-send-${encodeURIComponent(String(process.geteuid?.() ?? "")).replaceAll(".", "%2E")}`,
+    "agent-a",
   );
-}
-
-test("rejects a linked user draft directory before touching its target", async () => {
-  const root = temporaryStateDirectory();
-  const outside = temporaryStateDirectory();
-  await mkdir(root, { recursive: true });
-  await mkdir(outside, { recursive: true });
-  await symlink(outside, userDirectory(root), process.platform === "win32" ? "junction" : "dir");
-  const store = new AgentMessageDraftStore("agent-a", root);
-  await expect(
-    store.save("@ada", { content: "private reply", idempotencyKey: "key-1" }),
-  ).rejects.toThrow("draft directory");
-  expect(await Bun.file(join(outside, "agent-a", "continue-state.json")).exists()).toBe(false);
+  const legacyPath = join(legacyDirectory, "continue-state.json");
+  await mkdir(legacyDirectory, { recursive: true });
+  await Bun.write(
+    legacyPath,
+    JSON.stringify({ targets: { "@ada": { content: "no age", idempotencyKey: "key-old" } } }),
+  );
+  const previous = Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
+  try {
+    Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = legacyRoot;
+    // An unknown age is the epoch: too old to resend, rather than a draft that never expires.
+    const store = storeFor(stateDirectory, "agent-a", () => Date.now());
+    expect(await store.lookup("@ada")).toMatchObject({ status: "expired", content: "no age" });
+    expect(await store.lookup("@ada")).toEqual({ status: "missing" });
+    expect(existsSync(legacyPath)).toBe(false);
+  } finally {
+    if (previous === undefined) delete Bun.env.COFORGE_CLI_DRAFT_STATE_DIR;
+    else Bun.env.COFORGE_CLI_DRAFT_STATE_DIR = previous;
+  }
 });
 
-test.skipIf(!process.geteuid)(
-  "rejects a draft directory owned by another user without changing its mode",
-  async () => {
-    const root = temporaryStateDirectory();
-    const directory = userDirectory(root);
-    await mkdir(directory, { recursive: true, mode: 0o755 });
-    await chmod(directory, 0o755);
-    const store = new AgentMessageDraftStore("agent-a", root);
-    const uid = process.geteuid!();
-    const identity = spyOn(process, "geteuid").mockReturnValue(uid + 1);
-    try {
-      await expect(
-        store.save("@ada", { content: "private reply", idempotencyKey: "key-1" }),
-      ).rejects.toThrow("owned by the current user");
-      expect((await stat(directory)).mode & 0o777).toBe(0o755);
-    } finally {
-      identity.mockRestore();
-    }
-  },
-);
+test("rejects a linked Agent state directory before touching its database", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const elsewhere = temporaryStateDirectory();
+  await mkdir(join(stateDirectory, "agent-state"), { recursive: true });
+  await symlink(elsewhere, join(stateDirectory, "agent-state", "agent-a"));
 
-test.skipIf(process.platform === "win32")(
-  "makes existing user and Agent draft directories private",
-  async () => {
-    const root = temporaryStateDirectory();
-    const user = userDirectory(root);
-    const agent = join(user, "agent-a");
-    await mkdir(agent, { recursive: true });
-    await chmod(user, 0o755);
-    await chmod(agent, 0o755);
-    const store = new AgentMessageDraftStore("agent-a", root);
-    await store.save("@ada", { content: "private reply", idempotencyKey: "key-1" });
-    expect((await stat(user)).mode & 0o777).toBe(0o700);
-    expect((await stat(agent)).mode & 0o777).toBe(0o700);
-    expect((await stat(join(agent, "continue-state.json"))).mode & 0o777).toBe(0o600);
-    await store.clear("@ada");
-    expect(await store.lookup("@ada")).toEqual({ status: "missing" });
-  },
-);
-
-test("rejects a linked Agent directory for reads and cleanup", async () => {
-  const root = temporaryStateDirectory();
-  const outside = temporaryStateDirectory();
-  await mkdir(userDirectory(root), { recursive: true });
-  await mkdir(outside, { recursive: true });
-  await Bun.write(
-    join(outside, "continue-state.json"),
-    JSON.stringify({ targets: { "@ada": { content: "x", savedAt: 1_000 } } }),
+  expect(() => AgentStateDb.open(stateDirectory, "agent-a")).toThrow(
+    "Agent state path must be a real directory",
   );
-  await symlink(
-    outside,
-    join(userDirectory(root), "agent-a"),
-    process.platform === "win32" ? "junction" : "dir",
-  );
-  const store = new AgentMessageDraftStore("agent-a", root);
-  await expect(store.lookup("@ada")).rejects.toThrow("draft directory");
-  await expect(store.clear("@ada")).rejects.toThrow("draft directory");
-  expect(await Bun.file(join(outside, "continue-state.json")).exists()).toBe(true);
 });

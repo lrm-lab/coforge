@@ -1,217 +1,26 @@
 import { afterAll, afterEach, beforeEach, expect, jest, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { realpathSync } from "node:fs";
-import { join } from "node:path";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
-import type {
-  AgentRuntimeConfig,
-  AgentRuntimeEvent,
-  AgentSession,
-  AgentSessionOptions,
-} from "@lrm/coforge-anvil";
-import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { seedCursor } from "./fixtures/consumed-cursor";
 import { RUNNER_HOLD_REASONS } from "@lrm/coforge-sdk/internal";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-store";
 import { MentionDeliveryTracker } from "#src/daemon-runtime/mention-delivery-tracker";
+import { seedCursor } from "./fixtures/consumed-cursor";
 import { captureDaemonLogs } from "./log-capture";
-import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
-
-// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
-const tempRoot = realpathSync(tmpdir());
-const workspaceRoot = join(tempRoot, `coforge-mention-delivery-${crypto.randomUUID()}`);
-const connection: WorkspaceConfig = {
-  computerId: "computer-a",
-  workspaceId: "workspace-a",
+import {
+  config,
+  connection,
+  harness,
   workspaceRoot,
-};
+  type Frame,
+} from "./fixtures/mention-delivery-harness";
 
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 afterEach(() => jest.useRealTimers());
 // The consumed cursor outlives a runtime (it is durable), so each test starts from a clean one.
-beforeEach(() => seedCursor("agent-a", { targets: {}, aliases: {}, nextReadOrder: 1 }));
+beforeEach(() => seed({ targets: {}, aliases: {}, nextReadOrder: 1 }));
 
-const config: AgentRuntimeConfig = {
-  provider: "pi",
-  model: "default",
-  modelProvider: "anthropic",
-  reasoning: "balanced",
-};
-
-/** One frame the daemon sent the cloud about a delivery, in the order it sent them. */
-type Frame =
-  | { kind: "ack"; deliveryId: string; mentionDelivery?: MentionDeliveryEnvelope }
-  | { kind: "transition"; deliveryId: string; stage: string; outcome: string }
-  | { kind: "terminal"; deliveryId: string; code: string }
-  | { kind: "reject"; deliveryId: string; reason: string };
-
-/**
- * Boots a runtime with one Agent whose session reports the native session `native-1`, and hands
- * the test every frame the daemon sends about a delivery. `emit` drives the session's events:
- * any activity makes the Agent busy, `completed` ends its turn.
- */
-async function harness(
-  options: {
-    reportSession?: boolean;
-    refuseNotice?: boolean;
-    /** Holds every notice write open until it settles. */
-    noticeGate?: Promise<void>;
-    /** Holds every launch after the first open until it settles. */
-    launchGate?: Promise<void>;
-  } = {},
-) {
-  const credentials = new InMemoryDaemonCredentialStore();
-  await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-  const frames: Frame[] = [];
-  const waiters: Array<{ matches: (frame: Frame) => boolean; resolve: () => void }> = [];
-  const record = (frame: Frame) => {
-    frames.push(frame);
-    for (const waiter of waiters.splice(0))
-      if (waiter.matches(frame)) waiter.resolve();
-      else waiters.push(waiter);
-  };
-  const notices: string[] = [];
-  /** The tracked deliveries each notice carried, as the session was told them. */
-  const noticeDeliveryIds: Array<readonly string[] | undefined> = [];
-  const noticeWritten = Promise.withResolvers<void>();
-  const listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  const exitListeners = new Set<() => void>();
-  let launches = 0;
-  const launchIds: string[] = [];
-  const launchStarted = Promise.withResolvers<void>();
-  const runtime = new DaemonRuntime(
-    connection,
-    () => ({
-      provider: "pi",
-      async createAgentSession(sessionOptions: AgentSessionOptions) {
-        launches++;
-        if (launches > 1 && options.launchGate) {
-          launchStarted.resolve();
-          await options.launchGate;
-        }
-        if (options.reportSession !== false) await sessionOptions.onSessionId?.("native-1");
-        return {
-          async sendMessage() {
-            // Mention delivery starts from a ready Agent, after its startup turn has ended.
-            for (const listener of listeners) listener({ type: "completed", status: "completed" });
-          },
-          async notify(notice: string, noticeOptions?: { deliveryIds?: readonly string[] }) {
-            if (options.refuseNotice) throw new Error("the session refused the notice");
-            notices.push(notice);
-            noticeDeliveryIds.push(noticeOptions?.deliveryIds);
-            noticeWritten.resolve();
-            await options.noticeGate;
-          },
-          subscribe(listener) {
-            listeners.add(listener);
-            return () => listeners.delete(listener);
-          },
-          async interrupt() {},
-          onExit(listener) {
-            exitListeners.add(listener);
-            return () => exitListeners.delete(listener);
-          },
-          async dispose() {},
-        } satisfies AgentSession;
-      },
-    }),
-    credentials,
-    {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async stop() {},
-        async requestAgentLaunchConfig() {
-          return { agentApiKey: `sk_agent_${"a".repeat(43)}` };
-        },
-        async revokeAgentApiKey() {},
-        sendAgentActivity() {},
-        async sendAgentControlResult() {},
-        async reportAgentSession(report) {
-          launchIds.push(report.launchId);
-        },
-        async sendAgentDeliveryAck(ack) {
-          record({
-            kind: "ack",
-            deliveryId: ack.deliveryId,
-            ...(ack.mentionDelivery ? { mentionDelivery: ack.mentionDelivery } : {}),
-          });
-        },
-        async sendAgentDeliveryRejection(rejection) {
-          record({ kind: "reject", deliveryId: rejection.deliveryId, reason: rejection.reason });
-        },
-        async sendAgentMentionDeliveryTransition(report) {
-          record({
-            kind: "transition",
-            deliveryId: report.deliveryId,
-            stage: report.stage,
-            outcome: report.outcome,
-          });
-        },
-        async sendAgentMentionDeliveryTerminalError(report) {
-          record({ kind: "terminal", deliveryId: report.deliveryId, code: report.code });
-        },
-      }),
-    },
-    undefined,
-    emptyCodeAgentDiscovery,
-  );
-  await runtime.start(connection);
-  await runtime.startAgent("agent-a", config);
-  const envelope = (
-    sequence: number,
-    overrides: Partial<MentionDeliveryEnvelope> = {},
-  ): MentionDeliveryEnvelope => ({
-    messageId: `message-${sequence}`,
-    launchId: launchIds.at(-1) ?? "launch-never-reported",
-    sessionId: "native-1",
-    computerId: connection.computerId,
-    ...overrides,
-  });
-  return {
-    runtime,
-    frames,
-    notices,
-    noticeDeliveryIds,
-    /** Resolves once the session has been handed its first notice. */
-    noticeWritten: noticeWritten.promise,
-    /** Resolves once a launch after the first has reached `launchGate`. */
-    launchStarted: launchStarted.promise,
-    launches: () => launches,
-    envelope,
-    emit(event: AgentRuntimeEvent) {
-      for (const listener of listeners) listener(event);
-    },
-    /** Simulates the Agent's process exiting unexpectedly. */
-    exit() {
-      for (const listener of exitListeners) listener();
-    },
-    /** Resolves once the daemon has sent a frame matching `matches` — the observable completion
-     * of work the daemon does not hand back to the caller (docs/agents/testing.md). */
-    frameSent(matches: (frame: Frame) => boolean): Promise<void> {
-      if (frames.some(matches)) return Promise.resolve();
-      return new Promise((resolve) => waiters.push({ matches, resolve }));
-    },
-    /** A delivery of message `sequence`; tracked when it carries an envelope. */
-    deliver: (sequence: number, mentionDelivery?: MentionDeliveryEnvelope) =>
-      runtime.handleAgentMessage({
-        protocolMajor: 1,
-        requestId: `request-${sequence}`,
-        messageId: `message-${sequence}`,
-        deliveryId: `delivery-${sequence}`,
-        sequence,
-        workspaceId: connection.workspaceId,
-        conversationId: "conversation-a",
-        agentId: "agent-a",
-        body: `body-${sequence}`,
-        method: "agent:v1:message:deliver",
-        target: "#general",
-        mentionsAgent: true,
-        ...(mentionDelivery ? { mentionDelivery } : {}),
-      }),
-  };
-}
+/** Seeds the cursor the runtime under test reads: this file's Agent, in its own state directory. */
+const seed = (state: AgentConsumedSeqState) => seedCursor("agent-a", state, workspaceRoot);
 
 test("an idle Agent is told the mention, and only then is it ACKed with its envelope", async () => {
   const { runtime, frames, notices, envelope, deliver } = await harness();
@@ -660,7 +469,7 @@ test("a pending mention issued again for the next launch is told to that launch 
 });
 
 test("a mention the Agent already consumed is drained without a running process", async () => {
-  await seedCursor("agent-a", {
+  await seed({
     targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,
@@ -688,7 +497,7 @@ test("a mention the Agent already consumed is drained without a running process"
 });
 
 test("a mention drained as already consumed logs why the Agent was not told", async () => {
-  await seedCursor("agent-a", {
+  await seed({
     targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,
@@ -716,7 +525,7 @@ test("a mention drained as already consumed logs why the Agent was not told", as
 });
 
 test("a mention the Agent already consumed is drained even when its envelope names an older launch", async () => {
-  await seedCursor("agent-a", {
+  await seed({
     targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
     nextReadOrder: 1,

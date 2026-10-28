@@ -43,10 +43,11 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 - A target's consumed cursor belongs to one conversation: a delivery binds the
   target to its `conversationId`, and a target seen under another conversation
   (a channel deleted and recreated under the same name, whose sequences restart
-  at 1) starts over. `consumed-seqs.json` entries without a `conversationId` are
-  dropped on read, since they cannot say whose sequences they hold.
+  at 1) starts over. Rows without a `conversationId` are dropped on read,
+  since they cannot say whose sequences they hold.
 - The attention index is the consumed cursor's source of truth once it has
-  read the file, and an operation that changed it writes one snapshot. A read's
+  read the Agent's state database, and an operation that changed it writes one
+  snapshot (one transaction). A read's
   state is kept under its `consumptionScope.target` (a channel's top level is
   already canonical); the spelling the Agent used becomes an alias of it. A
   consumption scope for this Agent settles, in every other target of that

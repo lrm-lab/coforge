@@ -16,3 +16,7 @@ Rules for durable local state in `src/persistence/`. They extend
 
 - `conversation-session-store.ts` atomically stores Memory conversation identities outside
   Agent workspaces, namespaced by the control session so a Session Reset starts fresh.
+- `agent-state-db.ts` owns each Agent's durable ledger (`agent-state/<agentId>/state.db`) in the
+  daemon state directory — one SQLite database per Agent holding the consumed cursor and the
+  held-send draft — and the first-boot import of the legacy JSON stores. Writes commit when they
+  happen (WAL, `synchronous=NORMAL`); there is no write delay, batching, or stop-time flush.

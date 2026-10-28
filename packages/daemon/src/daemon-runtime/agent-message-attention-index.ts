@@ -201,7 +201,7 @@ export class AgentMessageAttentionIndex {
        * while held keeps both attempts for ACK bookkeeping — and a notice must count messages,
        * not attempts. Optional: a composition without a delivery queue holds nothing. */
       queued?(agentId: string): readonly AgentMessageDelivery[];
-      /** The Agent's durable consumed cursor (`consumed-seqs.json`). Without it the index is
+      /** The Agent's durable consumed cursor (its state database). Without it the index is
        * exactly as volatile as it was: the cursor then only lives as long as this process. */
       consumedSeqs?: AgentConsumedSeqPort;
     } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },

@@ -15,6 +15,7 @@ import { adaptAgentSendResponse } from "@lrm/coforge-daemon/src/connection/agent
 import { AgentMessageOperations } from "@lrm/coforge-daemon/src/daemon-runtime/agent-message-operations";
 import { AgentMessageAttentionIndex } from "@lrm/coforge-daemon/src/daemon-runtime/agent-message-attention-index";
 import { AgentInboxStateMachine } from "@lrm/coforge-daemon/src/daemon-runtime/agent-inbox-state-machine";
+import { AgentStateDb } from "@lrm/coforge-daemon/src/persistence/agent-state-db";
 import { AgentMessageDraftStore } from "@lrm/coforge-daemon/src/persistence/agent-message-draft-store";
 import { canonicalThreadTarget } from "@lrm/coforge-daemon/src/daemon-runtime/thread-target";
 import { handleAgentMessagesGet, handleAgentMessagesPost } from "#src/routes/api/agent/v1/messages";
@@ -74,7 +75,9 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
       { session: () => undefined },
       async () => {},
     );
-    const inbox = new AgentInboxStateMachine(new AgentMessageDraftStore(f.principal.agentId, root));
+    const inbox = new AgentInboxStateMachine(
+      new AgentMessageDraftStore(AgentStateDb.open(root, f.principal.agentId)),
+    );
     const operations = new AgentMessageOperations({
       connection: { workspaceId: f.workspace.id, computerId: "fixture" },
       attention,

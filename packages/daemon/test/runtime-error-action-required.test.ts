@@ -106,6 +106,7 @@ async function harness() {
     },
     undefined,
     emptyCodeAgentDiscovery,
+    workspaceRoot,
   );
   await runtime.start(connection);
   await runtime.startAgent("agent-a", config);
@@ -256,6 +257,7 @@ test("a launch that fails with an auth-shaped throw goes offline with the re-aut
     },
     undefined,
     emptyCodeAgentDiscovery,
+    workspaceRoot,
   );
   try {
     await runtime.start(connection);
@@ -418,11 +420,15 @@ test("an already-consumed delivery to an offline Agent is ACKed and dropped, not
     h.emit({ type: "error", message: "not logged in" });
     await h.disposed;
     // The consumed cursor already covers this delivery (durable, outlives the process).
-    await seedCursor("agent-a", {
-      targets: { "@gone": { conversationId: "conversation-gone", seq: 5 } },
-      aliases: {},
-      nextReadOrder: 1,
-    });
+    await seedCursor(
+      "agent-a",
+      {
+        targets: { "@gone": { conversationId: "conversation-gone", seq: 5 } },
+        aliases: {},
+        nextReadOrder: 1,
+      },
+      workspaceRoot,
+    );
     await h.runtime.handleAgentMessage({
       protocolMajor: 1,
       requestId: "request-gone",

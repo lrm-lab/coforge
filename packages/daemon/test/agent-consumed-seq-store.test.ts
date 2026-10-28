@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 
 const directories: string[] = [];
@@ -18,64 +20,26 @@ const temporaryStateDirectory = () => {
   return path;
 };
 
-/** The cursor lives at `<root>/coforge-cli-consumed-seq-<euid>/<agentId>/consumed-seqs.json`, next
- * to the draft store — so a state directory is the root here, and the two directory levels below
- * it are the store's own. */
-const storeDirectory = (root: string, agentId = "agent-1") =>
-  join(
-    root,
-    `coforge-cli-consumed-seq-${encodeURIComponent(String(process.geteuid?.() ?? "")).replaceAll(".", "%2E")}`,
-    agentId,
-  );
-const storePath = (root: string, agentId = "agent-1") =>
-  join(storeDirectory(root, agentId), "consumed-seqs.json");
+/** Where an Agent's ledger lands: `<root>/agent-state/<agentId>/state.db`. */
+const dbPath = (root: string, agentId = "agent-1") =>
+  join(root, "agent-state", agentId, "state.db");
 
-test("cursor roots capture the environment at construction while explicit and empty roots keep their meaning", async () => {
-  const firstRoot = temporaryStateDirectory();
-  const secondRoot = temporaryStateDirectory();
-  const explicitRoot = temporaryStateDirectory();
-  const previous = Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
-  const firstState = {
-    targets: { "@ada": { conversationId: "conversation-1", seq: 7 } },
-    aliases: {},
-    nextReadOrder: 1,
-  };
-  const secondState = {
-    targets: { "@ada": { conversationId: "conversation-1", seq: 8 } },
-    aliases: {},
-    nextReadOrder: 1,
-  };
-  const explicitState = {
-    targets: { "@ada": { conversationId: "conversation-1", seq: 9 } },
-    aliases: {},
-    nextReadOrder: 1,
-  };
+const cursorRows = (root: string, agentId = "agent-1") => {
+  const db = new Database(dbPath(root, agentId), { readonly: true });
   try {
-    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = firstRoot;
-    const first = new AgentConsumedSeqStore();
-    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = secondRoot;
-    const second = new AgentConsumedSeqStore();
-    const explicit = new AgentConsumedSeqStore(explicitRoot);
-
-    first.write("agent-1", firstState);
-    second.write("agent-1", secondState);
-    explicit.write("agent-1", explicitState);
-    await Promise.all([first.flush(), second.flush(), explicit.flush()]);
-    expect(new AgentConsumedSeqStore(firstRoot).read("agent-1")).toEqual(firstState);
-    expect(new AgentConsumedSeqStore(secondRoot).read("agent-1")).toEqual(secondState);
-
-    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = "";
-    expect(() => new AgentConsumedSeqStore()).toThrow(
-      "consumed-sequence state directory is required",
-    );
-    expect(new AgentConsumedSeqStore(explicitRoot).read("agent-1")).toEqual(explicitState);
+    return db.prepare(`SELECT * FROM consumed_seqs`).all();
   } finally {
-    if (previous === undefined) delete Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
-    else Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = previous;
+    db.close();
   }
+};
+
+test("an empty root still refuses to be the state directory", () => {
+  expect(() => new AgentConsumedSeqStore("")).toThrow(
+    "consumed-sequence state directory is required",
+  );
 });
 
-test("writes one snapshot in the consumed-seqs shape and reads it back", async () => {
+test("writes one row per target and reads the state back", async () => {
   const stateDirectory = temporaryStateDirectory();
   const store = new AgentConsumedSeqStore(stateDirectory);
   const state = {
@@ -88,201 +52,156 @@ test("writes one snapshot in the consumed-seqs shape and reads it back", async (
   };
 
   store.write("agent-1", state);
-  await store.flush();
 
-  expect(JSON.parse(await readFile(storePath(stateDirectory), "utf8"))).toEqual(state);
+  // Every write is committed when it happens — no delay, no flush.
+  expect(await readdir(join(stateDirectory, "agent-state", "agent-1"))).toContain("state.db");
+  expect(cursorRows(stateDirectory)).toHaveLength(2);
   expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(state);
+  store.close();
 });
 
-test("reading a file nobody in this process wrote normalizes its exact sequences", async () => {
+test("a write replaces every row of the previous snapshot in one transaction", () => {
   const stateDirectory = temporaryStateDirectory();
-  await mkdir(storeDirectory(stateDirectory), { recursive: true });
-  await writeFile(
-    storePath(stateDirectory),
-    JSON.stringify({
-      targets: {
-        // Duplicates, non-integers and sequences at or below the frontier are not kept.
-        "@ada": { conversationId: "conversation-1", seq: 4, exactSeqs: [9, 6, 6, 3, 4, 2.5, "7"] },
-        // An entry that carries only exact sequences is kept.
-        "#general": { conversationId: "conversation-1", exactSeqs: [12] },
-        "@bea": {
-          conversationId: "conversation-1",
-          exactSeqs: Array.from({ length: 2600 }, (_, index) => index + 1),
-        },
-      },
-    }),
-  );
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  store.write("agent-1", {
+    targets: {
+      "@ada": { conversationId: "conversation-1", seq: 7 },
+      "@bea": { conversationId: "conversation-1", seq: 2 },
+    },
+    aliases: {},
+    nextReadOrder: 1,
+  });
+  store.write("agent-1", {
+    targets: { "@ada": { conversationId: "conversation-1", seq: 9 } },
+    aliases: {},
+    nextReadOrder: 1,
+  });
+  expect(cursorRows(stateDirectory)).toHaveLength(1);
+  expect(store.read("agent-1").targets["@ada"]).toEqual({
+    conversationId: "conversation-1",
+    seq: 9,
+  });
+});
 
-  const targets = new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets;
+test("rows nobody in this process wrote still normalize on read", () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  const db = store.stateDb("agent-1").database;
+  db.prepare(
+    `INSERT INTO consumed_seqs (target, conversation_id, seq, read_order, reviewed_seq, exact_seqs)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run("@ada", "conversation-1", 4, null, null, JSON.stringify([9, 6, 6, 3, 4, 2.5, "7"]));
+  db.prepare(
+    `INSERT INTO consumed_seqs (target, conversation_id, seq, read_order, reviewed_seq, exact_seqs)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "@bea",
+    "conversation-1",
+    null,
+    null,
+    null,
+    JSON.stringify(Array.from({ length: 2600 }, (_, index) => index + 1)),
+  );
+  // A reviewedSeq beside no readOrder is dropped with the order; a row missing its
+  // conversation id cannot say whose sequences it holds.
+  db.prepare(
+    `INSERT INTO consumed_seqs (target, conversation_id, seq, read_order, reviewed_seq, exact_seqs)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run("@cyd", "conversation-1", null, null, 8, "[]");
+  db.prepare(
+    `INSERT INTO consumed_seqs (target, conversation_id, seq, read_order, reviewed_seq, exact_seqs)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run("@dot", "", 5, null, null, "[]");
+
+  const targets = store.read("agent-1").targets;
   expect(targets["@ada"]).toEqual({ conversationId: "conversation-1", seq: 4, exactSeqs: [6, 9] });
-  expect(targets["#general"]).toEqual({ conversationId: "conversation-1", exactSeqs: [12] });
   const kept = targets["@bea"]?.exactSeqs ?? [];
   expect([kept.length, kept[0], kept.at(-1)]).toEqual([2500, 101, 2600]);
+  expect(targets["@cyd"]).toBeUndefined();
+  expect(targets["@dot"]).toBeUndefined();
 });
 
-test("reading compresses alias chains to their canonical target and drops a cycle", async () => {
+test("the next read order recomputes above every stored order", () => {
   const stateDirectory = temporaryStateDirectory();
-  await mkdir(storeDirectory(stateDirectory), { recursive: true });
-  await writeFile(
-    storePath(stateDirectory),
-    JSON.stringify({
-      targets: {},
-      aliases: { a: "b", b: "c", same: "same", x: "y", y: "x" },
-    }),
-  );
-
-  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").aliases).toEqual({
-    a: "c",
-    b: "c",
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  store.write("agent-1", {
+    targets: {
+      "@ada": { conversationId: "conversation-1", readOrder: 4, reviewedSeq: 9 },
+      "@bea": { conversationId: "conversation-1", seq: 40 },
+    },
+    aliases: {},
+    nextReadOrder: 1,
   });
+  // A frontier recorded without a review does not push the counter up to its sequence.
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").nextReadOrder).toBe(5);
 });
 
-test("recomputes nextReadOrder from the orders the file holds, never trusting the stored one", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  await mkdir(storeDirectory(stateDirectory), { recursive: true });
-  // A file whose `nextReadOrder` is behind the orders it carries — an older build's write, or an
-  // edit. Reading starts the counter above every order the file holds.
-  await writeFile(
-    storePath(stateDirectory),
-    JSON.stringify({
-      targets: { "@ada": { conversationId: "conversation-1", readOrder: 12 } },
-      nextReadOrder: 2,
-    }),
-  );
-
-  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").nextReadOrder).toBe(13);
-});
-
-test("a missing, unreadable or shapeless file is an empty cursor, never an error", async () => {
+test("alias chains compress on read and cycles drop", () => {
   const stateDirectory = temporaryStateDirectory();
   const store = new AgentConsumedSeqStore(stateDirectory);
-  const empty = { targets: {}, aliases: {}, nextReadOrder: 1 };
-  expect(store.read("agent-1")).toEqual(empty);
-
-  await mkdir(storeDirectory(stateDirectory), { recursive: true });
-  await writeFile(storePath(stateDirectory), "{ this is not json");
-  expect(store.read("agent-1")).toEqual(empty);
-
-  // Entries that carry neither a sequence nor an order are dropped rather than kept as garbage.
-  await writeFile(
-    storePath(stateDirectory),
-    JSON.stringify({ targets: { "@ada": {}, "@bea": "nope", "@cara": { seq: 0, readOrder: -1 } } }),
+  store.write("agent-1", {
+    targets: { "@ada": { conversationId: "conversation-1", seq: 1 } },
+    aliases: { "@ADA": "@ada", "@adA": "@ADA" },
+    nextReadOrder: 1,
+  });
+  const db = store.stateDb("agent-1").database;
+  db.prepare(`INSERT OR REPLACE INTO consumed_seq_aliases (spelling, canonical) VALUES (?, ?)`).run(
+    "@loop1",
+    "@loop2",
   );
-  expect(store.read("agent-1")).toEqual(empty);
-});
-
-test("an unwritable cursor is reported, not thrown: a lost cursor must not fail a send", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  // The state root is a file, so the directory the cursor needs cannot exist.
-  await writeFile(stateDirectory, "not a directory");
-  const store = new AgentConsumedSeqStore(stateDirectory);
-
-  expect(() =>
-    store.write("agent-1", { targets: { "@ada": { seq: 3 } }, aliases: {}, nextReadOrder: 1 }),
-  ).not.toThrow();
-  await store.flush();
-  expect(store.read("agent-1")).toEqual({ targets: {}, aliases: {}, nextReadOrder: 1 });
-});
-
-test("an Agent id that could not be a path segment is refused", () => {
-  const store = new AgentConsumedSeqStore(temporaryStateDirectory());
-  expect(() => store.read("../../etc")).toThrow("invalid consumed-sequence Agent scope");
-  expect(() => store.write("", { targets: {}, aliases: {}, nextReadOrder: 1 })).toThrow(
-    "invalid consumed-sequence Agent scope",
+  db.prepare(`INSERT OR REPLACE INTO consumed_seq_aliases (spelling, canonical) VALUES (?, ?)`).run(
+    "@loop2",
+    "@loop1",
   );
+  expect(store.read("agent-1").aliases).toEqual({ "@ADA": "@ada", "@adA": "@ada" });
 });
 
-test("leaves no temporary file behind once a cursor has been written", async () => {
+test("the first open imports the legacy JSON cursor and deletes the file", async () => {
   const stateDirectory = temporaryStateDirectory();
-  const store = new AgentConsumedSeqStore(stateDirectory);
-  store.write("agent-1", { targets: { "@ada": { seq: 1 } }, aliases: {}, nextReadOrder: 1 });
-  await store.flush();
-
-  expect((await readdir(storeDirectory(stateDirectory))).sort()).toEqual(["consumed-seqs.json"]);
-});
-
-test("an entry that names no conversation is dropped: it cannot say whose sequences it holds", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  await mkdir(storeDirectory(stateDirectory), { recursive: true });
+  const legacyRoot = temporaryStateDirectory();
+  const legacyDirectory = join(
+    legacyRoot,
+    `coforge-cli-consumed-seq-${encodeURIComponent(String(process.geteuid?.() ?? "")).replaceAll(".", "%2E")}`,
+    "agent-1",
+  );
+  const legacyPath = join(legacyDirectory, "consumed-seqs.json");
+  await mkdir(legacyDirectory, { recursive: true });
   await writeFile(
-    storePath(stateDirectory),
+    legacyPath,
     JSON.stringify({
       targets: {
-        "#legacy": { seq: 5704, readOrder: 1, exactSeqs: [5710] },
-        "#bound": { conversationId: "conversation-1", seq: 3 },
-        "#blank": { conversationId: "", seq: 9 },
+        "@ada": { conversationId: "conversation-1", seq: 7, exactSeqs: [9] },
+        "@bea": { conversationId: "conversation-1", readOrder: 3, reviewedSeq: 4 },
       },
-      aliases: {},
-      nextReadOrder: 2,
+      aliases: { "@ADA": "@ada" },
+      nextReadOrder: 99,
     }),
   );
-
-  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets).toEqual({
-    "#bound": { conversationId: "conversation-1", seq: 3 },
-  });
+  const previous = Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
+  try {
+    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = legacyRoot;
+    const store = new AgentConsumedSeqStore(stateDirectory);
+    expect(store.read("agent-1")).toEqual({
+      targets: {
+        "@ada": { conversationId: "conversation-1", seq: 7, exactSeqs: [9] },
+        "@bea": { conversationId: "conversation-1", readOrder: 3, reviewedSeq: 4 },
+      },
+      aliases: { "@ADA": "@ada" },
+      nextReadOrder: 4,
+    });
+    expect(existsSync(legacyPath)).toBe(false);
+    expect(existsSync(legacyDirectory)).toBe(false);
+  } finally {
+    if (previous === undefined) delete Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
+    else Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = previous;
+  }
 });
 
-const cursor = (seq: number) => ({
-  targets: { "@ada": { conversationId: "conversation-1", seq } },
-  aliases: {},
-  nextReadOrder: 1,
-});
-
-test("writes in quick succession reach the disk once, as the latest snapshot, without blocking the caller", async () => {
+test("the Agent state directories are real and owned", async () => {
   const stateDirectory = temporaryStateDirectory();
   const store = new AgentConsumedSeqStore(stateDirectory);
-
-  store.write("agent-1", cursor(1));
-  store.write("agent-1", cursor(2));
-  store.write("agent-1", cursor(3));
-
-  // Nothing is on disk yet: the caller (a check, read or send) did not wait for a file write.
-  expect(await Bun.file(storePath(stateDirectory)).exists()).toBe(false);
-  // This process still sees what it wrote.
-  expect(store.read("agent-1")).toEqual(cursor(3));
-
-  await store.flush();
-  expect(JSON.parse(await readFile(storePath(stateDirectory), "utf8"))).toEqual(cursor(3));
-  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(cursor(3));
-});
-
-test("a pending cursor is written on its own after a short pause", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  const store = new AgentConsumedSeqStore(stateDirectory);
-
-  store.write("agent-1", cursor(4));
-  const deadline = Date.now() + 2_000;
-  while (!(await Bun.file(storePath(stateDirectory)).exists()) && Date.now() < deadline)
-    await Bun.sleep(20);
-
-  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(cursor(4));
-});
-
-test("flush writes every Agent's pending cursor", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  const store = new AgentConsumedSeqStore(stateDirectory);
-
-  store.write("agent-1", cursor(5));
-  store.write("agent-2", cursor(6));
-  await store.flush();
-
-  const reopened = new AgentConsumedSeqStore(stateDirectory);
-  expect(reopened.read("agent-1")).toEqual(cursor(5));
-  expect(reopened.read("agent-2")).toEqual(cursor(6));
-});
-
-test("an Agent's directories are prepared once, not before every write", async () => {
-  const stateDirectory = temporaryStateDirectory();
-  const store = new AgentConsumedSeqStore(stateDirectory);
-  store.write("agent-1", cursor(1));
-  await store.flush();
-  expect((await stat(storeDirectory(stateDirectory))).mode & 0o777).toBe(0o700);
-
-  // Were the directory checked again, this write would put the mode back to 0700.
-  await chmod(storeDirectory(stateDirectory), 0o750);
-  store.write("agent-1", cursor(2));
-  await store.flush();
-
-  expect((await stat(storeDirectory(stateDirectory))).mode & 0o777).toBe(0o750);
-  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(cursor(2));
+  store.write("agent-1", { targets: {}, aliases: {}, nextReadOrder: 1 });
+  const directory = await stat(join(stateDirectory, "agent-state", "agent-1"));
+  expect(directory.isDirectory()).toBe(true);
+  expect(directory.mode & 0o777).toBe(0o700);
 });

@@ -1,15 +1,12 @@
-import { chmod, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { tmpdir, userInfo } from "node:os";
-import { dirname, join } from "node:path";
 import { normalizeSeenExactSeqs, type LocalMentionSelector } from "@lrm/coforge-sdk/internal";
-import { escapePathIdentity } from "./path-scope";
+import { AgentStateDb } from "./agent-state-db";
 
 export const AGENT_MESSAGE_DRAFT_TTL_MS = 10 * 60 * 1_000;
 
 /**
- * The continuation state of one held send — the fields the draft file (`continue-state.json`)
- * holds: `content`, `attachmentIds`, `idempotencyKey`, `mentions`, `savedAt`, `reholdCount`,
- * `seenUpToSeq`, and `seenExactSeqs`.
+ * The continuation state of one held send — the fields the draft row holds: `content`,
+ * `attachmentIds`, `idempotencyKey`, `mentions`, `savedAt`, `reholdCount`, `seenUpToSeq`, and
+ * `seenExactSeqs`.
  */
 export type AgentMessageDraftContent = Readonly<{
   content: string;
@@ -44,237 +41,135 @@ export type AgentMessageDraftLookup =
   | { status: "missing" }
   | { status: "expired"; content: string; savedAt: number };
 
+type DraftRow = {
+  target: string;
+  content: string;
+  attachment_ids: string | null;
+  idempotency_key: string;
+  mentions: string | null;
+  saved_at: number;
+  rehold_count: number;
+  seen_up_to_seq: number | null;
+  seen_exact_seqs: string | null;
+};
+
 /**
- * Short-lived continuation state, isolated in one private file per Agent.
+ * Short-lived continuation state, one row per target in the Agent's `state.db`
+ * (`agent-state/<agentId>/`) — the same database the consumed cursor keeps, each write its own
+ * commit.
  *
- * The file (`continue-state.json`) holds a single `targets` map keyed by the message target, each
- * entry holding that target's draft. `target` is the key, never a field of the entry. Only a
- * lookup removes an expired entry, and only its own target's: `--send-draft` can then tell an
- * expired draft from one that never existed, and a write for one target never drops another
- * target's expired draft (or its last body).
+ * Only a lookup removes an expired row, and only its own target's: `--send-draft` can then tell
+ * an expired draft from one that never existed, and a write for one target never drops another
+ * target's expired draft (or its last body). The async signatures stay: the state machine's API
+ * is unchanged, and each operation is already a single commit, so there is nothing left to
+ * serialize by hand.
  */
 export class AgentMessageDraftStore {
-  readonly #path: string;
-  #operation = Promise.resolve();
-
   constructor(
-    agentId: string,
-    rootDirectory = Bun.env.COFORGE_CLI_DRAFT_STATE_DIR ?? tmpdir(),
+    private readonly db: AgentStateDb,
     private readonly now: () => number = Date.now,
-  ) {
-    if (!rootDirectory) throw new Error("Agent message draft state directory is required");
-    this.#path = join(
-      rootDirectory,
-      `coforge-cli-attested-send-${encodeIdentity(String(process.geteuid?.() ?? userInfo().username))}`,
-      encodeIdentity(agentId),
-      "continue-state.json",
-    );
-  }
+  ) {}
 
-  lookup(target: string): Promise<AgentMessageDraftLookup> {
-    return this.#serialized(async () => {
-      const drafts = await this.#read();
-      const draft = drafts.get(target);
-      if (!draft) return { status: "missing" };
-      if (!this.#expired(draft)) return { status: "found", draft };
-      drafts.delete(target);
-      await this.#write(drafts);
-      return { status: "expired", content: draft.content, savedAt: draft.savedAt };
-    });
+  async lookup(target: string): Promise<AgentMessageDraftLookup> {
+    const row = this.#row(target);
+    if (!row) return { status: "missing" };
+    const draft = this.#draft(row);
+    // A row without a key names no logical send, so it answers exactly like an absent one.
+    if (!draft.idempotencyKey) return { status: "missing" };
+    if (!this.#expired(draft)) return { status: "found", draft };
+    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+    return { status: "expired", content: draft.content, savedAt: draft.savedAt };
   }
 
   /** A fresh send saves a never-held draft; only `replace` (a hold) advances the count. */
-  save(target: string, draft: AgentMessageDraftContent): Promise<void> {
-    return this.#writeDraft(target, draft, 0);
+  async save(target: string, draft: AgentMessageDraftContent): Promise<void> {
+    this.#upsert(target, draft, 0);
   }
 
   /** The held-draft refresh: the same content, one hold later, at the reviewed frontier. */
-  replace(
+  async replace(
     target: string,
     draft: AgentMessageDraftContent & { reholdCount: number },
   ): Promise<void> {
-    return this.#writeDraft(target, draft, draft.reholdCount);
+    this.#upsert(target, draft, draft.reholdCount);
   }
 
-  clear(target: string): Promise<void> {
-    return this.#serialized(async () => {
-      const drafts = await this.#read();
-      drafts.delete(target);
-      await this.#write(drafts);
-    });
+  async clear(target: string): Promise<void> {
+    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
   }
 
   /** The clear after an accepted send: only the send whose key the draft holds consumes it, so an
    * older send accepted late never removes a newer draft. Returns whether it cleared. */
-  clearIfIdempotencyKeyMatches(target: string, idempotencyKey: string): Promise<boolean> {
-    return this.#serialized(async () => {
-      const drafts = await this.#read();
-      const draft = drafts.get(target);
-      // An expired draft is left for `--send-draft` to report (and hand back) as expired.
-      if (!draft || this.#expired(draft) || draft.idempotencyKey !== idempotencyKey) return false;
-      drafts.delete(target);
-      await this.#write(drafts);
-      return true;
-    });
+  async clearIfIdempotencyKeyMatches(target: string, idempotencyKey: string): Promise<boolean> {
+    const row = this.#row(target);
+    if (!row) return false;
+    const draft = this.#draft(row);
+    // An expired draft is left for `--send-draft` to report (and hand back) as expired.
+    if (this.#expired(draft) || draft.idempotencyKey !== idempotencyKey) return false;
+    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+    return true;
   }
 
-  #writeDraft(target: string, draft: AgentMessageDraftContent, reholdCount: number): Promise<void> {
-    return this.#serialized(async () => {
-      const drafts = await this.#read();
-      drafts.set(target, {
-        target,
-        content: draft.content,
-        idempotencyKey: draft.idempotencyKey,
-        reholdCount,
-        ...(draft.attachmentIds?.length ? { attachmentIds: draft.attachmentIds } : {}),
-        ...(draft.mentions?.length ? { mentions: draft.mentions } : {}),
-        ...(draft.seenUpToSeq !== undefined ? { seenUpToSeq: draft.seenUpToSeq } : {}),
-        ...(draft.seenExactSeqs?.length ? { seenExactSeqs: draft.seenExactSeqs } : {}),
-        savedAt: this.now(),
-      });
-      await this.#write(drafts);
-    });
+  #row(target: string): DraftRow | undefined {
+    return this.db.database.prepare(`SELECT * FROM drafts WHERE target = ?`).get(target) as
+      | DraftRow
+      | undefined;
   }
 
-  #serialized<T>(operation: () => Promise<T>): Promise<T> {
-    const guarded = async () => {
-      await this.#prepareDirectories();
-      return operation();
-    };
-    const result = this.#operation.then(guarded, guarded);
-    this.#operation = result.then(
-      () => undefined,
-      () => undefined,
+  #draft(row: DraftRow): AgentMessageDraft {
+    const attachmentIds = parseJson<string[]>(row.attachment_ids) ?? [];
+    const mentions = parseJson<LocalMentionSelector[]>(row.mentions) ?? [];
+    const seenExactSeqs = normalizeSeenExactSeqs(
+      parseJson<number[]>(row.seen_exact_seqs) ?? [],
+      row.seen_up_to_seq ?? 0,
     );
-    return result;
+    return {
+      target: row.target,
+      content: row.content,
+      idempotencyKey: row.idempotency_key,
+      reholdCount: row.rehold_count,
+      savedAt: row.saved_at,
+      ...(attachmentIds.length ? { attachmentIds } : {}),
+      ...(mentions.length ? { mentions } : {}),
+      ...(row.seen_up_to_seq !== null ? { seenUpToSeq: row.seen_up_to_seq } : {}),
+      ...(seenExactSeqs.length ? { seenExactSeqs } : {}),
+    };
   }
 
-  async #prepareDirectories(): Promise<void> {
-    for (const directory of [dirname(dirname(this.#path)), dirname(this.#path)]) {
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      const status = await lstat(directory);
-      if (status.isSymbolicLink() || !status.isDirectory())
-        throw new Error("Agent message draft directory must be a real directory");
-      const uid = process.geteuid?.();
-      if (uid !== undefined && status.uid !== uid)
-        throw new Error("Agent message draft directory must be owned by the current user");
-      await chmod(directory, 0o700);
-    }
+  #upsert(target: string, draft: AgentMessageDraftContent, reholdCount: number): void {
+    // A draft without a key names no logical send, so there is nothing to keep for a resend.
+    if (!draft.idempotencyKey) return;
+    this.db.database
+      .prepare(
+        `INSERT OR REPLACE INTO drafts
+           (target, content, attachment_ids, idempotency_key, mentions, saved_at, rehold_count,
+            seen_up_to_seq, seen_exact_seqs)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        target,
+        draft.content,
+        draft.attachmentIds?.length ? JSON.stringify(draft.attachmentIds) : null,
+        draft.idempotencyKey,
+        draft.mentions?.length ? JSON.stringify(draft.mentions) : null,
+        this.now(),
+        reholdCount,
+        draft.seenUpToSeq ?? null,
+        draft.seenExactSeqs?.length ? JSON.stringify(draft.seenExactSeqs) : null,
+      );
   }
 
   #expired(draft: AgentMessageDraft): boolean {
     return this.now() - draft.savedAt > AGENT_MESSAGE_DRAFT_TTL_MS;
   }
-
-  async #read(): Promise<Map<string, AgentMessageDraft>> {
-    if (!(await Bun.file(this.#path).exists())) return new Map();
-    let envelope: unknown;
-    try {
-      envelope = JSON.parse(await Bun.file(this.#path).text());
-    } catch {
-      throw new Error(`Agent message draft data is corrupt: ${this.#path}`);
-    }
-    const drafts = readDraftEntries(envelope);
-    if (!drafts) throw new Error(`Agent message draft data is corrupt: ${this.#path}`);
-    return drafts;
-  }
-
-  async #write(drafts: ReadonlyMap<string, AgentMessageDraft>): Promise<void> {
-    if (drafts.size === 0) {
-      await rm(this.#path, { force: true });
-      return;
-    }
-    const targets: Record<string, unknown> = {};
-    for (const [target, draft] of drafts) {
-      targets[target] = {
-        content: draft.content,
-        // The array is written even when the send carried no attachments; the read side treats
-        // an empty or absent list the same way.
-        attachmentIds: [...(draft.attachmentIds ?? [])],
-        idempotencyKey: draft.idempotencyKey,
-        ...(draft.mentions?.length ? { mentions: draft.mentions } : {}),
-        savedAt: draft.savedAt,
-        reholdCount: draft.reholdCount,
-        ...(draft.seenUpToSeq !== undefined ? { seenUpToSeq: draft.seenUpToSeq } : {}),
-        ...(draft.seenExactSeqs?.length ? { seenExactSeqs: draft.seenExactSeqs } : {}),
-      };
-    }
-    const temporary = `${this.#path}.${crypto.randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, JSON.stringify({ targets }) + "\n", { mode: 0o600 });
-      await chmod(temporary, 0o600);
-      await rename(temporary, this.#path);
-      await chmod(this.#path, 0o600);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
-  }
 }
 
-/**
- * Reads the `{ targets: { … } }` file. An entry without an idempotency key names no logical send,
- * so it is left out (and so dropped by the next write).
- */
-function readDraftEntries(value: unknown): Map<string, AgentMessageDraft> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const targets = (value as Record<string, unknown>).targets;
-  if (!targets || typeof targets !== "object" || Array.isArray(targets)) return undefined;
-  const drafts = new Map<string, AgentMessageDraft>();
-  for (const [target, entry] of Object.entries(targets)) {
-    const draft = readDraft(entry, target);
-    if (draft === "invalid") return undefined;
-    if (draft) drafts.set(target, draft);
-  }
-  return drafts;
-}
-
-/** One draft entry, tolerating a missing `reholdCount`/`seenUpToSeq`; `undefined` when it names no
- * send (no key), `"invalid"` when the file is corrupt. */
-function readDraft(value: unknown, target: string): AgentMessageDraft | "invalid" | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "invalid";
-  const draft = value as Record<string, unknown>;
-  if (typeof draft.content !== "string") return "invalid";
-  if (typeof draft.savedAt !== "number" || !Number.isFinite(draft.savedAt)) return "invalid";
-  if (draft.reholdCount !== undefined && typeof draft.reholdCount !== "number") return "invalid";
-  if (draft.seenUpToSeq !== undefined && typeof draft.seenUpToSeq !== "number") return "invalid";
-  // Keys are compared exactly as written; a blank one names no send.
-  if (typeof draft.idempotencyKey !== "string" || draft.idempotencyKey.trim().length === 0)
+function parseJson<T>(value: string | null): T | undefined {
+  if (value === null) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as T) : undefined;
+  } catch {
     return undefined;
-  const idempotencyKey = draft.idempotencyKey;
-  const attachmentIds = Array.isArray(draft.attachmentIds)
-    ? draft.attachmentIds.filter((id): id is string => typeof id === "string")
-    : undefined;
-  const mentions = Array.isArray(draft.mentions)
-    ? draft.mentions.filter(isMentionSelector)
-    : undefined;
-  if (Array.isArray(draft.mentions) && mentions?.length !== draft.mentions.length) return "invalid";
-  // Keep what is usable rather than refusing the draft over one bad sequence.
-  const seenExactSeqs = normalizeSeenExactSeqs(draft.seenExactSeqs);
-  return {
-    target,
-    content: draft.content,
-    idempotencyKey,
-    reholdCount: typeof draft.reholdCount === "number" ? draft.reholdCount : 0,
-    savedAt: draft.savedAt,
-    ...(attachmentIds?.length ? { attachmentIds } : {}),
-    ...(mentions?.length ? { mentions } : {}),
-    ...(typeof draft.seenUpToSeq === "number" ? { seenUpToSeq: draft.seenUpToSeq } : {}),
-    ...(seenExactSeqs.length ? { seenExactSeqs } : {}),
-  };
-}
-
-function isMentionSelector(value: unknown): value is LocalMentionSelector {
-  if (!value || typeof value !== "object") return false;
-  const mention = value as Record<string, unknown>;
-  return (
-    (mention.type === "user" || mention.type === "agent") &&
-    typeof mention.id === "string" &&
-    typeof mention.name === "string"
-  );
-}
-
-function encodeIdentity(identity: string): string {
-  if (!identity) throw new Error("Agent message draft identity is required");
-  return escapePathIdentity(identity);
+  }
 }

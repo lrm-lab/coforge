@@ -60,6 +60,7 @@ import {
   AGENT_MESSAGE_DRAFT_TTL_MS,
   AgentMessageDraftStore,
 } from "#src/persistence/agent-message-draft-store";
+import { AgentStateDb } from "#src/persistence/agent-state-db";
 import {
   RUNNER_HOLD_REASONS,
   AGENT_SEND_LOCAL_DEADLINE_MS,
@@ -75,6 +76,7 @@ import {
 import type { LogRecord } from "@logtape/logtape";
 import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
+import { createMessageHarness } from "./fixtures/message-harness";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());
@@ -93,14 +95,15 @@ const userDirectoryName = encodeURIComponent(
 ).replaceAll(".", "%2E");
 /** Where the daemon's consumed cursor lands when a test passes no state directory: the temporary
  * state root (`COFORGE_CLI_CONSUMED_SEQ_STATE_DIR ?? tmpdir()`), under CoForge's own directory
- * name. */
+ * name. Only a legacy store lives there now: the live cursor is in the per-Agent state database, and
+ * a leftover file would be migrated into it. */
 const CONSUMED_SEQ_ROOT = join(
   cliTempStateRoot("COFORGE_CLI_CONSUMED_SEQ_STATE_DIR"),
   `coforge-cli-consumed-seq-${userDirectoryName}`,
 );
 /** Where the daemon's per-Agent send drafts land in tests: the temporary state root
- * (`COFORGE_CLI_DRAFT_STATE_DIR ?? tmpdir()`), shared by every runtime in this file, so each test
- * starts without another test's draft. */
+ * (`COFORGE_CLI_DRAFT_STATE_DIR ?? tmpdir()`). Only a legacy store lives there now: the live
+ * drafts are in the per-Agent state database, and a leftover file would be migrated into it. */
 const DRAFT_ROOT = join(
   cliTempStateRoot("COFORGE_CLI_DRAFT_STATE_DIR"),
   `coforge-cli-attested-send-${userDirectoryName}`,
@@ -121,14 +124,15 @@ const config: AgentRuntimeConfig = {
   reasoning: "balanced",
 };
 
-// The daemon's consumed cursor is durable now (`consumed-seqs.json`), and its home is the
-// temporary state root every runtime in this process shares by default. Left alone, one test's reviewed
-// boundary would reach the next and suppress a delivery its Agent was never shown — correct in
-// production, wrong here. Every test starts from a clean cursor, exactly as it already starts from a
-// fresh runtime.
+// The daemon's consumed cursor is durable now, in the per-Agent state database under the daemon
+// state directory — and runtimes in this file that name no state directory share the default one.
+// Left alone, one test's reviewed boundary would reach the next and suppress a delivery its Agent
+// was never shown — correct in production, wrong here. Every test starts from a clean cursor,
+// exactly as it already starts from a fresh runtime.
 beforeEach(async () => {
   await rm(CONSUMED_SEQ_ROOT, { recursive: true, force: true });
   await rm(DRAFT_ROOT, { recursive: true, force: true });
+  await rm(".coforge-daemon-state", { recursive: true, force: true });
 });
 
 test("ready and reconnect snapshots report the executable version and observed OS", async () => {
@@ -880,72 +884,7 @@ async function queueHarness(
   };
 }
 
-async function messageHarness(
-  respond: (request: AgentMessageRequest) => Promise<AgentMessageTransportResponse>,
-  respondTask?: (request: TaskRequest) => Promise<TaskResponse>,
-  respondAttachmentUpload?: (request: Request, agentApiKey?: string) => Promise<Response>,
-  respondUploadSessions?: {
-    create?: (body: unknown, agentApiKey?: string) => Promise<Response>;
-    complete?: (uploadId: string, agentApiKey?: string) => Promise<Response>;
-    cancel?: (uploadId: string, agentApiKey?: string) => Promise<Response>;
-    get?: (uploadId: string, agentApiKey?: string) => Promise<Response>;
-  },
-  reconcile?: (request: AgentSendReconciliationRequest) => Promise<AgentSendReconciliationResponse>,
-) {
-  const credentials = new InMemoryDaemonCredentialStore();
-  await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-  const runtime = new DaemonRuntime(
-    connection,
-    () => ({
-      provider: "pi",
-      createAgentSession: async () => ({ ...sessionSpy(), async notify() {} }),
-    }),
-    credentials,
-    {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async stop() {},
-        async requestAgentApiKey() {
-          return `sk_agent_${"a".repeat(43)}`;
-        },
-        async revokeAgentApiKey() {},
-        async sendAgentDeliveryAck() {},
-        agentMessage: respond,
-        reconcileAgentSend: reconcile,
-        agentTask: respondTask,
-        agentAttachmentUpload: respondAttachmentUpload,
-        agentAttachmentUploadSessionCreate: respondUploadSessions?.create,
-        agentAttachmentUploadSessionComplete: respondUploadSessions?.complete,
-        agentAttachmentUploadSessionCancel: respondUploadSessions?.cancel,
-        agentAttachmentUploadSessionGet: respondUploadSessions?.get,
-      }),
-    },
-    undefined,
-    emptyCodeAgentDiscovery,
-  );
-  await runtime.start(connection);
-  await runtime.startAgent("agent-a", config);
-  return {
-    runtime,
-    context: runtime.issueAgentContext("agent-a"),
-    apiKey: `sk_agent_${"a".repeat(43)}`,
-    deliver: (sequence: number, target: string) =>
-      runtime.handleAgentMessage({
-        protocolMajor: 1,
-        requestId: `delivery-${sequence}`,
-        messageId: `message-${sequence}`,
-        deliveryId: `delivery-${sequence}`,
-        sequence,
-        workspaceId: connection.workspaceId,
-        conversationId: "conversation-a",
-        agentId: "agent-a",
-        body: `body-${sequence}`,
-        method: "agent:v1:message:deliver",
-        target,
-      }),
-  };
-}
+const messageHarness = createMessageHarness({ connection, config });
 
 describe("Agent Task freshness", () => {
   test("reviewer-isolation holds are repeatable without reading, forwarding, or consuming", async () => {
@@ -3211,11 +3150,15 @@ describe("DaemonRuntime", () => {
     const stateDirectory = join(tempRoot, `coforge-message-drafts-${crypto.randomUUID()}`);
     // The Agent has met @ada's conversation before: a cursor is durable only for a target bound to
     // one, and nothing in this test delivers to or reads @ada.
-    await seedCursor("agent-a", {
-      targets: { "@ada": { conversationId: "conversation-b", readOrder: 1 } },
-      aliases: {},
-      nextReadOrder: 1,
-    });
+    await seedCursor(
+      "agent-a",
+      {
+        targets: { "@ada": { conversationId: "conversation-b", readOrder: 1 } },
+        aliases: {},
+        nextReadOrder: 1,
+      },
+      stateDirectory,
+    );
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const operations: string[] = [];
@@ -3428,7 +3371,7 @@ describe("DaemonRuntime", () => {
     expect(ordinarySend).toMatchObject({ accepted: true, decision: "forward" });
     expect(operations).toEqual(["send", "send", "send"]);
     // A fresh send from the recovered daemon still accounts for the frontier the held notice
-    // presented: the consumed cursor outlives the process (`consumed-seqs.json`), so the context
+    // presented: the consumed cursor outlives the process in the state database, so the context
     // that was already reviewed is not presented — or held — a second time. The draft carried it
     // within the restart above; the cursor is what carries it for a send that never saw that
     // draft.
@@ -3588,11 +3531,15 @@ describe("DaemonRuntime", () => {
   test("acknowledges a message the Agent has already seen without waking its exited process", async () => {
     // The Agent reviewed @agent through message 3 before its process exited; the consumed cursor
     // outlives the process.
-    await seedCursor("agent-a", {
-      targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
-      aliases: {},
-      nextReadOrder: 1,
-    });
+    await seedCursor(
+      "agent-a",
+      {
+        targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
+        aliases: {},
+        nextReadOrder: 1,
+      },
+      ".coforge-daemon-state",
+    );
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const exits = new Set<() => void>();
@@ -3948,11 +3895,15 @@ describe("DaemonRuntime", () => {
   });
 
   test("acknowledges, rather than rejects, a message an Agent with no process has already seen", async () => {
-    await seedCursor("agent-a", {
-      targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
-      aliases: {},
-      nextReadOrder: 1,
-    });
+    await seedCursor(
+      "agent-a",
+      {
+        targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
+        aliases: {},
+        nextReadOrder: 1,
+      },
+      ".coforge-daemon-state",
+    );
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const acknowledgements: string[] = [];
@@ -11097,8 +11048,10 @@ describe("one logical send keeps one idempotency key", () => {
   const lostMidResponse = () =>
     AgentTransportError.midResponseTransport("agent send", 200, new Error("stream reset"));
   /** The runtime's draft for `@ada`, read through the same store (and directory) it uses. */
-  const draft = async () => {
-    const lookup = await new AgentMessageDraftStore("agent-a").lookup("@ada");
+  const draft = async (stateDirectory: string) => {
+    const lookup = await new AgentMessageDraftStore(
+      AgentStateDb.open(stateDirectory, "agent-a"),
+    ).lookup("@ada");
     return lookup.status === "found" ? lookup.draft : undefined;
   };
   const deferred = <T>() => {
@@ -11139,7 +11092,8 @@ describe("one logical send keeps one idempotency key", () => {
     reconcile?: (
       request: AgentSendReconciliationRequest,
     ) => Promise<AgentSendReconciliationResponse>,
-  ) => messageHarness(respond, undefined, undefined, undefined, reconcile);
+    stateDirectory?: string,
+  ) => messageHarness(respond, undefined, undefined, undefined, reconcile, stateDirectory);
 
   test("--send-draft after an unknown outcome sends under the original send's key, then clears", async () => {
     const calls: AgentMessageRequest[] = [];
@@ -11152,7 +11106,7 @@ describe("one logical send keeps one idempotency key", () => {
       expect(await failure(send(harness, "send-first", { content: "reply" }))).toBeInstanceOf(
         AgentTransportError,
       );
-      expect((await draft())?.idempotencyKey).toBe("send-first");
+      expect((await draft(harness.stateDirectory))?.idempotencyKey).toBe("send-first");
 
       const resent = await send(harness, "send-again", { sendDraft: true });
 
@@ -11161,7 +11115,7 @@ describe("one logical send keeps one idempotency key", () => {
         ["send-first", "reply"],
         ["send-first", "reply"],
       ]);
-      expect(await draft()).toBeUndefined();
+      expect(await draft(harness.stateDirectory)).toBeUndefined();
     } finally {
       await harness.runtime.stop();
     }
@@ -11175,7 +11129,10 @@ describe("one logical send keeps one idempotency key", () => {
     });
     try {
       expect((await send(harness, "send-held", { content: "held reply" })).state).toBe("held");
-      expect(await draft()).toMatchObject({ idempotencyKey: "send-held", reholdCount: 1 });
+      expect(await draft(harness.stateDirectory)).toMatchObject({
+        idempotencyKey: "send-held",
+        reholdCount: 1,
+      });
 
       await send(harness, "send-resend", { sendDraft: true });
 
@@ -11202,7 +11159,7 @@ describe("one logical send keeps one idempotency key", () => {
       answer.resolve(sent({ idempotencyKey: "send-older" }));
 
       expect((await older).state).toBe("sent");
-      expect(await draft()).toMatchObject({
+      expect(await draft(harness.stateDirectory)).toMatchObject({
         content: "newer reply",
         idempotencyKey: "send-newer",
       });
@@ -11234,7 +11191,7 @@ describe("one logical send keeps one idempotency key", () => {
         "Review the current draft",
       );
       expect(calls).toEqual([]);
-      expect(await draft()).toMatchObject({
+      expect(await draft(harness.stateDirectory)).toMatchObject({
         content: "newer draft",
         idempotencyKey: "send-newer",
       });
@@ -11245,15 +11202,23 @@ describe("one logical send keeps one idempotency key", () => {
 
   test("an expired draft is not sent: the entry is removed and its body travels once, as details", async () => {
     const calls: AgentMessageRequest[] = [];
+    const stateDirectory = join(tempRoot, `coforge-stale-${crypto.randomUUID()}`);
     const savedAt = Date.now() - AGENT_MESSAGE_DRAFT_TTL_MS - 1_000;
-    await new AgentMessageDraftStore("agent-a", undefined, () => savedAt).save("@ada", {
+    await new AgentMessageDraftStore(
+      AgentStateDb.open(stateDirectory, "agent-a"),
+      () => savedAt,
+    ).save("@ada", {
       content: "stale reply\n",
       idempotencyKey: "send-stale",
     });
-    const harness = await harnessWith(async (request) => {
-      calls.push(request);
-      return sent(request);
-    });
+    const harness = await harnessWith(
+      async (request) => {
+        calls.push(request);
+        return sent(request);
+      },
+      undefined,
+      stateDirectory,
+    );
     try {
       const expired = await failure(send(harness, "send-late", { sendDraft: true }));
 
@@ -11276,12 +11241,16 @@ describe("one logical send keeps one idempotency key", () => {
   });
 
   test("a send to another target never drops this target's expired draft or its last copy", async () => {
+    const stateDirectory = join(tempRoot, `coforge-other-${crypto.randomUUID()}`);
     const savedAt = Date.now() - AGENT_MESSAGE_DRAFT_TTL_MS - 1_000;
-    await new AgentMessageDraftStore("agent-a", undefined, () => savedAt).save("@ada", {
+    await new AgentMessageDraftStore(
+      AgentStateDb.open(stateDirectory, "agent-a"),
+      () => savedAt,
+    ).save("@ada", {
       content: "ada's reply",
       idempotencyKey: "send-ada",
     });
-    const harness = await harnessWith(async (request) => sent(request));
+    const harness = await harnessWith(async (request) => sent(request), undefined, stateDirectory);
     try {
       await send(harness, "send-bob", { target: "@bob", content: "bob's reply" });
 
@@ -11315,16 +11284,20 @@ describe("one logical send keeps one idempotency key", () => {
   });
 
   test("a draft written without a key is no draft to resend", async () => {
-    await mkdir(join(DRAFT_ROOT, "agent-a"), { recursive: true, mode: 0o700 });
-    await Bun.write(
-      join(DRAFT_ROOT, "agent-a", "continue-state.json"),
-      JSON.stringify({ targets: { "@ada": { content: "keyless", savedAt: Date.now() } } }),
-    );
-    const calls: AgentMessageRequest[] = [];
-    const harness = await harnessWith(async (request) => {
-      calls.push(request);
-      return sent(request);
+    const stateDirectory = join(tempRoot, `coforge-keyless-${crypto.randomUUID()}`);
+    await new AgentMessageDraftStore(AgentStateDb.open(stateDirectory, "agent-a")).save("@ada", {
+      content: "keyless",
+      idempotencyKey: "",
     });
+    const calls: AgentMessageRequest[] = [];
+    const harness = await harnessWith(
+      async (request) => {
+        calls.push(request);
+        return sent(request);
+      },
+      undefined,
+      stateDirectory,
+    );
     try {
       expect(await failure(send(harness, "send-draft", { sendDraft: true }))).toMatchObject({
         code: "SEND_DRAFT_NOT_FOUND",
@@ -11336,15 +11309,20 @@ describe("one logical send keeps one idempotency key", () => {
   });
 
   test("the draft's key outlives a daemon restart", async () => {
-    const first = await harnessWith(async (request) => held(request));
+    const stateDirectory = join(tempRoot, `coforge-restart-${crypto.randomUUID()}`);
+    const first = await harnessWith(async (request) => held(request), undefined, stateDirectory);
     await send(first, "send-held", { content: "held reply" });
     await first.runtime.stop();
 
     const calls: AgentMessageRequest[] = [];
-    const second = await harnessWith(async (request) => {
-      calls.push(request);
-      return sent(request);
-    });
+    const second = await harnessWith(
+      async (request) => {
+        calls.push(request);
+        return sent(request);
+      },
+      undefined,
+      stateDirectory,
+    );
     try {
       expect(
         await failure(send(second, "send-a", { sendDraft: true, expectedDraftKey: "send-older" })),
@@ -11356,7 +11334,7 @@ describe("one logical send keeps one idempotency key", () => {
       expect(calls.map((call) => [call.idempotencyKey, call.content])).toEqual([
         ["send-held", "held reply"],
       ]);
-      expect(await draft()).toBeUndefined();
+      expect(await draft(stateDirectory)).toBeUndefined();
     } finally {
       await second.runtime.stop();
     }
@@ -11413,7 +11391,7 @@ describe("one logical send keeps one idempotency key", () => {
             target: "@ada",
           },
         ]);
-        expect(await draft()).toBeUndefined();
+        expect(await draft(harness.stateDirectory)).toBeUndefined();
       } finally {
         await harness.runtime.stop();
       }
@@ -11467,7 +11445,7 @@ describe("one logical send keeps one idempotency key", () => {
         expect((error as AgentSendVerdictError).verdict.suggestedNextAction).toContain(
           '--expected-draft-key "send-replay" --target "@ada"',
         );
-        expect((await draft())?.idempotencyKey).toBe("send-replay");
+        expect((await draft(harness.stateDirectory))?.idempotencyKey).toBe("send-replay");
       } finally {
         await harness.runtime.stop();
       }
@@ -11497,7 +11475,7 @@ describe("one logical send keeps one idempotency key", () => {
         expect(error).toBeInstanceOf(AgentSendVerdictError);
         expect(error.verdict).toMatchObject({ retryable: false, draftSaved: false });
         expect(error.verdict.suggestedNextAction).toContain("CANNOT_CONFIRM");
-        expect(await draft()).toMatchObject({
+        expect(await draft(harness.stateDirectory)).toMatchObject({
           content: "newer reply",
           idempotencyKey: "send-newer",
         });
