@@ -144,6 +144,41 @@ export function messagesArrivedWhere(
   };
 }
 
+/**
+ * What arrived in `conversationId` after a cursor, for a window that merges it in. The arriving
+ * ids are read first: Prisma loads each relation of `browserMessageFields` (attachments, mentions,
+ * reactions, sender) as its own statement, and asks for them even when no message matched, so a
+ * read that brings nothing — the usual answer to a reconciliation — costs one statement instead
+ * of one per relation. `relationLoadStrategy: "join"` would make it one statement either way, but
+ * it is a schema-level preview feature, not a decision this read makes.
+ *
+ * Both reads are scoped by the conversation, as every browser read here is. A message deleted
+ * between them is left out: the page already drops a row it cannot hydrate.
+ */
+export async function browserMessageUpdates(
+  db: Pick<PrismaClient, "message">,
+  conversationId: string,
+  afterSequence: number,
+  afterReplySequence?: number,
+): Promise<BrowserMessageRow[]> {
+  const arrived = await db.message.findMany({
+    where: messagesArrivedWhere(conversationId, afterSequence, afterReplySequence),
+    orderBy: { sequence: "asc" },
+    take: 100,
+    select: { id: true },
+  });
+  if (arrived.length === 0) return [];
+  const rows = await db.message.findMany({
+    where: { id: { in: arrived.map((row) => row.id) }, conversationId },
+    select: browserMessageFields,
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return arrived.flatMap((row) => {
+    const message = byId.get(row.id);
+    return message ? [message] : [];
+  });
+}
+
 /** Bounded browser history reads shared by direct conversations and public channels. */
 export class ConversationHistory {
   constructor(private readonly db: PrismaClient) {}
