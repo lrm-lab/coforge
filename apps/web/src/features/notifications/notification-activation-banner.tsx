@@ -6,7 +6,8 @@ import { BellRinging01, Check } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
-import { browserNotificationPermission, syncBrowserPushSubscription } from "./browser-push";
+import { syncBrowserPushSubscription } from "./browser-push";
+import { useNotificationsAskable } from "./notification-permission";
 import { saveBrowserNotificationPreference, subscribeBrowserPush } from "./notifications.functions";
 import "./notification-activation-banner.css";
 
@@ -56,27 +57,16 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
   const subscribe = useServerFn(subscribeBrowserPush);
   const savePreference = useServerFn(saveBrowserNotificationPreference);
   const ref = useRef<HTMLDivElement>(null);
-  // Read in the browser only, so the server render and hydration agree on showing nothing.
-  const [permission, setPermission] = useState<string>("unsupported");
+  // Known in the browser only, so the server render and hydration agree on showing nothing.
+  const [askable, recheckAskable] = useNotificationsAskable();
   const [dismissed, setDismissed] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState<"unavailable" | "generic" | null>(null);
 
-  useEffect(() => {
-    const refresh = () => setPermission(browserNotificationPermission());
-    refresh();
-    setDismissed(readDismissed());
-    const onVisible = () => document.visibilityState === "visible" && refresh();
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
+  useEffect(() => setDismissed(readDismissed()), []);
 
-  if (permission !== "default" || (dismissed && !confirming)) return null;
+  if (!askable || (dismissed && !confirming)) return null;
 
   const returnFocus = () => {
     if (ref.current?.contains(document.activeElement))
@@ -101,7 +91,7 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
       console.warn("enabling notifications from the banner failed", cause);
       setError("generic");
     } finally {
-      setPermission(browserNotificationPermission());
+      recheckAskable();
       setEnabling(false);
     }
   }
