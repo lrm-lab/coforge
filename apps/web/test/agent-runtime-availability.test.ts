@@ -105,4 +105,25 @@ describe("agentRuntimeSelectionIsAvailable", () => {
       ),
     ).toBe(true);
   });
+
+  test("accepts a Devin level its catalog cannot list", () => {
+    // Devin's ACP model list carries no efforts; its effort select follows the selected model.
+    const devinModel = { id: "gpt-6-sol-high", modelProvider: "", reasoningEfforts: [] };
+    expect(
+      agentRuntimeSelectionIsAvailable(
+        {
+          provider: RUNTIME_PROVIDER.DEVIN,
+          model: "gpt-6-sol-high",
+          modelProvider: "",
+          reasoning: "high",
+          hasApiKey: false,
+        },
+        {
+          connected: true,
+          providers: new Set([RUNTIME_PROVIDER.DEVIN]),
+          models: [devinModel],
+        },
+      ),
+    ).toBe(true);
+  });
 });

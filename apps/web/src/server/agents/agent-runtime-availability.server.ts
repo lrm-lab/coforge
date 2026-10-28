@@ -93,8 +93,10 @@ function modelMatches(value: unknown, config: AgentRuntimeSelection): boolean {
     modelProvider === config.modelProvider &&
     (!config.reasoning ||
       // Command Code reports a model's efforts only after a session switches to it
-      // (`readCommandCodeReasoningEfforts`), so its catalog cannot list them.
+      // (`readCommandCodeReasoningEfforts`), and Devin's ACP model list carries no efforts
+      // (its effort select follows the selected model), so their catalogs cannot list them.
       config.provider === RUNTIME_PROVIDER.COMMAND_CODE ||
+      config.provider === RUNTIME_PROVIDER.DEVIN ||
       (Array.isArray(efforts) && efforts.includes(config.reasoning)))
   );
 }

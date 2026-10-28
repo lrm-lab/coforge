@@ -52,3 +52,15 @@ test("Command Code is recognized as an external runtime without fast mode or usa
   expect(RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[provider]).toBe(false);
   expect(RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[provider]).toBe(false);
 });
+
+test("Devin is recognized as an external runtime without fast mode or usage scanning", async () => {
+  const {
+    RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
+    RUNTIME_PROVIDER_SUPPORTS_FAST_MODE,
+    RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
+  } = await import("./runtime-provider");
+  const provider = requireRuntimeProvider("devin", "Devin is missing from the runtime vocabulary");
+  expect(RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider]).toBe(true);
+  expect(RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[provider]).toBe(false);
+  expect(RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[provider]).toBe(false);
+});

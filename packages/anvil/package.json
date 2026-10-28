@@ -14,6 +14,7 @@
     "./kiro": "./src/kiro/index.ts",
     "./grok": "./src/grok/index.ts",
     "./command-code": "./src/command-code/index.ts",
+    "./devin": "./src/devin/index.ts",
     "./antigravity": "./src/antigravity/index.ts",
     "./execution": "./src/execution.ts",
     "./dsh": "./src/dsh/index.ts",

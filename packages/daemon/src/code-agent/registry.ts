@@ -10,6 +10,8 @@ import {
   createCommandCodeAuthHost,
 } from "#src/code-agent/command-code/host";
 import { dshRuntimeHost } from "#src/code-agent/dsh/host";
+import { DevinProvider, DevinRuntimeAuthAdapter } from "@lrm/coforge-anvil/devin";
+import { createDevinAuthHost, devinRuntimeHost } from "#src/code-agent/devin/host";
 import { piRuntimeHost } from "#src/code-agent/pi/host";
 import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
@@ -76,6 +78,8 @@ export function createRuntimeAuthAdapter(
         (options.platform === "win32" ? "cmdc" : "cmd");
       return new CommandCodeRuntimeAuthAdapter(createCommandCodeAuthHost([executable]));
     }
+    case RUNTIME_PROVIDER.DEVIN:
+      return new DevinRuntimeAuthAdapter(createDevinAuthHost(options));
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeRuntimeAuthAdapter({
         host: claudeAuthHost,
@@ -139,6 +143,13 @@ export function createCodeAgentProvider(
       return new CommandCodeProvider({
         host: commandCodeRuntimeHost,
         command: [executable ?? (options.platform === "win32" ? "cmdc" : "cmd")],
+      });
+    }
+    case RUNTIME_PROVIDER.DEVIN: {
+      const executable = providerExecutable(RUNTIME_PROVIDER.DEVIN, options);
+      return new DevinProvider({
+        host: devinRuntimeHost,
+        command: [executable ?? RUNTIME_PROVIDER.DEVIN],
       });
     }
     default: {

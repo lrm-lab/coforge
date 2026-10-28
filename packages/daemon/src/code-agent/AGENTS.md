@@ -83,6 +83,11 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   is no usage scan. Permission requests are allow-once only for the active session, and all other
   requests are cancelled.
 - Native Command Code rules live in [Anvil Command Code instructions](../../../anvil/src/command-code/AGENTS.md).
+- Devin (`devin acp`): full-access `bypass` mode, standing instructions in a private always-on
+  `.devin/rules/coforge-runtime-*.md`, `session/load` resume with replacement, and
+  `devin auth status|login|logout` for the login chip; login pastes the code through a
+  pseudo-terminal (`auth-process.ts`, shared with Kiro). No usage scan. Rules in
+  [Anvil Devin instructions](../../../anvil/src/devin/AGENTS.md).
 
 ## Standing instructions
 

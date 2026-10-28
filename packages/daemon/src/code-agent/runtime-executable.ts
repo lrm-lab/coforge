@@ -142,6 +142,11 @@ export const externalCodeAgents = [
   },
   commandCodeAgent,
   dshCodeAgent,
+  {
+    provider: RUNTIME_PROVIDER.DEVIN,
+    executable: RUNTIME_PROVIDER.DEVIN,
+    installedExecutableCandidates: noInstalledExecutableCandidates,
+  },
 ] as const;
 
 export type ExternalCodeAgentProvider = (typeof externalCodeAgents)[number]["provider"];

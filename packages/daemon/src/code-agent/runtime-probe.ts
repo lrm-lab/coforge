@@ -26,6 +26,11 @@ import {
   logCommandCodeVersionUnsupported,
 } from "@lrm/coforge-anvil/command-code";
 import {
+  devinVersionFromOutput,
+  isDevinVersionUnsupported,
+  logDevinVersionUnsupported,
+} from "@lrm/coforge-anvil/devin";
+import {
   isAntigravityVersionUnsupported,
   logAntigravityVersionUnsupported,
 } from "@lrm/coforge-anvil/antigravity";
@@ -131,17 +136,19 @@ async function probeRuntimeVersion(
     return { kind: "unavailable" };
   }
   // Grok prints `grok <version> (<build hash>)`; the version is the dotted-numeric token, not the
-  // last word.
+  // last word. Devin reads its own launch gate's parser, so the two can never disagree.
   const version =
-    provider === RUNTIME_PROVIDER.GROK
-      ? output
-          .trim()
-          .split(/\s+/)
-          .find((token) => /^\d+(\.\d+)*$/.test(token))
-      : provider === RUNTIME_PROVIDER.DSH
-        ? // Read exactly as DSH's launch reads it, so the two never disagree on the pin below.
-          (dshVersionFromOutput(output) ?? output.trim())
-        : lastWord(output);
+    provider === RUNTIME_PROVIDER.DEVIN
+      ? devinVersionFromOutput(output)
+      : provider === RUNTIME_PROVIDER.GROK
+        ? output
+            .trim()
+            .split(/\s+/)
+            .find((token) => /^\d+(\.\d+)*$/.test(token))
+        : provider === RUNTIME_PROVIDER.DSH
+          ? // Read exactly as DSH's launch reads it, so the two never disagree on the pin below.
+            (dshVersionFromOutput(output) ?? output.trim())
+          : lastWord(output);
   if (!version) return { kind: "unavailable" };
   if (provider === RUNTIME_PROVIDER.KIRO && isKiroVersionUnsupported(version)) {
     logKiroVersionUnsupported(name, version);
@@ -162,6 +169,11 @@ async function probeRuntimeVersion(
   if (provider === RUNTIME_PROVIDER.COMMAND_CODE && isCommandCodeVersionUnsupported(version)) {
     logCommandCodeVersionUnsupported(name, version);
     return { kind: "unavailable" };
+  }
+  if (provider === RUNTIME_PROVIDER.DEVIN && isDevinVersionUnsupported(version)) {
+    logDevinVersionUnsupported(name, version);
+    // A refused version is not a probe miss: the cached runtime must be dropped, not restored.
+    return { kind: "rejected" };
   }
   // The preview ACP is pinned to one release: any other version is refused, never offered.
   if (provider === RUNTIME_PROVIDER.DSH && version !== DSH_ACP_VERSION) {
@@ -189,22 +201,23 @@ type RuntimeVersionProbe =
   | { kind: "rejected" }
   | { kind: "unavailable" };
 
-/** An older daemon cached this OpenCode build before the floor moved. Serving it, including as a
- * probe-failure fallback, would keep offering a CLI this build refuses to launch. */
-function cachedOpenCodeBelowFloor(
+/** An older daemon cached an OpenCode or Devin build before the floor moved. Serving it, including
+ * as a probe-failure fallback, would keep offering a CLI this build refuses to launch. */
+function cachedBelowFloor(
   provider: ExternalCodeAgentProvider,
   name: string,
   runtime: RuntimeMetadata | undefined,
 ): boolean {
-  if (
-    provider !== RUNTIME_PROVIDER.OPENCODE ||
-    runtime === undefined ||
-    !isOpenCodeVersionUnsupported(runtime.version)
-  ) {
-    return false;
+  if (runtime === undefined) return false;
+  if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeVersionUnsupported(runtime.version)) {
+    logOpenCodeVersionUnsupported(name, runtime.version);
+    return true;
   }
-  logOpenCodeVersionUnsupported(name, runtime.version);
-  return true;
+  if (provider === RUNTIME_PROVIDER.DEVIN && isDevinVersionUnsupported(runtime.version)) {
+    logDevinVersionUnsupported(name, runtime.version);
+    return true;
+  }
+  return false;
 }
 
 /** A live probe that read a refused version must erase this provider's cached runtime. A later
@@ -260,7 +273,7 @@ export async function discoverExternalCodeAgents(
               logKiroVersionUnsupported(name, cached.runtime.version);
               return undefined;
             }
-            if (cachedOpenCodeBelowFloor(provider, name, cached.runtime)) return undefined;
+            if (cachedBelowFloor(provider, name, cached.runtime)) return undefined;
             if (
               provider === RUNTIME_PROVIDER.COMMAND_CODE &&
               isCommandCodeVersionUnsupported(cached.runtime.version)
@@ -291,7 +304,7 @@ export async function discoverExternalCodeAgents(
           // A transient version/app-server failure must not make an installed runtime vanish
           // from the Computer inventory. Keep the last successful result when the executable
           // itself is unchanged; the next refresh will retry the live probe.
-          if (cachedOpenCodeBelowFloor(provider, name, cached?.runtime)) return undefined;
+          if (cachedBelowFloor(provider, name, cached?.runtime)) return undefined;
           if (cached?.runtime) {
             logger.warning("Code Agent runtime probe failed; using cached runtime", {
               event: "code_agent_runtime:cache_fallback",
@@ -317,7 +330,7 @@ export async function discoverExternalCodeAgents(
               : undefined
             : undefined;
           const fallbackCached = fallbackCacheKey ? cache?.[provider] : undefined;
-          if (cachedOpenCodeBelowFloor(provider, name, fallbackCached?.runtime)) return undefined;
+          if (cachedBelowFloor(provider, name, fallbackCached?.runtime)) return undefined;
           if (fallbackCached?.runtime) {
             logger.warning("Code Agent runtime probe failed; using cached runtime", {
               event: "code_agent_runtime:cache_fallback",
@@ -425,6 +438,8 @@ function externalRuntimeDisplayName(provider: ExternalCodeAgentProvider): string
       return "Antigravity CLI";
     case RUNTIME_PROVIDER.COMMAND_CODE:
       return "Command Code";
+    case RUNTIME_PROVIDER.DEVIN:
+      return "Devin";
     case RUNTIME_PROVIDER.DSH:
       return "DeepSeek Harness";
     default: {

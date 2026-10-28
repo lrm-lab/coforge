@@ -14,6 +14,7 @@ const runtimes = [
   "pi",
   "dsh",
   "command-code",
+  "devin",
   "codex",
   "claude-code",
 ].map((name) => resolve(anvil, "src", name));

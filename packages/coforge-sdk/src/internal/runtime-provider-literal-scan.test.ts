@@ -37,6 +37,8 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
     "the RuntimeProvider vocabulary module itself",
   "packages/daemon/src/code-agent/runtime-executable.ts":
     'the provider-to-executable table and installer paths; the CLIs are literally named "codex", "opencode" and "grok"',
+  "packages/anvil/src/devin/version.ts":
+    'the Devin CLI is literally named "devin", so its version gate names that executable',
 };
 
 const LITERAL_PATTERN = new RegExp(

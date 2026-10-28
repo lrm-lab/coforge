@@ -10,6 +10,28 @@ test("the chip shows every Anvil auth-status provider, and signs in only the SDK
   expect([...RUNTIME_LOGIN_STATE_PROVIDERS]).toEqual([...RUNTIME_AUTH_PROVIDERS]);
 });
 
+test("Devin shows its account and offers Sign in and Sign out", () => {
+  expect(
+    runtimeLoginChip({
+      provider: "devin",
+      status: {
+        provider: "devin",
+        state: "logged_in",
+        account: { maskedLabel: "u****@example.com", planLabel: "Pro", methodLabel: "Devin" },
+      },
+      canSignIn: true,
+    }),
+  ).toEqual({
+    auth: {
+      provider: "devin",
+      state: "logged_in",
+      account: { maskedLabel: "u****@example.com", planLabel: "Pro", methodLabel: "Devin" },
+    },
+    account: "logged_in",
+    signable: true,
+  });
+});
+
 test("Command Code shows logged in and logged out with no Sign in", () => {
   expect(
     runtimeLoginChip({

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
-import { kiroAuthProcess } from "#src/code-agent/kiro/auth-process";
+import { runtimeAuthProcess } from "#src/code-agent/auth-process";
 import type { RuntimeAuthLoginEvent } from "@lrm/coforge-anvil";
 
 test.skipIf(process.platform === "win32")(
@@ -12,7 +12,7 @@ test.skipIf(process.platform === "win32")(
       enterpriseLoginSupported: true,
       maskAccountLabel: () => "a***@example.com",
       spawn(args, cwd, terminal) {
-        return kiroAuthProcess(
+        return runtimeAuthProcess(
           new ProcessTreeOwner().spawn(
             [
               Bun.which("bun")!,
@@ -45,7 +45,10 @@ test.skipIf(process.platform === "win32")(
       );
       expect(result).toMatchObject({
         status: "logged_in",
-        authStatus: { provider: "kiro", account: { maskedLabel: "a***@example.com" } },
+        authStatus: {
+          provider: "kiro",
+          account: { maskedLabel: "a***@example.com" },
+        },
       });
       expect(events).toEqual([
         {

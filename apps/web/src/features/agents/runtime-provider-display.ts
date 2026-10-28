@@ -2,6 +2,7 @@ import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/interna
 import antigravityMark from "@lobehub/icons-static-svg/icons/antigravity-color.svg";
 import claudeCodeMark from "@lobehub/icons-static-svg/icons/claudecode-color.svg";
 import codexMark from "@lobehub/icons-static-svg/icons/codex-color.svg";
+import devinMark from "@lobehub/icons-static-svg/icons/devin-color.svg";
 import deepseekMark from "@lobehub/icons-static-svg/icons/deepseek-color.svg";
 import cursorMark from "@lobehub/icons-static-svg/icons/cursor.svg";
 import kiroMark from "@lobehub/icons-static-svg/icons/kiro-color.svg";
@@ -30,6 +31,7 @@ export const RUNTIME_PROVIDER_DISPLAY_ORDER: readonly RuntimeProvider[] = [
   RUNTIME_PROVIDER.GROK,
   RUNTIME_PROVIDER.ANTIGRAVITY,
   RUNTIME_PROVIDER.COMMAND_CODE,
+  RUNTIME_PROVIDER.DEVIN,
   RUNTIME_PROVIDER.DSH,
 ];
 
@@ -48,6 +50,7 @@ export function runtimeProviderLabel(provider: RuntimeProvider): string {
     [RUNTIME_PROVIDER.ANTIGRAVITY]: "Antigravity CLI",
     [RUNTIME_PROVIDER.DSH]: "DeepSeek Harness",
     [RUNTIME_PROVIDER.COMMAND_CODE]: "Command Code",
+    [RUNTIME_PROVIDER.DEVIN]: "Devin",
   };
   return labels[provider];
 }
@@ -67,6 +70,7 @@ export const RUNTIME_PROVIDER_MARK: Record<
   [RUNTIME_PROVIDER.ANTIGRAVITY]: antigravityMark,
   [RUNTIME_PROVIDER.DSH]: deepseekMark,
   [RUNTIME_PROVIDER.COMMAND_CODE]: commandCodeMark,
+  [RUNTIME_PROVIDER.DEVIN]: devinMark,
 };
 
 /** Whether that mark is a full-color icon rendered as an `<img>`, as opposed to a monochrome
@@ -85,4 +89,5 @@ export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
   [RUNTIME_PROVIDER.DSH]: true,
   [RUNTIME_PROVIDER.COMMAND_CODE]: false,
+  [RUNTIME_PROVIDER.DEVIN]: true,
 };

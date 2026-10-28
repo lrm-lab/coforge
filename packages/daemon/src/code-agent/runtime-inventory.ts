@@ -1,5 +1,6 @@
 import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
 import { commandCodeRuntimeHost } from "#src/code-agent/command-code/host";
+import { devinRuntimeHost } from "#src/code-agent/devin/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
 import { discoverCommandCodeCatalog } from "@lrm/coforge-anvil/command-code";
+import { discoverDevinCatalog } from "@lrm/coforge-anvil/devin";
 import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
 import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
 import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
@@ -67,6 +69,7 @@ type CatalogCommands = {
   grok?: readonly string[];
   antigravity?: readonly string[];
   commandCode?: readonly string[];
+  devin?: readonly string[];
 };
 
 export type CodeAgentDiscoveryOptions = {
@@ -103,6 +106,7 @@ const CACHEABLE_CATALOG_PROVIDERS = [
   RUNTIME_PROVIDER.OPENCODE,
   RUNTIME_PROVIDER.ANTIGRAVITY,
   RUNTIME_PROVIDER.COMMAND_CODE,
+  RUNTIME_PROVIDER.DEVIN,
 ] as const;
 
 function piCacheKeyPaths(environment: Readonly<Record<string, string | undefined>>): string[] {
@@ -391,6 +395,19 @@ export async function discoverCodeAgentCatalogs(
           .catch(() => undefined)
           .then((catalog) => ({
             provider: RUNTIME_PROVIDER.COMMAND_CODE,
+            keyPaths: [executable],
+            catalog,
+          })),
+      );
+  }
+  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)) {
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.DEVIN);
+    if (executable)
+      discoveries.push(
+        discoverDevinCatalog(commands.devin ?? [executable], cwd, environment, devinRuntimeHost)
+          .catch(() => undefined)
+          .then((catalog) => ({
+            provider: RUNTIME_PROVIDER.DEVIN,
             keyPaths: [executable],
             catalog,
           })),

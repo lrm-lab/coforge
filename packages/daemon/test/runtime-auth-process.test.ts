@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { ProcessTreeOwner } from "#src/platform/process-tree";
-import { kiroAuthProcess } from "#src/code-agent/kiro/auth-process";
+import { runtimeAuthProcess } from "#src/code-agent/auth-process";
 
 for (const terminal of [false, true])
   test.skipIf(terminal && process.platform === "win32")(
     `owned auth process closes ${terminal ? "PTY" : "pipes"} and its child on dispose`,
     async () => {
-      const process = kiroAuthProcess(
+      const process = runtimeAuthProcess(
         new ProcessTreeOwner().spawn(
           [
             Bun.which("bun")!,
@@ -58,7 +58,7 @@ for (const terminal of [false, true]) {
           { PATH: Bun.env.PATH ?? "" },
           { terminal },
         );
-        const auth = kiroAuthProcess(tree);
+        const auth = runtimeAuthProcess(tree);
         const reader = auth.output.getReader();
         let output = "";
         const read = async () => {

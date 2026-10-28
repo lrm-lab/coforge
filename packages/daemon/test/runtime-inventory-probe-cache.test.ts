@@ -141,6 +141,47 @@ describe("Code Agent probe cache", () => {
     }
   });
 
+  test("re-validates a cached Devin runtime and drops it when below its minimum", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const devinPath = join(binDirectory, "devin");
+    await Bun.write(devinPath, "#!/bin/sh\necho devin\n");
+    try {
+      const key = await fileStatCacheKey([devinPath]);
+      await writeInventoryCache(stateDirectory, {
+        devin: {
+          key: key!,
+          runtime: { provider: "devin", version: "3000.11.100", displayName: "Devin" },
+        },
+      });
+      let spawnCalls = 0;
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "devin" ? devinPath : undefined),
+        spawn: () => {
+          spawnCalls++;
+          return {
+            stdout: new Blob(["devin 3000.11.100 (053434014dbd)"]).stream(),
+            exited: Promise.resolve(0),
+          };
+        },
+      };
+
+      const runtimes = await discoverExternalCodeAgents(
+        probe,
+        { PATH: "" },
+        undefined,
+        undefined,
+        stateDirectory,
+      );
+
+      expect(runtimes).toEqual([]);
+      expect(spawnCalls).toBe(0);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("does not restore a cached OpenCode runtime below 2.0.30 when the live probe rejects it", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
@@ -340,6 +381,35 @@ describe("Code Agent probe cache", () => {
         spawn: () => {
           throw new Error("version probe failed");
         },
+      };
+
+      await expect(
+        discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
+      ).resolves.toEqual([]);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("does not restore a supported cached Devin runtime when the live binary is below the floor", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
+    const devinPath = join(binDirectory, "devin");
+    await Bun.write(devinPath, "#!/bin/sh\necho devin\n");
+    try {
+      await writeInventoryCache(stateDirectory, {
+        devin: {
+          key: "stale-supported",
+          runtime: { provider: "devin", version: "3000.11.228", displayName: "Devin" },
+        },
+      });
+      const probe: ExternalCodeAgentProbe = {
+        which: (name) => (name === "devin" ? devinPath : undefined),
+        spawn: () => ({
+          stdout: new Blob(["devin 3000.11.100 (053434014dbd)"]).stream(),
+          exited: Promise.resolve(0),
+        }),
       };
 
       await expect(

@@ -65,6 +65,7 @@ test("the runtime reports login status after its inventory, then again on demand
     "unavailable",
     "unavailable",
     "unavailable",
+    "unavailable",
   ]);
 
   await runtime.refreshRuntimeAuth();

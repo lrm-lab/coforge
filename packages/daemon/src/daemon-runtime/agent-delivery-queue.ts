@@ -48,6 +48,7 @@ export const AGENT_DELIVERY_MODE: Readonly<Record<RuntimeProvider, AgentDelivery
   [RUNTIME_PROVIDER.ANTIGRAVITY]: "steer",
   [RUNTIME_PROVIDER.DSH]: "steer",
   [RUNTIME_PROVIDER.COMMAND_CODE]: "steer",
+  [RUNTIME_PROVIDER.DEVIN]: "steer",
 };
 
 /**

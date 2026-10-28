@@ -1,9 +1,16 @@
 import type { OwnedProcessTree } from "@lrm/coforge-anvil";
 import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
-import type { KiroAuthProcess } from "@lrm/coforge-anvil/kiro";
 
-/** Adapt the shared process owner to Kiro's byte stream without owning another launch path. */
-export function kiroAuthProcess(tree: OwnedProcessTree): KiroAuthProcess {
+/** The byte-stream view a native CLI's auth adapter reads (Kiro, Devin): stdout and stderr merged,
+ * written through stdin, disposed through the shared process owner, no second launch path. */
+export interface RuntimeAuthProcess {
+  readonly output: ReadableStream<Uint8Array>;
+  readonly exited: Promise<number>;
+  write(text: string): void;
+  dispose(): Promise<void>;
+}
+
+export function runtimeAuthProcess(tree: OwnedProcessTree): RuntimeAuthProcess {
   let cancelled = false;
   const output = new ReadableStream<Uint8Array>({
     start(controller) {

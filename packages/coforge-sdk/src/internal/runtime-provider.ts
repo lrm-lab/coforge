@@ -10,6 +10,7 @@ export const RUNTIME_PROVIDER = {
   ANTIGRAVITY: "antigravity",
   DSH: "dsh",
   COMMAND_CODE: "command-code",
+  DEVIN: "devin",
 } as const;
 export type RuntimeProvider = (typeof RUNTIME_PROVIDER)[keyof typeof RUNTIME_PROVIDER];
 /** Every RuntimeProvider value, for a zod `z.enum` or other exhaustive-tuple consumer. */
@@ -58,6 +59,7 @@ export const RUNTIME_PROVIDER_USES_EXTERNAL_CLI: Record<RuntimeProvider, boolean
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
   [RUNTIME_PROVIDER.DSH]: true,
   [RUNTIME_PROVIDER.COMMAND_CODE]: true,
+  [RUNTIME_PROVIDER.DEVIN]: true,
 };
 
 /**
@@ -79,6 +81,7 @@ export const RUNTIME_PROVIDER_SUPPORTS_FAST_MODE: Record<RuntimeProvider, boolea
   [RUNTIME_PROVIDER.ANTIGRAVITY]: false,
   [RUNTIME_PROVIDER.DSH]: false,
   [RUNTIME_PROVIDER.COMMAND_CODE]: false,
+  [RUNTIME_PROVIDER.DEVIN]: false,
 };
 
 /** Whether the shipped adapter implements `readUsage`. Cursor, OpenCode, Pi, and CoForge
@@ -97,4 +100,5 @@ export const RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN: Record<RuntimeProvider, boole
   [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
   [RUNTIME_PROVIDER.DSH]: false,
   [RUNTIME_PROVIDER.COMMAND_CODE]: false,
+  [RUNTIME_PROVIDER.DEVIN]: false,
 };

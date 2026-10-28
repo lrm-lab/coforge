@@ -23,7 +23,7 @@ function subject(options: {
   let now = 1_000;
   const collector = new RuntimeAuthStatusCollector({
     installedProviders: async () =>
-      options.installed ?? ["claude-code", "codex", "kiro", "command-code"],
+      options.installed ?? ["claude-code", "codex", "kiro", "command-code", "devin"],
     readStatus: (provider) => {
       reads.push(provider);
       return options.read?.(provider) ?? Promise.resolve({ provider, state: "logged_out" });
@@ -59,6 +59,7 @@ describe("collecting the runtimes' login status", () => {
           { provider: "codex", state: "logged_in", account: { planLabel: "pro" } },
           { provider: "kiro", state: "logged_out" },
           { provider: "command-code", state: "logged_out" },
+          { provider: "devin", state: "logged_out" },
         ],
       },
     ]);
@@ -73,6 +74,7 @@ describe("collecting the runtimes' login status", () => {
       { provider: "codex", state: "logged_out" },
       { provider: "kiro", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "command-code", state: "unavailable", unavailableReason: "not_installed" },
+      { provider: "devin", state: "unavailable", unavailableReason: "not_installed" },
     ]);
   });
 
@@ -90,6 +92,7 @@ describe("collecting the runtimes' login status", () => {
       { provider: "codex", state: "unknown" },
       { provider: "kiro", state: "unknown" },
       { provider: "command-code", state: "unknown" },
+      { provider: "devin", state: "unknown" },
     ]);
   });
 

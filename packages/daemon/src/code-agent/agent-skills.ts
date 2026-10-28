@@ -140,6 +140,17 @@ export async function listAgentSkills(options: {
       locals = [local(".commandcode/skills"), local(".agents/skills")];
       if (home) globals = [personal(".commandcode/skills"), personal(".agents/skills")];
       break;
+    case RUNTIME_PROVIDER.DEVIN:
+      // Devin CLI docs, "Skills": project `.devin/skills`, `.cognition/skills`, `.agents/skills`;
+      // user `~/.config/devin/skills`, `~/.config/cognition/skills`, `~/.agents/skills`.
+      locals = [local(".devin/skills"), local(".cognition/skills"), local(".agents/skills")];
+      if (home)
+        globals = [
+          native("XDG_CONFIG_HOME", ".config", "devin/skills"),
+          native("XDG_CONFIG_HOME", ".config", "cognition/skills"),
+          personal(".agents/skills"),
+        ];
+      break;
     case RUNTIME_PROVIDER.PI:
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];
       if (home)
