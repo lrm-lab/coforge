@@ -72,7 +72,7 @@ WantedBy=multi-user.target
 
 /** The origin pasted into `curl` must be this deployment's bare origin, with nothing a shell
  * could treat as another command. */
-function requireInstallOrigin(value: string): string {
+export function requireInstallOrigin(value: string): string {
   let url: URL;
   try {
     url = new URL(value);

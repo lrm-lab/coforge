@@ -1,5 +1,8 @@
 import { isValidReleaseFeedUrl } from "#src/server/install/install-script.server";
-import { ServerConnectionError } from "#src/server/workspaces/server-connection.server";
+import {
+  requireInstallOrigin,
+  ServerConnectionError,
+} from "#src/server/workspaces/server-connection.server";
 
 export type HostBootstrapInput = {
   origin: string;
@@ -13,7 +16,7 @@ export type HostBootstrapInput = {
 
 /** One script the Swarm manager runs. It carries the cluster token and does not print it. */
 export function hostBootstrapScript(input: HostBootstrapInput): string {
-  const origin = requireOrigin(input.origin);
+  const origin = requireInstallOrigin(input.origin);
   if (!isValidReleaseFeedUrl(input.releaseFeed)) {
     throw new ServerConnectionError(422, "invalid release feed");
   }
@@ -102,24 +105,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now coforge-host.service
 systemctl is-active coforge-host.service
 `;
-}
-
-function requireOrigin(value: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new ServerConnectionError(422, "invalid install origin");
-  }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.origin !== value ||
-    url.username !== "" ||
-    url.password !== ""
-  ) {
-    throw new ServerConnectionError(422, "invalid install origin");
-  }
-  return value;
 }
 
 function requireShellValue(value: string, minimum: number, message: string): string {
