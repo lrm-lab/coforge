@@ -23,10 +23,11 @@ import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { deliveryMentionsAgent } from "./mentions.server";
 import { channelMentionTargets, storeMessageBody } from "./message-references.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
+import { pendingMentionActionsForMessage } from "./pending-mention-actions.server";
 import {
-  pendingMentionActionsForMessage,
   recordPendingMentionActions,
-} from "./pending-mention-actions.server";
+  unboundMentionTargets,
+} from "./pending-mention-action-recording.server";
 import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
 import { agentMessageSender } from "./sender-display.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
@@ -176,14 +177,19 @@ export async function sendChannel(
             messageId: message.id,
           });
         // A mention of someone outside the channel reached nobody; the sender may still act on it.
-        await recordPendingMentionActions(tx, {
-          id: message.id,
-          workspaceId,
-          conversationId: channelId,
-          senderMemberId: member.id,
-          body: stored.body,
-          createdAt: message.createdAt,
-        });
+        // A binding that stored no mention — the member left before the lock — degrades the same.
+        await recordPendingMentionActions(
+          tx,
+          {
+            id: message.id,
+            workspaceId,
+            conversationId: channelId,
+            senderMemberId: member.id,
+            body: stored.body,
+            createdAt: message.createdAt,
+          },
+          unboundMentionTargets(input.mentions ?? [], stored.mentions),
+        );
         await Promise.all(
           attachmentRowIds.map((id, position) =>
             tx.attachment.update({

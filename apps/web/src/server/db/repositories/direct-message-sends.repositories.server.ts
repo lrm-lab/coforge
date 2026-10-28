@@ -17,7 +17,10 @@ import {
   storeMessageBody,
 } from "#src/server/conversations/message-references.server";
 import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
-import { recordPendingMentionActions } from "#src/server/conversations/pending-mention-actions.server";
+import {
+  recordPendingMentionActions,
+  unboundMentionTargets,
+} from "#src/server/conversations/pending-mention-action-recording.server";
 import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
@@ -351,7 +354,8 @@ export async function sendAgentMessage(
             400,
             `mention binding does not match a conversation member: @${mention.name}`,
           );
-        mentionedMemberIds.push(match.id);
+        // A member who already left keeps no follow — their binding degrades below.
+        if (!match.leftAt) mentionedMemberIds.push(match.id);
       }
     }
     // Channel member mentions (structured or plain) become <@kind:uuid> plus MessageMention;
@@ -442,16 +446,22 @@ export async function sendAgentMessage(
       });
     }
     // A channel mention of someone outside the channel reached nobody; the sending Agent may
-    // still act on it. A DM stores every `@handle` as text, so it records nothing.
+    // still act on it. A DM stores every `@handle` as text, so it records nothing. A binding that
+    // matched a member but stored no mention — the member left before the lock — degrades the
+    // same way: no token, no mention row, just the pending action.
     if (conversation.channelName) {
-      await recordPendingMentionActions(tx, {
-        id: created.id,
-        workspaceId: conversation.workspaceId,
-        conversationId,
-        senderMemberId: sender.id,
-        body: stored.body,
-        createdAt: created.createdAt,
-      });
+      await recordPendingMentionActions(
+        tx,
+        {
+          id: created.id,
+          workspaceId: conversation.workspaceId,
+          conversationId,
+          senderMemberId: sender.id,
+          body: stored.body,
+          createdAt: created.createdAt,
+        },
+        unboundMentionTargets(mentions ?? [], stored.mentions),
+      );
       if (root)
         await recordThreadCreatedByReply(tx, {
           workspaceId: conversation.workspaceId,
