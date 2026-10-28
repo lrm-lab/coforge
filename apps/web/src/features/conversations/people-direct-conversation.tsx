@@ -93,10 +93,15 @@ export function PeopleDirectConversation({
   const self = useIsSelfConversation(conversation);
   const { mentionables } = conversation;
   const plainMentions = useMemo(() => plainMentionsByHandle(mentionables), [mentionables]);
+  // Nobody else is in a conversation with yourself, so its messages carry no read ticks.
+  const shown = useMemo(
+    () => (self ? { ...conversation, readTicks: undefined } : conversation),
+    [self, conversation],
+  );
   return (
     <DirectThreadedConversation
       {...props}
-      conversation={conversation}
+      conversation={shown}
       mentionCompletion={false}
       name={peer.displayName}
       plainMentions={plainMentions}

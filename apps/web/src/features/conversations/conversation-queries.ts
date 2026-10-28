@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   queryOptions,
   useQueryClient,
@@ -50,7 +50,7 @@ import {
   updateLoadedReply,
 } from "./thread-cache";
 import { mergeWindowThreads, newestReflectedSequence } from "./thread-summary-model";
-import type { AgentReadEvent } from "./conversation-realtime";
+import type { ConversationReadEvent } from "./conversation-realtime";
 
 export const directConversationQuery = (conversationId: string) =>
   conversationPages(["conversation", "direct", conversationId], (page) =>
@@ -152,7 +152,6 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   loadUpdates,
   onRealtime,
   onArrived,
-  onAgentReadChanged,
 }: {
   query: ReturnType<typeof conversationPages<M, T>>["query"];
   /** The newest page on its own: how "back to latest" recovers a tail the window evicted. */
@@ -162,7 +161,6 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   onRealtime?: () => Promise<unknown>;
   /** The messages `mergeUpdates` folds in, as they arrive. */
   onArrived?: (conversationId: string, messages: readonly M[]) => void;
-  onAgentReadChanged?: (event: AgentReadEvent) => void;
 }) {
   const queryClient = useQueryClient();
   /** The pane updates this synchronously from its real scroll position. Query meta lets a focus or
@@ -187,16 +185,41 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   const latestPage = data.pages.at(-1)!;
   const conversationId = latestPage.conversationId;
 
+  // Other members' reads heard live since the page was read. Kept apart from the cached pages and
+  // merged by max, so a refetch that raced a read event cannot take a tick back.
+  const [liveOthersRead, setLiveOthersRead] = useState<{
+    conversationId: string;
+    sequence: number;
+  }>();
+  const senderMemberId = latestPage.senderMemberId;
+  const onRead = useCallback(
+    (event: ConversationReadEvent) => {
+      if (event.memberId === senderMemberId) return;
+      setLiveOthersRead((current) => {
+        const heard = current?.conversationId === event.conversationId ? current.sequence : 0;
+        return event.readThroughSequence > heard
+          ? { conversationId: event.conversationId, sequence: event.readThroughSequence }
+          : current;
+      });
+    },
+    [senderMemberId],
+  );
+  const othersReadThroughSequence = Math.max(
+    latestPage.othersReadThroughSequence ?? 0,
+    liveOthersRead?.conversationId === conversationId ? liveOthersRead.sequence : 0,
+  );
+
   const conversation = useMemo(
     () => ({
       ...latestPage,
+      othersReadThroughSequence,
       hasOlder: hasPreviousPage,
       hasNewer: latestPage.hasNewer ?? false,
       messages: data.pages.reduce<M[]>((all, page) => mergeMessages(all, page.messages), []),
       // Each page holds the threads, reads and follows of its own roots: the window's are all of them.
       ...mergeWindowThreads(data.pages),
     }),
-    [data, hasPreviousPage, latestPage],
+    [data, hasPreviousPage, latestPage, othersReadThroughSequence],
   );
 
   const setPages = (update: (pages: Pages<T>) => Pages<T>) =>
@@ -363,7 +386,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     () => void queryClient.invalidateQueries({ queryKey: query.queryKey }).catch(() => {}),
     (event) => reactionSync.apply(event.messageId, event),
     () => void reactionSync.repair(),
-    onAgentReadChanged,
+    onRead,
   );
 
   /** Replace the loaded history with a window around one message. */

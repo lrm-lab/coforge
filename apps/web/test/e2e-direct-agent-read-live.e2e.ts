@@ -9,7 +9,8 @@ import { publishConversationReadChanged } from "#src/server/conversations/conver
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
 /**
- * An Agent reading the viewer's DM message shows "Read" under it without a reload (task #230).
+ * An Agent reading the viewer's DM message turns its one tick into two without a reload (task
+ * #230; Telegram's ticks since #248).
  * The suite sends a message from the page, then advances the Agent's read position and publishes
  * `conversation.read.v1` exactly as the server does when the Agent reads. Realtime needs the
  * same-origin proxy (`scripts/e2e/same-origin-proxy.ts`): run with

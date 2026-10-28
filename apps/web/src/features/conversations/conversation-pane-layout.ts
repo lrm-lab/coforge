@@ -16,45 +16,16 @@ export function outboxContinuesRun(
   );
 }
 
-export function agentReadMessageId(input: {
-  root: boolean;
-  hasNewer?: boolean;
-  messages: readonly {
-    id: string;
-    sequence: number;
-    senderKind: string;
-    senderUserId?: string;
-    weeklyReportHidden?: boolean;
-  }[];
-  agentReadThroughSequence?: number;
-  viewerId?: string;
-}) {
-  const message = input.messages.filter((item) => item.weeklyReportHidden !== true).at(-1);
-  return !input.root &&
-    !input.hasNewer &&
-    input.agentReadThroughSequence !== undefined &&
-    input.viewerId !== undefined &&
-    message?.senderKind === "user" &&
-    message.senderUserId === input.viewerId &&
-    message.sequence <= input.agentReadThroughSequence
-    ? message.id
-    : undefined;
-}
-
-export function agentReadMessageIdForPane(input: {
-  root: boolean;
-  conversation: {
-    hasNewer?: boolean;
-    agentReadThroughSequence?: number;
-    viewerId?: string;
-  };
-  messages: Parameters<typeof agentReadMessageId>[0]["messages"];
-}) {
-  return agentReadMessageId({
-    root: input.root,
-    hasNewer: input.conversation.hasNewer,
-    messages: input.messages,
-    agentReadThroughSequence: input.conversation.agentReadThroughSequence,
-    viewerId: input.conversation.viewerId,
-  });
+/**
+ * The ticks an own message carries (Telegram's): one once it is sent, two once another member — a
+ * person or an Agent — has read through it. None where there is no read position to go by: a
+ * thread pane, whose replies keep their own read cursors.
+ */
+export function ownMessageReadState(
+  own: boolean,
+  sequence: number,
+  othersReadThroughSequence: number | undefined,
+): "sent" | "read" | undefined {
+  if (!own || othersReadThroughSequence === undefined) return undefined;
+  return sequence <= othersReadThroughSequence ? "read" : "sent";
 }

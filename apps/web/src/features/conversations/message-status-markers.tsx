@@ -12,11 +12,21 @@ export function SavedMessageMarker() {
   );
 }
 
-export function AgentReadReceipt() {
+/**
+ * Telegram's ticks on an own message: one once it is sent, two once another member has read it.
+ * Both in the time's colour, told apart by count alone; two overlapping checks, since the icon set
+ * has no double check.
+ */
+export function ReadTicks({ state }: { state: "sent" | "read" }) {
   return (
-    <div className="message-text flex items-center justify-end gap-1 font-mono text-xs leading-4 text-tertiary">
-      <Check aria-hidden="true" className="size-3" />
-      {m.conversation_read()}
-    </div>
+    <span
+      role="img"
+      aria-label={state === "read" ? m.conversation_read() : m.conversation_sent()}
+      data-read-state={state}
+      className="flex items-center text-tertiary"
+    >
+      <Check aria-hidden="true" className="size-3.5" />
+      {state === "read" && <Check aria-hidden="true" className="-ml-2 size-3.5" />}
+    </span>
   );
 }

@@ -38,7 +38,7 @@ import { makeReferenceBodyFormatter } from "./mention-text";
 import type { ChipMention } from "./message-markdown";
 import type { ChannelSuggestion } from "./reference-completion";
 import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
-import { agentReadMessageIdForPane, outboxContinuesRun } from "./conversation-pane-layout";
+import { outboxContinuesRun, ownMessageReadState } from "./conversation-pane-layout";
 import { useMessageExpansion } from "./use-message-expansion";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 import { optimisticSavedEntry } from "./saved-messages-collection";
@@ -311,11 +311,7 @@ export function ConversationPane({
     () => conversation.messages.filter((message) => message.weeklyReportHidden !== true),
     [conversation.messages],
   );
-  const agentReadId = agentReadMessageIdForPane({
-    root: Boolean(root),
-    conversation,
-    messages: visibleMessages,
-  });
+  const readThrough = root ? undefined : conversation.othersReadThroughSequence;
   const streamItems = useMemo(
     () =>
       groupSystemMessages(
@@ -900,7 +896,7 @@ export function ConversationPane({
                       onOpenTask={openTaskReference}
                       channelNames={channelNames}
                       onQuoteSelection={canCompose ? quoteSelection : undefined}
-                      agentRead={message.id === agentReadId}
+                      readState={ownMessageReadState(own, message.sequence, readThrough)}
                     />
                   );
                 })}

@@ -1,4 +1,3 @@
-import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -147,41 +146,13 @@ export function useDirectConversation(conversationId: string) {
   const markRead = useServerFn(markDirectThreadRead);
   const loadOwnMessages = useServerFn(loadOwnConversationMessages);
   const endReplyIntents = useEndReplyIntentsOnArrival();
-  const [agentReadPositions, setAgentReadPositions] = useState<Record<string, number>>({});
-  const onAgentReadChanged = useCallback(
-    (event: { conversationId: string; readThroughSequence: number }) =>
-      setAgentReadPositions((current) => ({
-        ...current,
-        [event.conversationId]: Math.max(
-          current[event.conversationId] ?? 0,
-          event.readThroughSequence,
-        ),
-      })),
-    [],
-  );
   const page = useConversationQuery({
     onArrived: endReplyIntents,
     ...directConversationQuery(conversationId),
     loadUpdates: directConversationUpdates(conversationId),
     // No Task refresh here either — see the channel branch above.
-    onAgentReadChanged,
   });
-  // The loaded conversation with the Agent's live read position: what every view of this DM
-  // reads, so none of them shows the position as of the last load.
-  const loadedConversation = page.conversation;
-  const conversation = useMemo(
-    () =>
-      loadedConversation.kind === "agent"
-        ? {
-            ...loadedConversation,
-            agentReadThroughSequence: Math.max(
-              agentReadPositions[conversationId] ?? 0,
-              loadedConversation.agentReadThroughSequence ?? 0,
-            ),
-          }
-        : loadedConversation,
-    [agentReadPositions, conversationId, loadedConversation],
-  );
+  const { conversation } = page;
   const viewerReactor = useViewerReactor(conversation.viewerId);
   const taskView = useConversationTasks(conversation.conversationId);
 

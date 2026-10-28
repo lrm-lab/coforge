@@ -23,8 +23,9 @@ export type DirectConversationView = {
    * first message past it is the first unread; the initial view positions there and draws the
    * divider. Absent for a non-member, a fully-read fresh seed, or an unvisited thread. */
   readThroughSequence?: number;
-  /** The Agent's actual read position, present only for a User-Agent DM. */
-  agentReadThroughSequence?: number;
+  /** How far the furthest-reading other member has read the top-level messages: the viewer's
+   * own messages up to it show two ticks, later ones one. */
+  othersReadThroughSequence?: number;
   threadReadThrough?: Record<string, number>;
   /** Each thread of the loaded window as a summary, by its root's id: the messages are top-level
    * only, and a thread's replies are read when its pane opens (`thread-pane.tsx`). */

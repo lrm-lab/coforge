@@ -7,25 +7,29 @@ import { onNetworkRead } from "#src/features/conversations/conversation-queries"
 import {
   decodeChannelCreatedEvent,
   decodeChannelUpdatedEvent,
-  decodeAgentReadEvent,
+  decodeConversationReadEvent,
   decodeMessageAvailableEvent,
   decodeNotificationAvailableEvent,
   decodeViewerEvent,
 } from "#src/features/conversations/conversation-realtime";
 
 describe("conversation realtime", () => {
-  test("decodes the versioned Agent read position event", () => {
+  test("decodes the versioned member read position event", () => {
     const event = {
-      type: "conversation.agent_read.v1" as const,
-      workspaceId: "workspace-a",
+      type: "conversation.read.v1" as const,
       conversationId: "dm-a",
-      agentId: "agent-a",
+      memberId: "member-a",
       readThroughSequence: 12,
     };
-    expect(decodeAgentReadEvent(event)).toEqual(event);
-    expect(decodeAgentReadEvent(new TextEncoder().encode(JSON.stringify(event)))).toEqual(event);
-    expect(decodeAgentReadEvent({ ...event, readThroughSequence: -1 })).toBeUndefined();
-    expect(decodeAgentReadEvent({ ...event, agentId: "" })).toBeUndefined();
+    expect(decodeConversationReadEvent(event)).toEqual(event);
+    expect(decodeConversationReadEvent(new TextEncoder().encode(JSON.stringify(event)))).toEqual(
+      event,
+    );
+    expect(decodeConversationReadEvent({ ...event, readThroughSequence: -1 })).toBeUndefined();
+    expect(decodeConversationReadEvent({ ...event, memberId: "" })).toBeUndefined();
+    expect(
+      decodeConversationReadEvent({ ...event, type: "conversation.agent_read.v1" }),
+    ).toBeUndefined();
   });
 
   test("decodes only the versioned channel-updated contract", () => {

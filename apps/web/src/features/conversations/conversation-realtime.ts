@@ -103,18 +103,19 @@ export function decodeMessageAvailableEvent(input: unknown): MessageAvailableEve
   };
 }
 
-const agentReadEvent = z.object({
-  type: z.literal("conversation.agent_read.v1"),
-  workspaceId: z.string().min(1),
+/** A member's top-level read position moved forward in this conversation (a person or an Agent),
+ * so the viewer's own messages up to it read as seen. */
+const conversationReadEvent = z.object({
+  type: z.literal("conversation.read.v1"),
   conversationId: z.string().min(1),
-  agentId: z.string().min(1),
+  memberId: z.string().min(1),
   readThroughSequence: z.number().int().nonnegative(),
 });
 
-export type AgentReadEvent = z.infer<typeof agentReadEvent>;
+export type ConversationReadEvent = z.infer<typeof conversationReadEvent>;
 
-export function decodeAgentReadEvent(value: unknown): AgentReadEvent | undefined {
-  return decodeJsonPublication(agentReadEvent, value);
+export function decodeConversationReadEvent(value: unknown): ConversationReadEvent | undefined {
+  return decodeJsonPublication(conversationReadEvent, value);
 }
 
 /**

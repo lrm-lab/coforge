@@ -23,6 +23,9 @@ export type ConversationPage<M extends PageMessage> = WindowThreadsPage & {
   conversationId: string;
   /** The viewer's member row in the conversation; empty for someone who never joined or left. */
   senderMemberId?: string;
+  /** How far the furthest-reading other member (a person or an Agent) has read the top-level
+   * messages: the viewer's own messages up to it show as read. */
+  othersReadThroughSequence?: number;
   hasOlder: boolean;
   hasNewer?: boolean;
   /** Top-level messages only: a thread's replies are read when its pane opens
