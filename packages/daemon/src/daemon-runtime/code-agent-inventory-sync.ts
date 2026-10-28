@@ -7,6 +7,7 @@ import {
   type RuntimeMetadata,
 } from "@lrm/coforge-sdk/internal";
 import { readHostCommandCodeEfforts } from "#src/code-agent/command-code/effort-read";
+import { readHostDevinEfforts, type DevinCatalogEfforts } from "#src/code-agent/devin/effort-read";
 import { discoverPiModels } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -71,17 +72,29 @@ export class CodeAgentInventorySync {
   /** Serializes Command Code effort reads so two forms do not spawn two processes at once. */
   #effortChain: Promise<void> = Promise.resolve();
   #runtimeVersions = new Map<RuntimeMetadata["provider"], string>();
+  /** Devin's `thought_level` sweep; production resolves this Computer's `devin`. */
+  readonly #devinEfforts: (
+    stateDirectory: string | undefined,
+    version: string | undefined,
+    modelIds: readonly string[],
+  ) => Promise<DevinCatalogEfforts>;
 
   constructor(
     discovery: CodeAgentDiscovery,
     owner: { workspaceId: string; computerId: string },
     isLive: (transport: DaemonConnectionClient) => boolean,
     runtimeAuth?: RuntimeAuthReporter,
+    devinEfforts?: (
+      stateDirectory: string | undefined,
+      version: string | undefined,
+      modelIds: readonly string[],
+    ) => Promise<DevinCatalogEfforts>,
   ) {
     this.#runtimeAuth = runtimeAuth;
     this.#discovery = discovery;
     this.#owner = owner;
     this.#isLive = isLive;
+    this.#devinEfforts = devinEfforts ?? readHostDevinEfforts;
   }
 
   /**
@@ -123,8 +136,12 @@ export class CodeAgentInventorySync {
 
   /** Starts a background live catalog discovery when `report`'s cached catalogs were stale. */
   refreshStaleCatalogs(report: CodeAgentRuntimesReport, transport: DaemonConnectionClient): void {
+    // The same chain `refreshModels` uses: one CLI-spawning report at a time, so a queued
+    // refresh cannot be overwritten by an older report's later phases on the same transport.
     if (report.needsCatalogRefresh && this.#isLive(transport))
-      void this.#reportCatalogs(report.runtimes, transport).catch(() => {});
+      this.#modelRefreshChain = this.#modelRefreshChain
+        .catch(() => {})
+        .then(() => this.#reportCatalogs(report.runtimes, transport));
   }
 
   /** Answers a server model refresh request after every refresh that arrived before it. */
@@ -253,6 +270,9 @@ export class CodeAgentInventorySync {
       const catalogs = await this.#discovery.catalogs(runtimes, { force: true });
       if (!this.#isLive(transport)) return;
       await this.#sendInventory(transport, requestId, runtimes, catalogs);
+      const resolved = await this.#resolveDevinEfforts(runtimes, catalogs, scope);
+      if (resolved && this.#isLive(transport))
+        await this.#sendInventory(transport, crypto.randomUUID(), runtimes, resolved);
       this.#runtimeAuth?.inventoryObserved(runtimes);
       logger.info("Code Agent catalog refresh completed", {
         event: "code_agent_catalog:refresh_completed",
@@ -261,7 +281,7 @@ export class CodeAgentInventorySync {
         elapsed_ms: Math.round(performance.now() - startedAt),
         outcome: "ok",
       });
-      await reply({ accepted: true, status: "refreshed", catalogs });
+      await reply({ accepted: true, status: "refreshed", catalogs: resolved ?? catalogs });
     } catch (error) {
       logger.warning("Code Agent catalog refresh failed", {
         event: "code_agent_catalog:refresh_failed",
@@ -300,6 +320,10 @@ export class CodeAgentInventorySync {
       const catalogs = await this.#discovery.catalogs(runtimes);
       if (!this.#isLive(transport)) return;
       await this.#sendInventory(transport, requestId, runtimes, catalogs);
+      if (!this.#isLive(transport)) return;
+      const resolved = await this.#resolveDevinEfforts(runtimes, catalogs, scope);
+      if (resolved && this.#isLive(transport))
+        await this.#sendInventory(transport, crypto.randomUUID(), runtimes, resolved);
       logger.info("Code Agent catalog discovery completed", {
         event: "code_agent_catalog:summary_completed",
         ...scope,
@@ -324,6 +348,57 @@ export class CodeAgentInventorySync {
       workspace_id: this.#owner.workspaceId,
       computer_id: this.#owner.computerId,
     };
+  }
+
+  /** The Devin effort sweep after a report: a throw is one failed read, not a failed report. */
+  async #resolveDevinEfforts(
+    runtimes: RuntimeMetadata[],
+    catalogs: CodeAgentModelCatalog[],
+    scope: Record<string, string>,
+  ): Promise<CodeAgentModelCatalog[] | undefined> {
+    return this.#devinEffortCatalogs(runtimes, catalogs).catch((error: unknown) => {
+      logger.warning("Devin effort sweep failed", {
+        event: "code_agent_catalog:devin_efforts_failed",
+        ...scope,
+        error_code: diagnosticErrorCode(error),
+        outcome: "failed",
+      });
+      return undefined;
+    });
+  }
+
+  /**
+   * Reads the Devin models' `thought_level` choices after the model list already reported and
+   * returns the catalogs to publish again, or undefined when the sweep adds nothing or leaves a
+   * model unread: an unread model is never reported as effort-less — it keeps its
+   * cache-published value for this report.
+   */
+  async #devinEffortCatalogs(
+    runtimes: RuntimeMetadata[],
+    catalogs: CodeAgentModelCatalog[],
+  ): Promise<CodeAgentModelCatalog[] | undefined> {
+    const index = catalogs.findIndex((catalog) => catalog.provider === RUNTIME_PROVIDER.DEVIN);
+    const directory = this.#discovery.stateDirectory;
+    if (index < 0 || !directory) return undefined;
+    const catalog = catalogs[index];
+    if (!catalog) return undefined;
+    const read = await this.#devinEfforts(
+      directory,
+      runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)?.version,
+      catalog.models.map((model) => model.id),
+    );
+    if (!read.complete) return undefined;
+    let changed = false;
+    const models = catalog.models.map((model) => {
+      const efforts = read.efforts.get(model.id);
+      if (!efforts) return model;
+      const current = model.reasoningEfforts;
+      if (efforts.length !== current.length || efforts.some((value, i) => value !== current[i]))
+        changed = true;
+      return { ...model, reasoningEfforts: [...efforts] };
+    });
+    if (!changed) return undefined;
+    return catalogs.map((candidate, i) => (i === index ? { ...candidate, models } : candidate));
   }
 
   // Returns the transport's own promise (not an `async` wrapper) so callers await exactly it.

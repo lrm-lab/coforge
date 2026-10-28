@@ -1,14 +1,15 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
 import {
   readDevinModelEfforts,
   type DevinEffortRead,
   type DevinRuntimeHost,
 } from "@lrm/coforge-anvil/devin";
+import { withDeadline } from "@lrm/coforge-anvil";
 import {
-  cachedEfforts,
+  cachedEffortsForModels,
   dedupeEffortRead,
   effortCachePath,
   rememberEfforts,
@@ -17,6 +18,8 @@ import { resolveHostCodeAgentExecutable } from "#src/code-agent/runtime-executab
 import { devinRuntimeHost } from "./host";
 
 const CACHE_FILE_NAME = "devin-effort-cache.json";
+/** One `devin acp` sweep's overall budget; per-request bounds inside it stay `timeoutMs`. */
+const DEVIN_EFFORT_SWEEP_TIMEOUT_MS = 120_000;
 
 function cachePath(stateDirectory: string): string {
   return effortCachePath(stateDirectory, CACHE_FILE_NAME);
@@ -24,10 +27,46 @@ function cachePath(stateDirectory: string): string {
 
 export type DevinCatalogEfforts = {
   /** False when at least one model's effort list could not be read or cached this round; the
-   * caller must not publish those models as effort-less. */
+   * caller may publish the model list but must not treat those models as effort-less. */
   complete: boolean;
   efforts: ReadonlyMap<string, readonly string[]>;
 };
+
+/** Cache-only lookup for the catalog path: publishing a model list must not wait on a process,
+ * so discovery fills efforts from the cache alone and the effort sweep reports again later. */
+export async function cachedDevinEfforts(
+  stateDirectory: string | undefined,
+  version: string | undefined,
+  modelIds: readonly string[],
+  now = Date.now(),
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  if (!stateDirectory || !version?.trim()) return new Map();
+  return cachedEffortsForModels(cachePath(stateDirectory), version.trim(), modelIds, now);
+}
+
+/** A catalog's models with effort lists filled from the cache alone; `complete` is false while
+ * a model has no fresh entry — unread, never proof that the model has no effort control. */
+export async function devinCatalogWithCachedEfforts(
+  catalog: CodeAgentModelCatalog,
+  stateDirectory: string | undefined,
+  version: string | undefined,
+): Promise<{ catalog: CodeAgentModelCatalog; complete: boolean }> {
+  const efforts = await cachedDevinEfforts(
+    stateDirectory,
+    version,
+    catalog.models.map((model) => model.id),
+  );
+  return {
+    complete: catalog.models.every((model) => efforts.has(model.id)),
+    catalog: {
+      ...catalog,
+      models: catalog.models.map((model) => {
+        const cached = efforts.get(model.id);
+        return cached ? { ...model, reasoningEfforts: [...cached] } : model;
+      }),
+    },
+  };
+}
 
 type DevinEffortSweep = (
   modelIds: readonly string[],
@@ -51,15 +90,14 @@ export async function readDevinEffortsForCatalog(input: {
   const efforts = new Map<string, readonly string[]>();
   const path = input.stateDirectory ? cachePath(input.stateDirectory) : undefined;
   const missing: string[] = [];
-  for (const modelId of input.modelIds) {
-    if (!version || !path) {
-      missing.push(modelId);
-      continue;
+  if (version && path) {
+    const cached = await cachedEffortsForModels(path, version, input.modelIds, now());
+    for (const modelId of input.modelIds) {
+      const entry = cached.get(modelId);
+      if (entry === undefined) missing.push(modelId);
+      else efforts.set(modelId, entry);
     }
-    const cached = await cachedEfforts(path, version, modelId, now());
-    if (cached === undefined) missing.push(modelId);
-    else efforts.set(modelId, cached);
-  }
+  } else missing.push(...input.modelIds);
   const key =
     version && input.stateDirectory
       ? `${input.stateDirectory}\0${version}\0devin-sweep\0${missing.join("\0")}`
@@ -93,7 +131,13 @@ async function sweepLive(
   // has to be removed even when the CLI fails. Bun's file API does not own that temporary directory.
   const cwd = await mkdtemp(join(tmpdir(), "coforge-devin-effort-"));
   try {
-    return await readDevinModelEfforts(command, cwd, environment, host, modelIds);
+    // A whole sweep of one CLI session gets one overall budget: a hung model cannot hold the
+    // inventory report or a queued refresh for longer than this.
+    return await withDeadline(
+      readDevinModelEfforts(command, cwd, environment, host, modelIds),
+      DEVIN_EFFORT_SWEEP_TIMEOUT_MS,
+      () => new Error("Devin effort sweep timed out"),
+    );
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

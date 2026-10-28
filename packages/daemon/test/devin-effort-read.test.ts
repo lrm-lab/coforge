@@ -61,3 +61,214 @@ test("Devin efforts cache by CLI version and model; a failed model stays unread"
     await rm(stateDirectory, { recursive: true, force: true });
   }
 });
+
+test("the Devin catalog publishes fast and reports again once efforts resolve", async () => {
+  const stateDirectory = await directory();
+  const catalog = {
+    provider: "devin" as const,
+    models: [
+      {
+        id: "swe-2-high",
+        displayName: "SWE-2",
+        description: "",
+        modelProvider: "devin",
+        reasoningEfforts: [] as string[],
+        defaultReasoning: "",
+        recommended: false,
+      },
+    ],
+  };
+  const updates: { catalogs?: { models?: { id: string; reasoningEfforts: string[] }[] }[] }[] = [];
+  const replies: { catalogs?: { models?: { id: string; reasoningEfforts: string[] }[] }[] }[] = [];
+  const transport = {
+    updateCodeAgents: async (report: (typeof updates)[number]) => {
+      updates.push(report);
+    },
+    sendProviderModelRefreshResult: async (reply: (typeof replies)[number]) => {
+      replies.push(reply);
+    },
+  };
+  const { CodeAgentInventorySync } = await import("#src/daemon-runtime/code-agent-inventory-sync");
+  const sync = new CodeAgentInventorySync(
+    {
+      runtimes: async () => [{ provider: "devin", version: "3000.11.228", displayName: "Devin" }],
+      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
+      catalogs: async () => [catalog],
+      stateDirectory,
+    },
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    () => true,
+    undefined,
+    async () => ({
+      complete: true,
+      efforts: new Map([["swe-2-high", ["medium", "high", "max"]]]),
+    }),
+  );
+  try {
+    await sync.refreshModels(
+      {
+        protocolMajor: 1,
+        requestId: "refresh-1",
+        workspaceId: "workspace-a",
+        computerId: "computer-a",
+      },
+      transport as never,
+    );
+    expect(updates).toHaveLength(2);
+    expect(updates.at(0)?.catalogs?.[0]?.models?.[0]?.reasoningEfforts).toEqual([]);
+    expect(updates.at(1)?.catalogs?.[0]?.models?.[0]?.reasoningEfforts).toEqual([
+      "medium",
+      "high",
+      "max",
+    ]);
+    expect(replies.at(0)?.catalogs?.[0]?.models?.[0]?.reasoningEfforts).toEqual([
+      "medium",
+      "high",
+      "max",
+    ]);
+  } finally {
+    await rm(stateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("an unresolved Devin effort read does not republish", async () => {
+  const stateDirectory = await directory();
+  const updates: unknown[] = [];
+  const transport = {
+    updateCodeAgents: async (report: unknown) => {
+      updates.push(report);
+    },
+    sendProviderModelRefreshResult: async () => {},
+  };
+  const { CodeAgentInventorySync } = await import("#src/daemon-runtime/code-agent-inventory-sync");
+  const sync = new CodeAgentInventorySync(
+    {
+      runtimes: async () => [{ provider: "devin", version: "3000.11.228", displayName: "Devin" }],
+      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
+      catalogs: async () => [
+        {
+          provider: "devin",
+          models: [
+            {
+              id: "swe-2-high",
+              displayName: "SWE-2",
+              description: "",
+              modelProvider: "devin",
+              reasoningEfforts: [],
+              defaultReasoning: "",
+              recommended: false,
+            },
+          ],
+        },
+      ],
+      stateDirectory,
+    },
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    () => true,
+    undefined,
+    async () => ({ complete: false, efforts: new Map() }),
+  );
+  try {
+    await sync.refreshModels(
+      {
+        protocolMajor: 1,
+        requestId: "refresh-2",
+        workspaceId: "workspace-a",
+        computerId: "computer-a",
+      },
+      transport as never,
+    );
+    expect(updates).toHaveLength(1);
+  } finally {
+    await rm(stateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("a sweep that changes nothing does not republish", async () => {
+  const stateDirectory = await directory();
+  const updates: unknown[] = [];
+  const transport = {
+    updateCodeAgents: async (report: unknown) => {
+      updates.push(report);
+    },
+    sendProviderModelRefreshResult: async () => {},
+  };
+  const { CodeAgentInventorySync } = await import("#src/daemon-runtime/code-agent-inventory-sync");
+  const sync = new CodeAgentInventorySync(
+    {
+      runtimes: async () => [{ provider: "devin", version: "3000.11.228", displayName: "Devin" }],
+      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
+      catalogs: async () => [
+        {
+          provider: "devin",
+          models: [
+            {
+              id: "swe-2-high",
+              displayName: "SWE-2",
+              description: "",
+              modelProvider: "devin",
+              reasoningEfforts: ["medium", "high", "max"],
+              defaultReasoning: "",
+              recommended: false,
+            },
+          ],
+        },
+      ],
+      stateDirectory,
+    },
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    () => true,
+    undefined,
+    async () => ({
+      complete: true,
+      efforts: new Map([["swe-2-high", ["medium", "high", "max"]]]),
+    }),
+  );
+  try {
+    await sync.refreshModels(
+      {
+        protocolMajor: 1,
+        requestId: "refresh-3",
+        workspaceId: "workspace-a",
+        computerId: "computer-a",
+      },
+      transport as never,
+    );
+    expect(updates).toHaveLength(1);
+  } finally {
+    await rm(stateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("cachedDevinEfforts answers only fresh same-version entries", async () => {
+  const stateDirectory = await directory();
+  const { cachedDevinEfforts, readDevinEffortsForCatalog } =
+    await import("#src/code-agent/devin/effort-read");
+  let now = 10_000;
+  const live = async (modelIds: readonly string[]) =>
+    new Map(modelIds.map((modelId) => [modelId, ready(["high"])]));
+  try {
+    await readDevinEffortsForCatalog({
+      modelIds: ["swe-2-high"],
+      stateDirectory,
+      version: "3000.11.228",
+      now: () => now,
+      live,
+    });
+    expect(await cachedDevinEfforts(stateDirectory, "3000.11.228", ["swe-2-high"], now)).toEqual(
+      new Map([["swe-2-high", ["high"]]]),
+    );
+    expect(await cachedDevinEfforts(stateDirectory, "3000.12.0", ["swe-2-high"], now)).toEqual(
+      new Map(),
+    );
+    now += CATALOG_CACHE_TTL_MS + 1;
+    expect(await cachedDevinEfforts(stateDirectory, "3000.11.228", ["swe-2-high"], now)).toEqual(
+      new Map(),
+    );
+    expect(await cachedDevinEfforts(undefined, "3000.11.228", ["swe-2-high"], now)).toEqual(
+      new Map(),
+    );
+  } finally {
+    await rm(stateDirectory, { recursive: true, force: true });
+  }
+});

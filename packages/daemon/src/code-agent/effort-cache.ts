@@ -57,6 +57,24 @@ export async function cachedEfforts(
   return entry.efforts;
 }
 
+/** One file read for many models: the cached effort list of each model that has a fresh entry.
+ * Missing, stale or unversioned answers are absent, never empty. */
+export async function cachedEffortsForModels(
+  path: string,
+  version: string,
+  modelIds: readonly string[],
+  now: number,
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  const efforts = new Map<string, readonly string[]>();
+  const file = await readCacheFile(path);
+  if (!file || file.version !== version) return efforts;
+  for (const modelId of modelIds) {
+    const entry = file.entries.find((candidate) => candidate.modelId === modelId);
+    if (entry && now - entry.probedAt <= CATALOG_CACHE_TTL_MS) efforts.set(modelId, entry.efforts);
+  }
+  return efforts;
+}
+
 /** Best-effort write; a cache that cannot be persisted only costs the next restart a re-probe.
  * Writes for one file serialize so concurrent models cannot lose each other's entries. */
 export function rememberEfforts(

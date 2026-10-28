@@ -13,8 +13,8 @@ import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
 import { COFORGE_AGENT_RUNTIME_METADATA } from "#src/code-agent/pi/metadata";
 import { discoverCommandCodeCatalog } from "@lrm/coforge-anvil/command-code";
-import { discoverDevinCatalog, readDevinModelEfforts } from "@lrm/coforge-anvil/devin";
-import { readDevinEffortsForCatalog } from "#src/code-agent/devin/effort-read";
+import { discoverDevinCatalog } from "@lrm/coforge-anvil/devin";
+import { devinCatalogWithCachedEfforts } from "#src/code-agent/devin/effort-read";
 import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
 import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
 import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
@@ -216,6 +216,18 @@ export async function loadCachedCodeAgentCatalogs(
     if (!fresh || Date.now() - (cached?.catalogProbedAt ?? 0) > CATALOG_CACHE_TTL_MS)
       needsRefresh = true;
   }
+  // The replayed Devin catalog carries the efforts its sweep knew at publish time; overlay the
+  // effort cache so a restart does not hide them, and refresh while a model still lacks a read.
+  const devinIndex = catalogs.findIndex((catalog) => catalog.provider === RUNTIME_PROVIDER.DEVIN);
+  if (devinIndex >= 0 && options.cacheDirectory) {
+    const filled = await devinCatalogWithCachedEfforts(
+      catalogs[devinIndex]!,
+      options.cacheDirectory,
+      runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)?.version,
+    );
+    catalogs[devinIndex] = filled.catalog;
+    if (!filled.complete) needsRefresh = true;
+  }
   if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DSH)) {
     const dshOptions = await dshCatalogOptions(options);
     const cached = dshOptions ? await dshCatalogs.cached(dshOptions) : undefined;
@@ -408,41 +420,16 @@ export async function discoverCodeAgentCatalogs(
         discoverDevinCatalog(commands.devin ?? [executable], cwd, environment, devinRuntimeHost)
           .catch(() => undefined)
           .then(async (catalog) => {
-            // A model whose efforts are unread is withheld, not published as effort-less:
-            // the catalog reports again once every model's `thought_level` is known.
+            // A model list publishes at discovery speed: efforts fill from the cache only, and
+            // the inventory-sync sweep reports the catalog again once `thought_level` is read.
             if (!catalog)
               return { provider: RUNTIME_PROVIDER.DEVIN, keyPaths: [executable], catalog };
-            const read = await readDevinEffortsForCatalog({
-              modelIds: catalog.models.map((model) => model.id),
-              stateDirectory: options.cacheDirectory,
-              version: runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)
-                ?.version,
-              live: (modelIds) =>
-                readDevinModelEfforts(
-                  commands.devin ?? [executable],
-                  cwd,
-                  environment,
-                  devinRuntimeHost,
-                  modelIds,
-                ),
-            });
-            if (!read.complete)
-              return {
-                provider: RUNTIME_PROVIDER.DEVIN,
-                keyPaths: [executable],
-                catalog: undefined,
-              };
-            return {
-              provider: RUNTIME_PROVIDER.DEVIN,
-              keyPaths: [executable],
-              catalog: {
-                ...catalog,
-                models: catalog.models.map((model) => ({
-                  ...model,
-                  reasoningEfforts: [...(read.efforts.get(model.id) ?? [])],
-                })),
-              },
-            };
+            const { catalog: filled } = await devinCatalogWithCachedEfforts(
+              catalog,
+              options.cacheDirectory,
+              runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)?.version,
+            );
+            return { provider: RUNTIME_PROVIDER.DEVIN, keyPaths: [executable], catalog: filled };
           }),
       );
   }

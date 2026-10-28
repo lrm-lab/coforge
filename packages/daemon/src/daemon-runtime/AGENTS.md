@@ -18,7 +18,8 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `runtime-auth-subscription.ts` binds the complete private authentication transport seam.
 - `agent-message-ports.ts` holds the Agent message operation dependencies.
 - `runtime-auth-controller.ts` owns private, volatile login/logout operations through Anvil and the existing SDK reports; codes never enter persistence, logs, traces or Activity.
-- `code-agent-inventory-sync.ts` owns inventory/catalog reports, liveness checks and
+- `code-agent-inventory-sync.ts` owns inventory/catalog reports (including the post-report Devin
+  effort republish), liveness checks and
   refresh serialization. `runtime.ts` decides when to report; Agent traffic never waits. Each inventory also feeds `runtime-auth-reporter.ts`, which reports login status, never on a timer (every inventory report or re-discovery, login/logout via `refreshRuntimeAuth()`, every answered usage scan); unchanged provider lists still re-read auth because executable paths or environments may have changed. Scan replies wait for auth collection and reporting, regardless of usage support or result. Refused reports log a credential-redacted reason at info; a scan requiring a fresh snapshot answers error if reporting fails. Background inventory reports remain best-effort.
 - `session-invalidate-activity.ts` narrates the cold-start Activity after a session invalidate. `runtime.ts` only publishes it.
 - A start that fails stops its transport before replacing it, so a connection

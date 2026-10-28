@@ -87,7 +87,10 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 - Devin (`devin acp`): full-access `bypass` mode, standing instructions in a private always-on
   `.devin/rules/coforge-runtime-*.md`, `session/load` resume with replacement, and
   `devin auth status|login|logout` for the login chip; login pastes the code through a
-  pseudo-terminal (`auth-process.ts`, shared with Kiro). No usage scan. Rules in
+  pseudo-terminal (`auth-process.ts`, shared with Kiro). The catalog publishes the model list at
+  discovery speed with cache-known efforts; inventory-sync then sweeps each model's
+  `thought_level` in one `devin acp` session and reports the catalog again — an unread model is
+  never reported as effort-less. No usage scan. Rules in
   [Anvil Devin instructions](../../../anvil/src/devin/AGENTS.md).
 
 ## Standing instructions
