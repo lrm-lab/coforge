@@ -106,10 +106,16 @@ export function messageWindowTasks(
 /** Task changes to apply: announced ones (`task.changed.v1`), or a command's own result. */
 export type TaskChanges = { tasks: readonly TaskView[]; deleted: readonly string[] };
 
-/** The Tasks the collection holds, by message id and by number, for readers of one Task. */
+/**
+ * The Tasks the collection holds, by message id and by number, for readers of one Task, and the
+ * numbers known to name no Task: a read by number answered without them, or their Task's
+ * deletion was announced (`apply`). A body's reference to one of those is plain words
+ * (`TaskReference`). A row the collection drops because no read holds it any more is not one.
+ */
 type HeldConversationTasks = {
   byId: ReadonlyMap<string, ConversationTask>;
   byNumber: ReadonlyMap<number, ConversationTask>;
+  missing: ReadonlySet<number>;
 };
 
 /** A new store state from the collection's changes: unchanged Tasks keep their very objects. */
@@ -119,16 +125,20 @@ function heldAfter(
 ): HeldConversationTasks {
   const byId = new Map(held.byId);
   const byNumber = new Map(held.byNumber);
+  let missing = held.missing;
   for (const { type, value } of changes) {
     const known = byId.get(value.messageId);
     if (known && byNumber.get(known.number) === known) byNumber.delete(known.number);
+    // A delete here is also a row no read holds any more, so it says nothing about the Task.
     if (type === "delete") byId.delete(value.messageId);
     else {
       byId.set(value.messageId, value);
       byNumber.set(value.number, value);
+      if (missing.has(value.number))
+        missing = new Set([...missing].filter((number) => number !== value.number));
     }
   }
-  return { byId, byNumber };
+  return { byId, byNumber, missing };
 }
 
 /**
@@ -148,18 +158,27 @@ export function createConversationTasks(
   // each read is complete for its own subset, so this is the only thing that could.
   const announced = createAnnouncedTasks();
 
+  const store = createStore<HeldConversationTasks>({
+    byId: new Map(),
+    byNumber: new Map(),
+    missing: new Set<number>(),
+  });
+
   const collection = createCollection(
     queryCollectionOptions({
       id: `conversation-tasks:${conversationId}`,
       queryKey: conversationTasksKey(conversationId),
       syncMode: "on-demand",
-      queryFn: async (context) =>
-        (
-          await api.load(
-            conversationId,
-            conversationTaskSubset(context.meta?.loadSubsetOptions as LoadSubsetOptions),
-          )
-        ).tasks,
+      queryFn: async (context) => {
+        const subset = conversationTaskSubset(context.meta?.loadSubsetOptions as LoadSubsetOptions);
+        const { tasks } = await api.load(conversationId, subset);
+        // The numbers a read by number answered without: no Task has them.
+        const found = new Set(tasks.map((task) => task.number));
+        const absent = (subset.numbers ?? []).filter((number) => !found.has(number));
+        if (absent.length > 0)
+          store.setState((held) => ({ ...held, missing: new Set([...held.missing, ...absent]) }));
+        return tasks;
+      },
       select: announced.over,
       queryClient,
       getKey: (row: ConversationTask) => row.messageId,
@@ -169,7 +188,6 @@ export function createConversationTasks(
     }),
   );
 
-  const store = createStore<HeldConversationTasks>({ byId: new Map(), byNumber: new Map() });
   // One subscription for every reader; it starts the collection's sync (no read happens until a
   // live query asks) and keeps it for as long as the conversation's page is known.
   collection.subscribeChanges((changes) => store.setState((held) => heldAfter(held, changes)), {
@@ -190,6 +208,8 @@ export function createConversationTasks(
     const current = (messageId: string) =>
       next.has(messageId) ? (next.get(messageId) ?? undefined) : collection.get(messageId);
     let finishedChanged = false;
+    // The numbers of the deleted Tasks the collection held: a reference to one is plain words.
+    const gone: number[] = [];
     for (const { tasks, deleted } of bursts) {
       for (const copy of tasks) {
         const held = current(copy.messageId);
@@ -204,6 +224,7 @@ export function createConversationTasks(
       }
       for (const messageId of deleted) {
         const held = current(messageId);
+        if (held) gone.push(held.number);
         if (!held || isFinishedStatus(held.status)) finishedChanged = true;
         next.set(messageId, null);
         announced.deleted(messageId);
@@ -218,6 +239,8 @@ export function createConversationTasks(
           else collection.utils.writeInsert({ ...copy });
         }
       });
+    if (gone.length > 0)
+      store.setState((held) => ({ ...held, missing: new Set([...held.missing, ...gone]) }));
     return { finishedChanged };
   };
 

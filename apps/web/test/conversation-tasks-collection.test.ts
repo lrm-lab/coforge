@@ -134,6 +134,32 @@ test("an announced change reaches only the reader of the Task it changed", async
   expect(after.byId.get("message-1")?.sequence).toBe(10);
 });
 
+test("a number a read by number answered without, or whose Task was deleted, is known missing", async () => {
+  const { tasks } = fixture();
+  await createLiveQueryCollection((q) =>
+    q.from({ task: tasks.collection }).where(({ task }) => inArray(task.number, [2, 99])),
+  ).preload();
+  expect([...tasks.store.state.missing]).toEqual([99]);
+  tasks.apply([{ tasks: [], deleted: ["message-2"] }]);
+  expect([...tasks.store.state.missing].sort()).toEqual([2, 99]);
+  tasks.apply([{ tasks: [task(99, { sequence: undefined, revision: 0 })], deleted: [] }]);
+  expect([...tasks.store.state.missing]).toEqual([2]);
+});
+
+test("a Task dropped because no read holds it any more is not missing", async () => {
+  const { tasks } = fixture();
+  const references = createLiveQueryCollection({
+    query: (q) => q.from({ task: tasks.collection }).where(({ task }) => inArray(task.number, [2])),
+    gcTime: 1,
+  });
+  await references.preload();
+  expect(tasks.store.state.byNumber.has(2)).toBe(true);
+  await references.cleanup();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(tasks.store.state.byNumber.has(2)).toBe(false);
+  expect(tasks.store.state.missing.has(2)).toBe(false);
+});
+
 test("announced changes: a newer copy replaces, an echo changes nothing, an unknown Task joins, a deletion leaves", async () => {
   const { tasks } = fixture();
   await unfinishedQuery(tasks).preload();

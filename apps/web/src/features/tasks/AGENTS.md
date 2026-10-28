@@ -114,6 +114,9 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   `useMessageTask`, selectors over the collection's TanStack Store (`byId`,
   `byNumber`, where an unchanged Task keeps its object), never from a list
   passed down. They never read anything themselves, so a row adds no request.
+  A body's task reference whose number the collection does not hold yet opens
+  the Task on a press, as Raft's does; it is the plain words only once a read
+  by number has answered without it or its Task was deleted (`missing`).
 - Board columns can be hidden from their "···" menu, as Linear allows; hidden
   ones are listed last (`HiddenColumn`), stay drop targets, and show again when
   pressed. Every column shows by default; the choice is per device

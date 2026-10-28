@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { ChevronDown } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -9,7 +9,6 @@ import {
   overflowsCollapsedMessage,
 } from "./collapsed-message-height";
 import { MessageBody } from "./message-body";
-import { messagePlainText } from "./selection-copy";
 
 /**
  * A message body that collapses when it is very long, with a control to show the rest — Slack's
@@ -24,12 +23,12 @@ import { messagePlainText } from "./selection-copy";
  * elements), so the collapsed state is a `max-height` on a multiple of the line height, with a
  * mask fading the last line so the cut reads as "there is more" rather than as a clipped row.
  *
- * Clipped content is real content, so while collapsed the body is `inert`: a link or an Agent
- * mention below the cut cannot be tabbed into or clicked when nobody can see it. `inert` also
- * takes the body out of the accessibility tree, so the full message is offered to assistive
- * technology as text alongside it — a collapse is a device for saving screen space, not for
- * withholding the message, and a screen-reader user should not have to operate a visual control to
- * hear it. Expanding drops both, leaving the ordinary interactive body.
+ * The collapsed body stays an ordinary interactive body, as Raft's does: a link, mention or task
+ * chip above the cut works, and the clip keeps a pointer from reaching anything below it. Focus
+ * that lands below the cut (a Tab into a link nobody can see) expands the message, so the
+ * keyboard never works blind. A collapse is a device for saving screen space, not for withholding
+ * the message: assistive technology reads the whole body, clipped part included, and a
+ * screen-reader user never has to operate a visual control to hear it.
  *
  * `expanded` is owned by the conversation, not by this component: a row unmounts as soon as it
  * scrolls out of the virtualizer's window, and an expanded message must not silently re-collapse
@@ -79,19 +78,16 @@ export function CollapsibleMessageBody({
   // Off, nothing folds and no control shows, whatever the last measurement said.
   const foldable = collapsible && overflowing;
   const collapsed = foldable && !expanded;
-  const { channelNames } = bodyProps;
-  const plainText = useMemo(
-    () => (collapsed ? messagePlainText({ body, mentions }, channelNames) : ""),
-    [collapsed, body, mentions, channelNames],
-  );
 
   return (
     <>
-      {collapsed && <p className="sr-only">{plainText}</p>}
       <div
         ref={contentRef}
-        aria-hidden={collapsed || undefined}
-        inert={collapsed}
+        onFocusCapture={(event) => {
+          if (!collapsed) return;
+          const content = event.currentTarget.getBoundingClientRect();
+          if (event.target.getBoundingClientRect().bottom > content.bottom) onToggleExpanded();
+        }}
         // `overflow-hidden` only while collapsed: a code block or table inside the body keeps its
         // own horizontal scrolling when the body is open.
         // `message-text` is what Settings → Message font size scales (`message-markdown.css`): the

@@ -73,6 +73,12 @@ export function useNumberedTask(conversationId: string, number: number | undefin
   );
 }
 
+/** Whether Task `#number` is known not to exist: a read answered without it, or it was deleted. */
+export function useMissingTask(conversationId: string, number: number) {
+  const { store } = useConversationTasksCollection(conversationId);
+  return useSelector(store, (held) => held.missing.has(number));
+}
+
 /** The Task a message became, read as `useNumberedTask` reads one. */
 export function useMessageTask(conversationId: string, messageId: string) {
   const { store } = useConversationTasksCollection(conversationId);
