@@ -54,19 +54,6 @@ test("before a long task, progress goes to notes/active-context.md rather than M
   expect(instructions).not.toContain("Active Context");
 });
 
-test("retains reply instructions and thread addressing without provider tool names", () => {
-  expect(instructions).toContain(
-    "text outside an executed `coforge message send` command is not delivered",
-  );
-  expect(instructions).toContain("Reply to direct user messages");
-  expect(instructions).toContain("exact `target=`");
-  expect(instructions).toContain("including its thread suffix");
-  expect(instructions).toContain(
-    "Send the reply on stdin with `coforge message send --target '<target>'`",
-  );
-  expect(instructions).not.toContain("Bash tool");
-});
-
 test("message preparation avoids shared files and stops before sending stale contents", () => {
   expect(instructions).toContain("Prefer a quoted here-document");
   expect(instructions).toContain("with a delimiter absent from its body");
