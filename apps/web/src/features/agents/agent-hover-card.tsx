@@ -29,6 +29,7 @@ import {
   useLiveAgentMascot,
 } from "./workspace-agents-realtime";
 import { AgentMascotAvatar } from "./agent-mascot-avatar";
+import { useAgentModelName } from "./use-agent-model-name";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -110,6 +111,7 @@ function AgentCard({
 }) {
   const profile = useQuery({ ...agentProfileQuery(agentId), staleTime: CARD_PROFILE_STALE_MS });
   const data = profile.data;
+  const modelLabel = useAgentModelName(agentId, data?.runtimeConfig.model ?? "");
   // Read only once the profile says the viewer gets the panel's Activity tab, as the server does.
   const canSeeActivity = Boolean(data && !data.deletedAt && canManageAgent(data));
   const activity = useAgentRecentActivity(
@@ -175,7 +177,7 @@ function AgentCard({
                 {data && runtimeProviderLabel(data.runtimeConfig.runtime)}
               </CardFact>
               <CardFact label={m.agent_form_model()}>
-                {data && (data.runtimeConfig.model || m.agent_form_provider_default())}
+                {data && (data.runtimeConfig.model ? modelLabel : m.agent_form_provider_default())}
               </CardFact>
               <CardFact label={m.agent_form_reasoning()}>
                 {data && (data.runtimeConfig.reasoning || m.agent_form_provider_default())}

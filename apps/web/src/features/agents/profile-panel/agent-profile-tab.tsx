@@ -35,6 +35,7 @@ import { FactRow } from "./agent-fact-row";
 import { AppBotProfile } from "./app-bot-profile";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { useAgentModelName } from "#src/features/agents/use-agent-model-name";
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
 
@@ -134,6 +135,7 @@ function AgentProfileTabBody({
   onStartDelete?: () => void;
 }) {
   const { runtime, model, reasoning } = profile.runtimeConfig;
+  const modelLabel = useAgentModelName(profile.id, model);
   const canEditRuntime = canManage && Boolean(onStartRuntimeEdit);
   const runtimeLabel = runtimeProviderLabel(runtime);
   const runtimeIcon = <RuntimeProviderMark provider={runtime} className="size-3.5" />;
@@ -335,8 +337,8 @@ function AgentProfileTabBody({
             </FactBadge>
           </FactRow>
           <FactRow label={m.agent_form_model()}>
-            <span className={model ? "font-mono break-all" : ""}>
-              {model || m.agent_form_provider_default()}
+            <span className={model ? "break-words" : ""}>
+              {model ? modelLabel : m.agent_form_provider_default()}
             </span>
           </FactRow>
           <FactRow label={m.agent_form_reasoning()}>

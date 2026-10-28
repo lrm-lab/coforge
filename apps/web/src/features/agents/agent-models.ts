@@ -10,7 +10,7 @@ export const agentModelsQueryKey = (workspaceId: string | undefined) =>
 
 /** The Workspace's Agent models, read again whenever the page regains focus or the network
  * reconnects. Typed from `listAgentModels`, so a change to its shape fails the type check. */
-const agentModelsQuery = (workspaceId: string) =>
+export const agentModelsQuery = (workspaceId: string) =>
   queryOptions({
     queryKey: agentModelsQueryKey(workspaceId),
     queryFn: () => listAgentModels(),
@@ -18,7 +18,7 @@ const agentModelsQuery = (workspaceId: string) =>
     refetchOnReconnect: "always",
   });
 
-type AgentModels = Awaited<ReturnType<typeof listAgentModels>>;
+export type AgentModels = Awaited<ReturnType<typeof listAgentModels>>;
 
 /**
  * One Agent's configured model, for the label beside its name in chat; `""` for an Agent on its

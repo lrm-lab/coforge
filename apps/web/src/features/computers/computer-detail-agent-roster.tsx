@@ -16,6 +16,7 @@ import {
 } from "#src/features/agents/agent-runtime-controls";
 import { DetailGroup } from "./computer-detail-rows";
 import type { ComputerDetailView } from "./computer-detail-view";
+import { useAgentModelName } from "#src/features/agents/use-agent-model-name";
 
 export function ComputerDetailAgentRoster({
   agents,
@@ -238,6 +239,7 @@ export function ComputerDetailAgentRoster({
  * the name and runtime. */
 function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][number] }) {
   const display = useLiveAgentDisplay(agent.id) ?? agent.display;
+  const modelLabel = useAgentModelName(agent.id, agent.runtimeConfig.model ?? "");
   return (
     <>
       <AgentDisplayAvatar
@@ -252,7 +254,7 @@ function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][nu
           <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
           <span className="truncate">
             {runtimeProviderLabel(agent.provider)}
-            {agent.runtimeConfig.model ? ` · ${agent.runtimeConfig.model}` : ""}
+            {modelLabel ? ` · ${modelLabel}` : ""}
           </span>
         </span>
       </span>

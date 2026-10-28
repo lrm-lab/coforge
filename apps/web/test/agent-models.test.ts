@@ -7,16 +7,28 @@ import type { AgentVisibilityViewer } from "#src/server/agents/agent-visibility.
 const WORKSPACE_ID = "workspace-1";
 const member: AgentVisibilityViewer = { kind: "user", userId: "user-member", role: "member" };
 
-function fakeDb(rows: Array<{ id: string; runtimeConfig: unknown }>) {
+function fakeDb(
+  rows: Array<{ id: string; computerId?: string | null; runtimeConfig: unknown }>,
+  catalogs: Array<{ computerId: string; provider: string; models: unknown }> = [],
+) {
   const calls: Prisma.AgentFindManyArgs[] = [];
   const db = {
     agent: {
       findMany: async (args: Prisma.AgentFindManyArgs) => {
         calls.push(args);
-        return rows;
+        return rows.map((row) => ({ computerId: null, ...row }));
       },
     },
-  } as unknown as Pick<PrismaClient, "agent">;
+    computerModelCatalog: {
+      findMany: async (args: Prisma.ComputerModelCatalogFindManyArgs) => {
+        const ids = (args.where?.computerId as { in: string[] }).in;
+        const providers = (args.where?.provider as { in: string[] }).in;
+        return catalogs.filter(
+          (catalog) => ids.includes(catalog.computerId) && providers.includes(catalog.provider),
+        );
+      },
+    },
+  } as unknown as Pick<PrismaClient, "agent" | "computerModelCatalog">;
   return { db, calls };
 }
 
@@ -72,6 +84,46 @@ describe("listVisibleAgentModels", () => {
     });
   });
 
+  test("keeps the stored id each name was resolved from", async () => {
+    const { db } = fakeDb([{ id: "agent-a", runtimeConfig: config(" gpt-5.5 ") }]);
+    expect((await listVisibleAgentModels(db, WORKSPACE_ID, member)).modelIds).toEqual({
+      "agent-a": "gpt-5.5",
+    });
+  });
+
+  test("names a model as its Computer's catalog does, and keeps the id of one it does not list", async () => {
+    const dsh = (model: string) => ({ ...config(model), runtime: "dsh" });
+    const { db } = fakeDb(
+      [
+        { id: "agent-listed", computerId: "computer-a", runtimeConfig: dsh('["route","pro"]') },
+        { id: "agent-unlisted", computerId: "computer-a", runtimeConfig: dsh('["route","old"]') },
+        { id: "agent-elsewhere", computerId: "computer-b", runtimeConfig: dsh('["route","pro"]') },
+      ],
+      [
+        {
+          computerId: "computer-a",
+          provider: "dsh",
+          models: [
+            {
+              id: '["route","pro"]',
+              displayName: "DeepSeek-V4-Pro",
+              description: "",
+              modelProvider: "",
+              reasoningEfforts: [],
+              defaultReasoning: "",
+              recommended: false,
+            },
+          ],
+        },
+      ],
+    );
+    expect((await listVisibleAgentModels(db, WORKSPACE_ID, member)).models).toEqual({
+      "agent-listed": "DeepSeek-V4-Pro",
+      "agent-unlisted": '["route","old"]',
+      "agent-elsewhere": '["route","pro"]',
+    });
+  });
+
   test("stamps the list with the server's own read time, the clock message times come from", async () => {
     const { db } = fakeDb([]);
     const list = await listVisibleAgentModels(db, WORKSPACE_ID, member, () => 1_700_000_000_000);
@@ -87,7 +139,7 @@ describe("listVisibleAgentModels", () => {
           return [];
         },
       },
-    } as unknown as Pick<PrismaClient, "agent">;
+    } as unknown as Pick<PrismaClient, "agent" | "computerModelCatalog">;
     const list = await listVisibleAgentModels(db, WORKSPACE_ID, member, () => clock);
     expect(list.readAt).toBe(1_000);
   });
