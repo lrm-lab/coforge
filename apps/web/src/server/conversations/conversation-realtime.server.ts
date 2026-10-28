@@ -20,8 +20,10 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { readConversationSignalParticipants } from "#src/server/db/repositories/conversation-signal.repositories.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import { publishAgentReadChanged } from "./agent-read-realtime.server";
-import type { AgentReadChangedInput } from "#src/server/db/repositories/agent-read-position.repositories.server";
+import {
+  publishConversationReadChanged,
+  type ConversationReadChangedInput,
+} from "./conversation-read-realtime.server";
 
 export type ConversationRealtimeMessage = {
   conversationId: string;
@@ -167,8 +169,8 @@ export type ConversationRealtime = {
   viewerChanged?(input: { userIds: readonly string[]; event: ViewerEvent }): Promise<void>;
   /** `MessageReactionEvent`; optional, like the above. */
   reactionChanged?(input: ReactionSignal): Promise<void>;
-  /** An Agent's monotone read position, scoped to one conversation and Agent. */
-  agentReadChanged?(input: AgentReadChangedInput): Promise<void>;
+  /** A member's monotone conversation read position, scoped to one conversation. */
+  conversationReadChanged?(input: ConversationReadChangedInput): Promise<void>;
 };
 
 export class CentrifugoConversationRealtime implements ConversationRealtime {
@@ -243,8 +245,8 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     );
   }
 
-  async agentReadChanged(input: AgentReadChangedInput) {
-    await publishAgentReadChanged(this.centrifugo, input);
+  async conversationReadChanged(input: ConversationReadChangedInput) {
+    await publishConversationReadChanged(this.centrifugo, input);
   }
 
   async taskChanged(signal: TaskChangedSignal) {

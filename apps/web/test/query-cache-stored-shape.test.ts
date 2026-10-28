@@ -77,6 +77,7 @@ const message = {
 };
 const windowFields = {
   senderMemberId: "member-1",
+  othersReadThroughSequence: 0,
   readThroughSequence: 1,
   threads: {
     m1: {
@@ -413,6 +414,18 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "channel window": "311f6b99684eed2c",
     "direct window with an Agent": "409b90398ef4884e",
     "direct window with a person": "7adde1efb9396169",
+    "sidebar channels": "91afa2f21eb4ec87",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "331d221481674004",
+    "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
+    "chat sections": "4c7716ab24622fdc",
+    "chat section order": "89829726781b01aa",
+  },
+  10: {
+    "channel window": "bee52e3753bc63fa",
+    "direct window with an Agent": "cfb56f0008e53e3a",
+    "direct window with a person": "8ffc1a72c5a7dfd6",
     "sidebar channels": "91afa2f21eb4ec87",
     "sidebar directs": "5205999212e744be",
     "channel names": "331d221481674004",

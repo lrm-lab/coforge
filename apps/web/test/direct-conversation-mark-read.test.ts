@@ -12,6 +12,7 @@ describe("PrismaDirectConversationRepository read position", () => {
             findFirst: async () => ({ sequence: 7 }),
           },
           conversationMember: {
+            findFirst: async () => ({ id: "member-1" }),
             updateMany: async (input: { where: object; data: object }) => {
               updated.push(input);
               return { count: 1 };
@@ -29,10 +30,8 @@ describe("PrismaDirectConversationRepository read position", () => {
     expect(updated).toEqual([
       {
         where: {
-          conversationId: "conversation-1",
-          userId: "user-1",
+          id: "member-1",
           readThroughSequence: { lt: 7 },
-          leftAt: null,
         },
         data: { readThroughSequence: 7 },
       },
@@ -40,10 +39,8 @@ describe("PrismaDirectConversationRepository read position", () => {
       // badge cannot come back on the next render (P2b, #125).
       {
         where: {
-          conversationId: "conversation-1",
-          userId: "user-1",
+          id: "member-1",
           unreadFromSequence: { not: null, lte: 7 },
-          leftAt: null,
         },
         data: { unreadFromSequence: null },
       },

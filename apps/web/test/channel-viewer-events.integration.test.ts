@@ -20,6 +20,7 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 
 function recordingRealtime() {
   const announced: { userIds: readonly string[]; event: ViewerEvent }[] = [];
+  const readChanges: object[] = [];
   const realtime: ConversationRealtime = {
     async messageAvailable() {},
     async memberChanged() {},
@@ -27,8 +28,11 @@ function recordingRealtime() {
     async viewerChanged(input) {
       announced.push(input);
     },
+    async conversationReadChanged(input) {
+      readChanges.push(input);
+    },
   };
-  return { realtime, announced };
+  return { realtime, announced, readChanges };
 }
 
 async function setup() {
@@ -53,7 +57,7 @@ async function setup() {
     },
   });
   await enrollGeneralChannel(db, workspace.id);
-  const { realtime, announced } = recordingRealtime();
+  const { realtime, announced, readChanges } = recordingRealtime();
   const channels = new PublicChannels(db, undefined, undefined, undefined, realtime);
   const team = await channels.create(workspace.id, ada.id, `team-${suffix}`);
   await channels.join(workspace.id, bob.id, team.id);
@@ -83,18 +87,33 @@ async function setup() {
     await db.user.deleteMany({ where: { username: { endsWith: suffix } } }).catch(() => {});
     await db.$disconnect();
   };
-  return { db, suffix, workspace, ada, bob, team, channels, realtime, announced, post, teardown };
+  return {
+    db,
+    suffix,
+    workspace,
+    ada,
+    bob,
+    team,
+    channels,
+    realtime,
+    announced,
+    readChanges,
+    post,
+    teardown,
+  };
 }
 
 test.skipIf(!connectionString)(
   "reading a channel tells the reader's pages its unread count, and a read that moves nothing says nothing",
   async () => {
-    const { teardown, workspace, ada, bob, team, channels, announced, post } = await setup();
+    const { teardown, workspace, ada, bob, team, channels, announced, readChanges, post } =
+      await setup();
     try {
       await post(ada.id);
       const second = await post(ada.id);
       const third = await post(ada.id);
       announced.length = 0;
+      readChanges.length = 0;
 
       await channels.markRead(workspace.id, bob.id, team.id, second.sequence);
       expect(announced).toEqual([
@@ -109,10 +128,20 @@ test.skipIf(!connectionString)(
           },
         },
       ]);
+      expect(readChanges).toEqual([
+        {
+          workspaceId: workspace.id,
+          conversationId: team.id,
+          memberId: expect.any(String),
+          readThroughSequence: second.sequence,
+        },
+      ]);
 
       announced.length = 0;
+      readChanges.length = 0;
       await channels.markRead(workspace.id, bob.id, team.id, second.sequence);
       expect(announced).toEqual([]);
+      expect(readChanges).toEqual([]);
 
       await channels.markRead(workspace.id, bob.id, team.id, third.sequence);
       expect(announced.map(({ event }) => event)).toEqual([
@@ -121,6 +150,14 @@ test.skipIf(!connectionString)(
           workspaceId: workspace.id,
           conversationId: team.id,
           unreadCount: 0,
+          readThroughSequence: third.sequence,
+        },
+      ]);
+      expect(readChanges).toEqual([
+        {
+          workspaceId: workspace.id,
+          conversationId: team.id,
+          memberId: expect.any(String),
           readThroughSequence: third.sequence,
         },
       ]);

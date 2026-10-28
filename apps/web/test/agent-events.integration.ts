@@ -39,7 +39,7 @@ test("events drain and recovery keep the unread rule across channels, direct mes
       db,
       {},
       {
-        agentReadChanged: async (event) => {
+        conversationReadChanged: async (event) => {
           agentReadChanges.push(event);
         },
       },

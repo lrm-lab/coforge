@@ -24,6 +24,7 @@ export const HUMAN_UNREAD_MESSAGE_SQL = Prisma.sql`m."sequence" > LEAST(cm."read
  * unread for them (the badge, by the same rule `PublicChannels.list` counts every row's with), and
  * their read cursor (`readThroughSequence`), which a page's stored window draws its divider from. */
 export type HumanReadState = { unreadCount: number; readThroughSequence: number };
+export type HumanReadAdvance = HumanReadState & { memberId: string; readThroughAdvanced: boolean };
 
 /** `HumanReadState` of one conversation the person `userId` is in; nothing unread and nothing read
  * when they are not in it. */
@@ -82,7 +83,7 @@ export async function humanReadStates(
 export async function markHumanRead(
   db: PrismaClient,
   read: { conversationId: string; userId: string; throughSequence: number },
-): Promise<HumanReadState | undefined> {
+): Promise<HumanReadAdvance | undefined> {
   const { conversationId, userId } = read;
   const moved = await db.$transaction(async (tx) => {
     const latest = await tx.message.findFirst({
@@ -92,12 +93,15 @@ export async function markHumanRead(
     });
     const boundary = Math.min(read.throughSequence, latest?.sequence ?? 0);
     if (boundary < 1) return undefined;
+    const member = await tx.conversationMember.findFirst({
+      where: { conversationId, userId, ...ACTIVE_MEMBER_WHERE },
+      select: { id: true },
+    });
+    if (!member) return undefined;
     const advanced = await tx.conversationMember.updateMany({
       where: {
-        conversationId,
-        userId,
+        id: member.id,
         readThroughSequence: { lt: boundary },
-        ...ACTIVE_MEMBER_WHERE,
       },
       data: { readThroughSequence: boundary },
     });
@@ -105,20 +109,25 @@ export async function markHumanRead(
     // back on the next render (see the marker's note in the schema).
     const consumed = await tx.conversationMember.updateMany({
       where: {
-        conversationId,
-        userId,
+        id: member.id,
         unreadFromSequence: { not: null, lte: boundary },
-        ...ACTIVE_MEMBER_WHERE,
       },
       data: { unreadFromSequence: null },
     });
     if (advanced.count === 0 && consumed.count === 0) return undefined;
-    return { throughLatest: boundary === latest?.sequence, boundary };
+    return {
+      memberId: member.id,
+      readThroughAdvanced: advanced.count > 0,
+      throughLatest: boundary === latest?.sequence,
+      boundary,
+    };
   });
   if (!moved) return undefined;
   // Through the newest message the cursor is at it, whether this read moved it or an earlier one.
-  if (moved.throughLatest) return { unreadCount: 0, readThroughSequence: moved.boundary };
-  return humanReadState(db, conversationId, userId);
+  const state = moved.throughLatest
+    ? { unreadCount: 0, readThroughSequence: moved.boundary }
+    : await humanReadState(db, conversationId, userId);
+  return { memberId: moved.memberId, readThroughAdvanced: moved.readThroughAdvanced, ...state };
 }
 
 /**

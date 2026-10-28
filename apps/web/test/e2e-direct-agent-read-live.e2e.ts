@@ -5,13 +5,13 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { publishAgentReadChanged } from "#src/server/conversations/agent-read-realtime.server";
+import { publishConversationReadChanged } from "#src/server/conversations/conversation-read-realtime.server";
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
 /**
  * An Agent reading the viewer's DM message shows "Read" under it without a reload (task #230).
  * The suite sends a message from the page, then advances the Agent's read position and publishes
- * `conversation.agent_read.v1` exactly as the server does when the Agent reads. Realtime needs the
+ * `conversation.read.v1` exactly as the server does when the Agent reads. Realtime needs the
  * same-origin proxy (`scripts/e2e/same-origin-proxy.ts`): run with
  * `COFORGE_E2E_WEB_URL=http://127.0.0.1:8790`. Screenshots live in .amp/e2e/direct-agent-read-live/.
  */
@@ -24,8 +24,10 @@ let workspaceId = "";
 let computerId = "";
 let agentId = "";
 let conversationId = "";
+let agentMemberId = "";
 const probe = "read probe";
-const READ = `[...document.querySelectorAll("main .message-text")].some((el) => el.textContent.trim() === "Read")`;
+const tick = (state: "sent" | "read") =>
+  `Boolean(document.querySelector('main [data-message="own"] [data-read-state="${state}"]'))`;
 
 // The suite's own Computer, Agent and DM, so it never writes to a real Agent's conversation.
 beforeAll(async () => {
@@ -73,6 +75,12 @@ beforeAll(async () => {
     },
   });
   conversationId = conversation.id;
+  agentMemberId = (
+    await db.conversationMember.findUniqueOrThrow({
+      where: { conversationId_agentId: { conversationId, agentId } },
+      select: { id: true },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -89,7 +97,7 @@ afterAll(async () => {
   }
 });
 
-test("an Agent's read shows Read under the viewer's message without a reload", async () => {
+test("an Agent's read turns the viewer's message into two ticks without a reload", async () => {
   await browser("set", "viewport", "1280", "900");
   await browser("open", `${origin}/en/w/${slug}/dm/${conversationId}`);
   await browser("wait", "main textarea");
@@ -107,20 +115,21 @@ test("an Agent's read shows Read under the viewer's message without a reload", a
   // Let the page take in its own message before the Agent reads it.
   await Bun.sleep(1500);
   await browser("screenshot", join(artifacts, "before-read.png"));
-  expect(await evaluate<boolean>(READ)).toBe(false);
+  expect(await evaluate<boolean>(tick("sent"))).toBe(true);
+  expect(await evaluate<boolean>(tick("read"))).toBe(false);
   await db.conversationMember.updateMany({
     where: { conversationId, agentId },
     data: { agentReadThroughSequence: message!.sequence },
   });
-  await publishAgentReadChanged(createCentrifugoServerApi(), {
+  await publishConversationReadChanged(createCentrifugoServerApi(), {
     workspaceId,
     conversationId,
-    agentId,
+    memberId: agentMemberId,
     readThroughSequence: message!.sequence,
   });
   let read = false;
   for (let i = 0; i < 25 && !read; i++) {
-    read = await evaluate<boolean>(READ);
+    read = await evaluate<boolean>(tick("read"));
     if (!read) await Bun.sleep(200);
   }
   await browser("screenshot", join(artifacts, "after-read.png"));

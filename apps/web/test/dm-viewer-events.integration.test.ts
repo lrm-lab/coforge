@@ -36,11 +36,15 @@ async function setup() {
     },
   });
   const announced: { userIds: readonly string[]; event: ViewerEvent }[] = [];
+  const readChanges: object[] = [];
   const realtime: ConversationRealtime = {
     async messageAvailable() {},
     async memberChanged() {},
     async viewerChanged(input) {
       announced.push(input);
+    },
+    async conversationReadChanged(input) {
+      readChanges.push(input);
     },
   };
   const dms = new DirectConversations(db, realtime);
@@ -68,19 +72,20 @@ async function setup() {
     await db.user.deleteMany({ where: { username: { endsWith: suffix } } }).catch(() => {});
     await db.$disconnect();
   };
-  return { db, workspace, ada, bob, dms, announced, post, teardown };
+  return { db, workspace, ada, bob, dms, announced, readChanges, post, teardown };
 }
 
 test.skipIf(!connectionString)(
   "reading a DM tells the reader's pages its unread count, and a read that moves nothing says nothing",
   async () => {
-    const { workspace, ada, bob, dms, announced, post, teardown } = await setup();
+    const { workspace, ada, bob, dms, announced, readChanges, post, teardown } = await setup();
     try {
       const { conversationId } = await dms.open(workspace.id, ada.id, { userId: bob.id });
       await post(conversationId, ada.id);
       const second = await post(conversationId, ada.id);
       const third = await post(conversationId, ada.id);
       announced.length = 0;
+      readChanges.length = 0;
       const marked = (unreadCount: number, readThroughSequence: number) => ({
         userIds: [bob.id],
         event: {
@@ -96,6 +101,20 @@ test.skipIf(!connectionString)(
       await dms.markRead(workspace.id, bob.id, conversationId, second.sequence);
       await dms.markRead(workspace.id, bob.id, conversationId, third.sequence);
       expect(announced).toEqual([marked(1, second.sequence), marked(0, third.sequence)]);
+      expect(readChanges).toEqual([
+        {
+          workspaceId: workspace.id,
+          conversationId,
+          memberId: expect.any(String),
+          readThroughSequence: second.sequence,
+        },
+        {
+          workspaceId: workspace.id,
+          conversationId,
+          memberId: expect.any(String),
+          readThroughSequence: third.sequence,
+        },
+      ]);
     } finally {
       await teardown();
     }

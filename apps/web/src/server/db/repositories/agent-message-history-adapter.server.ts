@@ -5,6 +5,7 @@ import {
   type ResolvedAgentTarget,
 } from "./resolved-agent-target.server";
 import type { DirectConversationPageOptions } from "./direct-conversation-types.server";
+import type { ConversationReadChangedInput } from "./agent-read-position.repositories.server";
 
 export function readDirectConversationMessagesPage(input: {
   db: PrismaClient;
@@ -17,12 +18,7 @@ export function readDirectConversationMessagesPage(input: {
     conversationId: string,
     anchor: string,
   ): Promise<{ id: string; sequence: number; threadRootId: string | null }>;
-  agentReadChanged?: (input: {
-    workspaceId: string;
-    conversationId: string;
-    agentId: string;
-    readThroughSequence: number;
-  }) => Promise<void>;
+  conversationReadChanged?: (input: ConversationReadChangedInput) => Promise<void>;
 }) {
   return input.resolveTarget(input.target).then((resolved) => {
     const { conversationId, threadRootId, canonicalTarget, isChannel } = resolved;
@@ -36,7 +32,7 @@ export function readDirectConversationMessagesPage(input: {
       isUserAgentDirectConversation: resolved.isUserAgentDirectConversation === true,
       page: input.page,
       consumptionScope: agentHistoryConsumptionScope(input.agentId, resolved),
-      agentReadChanged: input.agentReadChanged,
+      conversationReadChanged: input.conversationReadChanged,
       resolveAnchor: (anchor) => input.resolveAnchor(conversationId, anchor),
     });
   });

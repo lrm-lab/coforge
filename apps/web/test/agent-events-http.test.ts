@@ -21,7 +21,7 @@ test("the Agent events route assembles the repository with realtime", async () =
     () => {
       assembled = createAgentEventsRepository(
         {} as never,
-        { agentReadChanged: async () => {} } as never,
+        { conversationReadChanged: async () => {} } as never,
       );
       return {
         ...baseRepository,

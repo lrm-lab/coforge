@@ -1,8 +1,11 @@
 import {
   advanceAgentReadPosition,
-  type AgentReadChangedInput,
+  type ConversationReadChangedInput,
   type AgentReadPositionInput,
 } from "./agent-read-position.repositories.server";
+import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+
+export type ConversationReadRealtimePort = Pick<ConversationRealtime, "conversationReadChanged">;
 
 export type AgentReadGroup = {
   conversationId: string;
@@ -33,18 +36,45 @@ export function agentReadGroupsForPage(
   return groups;
 }
 
+export function conversationReadPublicationMap(
+  rows: readonly {
+    conversationId: string;
+    conversation: { channelName: string | null; directKey: string | null };
+  }[],
+  isUserAgentDirectConversation: (conversation: { directKey: string | null }) => boolean,
+) {
+  return new Map(
+    rows.map((row) => [
+      row.conversationId,
+      row.conversation.channelName !== null || isUserAgentDirectConversation(row.conversation),
+    ]),
+  );
+}
+
+export function conversationReadChangedPort(realtime: ConversationReadRealtimePort | undefined) {
+  return realtime?.conversationReadChanged?.bind(realtime);
+}
+
 export async function advanceAgentReadGroups(input: {
   db: AgentReadPositionInput["db"];
   groups: Iterable<AgentReadGroup>;
   memberIdByConversation: ReadonlyMap<string, string>;
-  directConversationById: ReadonlyMap<string, boolean>;
+  messageRows: readonly {
+    conversationId: string;
+    conversation: { channelName: string | null; directKey: string | null };
+  }[];
+  isUserAgentDirectConversation: (conversation: { directKey: string | null }) => boolean;
   workspaceId: string;
   agentId: string;
 }) {
-  const changes: AgentReadChangedInput[] = [];
+  const changes: ConversationReadChangedInput[] = [];
+  const publishReadByConversation = conversationReadPublicationMap(
+    input.messageRows,
+    input.isUserAgentDirectConversation,
+  );
   for (const group of input.groups) {
     const memberId = input.memberIdByConversation.get(group.conversationId);
-    if (group.threadRootId && !memberId) throw new Error("Agent is not a conversation member");
+    if (!memberId) throw new Error("Agent is not a conversation member");
     const publication = await advanceAgentReadPosition({
       db: input.db,
       memberId,
@@ -53,21 +83,21 @@ export async function advanceAgentReadGroups(input: {
       agentId: input.agentId,
       ...(group.threadRootId ? { threadRootId: group.threadRootId } : {}),
       sequence: group.maxSequence,
-      isDirectConversation: input.directConversationById.get(group.conversationId) === true,
+      publishConversationRead: publishReadByConversation.get(group.conversationId) === true,
     });
     if (publication) changes.push(publication);
   }
   return changes;
 }
 
-export async function publishAgentReadChangesAfterCommit<T>(
+export async function publishConversationReadChangesAfterCommit<T>(
   transaction: () => Promise<{
     result: T;
-    agentReadChanges: readonly AgentReadChangedInput[];
+    conversationReadChanges: readonly ConversationReadChangedInput[];
   }>,
-  publish?: (change: AgentReadChangedInput) => Promise<void>,
+  publish?: (change: ConversationReadChangedInput) => Promise<void>,
 ) {
   const committed = await transaction();
-  for (const change of committed.agentReadChanges) void publish?.(change).catch(() => {});
+  for (const change of committed.conversationReadChanges) void publish?.(change).catch(() => {});
   return committed.result;
 }

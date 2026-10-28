@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read-position.repositories.server";
-import { publishAgentReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
+import { publishConversationReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
 /** Unread reads and complete latest pages move the Agent's read position monotonically. */
@@ -14,7 +14,7 @@ test("an unanchored canonical read advances across a missing sequence", async ()
     agent: { findMany: async () => [] },
     user: { findUnique: async () => ({ id: "user-1" }) },
     conversationMember: {
-      findUnique: async () => ({ agentReadThroughSequence: 1 }),
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 1 }),
       updateMany: async (input: object) => {
         updates.push(input);
         return { count: 1 };
@@ -49,7 +49,7 @@ test("an unanchored canonical read advances across a missing sequence", async ()
     db,
     {},
     {
-      agentReadChanged: async (event: object) => {
+      conversationReadChanged: async (event: object) => {
         events.push(event);
       },
     },
@@ -61,7 +61,7 @@ test("an unanchored canonical read advances across a missing sequence", async ()
     {
       workspaceId: "workspace-1",
       conversationId: "conversation-1",
-      agentId: "agent-1",
+      memberId: "member-1",
       readThroughSequence: 3,
     },
   ]);
@@ -124,7 +124,7 @@ test("a plain latest read advances a User-Agent DM when the full unread page fit
     db,
     {},
     {
-      agentReadChanged: async (event: object) => {
+      conversationReadChanged: async (event: object) => {
         events.push(event);
       },
     },
@@ -135,7 +135,7 @@ test("a plain latest read advances a User-Agent DM when the full unread page fit
     {
       workspaceId: "workspace-1",
       conversationId: "conversation-1",
-      agentId: "agent-1",
+      memberId: "member-1",
       readThroughSequence: 3,
     },
   ]);
@@ -184,7 +184,7 @@ test("a plain latest read leaves the cursor when unread messages exceed the page
     db,
     {},
     {
-      agentReadChanged: async () => {
+      conversationReadChanged: async () => {
         throw new Error("must not publish");
       },
     },
@@ -346,7 +346,7 @@ test("a plain historical read never advances the User-Agent DM cursor", async ()
     db,
     {},
     {
-      agentReadChanged: async () => {
+      conversationReadChanged: async () => {
         throw new Error("must not publish");
       },
     },
@@ -398,7 +398,7 @@ test("an Agent peer read does not publish a User-Agent DM event", async () => {
     db,
     {},
     {
-      agentReadChanged: async (event: object) => {
+      conversationReadChanged: async (event: object) => {
         events.push(event);
       },
     },
@@ -435,7 +435,7 @@ test("an app event session read does not publish a User-Agent DM event", async (
     db,
     {},
     {
-      agentReadChanged: async (event: object) => {
+      conversationReadChanged: async (event: object) => {
         events.push(event);
       },
     },
@@ -443,13 +443,13 @@ test("an app event session read does not publish a User-Agent DM event", async (
   expect(events).toEqual([]);
 });
 
-test("publishes an Agent read position only after the database advances", async () => {
+test("publishes a conversation read position only after the database advances", async () => {
   const events: object[] = [];
   const db = {
     agent: { findMany: async () => [] },
     user: { findUnique: async () => ({ id: "user-1" }) },
     conversationMember: {
-      findUnique: async () => ({ agentReadThroughSequence: 1 }),
+      findUnique: async () => ({ id: "member-1", agentReadThroughSequence: 1 }),
       updateMany: async () => ({ count: 1 }),
     },
     message: {
@@ -489,7 +489,7 @@ test("publishes an Agent read position only after the database advances", async 
     db,
     {},
     {
-      agentReadChanged: async (event: object) => {
+      conversationReadChanged: async (event: object) => {
         events.push(event);
       },
     },
@@ -498,13 +498,13 @@ test("publishes an Agent read position only after the database advances", async 
     {
       workspaceId: "workspace-1",
       conversationId: "conversation-1",
-      agentId: "agent-1",
+      memberId: "member-1",
       readThroughSequence: 3,
     },
   ]);
 });
 
-test("thread and channel read advances do not publish Agent DM events", async () => {
+test("thread reads stay silent while channel reads publish the shared event", async () => {
   const db = {
     conversationMember: { updateMany: async () => ({ count: 1 }) },
     $executeRaw: async () => 1,
@@ -512,13 +512,14 @@ test("thread and channel read advances do not publish Agent DM events", async ()
   expect(
     await advanceAgentReadPosition({
       db,
+      memberId: "member-1",
       conversationId: "channel-1",
       workspaceId: "workspace-1",
       agentId: "agent-1",
       sequence: 4,
-      isDirectConversation: false,
+      publishConversationRead: true,
     }),
-  ).toBeUndefined();
+  ).toMatchObject({ memberId: "member-1" });
   expect(
     await advanceAgentReadPosition({
       db,
@@ -528,7 +529,7 @@ test("thread and channel read advances do not publish Agent DM events", async ()
       agentId: "agent-1",
       threadRootId: "root-1",
       sequence: 5,
-      isDirectConversation: false,
+      publishConversationRead: false,
     }),
   ).toBeUndefined();
   expect(
@@ -540,7 +541,7 @@ test("thread and channel read advances do not publish Agent DM events", async ()
       agentId: "agent-1",
       threadRootId: "root-1",
       sequence: 6,
-      isDirectConversation: true,
+      publishConversationRead: false,
     }),
   ).toBeUndefined();
 });
@@ -548,7 +549,7 @@ test("thread and channel read advances do not publish Agent DM events", async ()
 test("a rolled-back drain does not publish collected Agent read changes", async () => {
   const published: object[] = [];
   await expect(
-    publishAgentReadChangesAfterCommit(
+    publishConversationReadChangesAfterCommit(
       async () => {
         throw new Error("rollback");
       },
@@ -560,7 +561,7 @@ test("a rolled-back drain does not publish collected Agent read changes", async 
   expect(published).toEqual([]);
 });
 
-test("history reads of a channel or DM thread do not publish a DM main read", async () => {
+test("channel main reads publish while DM thread reads stay silent", async () => {
   const events: object[] = [];
   const db = {
     conversationMember: {
@@ -601,7 +602,7 @@ test("history reads of a channel or DM thread do not publish a DM main read", as
     isChannel: true,
     isUserAgentDirectConversation: false,
     page,
-    agentReadChanged: async (event) => {
+    conversationReadChanged: async (event) => {
       events.push(event);
     },
     resolveAnchor: async () => ({ id: "root-1", sequence: 1, threadRootId: "root-1" }),
@@ -615,10 +616,17 @@ test("history reads of a channel or DM thread do not publish a DM main read", as
     isChannel: false,
     isUserAgentDirectConversation: true,
     page,
-    agentReadChanged: async (event) => {
+    conversationReadChanged: async (event) => {
       events.push(event);
     },
     resolveAnchor: async () => ({ id: "root-1", sequence: 1, threadRootId: "root-1" }),
   });
-  expect(events).toEqual([]);
+  expect(events).toEqual([
+    {
+      workspaceId: "workspace-1",
+      conversationId: "channel-1",
+      memberId: "member-1",
+      readThroughSequence: 3,
+    },
+  ]);
 });

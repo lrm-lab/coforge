@@ -21,7 +21,7 @@ import {
 import { readThroughOf } from "./thread-read-position.server";
 import {
   advanceAgentReadPosition,
-  type AgentReadChangedInput,
+  type ConversationReadChangedInput,
 } from "./agent-read-position.repositories.server";
 
 /** Windowing and read-through after the caller has authorized and resolved its target. */
@@ -38,7 +38,7 @@ export async function readAgentMessagePage(
     page: AgentMessagesPage;
     consumptionScope?: AgentHistoryConsumptionScope;
     additionalScope?: Prisma.MessageWhereInput;
-    agentReadChanged?(input: AgentReadChangedInput): Promise<void>;
+    conversationReadChanged?(input: ConversationReadChangedInput): Promise<void>;
     resolveAnchor(
       anchor: string,
     ): Promise<{ id: string; sequence: number; threadRootId: string | null }>;
@@ -55,7 +55,7 @@ export async function readAgentMessagePage(
     page,
     consumptionScope,
     additionalScope,
-    agentReadChanged,
+    conversationReadChanged,
     resolveAnchor,
   } = input;
   const scope = {
@@ -108,9 +108,9 @@ export async function readAgentMessagePage(
       agentId,
       threadRootId,
       sequence,
-      isDirectConversation: isUserAgentDirectConversation,
+      publishConversationRead: isChannel || isUserAgentDirectConversation,
     });
-    if (publication) void agentReadChanged?.(publication)?.catch(() => {});
+    if (publication) void conversationReadChanged?.(publication)?.catch(() => {});
   };
   // An `unread` read starts at the read position. A latest or anchored page moves it only when the
   // shared contiguity rule proves that it joins the existing read-through.

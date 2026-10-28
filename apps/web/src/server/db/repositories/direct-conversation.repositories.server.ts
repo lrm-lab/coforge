@@ -125,17 +125,19 @@ import {
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
 import { resolveAgentConversationTarget } from "./agent-target-resolution.server";
-import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   advanceAgentReadGroups,
   agentReadGroupsForPage,
-  publishAgentReadChangesAfterCommit,
+  conversationReadChangedPort,
+  type ConversationReadRealtimePort,
+  publishConversationReadChangesAfterCommit,
 } from "./agent-read-groups.repositories.server";
 import {
   searchAgentMessagePage,
   type AgentMessageSearchOptions,
   type AgentMessageSearchPage,
 } from "./agent-message-search.repositories.server";
+import { othersReadThroughSequence } from "#src/server/conversations/conversation-read-state.server";
 import {
   AGENT_RECOVERY_MESSAGE_LIMIT,
   recoverySecondPass,
@@ -426,7 +428,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   constructor(
     private readonly db: PrismaClient,
     { oneRequest = false }: { oneRequest?: boolean } = {},
-    private readonly realtime?: ReactionPort & Pick<ConversationRealtime, "agentReadChanged">,
+    private readonly realtime?: ReactionPort & ConversationReadRealtimePort,
   ) {
     if (oneRequest) this.#agentChannels = new Map();
   }
@@ -812,6 +814,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       select: {
         directKey: true,
         members: {
+          where: ACTIVE_MEMBER_WHERE,
           select: {
             id: true,
             userId: true,
@@ -916,6 +919,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     return {
       conversationId,
       senderMemberId: sender.id,
+      othersReadThroughSequence: othersReadThroughSequence(sender.id, members),
       // The viewer's conversation-level read boundary: first unread = first top-level
       // message past this. Thread replies are positioned by their thread instead.
       readThroughSequence: sender.readThroughSequence,
@@ -1332,7 +1336,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       page,
       resolveTarget: (value) => this.resolveAgentTarget(workspaceId, agentId, value),
       resolveAnchor: (conversationId, anchor) => this.resolveMessage(conversationId, anchor),
-      agentReadChanged: this.realtime?.agentReadChanged?.bind(this.realtime),
+      conversationReadChanged: conversationReadChangedPort(this.realtime),
     });
   }
 
@@ -1456,7 +1460,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }> {
     const bounded = clampPageLimit(limit, 100);
     const scope = target ? await this.drainScope(workspaceId, agentId, target) : undefined;
-    return publishAgentReadChangesAfterCommit(
+    return publishConversationReadChangesAfterCommit(
       () =>
         this.db.$transaction(async (tx) => {
           const rows = await tx.$queryRaw<
@@ -1477,7 +1481,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
           const hasMore = rows.length > bounded;
           const page = rows.slice(0, bounded);
           if (page.length === 0)
-            return { result: { messages: [], hasMore: false }, agentReadChanges: [] };
+            return { result: { messages: [], hasMore: false }, conversationReadChanges: [] };
           const messageRows = await tx.message.findMany({
             where: { id: { in: page.map((row) => row.id) } },
             include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
@@ -1533,23 +1537,18 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
             select: { id: true, conversationId: true },
           });
           const memberIdByConversation = new Map(members.map((m) => [m.conversationId, m.id]));
-          const directConversationById = new Map(
-            messageRows.map((message) => [
-              message.conversationId,
-              isUserAgentDirectConversation(message.conversation),
-            ]),
-          );
-          const agentReadChanges = await advanceAgentReadGroups({
+          const changes = await advanceAgentReadGroups({
             db: tx,
             groups: targetGroups.values(),
             memberIdByConversation,
-            directConversationById,
+            messageRows,
+            isUserAgentDirectConversation,
             workspaceId,
             agentId,
           });
-          return { result: { messages, hasMore }, agentReadChanges };
+          return { result: { messages, hasMore }, conversationReadChanges: changes };
         }),
-      this.realtime?.agentReadChanged?.bind(this.realtime),
+      conversationReadChangedPort(this.realtime),
     );
   }
 

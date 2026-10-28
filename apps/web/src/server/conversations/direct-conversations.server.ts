@@ -14,6 +14,7 @@ import {
 } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PrismaDirectConversationPreferences } from "#src/server/db/repositories/direct-conversation-preferences.repositories.server";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
+import { announceConversationReadChanged } from "./conversation-read-realtime.server";
 import { SendDirectMessage } from "./direct-message.server";
 import { humanReadState } from "./human-unread.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
@@ -48,7 +49,10 @@ export class DirectConversations {
 
   constructor(
     private readonly db: PrismaClient,
-    private readonly realtime?: Pick<ConversationRealtime, "viewerChanged" | "reactionChanged">,
+    private readonly realtime?: Pick<
+      ConversationRealtime,
+      "viewerChanged" | "reactionChanged" | "conversationReadChanged"
+    >,
   ) {
     this.conversations = new PrismaDirectConversationRepository(db);
     this.preferences = new PrismaDirectConversationPreferences(db);
@@ -318,11 +322,20 @@ export class DirectConversations {
       conversationId,
       throughSequence,
     );
-    if (state !== undefined)
+    if (state !== undefined) {
+      const { memberId, readThroughAdvanced, ...viewerState } = state;
       await announceViewerEvent(this.realtime, {
         userIds: [viewerId],
-        event: { type: "dm.marked.v1", workspaceId, conversationId, ...state },
+        event: { type: "dm.marked.v1", workspaceId, conversationId, ...viewerState },
       });
+      if (readThroughAdvanced)
+        await announceConversationReadChanged(this.realtime, {
+          workspaceId,
+          conversationId,
+          memberId,
+          readThroughSequence: state.readThroughSequence,
+        });
+    }
   }
 
   /** Advances the viewer's read position in one thread. */

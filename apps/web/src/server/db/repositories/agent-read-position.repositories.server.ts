@@ -1,21 +1,21 @@
 import { advanceAgentRead } from "./thread-read-position.server";
 
-export type AgentReadChangedInput = {
+export type ConversationReadChangedInput = {
   workspaceId: string;
   conversationId: string;
-  agentId: string;
+  memberId: string;
   readThroughSequence: number;
 };
 
 export type AgentReadPositionInput = {
   db: Parameters<typeof advanceAgentRead>[0];
-  memberId?: string;
+  memberId: string;
   conversationId: string;
   workspaceId: string;
   agentId: string;
   threadRootId?: string | null;
   sequence: number;
-  isDirectConversation: boolean;
+  publishConversationRead: boolean;
 };
 
 export async function advanceAgentReadPosition(input: AgentReadPositionInput) {
@@ -27,11 +27,11 @@ export async function advanceAgentReadPosition(input: AgentReadPositionInput) {
     threadRootId: input.threadRootId ?? null,
     sequence: input.sequence,
   });
-  return advanced && input.isDirectConversation && !input.threadRootId
+  return advanced && input.publishConversationRead && !input.threadRootId
     ? {
         workspaceId: input.workspaceId,
         conversationId: input.conversationId,
-        agentId: input.agentId,
+        memberId: input.memberId,
         readThroughSequence: input.sequence,
       }
     : undefined;

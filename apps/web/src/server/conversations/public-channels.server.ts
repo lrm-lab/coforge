@@ -25,12 +25,9 @@ import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { CHANNEL_NAME_PATTERN, type MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { windowPageFlags } from "#src/lib/conversation-window";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
-import {
-  HUMAN_UNREAD_MESSAGE_SQL,
-  humanReadState,
-  markHumanRead,
-  markUnreadAnchor,
-} from "./human-unread.server";
+import { HUMAN_UNREAD_MESSAGE_SQL, humanReadState, markUnreadAnchor } from "./human-unread.server";
+import { markPublicChannelRead } from "./channel-read.server";
+import { othersReadThroughSequence } from "./conversation-read-state.server";
 import {
   channelActorMemberWhere,
   deriveChannelAdminBasis,
@@ -1192,21 +1189,14 @@ export class PublicChannels {
    * messages into "already read").
    */
   async markRead(workspaceId: string, userId: string, channelId: string, throughSequence: number) {
-    await this.channel(workspaceId, userId, channelId);
-    if (!Number.isSafeInteger(throughSequence) || throughSequence < 1)
-      throw new AppError("INVALID_INPUT");
-    // A read that moved the cursor tells the reader's other pages the badge it leaves (Slack's
-    // `channel_marked`); one that moved nothing says nothing, so an open channel reading along
-    // with new messages announces only real moves.
-    const state = await markHumanRead(this.db, {
-      conversationId: channelId,
+    await markPublicChannelRead({
+      db: this.db,
+      realtime: this.realtime,
+      authorize: () => this.channel(workspaceId, userId, channelId),
+      workspaceId,
       userId,
+      conversationId: channelId,
       throughSequence,
-    });
-    if (state === undefined) return;
-    await announceViewerEvent(this.realtime, {
-      userIds: [userId],
-      event: { type: "channel.marked.v1", workspaceId, conversationId: channelId, ...state },
     });
   }
 
@@ -1650,6 +1640,9 @@ export class PublicChannels {
       this.db.conversationMember.findMany({
         where: { conversationId: channelId, ...ACTIVE_MEMBER_WHERE },
         select: {
+          id: true,
+          readThroughSequence: true,
+          agentReadThroughSequence: true,
           user: {
             select: {
               id: true,
@@ -1725,6 +1718,11 @@ export class PublicChannels {
       // the client positions the initial view at the first unread message and draws the
       // divider there. Undefined for a non-member (nothing is "unread for them").
       readThroughSequence: member?.readThroughSequence,
+      ...(member
+        ? {
+            othersReadThroughSequence: othersReadThroughSequence(member.id, mentionRows),
+          }
+        : {}),
       threads,
       threadReadThrough,
       followedThreadRootIds: followedRootIds,
