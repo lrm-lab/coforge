@@ -20,22 +20,24 @@ const longBody = `  const value = input.trim();
 const script = join(import.meta.dir, "dead-code.ts");
 const repo = useTestRepo();
 
-test("a declaration is found with the line it starts on", () => {
+test("a declaration is found with the kind and the line it starts on", () => {
   const text = [
     "import { x } from './x';",
     "",
     "export function alpha() {}",
     "export const beta = 1;",
+    "export type Gamma = string;",
   ].join("\n");
   expect(declaredExports(text)).toEqual([
-    { name: "alpha", line: 3 },
-    { name: "beta", line: 4 },
+    { name: "alpha", kind: "value", line: 3 },
+    { name: "beta", kind: "value", line: 4 },
+    { name: "Gamma", kind: "type", line: 5 },
   ]);
 });
 
 test("a const enum is one declaration, not a declaration named enum", () => {
   expect(declaredExports("export const enum Mode {\n  A,\n}\n")).toEqual([
-    { name: "Mode", line: 1 },
+    { name: "Mode", kind: "value", line: 1 },
   ]);
 });
 
@@ -49,28 +51,35 @@ test("only product and package source is a candidate", () => {
   expect(isCandidatePath("packages/x/src/a_pb.ts")).toBe(false);
 });
 
-test("an export only its own file uses is dead, one another file references is not", () => {
+test("an export nothing names is unused, one its own file uses is internal, one elsewhere is not reported", () => {
   const report = analyze(
     new Map([
       [
         "packages/x/src/a.ts",
-        ["export function unused() {}", "export function used() {}", "used();"].join("\n"),
+        [
+          "export function unused() {}",
+          "export function internal() {}",
+          "export function used() {}",
+          "internal();",
+        ].join("\n"),
       ],
       ["packages/x/src/b.ts", "import { used } from './a';\nused();"],
     ]),
   );
-  expect(report.exports.map((entry) => entry.name)).toEqual(["unused"]);
-  expect(report.exports[0]).toMatchObject({ path: "packages/x/src/a.ts", line: 1 });
+  expect(report.unused.map((entry) => entry.name)).toEqual(["unused"]);
+  expect(report.internal.map((entry) => entry.name)).toEqual(["internal"]);
+  expect(report.unused[0]).toMatchObject({ path: "packages/x/src/a.ts", line: 1, sameFileUses: 1 });
+  expect(report.internal[0]).toMatchObject({ sameFileUses: 2 });
 });
 
-test("two dead declarations of one name are both reported", () => {
+test("two dead declarations of one name are both unused", () => {
   const report = analyze(
     new Map([
       ["packages/x/src/a.ts", "export function twin() {}"],
       ["packages/x/src/b.ts", "export function twin() {}"],
     ]),
   );
-  expect(report.exports.map((entry) => `${entry.name}@${entry.path}`)).toEqual([
+  expect(report.unused.map((entry) => `${entry.name}@${entry.path}`)).toEqual([
     "twin@packages/x/src/a.ts",
     "twin@packages/x/src/b.ts",
   ]);
@@ -101,14 +110,17 @@ test("an import with an explicit extension still names its module", () => {
   expect(report.modules.map((module) => module.path)).not.toContain("packages/x/src/alpha.ts");
 });
 
-test("a bare side-effect import still names its module", () => {
+test("a bare side-effect import and a require both name their module", () => {
   const report = analyze(
     new Map([
       ["packages/x/src/register.ts", "export const a = 1;"],
-      ["apps/web/src/consumer.ts", "import './register';"],
+      ["packages/x/src/legacy.ts", "export const b = 2;"],
+      ["apps/web/src/consumer.ts", "import './register';\nrequire('./legacy');"],
     ]),
   );
-  expect(report.modules.map((module) => module.path)).not.toContain("packages/x/src/register.ts");
+  const paths = report.modules.map((module) => module.path);
+  expect(paths).not.toContain("packages/x/src/register.ts");
+  expect(paths).not.toContain("packages/x/src/legacy.ts");
 });
 
 test("a module the build names by its path is not orphaned", () => {
@@ -140,28 +152,59 @@ test("the same function body in two files is a duplicate; a short body is not", 
   ]);
 });
 
-test("a brace inside a string or a comment does not cut the body short", () => {
+test("an arrow function assigned to a const is compared too", () => {
+  const body = `export const parse = (input: string) => {\n${longBody}\n}`;
+  const report = analyze(
+    new Map([
+      ["packages/x/src/a.ts", body],
+      ["packages/x/src/b.ts", body],
+    ]),
+  );
+  expect(report.duplicates).toHaveLength(1);
+  expect(report.duplicates[0]!.name).toBe("parse");
+});
+
+test("a brace or a quote inside a string, a regex or a comment does not cut the body short", () => {
   const body = [
-    "export function payload() {",
+    "export function matcher(input: string) {",
     '  const json = "}";',
     "  // } a comment brace",
+    "  const quoted = /['\"`]/;",
+    "  const braces = /a{2,3}/;",
     "  const text = `${json} }`;",
     `  const filler = "${"x".repeat(140)}";`,
-    "  return 1;",
+    "  return quoted.test(input) && braces.test(text) && json.length > 0;",
     "}",
   ].join("\n");
   const [parsed] = functionBodies(body);
-  expect(parsed!.body.endsWith("return 1;")).toBe(true);
+  expect(parsed!.body.endsWith("json.length > 0;")).toBe(true);
   expect(parsed!.body.length).toBeGreaterThan(140);
   expect(parsed!.line).toBe(1);
 });
 
+test("a regex containing a quote does not blank the rest of the file", () => {
+  const text = [
+    "export function check(input: string) {",
+    "  const ok = /['\"]/.test(input);",
+    "  return ok;",
+    "}",
+    "",
+    "export function after() {",
+    "  return 1;",
+    "}",
+  ].join("\n");
+  const names = functionBodies(text).map((body) => body.name);
+  expect(names).toEqual(["check", "after"]);
+  expect(functionBodies(text)[0]!.body).toContain("return ok;");
+});
+
 test("noise stripping keeps every newline and every code character", () => {
-  const text = 'const a = "x\\ny";\n// comment\nconst b = `z`;\n';
+  const text = 'const a = "x\\ny";\n// comment\nconst b = `z`;\nconst c = /[\\]]/;\n';
   const stripped = stripNoise(text);
   expect(stripped.split("\n")).toHaveLength(text.split("\n").length);
   expect(stripped).toContain("const a =");
   expect(stripped).toContain("const b =");
+  expect(stripped).toContain("const c =");
   expect(stripped).not.toContain("comment");
 });
 
@@ -182,7 +225,12 @@ test("the report names each section with its count", () => {
     files: 3,
     candidates: 2,
     modules: [{ path: "packages/x/src/lonely.ts", lines: 4 }],
-    exports: [{ name: "unused", path: "packages/x/src/a.ts", line: 2 }],
+    unused: [
+      { name: "gone", kind: "value", path: "packages/x/src/a.ts", line: 2, sameFileUses: 1 },
+    ],
+    internal: [
+      { name: "Hidden", kind: "type", path: "packages/x/src/b.ts", line: 3, sameFileUses: 2 },
+    ],
     duplicates: [
       {
         name: "parse",
@@ -196,8 +244,10 @@ test("the report names each section with its count", () => {
   expect(markdown).toContain("2 of them candidate source");
   expect(markdown).toContain("## Modules nothing imports (1)");
   expect(markdown).toContain("`packages/x/src/lonely.ts` (4 lines)");
-  expect(markdown).toContain("## Exports nothing outside their own file references (1)");
-  expect(markdown).toContain("`unused` - `packages/x/src/a.ts:2`");
+  expect(markdown).toContain("## Exports nothing references anywhere (1)");
+  expect(markdown).toContain("`gone` - `packages/x/src/a.ts:2`");
+  expect(markdown).toContain("## Exports only their own file uses (1)");
+  expect(markdown).toContain("`Hidden` (type) - `packages/x/src/b.ts:3`");
   expect(markdown).toContain("## Identical function bodies in more than one file (1)");
   expect(markdown).toContain("`parse` (2 copies)");
 });
@@ -223,6 +273,7 @@ test("--json answers the same report in machine-readable form", () => {
   expect(report.modules.map((module: { path: string }) => module.path)).toEqual([
     "packages/x/src/lonely.ts",
   ]);
+  expect(report.unused.map((entry: { name: string }) => entry.name)).toEqual(["lonely"]);
 });
 
 test("a work tree with no candidate source is refused rather than reported clean", () => {
@@ -230,6 +281,7 @@ test("a work tree with no candidate source is refused rather than reported clean
   const result = repo.run([process.execPath, script]);
   expect(result.exitCode).toBe(1);
   expect(result.stderr).toContain("no apps/*/src or packages/*/src TypeScript");
+  expect(result.stderr).not.toContain("    at ");
 });
 
 test("running outside a git work tree is refused", () => {
@@ -244,5 +296,18 @@ test("running outside a git work tree is refused", () => {
     expect(result.stderr.toString()).toContain("run this inside a git work tree");
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a missing git is named as such, not as a missing work tree", () => {
+  repo.seed({ "packages/x/src/lonely.ts": "export const lonely = 1;\n" });
+  // An empty PATH is not enough: the OS falls back to its default search path, which has git.
+  const withoutGit = mkdtempSync(join(tmpdir(), "coforge-audit-path-"));
+  try {
+    const result = repo.run([process.execPath, script], { PATH: withoutGit });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("git is not on PATH");
+  } finally {
+    rmSync(withoutGit, { recursive: true, force: true });
   }
 });
