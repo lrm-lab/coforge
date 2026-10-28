@@ -43,6 +43,7 @@ import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-mode
 import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
+import { listedWorkspaceComputerWhere } from "#src/server/computers/computer-list-visibility.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { RestartComputer } from "#src/server/computers/restart-computer.server";
@@ -137,17 +138,7 @@ export const readUsage = createServerFn({ method: "GET" })
     });
   });
 
-/** Every Computer connected to the Workspace, by identity only: what pickers and search name. */
-export const listComputerNames = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context: { db, workspaceId } }) => {
-    const connections = await db.workspaceComputer.findMany({
-      where: { workspaceId, computer: { deletedAt: null } },
-      select: { computer: { select: { id: true, name: true, displayName: true, kind: true } } },
-      orderBy: { createdAt: "asc" },
-    });
-    return connections.map(({ computer }) => computer);
-  });
+export { listComputerNames } from "./computer-list-names.functions";
 
 export const listComputers = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
@@ -159,7 +150,7 @@ export const listComputers = createServerFn({ method: "GET" })
     const canManage = agentViewer.role === "owner" || agentViewer.role === "admin";
     const [connections, runtimes] = await Promise.all([
       db.workspaceComputer.findMany({
-        where: { workspaceId, computer: { deletedAt: null } },
+        where: { workspaceId, computer: listedWorkspaceComputerWhere(user.id) },
         select: {
           createdAt: true,
           computer: {

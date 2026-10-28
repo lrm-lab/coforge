@@ -2,6 +2,10 @@
 
 These rules apply to `src/server/computers/`.
 
+- `computer-list-visibility.server.ts` is the list/search filter for Workspace
+  members: another person's account default cloud Computer is omitted; extras
+  and local Computers stay. Host jobs, daemons, and Agent placement that read
+  links directly are unchanged.
 - `computer-metadata.server.ts` persists last-observed OS and executable
   metadata. The Daemon `ready` message supplies observations only, never
   creator identity.

@@ -38,7 +38,10 @@ These rules apply to `src/features/computers/`.
   created, and ensured once more when the Computers page opens. That start also
   binds the creator's weekly-report assistant to the default computer. Each
   Workspace can add one extra. The cluster places it. The page does not ask the
-  user to pick a host. The owner's Open desktop button opens
+  user to pick a host. Another member's default cloud Computer stays linked for
+  that owner's Agents and daemons, but `listComputers` / `listComputerNames`
+  hide it from everyone except its owner (`computer-list-visibility.server.ts`);
+  extras and local Computers stay listed for every member. The owner's Open desktop button opens
   `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in its own window when that
   deployment variable is set, and opening it again brings that window forward.
   The same owner's Computer tab opens that Agent's
