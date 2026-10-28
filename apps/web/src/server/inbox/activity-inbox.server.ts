@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type {
   ActivityInboxFilter,
@@ -16,18 +16,15 @@ import {
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
 import {
-  HUMAN_UNREAD_MESSAGE_SQL,
   directThreadsSql,
   followedChannelThreadsSql,
   humanReadStates,
-  humanUnreadReplySql,
   markConversationDoneSql,
   markConversationsReadSql,
   markThreadDoneSql,
   markThreadsReadSql,
 } from "#src/server/conversations/human-unread.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
-import { viewerDirectConversationSql } from "#src/server/conversations/viewer-direct-conversations.server";
 import {
   peoplePeer,
   peoplePeerUserFields,
@@ -36,6 +33,11 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
+import {
+  conversationCandidatesSql,
+  navUnreadTotalSql,
+  threadCandidatesSql,
+} from "./activity-inbox-items-sql.server";
 
 /**
  * A person's Activity inbox: every joined channel, every direct message of theirs (with their own
@@ -256,43 +258,14 @@ export class ActivityInbox {
   /**
    * The viewer's total unread activity count, without listing items — what the nav rail's Activity
    * dot reads. Same candidates the inbox lists, so Done and read move it exactly like the page.
+   * Every online viewer re-reads this on each Workspace message.
    */
   async navAttention(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
-    return { unread: await this.unreadTotal(workspaceId, userId) };
-  }
-
-  /**
-   * The viewer's total unread activity, in one statement: the same three terms the inbox lists —
-   * joined conversations, followed threads and notified mentions — each counted from the item's own
-   * read boundary up. Every online viewer re-reads this on each Workspace message, so it counts in
-   * one statement rather than listing the items.
-   */
-  private async unreadTotal(workspaceId: string, userId: string): Promise<number> {
-    const [{ unread }] = await this.db.$queryRaw<[{ unread: number }]>`
-      SELECT ((
-        SELECT COUNT(*) FROM ${conversationItemsSql(workspaceId, userId)}
-        JOIN "messages" m
-          ON m."conversationId" = cm."conversationId"
-         AND m."threadRootId" IS NULL
-         AND ${HUMAN_UNREAD_MESSAGE_SQL}
-        WHERE ${conversationItemListedSql(userId)}
-      ) + (
-        -- Per thread, as the list counts it: an index range above that thread's read cursor. A
-        -- plain join let the planner read every reply of every followed thread before the cursor.
-        SELECT COALESCE(SUM(replies."unread"), 0) FROM ${threadItemsSql(workspaceId, userId)}
-        ${threadUnreadLateral}
-        WHERE ${threadItemListedSql(userId)}
-      ) + (
-        -- Each notified mention is one unread item until the viewer reads it.
-        SELECT COUNT(*) FROM "pending_mention_actions" pma
-        JOIN "conversations" pc ON pc."id" = pma."conversationId"
-         AND pc."archivedAt" IS NULL AND pc."hiddenFromWorkspaceAt" IS NULL
-        WHERE pma."workspaceId" = ${workspaceId}::uuid AND pma."targetUserId" = ${userId}::uuid
-          AND pma."notifiedAt" IS NOT NULL AND pma."dismissedAt" IS NULL
-          AND pma."targetReadAt" IS NULL
-      ))::int AS "unread"`;
-    return unread;
+    const [{ unread }] = await this.db.$queryRaw<[{ unread: number }]>(
+      navUnreadTotalSql(workspaceId, userId),
+    );
+    return { unread };
   }
 
   /** Reads or unreads a mention the viewer was notified of; it stays listed until Done. */
@@ -349,57 +322,8 @@ export class ActivityInbox {
     // items, and none of them depends on the others. Starting them together means the page waits
     // for the slowest instead of for two waves.
     const [conversations, threads, mentions] = await Promise.all([
-      this.db.$queryRaw<ActivityCandidateRow[]>`
-        SELECT
-          CASE WHEN c."channelName" IS NOT NULL THEN 'channel' ELSE 'direct' END AS "kind",
-          cm."id" AS "memberId",
-          cm."conversationId" AS "conversationId",
-          NULL::uuid AS "rootMessageId",
-          c."channelName" AS "channelName",
-          c."directKey" AS "directKey",
-          peer."agentId" AS "agentId",
-          latest."id" AS "latestMessageId",
-          latest."sequence" AS "latestSequence",
-          latest."createdAt" AS "latestAt",
-          unread."count" AS "unreadCount",
-          unread."firstId" AS "firstUnreadMessageId",
-          mention."unread" AS "unreadMention",
-          mention."firstId" AS "firstMentionMessageId",
-          ${conversationPastDoneSql} AS "pastDone",
-          pin."sortOrder" AS "pinOrder",
-          pin."createdAt" AS "pinnedAt"
-        FROM ${conversationItemsSql(workspaceId, userId)}
-        LEFT JOIN "conversation_pins" pin
-          ON pin."workspaceId" = ${workspaceId}::uuid
-         AND pin."memberId" = cm."id"
-         AND pin."conversationId" = cm."conversationId"
-        ${conversationUnreadLateral}
-        ${conversationMentionLateral}
-        WHERE ${conversationItemVisibleSql(userId)}
-          AND (${conversationPastDoneSql} OR pin."memberId" IS NOT NULL)`,
-      this.db.$queryRaw<ActivityCandidateRow[]>`
-        SELECT
-          threads."kind" AS "kind",
-          threads."memberId" AS "memberId",
-          threads."conversationId" AS "conversationId",
-          threads."rootMessageId" AS "rootMessageId",
-          c."channelName" AS "channelName",
-          c."directKey" AS "directKey",
-          peer."agentId" AS "agentId",
-          latest."id" AS "latestMessageId",
-          latest."sequence" AS "latestSequence",
-          latest."createdAt" AS "latestAt",
-          replies."unread" AS "unreadCount",
-          replies."firstUnreadId" AS "firstUnreadMessageId",
-          mention."unread" AS "unreadMention",
-          mention."firstId" AS "firstMentionMessageId",
-          TRUE AS "pastDone",
-          NULL::int AS "pinOrder",
-          NULL::timestamp AS "pinnedAt"
-        FROM ${threadItemsSql(workspaceId, userId)}
-        ${threadUnreadLateral}
-        ${threadMentionLateral}
-        WHERE ${threadItemListedSql(userId)}`,
+      this.db.$queryRaw<ActivityCandidateRow[]>(conversationCandidatesSql(workspaceId, userId)),
+      this.db.$queryRaw<ActivityCandidateRow[]>(threadCandidatesSql(workspaceId, userId)),
       this.mentionCandidates(workspaceId, userId),
     ]);
     return [...conversations, ...threads].map(activityCandidate).concat(mentions);
@@ -579,99 +503,6 @@ export class ActivityInbox {
   }
 }
 
-/** A reply unread for the thread's viewer (the candidate query's `threads` and `tr` rows). */
-const unreadReplySql = humanUnreadReplySql(
-  Prisma.sql`threads."memberId"`,
-  Prisma.sql`tr."readThroughSequence"`,
-);
-
-/**
- * The per-candidate unread and mention laterals. Each names the aliases its `FROM` provides (`cm`
- * for conversations, `threads`/`tr` for threads).
- */
-const conversationUnreadLateral = Prisma.sql`CROSS JOIN LATERAL (
-  SELECT COUNT(*)::int AS "count",
-    (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
-  FROM "messages" m
-  WHERE m."conversationId" = cm."conversationId"
-    AND m."threadRootId" IS NULL
-    AND ${HUMAN_UNREAD_MESSAGE_SQL}
-) unread`;
-
-const conversationMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
-  SELECT COALESCE(BOOL_OR(${HUMAN_UNREAD_MESSAGE_SQL}), FALSE) AS "unread",
-    (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
-  FROM "message_mentions" mm
-  JOIN "messages" m ON m."id" = mm."messageId" AND m."conversationId" = mm."conversationId"
-  WHERE mm."memberId" = cm."id"
-    AND m."threadRootId" IS NULL
-    AND m."sequence" > COALESCE(cm."doneThroughSequence", 0)
-) mention`;
-
-const threadUnreadLateral = Prisma.sql`CROSS JOIN LATERAL (
-  SELECT COUNT(*)::int AS "unread",
-    (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstUnreadId"
-  FROM "messages" m
-  WHERE m."conversationId" = threads."conversationId"
-    AND m."threadRootId" = threads."rootMessageId"
-    AND ${unreadReplySql}
-) replies`;
-
-const threadMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
-  SELECT COALESCE(BOOL_OR(${unreadReplySql}), FALSE) AS "unread",
-    (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
-  FROM "messages" m
-  JOIN "message_mentions" mm
-    ON mm."messageId" = m."id"
-   AND mm."memberId" = threads."memberId"
-   AND mm."conversationId" = m."conversationId"
-  WHERE m."conversationId" = threads."conversationId"
-    AND m."threadRootId" = threads."rootMessageId"
-    AND m."sequence" > COALESCE(tr."doneThroughSequence", 0)
-) mention`;
-
-/**
- * The viewer's joined conversations with a DM's Agent (`peer`) and newest top-level message
- * (`latest`), as the `FROM` of an item query over `cm` and `c`. The list and the nav dot share it
- * and the clauses of `conversationItemListedSql`, so they cannot disagree on what is listed.
- */
-function conversationItemsSql(workspaceId: string, userId: string) {
-  return Prisma.sql`"conversation_members" cm
-    JOIN "conversations" c
-      ON c."id" = cm."conversationId"
-     AND cm."userId" = ${userId}::uuid
-     AND cm."workspaceId" = ${workspaceId}::uuid
-     AND cm."leftAt" IS NULL
-     AND c."workspaceId" = ${workspaceId}::uuid
-     AND c."archivedAt" IS NULL
-     AND c."hiddenFromWorkspaceAt" IS NULL
-    LEFT JOIN LATERAL (
-      SELECT am."agentId" FROM "conversation_members" am
-      JOIN "agents" a ON a."id" = am."agentId" AND a."deletedAt" IS NULL
-      WHERE am."conversationId" = cm."conversationId" AND am."agentId" IS NOT NULL
-      LIMIT 1
-    ) peer ON c."directKey" IS NOT NULL
-    CROSS JOIN LATERAL (
-      SELECT m."id", m."sequence", m."createdAt" FROM "messages" m
-      WHERE m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
-      ORDER BY m."sequence" DESC LIMIT 1
-    ) latest`;
-}
-
-/** A joined conversation the inbox can list: a channel, or one of the viewer's own DMs (the ones
- * their Direct messages list holds). */
-function conversationItemVisibleSql(userId: string) {
-  return Prisma.sql`(c."channelName" IS NOT NULL OR ${viewerDirectConversationSql(userId)})`;
-}
-
-/** A joined conversation's newest top-level message is past the viewer's Done boundary. */
-const conversationPastDoneSql = Prisma.sql`(latest."sequence" > COALESCE(cm."doneThroughSequence", 0))`;
-
-/** A joined conversation is listed when the inbox can list it and it has activity past Done. */
-function conversationItemListedSql(userId: string) {
-  return Prisma.sql`${conversationItemVisibleSql(userId)} AND ${conversationPastDoneSql}`;
-}
-
 /** A candidate from its statement row, its two pin columns joined into one pin. */
 function activityCandidate({
   pinOrder,
@@ -691,40 +522,4 @@ function activityItemKey(candidate: ActivityCandidate) {
     : candidate.rootMessageId
       ? `thread:${candidate.rootMessageId}`
       : `conversation:${candidate.conversationId}`;
-}
-
-/**
- * The viewer's followed channel threads and direct-message threads (`threads`) with their
- * conversation (`c`), a DM's Agent (`peer`), thread cursors (`tr`) and newest reply (`latest`), as
- * the `FROM` of an item query. `threadItemListedSql` is its `WHERE`.
- */
-function threadItemsSql(workspaceId: string, userId: string) {
-  return Prisma.sql`(
-      SELECT 'channel' AS "kind", followed.* FROM (${followedChannelThreadsSql(workspaceId, userId)}) followed
-      UNION ALL
-      SELECT 'direct' AS "kind", direct.* FROM (${directThreadsSql(workspaceId, userId)}) direct
-    ) threads
-    JOIN "conversations" c ON c."id" = threads."conversationId"
-    LEFT JOIN LATERAL (
-      SELECT am."agentId" FROM "conversation_members" am
-      JOIN "agents" a ON a."id" = am."agentId" AND a."deletedAt" IS NULL
-      WHERE threads."kind" = 'direct'
-        AND am."conversationId" = threads."conversationId"
-        AND am."agentId" IS NOT NULL
-      LIMIT 1
-    ) peer ON TRUE
-    LEFT JOIN "thread_reads" tr
-      ON tr."memberId" = threads."memberId" AND tr."rootMessageId" = threads."rootMessageId"
-    CROSS JOIN LATERAL (
-      SELECT m."id", m."sequence", m."createdAt" FROM "messages" m
-      WHERE m."conversationId" = threads."conversationId"
-        AND m."threadRootId" = threads."rootMessageId"
-      ORDER BY m."sequence" DESC LIMIT 1
-    ) latest`;
-}
-
-/** A thread is listed with a reply past Done; a direct-message thread only in the viewer's own DMs. */
-function threadItemListedSql(userId: string) {
-  return Prisma.sql`latest."sequence" > COALESCE(tr."doneThroughSequence", 0)
-    AND (threads."kind" = 'channel' OR ${viewerDirectConversationSql(userId)})`;
 }
