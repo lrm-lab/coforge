@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { TaskCommand, TaskPrincipal, TaskStatus } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { refuseUnclaimed, TaskBoard } from "#src/server/tasks/task-board.server";
+import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { refuseUnclaimed } from "#src/server/tasks/task-claims.server";
 
 const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 

@@ -1,20 +1,34 @@
-import { readDirectConversationMessagesPage } from "./agent-message-history-adapter.server";
-import { findAgentScopedMessage } from "./agent-message-lookup.repositories.server";
-import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
-import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
-import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
 import {
-  AGENT_MESSAGE_WITH_TARGET_INCLUDE,
-  CONVERSATION_TARGET_MEMBERS,
-  conversationTarget,
-  deliveryTarget,
-  messageDeliveryTarget,
-  toAgentMessage,
-} from "./direct-conversation-agent-message.server";
+  advanceAgentReadThrough,
+  agentMentionReport,
+  committedAgentMentionReport,
+  readMessagesPage,
+} from "./agent-message-reads.repositories.server";
+import {
+  readAgentRecoveryContext,
+  readPendingAgentDeliveries,
+} from "./agent-recovery.repositories.server";
+import { drainAgentEvents } from "./agent-event-drain.repositories.server";
+import { agentTargetFreshness } from "./agent-target-freshness.repositories.server";
+import {
+  resolveAgentMessage,
+  resolveAgentReplyTarget,
+  resolveAgentSendTarget,
+  resolveAgentTarget,
+  resolveMessage,
+  setAgentChannelMuted,
+  setAgentMessageReaction,
+  setAgentThreadFollowed,
+  type DirectConversationPorts,
+} from "./agent-targets.repositories.server";
+import {
+  markReadForUser,
+  markThreadReadForUser,
+  openConversationForUser,
+  updatesSince,
+} from "./user-direct-reads.repositories.server";
+import { deliveryTarget } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
-import { markHumanRead } from "#src/server/conversations/human-unread.server";
-import { assertMessageAnchor, onlyAnchorMatch } from "./direct-conversation-anchor.server";
-import { advanceThreadRead } from "./thread-read-position.server";
 import {
   assertAgentDmWithinLimits,
   noteAgentDmLimit,
@@ -28,122 +42,53 @@ import {
 } from "./user-agent-direct.repositories.server";
 import {
   humanRef,
-  recoveryRefs,
-  directTargets,
   dmParentTarget,
   getOrCreateAgentPeerConversation,
-  findAgentPeerConversation,
   openDirectPeerConversation,
   liveAgentPeer,
   peerSeatTarget,
 } from "./agent-peer-direct.repositories.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { isAppBot } from "#src/features/agents/agent-system-kind";
-import {
-  isAgentPeerDirectKey,
-  isUserAgentDirectConversation,
-  peopleDirectPeerId,
-} from "#src/features/conversations/direct-key";
-import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
-import type { AgentTargetFreshness } from "#src/server/agents/agent-target-freshness.server";
+import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
-import { AppError, isAppError } from "#src/lib/app-error";
-import { humanLabel } from "#src/lib/human-label";
+import { AppError } from "#src/lib/app-error";
 import { userIdOfUsernameTarget } from "./public-user-target.repositories.server";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
-import {
-  AgentMessageValidationError,
-  MESSAGE_NOT_VISIBLE,
-} from "#src/server/conversations/agent-message-validation-error.server";
-import { messageAnchorWhere, messageIdMatchesAnchor } from "#src/server/db/message-anchor.server";
-import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { channelAgentRecipients } from "#src/server/conversations/channel-agent-recipients.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import { getAgentChannel } from "#src/server/conversations/channel-access.server";
-import {
-  ACTIVE_MEMBER_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
-import {
-  MESSAGE_MENTIONS_SELECT,
-  type MessageMentionRef,
-} from "#src/server/conversations/mentions.server";
-import {
-  agentMessageView,
-  type AgentReadableBody,
-} from "#src/server/conversations/agent-message-view.server";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import {
   channelMentionTargets,
   storeMessageBody,
 } from "#src/server/conversations/message-references.server";
 import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
-import {
-  pendingMentionActionsForMessage,
-  recordPendingMentionActions,
-} from "#src/server/conversations/pending-mention-actions.server";
-import { unresolvedMentionHandles } from "#src/server/conversations/unresolved-mentions.server";
+import { recordPendingMentionActions } from "#src/server/conversations/pending-mention-actions.server";
 import {
   agentMessageSender,
-  browserSenderName,
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
 import {
   attachmentView,
   ATTACHMENT_VIEW_SELECT,
   type AttachmentViewRow,
 } from "#src/server/attachments/attachment-view.server";
-import {
-  browserMessageFields,
-  browserMessageUpdates,
-  mapBrowserMessage,
-} from "#src/server/conversations/conversation-history.server";
-import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
-import { windowPageFlags } from "#src/lib/conversation-window";
-import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
-import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
-import {
-  agentAttentionCountSql,
-  agentAttentionIdsSql,
-  agentAttentionMaxSql,
-  agentRecentContextSql,
-  NOTIFIED_AGENT_WHERE,
-  pendingDeliveryWhere,
-  unreadAgentMessagesFragment,
-  type AgentAttentionScope,
-} from "#src/server/db/repositories/agent-attention.repositories.server";
-import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
-import { resolveAgentConversationTarget } from "./agent-target-resolution.server";
-import {
-  advanceAgentReadGroups,
-  agentReadGroupsForPage,
-  conversationReadChangedPort,
-  type ConversationReadRealtimePort,
-  publishConversationReadChangesAfterCommit,
-} from "./agent-read-groups.repositories.server";
+import { type ConversationReadRealtimePort } from "./agent-read-groups.repositories.server";
 import {
   searchAgentMessagePage,
   type AgentMessageSearchOptions,
 } from "./agent-message-search.repositories.server";
-import { othersReadThroughSequence } from "#src/server/conversations/conversation-read-state.server";
-import {
-  AGENT_RECOVERY_MESSAGE_LIMIT,
-  recoverySecondPass,
-  type AgentRecoveryRow,
-} from "./agent-recovery-row.server";
-
 import type {
   AgentMentionBinding,
   AgentMentionReport,
-  AgentRecoveryContext,
   DirectConversationPageOptions,
   DirectConversationRepository,
   HistoryWindow,
-  PendingAgentDelivery,
 } from "./direct-conversation-types.server";
+
 export type {
   AgentFacingSender,
   AgentMentionBinding,
@@ -158,10 +103,6 @@ export type {
   PendingAgentDelivery,
 } from "./direct-conversation-types.server";
 
-/** An Agent-facing record as this repository builds it: its `body` comes from `agentMessageView`.
- * The port types keep a plain `body: string`, which this is assignable to. */
-type AgentFacing<T extends { body: string }> = Omit<T, "body"> & { body: AgentReadableBody };
-
 /**
  * Next sequence for a conversation; holds the conversation row lock until the transaction ends.
  * Exported so other message-anchored writers (e.g. `ActionCards.prepare`) serialize through the
@@ -175,19 +116,6 @@ export async function allocateSequence(tx: Prisma.TransactionClient, conversatio
     select: { sequence: true },
   });
   return (last?.sequence ?? 0) + 1;
-}
-
-const PEER_PROFILE_SELECT = {
-  id: true,
-  username: true,
-  displayName: true,
-  avatarObjectKey: true,
-} satisfies Prisma.UserSelect;
-type PeerProfile = Prisma.UserGetPayload<{ select: typeof PEER_PROFILE_SELECT }>;
-
-/** A direct conversation with neither an Agent nor another person on the other side. */
-function unauthorizedScope(): never {
-  throw new Error("conversation scope is not authorized");
 }
 
 export class PrismaDirectConversationRepository implements DirectConversationRepository {
@@ -206,29 +134,29 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     if (oneRequest) this.#agentChannels = new Map();
   }
 
+  /** What the operations in the `agent-*` and `user-direct-reads` modules run on; its channel
+   * lookup is this instance's, so they share the one-request cache. */
+  get #ports(): DirectConversationPorts {
+    return {
+      db: this.db,
+      realtime: this.realtime,
+      getAgentChannel: (workspaceId, agentId, target) =>
+        this.getAgentChannel(workspaceId, agentId, target),
+      findUserAgentConversation: (workspaceId, userId, agentId) =>
+        this.findUserAgentConversation(workspaceId, userId, agentId),
+      getOrCreateUserAgent: (workspaceId, userId, agentId) =>
+        this.getOrCreateUserAgent(workspaceId, userId, agentId),
+      resolveAgentTarget: (workspaceId, agentId, target) =>
+        this.resolveAgentTarget(workspaceId, agentId, target),
+    };
+  }
+
   async userIdForUsername(target: string) {
     return userIdOfUsernameTarget(this.db, humanUsernameTarget(dmParentTarget(target)));
   }
 
-  private async resolveMessage(conversationId: string, anchor: string, rootOnly = false) {
-    assertMessageAnchor(anchor);
-    const rows = await this.db.message.findMany({
-      where: {
-        conversationId,
-        id: messageAnchorWhere(anchor),
-      },
-      take: 2,
-      select: { id: true, sequence: true, threadRootId: true, senderMemberId: true },
-    });
-    const row = onlyAnchorMatch(rows, "message anchor not found in this conversation");
-    if (rootOnly && row.threadRootId)
-      throw new AgentMessageValidationError("thread root must be a top-level message");
-    return row;
-  }
-
-  private async targetRoot(conversationId: string, target: string) {
-    const root = target.split(":")[1];
-    return root ? (await this.resolveMessage(conversationId, root, true)).id : null;
+  private resolveMessage(conversationId: string, anchor: string, rootOnly = false) {
+    return resolveMessage(this.#ports, conversationId, anchor, rootOnly);
   }
 
   getAgentChannel(workspaceId: string, agentId: string, target: string) {
@@ -244,21 +172,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   async setAgentChannelMuted(workspaceId: string, agentId: string, target: string, muted: boolean) {
-    const user = await workspaceAssistantUser(this.db, workspaceId, agentId);
-    if (user) {
-      const scope = await new WorkspaceAssistantCommands(this.db).target(
-        { workspaceId, agentId },
-        target,
-      );
-      if (!scope.isChannel) throw new AppError("INVALID_INPUT");
-      return new PublicChannels(this.db).setUserMuted(
-        workspaceId,
-        user.userId,
-        scope.conversationId,
-        muted,
-      );
-    }
-    return new PublicChannels(this.db).setAgentMuted(workspaceId, agentId, target, muted);
+    return setAgentChannelMuted(this.#ports, workspaceId, agentId, target, muted);
   }
 
   async setAgentThreadFollowed(
@@ -267,185 +181,23 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     target: string,
     followed: boolean,
   ) {
-    const user = await workspaceAssistantUser(this.db, workspaceId, agentId);
-    if (user) {
-      const scope = await new WorkspaceAssistantCommands(this.db).target(
-        { workspaceId, agentId },
-        target,
-      );
-      if (!scope.isChannel || !scope.threadRootId) throw new AppError("INVALID_INPUT");
-      return new PublicChannels(this.db).setUserThreadFollowed(
-        workspaceId,
-        user.userId,
-        scope.conversationId,
-        scope.threadRootId,
-        followed,
-      );
-    }
-    return new PublicChannels(this.db).setAgentThreadFollowed(
-      workspaceId,
-      agentId,
-      target,
-      followed,
-    );
+    return setAgentThreadFollowed(this.#ports, workspaceId, agentId, target, followed);
   }
 
-  /**
-   * The target an Agent drains (`message check --target`): one it belongs to, or a channel it is
-   * not in but was notified of a message in and has not read yet. The latter only reaches those
-   * notified messages (the drain's non-member branch); the channel itself stays closed to it.
-   */
-  private async drainScope(workspaceId: string, agentId: string, target: string) {
-    try {
-      return await this.resolveAgentTarget(workspaceId, agentId, target);
-    } catch (error) {
-      const [parent, anchor] = target.split(":");
-      if (!parent?.startsWith("#") || !isAppError(error) || error.code !== "ACCESS_DENIED")
-        throw error;
-      const notified = await this.db.pendingMentionAction.findMany({
-        where: {
-          workspaceId,
-          ...NOTIFIED_AGENT_WHERE(agentId),
-          targetReadAt: null,
-          message: {
-            conversation: { ...VISIBLE_CONVERSATION_WHERE, channelName: parent.slice(1) },
-            threadRootId: anchor ? { not: null } : null,
-          },
-        },
-        select: { conversationId: true, message: { select: { threadRootId: true } } },
-      });
-      const match = notified.find(
-        (row) => !anchor || messageIdMatchesAnchor(row.message.threadRootId!, anchor),
-      );
-      if (!match) throw error;
-      return { conversationId: match.conversationId, threadRootId: match.message.threadRootId };
-    }
-  }
-
-  /** Resolves an Agent target to its conversation, optional thread root and canonical spelling.
-   * Public so Agent HTTP routes share the same target grammar. */
   async resolveAgentTarget(
     workspaceId: string,
     agentId: string,
     target: string,
   ): Promise<ResolvedAgentTarget> {
-    return this.#resolveAgentTarget(
-      workspaceId,
-      agentId,
-      target,
-      (userId) => this.agentDirectConversation(workspaceId, userId, agentId),
-      (peerId) => getOrCreateAgentPeerConversation(this.db, workspaceId, agentId, peerId),
-    );
+    return resolveAgentTarget(this.#ports, workspaceId, agentId, target);
   }
 
-  /**
-   * `resolveAgentTarget` for something the Agent is about to post (a message or an attachment):
-   * a direct message to someone who is not a Workspace member is refused with
-   * `DM_PEER_NOT_IN_WORKSPACE` before anything is written.
-   */
   resolveAgentSendTarget(workspaceId: string, agentId: string, target: string) {
-    return this.#resolveAgentPostTarget(
-      workspaceId,
-      agentId,
-      target,
-      (userId) => this.getOrCreateUserAgent(workspaceId, userId, agentId),
-      (peerId) => getOrCreateAgentPeerConversation(this.db, workspaceId, agentId, peerId),
-    );
+    return resolveAgentSendTarget(this.#ports, workspaceId, agentId, target);
   }
 
-  /**
-   * Where a send to `target` would post, for the "about to post" signal: the send path's checks
-   * without its writes. A direct message is only looked up, never started, and `peerUserId` names
-   * the person on its other side. A Workspace assistant's direct message is not resolved: its
-   * lookup opens one.
-   */
   async resolveAgentReplyTarget(workspaceId: string, agentId: string, target: string) {
-    let peerUserId: string | undefined;
-    const resolved = await this.#resolveAgentPostTarget(
-      workspaceId,
-      agentId,
-      target,
-      async (userId) => {
-        const direct = await this.findUserAgentConversation(workspaceId, userId, agentId);
-        if (!direct) throw new AppError("NOT_FOUND");
-        const member = await this.db.workspaceMembership.findUnique({
-          where: { workspaceId_userId: { workspaceId, userId } },
-          select: { userId: true },
-        });
-        if (!member) throw new AppError("DM_PEER_NOT_IN_WORKSPACE");
-        peerUserId = userId;
-        return direct;
-      },
-      async (peerId) => {
-        const direct = await findAgentPeerConversation(this.db, workspaceId, agentId, peerId);
-        if (!direct) throw new AppError("NOT_FOUND");
-        return direct;
-      },
-      true,
-    );
-    return { ...resolved, peerUserId };
-  }
-
-  async #resolveAgentPostTarget(
-    workspaceId: string,
-    agentId: string,
-    target: string,
-    directConversation: (userId: string) => Promise<{ id: string }>,
-    peerConversation: (peerAgentId: string) => Promise<{ id: string }>,
-    readOnly = false,
-  ): Promise<ResolvedAgentTarget> {
-    await appEventConversation(this.db, workspaceId, agentId, target.split(":")[0]!, {
-      send: true,
-    });
-    const delegate = await workspaceAssistantUser(this.db, workspaceId, agentId);
-    if (delegate && target.split(":")[0] !== `@${delegate.username}`) {
-      if (readOnly && !target.startsWith("#")) throw new AppError("ACCESS_DENIED");
-      const scope = await new WorkspaceAssistantCommands(this.db).target(
-        { workspaceId, agentId },
-        target,
-      );
-      return {
-        conversationId: scope.conversationId,
-        threadRootId: scope.threadRootId ?? null,
-        canonicalTarget: deliveryTarget(target.split(":")[0]!, scope.threadRootId ?? null),
-        isChannel: scope.isChannel,
-      };
-    }
-    return this.#resolveAgentTarget(
-      workspaceId,
-      agentId,
-      target,
-      directConversation,
-      peerConversation,
-    );
-  }
-
-  async #resolveAgentTarget(
-    workspaceId: string,
-    agentId: string,
-    target: string,
-    directConversation: (userId: string) => Promise<{ id: string }>,
-    peerConversation: (peerAgentId: string) => Promise<{ id: string }>,
-  ): Promise<ResolvedAgentTarget> {
-    const resolved = await resolveAgentConversationTarget({
-      db: this.db,
-      workspaceId,
-      agentId,
-      target,
-      getChannel: (parentTarget) => this.getAgentChannel(workspaceId, agentId, parentTarget),
-      directConversation,
-      peerConversation,
-    });
-    const { conversation, isChannel } = resolved;
-    const parentTarget = target.split(":")[0]!;
-    const threadRootId = await this.targetRoot(conversation.id, target);
-    return {
-      conversationId: conversation.id,
-      threadRootId,
-      canonicalTarget: deliveryTarget(parentTarget, threadRootId),
-      isChannel,
-      isUserAgentDirectConversation: resolved.isUserAgentDirectConversation,
-    };
+    return resolveAgentReplyTarget(this.#ports, workspaceId, agentId, target);
   }
 
   searchMessages(workspaceId: string, agentId: string, options: AgentMessageSearchOptions) {
@@ -455,20 +207,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   }
 
   async resolveAgentMessage(workspaceId: string, agentId: string, anchor: string) {
-    const row = await findAgentScopedMessage(this.db, workspaceId, agentId, anchor);
-    const coordination = await readChannelCoordination(
-      this.db,
-      workspaceId,
-      agentId,
-      row.conversation.channelName !== null ? [row.conversationId] : [],
-    );
-    const targetOf = await directTargets(this.db, workspaceId, agentId, [row.conversation]);
-    return toAgentMessage(
-      row,
-      messageDeliveryTarget(row, targetOf),
-      agentId,
-      coordination.get(row.conversationId),
-    );
+    return resolveAgentMessage(this.#ports, workspaceId, agentId, anchor);
   }
 
   async setAgentMessageReaction(
@@ -478,34 +217,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     emoji: string,
     active: boolean,
   ) {
-    const row = await findAgentScopedMessage(this.db, workspaceId, agentId, anchor);
-    const member = await this.db.conversationMember.findFirst({
-      where: { conversationId: row.conversationId, workspaceId, agentId, ...ACTIVE_MEMBER_WHERE },
-      select: { id: true },
-    });
-    if (!member) throw new AgentMessageValidationError(MESSAGE_NOT_VISIBLE);
-    const written = await writeReaction(this.db, this.realtime, {
-      workspaceId,
-      conversationId: row.conversationId,
-      messageId: row.id,
-      threadRootId: row.threadRootId,
-      memberId: member.id,
-      emoji,
-      active,
-    });
-    if (!written) throw new AgentMessageValidationError(MESSAGE_NOT_VISIBLE);
-    return { messageId: row.id };
-  }
-
-  /**
-   * The Agent's DM with a person to read: the one they already have, which stays as history after
-   * they left the Workspace, or else one started while they are a member.
-   */
-  private async agentDirectConversation(workspaceId: string, userId: string, agentId: string) {
-    return (
-      (await this.findUserAgentConversation(workspaceId, userId, agentId)) ??
-      this.getOrCreateUserAgent(workspaceId, userId, agentId)
-    );
+    return setAgentMessageReaction(this.#ports, workspaceId, agentId, anchor, emoji, active);
   }
 
   /** Tells a conversation between Agents, once, that a limit stopped it. */
@@ -558,246 +270,32 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     return opened;
   }
 
-  /**
-   * The member on the other side of a DM between people, named by its key: the viewer in their
-   * conversation with themself, and still the same person after they left the Workspace.
-   */
-  private async peerOf(
-    conversation: {
-      directKey: string | null;
-      members: { userId: string | null; user: PeerProfile | null }[];
-    },
-    viewerId: string,
-  ): Promise<PeerProfile | null> {
-    const peerId = peopleDirectPeerId(conversation.directKey, viewerId);
-    if (!peerId) return null;
-    return (
-      conversation.members.find((member) => member.userId === peerId)?.user ??
-      this.db.user.findUnique({ where: { id: peerId }, select: PEER_PROFILE_SELECT })
-    );
-  }
-
-  /**
-   * Who is in one of the viewer's direct conversations, from the viewer's seat: every member's
-   * public profile, the viewer's own row, and the Agent or member on the other side.
-   */
-  private async viewerSide(conversationId: string, userId: string) {
-    const row = await this.db.conversation.findUnique({
-      where: { id: conversationId },
-      select: {
-        directKey: true,
-        members: {
-          where: ACTIVE_MEMBER_WHERE,
-          select: {
-            id: true,
-            userId: true,
-            agentId: true,
-            // The viewer's own conversation-level read cursor: the client positions the
-            // initial view at the first unread message and draws the divider there.
-            readThroughSequence: true,
-            agentReadThroughSequence: true,
-            // The full public profile: the pane resolves stored `<@kind:uuid>` tokens (and offers
-            // @-completion) from these rows, so a mention of the viewer — the row that used to be
-            // missing — is resolvable without a second query.
-            user: {
-              select: {
-                id: true,
-                username: true,
-                displayName: true,
-                description: true,
-                avatarObjectKey: true,
-              },
-            },
-            agent: {
-              select: {
-                id: true,
-                name: true,
-                displayName: true,
-                description: true,
-                deletedAt: true,
-                avatarMascot: true,
-                // Not sent to the browser (see the trimmed `agent:` field of the open); read only
-                // to compute `dmWritable`.
-                ownerId: true,
-                visibility: true,
-              },
-            },
-          },
-        },
-      },
-    });
-    const sender = row?.members.find((member) => member.userId === userId);
-    if (!row || !sender) throw new Error("conversation scope is not authorized");
-    const agent = row.members.find((member) => member.agent)?.agent;
-    const peer = agent ? undefined : await this.peerOf(row, userId);
-    return { members: row.members, sender, agent, peer };
-  }
-
-  /**
-   * A window of one of the viewer's direct conversations, by its id, and who is on the other side:
-   * an Agent, or a member (the viewer themself in their own). Whether the viewer may read it is
-   * `DirectConversations.authorize`'s to decide.
-   */
   async openConversationForUser(
     workspaceId: string,
     userId: string,
     conversationId: string,
     page: HistoryWindow = {},
   ) {
-    const limit = Math.min(page.limit ?? 50, 100);
-    // A forward fetch reads towards the live end, from the newest sequence the retained window
-    // still holds; a backward fetch reads history upwards from its oldest. Neither is the initial
-    // (uncursored) load, which lands on the newest page (see `lib/conversation-window.ts`).
-    const forward = page.afterSequence !== undefined;
-    // The window does not wait for the conversation's members: both are read by the conversation
-    // id alone, and whether the viewer may read it is the caller's to have decided already.
-    const [{ members, sender, agent, peer }, windowRows] = await Promise.all([
-      this.viewerSide(conversationId, userId),
-      this.db.message.findMany({
-        where: {
-          conversationId,
-          threadRootId: null,
-          sequence: forward
-            ? { gt: page.afterSequence }
-            : page.beforeSequence
-              ? { lt: page.beforeSequence }
-              : undefined,
-        },
-        // Both directions take `limit + 1` rows to learn whether one more remains; the page
-        // itself is re-sorted by sequence below, so only the overflow row's presence matters.
-        orderBy: { sequence: forward ? ("asc" as const) : ("desc" as const) },
-        take: limit + 1,
-        select: browserMessageFields,
-      }),
-    ]);
-    const overflow = windowRows.length > limit;
-    const { hasOlder, hasNewer } = windowPageFlags(
-      forward ? "forward" : page.beforeSequence ? "backward" : "initial",
-      overflow,
-    );
-    // The overflow row is always the newest of the fetched rows, so dropping the tail of the
-    // ordered list keeps the reader's side of the window and drops the row that only proved there
-    // was more.
-    const pageRows = windowRows.slice(0, limit);
-    const messages = forward ? pageRows : pageRows.reverse();
-    // Each thread of the page as a summary, read through the viewer's own member row (the Agent
-    // records a boundary for every thread it drains, which this open never returns) and for these
-    // roots only.
-    const { threads, threadReadThrough } = await readWindowThreads(this.db, {
-      workspaceId,
-      conversationId,
-      rootIds: messages.map((message) => message.id),
-      viewerMemberId: sender.id,
-    });
-    return {
-      conversationId,
-      senderMemberId: sender.id,
-      othersReadThroughSequence: othersReadThroughSequence(sender.id, members),
-      // The viewer's conversation-level read boundary: first unread = first top-level
-      // message past this. Thread replies are positioned by their thread instead.
-      readThroughSequence: sender.readThroughSequence,
-      threads,
-      threadReadThrough,
-      ...(agent
-        ? {
-            kind: "agent" as const,
-            // Never the Agent row wholesale: `ownerId`/`visibility` are read above only to
-            // compute `dmWritable` and must not reach the browser payload.
-            agent: {
-              id: agent.id,
-              name: agent.name,
-              displayName: agent.displayName,
-              deletedAt: agent.deletedAt,
-              avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
-            },
-            // Whether this viewer may still send here: a private Agent's DM stays scoped to
-            // its own creator, so an existing DM held by anyone else reads read-only once it goes
-            // private. Independent of `deletedAt`'s own read-only rule.
-            dmWritable: canDirectMessageAgent(userId, agent),
-            ...(members.find((member) => member.agentId === agent.id)
-              ? {
-                  agentReadThroughSequence: members.find((member) => member.agentId === agent.id)!
-                    .agentReadThroughSequence,
-                }
-              : {}),
-          }
-        : peer
-          ? {
-              kind: "people" as const,
-              peer: {
-                id: peer.id,
-                username: peer.username,
-                displayName: browserSenderName({ user: peer }),
-                avatarUrl: workspaceUserAvatarUrl(
-                  workspaceId,
-                  peer.id,
-                  peer.avatarObjectKey ?? null,
-                ),
-              },
-            }
-          : unauthorizedScope()),
-      viewerId: sender.user ? userId : undefined,
-      // DM mention candidates have zero affinity and sort by handle. Include the viewer so
-      // their own stored human mention resolves instead of rendering a raw token.
-      mentionables: members
-        .map((member) =>
-          member.user
-            ? {
-                kind: "user" as const,
-                id: member.user.id,
-                handle: member.user.username,
-                label: humanLabel(member.user),
-                description: member.user.description?.trim() ?? "",
-                avatarUrl: workspaceUserAvatarUrl(
-                  workspaceId,
-                  member.user.id,
-                  member.user.avatarObjectKey ?? null,
-                ),
-                mentionScore: 0,
-              }
-            : member.agent
-              ? {
-                  kind: "agent" as const,
-                  id: member.agent.id,
-                  handle: member.agent.name,
-                  label: member.agent.displayName?.trim() || member.agent.name,
-                  description: member.agent.description?.trim() ?? "",
-                  avatarUrl: agentAvatarUrl(member.agent.id, member.agent.avatarMascot),
-                  mentionScore: 0,
-                }
-              : undefined,
-        )
-        .filter((mentionable) => mentionable !== undefined)
-        .sort((left, right) => left.handle.localeCompare(right.handle)),
-      hasOlder,
-      hasNewer,
-      messages: messages.map((message) => mapBrowserMessage(message, workspaceId)),
-    };
+    return openConversationForUser(this.#ports, workspaceId, userId, conversationId, page);
   }
 
-  /** What arrived in a direct conversation after `afterSequence`, threads included (see
-   * `messagesArrivedWhere` for `afterReplySequence`). */
   async updatesSince(
     workspaceId: string,
     conversationId: string,
     afterSequence: number,
     afterReplySequence?: number,
   ) {
-    const messages = await browserMessageUpdates(
-      this.db,
+    return updatesSince(
+      this.#ports,
+      workspaceId,
       conversationId,
       afterSequence,
       afterReplySequence,
     );
-    return messages.map((message) => mapBrowserMessage(message, workspaceId));
   }
 
-  /** Advances the person's DM read cursor (`markHumanRead`): where it left them, or undefined
-   * when nothing moved. */
   async markReadForUser(userId: string, conversationId: string, throughSequence: number) {
-    if (!Number.isSafeInteger(throughSequence) || throughSequence < 1)
-      throw new AppError("INVALID_INPUT");
-    return markHumanRead(this.db, { conversationId, userId, throughSequence });
+    return markReadForUser(this.#ports, userId, conversationId, throughSequence);
   }
 
   async markThreadReadForUser(
@@ -807,28 +305,13 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     rootMessageId: string,
     throughSequence: number,
   ) {
-    const root = await this.resolveMessage(conversationId, rootMessageId, true);
-    const latest = await this.db.message.findFirst({
-      where: {
-        conversationId,
-        threadRootId: root.id,
-        sequence: { lte: throughSequence },
-      },
-      orderBy: { sequence: "desc" },
-    });
-    if (!latest) return;
-    const member = await this.db.conversationMember.findUniqueOrThrow({
-      where: {
-        conversationId_userId: { conversationId, userId },
-      },
-    });
-    await advanceThreadRead(
-      this.db,
-      member.id,
-      conversationId,
+    return markThreadReadForUser(
+      this.#ports,
       workspaceId,
-      root.id,
-      latest.sequence,
+      userId,
+      conversationId,
+      rootMessageId,
+      throughSequence,
     );
   }
 
@@ -989,101 +472,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
   async readPendingAgentDeliveries(
     workspaceId: string,
     agentId: string,
-    /** These deliveries, received or not (a tracked mention issued again), and with
-     * `orUnreceived` every unreceived one too. Without it, only the unreceived ones. */
     select?: { deliveryIds: readonly string[]; orUnreceived?: boolean },
-  ): Promise<AgentFacing<PendingAgentDelivery>[]> {
-    const unreceived = { receivedAt: null } satisfies Prisma.AgentMessageDeliveryWhereInput;
-    const chosen = { deliveryId: { in: [...(select?.deliveryIds ?? [])] } };
-    const selected = !select
-      ? unreceived
-      : { AND: [select.orUnreceived ? { OR: [unreceived, chosen] } : chosen] };
-    const deliveries = await this.db.agentMessageDelivery.findMany({
-      // Hidden-channel deliveries wait for restore. Left/removed/private-transition channel
-      // memberships never replay; DMs and notified non-member channel messages still do.
-      where: await pendingDeliveryWhere(this.db, { workspaceId, agentId }, selected),
-      orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
-      select: {
-        deliveryId: true,
-        messageId: true,
-        conversationId: true,
-        conversation: {
-          select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
-        },
-        sequence: true,
-        message: {
-          select: {
-            body: true,
-            createdAt: true,
-            threadRootId: true,
-            sender: MESSAGE_SENDER_SELECT,
-            mentions: MESSAGE_MENTIONS_SELECT,
-            pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
-            memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
-          },
-        },
-      },
-    });
-    // A notified delivery reaches the Agent as a non-member only while it is not in the channel.
-    const memberOf = new Set(
-      (
-        await this.db.conversationMember.findMany({
-          where: {
-            agentId,
-            ...ACTIVE_MEMBER_WHERE,
-            conversationId: { in: [...new Set(deliveries.map((d) => d.conversationId))] },
-          },
-          select: { conversationId: true },
-        })
-      ).map((member) => member.conversationId),
-    );
-    const coordination = await readChannelCoordination(
-      this.db,
-      workspaceId,
-      agentId,
-      deliveries
-        .filter((delivery) => delivery.conversation.channelName !== null)
-        .map((delivery) => delivery.conversationId),
-    );
-    const targetOf = await directTargets(
-      this.db,
-      workspaceId,
-      agentId,
-      deliveries.map((delivery) => delivery.conversation),
-    );
-    return deliveries.map((delivery) => {
-      // agentMessageSender handles both human and Agent authors and validates the handle;
-      // reading sender.user alone produces a bare @ for Agent messages.
-      const sender = agentMessageSender(delivery.message.sender);
-      const target = deliveryTarget(
-        conversationTarget(delivery.conversation, targetOf),
-        delivery.message.threadRootId,
-      );
-      return {
-        messageId: delivery.messageId,
-        deliveryId: delivery.deliveryId,
-        conversationId: delivery.conversationId,
-        sequence: delivery.sequence,
-        createdAtMs: delivery.message.createdAt.getTime(),
-        target,
-        latestSenderKind: sender.kind,
-        latestSenderHandle: sender.handle,
-        latestSenderDescription: sender.description,
-        ...agentMessageView(delivery.message, agentId, coordination.get(delivery.conversationId)),
-        ...(delivery.message.memoryHint?.deliveredAt &&
-        delivery.message.memoryHint.targetAgentId === agentId
-          ? {
-              memoryHint: {
-                hint_id: delivery.message.memoryHint.id,
-                tool: "memory_disposition" as const,
-              },
-            }
-          : {}),
-        ...(delivery.message.pendingMentionActions.length && !memberOf.has(delivery.conversationId)
-          ? { nonMemberMention: true }
-          : {}),
-      };
-    });
+  ) {
+    return readPendingAgentDeliveries(this.#ports, workspaceId, agentId, select);
   }
 
   async readMessages(
@@ -1101,340 +492,19 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     target: string,
     page: DirectConversationPageOptions = {},
   ) {
-    return readDirectConversationMessagesPage({
-      db: this.db,
-      workspaceId,
-      agentId,
-      target,
-      page,
-      resolveTarget: (value) => this.resolveAgentTarget(workspaceId, agentId, value),
-      resolveAnchor: (conversationId, anchor) => this.resolveMessage(conversationId, anchor),
-      conversationReadChanged: conversationReadChangedPort(this.realtime),
-    });
+    return readMessagesPage(this.#ports, workspaceId, agentId, target, page);
   }
 
-  async readAgentRecoveryContext(
-    workspaceId: string,
-    agentId: string,
-  ): Promise<
-    Omit<AgentRecoveryContext, "resumeMessages"> & {
-      resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[];
-    }
-  > {
-    // One statement over every unread message the Agent owes attention to, ranked globally by
-    // (conversation, thread root, sequence). Rows past the resume budget are kept only for the
-    // first message of each target so unreadSummary stays complete without a second pass.
-    const rows = await this.db.$queryRaw<AgentRecoveryRow[]>`
-      WITH unread AS (
-        ${unreadAgentMessagesFragment(workspaceId, agentId)}
-      ), ranked AS (
-        SELECT u.*,
-          (COUNT(*) OVER (PARTITION BY "conversationId", "threadRootId"))::int AS "unreadCount",
-          (ROW_NUMBER() OVER (PARTITION BY "conversationId", "threadRootId" ORDER BY "sequence"))::int AS "targetRank",
-          (ROW_NUMBER() OVER (ORDER BY "conversationId", "rootSequence", "sequence"))::int AS "globalRank"
-        FROM unread u
-      )
-      SELECT "id", "sequence", "body", "conversationId", "threadRootId", "senderMemberId", "createdAt",
-        "deliveryId", "senderAgentName", "senderAgentDescription", "senderUsername",
-        "senderUserDescription", "channelName", "otherUsername", "agentPeer", "unreadCount", "globalRank",
-        "nonMemberMention"
-      FROM ranked
-      WHERE "globalRank" <= ${AGENT_RECOVERY_MESSAGE_LIMIT} OR "targetRank" = 1
-      ORDER BY "globalRank"`;
-    const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
-    const unreadSummary: Record<string, number> = {};
-    const unreadConversationIds: Record<string, string> = {};
-    const { mentionsByMessage, hintsByMessage } = await recoverySecondPass(
-      this.db,
-      workspaceId,
-      agentId,
-      rows,
-    );
-    const coordination = await readChannelCoordination(
-      this.db,
-      workspaceId,
-      agentId,
-      rows.filter((row) => row.channelName !== null).map((row) => row.conversationId),
-    );
-    const directRefOf = await recoveryRefs(this.db, workspaceId, agentId, rows);
-    for (const row of rows) {
-      if (!row.channelName && !row.otherUsername)
-        throw new Error("Agent conversation has no other member to target");
-      const target = deliveryTarget(
-        row.channelName ? `#${row.channelName}` : directRefOf(row),
-        row.threadRootId,
-      );
-      unreadSummary[target] ??= row.unreadCount;
-      unreadConversationIds[target] = row.conversationId;
-      if (row.globalRank > AGENT_RECOVERY_MESSAGE_LIMIT) continue;
-      if (!row.deliveryId) throw new Error(`Unread Agent message has no delivery: ${row.id}`);
-      // Read the author from the message with the shared sender projection. A DM peer is the
-      // recipient, so deriving the author from the conversation misattributes Agent messages.
-      const sender = agentMessageSender(
-        row.senderMemberId === null
-          ? null
-          : {
-              agentId: row.senderAgentName !== null ? row.senderMemberId : null,
-              agent:
-                row.senderAgentName !== null
-                  ? { name: row.senderAgentName, description: row.senderAgentDescription ?? "" }
-                  : null,
-              user:
-                row.senderUsername !== null
-                  ? { username: row.senderUsername, description: row.senderUserDescription ?? "" }
-                  : null,
-            },
-      );
-      resumeMessages.push({
-        messageId: row.id,
-        deliveryId: row.deliveryId,
-        conversationId: row.conversationId,
-        sequence: row.sequence,
-        createdAtMs: row.createdAt.getTime(),
-        target,
-        latestSenderKind: sender.kind,
-        latestSenderHandle: sender.handle,
-        latestSenderDescription: sender.description,
-        ...agentMessageView(
-          { body: row.body, mentions: mentionsByMessage.get(row.id) ?? [] },
-          agentId,
-          coordination.get(row.conversationId),
-        ),
-        ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
-        ...(hintsByMessage.has(row.id)
-          ? {
-              memoryHint: {
-                hint_id: hintsByMessage.get(row.id)!,
-                tool: "memory_disposition" as const,
-              },
-            }
-          : {}),
-      });
-    }
-    return {
-      resumeMessages,
-      unreadSummary,
-      ...(Object.keys(unreadConversationIds).length ? { unreadConversationIds } : {}),
-    };
+  async readAgentRecoveryContext(workspaceId: string, agentId: string) {
+    return readAgentRecoveryContext(this.#ports, workspaceId, agentId);
   }
 
-  /**
-   * Drain owed attention in (conversation, thread root, sequence) order and advance only
-   * returned targets, monotonically. Default 20, capped 100, to bound unscoped transcript input.
-   */
-  async drainAgentEvents(
-    workspaceId: string,
-    agentId: string,
-    limit = 20,
-    target?: string,
-  ): Promise<{
-    messages: (ReturnType<typeof toAgentMessage> & { nonMemberMention?: boolean })[];
-    hasMore: boolean;
-  }> {
-    const bounded = clampPageLimit(limit, 100);
-    const scope = target ? await this.drainScope(workspaceId, agentId, target) : undefined;
-    return publishConversationReadChangesAfterCommit(
-      () =>
-        this.db.$transaction(async (tx) => {
-          const rows = await tx.$queryRaw<
-            Array<
-              Pick<
-                AgentRecoveryRow,
-                "id" | "conversationId" | "threadRootId" | "sequence" | "nonMemberMention"
-              >
-            >
-          >`
-        WITH unread AS (
-          ${unreadAgentMessagesFragment(workspaceId, agentId, scope)}
-        )
-        SELECT "id", "conversationId", "threadRootId", "sequence", "nonMemberMention"
-        FROM unread
-        ORDER BY "conversationId", "rootSequence", "sequence"
-        LIMIT ${bounded + 1}`;
-          const hasMore = rows.length > bounded;
-          const page = rows.slice(0, bounded);
-          if (page.length === 0)
-            return { result: { messages: [], hasMore: false }, conversationReadChanges: [] };
-          const messageRows = await tx.message.findMany({
-            where: { id: { in: page.map((row) => row.id) } },
-            include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
-          });
-          const rowById = new Map(messageRows.map((row) => [row.id, row]));
-          const targetOf = await directTargets(
-            tx,
-            workspaceId,
-            agentId,
-            messageRows.map((row) => row.conversation),
-          );
-          const coordination = await readChannelCoordination(
-            tx,
-            workspaceId,
-            agentId,
-            messageRows
-              .filter((row) => row.conversation.channelName !== null)
-              .map((row) => row.conversationId),
-          );
-          const messages = page.map((row) => {
-            const message = rowById.get(row.id);
-            if (!message) throw new Error(`drained Agent message is missing: ${row.id}`);
-            return {
-              ...toAgentMessage(
-                message,
-                messageDeliveryTarget(message, targetOf),
-                agentId,
-                coordination.get(row.conversationId),
-              ),
-              // Reached the Agent outside the channel: readable, but it cannot reply there.
-              ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
-            };
-          });
-          // A notified non-member has no read boundary in the channel: the message is read once.
-          const nonMemberIds = page.filter((row) => row.nonMemberMention).map((row) => row.id);
-          if (nonMemberIds.length)
-            await tx.pendingMentionAction.updateMany({
-              where: {
-                workspaceId,
-                targetAgentId: agentId,
-                messageId: { in: nonMemberIds },
-                notifiedAt: { not: null },
-                targetReadAt: null,
-              },
-              data: { targetReadAt: new Date() },
-            });
-          const targetGroups = agentReadGroupsForPage(page);
-          const members = await tx.conversationMember.findMany({
-            where: {
-              agentId,
-              conversationId: { in: [...new Set(page.map((r) => r.conversationId))] },
-            },
-            select: { id: true, conversationId: true },
-          });
-          const memberIdByConversation = new Map(members.map((m) => [m.conversationId, m.id]));
-          const changes = await advanceAgentReadGroups({
-            db: tx,
-            groups: targetGroups.values(),
-            memberIdByConversation,
-            messageRows,
-            isUserAgentDirectConversation,
-            workspaceId,
-            agentId,
-          });
-          return { result: { messages, hasMore }, conversationReadChanges: changes };
-        }),
-      conversationReadChangedPort(this.realtime),
-    );
+  async drainAgentEvents(workspaceId: string, agentId: string, limit = 20, target?: string) {
+    return drainAgentEvents(this.#ports, workspaceId, agentId, limit, target);
   }
 
-  /**
-   * One Agent-facing target resolved once, with the freshness reads and the read-through advance
-   * a send checks against it (`executeAgentSendMessageWithPolicy`), so they share that resolution,
-   * the Agent's membership lookup, and each pending scope (a read and its count share one).
-   */
   async agentTargetFreshness(workspaceId: string, agentId: string, target: string) {
-    const resolved = await this.resolveAgentSendTarget(workspaceId, agentId, target);
-    const { conversationId, threadRootId, canonicalTarget, isChannel } = resolved;
-    // One membership lookup for every read of this send. Its read-through may predate this send's
-    // own advance, which only raises it: the planner takes the larger of the two.
-    let member: Promise<{ id: string; agentReadThroughSequence: number } | null> | undefined;
-    const agentMember = () =>
-      (member ??= this.db.conversationMember.findUnique({
-        where: { conversationId_agentId: { conversationId, agentId } },
-        select: { id: true, agentReadThroughSequence: true },
-      }));
-    const pendingScopes = new Map<number | undefined, Promise<AgentAttentionScope>>();
-    // A pending scope starts above the boundary the Agent reported, or, with none, above its own
-    // latest message in the target.
-    const pendingScope = (afterSequence?: number) => {
-      let scope = pendingScopes.get(afterSequence);
-      if (!scope) {
-        scope = (async () => {
-          const own = await agentMember();
-          const latestOwn =
-            afterSequence === undefined && own
-              ? await this.db.message.findFirst({
-                  where: { conversationId, threadRootId, senderMemberId: own.id },
-                  orderBy: { sequence: "desc" },
-                  select: { sequence: true },
-                })
-              : undefined;
-          return {
-            agentId,
-            conversationId,
-            threadRootId,
-            isChannel,
-            ownMemberId: own?.id,
-            afterSequence: afterSequence ?? latestOwn?.sequence ?? 0,
-          };
-        })();
-        pendingScopes.set(afterSequence, scope);
-      }
-      return scope;
-    };
-    const freshness = {
-      advanceReadThrough: (seenUpToSequence: number) =>
-        this.#advanceAgentReadThrough(workspaceId, agentId, resolved, seenUpToSequence),
-      readThrough: async () => {
-        const own = await agentMember();
-        if (!own) return 0;
-        if (!threadRootId) return own.agentReadThroughSequence;
-        const read = await this.db.threadRead.findUnique({
-          where: { memberId_rootMessageId: { memberId: own.id, rootMessageId: threadRootId } },
-          select: { readThroughSequence: true },
-        });
-        return read?.readThroughSequence ?? 0;
-      },
-      readPending: async (afterSequence?: number, excludingSequences?: readonly number[]) =>
-        this.#agentMessagesByIds(
-          await this.db.$queryRaw<{ id: string }[]>(
-            agentAttentionIdsSql(
-              { ...(await pendingScope(afterSequence)), excludeSequences: excludingSequences },
-              HELD_CONTEXT_LIMIT,
-            ),
-          ),
-          canonicalTarget,
-          { workspaceId, agentId },
-        ),
-      countPending: async (afterSequence?: number, excludingSequences?: readonly number[]) => {
-        const scope = {
-          ...(await pendingScope(afterSequence)),
-          excludeSequences: excludingSequences,
-        };
-        const [row] = await this.db.$queryRaw<{ count: number }[]>(agentAttentionCountSql(scope));
-        return row?.count ?? 0;
-      },
-      maxPendingSequence: async (afterSequence?: number) => {
-        const [row] = await this.db.$queryRaw<{ max: number | null }[]>(
-          agentAttentionMaxSql(await pendingScope(afterSequence)),
-        );
-        return row?.max ?? undefined;
-      },
-      // The target's newest messages, whatever the Agent's boundary, the Agent's own included (they
-      // count as seen); `unseen` is the rest of the window less what it was shown one by one.
-      readRecent: async (limit: number, excludingSequences?: readonly number[]) => {
-        const window = await this.db.$queryRaw<{ id: string; sequence: number; seen: boolean }[]>(
-          agentRecentContextSql(
-            {
-              agentId,
-              conversationId,
-              threadRootId,
-              isChannel,
-              ownMemberId: (await agentMember())?.id,
-              excludeSequences: excludingSequences,
-            },
-            limit,
-          ),
-        );
-        return {
-          unseen: await this.#agentMessagesByIds(
-            window.filter((row) => !row.seen),
-            canonicalTarget,
-            { workspaceId, agentId },
-          ),
-          maxSequence: window[0]?.sequence,
-        };
-      },
-    };
-    return freshness satisfies Required<AgentTargetFreshness>;
+    return agentTargetFreshness(this.#ports, workspaceId, agentId, target);
   }
 
   async advanceAgentReadThrough(
@@ -1443,152 +513,23 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     target: string,
     seenUpToSequence: number,
   ): Promise<number> {
-    return this.#advanceAgentReadThrough(
-      workspaceId,
-      agentId,
-      await this.resolveAgentTarget(workspaceId, agentId, target),
-      seenUpToSequence,
-    );
+    return advanceAgentReadThrough(this.#ports, workspaceId, agentId, target, seenUpToSequence);
   }
 
-  async #advanceAgentReadThrough(
-    workspaceId: string,
-    agentId: string,
-    { conversationId, threadRootId }: ResolvedAgentTarget,
-    seenUpToSequence: number,
-  ): Promise<number> {
-    const latest = await this.db.message.findFirst({
-      where: { conversationId, threadRootId },
-      orderBy: { sequence: "desc" },
-      select: { sequence: true },
-    });
-    const bounded = Math.min(seenUpToSequence, latest?.sequence ?? 0);
-    if (bounded && threadRootId) {
-      const member = await this.db.conversationMember.findUniqueOrThrow({
-        where: { conversationId_agentId: { conversationId, agentId } },
-        select: { id: true },
-      });
-      await advanceThreadRead(
-        this.db,
-        member.id,
-        conversationId,
-        workspaceId,
-        threadRootId,
-        bounded,
-      );
-    } else if (bounded)
-      await this.db.conversationMember.updateMany({
-        where: {
-          conversationId,
-          workspaceId,
-          agentId,
-          agentReadThroughSequence: { lt: bounded },
-        },
-        data: { agentReadThroughSequence: bounded },
-      });
-    return bounded;
-  }
-
-  /** These messages, oldest first, as Agent-facing records. */
-  async #agentMessagesByIds(
-    ids: readonly { id: string }[],
-    canonicalTarget: string,
-    reader: { workspaceId: string; agentId: string },
-  ) {
-    if (!ids.length) return [];
-    const rows = await this.db.message.findMany({
-      where: { id: { in: ids.map((row) => row.id) } },
-      orderBy: { sequence: "asc" },
-      include: {
-        sender: MESSAGE_SENDER_SELECT,
-        attachments: { orderBy: { position: "asc" } },
-        mentions: MESSAGE_MENTIONS_SELECT,
-      },
-    });
-    const coordination = await readChannelCoordination(
-      this.db,
-      reader.workspaceId,
-      reader.agentId,
-      canonicalTarget.startsWith("#") ? rows.map((row) => row.conversationId) : [],
-    );
-    return rows.map((m) =>
-      this.#agentContextRecord(m, canonicalTarget, coordination.get(m.conversationId)),
-    );
-  }
-
-  /** One row of the Agent-facing context window, shared by the pending and recent readers so both
-   * surfaces cannot drift apart. */
-  #agentContextRecord<
-    Row extends {
-      id: string;
-      sequence: number;
-      sender: Parameters<typeof agentMessageSender>[0];
-      body: string;
-      mentions: readonly MessageMentionRef[];
-      createdAt: Date;
-      attachments: { id: string; fileName: string; contentType: string; sizeBytes: number }[];
-    },
-  >(m: Row, canonicalTarget: string, channelCoordination?: string) {
-    const sender = agentMessageSender(m.sender);
-    return {
-      id: m.id,
-      sequence: m.sequence,
-      senderKind: sender.kind,
-      senderHandle: sender.handle,
-      senderDescription: sender.description,
-      ...agentMessageView(m, undefined, channelCoordination),
-      createdAt: m.createdAt,
-      target: canonicalTarget,
-      attachments: m.attachments,
-    };
-  }
-
-  /**
-   * What an Agent's channel message did not reach: its pending mention actions (people and public
-   * Agents outside the channel) and the `@handle`s that name nobody the Agent can see. Read from
-   * the stored message, so an idempotent replay reports what the first send did. Empty for a DM.
-   */
   async agentMentionReport(
     workspaceId: string,
     agentId: string,
     message: { id: string; conversationId: string; body: string },
   ): Promise<AgentMentionReport> {
-    const conversation = await this.db.conversation.findFirst({
-      where: { id: message.conversationId, workspaceId, channelName: { not: null } },
-      select: {
-        channelName: true,
-        archivedAt: true,
-        members: { where: { agentId }, select: { id: true } },
-      },
-    });
-    const senderMemberId = conversation?.members[0]?.id;
-    if (!conversation || !senderMemberId)
-      return { pendingMentionActions: [], unresolvedMentionHandles: [] };
-    const [pendingMentionActions, unresolved] = await Promise.all([
-      pendingMentionActionsForMessage(
-        this.db,
-        { ...message, workspaceId, senderMemberId },
-        { archived: conversation.archivedAt !== null, name: conversation.channelName! },
-      ),
-      unresolvedMentionHandles(this.db, workspaceId, { agentId }, message.body),
-    ]);
-    return { pendingMentionActions, unresolvedMentionHandles: unresolved };
+    return agentMentionReport(this.#ports, workspaceId, agentId, message);
   }
 
-  /** `agentMentionReport` for a message this Agent already committed, found by its id. Only the
-   * Agent that sent the message reads its report. */
   async committedAgentMentionReport(
     workspaceId: string,
     agentId: string,
     messageId: string,
   ): Promise<AgentMentionReport> {
-    const message = await this.db.message.findFirst({
-      where: { id: messageId, workspaceId, sender: { agentId } },
-      select: { id: true, conversationId: true, body: true },
-    });
-    return message
-      ? this.agentMentionReport(workspaceId, agentId, message)
-      : { pendingMentionActions: [], unresolvedMentionHandles: [] };
+    return committedAgentMentionReport(this.#ports, workspaceId, agentId, messageId);
   }
 
   async sendAgentMessage(

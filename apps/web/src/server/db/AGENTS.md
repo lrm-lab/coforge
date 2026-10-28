@@ -101,6 +101,10 @@ These rules apply to `src/server/db/`.
   `DirectConversations` has authorized and never creates one;
   `PrismaDirectConversationRepository` keeps the DM's messages and read
   cursors.
+- `agent-targets.repositories.server.ts` resolves an Agent's target (channel, DM, thread root) and owns the `DirectConversationPorts` context the facade's operations share, plus an Agent's reaction, channel mute and thread follow.
+- `user-direct-reads.repositories.server.ts` reads a person's DM (window, peer, updates) and advances their read cursors.
+- `agent-message-reads.repositories.server.ts` reads an Agent's message pages and advances its read-through; `agent-recovery.repositories.server.ts` reads pending deliveries and the recovery context.
+- `agent-event-drain.repositories.server.ts` drains an Agent's owed attention; `agent-target-freshness.repositories.server.ts` reads a send's pending and recent context.
 - `mention-delivery.repositories.server.ts` keeps tracked @mention outcomes on
   `agent_message_deliveries`. Every write is conditional on the outcome still
   being open (pending or unknown) and, for a daemon report, on the row still

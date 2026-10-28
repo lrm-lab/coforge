@@ -4,7 +4,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import { refuseUnclaimed, TaskBoard } from "#src/server/tasks/task-board.server";
+import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { refuseUnclaimed } from "#src/server/tasks/task-claims.server";
 import { browserTaskBoard } from "#src/server/tasks/browser-task-board.server";
 import { CONVERSATION_TASK_NUMBERS_MAX } from "./conversation-task-subset";
 
