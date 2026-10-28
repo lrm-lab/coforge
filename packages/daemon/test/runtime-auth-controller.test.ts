@@ -573,3 +573,53 @@ test("an unencodable terminal result falls back safely and releases the provider
     controller.stop();
   }
 });
+
+test("a failed login reports only allow-listed detail codes, never free provider text", async () => {
+  const reports: RuntimeAuthLoginReport[] = [];
+  const results: RuntimeAuthLoginResult[] = [
+    { status: "failed", reason: "interaction_failed", detail: "command_code_browser_unavailable" },
+    { status: "failed", reason: "rejected", detail: "stdout: token=provider-secret-sentinel" },
+  ];
+  const adapter: RuntimeAuthAdapter = {
+    provider: "command-code",
+    async startLogin() {
+      return results.shift()!;
+    },
+    async readStatus() {
+      return { provider: "command-code", state: "logged_out" };
+    },
+    async submitCode() {
+      throw new Error("Command Code login completes in the browser");
+    },
+    async cancel() {},
+    async logout() {
+      return {
+        status: "logged_out",
+        authStatus: { provider: "command-code", state: "logged_out" },
+      };
+    },
+  };
+  const controller = new RuntimeAuthController({
+    owner: scope,
+    workingDirectory: "/fixture",
+    createAdapter: () => adapter,
+    reportLogin: async (report) => {
+      reports.push(decodeRuntimeAuthLoginReport(encodeRuntimeAuthLoginReport(report)));
+    },
+    reportLogout: async () => {},
+    refresh: async () => {},
+    now: () => 1_000,
+  });
+  await controller.handle({ ...scope, kind: "login_start", loginId, provider: "command-code" });
+  await controller.handle({
+    ...scope,
+    kind: "login_start",
+    loginId: "rtl_bcdefghijklmnopq",
+    provider: "command-code",
+  });
+  expect(reports.map((report) => report.result)).toEqual([
+    { kind: "failed", reason: "interaction_failed", detail: "command_code_browser_unavailable" },
+    { kind: "failed", reason: "rejected" },
+  ]);
+  expect(JSON.stringify(reports)).not.toContain("provider-secret-sentinel");
+});

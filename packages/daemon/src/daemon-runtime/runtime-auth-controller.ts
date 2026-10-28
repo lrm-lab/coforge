@@ -7,7 +7,10 @@ import {
   type RuntimeAuthLoginResult,
   type RuntimeAuthProvider,
 } from "@lrm/coforge-anvil";
-import { encodeRuntimeAuthLoginReport } from "@lrm/coforge-sdk/internal";
+import {
+  encodeRuntimeAuthLoginReport,
+  isRuntimeAuthFailureDetailCode,
+} from "@lrm/coforge-sdk/internal";
 import type {
   KiroIdentityCenterOptions,
   RuntimeAuthIntent,
@@ -339,7 +342,10 @@ export class RuntimeAuthController {
       const status = sanitizeRuntimeAuthStatus(result.authStatus, login.provider);
       return { kind: "logged_in", ...(status?.account ? { account: status.account } : {}) };
     }
-    if (result.status === "failed") return { kind: "failed", reason: result.reason };
+    if (result.status === "failed") {
+      const detail = isRuntimeAuthFailureDetailCode(result.detail) ? result.detail : undefined;
+      return { kind: "failed", reason: result.reason, ...(detail ? { detail } : {}) };
+    }
     if (result.status === "unsupported") return { kind: "unsupported", reason: result.reason };
     return { kind: result.status };
   }
