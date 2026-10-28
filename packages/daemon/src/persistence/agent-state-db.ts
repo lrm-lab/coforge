@@ -9,6 +9,9 @@ import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 const logger = getLogger(["coforge", "daemon", "agent-state-db"]);
 
+/** The schema this build writes. A database that reports a higher one is refused, not migrated. */
+const SCHEMA_VERSION = 1;
+
 /**
  * The durable per-Agent ledger (`agent-state/<agentId>/state.db`, modeled on Raft's): one row per
  * conversation for the consumed cursor and for a held send's draft. WAL + `synchronous=NORMAL`
@@ -41,7 +44,28 @@ export class AgentStateDb {
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA synchronous = NORMAL");
     db.exec("PRAGMA busy_timeout = 5000");
+    // A database a newer build wrote may carry a shape this one cannot read: refuse before any
+    // schema statement touches it.
+    const metaExists = Boolean(
+      db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'`).get(),
+    );
+    const found = metaExists
+      ? (db.prepare(`SELECT value FROM meta WHERE key = 'version'`).get() as {
+          value: string;
+        } | null)
+      : null;
+    const version = found ? Number(found.value) : undefined;
+    if (version !== undefined && Number.isSafeInteger(version) && version > SCHEMA_VERSION) {
+      db.close();
+      throw new Error(
+        `Agent state database version ${version} is newer than this daemon (${SCHEMA_VERSION})`,
+      );
+    }
     db.exec(`
+      CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS consumed_seqs (
         target TEXT PRIMARY KEY,
         conversation_id TEXT NOT NULL,
@@ -66,6 +90,7 @@ export class AgentStateDb {
         seen_exact_seqs TEXT
       );
     `);
+    if (version === undefined) writeMeta(db, "version", String(SCHEMA_VERSION));
     const handle = new AgentStateDb(db);
     handle.#importLegacyJson(agentId);
     return handle;
@@ -81,20 +106,25 @@ export class AgentStateDb {
   }
 
   /**
-   * First-boot import: both legacy JSON files move into this database in one transaction and are
-   * deleted once the commit succeeds. A crash mid-import simply re-runs on the next open; absent
-   * files are skipped, and a file that cannot parse leaves the store that read it starting empty,
-   * exactly as the JSON readers behaved.
+   * The one-time import of the JSON stores this database replaces. `meta.legacyImported` records
+   * that it ran, so a later open never re-reads the files; a corrupt file leaves the marker unset
+   * and itself in place, so a repair can still be imported. A crash mid-import simply re-runs on
+   * the next open: absent files are skipped, and a file that cannot parse leaves the store that
+   * read it starting empty, exactly as the JSON readers behaved.
    */
   #importLegacyJson(agentId: string): void {
+    if (readMeta(this.#db, "legacyImported") === "true") return;
     const legacy = legacyPaths(agentId);
     const consumed = readLegacyJson(legacy.consumedSeqs);
     const draft = readLegacyJson(legacy.drafts);
-    if (consumed === undefined && draft === undefined) return;
+    if (!consumed.present && !draft.present) {
+      writeMeta(this.#db, "legacyImported", "true");
+      return;
+    }
     try {
       this.#db.transaction(() => {
-        if (consumed) importConsumedSeqs(this.#db, consumed);
-        if (draft) importDrafts(this.#db, draft);
+        if (consumed.value !== undefined) importConsumedSeqs(this.#db, consumed.value);
+        if (draft.value !== undefined) importDrafts(this.#db, draft.value);
       })();
     } catch (error) {
       logger.warn("could not import the legacy Agent state files", {
@@ -104,12 +134,14 @@ export class AgentStateDb {
       });
       return;
     }
-    // Only a file whose content was actually imported goes away: a corrupt one stays for recovery,
-    // exactly as the JSON readers left it.
-    if (consumed !== undefined) rmSync(legacy.consumedSeqs, { force: true });
-    if (draft !== undefined) rmSync(legacy.drafts, { force: true });
+    // Only a file whose content was actually imported goes away: a corrupt one stays for recovery.
+    if (consumed.value !== undefined) rmSync(legacy.consumedSeqs, { force: true });
+    if (draft.value !== undefined) rmSync(legacy.drafts, { force: true });
     for (const parent of [dirname(legacy.consumedSeqs), dirname(legacy.drafts)])
       rmdirSyncQuiet(parent);
+    // A corrupt file still present means the import is not finished; retry on a later open.
+    if (!existsSync(legacy.consumedSeqs) && !existsSync(legacy.drafts))
+      writeMeta(this.#db, "legacyImported", "true");
   }
 }
 
@@ -144,13 +176,29 @@ function rmdirSyncQuiet(path: string): void {
   }
 }
 
-function readLegacyJson(path: string): unknown {
-  if (!existsSync(path)) return undefined;
+/** `present` says the file exists; `value` is its parsed content, or `undefined` when it cannot
+ * parse — the difference decides whether the file is removed or left for recovery. */
+function readLegacyJson(path: string): { present: boolean; value: unknown } {
+  if (!existsSync(path)) return { present: false, value: undefined };
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    return { present: true, value: JSON.parse(readFileSync(path, "utf8")) };
   } catch {
-    return undefined;
+    return { present: true, value: undefined };
   }
+}
+
+function readMeta(db: Database, key: string): string | undefined {
+  const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as {
+    value: string;
+  } | null;
+  return row?.value;
+}
+
+function writeMeta(db: Database, key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(key, value);
 }
 
 /** The legacy `consumed-seqs.json` shape: `targets`, `aliases` and a `nextReadOrder` the DB

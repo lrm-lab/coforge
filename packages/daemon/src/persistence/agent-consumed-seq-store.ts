@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import { normalizeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
 import { AgentStateDb } from "./agent-state-db";
 import { isSafePathScope } from "./path-scope";
@@ -122,31 +123,83 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
     return shapeState(rows, aliasRows);
   }
 
+  /**
+   * Writes only the rows the snapshot carries, one upsert each, and removes the targets it no
+   * longer names. Monotonicity is the database's rule, not the caller's: an older snapshot that
+   * arrives after a newer one can never lower a frontier, a review boundary or a read order, and
+   * a target that moved to another conversation resets instead of keeping the old sequences.
+   */
   write(agentId: string, state: AgentConsumedSeqState): void {
     const db = this.stateDb(agentId).database;
-    const insert = db.prepare(
+    const upsert = db.prepare(
       `INSERT INTO consumed_seqs (target, conversation_id, seq, read_order, reviewed_seq, exact_seqs)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(target) DO UPDATE SET
+         conversation_id = excluded.conversation_id,
+         seq = CASE
+           WHEN excluded.conversation_id <> consumed_seqs.conversation_id THEN excluded.seq
+           WHEN excluded.seq IS NULL THEN consumed_seqs.seq
+           WHEN consumed_seqs.seq IS NULL OR excluded.seq > consumed_seqs.seq THEN excluded.seq
+           ELSE consumed_seqs.seq
+         END,
+         read_order = CASE
+           WHEN excluded.conversation_id <> consumed_seqs.conversation_id THEN excluded.read_order
+           WHEN excluded.read_order IS NULL THEN consumed_seqs.read_order
+           WHEN consumed_seqs.read_order IS NULL OR excluded.read_order > consumed_seqs.read_order
+             THEN excluded.read_order
+           ELSE consumed_seqs.read_order
+         END,
+         reviewed_seq = CASE
+           WHEN excluded.conversation_id <> consumed_seqs.conversation_id THEN excluded.reviewed_seq
+           WHEN excluded.reviewed_seq IS NULL THEN consumed_seqs.reviewed_seq
+           WHEN consumed_seqs.reviewed_seq IS NULL
+             OR excluded.reviewed_seq > consumed_seqs.reviewed_seq THEN excluded.reviewed_seq
+           ELSE consumed_seqs.reviewed_seq
+         END,
+         exact_seqs = CASE
+           WHEN excluded.conversation_id <> consumed_seqs.conversation_id THEN excluded.exact_seqs
+           WHEN excluded.seq IS NOT NULL
+             AND (consumed_seqs.seq IS NULL OR excluded.seq > consumed_seqs.seq)
+             THEN excluded.exact_seqs
+           WHEN excluded.seq IS NULL OR consumed_seqs.seq IS NULL OR excluded.seq = consumed_seqs.seq
+             THEN (
+               SELECT json_group_array(value) FROM (
+                 SELECT value FROM json_each(consumed_seqs.exact_seqs)
+                 UNION
+                 SELECT value FROM json_each(excluded.exact_seqs)
+               )
+             )
+           ELSE consumed_seqs.exact_seqs
+         END`,
     );
     const alias = db.prepare(
-      `INSERT INTO consumed_seq_aliases (spelling, canonical) VALUES (?, ?)`,
+      `INSERT INTO consumed_seq_aliases (spelling, canonical) VALUES (?, ?)
+       ON CONFLICT(spelling) DO UPDATE SET canonical = excluded.canonical`,
     );
+    // An entry without a conversation cannot say whose sequences it holds, so it is not written.
+    const rows = Object.entries(state.targets).flatMap(([target, entry]) =>
+      entry.conversationId ? [{ target, entry, conversationId: entry.conversationId }] : [],
+    );
+    const spellings = Object.keys(state.aliases);
     db.transaction(() => {
-      db.exec("DELETE FROM consumed_seqs");
-      db.exec("DELETE FROM consumed_seq_aliases");
-      for (const [target, entry] of Object.entries(state.targets)) {
-        if (!entry.conversationId) continue;
-        insert.run(
+      for (const { target, entry, conversationId } of rows)
+        upsert.run(
           target,
-          entry.conversationId,
+          conversationId,
           entry.seq ?? null,
           entry.readOrder ?? null,
           entry.reviewedSeq ?? null,
           JSON.stringify(entry.exactSeqs ?? []),
         );
-      }
-      for (const [spelling, canonical] of Object.entries(state.aliases))
-        alias.run(spelling, canonical);
+      for (const spelling of spellings) alias.run(spelling, state.aliases[spelling] ?? "");
+      // A target or alias the snapshot no longer names is gone from the Agent's state.
+      deleteUnlisted(
+        db,
+        "consumed_seqs",
+        "target",
+        rows.map((row) => row.target),
+      );
+      deleteUnlisted(db, "consumed_seq_aliases", "spelling", spellings);
     })();
   }
 
@@ -214,4 +267,18 @@ function shapeState(
     if (canonical !== spelling) aliases[spelling] = canonical;
   }
   return { targets, aliases, nextReadOrder: maxObservedOrder + 1 };
+}
+
+/** Removes the rows of `table` whose `column` the snapshot no longer lists. */
+function deleteUnlisted(
+  db: Database,
+  table: "consumed_seqs" | "consumed_seq_aliases",
+  column: "target" | "spelling",
+  listed: readonly string[],
+): void {
+  if (listed.length === 0) db.exec(`DELETE FROM ${table}`);
+  else
+    db.prepare(
+      `DELETE FROM ${table} WHERE ${column} NOT IN (${listed.map(() => "?").join(", ")})`,
+    ).run(...listed);
 }

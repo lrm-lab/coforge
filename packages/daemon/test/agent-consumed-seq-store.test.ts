@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { AgentStateDb } from "#src/persistence/agent-state-db";
 
 const directories: string[] = [];
 
@@ -28,6 +29,19 @@ const cursorRows = (root: string, agentId = "agent-1") => {
   const db = new Database(dbPath(root, agentId), { readonly: true });
   try {
     return db.prepare(`SELECT * FROM consumed_seqs`).all();
+  } finally {
+    db.close();
+  }
+};
+
+const metaRows = (root: string, agentId = "agent-1") => {
+  const db = new Database(dbPath(root, agentId), { readonly: true });
+  try {
+    return Object.fromEntries(
+      (db.prepare(`SELECT key, value FROM meta`).all() as { key: string; value: string }[]).map(
+        (row) => [row.key, row.value],
+      ),
+    );
   } finally {
     db.close();
   }
@@ -191,6 +205,41 @@ test("the first open imports the legacy JSON cursor and deletes the file", async
     });
     expect(existsSync(legacyPath)).toBe(false);
     expect(existsSync(legacyDirectory)).toBe(false);
+    expect(metaRows(stateDirectory)).toEqual({ version: "1", legacyImported: "true" });
+  } finally {
+    if (previous === undefined) delete Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
+    else Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = previous;
+  }
+});
+
+test("the import marker keeps a legacy file that reappears out of a migrated database", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const legacyRoot = temporaryStateDirectory();
+  const legacyDirectory = join(
+    legacyRoot,
+    `coforge-cli-consumed-seq-${encodeURIComponent(String(process.geteuid?.() ?? "")).replaceAll(".", "%2E")}`,
+    "agent-1",
+  );
+  const legacyPath = join(legacyDirectory, "consumed-seqs.json");
+  await mkdir(legacyDirectory, { recursive: true });
+  await writeFile(
+    legacyPath,
+    JSON.stringify({ targets: { "@ada": { conversationId: "conversation-1", seq: 7 } } }),
+  );
+  const previous = Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
+  try {
+    Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = legacyRoot;
+    new AgentConsumedSeqStore(stateDirectory).read("agent-1");
+    // An older build (or a stray copy) writes the file again after the import already ran, and the
+    // import removed the directory it lived in.
+    await mkdir(legacyDirectory, { recursive: true });
+    await writeFile(
+      legacyPath,
+      JSON.stringify({ targets: { "@bea": { conversationId: "conversation-1", seq: 4 } } }),
+    );
+    expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets).toEqual({
+      "@ada": { conversationId: "conversation-1", seq: 7 },
+    });
   } finally {
     if (previous === undefined) delete Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR;
     else Bun.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = previous;
@@ -204,4 +253,83 @@ test("the Agent state directories are real and owned", async () => {
   const directory = await stat(join(stateDirectory, "agent-state", "agent-1"));
   expect(directory.isDirectory()).toBe(true);
   expect(directory.mode & 0o777).toBe(0o700);
+});
+
+test("an older snapshot never moves a cursor, a review boundary or a read order backwards", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  store.write("agent-1", {
+    targets: {
+      "@ada": {
+        conversationId: "conversation-1",
+        seq: 9,
+        readOrder: 5,
+        reviewedSeq: 9,
+        exactSeqs: [11, 13],
+      },
+    },
+    aliases: {},
+    nextReadOrder: 6,
+  });
+  // A snapshot from an earlier read arrives after it: the database keeps what it already has.
+  store.write("agent-1", {
+    targets: {
+      "@ada": {
+        conversationId: "conversation-1",
+        seq: 7,
+        readOrder: 3,
+        reviewedSeq: 7,
+        exactSeqs: [9],
+      },
+    },
+    aliases: {},
+    nextReadOrder: 4,
+  });
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets["@ada"]).toEqual({
+    conversationId: "conversation-1",
+    seq: 9,
+    readOrder: 5,
+    reviewedSeq: 9,
+    // The frontier did not move, so the seen sequences are the union; normalization drops the
+    // ones at or below it.
+    exactSeqs: [11, 13],
+  });
+});
+
+test("a target that moved to another conversation starts over", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  store.write("agent-1", {
+    targets: { "@ada": { conversationId: "conversation-1", seq: 9, readOrder: 5, reviewedSeq: 9 } },
+    aliases: {},
+    nextReadOrder: 6,
+  });
+  // A channel deleted and recreated under the same name: its sequences restart, so the old
+  // frontier is not a floor.
+  store.write("agent-1", {
+    targets: { "@ada": { conversationId: "conversation-2", seq: 2, readOrder: 1, reviewedSeq: 2 } },
+    aliases: {},
+    nextReadOrder: 2,
+  });
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets["@ada"]).toEqual({
+    conversationId: "conversation-2",
+    seq: 2,
+    readOrder: 1,
+    reviewedSeq: 2,
+  });
+});
+
+test("a database a newer build wrote is refused instead of migrated", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  new AgentConsumedSeqStore(stateDirectory).write("agent-1", {
+    targets: {},
+    aliases: {},
+    nextReadOrder: 1,
+  });
+  const db = new Database(dbPath(stateDirectory));
+  db.prepare(`UPDATE meta SET value = '999' WHERE key = 'version'`).run();
+  db.close();
+  expect(() => AgentStateDb.open(stateDirectory, "agent-1")).toThrow(
+    "Agent state database version 999 is newer than this daemon (1)",
+  );
 });
