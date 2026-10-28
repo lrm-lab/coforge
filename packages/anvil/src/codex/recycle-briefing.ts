@@ -1,12 +1,12 @@
 import { truncateCodePoints, truncateCodePointsWithEllipsis } from "@lrm/coforge-sdk/internal";
 import { collapseWhitespace } from "#src/inline-text";
 import { asRecord } from "#src/json-record";
+import { readTailLines } from "#src/transcript-tail";
 import { CHARS_PER_TOKEN, estimateTokens } from "#src/token-estimate";
 import type { CodexHistoryHost } from "./host";
 import {
   CODEX_BRIEFING_TAIL_BYTES,
   findCodexRollout,
-  readRolloutTailLines,
   rolloutRecords,
   type CodexRolloutRecord,
 } from "./session-rollout";
@@ -287,7 +287,7 @@ export async function readCodexRecycleBriefing(
   try {
     const path = await findCodexRollout(options.sessionId, options.envVars, host);
     if (!path) return;
-    const lines = await readRolloutTailLines(path, CODEX_BRIEFING_TAIL_BYTES, host);
+    const lines = await readTailLines(path, CODEX_BRIEFING_TAIL_BYTES, host);
     if (!lines) return;
     return formatCodexRecycleBriefing(rolloutRecords(lines), options.budgetTokens);
   } catch {

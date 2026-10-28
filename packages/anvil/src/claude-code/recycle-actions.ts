@@ -2,7 +2,8 @@ import type { ClaudeHistoryHost } from "./host";
 import { truncateCodePoints, truncateCodePointsWithEllipsis } from "@lrm/coforge-sdk/internal";
 import { collapseWhitespace } from "#src/inline-text";
 import { asRecord } from "#src/json-record";
-import { readTranscriptTailLines, transcriptRecords } from "./session-transcript";
+import { transcriptRecords } from "./session-transcript";
+import { readTailLines } from "#src/transcript-tail";
 
 /**
  * The tool calls of a Claude transcript, for the recycle briefing. Ported from the reference
@@ -69,7 +70,7 @@ export async function readTranscriptActions(
   transcriptPath: string,
   host: ClaudeHistoryHost,
 ): Promise<TranscriptAction[]> {
-  const lines = await readTranscriptTailLines(transcriptPath, ACTIONS_TAIL_BYTES, host);
+  const lines = await readTailLines(transcriptPath, ACTIONS_TAIL_BYTES, host);
   if (!lines) return [];
   const calls = new Map<
     string,

@@ -2,6 +2,7 @@ import { isAbsolute, join } from "node:path";
 import { asRecord } from "#src/json-record";
 import type { SessionResumeFacts } from "#src/contract";
 import type { CodexDirectoryEntry, CodexHistoryHost } from "./host";
+import { readTailLines } from "#src/transcript-tail";
 
 /**
  * Codex's own rollout, read for the idle-recycle decision and briefing.
@@ -116,22 +117,6 @@ export async function findCodexRollout(
   return best?.path;
 }
 
-/** The lines in the last `tailBytes` of `path`, minus a first line the window cut. */
-export async function readRolloutTailLines(
-  path: string,
-  tailBytes: number,
-  host: CodexHistoryHost,
-): Promise<string[] | undefined> {
-  try {
-    const { text, startOffset } = await host.readFileTail(path, tailBytes);
-    const lines = text.split("\n");
-    if (startOffset > 0) lines.shift();
-    return lines;
-  } catch {
-    return;
-  }
-}
-
 /** Parsed rollout records, in file order. A line without a timestamp or a `type` is skipped. */
 export function rolloutRecords(lines: readonly string[]): CodexRolloutRecord[] {
   const records: CodexRolloutRecord[] = [];
@@ -193,7 +178,7 @@ export async function readCodexSessionResumeFacts(
 ): Promise<SessionResumeFacts | undefined> {
   const path = await findCodexRollout(options.sessionId, options.envVars, host);
   if (!path) return;
-  const lines = await readRolloutTailLines(path, FACTS_TAIL_BYTES, host);
+  const lines = await readTailLines(path, FACTS_TAIL_BYTES, host);
   if (!lines) return;
   const records = rolloutRecords(lines);
   const last = records.at(-1);

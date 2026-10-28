@@ -1,7 +1,8 @@
 import type { ClaudeHistoryHost } from "./host";
 import { asRecord } from "#src/json-record";
 import { cliClock, toolResultText } from "./recycle-actions";
-import { readTranscriptTailLines, transcriptRecords } from "./session-transcript";
+import { transcriptRecords } from "./session-transcript";
+import { readTailLines } from "#src/transcript-tail";
 
 /**
  * The CoForge messages a Claude session saw and sent, recovered from its transcript for the
@@ -123,7 +124,7 @@ export async function collectRecentMessages(
   max: number,
   host: ClaudeHistoryHost,
 ): Promise<RecentMessage[]> {
-  const lines = await readTranscriptTailLines(transcriptPath, MESSAGE_SCAN_TAIL_BYTES, host);
+  const lines = await readTailLines(transcriptPath, MESSAGE_SCAN_TAIL_BYTES, host);
   if (!lines) return [];
   const sendAttempts = new Map<
     string,

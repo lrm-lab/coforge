@@ -24,6 +24,7 @@
 | `src/catalog-process.ts`     | JSONL catalog execution and diagnostics with required host environment and process ports                                      |
 | `src/catalog-command.ts`     | Host catalog command execution port                                                                                           |
 | `src/stderr-hint.ts`         | The bounded, credential-redacted single-line stderr excerpt a catalog logs                                                    |
+| `src/transcript-tail.ts`     | The tail-reader capability and the lines of a transcript/rollout tail                                                         |
 | `src/per-turn/`              | Shared per-turn session and process execution                                                                                 |
 | `src/version-gate.ts`        | Shared version policy and required host version-reader port                                                                   |
 | `src/pi/`                    | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities                   |

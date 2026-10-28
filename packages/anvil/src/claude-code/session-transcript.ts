@@ -3,6 +3,7 @@ import { isAbsolute, join } from "node:path";
 import { type SessionResumeFacts } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import { claudeUsageContextTokens } from "./observations";
+import { readTailLines } from "#src/transcript-tail";
 
 /**
  * Claude Code's own session transcript, read for the idle-recycle decision and briefing.
@@ -76,22 +77,6 @@ export async function findClaudeSessionTranscript(
   }
 }
 
-/** The lines in the last `tailBytes` of `path`, minus a first line the window cut; `undefined` if unreadable. */
-export async function readTranscriptTailLines(
-  path: string,
-  tailBytes: number,
-  host: ClaudeHistoryHost,
-): Promise<string[] | undefined> {
-  try {
-    const { text, startOffset } = await host.readFileTail(path, tailBytes);
-    const lines = text.split("\n");
-    if (startOffset > 0) lines.shift();
-    return lines;
-  } catch {
-    return;
-  }
-}
-
 /** Every parsed JSON object line of a transcript tail; malformed and non-object lines are skipped. */
 export function* transcriptRecords(lines: readonly string[]): Generator<Record<string, unknown>> {
   for (const line of lines) {
@@ -154,7 +139,7 @@ export async function readClaudeSessionResumeFacts(
 ): Promise<SessionResumeFacts | undefined> {
   const path = await findClaudeSessionTranscript(options.sessionId, options.envVars, host);
   if (!path) return;
-  const lines = await readTranscriptTailLines(path, FACTS_TAIL_BYTES, host);
+  const lines = await readTailLines(path, FACTS_TAIL_BYTES, host);
   if (!lines) return;
   let lastActivityAtMs: number | undefined;
   let lastContextTokens: number | undefined;
