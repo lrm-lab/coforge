@@ -40,6 +40,10 @@ description = "Build all buildable workspaces, then start the Web build and ask 
 run = "bun run build"
 depends_post = ["smoke:web"]
 
+[tasks."audit:dead-code"]
+description = "List simplification candidates: modules nothing imports, exports nothing references, and identical function bodies in more than one file (read-only; findings are leads, not verdicts)"
+run = "bun scripts/audit/dead-code.ts"
+
 [tasks."test:computer"]
 description = "Run Computer package tests"
 tools = { powershell = "{{vars.powershell_version}}" }
