@@ -39,6 +39,7 @@ function adapter(options: {
   const calls: string[] = [];
   const value = new DevinRuntimeAuthAdapter({
     terminalLoginSupported: false,
+    maskAccountLabel: (value) => (value === "user@example.com" ? "u****@example.com" : undefined),
     spawn(args) {
       const command = args.join(" ");
       calls.push(command);
@@ -57,15 +58,15 @@ function adapter(options: {
   return { adapter: value, calls };
 }
 
-test("a signed-in Devin reports only its plan, never the person or the credentials file", async () => {
+test("a signed-in Devin reports its plan and masked email, never the name, address or credentials file", async () => {
   const { adapter: value } = adapter({ status: () => ({ text: LOGGED_IN }) });
   const status = await value.readStatus({ workingDirectory: "/tmp" });
   expect(status).toEqual({
     provider: "devin",
     state: "logged_in",
-    account: { planLabel: "Pro", methodLabel: "Devin" },
+    account: { maskedLabel: "u****@example.com", planLabel: "Pro", methodLabel: "Devin" },
   });
-  expect(JSON.stringify(status)).not.toMatch(/example\.com|Frank|credentials/);
+  expect(JSON.stringify(status)).not.toMatch(/user@|Frank|credentials/);
 });
 
 test("a signed-out Devin is logged out and an unreadable report is unknown", async () => {
@@ -171,6 +172,7 @@ test("a link the CLI prints without a newline is relayed while it waits", async 
   let events: RuntimeAuthLoginEvent[] = [];
   const value = new DevinRuntimeAuthAdapter({
     terminalLoginSupported: false,
+    maskAccountLabel: () => undefined,
     spawn(args) {
       if (args.join(" ") === "auth login") return login.process;
       signedIn = true;
@@ -197,6 +199,7 @@ test("a URL split across two reads is relayed once and whole", async () => {
   let statusReads = 0;
   const value = new DevinRuntimeAuthAdapter({
     terminalLoginSupported: false,
+    maskAccountLabel: () => undefined,
     spawn(args) {
       if (args.join(" ") === "auth login") return login.process;
       statusReads++;
@@ -253,6 +256,7 @@ function terminalLogin(options: { exitAfterCode?: number } = {}) {
   let signedIn = false;
   const value = new DevinRuntimeAuthAdapter({
     terminalLoginSupported: true,
+    maskAccountLabel: () => undefined,
     spawn(args, _cwd, terminal) {
       spawns.push({ args: args.join(" "), terminal });
       if (args[1] === "login")

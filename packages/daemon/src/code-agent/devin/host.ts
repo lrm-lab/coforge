@@ -1,6 +1,7 @@
 import type { DevinAuthHost, DevinRuntimeHost } from "@lrm/coforge-anvil/devin";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { agentEnvironment } from "#src/code-agent/environment";
+import { maskEmail } from "#src/code-agent/mask-email";
 import { runtimeAuthProcess } from "#src/code-agent/auth-process";
 import { processSpawner } from "#src/code-agent/process-host";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
@@ -35,6 +36,7 @@ export function createDevinAuthHost(options: {
 }): DevinAuthHost {
   return {
     terminalLoginSupported: (options.platform ?? process.platform) !== "win32",
+    maskAccountLabel: maskEmail,
     spawn(args, cwd, terminal) {
       const env = agentEnvironment(undefined, Bun.env, options.platform, {
         extraEnv: { NO_COLOR: "1", TERM: "xterm-256color" },

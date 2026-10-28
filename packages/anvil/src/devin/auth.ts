@@ -36,13 +36,20 @@ export interface DevinAuthHost {
   spawn(args: readonly string[], cwd: string, terminal?: boolean): DevinAuthProcess;
   /** POSIX hosts can give the CLI a terminal; elsewhere login falls back to Devin's browser flow. */
   readonly terminalLoginSupported: boolean;
+  /** The only form of the account's email that leaves the status read. */
+  maskAccountLabel(value: string): string | undefined;
 }
 
 /**
- * `devin auth status` prints a human report; only the login state and the plan are read from it.
- * The report also names the person, their email and the credentials file, none of which is kept.
+ * `devin auth status` prints a human report; only the login state, the plan and the email, masked
+ * here, are read from it. The report also names the person and the credentials file, neither of
+ * which is kept, and the address itself goes no further than `maskAccountLabel`.
  */
-function readDevinAuthStatus(output: string, exitCode: number): RuntimeAuthStatus {
+function readDevinAuthStatus(
+  output: string,
+  exitCode: number,
+  maskAccountLabel: DevinAuthHost["maskAccountLabel"],
+): RuntimeAuthStatus {
   const loggedOut: RuntimeAuthStatus = {
     provider: RUNTIME_PROVIDER.DEVIN,
     state: "logged_out",
@@ -52,10 +59,12 @@ function readDevinAuthStatus(output: string, exitCode: number): RuntimeAuthStatu
     return { provider: RUNTIME_PROVIDER.DEVIN, state: "unknown" };
   const field = (name: string) =>
     new RegExp(`^\\s*${name}:\\s*(.+)$`, "im").exec(output)?.[1]?.trim();
+  const email = field("Email");
   return {
     provider: RUNTIME_PROVIDER.DEVIN,
     state: "logged_in",
     ...runtimeAuthAccount({
+      maskedLabel: email && maskAccountLabel(email),
       planLabel: field("Plan") ?? field("Tier"),
       methodLabel: "Devin",
     }),
@@ -76,7 +85,7 @@ export class DevinRuntimeAuthAdapter implements RuntimeAuthAdapter {
         timeoutMs,
         () => new Error("Devin auth status timed out"),
       );
-      return readDevinAuthStatus(text, code);
+      return readDevinAuthStatus(text, code, this.host.maskAccountLabel);
     } finally {
       await child.dispose();
     }
