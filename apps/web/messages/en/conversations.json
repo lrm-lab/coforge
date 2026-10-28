@@ -386,7 +386,7 @@
   "conversation_sent": "Sent",
   "conversation_more_actions": "More",
   "conversation_seen_count": "{count} seen",
-  "conversation_seen_none": "No one has seen it yet",
+  "conversation_seen_none": "Nobody viewed",
   "conversation_seen_loading": "Loading…",
   "conversation_seen_by": "Seen by"
 }
