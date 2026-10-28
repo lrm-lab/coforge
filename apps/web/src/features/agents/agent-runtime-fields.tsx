@@ -15,7 +15,9 @@ import { m } from "#src/paraglide/messages";
 import { AgentFastModeField } from "./agent-fast-mode-field";
 import { AgentReasoningField } from "./agent-reasoning-field";
 import { KEYED_MODEL_PROVIDERS, PI_BUILTIN_MODEL_PROVIDERS } from "./agent.schemas";
+import { ModelComboBox } from "./model-combobox";
 import { modelProviderDisplayName } from "./model-provider-display";
+import type { ModelChoice } from "./model-search";
 import {
   fastModeFieldState,
   isPiCustomModel,
@@ -45,6 +47,8 @@ export * from "./agent-runtime-fields-state";
  * contains "--"), and both stay free of the CSS-selector-special characters `modelOptionValue`
  * itself has to avoid. */
 const CUSTOM_MODEL_KEY = "custom-model";
+/** The model field's entries a search never hides: the default and "Custom…". */
+const PINNED_MODEL_CHOICES: ReadonlySet<string> = new Set(["", CUSTOM_MODEL_KEY]);
 
 export function AgentRuntimeFields({
   open,
@@ -200,6 +204,23 @@ export function AgentRuntimeFields({
     if (provider === RUNTIME_PROVIDER.COFORGE) return model.modelProvider === modelProvider;
     return true;
   });
+  // The model field's entries: the runtime's models in its own order, between the default and,
+  // on Pi's Configured list, "Custom…". A saved model the catalog no longer reports stays listed.
+  const modelChoices: ModelChoice[] = [
+    {
+      id: "",
+      label: piConfigured ? m.agent_form_pi_provider_configured() : m.agent_form_provider_default(),
+    },
+    ...(configuredModelSelected && !selectedModel && !(piConfigured && customModelActive)
+      ? [{ id: initialModelKey, label: configuredModelLabel ?? "" }]
+      : []),
+    ...visibleModels.map((model) => ({
+      id: modelOptionValue(model),
+      label: piConfigured ? piConfiguredModelLabel(model) : model.displayName,
+      keywords: [model.id, model.description],
+    })),
+    ...(piConfigured ? [{ id: CUSTOM_MODEL_KEY, label: m.agent_form_model_custom() }] : []),
+  ];
   const modelValue = customModelActive
     ? (customSplit?.model ?? "")
     : (selectedModel?.id ?? (modelKey === initialModelKey ? initial?.model : ""));
@@ -345,17 +366,15 @@ export function AgentRuntimeFields({
         <>
           <input type="hidden" name="model" value={modelValue} />
           <div className="relative min-w-0">
-            <Select
+            <ModelComboBox
               label={m.agent_form_model()}
-              size="md"
-              wrapValue
               className="min-w-0 [&_[data-label]]:pr-8"
               popoverClassName="min-w-(--trigger-width) w-max max-w-[min(36rem,calc(100vw-3rem))]"
               isDisabled={!options}
+              choices={modelChoices}
+              pinned={PINNED_MODEL_CHOICES}
               selectedKey={piConfigured && customModelActive ? CUSTOM_MODEL_KEY : modelKey}
-              onSelectionChange={(key) => {
-                if (key === null) return;
-                const value = String(key);
+              onSelectionChange={(value) => {
                 if (piConfigured && value === CUSTOM_MODEL_KEY) {
                   setCustomModelActive(true);
                   setModelKey("");
@@ -376,32 +395,7 @@ export function AgentRuntimeFields({
                     : (model?.defaultReasoning ?? ""),
                 );
               }}
-            >
-              <Select.Item
-                id=""
-                label={
-                  piConfigured
-                    ? m.agent_form_pi_provider_configured()
-                    : m.agent_form_provider_default()
-                }
-              />
-              {configuredModelSelected &&
-                !selectedModel &&
-                !(piConfigured && customModelActive) && (
-                  <Select.Item id={initialModelKey} label={configuredModelLabel} />
-                )}
-              {visibleModels.map((model) => (
-                <Select.Item
-                  key={modelOptionValue(model)}
-                  id={modelOptionValue(model)}
-                  className="[&_[slot=label]]:whitespace-normal [&_[slot=label]]:wrap-break-word"
-                  label={piConfigured ? piConfiguredModelLabel(model) : model.displayName}
-                />
-              ))}
-              {piConfigured && (
-                <Select.Item id={CUSTOM_MODEL_KEY} label={m.agent_form_model_custom()} />
-              )}
-            </Select>
+            />
             <div className="absolute top-0 right-0 flex h-5 items-center">
               <ButtonUtility
                 icon={catalogRefresh.refreshing ? Spinner : RefreshCw01}

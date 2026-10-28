@@ -78,6 +78,7 @@
   "agent_form_model": "Model",
   "agent_form_model_refresh": "Refresh Model Catalog",
   "agent_form_model_refresh_failed": "Refresh failed. Try again.",
+  "agent_form_model_search": "Search models",
   "agent_form_model_provider": "Model provider",
   "agent_form_catalog_manual_help": "The model catalog could not be loaded. Enter the provider and model ID manually; the Daemon will validate them when the Agent starts.",
   "agent_form_reasoning": "Reasoning",
