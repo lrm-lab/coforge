@@ -317,7 +317,7 @@ test("a channel's items carry the members its group avatar shows, as the Chat si
   }
 });
 
-test("the nav dot counts exactly the unread replies and messages the inbox lists", async () => {
+test("the nav dot lights exactly while the inbox lists unread replies and messages", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
   try {
@@ -404,7 +404,12 @@ test("the nav dot counts exactly the unread replies and messages the inbox lists
     });
     const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(page.items.reduce((sum, item) => sum + item.unreadCount, 0)).toBe(7);
-    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ unread: 7 });
+    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ hasUnread: true });
+
+    await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
+    const allRead = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    expect(allRead.items.reduce((sum, item) => sum + item.unreadCount, 0)).toBe(0);
+    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ hasUnread: false });
   } finally {
     await cleanup(db, suffix);
   }

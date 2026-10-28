@@ -219,7 +219,7 @@ test("direct messages between members, and a member's with themself, are listed 
       ["direct", withSelf.conversationId, peopleAt(alice, "alice"), 0],
       ["thread", withBob.conversationId, bobPeer, 1],
     ]);
-    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ unread: 2 });
+    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ hasUnread: true });
 
     // Done takes the DM and its thread out, the same as a channel's.
     const latest = await db.message.findFirstOrThrow({
@@ -245,7 +245,7 @@ test("direct messages between members, and a member's with themself, are listed 
         (item) => item.place.conversationId,
       ),
     ).toEqual([withSelf.conversationId]);
-    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ unread: 0 });
+    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ hasUnread: false });
 
     // A member with a blank display name reads as the placeholder, never by their username.
     const withCarol = await openPeopleDirectConversation(db, workspace.id, alice.id, carol.id);
@@ -321,7 +321,7 @@ test("a person notified of a mention outside their channels finds it in Activity
       firstMentionMessageId: sent.id,
     });
     expect(item!.latest.id).toBe(sent.id);
-    expect((await inbox.navAttention(workspace.id, bob.id)).unread).toBe(1);
+    expect((await inbox.navAttention(workspace.id, bob.id)).hasUnread).toBe(true);
     // Unread, it counts under both Unread and Mentions.
     expect(await countsOf()).toEqual({ unreadItemCount: 1, unreadMentionItemCount: 1 });
     // Alice's own inbox never lists what she sent.
@@ -334,13 +334,13 @@ test("a person notified of a mention outside their channels finds it in Activity
     // Read and unread like any item: it stays listed either way.
     await inbox.setMentionRead(workspace.id, bob.id, resolutionId, true);
     expect((await mentionsOf()).map((entry) => entry.unreadCount)).toEqual([0]);
-    expect((await inbox.navAttention(workspace.id, bob.id)).unread).toBe(0);
+    expect((await inbox.navAttention(workspace.id, bob.id)).hasUnread).toBe(false);
     expect(await countsOf()).toEqual({ unreadItemCount: 0, unreadMentionItemCount: 0 });
     await inbox.setMentionRead(workspace.id, bob.id, resolutionId, false);
     expect((await mentionsOf()).map((entry) => entry.unreadCount)).toEqual([1]);
     // Mark all read reads it too.
     await inbox.markAllRead(workspace.id, bob.id, { before: new Date() });
-    expect((await inbox.navAttention(workspace.id, bob.id)).unread).toBe(0);
+    expect((await inbox.navAttention(workspace.id, bob.id)).hasUnread).toBe(false);
 
     await inbox.markDone(workspace.id, bob.id, { kind: "mention_action", resolutionId });
     expect(await mentionsOf()).toEqual([]);

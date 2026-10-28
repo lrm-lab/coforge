@@ -35,7 +35,7 @@ import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import {
   conversationCandidatesSql,
-  navUnreadTotalSql,
+  navHasUnreadSql,
   threadCandidatesSql,
 } from "./activity-inbox-items-sql.server";
 
@@ -255,17 +255,14 @@ export class ActivityInbox {
     );
   }
 
-  /**
-   * The viewer's total unread activity count, without listing items — what the nav rail's Activity
-   * dot reads. Same candidates the inbox lists, so Done and read move it exactly like the page.
-   * Every online viewer re-reads this on each Workspace message.
-   */
+  /** Whether the viewer has any unread activity: all the nav rail's Activity dot shows. Every online
+   * viewer re-reads it on each Workspace message; `navHasUnreadSql` says what it reads. */
   async navAttention(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
-    const [{ unread }] = await this.db.$queryRaw<[{ unread: number }]>(
-      navUnreadTotalSql(workspaceId, userId),
+    const [{ hasUnread }] = await this.db.$queryRaw<[{ hasUnread: boolean }]>(
+      navHasUnreadSql(workspaceId, userId),
     );
-    return { unread };
+    return { hasUnread };
   }
 
   /** Reads or unreads a mention the viewer was notified of; it stays listed until Done. */

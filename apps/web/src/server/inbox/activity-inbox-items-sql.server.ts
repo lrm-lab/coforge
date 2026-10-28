@@ -155,31 +155,38 @@ function threadItemListedSql(userId: string) {
 }
 
 /**
- * The nav rail's Activity statement: the viewer's unread activity over the same three terms the
- * inbox lists — joined conversations, followed threads and notified mentions — each counted from
- * the item's own read boundary up, in one statement rather than listing the items.
+ * The nav rail's Activity statement: whether the viewer has any unread activity, over the same three
+ * terms the inbox lists — joined conversations, followed threads and notified mentions — each from
+ * the item's own read boundary up. The dot needs no count, so each term is an `EXISTS` that stops at
+ * the first unread row. Conversations and threads probe through a lateral keyed on their row, ordered
+ * by `sequence` so the read cursor's index range is the plan: a plain join, or a bare `LIMIT 1`,
+ * let the planner expect an early stop and scan all of `messages` when nothing is unread.
  */
-export function navUnreadTotalSql(workspaceId: string, userId: string) {
+export function navHasUnreadSql(workspaceId: string, userId: string) {
   return Prisma.sql`
-    SELECT ((
-      SELECT COUNT(*) FROM ${conversationItemsSql(workspaceId, userId)}
-      JOIN "messages" m ON ${conversationUnreadMessageSql}
-      WHERE ${conversationItemListedSql(userId)}
-    ) + (
-      -- Per thread, as the list counts it: an index range above that thread's read cursor. A
-      -- plain join let the planner read every reply of every followed thread before the cursor.
-      SELECT COALESCE(SUM(replies."unread"), 0) FROM ${threadItemsSql(workspaceId, userId)}
-      ${threadUnreadLateral}
-      WHERE ${threadItemListedSql(userId)}
-    ) + (
-      -- Each notified mention is one unread item until the viewer reads it.
-      SELECT COUNT(*) FROM "pending_mention_actions" pma
+    SELECT (EXISTS (
+      -- A notified mention is unread until the viewer reads it; the cheapest term goes first.
+      SELECT 1 FROM "pending_mention_actions" pma
       JOIN "conversations" pc ON pc."id" = pma."conversationId"
        AND pc."archivedAt" IS NULL AND pc."hiddenFromWorkspaceAt" IS NULL
       WHERE pma."workspaceId" = ${workspaceId}::uuid AND pma."targetUserId" = ${userId}::uuid
         AND pma."notifiedAt" IS NOT NULL AND pma."dismissedAt" IS NULL
         AND pma."targetReadAt" IS NULL
-    ))::int AS "unread"`;
+    ) OR EXISTS (
+      SELECT 1 FROM ${conversationItemsSql(workspaceId, userId)}
+      CROSS JOIN LATERAL (
+        SELECT 1 FROM "messages" m WHERE ${conversationUnreadMessageSql}
+        ORDER BY m."sequence" LIMIT 1
+      ) message
+      WHERE ${conversationItemListedSql(userId)}
+    ) OR EXISTS (
+      SELECT 1 FROM ${threadItemsSql(workspaceId, userId)}
+      CROSS JOIN LATERAL (
+        SELECT 1 FROM "messages" m WHERE ${threadUnreadReplySql}
+        ORDER BY m."sequence" LIMIT 1
+      ) reply
+      WHERE ${threadItemListedSql(userId)}
+    )) AS "hasUnread"`;
 }
 
 /**

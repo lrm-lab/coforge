@@ -21,7 +21,7 @@ const REFRESH_DELAY_MS = 300;
  * Listens to the viewer's workspace and user conversation channels and calls `onActivity` (once
  * per burst) when a message arrives and, with `refreshOnPins`, when the viewer's pins change. The
  * Activity page refreshes its list with it and asks for pins (it lists them under Pinned); the nav
- * rail's Activity dot re-reads its attention count with it.
+ * rail's Activity dot re-reads whether anything is unread with it.
  */
 export function useActivityInboxRealtime({
   workspaceId,

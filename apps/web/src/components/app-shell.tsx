@@ -68,7 +68,7 @@ function useActivityAttention(user: AppUser, workspaceId?: string) {
     onActivity: refresh,
   });
   const query = useQuery(activityNavAttentionQuery());
-  return (query.data?.unread ?? 0) > 0;
+  return query.data?.hasUnread ?? false;
 }
 
 /** Chat is the Workspace's home page ("") and its conversations. */
