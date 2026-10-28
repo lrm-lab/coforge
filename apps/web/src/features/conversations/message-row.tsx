@@ -241,6 +241,7 @@ export const MessageRow = memo(function MessageRow({
           toast.error(m.conversation_save_failed());
         })),
     saveSaved,
+    seenBy: readState && conversationId ? { conversationId } : undefined,
     onCopy: () =>
       void copyText(messagePlainText(message, channelNames)).then((copied) => {
         if (copied) toast.success(m.conversation_message_copied());
@@ -368,22 +369,23 @@ export const MessageRow = memo(function MessageRow({
             readState={readState}
           />
         </div>
-        {(onOpenThread || onToggleReaction || onToggleSave || copyable) && (
+        {(onOpenThread || onToggleReaction || onToggleSave || copyable || actions.seenBy) && (
           <MessageActionToolbar {...actions} grouped={grouped} />
         )}
-        {sheetActions && (onOpenThread || onToggleReaction || onToggleSave || copyable) && (
-          <MessageActionSheet
-            {...actions}
-            isOpen={actionsOpen}
-            onOpenChange={setActionsOpen}
-            avatar={avatar}
-            displayName={displayName}
-            createdAt={message.createdAt}
-            time={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
-            plainText={messagePlainText(message, channelNames)}
-            copyable={copyable}
-          />
-        )}
+        {sheetActions &&
+          (onOpenThread || onToggleReaction || onToggleSave || copyable || actions.seenBy) && (
+            <MessageActionSheet
+              {...actions}
+              isOpen={actionsOpen}
+              onOpenChange={setActionsOpen}
+              avatar={avatar}
+              displayName={displayName}
+              createdAt={message.createdAt}
+              time={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+              plainText={messagePlainText(message, channelNames)}
+              copyable={copyable}
+            />
+          )}
       </div>
     </li>
   );

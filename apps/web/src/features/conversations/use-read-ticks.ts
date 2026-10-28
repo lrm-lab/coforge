@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { ReadPositions } from "./conversation-pane-layout";
 import type { ConversationReadEvent } from "./conversation-realtime";
@@ -24,9 +25,15 @@ export function useReadTicks(
     conversationId: string;
     sequence: number;
   }>();
+  const queryClient = useQueryClient();
   const onRead = useCallback(
     (event: ConversationReadEvent) => {
-      if (event.memberId === senderMemberId) return;
+      // Until the viewer's own member id is known, their own reads cannot be told apart.
+      if (!senderMemberId || event.memberId === senderMemberId) return;
+      // Who has seen which message changed: an open or cached "N seen" list is read again.
+      void queryClient.invalidateQueries({
+        queryKey: ["conversation", "seen-by", event.conversationId],
+      });
       setLiveOthersRead((current) => {
         const heard = current?.conversationId === event.conversationId ? current.sequence : 0;
         return event.readThroughSequence > heard
@@ -34,7 +41,7 @@ export function useReadTicks(
           : current;
       });
     },
-    [senderMemberId],
+    [senderMemberId, queryClient],
   );
   const othersReadThroughSequence = Math.max(
     page.othersReadThroughSequence ?? 0,

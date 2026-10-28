@@ -13,6 +13,7 @@ import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-de
 import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
 
 import { ConversationPane } from "./conversation-pane";
+import { SeenByDirectory } from "./message-seen-by";
 import { useConversationDetailVisible } from "./conversation-navigation";
 import { useConversationHostChannels } from "./conversation-host";
 import { useConversationSync, useTaskPopupRoot } from "./use-conversation-sync";
@@ -277,21 +278,23 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   if (taskPopup) return taskLayer;
   const conversationMainPane = (
     <ThreadStoreProvider store={threads}>
-      <ConversationPane
-        {...conversationProps}
-        streamRead={windowRead}
-        onOpenTask={openTaskReference}
-        channelNames={channelNames}
-        channels={channelList}
-        jumpMessage={jumpMessage ?? jumpMessageId}
-        onJumpMessageConsumed={jumpMessage ? onJumpMessageConsumed : clearJumpMessage}
-        onLoadMessageAround={onLoadMessageAround}
-        onReadLatest={onReadLatest}
-        header={header}
-        conversation={conversation}
-        composerTarget={threadContext}
-        onOpenThread={openThread}
-      />
+      <SeenByDirectory members={conversation.mentionables}>
+        <ConversationPane
+          {...conversationProps}
+          streamRead={windowRead}
+          onOpenTask={openTaskReference}
+          channelNames={channelNames}
+          channels={channelList}
+          jumpMessage={jumpMessage ?? jumpMessageId}
+          onJumpMessageConsumed={jumpMessage ? onJumpMessageConsumed : clearJumpMessage}
+          onLoadMessageAround={onLoadMessageAround}
+          onReadLatest={onReadLatest}
+          header={header}
+          conversation={conversation}
+          composerTarget={threadContext}
+          onOpenThread={openThread}
+        />
+      </SeenByDirectory>
     </ThreadStoreProvider>
   );
   const conversationSidePane = visibleSlot && (

@@ -369,5 +369,10 @@
   ],
   "chat_section_change_failed": "这项改动没有保存成功。",
   "conversation_read": "已读",
-  "conversation_sent": "已发送"
+  "conversation_sent": "已发送",
+  "conversation_more_actions": "更多",
+  "conversation_seen_count": "{count} 人已看",
+  "conversation_seen_none": "还没有人看",
+  "conversation_seen_loading": "加载中…",
+  "conversation_seen_by": "已看的人"
 }

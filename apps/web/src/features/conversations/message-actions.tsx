@@ -9,6 +9,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { MessageReactionPicker, QUICK_REACTION_EMOJIS } from "./message-reaction-picker";
 import { ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
+import { MessageSeenByMenu, MessageSeenBySheetEntry } from "./message-seen-by";
 
 /** What a message's actions do, bound to that message by its row. */
 type MessageActions = {
@@ -18,6 +19,8 @@ type MessageActions = {
   onToggleSave?: () => void;
   saveSaved: boolean;
   onCopy: () => void;
+  /** An own message's "N seen" (`message-seen-by.tsx`), read from its conversation. */
+  seenBy?: { conversationId: string };
 };
 
 /**
@@ -40,6 +43,7 @@ export function MessageActionToolbar({
   onToggleSave,
   saveSaved,
   onCopy,
+  seenBy,
 }: MessageActions & { grouped: boolean }) {
   return (
     <div
@@ -72,6 +76,7 @@ export function MessageActionToolbar({
         onClick={onCopy}
         className="p-1 *:data-icon:size-3.5"
       />
+      {seenBy && <MessageSeenByMenu conversationId={seenBy.conversationId} messageId={messageId} />}
     </div>
   );
 }
@@ -99,6 +104,7 @@ export function MessageActionSheet({
   onToggleSave,
   saveSaved,
   onCopy,
+  seenBy,
 }: MessageActions & {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -229,6 +235,17 @@ export function MessageActionSheet({
               >
                 {m.conversation_message_copy_text()}
               </Button>
+            )}
+            {seenBy && (
+              <>
+                {(onToggleReaction || onToggleSave || onOpenThread || copyable) && (
+                  <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
+                )}
+                <MessageSeenBySheetEntry
+                  conversationId={seenBy.conversationId}
+                  messageId={messageId}
+                />
+              </>
             )}
           </div>
         </Dialog>
