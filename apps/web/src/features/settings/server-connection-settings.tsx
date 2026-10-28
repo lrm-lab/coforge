@@ -36,8 +36,8 @@ export function ServerConnectionSettings() {
           if (isAppErrorCode(cause, "ACCESS_DENIED")) setPage(null);
         });
     };
-    const interval = window.setInterval(refresh, 5_000);
-    return () => window.clearInterval(interval);
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [page, load]);
 
   function continueWithPassword() {

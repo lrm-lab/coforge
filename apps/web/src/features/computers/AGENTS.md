@@ -5,6 +5,7 @@ These rules apply to `src/features/computers/`.
 ## Module map
 
 - `computer-layout.tsx` — list/detail selection and empty state
+- `computer-connection.functions.ts` — minimal connection state for installation completion
 - `computer-detail.tsx` — one Computer's panel composition and owner actions
 - `computer-detail-view.ts` — detail panel view type and restart poll constants
 - `use-computer-detail-lifecycle.ts` — upgrade slots and restart polling

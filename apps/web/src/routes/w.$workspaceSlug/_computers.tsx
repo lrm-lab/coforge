@@ -6,6 +6,7 @@ import { AddComputerDialog } from "#src/features/computers/add-computer-dialog";
 import { ComputerLayout } from "#src/features/computers/computer-layout";
 import { ComputersPending } from "#src/features/computers/computers-pending";
 import { ensureCloudComputer } from "#src/features/computers/cloud-computers.functions";
+import { listComputerConnections } from "#src/features/computers/computer-connection.functions";
 import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
 import { listComputers } from "#src/features/computers/computers.functions";
 import {
@@ -63,6 +64,13 @@ function ComputersPage() {
   const [addComputerOpen, setAddComputerOpen] = useState(false);
   const [connectedComputerName, setConnectedComputerName] = useState<string | null>(null);
   const computersWhenAddOpened = useRef<ReadonlySet<string> | null>(null);
+  const connectionProbe = useQuery({
+    queryKey: ["computers", "connection-probe", currentWorkspace?.id],
+    queryFn: () => listComputerConnections(),
+    enabled: addComputerOpen && !connectedComputerName,
+    refetchInterval: addComputerOpen && !connectedComputerName ? 2000 : false,
+    retry: false,
+  });
 
   useEffect(() => {
     if (!addComputerOpen) {
@@ -73,21 +81,19 @@ function ComputersPage() {
     if (connectedComputerName) return;
 
     computersWhenAddOpened.current = new Set(computers.map((computer) => computer.id));
-    const refresh = () => void router.invalidate({ sync: true });
-    const interval = window.setInterval(refresh, 2000);
-    refresh();
-    return () => window.clearInterval(interval);
-  }, [addComputerOpen, connectedComputerName, router]);
+  }, [addComputerOpen, computers, connectedComputerName]);
 
   useEffect(() => {
     const initialComputerIds = computersWhenAddOpened.current;
     if (!addComputerOpen || !initialComputerIds || connectedComputerName) return;
-    const connectedComputer = computers.find(
+    const connectedComputer = connectionProbe.data?.find(
       (computer) =>
         !initialComputerIds.has(computer.id) && computer.ownedByCurrentUser && computer.online,
     );
-    if (connectedComputer) setConnectedComputerName(computerLabel(connectedComputer));
-  }, [addComputerOpen, computers, connectedComputerName]);
+    if (!connectedComputer) return;
+    setConnectedComputerName(computerLabel(connectedComputer));
+    void router.invalidate({ sync: true });
+  }, [addComputerOpen, connectedComputerName, connectionProbe.data, router]);
 
   return (
     <>
