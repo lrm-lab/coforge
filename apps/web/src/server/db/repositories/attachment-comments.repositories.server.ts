@@ -17,6 +17,7 @@ import {
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { DatabaseScope } from "#src/server/db/transaction.server";
@@ -104,11 +105,7 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
       await lockConversation(tx, conversationId);
       const threadRootId = input.rootId ? await rootOf(tx, input.attachmentId, input.rootId) : null;
       const member = await joinDiscussion(tx, actor, conversationId);
-      const latest = await tx.message.findFirst({
-        where: { conversationId },
-        orderBy: { sequence: "desc" },
-        select: { sequence: true },
-      });
+      const sequence = await allocateSequence(tx, conversationId);
       const message = await tx.message.create({
         data: {
           workspaceId: actor.workspaceId,
@@ -116,7 +113,7 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
           senderMemberId: member.id,
           body: input.body,
           threadRootId,
-          sequence: (latest?.sequence ?? 0) + 1,
+          sequence,
         },
       });
       const comment = await tx.attachmentComment.create({

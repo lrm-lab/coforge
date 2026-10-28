@@ -48,12 +48,12 @@ import {
   liveAgentPeer,
   peerSeatTarget,
 } from "./agent-peer-direct.repositories.server";
-import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { isAppBot } from "#src/features/agents/agent-system-kind";
 import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { userIdOfUsernameTarget } from "./public-user-target.repositories.server";
+import { allocateSequence } from "./sequence-allocation.server";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import { channelAgentRecipients } from "#src/server/conversations/channel-agent-recipients.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
@@ -102,21 +102,6 @@ export type {
   LatestSenderFields,
   PendingAgentDelivery,
 } from "./direct-conversation-types.server";
-
-/**
- * Next sequence for a conversation; holds the conversation row lock until the transaction ends.
- * Exported so other message-anchored writers (e.g. `ActionCards.prepare`) serialize through the
- * same lock instead of reimplementing sequence allocation.
- */
-export async function allocateSequence(tx: Prisma.TransactionClient, conversationId: string) {
-  await lockConversation(tx, conversationId);
-  const last = await tx.message.findFirst({
-    where: { conversationId },
-    orderBy: { sequence: "desc" },
-    select: { sequence: true },
-  });
-  return (last?.sequence ?? 0) + 1;
-}
 
 export class PrismaDirectConversationRepository implements DirectConversationRepository {
   /** Channel lookups this instance has made, kept only when it serves a single request. */

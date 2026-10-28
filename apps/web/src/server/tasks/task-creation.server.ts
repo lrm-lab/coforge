@@ -115,20 +115,24 @@ export async function createTasks(
       });
       if (!attachment) throw new AppError("ACCESS_DENIED");
     }
-    const lastMessage = await tx.message.findFirst({
-      where: { conversationId: scope.conversationId },
-      orderBy: { sequence: "desc" },
-      select: { sequence: true },
-    });
-    const allocated = await tx.$queryRaw<Array<{ first: number }>>`
+    // One statement takes the conversation lock and allocates both counters: a batch's Task
+    // numbers and its message sequences. `lastSequence` is the sole source; `MAX(sequence)`
+    // only floors a lagging counter, as in `allocateSequences`.
+    const allocated = await tx.$queryRaw<Array<{ first: number; firstSequence: number }>>`
         UPDATE "conversations"
-        SET "nextTaskNumber" = "nextTaskNumber" + ${titles.length}
+        SET "nextTaskNumber" = "nextTaskNumber" + ${titles.length},
+            "lastSequence" = GREATEST(
+              "lastSequence",
+              (SELECT COALESCE(MAX("sequence"), 0) FROM "messages" WHERE "conversationId" = "conversations"."id")
+            ) + ${titles.length}
         WHERE "id" = ${scope.conversationId}::uuid
-        RETURNING "nextTaskNumber" - ${titles.length} AS "first"
+        RETURNING "nextTaskNumber" - ${titles.length} AS "first",
+                  "lastSequence" - ${titles.length} + 1 AS "firstSequence"
       `;
     const firstTaskNumber = allocated[0]?.first;
-    if (firstTaskNumber === undefined) throw new AppError("NOT_FOUND");
-    const firstSequence = (lastMessage?.sequence ?? 0) + 1;
+    const firstSequence = allocated[0]?.firstSequence;
+    if (firstTaskNumber === undefined || firstSequence === undefined)
+      throw new AppError("NOT_FOUND");
     // Human Tasks wake live Agents: the DM Agent, or unmuted channel Agents (coordinator only
     // when configured), plus muted Agents mentioned in the title. Agent Tasks wake nobody.
     const agentMembers = member.userId

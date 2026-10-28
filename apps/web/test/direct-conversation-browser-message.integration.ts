@@ -4,10 +4,8 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { toggleUserMessageReaction } from "#src/server/conversations/user-message-reactions.server";
-import {
-  PrismaDirectConversationRepository,
-  allocateSequence,
-} from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
 /**

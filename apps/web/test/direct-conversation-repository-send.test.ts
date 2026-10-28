@@ -39,7 +39,7 @@ describe("PrismaDirectConversationRepository sending", () => {
       },
     };
     const tx = {
-      $queryRaw: async () => [],
+      $queryRaw: async () => [{ first: 1 }],
       message: {
         findFirst: async () => null,
         create: async ({ data }: { data: { body: string } }) => ({
@@ -127,7 +127,7 @@ describe("PrismaDirectConversationRepository sending", () => {
   test("sendAgentMessage stores a resolvable task reference as a token and leaves an unknown number alone", async () => {
     const created: { data: { body: string } }[] = [];
     const tx = {
-      $queryRaw: async () => [],
+      $queryRaw: async () => [{ first: 1 }],
       message: {
         findFirst: async () => null,
         create: async ({ data }: { data: { body: string } }) => {
@@ -206,7 +206,7 @@ describe("PrismaDirectConversationRepository sending", () => {
       },
     };
     const tx = {
-      $queryRaw: async () => [],
+      $queryRaw: async () => [{ first: 1 }],
       message: {
         findFirst: async () => null,
         create: async ({ data }: { data: { body: string } }) => ({
@@ -337,7 +337,7 @@ describe("PrismaDirectConversationRepository sending", () => {
   test("sendAgentMessage rejoins a soft-left Agent on a DM before sending", async () => {
     const memberUpdates: { where: unknown; data: unknown }[] = [];
     const tx = {
-      $queryRaw: async () => [],
+      $queryRaw: async () => [{ first: 1 }],
       message: {
         findFirst: async () => null,
         create: async ({ data }: { data: { body: string } }) => ({

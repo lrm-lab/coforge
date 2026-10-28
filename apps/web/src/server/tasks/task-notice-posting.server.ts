@@ -1,4 +1,5 @@
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { quotedTask, type QuotedTask } from "./task-notices.server";
 import type {
   Transaction,
@@ -104,12 +105,7 @@ async function writeNotice(
   conversation: ConversationRef,
   input: NoticeInput,
 ): Promise<PostedNotice> {
-  const latest = await tx.message.findFirst({
-    where: { conversationId: conversation.conversationId },
-    orderBy: { sequence: "desc" },
-    select: { sequence: true },
-  });
-  const sequence = (latest?.sequence ?? 0) + 1;
+  const sequence = await allocateSequence(tx, conversation.conversationId);
   // Named fields only: callers pass wider scope objects that are also a ConversationRef.
   const { conversationId, workspaceId } = conversation;
   return tx.message.create({

@@ -56,6 +56,7 @@ import {
   unfollowAgentFromThread,
 } from "./channel-threads.server";
 import { lockConversation } from "./conversation-lock.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { browserMessageFields } from "./conversation-history.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
@@ -401,10 +402,6 @@ export class PublicChannels {
             throw new AgentMessageValidationError("message anchor not found in this conversation");
           if (root?.threadRootId)
             throw new AgentMessageValidationError("thread root must be a top-level message");
-          const latest = await tx.message.findFirst({
-            where: { conversationId: channelId },
-            orderBy: { sequence: "desc" },
-          });
           // Validated before the message exists, then linked (messageId + position) once it does.
           const requestedAttachmentIds = attachmentIds ?? [];
           const availableAttachments = requestedAttachmentIds.length
@@ -456,7 +453,7 @@ export class PublicChannels {
             threadRootId: root?.id,
             mentions: stored.mentions,
           });
-          const sequence = (latest?.sequence ?? 0) + 1;
+          const sequence = await allocateSequence(tx, channelId);
           const message = await tx.message.create({
             data: {
               workspaceId,

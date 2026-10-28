@@ -37,6 +37,9 @@ model Conversation {
   /// (`ConversationMember.hiddenAt`).
   hiddenFromWorkspaceAt DateTime?
   nextTaskNumber Int                    @default(1)
+  /// Message sequence counter, the sole source a send allocates from (`allocateSequence`).
+  /// No index by design so the allocation UPDATE stays a HOT update on the conversation row.
+  lastSequence   Int                    @default(0)
   createdAt      DateTime               @default(now())
   workspace      Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   members        ConversationMember[]

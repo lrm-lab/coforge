@@ -8,6 +8,7 @@ import {
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { lockConversation } from "./conversation-lock.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { resolveChannelAuthority } from "./channel-authority.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
@@ -118,12 +119,7 @@ export async function changeChannelCoordinator(
       where: { id: channelId },
       data: { coordinatorAgentId },
     });
-    const latest = await tx.message.findFirst({
-      where: { conversationId: channelId },
-      orderBy: { sequence: "desc" },
-      select: { sequence: true },
-    });
-    const sequence = (latest?.sequence ?? 0) + 1;
+    const sequence = await allocateSequence(tx, channelId);
     const actor = await tx.user.findUniqueOrThrow({
       where: { id: userId },
       select: { displayName: true, username: true },

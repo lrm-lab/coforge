@@ -8,7 +8,7 @@ import type {
   StoredAgentEvent,
 } from "#src/server/app-agent-events/agent-events.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { allocateSequence } from "./direct-conversation.repositories.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 
 /** Event rows and the dedicated conversation they land in; what an event may say and who may send it
  * stay in `server/app-agent-events/`. */

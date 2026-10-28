@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { ActionCardKind, ResolvedActionCardPayload } from "@lrm/coforge-sdk/agent";
-import { allocateSequence } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { ActionCardTarget } from "./action-card-target.server";
 import { lockConversation } from "./conversation-lock.server";
 import { messageSignalScope, type ConversationRealtime } from "./conversation-realtime.server";
