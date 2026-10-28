@@ -35,7 +35,7 @@ export function pageFillUrl(
 export function pageFillRequestFields(
   fields: readonly PageFillField[],
   values: Record<string, string>,
-): { id: string; selector: string; value: string }[] {
+): { id: string; selector: string; input: PageFillField["input"]; value: string }[] {
   const ids = new Set(fields.map((field) => field.id));
   if (Object.keys(values).length !== ids.size || Object.keys(values).some((id) => !ids.has(id))) {
     throw new AppError("INVALID_INPUT");
@@ -44,7 +44,7 @@ export function pageFillRequestFields(
     const value = values[field.id];
     if (typeof value !== "string" || value.length > 2000) throw new AppError("INVALID_INPUT");
     if (field.input === "password" && value.length === 0) throw new AppError("INVALID_INPUT");
-    return { id: field.id, selector: field.selector, value };
+    return { id: field.id, selector: field.selector, input: field.input, value };
   });
 }
 
