@@ -15,19 +15,27 @@ export function isInlineImage(contentType: string): boolean {
 }
 
 /**
- * Types the browser may render, but only from the signed delivery (CDN) origin — never from this
+ * Files the browser may render, but only from the signed delivery (CDN) origin — never from this
  * one. A PDF is read in the browser's own viewer, which needs a real URL with a real content type;
  * serving that from our origin would put a document the sender controls inside our session's
  * origin, which is exactly what `INLINE_IMAGE_TYPES` exists to prevent. On the delivery origin it
- * has no access to our cookies, so the viewer is safe there. Where delivery is not configured
- * there is no such URL, and the attachment stays an opaque download (`attachmentResponseHeaders`
- * is deliberately not widened).
+ * has no access to our cookies, so the viewer is safe there. A video plays in a message from there
+ * too: the CDN answers range requests, so playback starts before the whole file has arrived. It is
+ * one by its name (`attachmentPreviewKind`), stored as a video or as untyped bytes, never as a
+ * document type the delivery origin would then render. Where delivery is not configured there is
+ * no such URL, and the attachment stays an opaque download (`attachmentResponseHeaders` is
+ * deliberately not widened).
  */
-const DELIVERY_INLINE_TYPES = new Set(["application/pdf"]);
-
-/** Whether `contentType` may be previewed, but only through a signed delivery URL. */
-export function isDeliveryInlinePreview(contentType: string): boolean {
-  return DELIVERY_INLINE_TYPES.has(contentType);
+export function isDeliveryInlinePreview(attachment: {
+  fileName: string;
+  contentType: string;
+}): boolean {
+  const { fileName, contentType } = attachment;
+  if (contentType === "application/pdf") return true;
+  return (
+    attachmentPreviewKind(fileName, contentType) === "video" &&
+    (contentType.startsWith("video/") || contentType === "application/octet-stream")
+  );
 }
 
 /**

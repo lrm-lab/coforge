@@ -62,12 +62,12 @@ export async function handleAttachmentDownload(
       userId: user.id,
     });
     const forceDownload = new URL(request.url).searchParams.has("download");
-    // A type that may only render off our own origin (a PDF) is redirected to the signed delivery
+    // A file that may only render off our own origin (a PDF, a video) is redirected to the signed delivery
     // URL as well; when there is no delivery to sign with, `signedRedirect` returns null and the
     // bytes stream below as an opaque download, exactly as before.
     const redirect =
       !forceDownload &&
-      (isInlineImage(attachment.contentType) || isDeliveryInlinePreview(attachment.contentType))
+      (isInlineImage(attachment.contentType) || isDeliveryInlinePreview(attachment))
         ? signedRedirect(dependencies, attachment.objectKey)
         : null;
     if (redirect) return redirect;

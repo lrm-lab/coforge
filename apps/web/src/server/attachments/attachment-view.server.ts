@@ -26,8 +26,8 @@ export type AttachmentView = {
   /** Intrinsic display size; both are absent until a safe inline image has a known size. */
   imageWidth?: number;
   imageHeight?: number;
-  /** A short-lived signed CDN URL, present for an inline-eligible image and for a type that may
-   * only be previewed off our own origin (a PDF) when delivery is configured. `<img src>` should
+  /** A short-lived signed CDN URL, present for an inline-eligible image and for a file that may
+   * only be previewed off our own origin (a PDF, a video) when delivery is configured. `<img src>` should
    * prefer this over `/api/attachments/:id` so the bytes never round-trip through the backend;
    * once it expires, that route is the fallback (it redirects to a freshly signed URL, or streams
    * the bytes when delivery is not configured). Its absence is also the client's signal that a
@@ -78,7 +78,7 @@ export function attachmentView(
   const inlineImage = isInlineImage(row.contentType);
   const resizable = isResizableImage(row.contentType);
   const signed =
-    delivery && (inlineImage || resizable || isDeliveryInlinePreview(row.contentType))
+    delivery && (inlineImage || resizable || isDeliveryInlinePreview(row))
       ? signPreviewUrl(delivery, row.objectKey)
       : undefined;
   const previewUrl = signed && (inlineImage || !resizable) ? signed : undefined;

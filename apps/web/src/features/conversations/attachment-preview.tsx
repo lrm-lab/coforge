@@ -1,48 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
-import { mediaMimeType, type AttachmentPreviewKind } from "./attachment-preview-kind";
+import type { AttachmentPreviewKind } from "./attachment-preview-kind";
+import { joinExclusivePlayback } from "./inline-video-exclusive";
+import { useMediaSource } from "./media-source";
 import type { Anchoring } from "./attachment-anchoring";
 import { LinesPreview, MarkdownPreview } from "./anchored-previews";
 import { CsvPreview } from "./csv-preview";
 import { HtmlRegionPreview } from "./html-region-preview";
-
-/** Media has no range requests here (see `MediaPreview`), so the whole file is held in memory;
- * past this the reader is better served by the download. */
-const MEDIA_PREVIEW_MAX_BYTES = 50 * 1024 * 1024;
-
-type FetchState<T> =
-  | { status: "loading" }
-  | { status: "ready"; value: T }
-  | { status: "error"; tooLarge: boolean };
-
-/** Fetches one attachment through the authenticated route, bounded by `maxBytes`. */
-function useAttachmentBlob(href: string, maxBytes: number): FetchState<Blob> {
-  const [state, setState] = useState<FetchState<Blob>>({ status: "loading" });
-  useEffect(() => {
-    const controller = new AbortController();
-    setState({ status: "loading" });
-    (async () => {
-      try {
-        const response = await fetch(href, { signal: controller.signal });
-        if (!response.ok) throw new Error(`attachment preview failed (${response.status})`);
-        const blob = await response.blob();
-        if (blob.size > maxBytes) {
-          setState({ status: "error", tooLarge: true });
-          return;
-        }
-        setState({ status: "ready", value: blob });
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        void error;
-        setState({ status: "error", tooLarge: false });
-      }
-    })();
-    return () => controller.abort();
-  }, [href, maxBytes]);
-  return state;
-}
 
 function PreviewStatus({
   state,
@@ -86,8 +52,9 @@ function PreviewStatus({
  * - `html` goes into a frame in a unique opaque origin, with forms, popups and same-origin access
  *   denied, where only our own bridge script may run (`html-preview-bridge.ts`). The document
  *   renders, but it cannot run code, read this page, or reach our cookies.
- * - `video`/`audio` play from a Blob built with a MIME type from our own allowlist, so the
- *   browser decodes media and never sniffs the bytes into markup.
+ * - `video`/`audio` play from the signed delivery URL where there is one, else from a Blob built
+ *   with a MIME type from our own allowlist, so the browser decodes media and never sniffs the
+ *   bytes into markup (`useMediaSource`).
  */
 export function AttachmentPreview({
   fileName,
@@ -102,7 +69,7 @@ export function AttachmentPreview({
   kind: AttachmentPreviewKind;
   /** The authenticated attachment URL; also the download target offered on failure. */
   href: string;
-  /** The signed delivery URL; required for `pdf`, unused by the other kinds. */
+  /** The signed delivery URL; required for `pdf`, streamed by `video`, unused by the others. */
   previewUrl?: string;
   /** A text kind's content, read before the preview opens (`readPreviewText`). */
   text?: string;
@@ -118,7 +85,7 @@ export function AttachmentPreview({
       <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />
     );
   if (kind === "video" || kind === "audio")
-    return <MediaPreview fileName={fileName} kind={kind} href={href} />;
+    return <MediaPreview fileName={fileName} kind={kind} href={href} previewUrl={previewUrl} />;
   if (text === undefined)
     return <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />;
   return (
@@ -189,57 +156,44 @@ function TextPreview({
   );
 }
 
-/**
- * Plays one media attachment from a Blob URL.
- *
- * The whole file is fetched before playback starts (bounded by `MEDIA_PREVIEW_MAX_BYTES`): the
- * attachment route serves an opaque download rather than a range-request media response, so there
- * is nothing to stream from yet. Real streaming would mean serving media inline with its own
- * content type — a change to what this origin is willing to render, which is a separate decision.
- */
+/** Plays one media attachment (`useMediaSource`); an expired delivery URL gives way once to the
+ * route, which signs a fresh one. */
 function MediaPreview({
   fileName,
   kind,
   href,
+  previewUrl,
 }: {
   fileName: string;
   kind: "video" | "audio";
   href: string;
+  previewUrl?: string;
 }) {
-  const blob = useAttachmentBlob(href, MEDIA_PREVIEW_MAX_BYTES);
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    const mimeType = mediaMimeType(fileName);
-    if (blob.status !== "ready" || !mimeType) {
-      setUrl(null);
-      return;
-    }
-    // Retyped from our allowlist rather than trusting the stored content type.
-    const objectUrl = URL.createObjectURL(new Blob([blob.value], { type: mimeType }));
-    setUrl(objectUrl);
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-      setUrl(null);
-    };
-  }, [blob, fileName]);
-
-  if (blob.status !== "ready") return <PreviewStatus state={blob} href={href} />;
-  if (!url)
-    return (
-      <p className="p-4 text-sm text-tertiary sm:p-6">
-        {m.conversation_attachment_preview_loading()}
-      </p>
-    );
+  const source = useMediaSource({ fileName, href, previewUrl });
+  const [onFallback, setOnFallback] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (source.status !== "ready") return <PreviewStatus state={source} href={href} />;
+  if (failed) return <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />;
+  const src = onFallback && source.fallbackSrc ? source.fallbackSrc : source.src;
+  const onError = () => (source.fallbackSrc && !onFallback ? setOnFallback(true) : setFailed(true));
 
   if (kind === "audio")
     return (
       <div className="p-4 sm:p-6">
-        <audio src={url} controls className="w-full" aria-label={fileName} />
+        <audio src={src} controls className="w-full" aria-label={fileName} onError={onError} />
       </div>
     );
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center bg-black/90 p-4">
-      <video src={url} controls className="max-h-full max-w-full" aria-label={fileName} />
+      <video
+        // Playing it here pauses the message's own player behind the dialog.
+        ref={joinExclusivePlayback}
+        src={src}
+        controls
+        className="max-h-full max-w-full"
+        aria-label={fileName}
+        onError={onError}
+      />
     </div>
   );
 }

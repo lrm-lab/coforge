@@ -7,9 +7,11 @@ import { fileTypeLabel } from "#src/features/files/file-meta";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { previewKindFor } from "./attachment-preview-kind";
+import { attachmentPreviewKind, previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
 import { ImageLightbox } from "./image-lightbox";
+import { InlineVideo } from "./inline-video";
+import { MEDIA_PREVIEW_MAX_BYTES } from "./media-source";
 import { LoadingImage } from "./loading-image";
 import {
   MESSAGE_GALLERY_MAX_WIDTH_PX,
@@ -28,6 +30,11 @@ export function attachmentUrl(attachment: { id: string }) {
 type Attachment = MessageView["attachments"][number];
 
 const isImage = (attachment: Attachment) => attachment.contentType.startsWith("image/");
+/** A video plays in the message; without a delivery URL to stream from, only one small enough to
+ * read whole (`MEDIA_PREVIEW_MAX_BYTES`), else it is a file card. */
+const isVideo = (attachment: Attachment) =>
+  attachmentPreviewKind(attachment.fileName, attachment.contentType) === "video" &&
+  (attachment.previewUrl !== undefined || attachment.sizeBytes <= MEDIA_PREVIEW_MAX_BYTES);
 
 /** One image as a button opening the lightbox: its thumbnail, else the original, else the route. */
 function ImageThumbnail({
@@ -72,9 +79,10 @@ function ImageThumbnail({
 
 /**
  * A message's attachments: its images first, laid out as Raft does (`attachment-image-box.ts`), a
- * lone one at its own shape and several in a grid, then a card for each other file. A lone image
- * that cannot be loaded falls back to its file card. The images open one lightbox, which pages
- * through all of them, as on Raft.
+ * lone one at its own shape and several in a grid, then each video as a player (`InlineVideo`),
+ * then a card for each other file. A lone image that cannot be loaded, and a video too large to
+ * play without a delivery URL, fall back to their file cards. The images open one lightbox, which
+ * pages through all of them, as on Raft.
  */
 export function MessageAttachments({ attachments }: { attachments: readonly Attachment[] }) {
   const [brokenId, setBrokenId] = useState<string>();
@@ -82,7 +90,10 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
   const [viewingId, setViewingId] = useState<string | null>(null);
   const images = attachments.filter(isImage);
   const viewing = images.findIndex((image) => image.id === viewingId);
-  const files = attachments.filter((attachment) => !isImage(attachment));
+  const videos = attachments.filter(isVideo);
+  const files = attachments.filter(
+    (attachment) => !isImage(attachment) && !videos.includes(attachment),
+  );
   const lone = images.length === 1 ? images[0]! : undefined;
   const broken = lone !== undefined && brokenId === lone.id;
   if (lone && broken) files.unshift(lone);
@@ -139,6 +150,9 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
           onOpenChange={(open) => !open && setViewingId(null)}
         />
       )}
+      {videos.map((attachment) => (
+        <InlineVideo key={attachment.id} attachment={attachment} href={attachmentUrl(attachment)} />
+      ))}
       {files.map((attachment) => (
         <AttachmentCard key={attachment.id} attachment={attachment} />
       ))}

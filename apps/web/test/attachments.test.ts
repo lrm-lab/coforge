@@ -330,7 +330,7 @@ test("attachment responses render safe images inline and everything else as a do
   expect(forced["Content-Type"]).toBe("application/octet-stream");
   expect(forced["Content-Disposition"]).toBe('attachment; filename="shot.png"');
 
-  for (const contentType of ["image/svg+xml", "text/html", "application/pdf"]) {
+  for (const contentType of ["image/svg+xml", "text/html", "application/pdf", "video/mp4"]) {
     const other = attachmentResponseHeaders({ fileName: "f", contentType }, false);
     expect(other["Content-Type"]).toBe("application/octet-stream");
     expect(other["Content-Disposition"]).toStartWith("attachment;");
@@ -379,6 +379,46 @@ test("attachment download redirects an inline image to a signed CDN URL when del
   expect(response.headers.get("cache-control")).toBe("private, no-store");
   expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   expect(await response.text()).toBe("");
+});
+
+test("only a video's name stored as a video or untyped bytes, or a PDF, previews from delivery", async () => {
+  const { isDeliveryInlinePreview } =
+    await import("#src/server/attachments/attachment-response.server");
+  const previews = (fileName: string, contentType: string) =>
+    isDeliveryInlinePreview({ fileName, contentType });
+  expect(previews("clip.mp4", "video/mp4")).toBe(true);
+  expect(previews("CLIP.MP4", "application/octet-stream")).toBe(true);
+  expect(previews("clip.webm", "video/webm")).toBe(true);
+  expect(previews("doc.pdf", "application/pdf")).toBe(true);
+  expect(previews("clip.mp4", "text/html")).toBe(false);
+  expect(previews("clip.mp4", "image/svg+xml")).toBe(false);
+  expect(previews("notes.txt", "video/mp4")).toBe(false);
+  expect(previews("clip.mov", "video/quicktime")).toBe(false);
+});
+
+test("attachment download redirects a video to a signed CDN URL", async () => {
+  const response = await handleAttachmentDownload(
+    new Request("https://coforge.test/api/attachments/a3"),
+    { attachmentId: "a3" },
+    {
+      authenticate: () => ({ id: "user-1" }),
+      database: () => ({}) as never,
+      read: async () => ({
+        attachment: { fileName: "clip.mp4", contentType: "video/mp4", objectKey: "v" },
+        open: async () => {
+          throw new Error("must not open bytes when the CDN redirect handles delivery");
+        },
+      }),
+      delivery: () => ({
+        signedUrl: () => ({
+          url: "https://files-staging.coforge.cn/v?auth_key=1",
+          expiresAt: new Date(0),
+        }),
+      }),
+    },
+  );
+  expect(response.status).toBe(302);
+  expect(response.headers.get("location")).toBe("https://files-staging.coforge.cn/v?auth_key=1");
 });
 
 test("?download bypasses CDN delivery and streams the image as before", async () => {

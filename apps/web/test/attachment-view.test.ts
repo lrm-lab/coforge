@@ -53,6 +53,32 @@ test("omits the preview URL for a non-image content type even when delivery is c
   expect(view).not.toHaveProperty("previewUrl");
 });
 
+test("carries a signed preview URL for a video, stored as a video or as untyped bytes", () => {
+  const delivery = {
+    signedUrl: () => ({
+      url: "https://files-staging.coforge.cn/v?auth_key=1",
+      expiresAt: new Date(0),
+    }),
+  };
+  for (const contentType of ["video/mp4", "application/octet-stream"]) {
+    const view = attachmentView({ ...row, fileName: "clip.mp4", contentType }, delivery);
+    expect(view.previewUrl).toBe("https://files-staging.coforge.cn/v?auth_key=1");
+    expect(view).not.toHaveProperty("thumbnailUrl");
+  }
+});
+
+test("never signs a video name stored as a document type", () => {
+  const view = attachmentView(
+    { ...row, fileName: "clip.mp4", contentType: "text/html" },
+    {
+      signedUrl: () => {
+        throw new Error("must not sign a document the delivery origin would render");
+      },
+    },
+  );
+  expect(view).not.toHaveProperty("previewUrl");
+});
+
 test("omits the preview URL when delivery is not configured", () => {
   const view = attachmentView(row, null);
   expect(view).toEqual({
