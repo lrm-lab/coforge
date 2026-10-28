@@ -42,7 +42,7 @@
 
 产品代码里已没有档外字号，也没有覆盖档位行高的 `leading-*`（单行元素的 `leading-none` 除外）。下面这些是有意保留的：
 
-- **消息字号**：Settings → Message font size 提供 12 / 14 / 16px 三档，默认 14px（不是正文的 16px）。消息文本里的 `text-xs/sm/md/lg/xl` 按所选档在规范上整体平移（默认：12 / 12 / 14 / 16 / 18px，各自取规范的行高；`xs` 和 `sm` 最小停在 12/18），不是乘一个系数，所以消息区里也没有档外字号。这是产品决策，不是偏差。
+- **消息字号**：Settings → Message font size 提供 12 / 14 / 16px 三档，默认 14px（不是正文的 16px）。消息文本里的 `text-xs/sm/md/lg/xl` 按所选档在规范上整体平移（默认：12 / 12 / 14 / 16 / 18px，各自取规范的行高；`xs` 和 `sm` 最小停在 12/18），不是乘一个系数，所以消息区里也没有档外字号。唯一不同的是行高：消息文本里 14px 一档的行高是 24px（设计稿），不是界面的 20px，因为成段的中文消息在 20px 下显得挤。这是产品决策，不是偏差。
 - **消息时间戳**：`message-row.tsx` 里悬停显示的时间用 `text-[length:0.75rem]` 加 `leading-[var(--text-md--line-height)]`，固定 12px，行高跟消息行一致，不随消息字号缩放。
 - **官方组件**：`components/base` 里 `avatar-count.tsx` 的 `text-[10px]` 保持上游原样；产品里没有任何地方给 `Avatar` 传 `count`，它不会出现在界面上。
 - **落地页**：`features/landing` 按冻结视觉保留，其中终端文字用 `text-xs`。

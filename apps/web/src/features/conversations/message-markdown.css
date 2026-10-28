@@ -1,12 +1,12 @@
 /*
  * Markdown typography for a message body.
  *
- * Message bodies are short and scanned in a narrow column, so this is the same "Compact" tier as
- * the Records rich-text prose (14px body by default, 20px line height; Settings → Message font size
- * picks 12, 14 or 16px) rather than a document scale. It is
- * a separate stylesheet from the Records editor because that one is scoped to `.rich-text-editor`
- * and carries editor-only affordances (resize handles, selection overlays, node-view wrappers)
- * that a read-only message never needs.
+ * Message bodies are short and scanned in a narrow column, so this is a compact tier rather than a
+ * document scale: 14px body by default (Settings → Message font size picks 12, 14 or 16px), on a
+ * 24px line height (the design spec), which Chinese text needs to not read cramped. It is a separate stylesheet from
+ * the Records editor because that one is scoped to `.rich-text-editor` and carries editor-only
+ * affordances (resize handles, selection overlays, node-view wrappers) that a read-only message
+ * never needs.
  *
  * Colors come from the semantic tokens in `styles/theme.css`, which already flip in dark mode.
  * No `whitespace-pre-wrap` here: soft breaks become real `<br>` (see `remark-breaks`), so
@@ -23,16 +23,16 @@
  * text (`.message-text`, the element that directly wraps `MessageBody`) redefines the type scale it
  * draws from, so the body, headings, code and chips all move together; everything outside the
  * message text keeps the UI size. Each size is a step on the design scale with its paired line
- * height (docs/design/typography.md), not a multiple of the body size: the body size picks the
- * `md` step, `lg` and `xl` are the steps above it, and `xs` and `sm` stop at the scale's smallest
- * (12px / 18px). */
+ * height (docs/design/typography.md), except that 14px takes 24px here rather than 20px; it is not
+ * a multiple of the body size: the body size picks the `md` step, `lg` and `xl` are the steps above
+ * it, and `xs` and `sm` stop at the scale's smallest (12px / 18px). */
 .message-text {
   --text-xs: 0.75rem;
   --text-xs--line-height: 1.125rem;
   --text-sm: 0.75rem;
   --text-sm--line-height: 1.125rem;
   --text-md: 0.875rem;
-  --text-md--line-height: 1.25rem;
+  --text-md--line-height: 1.5rem;
   --text-lg: 1rem;
   --text-lg--line-height: 1.5rem;
   --text-xl: 1.125rem;
@@ -43,14 +43,14 @@
   --text-md: 0.75rem;
   --text-md--line-height: 1.125rem;
   --text-lg: 0.875rem;
-  --text-lg--line-height: 1.25rem;
+  --text-lg--line-height: 1.5rem;
   --text-xl: 1rem;
   --text-xl--line-height: 1.5rem;
 }
 
 .message-font-lg .message-text {
   --text-sm: 0.875rem;
-  --text-sm--line-height: 1.25rem;
+  --text-sm--line-height: 1.5rem;
   --text-md: 1rem;
   --text-md--line-height: 1.5rem;
   --text-lg: 1.125rem;

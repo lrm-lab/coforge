@@ -46,7 +46,7 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
           name={person.displayName}
           src={person.avatarUrl}
         />
-        <h2 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
           <Link
             to="/w/$workspaceSlug/members"
             params={{ workspaceSlug }}
@@ -153,7 +153,7 @@ export function AgentCard({
           size="lg"
         />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-md font-semibold text-primary">
+          <h2 className="truncate text-sm font-semibold text-primary">
             <Link
               to="/w/$workspaceSlug/members"
               params={{ workspaceSlug }}
