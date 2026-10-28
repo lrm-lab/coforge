@@ -1,6 +1,7 @@
 import type { CommandCodeRuntimeHost, CommandCodeAuthHost } from "@lrm/coforge-anvil/command-code";
 import { agentEnvironment } from "#src/code-agent/environment";
 import { runCatalogCommand } from "#src/code-agent/catalog-command";
+import { maskEmail } from "#src/code-agent/mask-email";
 import { processSpawner } from "#src/code-agent/process-host";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
@@ -30,5 +31,15 @@ export function createCommandCodeAuthHost(command: readonly string[]): CommandCo
     // Human `cmd status` writes "Not authenticated" on stderr. `--json` is the stdout this probe reads.
     runStatus: (cwd, timeoutMs) =>
       runCatalogCommand([...command, "status", "--json"], cwd, Bun.env, timeoutMs),
+    // `whoami` is a colored human report; NO_COLOR asks it plainly and the adapter strips ANSI
+    // anyway. It hits the account service, so the adapter runs it once per signed-in account.
+    runWhoami: (cwd, timeoutMs) =>
+      runCatalogCommand(
+        [...command, "whoami"],
+        cwd,
+        Object.assign({}, Bun.env, { NO_COLOR: "1" }),
+        timeoutMs,
+      ),
+    maskAccountLabel: maskEmail,
   };
 }
