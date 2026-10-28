@@ -19,6 +19,7 @@ type DownloadReason = "no-feed" | "no-token" | "invalid" | "failed";
 
 export function ServerConnectionSettings() {
   const [page, setPage] = useState<Page | null>(null);
+  const [initialClusterName, setInitialClusterName] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<UnlockReason | null>(null);
   const [pending, guard] = useSubmitGuard();
@@ -51,6 +52,7 @@ export function ServerConnectionSettings() {
         }
         setPassword("");
         setPage(result.page);
+        setInitialClusterName(result.clusterName);
       } catch {
         setError("unavailable");
       }
@@ -100,6 +102,7 @@ export function ServerConnectionSettings() {
           size="sm"
           onPress={() => {
             setPage(null);
+            setInitialClusterName(null);
             void lock();
           }}
         >
@@ -115,7 +118,7 @@ export function ServerConnectionSettings() {
             : m.settings_server_connection_offline()}
         </p>
       </section>
-      <InstallHost clusterName={page.clusterName} download={download} />
+      <InstallHost clusterName={initialClusterName} download={download} />
       <section className="max-w-2xl space-y-2">
         <h2 className="font-medium text-primary">{m.settings_cloud_service_checks_title()}</h2>
         <ul className="list-disc space-y-1 pl-5 text-tertiary">

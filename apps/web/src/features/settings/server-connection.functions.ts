@@ -72,8 +72,11 @@ export const unlockCloudComputerService = createServerFn({ method: "POST" })
       "Set-Cookie",
       serializeCloudServiceCookie(sealCloudServiceUnlock(now, secret), secureCookie()),
     );
-    const page = await cloudServicePage(context.db, publicOrigin(request), now);
-    return { ok: true as const, page };
+    const [page, clusterName] = await Promise.all([
+      cloudServicePage(context.db, publicOrigin(request), now),
+      boundClusterName(context.db),
+    ]);
+    return { ok: true as const, page, clusterName };
   });
 
 export const lockCloudComputerService = createServerFn({ method: "POST" })
@@ -134,9 +137,8 @@ async function cloudServicePage(
   db: PrismaClient,
   origin: string,
   now: Date,
-): Promise<CloudComputerServicePage & { clusterName: string | null }> {
-  const page = await connections(db).servicePage(origin, now);
-  return { ...page, clusterName: await boundClusterName(db) };
+): Promise<CloudComputerServicePage> {
+  return connections(db).servicePage(origin, now);
 }
 
 async function boundClusterName(db: PrismaClient): Promise<string | null> {
