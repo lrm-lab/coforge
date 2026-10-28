@@ -27,3 +27,11 @@ export function sidebarDirectsQueryKey(workspaceId: string) {
 export function channelNamesQueryKey(workspaceId: string) {
   return ["conversation", "channel-names", workspaceId] as const;
 }
+
+/** Every attachment's comments, which joining or leaving a channel changes the viewer's say in. */
+export const ATTACHMENT_COMMENTS_QUERY_PREFIX = ["attachment-comments"] as const;
+
+/** One attachment's root comments (`useCommentPages`). */
+export function attachmentCommentsQueryKey(attachmentId: string) {
+  return [...ATTACHMENT_COMMENTS_QUERY_PREFIX, attachmentId] as const;
+}

@@ -15,6 +15,7 @@ import {
   TEXT_PREVIEW_MAX_BYTES,
   isTextPreviewKind,
   previewKindFor,
+  takesComments,
 } from "./attachment-preview-kind";
 import { readPreviewText, type PreviewRead } from "./attachment-preview-text";
 import { ImageLightbox, ReviewTitle, TOOLBAR_ICON } from "./image-lightbox";
@@ -31,8 +32,9 @@ type ReviewFile = {
 
 /**
  * An image's lightbox (`ImageLightbox`, the image alone), or a previewable file filling the screen
- * under an icon bar, its comments closed until asked for, as on Raft's page. A file without a preview never opens here: its card
- * downloads it (`previewKindFor`).
+ * under an icon bar, its comments closed until asked for, as on Raft's page. A file that takes no
+ * comments (`takesComments`: a PDF) has no comments button, and no note in its place, as on Raft.
+ * A file without a preview never opens here: its card downloads it (`previewKindFor`).
  *
  * A text preview is read before the dialog opens, as in Raft: `children` (the card) shows
  * `loading` meanwhile. A file found to have no preview after all (past `TEXT_PREVIEW_MAX_BYTES`,
@@ -72,6 +74,7 @@ export function AttachmentReviewDialog({
   }, [jumpTo, surface, commentsOnPhone]);
   const href = `/api/attachments/${file.id}`;
   const kind = previewKindFor(file);
+  const commentable = takesComments(file);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   // What reading the text preview found, once per card.
@@ -132,21 +135,23 @@ export function AttachmentReviewDialog({
               <>
                 <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">
                   <ReviewTitle fileName={file.fileName} contentType={file.contentType} />
-                  <ButtonUtility
-                    icon={MessageSquare01}
-                    size="sm"
-                    color="tertiary"
-                    tooltip={m.attachment_comments_title()}
-                    aria-pressed={commentsShown}
-                    className={cn(
-                      TOOLBAR_ICON,
-                      commentsShown && "bg-brand-primary_alt text-fg-brand-primary",
-                    )}
-                    onClick={() => {
-                      setCommentsOnPhone(!commentsShown);
-                      setCommentsExpanded(!commentsShown);
-                    }}
-                  />
+                  {commentable && (
+                    <ButtonUtility
+                      icon={MessageSquare01}
+                      size="sm"
+                      color="tertiary"
+                      tooltip={m.attachment_comments_title()}
+                      aria-pressed={commentsShown}
+                      className={cn(
+                        TOOLBAR_ICON,
+                        commentsShown && "bg-brand-primary_alt text-fg-brand-primary",
+                      )}
+                      onClick={() => {
+                        setCommentsOnPhone(!commentsShown);
+                        setCommentsExpanded(!commentsShown);
+                      }}
+                    />
+                  )}
                   {copyLabel && text && (
                     <ButtonUtility
                       icon={Copy01}
@@ -201,29 +206,31 @@ export function AttachmentReviewDialog({
                       </Empty>
                     )}
                   </div>
-                  <div
-                    className={cn(
-                      "min-h-0 min-w-0 flex-1",
-                      "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
-                      commentsExpanded ? "lg:block" : "lg:hidden",
-                      commentsOnPhone ? "block" : "hidden",
-                    )}
-                  >
-                    <AttachmentCommentsPane
-                      attachmentId={file.id}
-                      fileName={file.fileName}
-                      pendingAnchor={pendingAnchor}
-                      focusRequest={focusRequest}
-                      onClearAnchor={(anchor) =>
-                        setPendingAnchor((current) => (current === anchor ? null : current))
-                      }
-                      surface={surface}
-                      onJump={(anchor) => {
-                        setCommentsOnPhone(false);
-                        setJumpTo(anchor);
-                      }}
-                    />
-                  </div>
+                  {commentable && (
+                    <div
+                      className={cn(
+                        "min-h-0 min-w-0 flex-1",
+                        "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
+                        commentsExpanded ? "lg:block" : "lg:hidden",
+                        commentsOnPhone ? "block" : "hidden",
+                      )}
+                    >
+                      <AttachmentCommentsPane
+                        attachmentId={file.id}
+                        fileName={file.fileName}
+                        pendingAnchor={pendingAnchor}
+                        focusRequest={focusRequest}
+                        onClearAnchor={(anchor) =>
+                          setPendingAnchor((current) => (current === anchor ? null : current))
+                        }
+                        surface={surface}
+                        onJump={(anchor) => {
+                          setCommentsOnPhone(false);
+                          setJumpTo(anchor);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </>
             )}

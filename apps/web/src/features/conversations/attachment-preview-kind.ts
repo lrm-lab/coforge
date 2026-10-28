@@ -224,9 +224,9 @@ export function previewKindFor(
 }
 
 /**
- * Whether a file takes comments: one the reader can look at, an image or a file with a preview.
- * The server asks this before every new comment. A PDF counts by its type: it previews wherever
- * attachments are delivered from their own origin, which the server does not see per file.
+ * Whether a file takes comments: one the reader can look at, an image or a file with a preview,
+ * except a PDF, which Raft previews without comments (checked on Raft 1.21.36, 2026-10-28). The
+ * server asks this before every new comment, and the preview offers comments only where it holds.
  */
 export function takesComments(
   file: StoredFile,
@@ -234,7 +234,7 @@ export function takesComments(
 ): boolean {
   if (file.contentType.startsWith("image/")) return true;
   if (getFileExtension(file.fileName) === "pdf" || file.contentType === "application/pdf")
-    return true;
+    return false;
   return previewKindFor(file, applicationOrigin) !== null;
 }
 

@@ -158,7 +158,7 @@ describe("a text preview reads up to 5 MB and shows only UTF-8 text", () => {
     expect(previewKindFor(file("clip.mp4", 40 * MB), APP_ORIGIN)).toBe("video");
   });
 
-  test("a file takes comments when it can be looked at: an image or a file with a preview", () => {
+  test("a file takes comments when it can be looked at: an image or a file with a preview but a PDF", () => {
     const typed = (fileName: string, contentType: string, sizeBytes = 1024) => ({
       fileName,
       contentType,
@@ -167,8 +167,15 @@ describe("a text preview reads up to 5 MB and shows only UTF-8 text", () => {
     expect(takesComments(typed("report.md", "text/markdown", 164 * 1024), APP_ORIGIN)).toBe(true);
     expect(takesComments(typed("photo.png", "image/png", 20 * MB), APP_ORIGIN)).toBe(true);
     expect(takesComments(typed("clip.mp4", "video/mp4"), APP_ORIGIN)).toBe(true);
-    // A PDF previews from the delivery origin, which the server never sees: its type decides.
-    expect(takesComments(typed("brief.pdf", "application/pdf"), undefined)).toBe(true);
+    // As on Raft, a PDF takes none, by its name or its type, wherever it previews from.
+    expect(takesComments(typed("brief.pdf", "application/pdf"), APP_ORIGIN)).toBe(false);
+    expect(takesComments(typed("brief.pdf", "application/octet-stream"), undefined)).toBe(false);
+    expect(
+      takesComments(
+        { ...typed("scan", "application/pdf"), previewUrl: `${APP_ORIGIN}/p` },
+        APP_ORIGIN,
+      ),
+    ).toBe(false);
     expect(takesComments(typed("bundle.zip", "application/zip"), APP_ORIGIN)).toBe(false);
     expect(
       takesComments(typed("huge.log", "text/plain", TEXT_PREVIEW_MAX_BYTES + 1), APP_ORIGIN),

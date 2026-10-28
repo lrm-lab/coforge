@@ -17,7 +17,10 @@ import {
   publicChannelUpdates,
   useConversationQuery,
 } from "./conversation-queries";
-import { threadFollowingAgentsQueryPrefix } from "./conversation-query-keys";
+import {
+  ATTACHMENT_COMMENTS_QUERY_PREFIX,
+  threadFollowingAgentsQueryPrefix,
+} from "./conversation-query-keys";
 import type { SendOptions } from "./composer-outbox";
 import type { Reactor } from "./message-reactions";
 import { useRefreshSidebarChannels } from "./sidebar-lists";
@@ -75,7 +78,13 @@ export function useChannelConversation(channelId: string) {
   // The settings panel writes the channel (name, description, archive), the viewer's own
   // membership (leave) or mute itself; this re-reads the page and the sidebar's channel list.
   const refreshSidebarChannels = useRefreshSidebarChannels();
+  // Joining, leaving or archiving changes whether the viewer may comment on the channel's files:
+  // cached comments are dropped, so a file opened next shows what the server says now rather
+  // than, for a moment, the old answer. They are keyed by attachment alone, so all of them go.
+  const forgetAttachmentComments = () =>
+    queryClient.removeQueries({ queryKey: ATTACHMENT_COMMENTS_QUERY_PREFIX });
   const refreshChannelAndSidebar = async () => {
+    forgetAttachmentComments();
     await Promise.all([page.invalidate(), refreshSidebarChannels()]);
   };
 
@@ -106,6 +115,7 @@ export function useChannelConversation(channelId: string) {
         ),
       onJoin: async () => {
         await join({ data: { channelId } });
+        forgetAttachmentComments();
         // The layout's loader reuses the cached lists, so the channel list is re-read here.
         await Promise.all([
           page.invalidate(),

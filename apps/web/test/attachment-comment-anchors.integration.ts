@@ -73,11 +73,14 @@ test("each previewable kind stores its own anchor, read back on the comment", as
       ).anchor,
     ).toEqual(section);
 
-    // A PDF takes comments by its type; a ZIP has no preview, lists none, and takes none.
+    // A PDF takes no comments, as on Raft, and a ZIP has no preview: each lists and takes none.
     const pdf = await sibling("brief.pdf", "application/pdf");
-    expect(
-      (await comments.post(f.actor, { attachmentId: pdf.id, body: "Brief" })).anchor,
-    ).toBeNull();
+    expect(await comments.list(f.actor, { attachmentId: pdf.id })).toMatchObject({
+      canComment: false,
+    });
+    await expect(
+      comments.post(f.actor, { attachmentId: pdf.id, body: "Brief" }),
+    ).rejects.toMatchObject({ code: "ACCESS_DENIED", errorId: "attachment-comments-no-preview" });
     const zip = await sibling("bundle.zip", "application/zip");
     expect(await comments.list(f.actor, { attachmentId: zip.id })).toMatchObject({
       canComment: false,

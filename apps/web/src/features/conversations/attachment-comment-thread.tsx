@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { useInfiniteQuery, type QueryKey } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { clockLabel } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
@@ -9,26 +9,24 @@ import { getLocale } from "#src/paraglide/runtime";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
 import { loadAttachmentComments } from "./attachment-comments.functions";
 import { shouldSendOnEnter } from "./composer-behavior";
+import { attachmentCommentsQueryKey } from "./conversation-query-keys";
 import { MessageBody } from "./message-body";
 
-/** One attachment's root comments. */
-export const attachmentCommentsKey = (attachmentId: string): QueryKey => [
-  "attachment-comments",
-  attachmentId,
-];
-
 /**
- * An attachment's comments (`attachmentCommentsKey`), paged backwards from the newest and read
- * again every few seconds; `comments` runs oldest first across the loaded pages.
+ * An attachment's comments (`attachmentCommentsQueryKey`), paged backwards from the newest and read
+ * again every few seconds; `comments` runs oldest first across the loaded pages. Opening a file
+ * always reads them again: whether the viewer may comment follows their membership, which can
+ * have changed since they were cached.
  */
 export function useCommentPages(attachmentId: string) {
   const query = useInfiniteQuery({
-    queryKey: attachmentCommentsKey(attachmentId),
+    queryKey: attachmentCommentsQueryKey(attachmentId),
     initialPageParam: undefined as number | undefined,
     queryFn: ({ pageParam }) =>
       loadAttachmentComments({ data: { attachmentId, beforeSequence: pageParam } }),
     getNextPageParam: (page) => (page.hasOlder ? page.comments[0]?.sequence : undefined),
     refetchInterval: 5_000,
+    refetchOnMount: "always",
   });
   const comments = useMemo(
     () => (query.data ? [...query.data.pages].reverse().flatMap((page) => page.comments) : []),

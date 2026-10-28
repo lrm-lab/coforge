@@ -9,12 +9,8 @@ import { TextArea } from "#src/components/base/textarea/textarea";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 import { postAttachmentComment } from "./attachment-comments.functions";
-import {
-  attachmentCommentsKey,
-  CommentRow,
-  useCommentDraft,
-  useCommentPages,
-} from "./attachment-comment-thread";
+import { CommentRow, useCommentDraft, useCommentPages } from "./attachment-comment-thread";
+import { attachmentCommentsQueryKey } from "./conversation-query-keys";
 import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { ANCHOR_HIGHLIGHT_MS, type AnchorSurface } from "./attachment-anchoring";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
@@ -117,7 +113,7 @@ export function AttachmentCommentsPane({
 }) {
   const post = useServerFn(postAttachmentComment);
   const queryClient = useQueryClient();
-  const queryKey = attachmentCommentsKey(attachmentId);
+  const queryKey = attachmentCommentsQueryKey(attachmentId);
   const { query, comments: all } = useCommentPages(attachmentId);
   const state = query.data?.pages[0];
   // Placed once per load of comments or new preview, not on every keystroke in the draft.
@@ -155,7 +151,8 @@ export function AttachmentCommentsPane({
     clearTimeout(clearJumped.current);
     clearJumped.current = window.setTimeout(() => setJumped(null), ANCHOR_HIGHLIGHT_MS);
   };
-  const disabledReason = state?.disabledReason;
+  // A read that failed says so; why commenting was off before it is no longer known.
+  const disabledReason = query.isError ? undefined : state?.disabledReason;
   const emptyHint = m.attachment_comments_empty_hint({ name: "{name}" }).split("{name}");
   const disabledText =
     disabledReason === "archived"

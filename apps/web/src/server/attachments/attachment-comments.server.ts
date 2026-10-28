@@ -113,7 +113,8 @@ export class AttachmentComments {
       attachmentId: input.attachmentId,
       conversationId: access.conversationId,
       threadTarget: `attachment:${input.attachmentId}`,
-      // A file without a preview keeps its comments readable and resolvable, but takes no new ones.
+      // A file that takes no comments (no preview, or a PDF) keeps those it has readable and
+      // resolvable, but takes no new ones.
       canComment: disabledReason === null && takesComments(access),
       canReact: disabledReason === null,
       disabledReason,
