@@ -23,8 +23,8 @@ describe("page fill", () => {
 
   test("pairs values without leaving them out of the request, and rejects a blank password", () => {
     expect(pageFillRequestFields(fields, { username: "ada", password: "secret" })).toEqual([
-      { id: "username", selector: "#user", value: "ada" },
-      { id: "password", selector: "#pass", value: "secret" },
+      { id: "username", selector: "#user", input: "text", value: "ada" },
+      { id: "password", selector: "#pass", input: "password", value: "secret" },
     ]);
     expect(() => pageFillRequestFields(fields, { username: "ada", password: "" })).toThrow(
       AppError,
