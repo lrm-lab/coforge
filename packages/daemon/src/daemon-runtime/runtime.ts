@@ -395,6 +395,8 @@ export class DaemonRuntime {
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = generateRuntimeInstanceId();
+  /** The consumed cursor, durable for the reasons its store gives; stopping flushes its writes. */
+  readonly #consumedSeqs = new AgentConsumedSeqStore();
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
   readonly #agentProxyTokens = new Map<string, string>();
@@ -624,10 +626,7 @@ export class DaemonRuntime {
           const launch = this.#currentActivityLaunches.get(agentId);
           if (launch) this.#reconcileIdleTurn(agentId, launch);
         },
-        // The consumed cursor outlives the process. What an Agent has already reviewed decides
-        // the next hold, the `seenUpToSeq` a fresh send inherits, and whether a top-level send
-        // under a thread-read parent needs confirming.
-        consumedSeqs: new AgentConsumedSeqStore(),
+        consumedSeqs: this.#consumedSeqs,
       },
     );
     this.agentRequests = new AgentRequestForwarder({
@@ -4002,6 +4001,7 @@ export class DaemonRuntime {
     // past the service manager's grace period. The transport bounds it and never throws. Reminder
     // work already running settles alongside too, on the same bound, before the transport closes.
     await Promise.all([
+      this.#consumedSeqs.flush(),
       this.#settleReminders(),
       piChatClosed,
       this.#settleMigrations(),

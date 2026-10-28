@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
@@ -30,7 +30,7 @@ const storeDirectory = (root: string, agentId = "agent-1") =>
 const storePath = (root: string, agentId = "agent-1") =>
   join(storeDirectory(root, agentId), "consumed-seqs.json");
 
-test("cursor roots capture the environment at construction while explicit and empty roots keep their meaning", () => {
+test("cursor roots capture the environment at construction while explicit and empty roots keep their meaning", async () => {
   const firstRoot = temporaryStateDirectory();
   const secondRoot = temporaryStateDirectory();
   const explicitRoot = temporaryStateDirectory();
@@ -60,6 +60,7 @@ test("cursor roots capture the environment at construction while explicit and em
     first.write("agent-1", firstState);
     second.write("agent-1", secondState);
     explicit.write("agent-1", explicitState);
+    await Promise.all([first.flush(), second.flush(), explicit.flush()]);
     expect(new AgentConsumedSeqStore(firstRoot).read("agent-1")).toEqual(firstState);
     expect(new AgentConsumedSeqStore(secondRoot).read("agent-1")).toEqual(secondState);
 
@@ -87,6 +88,7 @@ test("writes one snapshot in the consumed-seqs shape and reads it back", async (
   };
 
   store.write("agent-1", state);
+  await store.flush();
 
   expect(JSON.parse(await readFile(storePath(stateDirectory), "utf8"))).toEqual(state);
   expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(state);
@@ -178,6 +180,7 @@ test("an unwritable cursor is reported, not thrown: a lost cursor must not fail 
   expect(() =>
     store.write("agent-1", { targets: { "@ada": { seq: 3 } }, aliases: {}, nextReadOrder: 1 }),
   ).not.toThrow();
+  await store.flush();
   expect(store.read("agent-1")).toEqual({ targets: {}, aliases: {}, nextReadOrder: 1 });
 });
 
@@ -193,6 +196,7 @@ test("leaves no temporary file behind once a cursor has been written", async () 
   const stateDirectory = temporaryStateDirectory();
   const store = new AgentConsumedSeqStore(stateDirectory);
   store.write("agent-1", { targets: { "@ada": { seq: 1 } }, aliases: {}, nextReadOrder: 1 });
+  await store.flush();
 
   expect((await readdir(storeDirectory(stateDirectory))).sort()).toEqual(["consumed-seqs.json"]);
 });
@@ -216,4 +220,69 @@ test("an entry that names no conversation is dropped: it cannot say whose sequen
   expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").targets).toEqual({
     "#bound": { conversationId: "conversation-1", seq: 3 },
   });
+});
+
+const cursor = (seq: number) => ({
+  targets: { "@ada": { conversationId: "conversation-1", seq } },
+  aliases: {},
+  nextReadOrder: 1,
+});
+
+test("writes in quick succession reach the disk once, as the latest snapshot, without blocking the caller", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+
+  store.write("agent-1", cursor(1));
+  store.write("agent-1", cursor(2));
+  store.write("agent-1", cursor(3));
+
+  // Nothing is on disk yet: the caller (a check, read or send) did not wait for a file write.
+  expect(await Bun.file(storePath(stateDirectory)).exists()).toBe(false);
+  // This process still sees what it wrote.
+  expect(store.read("agent-1")).toEqual(cursor(3));
+
+  await store.flush();
+  expect(JSON.parse(await readFile(storePath(stateDirectory), "utf8"))).toEqual(cursor(3));
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(cursor(3));
+});
+
+test("a pending cursor is written on its own after a short pause", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+
+  store.write("agent-1", cursor(4));
+  const deadline = Date.now() + 2_000;
+  while (!(await Bun.file(storePath(stateDirectory)).exists()) && Date.now() < deadline)
+    await Bun.sleep(20);
+
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(cursor(4));
+});
+
+test("flush writes every Agent's pending cursor", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+
+  store.write("agent-1", cursor(5));
+  store.write("agent-2", cursor(6));
+  await store.flush();
+
+  const reopened = new AgentConsumedSeqStore(stateDirectory);
+  expect(reopened.read("agent-1")).toEqual(cursor(5));
+  expect(reopened.read("agent-2")).toEqual(cursor(6));
+});
+
+test("an Agent's directories are prepared once, not before every write", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  store.write("agent-1", cursor(1));
+  await store.flush();
+  expect((await stat(storeDirectory(stateDirectory))).mode & 0o777).toBe(0o700);
+
+  // Were the directory checked again, this write would put the mode back to 0700.
+  await chmod(storeDirectory(stateDirectory), 0o750);
+  store.write("agent-1", cursor(2));
+  await store.flush();
+
+  expect((await stat(storeDirectory(stateDirectory))).mode & 0o777).toBe(0o750);
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(cursor(2));
 });

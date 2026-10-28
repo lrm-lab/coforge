@@ -10,8 +10,10 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { seedCursor } from "./fixtures/consumed-cursor";
 import type { AgentNoticeOptions } from "@coforge/agent";
 import { captureDaemonLogs } from "./log-capture";
+import { delivery, session } from "./fixtures/attention-delivery";
 
 const stateDirectories: string[] = [];
 
@@ -46,43 +48,12 @@ const indexWithConsumedSeqs = (
     },
   );
 
-const delivery = (
-  id: string,
-  latestSenderKind?: MessageSenderKind,
-  latestSenderHandle?: string,
-): AgentMessageDelivery => ({
-  protocolMajor: 1,
-  requestId: `request-${id}`,
-  messageId: `message-${id}`,
-  deliveryId: `delivery-${id}`,
-  sequence: 1,
-  workspaceId: "workspace-1",
-  conversationId: "conversation-1",
-  agentId: "agent-1",
-  body: "private body",
-  method: "agent:v1:message:deliver",
-  target: "@agent",
-  ...(latestSenderKind !== undefined
-    ? { latestSenderKind, latestSenderHandle: latestSenderHandle ?? "" }
-    : {}),
-});
-
 /** Binds targets to the one conversation these fixtures share: a cursor is durable only for a
  * target bound to a conversation. */
 const bindTargets = (index: AgentMessageAttentionIndex, ...targets: string[]) => {
   for (const target of targets) index.bindConversation("agent-1", target, "conversation-1");
 };
 
-const session = (notify: (notice: string) => void = () => {}) => ({
-  sendMessage: async () => {},
-  notify: async (notice: string) => {
-    notify(notice);
-  },
-  subscribe: () => () => {},
-  interrupt: async () => {},
-  onExit: () => () => {},
-  dispose: async () => {},
-});
 const runtime = { session: () => session() };
 
 test("a fenced Memory notice lists targets and teaches no CLI", async () => {
@@ -1710,15 +1681,18 @@ test("a channel recreated under the same target name starts from a fresh consume
 });
 
 test("a persisted cursor of another conversation is reset, and one without a conversation is not trusted", async () => {
-  const store = new AgentConsumedSeqStore(temporaryStateDirectory());
-  store.write("agent-1", {
-    targets: {
-      "#general": { seq: 5704, conversationId: "conversation-old" },
-      "#legacy": { seq: 5704 },
+  const store = await seedCursor(
+    "agent-1",
+    {
+      targets: {
+        "#general": { seq: 5704, conversationId: "conversation-old" },
+        "#legacy": { seq: 5704 },
+      },
+      aliases: {},
+      nextReadOrder: 1,
     },
-    aliases: {},
-    nextReadOrder: 1,
-  });
+    temporaryStateDirectory(),
+  );
   const notices: string[] = [];
   const index = indexWithConsumedSeqs(store, () => session((notice) => notices.push(notice)));
   const fresh = (target: string) => ({

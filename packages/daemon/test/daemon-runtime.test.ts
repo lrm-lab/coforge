@@ -43,7 +43,7 @@ import {
 } from "@lrm/coforge-anvil";
 import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { seedCursor } from "./fixtures/consumed-cursor";
 import type {
   AgentMessageTransportResponse,
   AgentSendReconciliationRequest,
@@ -3211,7 +3211,7 @@ describe("DaemonRuntime", () => {
     const stateDirectory = join(tempRoot, `coforge-message-drafts-${crypto.randomUUID()}`);
     // The Agent has met @ada's conversation before: a cursor is durable only for a target bound to
     // one, and nothing in this test delivers to or reads @ada.
-    new AgentConsumedSeqStore().write("agent-a", {
+    await seedCursor("agent-a", {
       targets: { "@ada": { conversationId: "conversation-b", readOrder: 1 } },
       aliases: {},
       nextReadOrder: 1,
@@ -3588,7 +3588,7 @@ describe("DaemonRuntime", () => {
   test("acknowledges a message the Agent has already seen without waking its exited process", async () => {
     // The Agent reviewed @agent through message 3 before its process exited; the consumed cursor
     // outlives the process.
-    new AgentConsumedSeqStore().write("agent-a", {
+    await seedCursor("agent-a", {
       targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
       aliases: {},
       nextReadOrder: 1,
@@ -3948,7 +3948,7 @@ describe("DaemonRuntime", () => {
   });
 
   test("acknowledges, rather than rejects, a message an Agent with no process has already seen", async () => {
-    new AgentConsumedSeqStore().write("agent-a", {
+    await seedCursor("agent-a", {
       targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
       aliases: {},
       nextReadOrder: 1,

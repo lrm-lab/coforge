@@ -7,7 +7,7 @@ import type { AgentActivity, AgentStatus } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
-import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { seedCursor } from "./fixtures/consumed-cursor";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
@@ -418,7 +418,7 @@ test("an already-consumed delivery to an offline Agent is ACKed and dropped, not
     h.emit({ type: "error", message: "not logged in" });
     await h.disposed;
     // The consumed cursor already covers this delivery (durable, outlives the process).
-    new AgentConsumedSeqStore().write("agent-a", {
+    await seedCursor("agent-a", {
       targets: { "@gone": { conversationId: "conversation-gone", seq: 5 } },
       aliases: {},
       nextReadOrder: 1,

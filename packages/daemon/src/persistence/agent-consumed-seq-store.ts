@@ -1,12 +1,5 @@
-import {
-  chmodSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync } from "node:fs";
+import { chmod, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { getLogger } from "@logtape/logtape";
@@ -14,6 +7,10 @@ import { normalizeSeenExactSeqs, thrownMessage } from "@lrm/coforge-sdk/internal
 import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 const logger = getLogger(["coforge", "daemon", "consumed-seqs"]);
+
+/** How long a written cursor waits for the next one before it goes to disk: a burst of checks,
+ * reads and sends costs one file write. */
+export const CONSUMED_SEQ_WRITE_DELAY_MS = 200;
 
 /** One Agent's consumed cursor for one target: `seq` is the frontier the Agent has consumed
  * (monotonic, never lower), `readOrder` when the target was last reviewed, ordered against every
@@ -58,7 +55,8 @@ export type AgentConsumedSeqState = Readonly<{
 export type AgentConsumedSeqPort = Readonly<{
   /** Never throws, and a missing or unreadable file is an empty state. */
   read(agentId: string): AgentConsumedSeqState;
-  /** Replaces the Agent's durable state with this snapshot, best-effort. */
+  /** Replaces the Agent's durable state with this snapshot, best-effort and later: the snapshot
+   * goes to disk after a short pause, or on `flush`. */
   write(agentId: string, state: AgentConsumedSeqState): void;
 }>;
 
@@ -79,12 +77,22 @@ function positiveFiniteNumber(value: unknown): number | undefined {
  * "never read anything".
  *
  * The daemon is the file's only writer and keeps the state in memory once read, so it writes a
- * whole snapshot per operation rather than reading, modifying and writing per record —
- * synchronously and with write errors swallowed: a lost write costs one cursor position, not a
- * failed send. The file lives in CoForge's own state directory.
+ * whole snapshot rather than reading, modifying and writing per record. Writes leave the event
+ * loop: a snapshot waits `CONSUMED_SEQ_WRITE_DELAY_MS` for the next one and only the latest goes
+ * to disk, asynchronously, with errors swallowed — the cursor is best-effort, so a crash inside
+ * that pause costs a slightly older boundary on the next cold start, not a failed send. The
+ * runtime `flush`es on stop. The file lives in CoForge's own state directory.
  */
 export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
   readonly #root: string;
+  /** Each Agent's newest snapshot until it is on disk (what `read` answers first), and the Agents
+   * whose snapshot the next flush writes. */
+  readonly #latest = new Map<string, AgentConsumedSeqState>();
+  readonly #dirty = new Set<string>();
+  /** Agent directories already checked in this process; a failed write checks again. */
+  readonly #prepared = new Set<string>();
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  #flushed: Promise<void> = Promise.resolve();
 
   /** `COFORGE_CLI_CONSUMED_SEQ_STATE_DIR ?? os.tmpdir()`, next to the draft store: this file
    * belongs to the CLI's temporary state, not to the daemon's persistent state directory
@@ -106,23 +114,27 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
 
   /** `/tmp` is world-writable, so the directories are ours before a cursor is written into them:
    * real directories (not symlinks) owned by this user, mode `0700`, as the draft store requires. */
-  #prepareDirectories(path: string): void {
+  async #prepareDirectories(path: string): Promise<void> {
+    if (this.#prepared.has(dirname(path))) return;
     for (const directory of [dirname(dirname(path)), dirname(path)]) {
-      mkdirSync(directory, { recursive: true, mode: 0o700 });
-      const status = lstatSync(directory);
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const status = await lstat(directory);
       if (status.isSymbolicLink() || !status.isDirectory())
         throw new Error("consumed-sequence directory must be a real directory");
       const uid = process.geteuid?.();
       if (uid !== undefined && status.uid !== uid)
         throw new Error("consumed-sequence directory must be owned by the current user");
-      chmodSync(directory, 0o700);
+      await chmod(directory, 0o700);
     }
+    this.#prepared.add(dirname(path));
   }
 
   read(agentId: string): AgentConsumedSeqState {
     // The scope check happens before the read is guarded: an id that could not be a path segment is
     // a caller error, and swallowing it would answer "empty cursor" to a typo.
     const path = this.#path(agentId);
+    const unsaved = this.#latest.get(agentId);
+    if (unsaved) return unsaved;
     let parsed: unknown;
     try {
       parsed = JSON.parse(readFileSync(path, "utf8"));
@@ -135,29 +147,51 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
   }
 
   /** Best-effort: a cursor that cannot be written costs the next cold start a stale boundary, and
-   * nothing else. */
+   * nothing else. The Agent id is checked now; the file is written after a short pause. */
   write(agentId: string, state: AgentConsumedSeqState): void {
+    this.#path(agentId);
+    this.#latest.set(agentId, state);
+    this.#dirty.add(agentId);
+    if (this.#timer) return;
+    this.#timer = setTimeout(() => void this.flush(), CONSUMED_SEQ_WRITE_DELAY_MS);
+    // A pending cursor never keeps the process alive; stopping the runtime flushes it.
+    this.#timer.unref?.();
+  }
+
+  /** Writes every pending cursor now; resolves once each is on disk or has failed. */
+  flush(): Promise<void> {
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
+    const batch = [...this.#dirty].map((agentId) => [agentId, this.#latest.get(agentId)!] as const);
+    this.#dirty.clear();
+    // Batches run one after another, so an older snapshot never lands after a newer one.
+    this.#flushed = this.#flushed.then(() =>
+      Promise.all(batch.map(([agentId, state]) => this.#persist(agentId, state))).then(() => {}),
+    );
+    return this.#flushed;
+  }
+
+  async #persist(agentId: string, state: AgentConsumedSeqState): Promise<void> {
     const path = this.#path(agentId);
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;
     try {
-      this.#prepareDirectories(path);
-      writeFileSync(temporary, `${JSON.stringify(state)}\n`, { mode: 0o600 });
-      chmodSync(temporary, 0o600);
-      renameSync(temporary, path);
+      await this.#prepareDirectories(path);
+      await writeFile(temporary, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+      await chmod(temporary, 0o600);
+      await rename(temporary, path);
     } catch (error) {
+      this.#prepared.delete(dirname(path));
       // Cleanup is best-effort too: when the directory itself could not be created, removing the
       // temporary path fails for the same reason, and that must not turn a lost cursor into a
       // failed send.
-      try {
-        rmSync(temporary, { force: true });
-      } catch {
-        // Nothing left to clean up.
-      }
+      await rm(temporary, { force: true }).catch(() => {});
       logger.warn("could not persist the consumed sequence cursor", {
         event: "message.consumed_seqs_write_failed",
         agent_id: agentId,
         error: thrownMessage(error),
       });
+    } finally {
+      if (this.#latest.get(agentId) === state) this.#latest.delete(agentId);
     }
   }
 }
