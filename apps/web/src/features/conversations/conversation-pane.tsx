@@ -42,11 +42,10 @@ import { agentReadMessageIdForPane, outboxContinuesRun } from "./conversation-pa
 import { useMessageExpansion } from "./use-message-expansion";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 import { optimisticSavedEntry } from "./saved-messages-collection";
-import { composerDraftKey } from "./composer-draft";
 import { OutboxMessageRow } from "./outbox-message-row";
 import { SystemMessageGroup } from "./system-message-group";
 import { groupSystemMessages } from "./system-message-groups";
-import { useMessageOutbox, useOutboxEntries } from "./use-message-outbox";
+import { usePaneOutbox } from "./use-pane-outbox";
 import { MessageNavigationGroup } from "./message-navigation-group";
 import { useOwnMessagesIndex } from "./own-messages-menu";
 import { useLoadedOwnMessages } from "./use-loaded-own-messages";
@@ -267,47 +266,24 @@ export function ConversationPane({
     fallback: loadedOwnMessages,
   });
   // The viewer's messages the server has not confirmed yet (or failed to take), shown greyed at the
-  // foot of the stream until the real message replaces them (see `composer-outbox.ts`).
-  const outboxDraftKey = composerDraftKey(conversation.conversationId, root?.id);
-  const outbox = useMessageOutbox({
-    draftKey: outboxDraftKey,
+  // foot of the stream until the real message replaces them (see `composer-outbox.ts`). Only a new
+  // send scrolls this pane to its latest messages.
+  const { outbox, outboxEntries, outboxDraftKey, shownOutbox } = usePaneOutbox({
+    conversation,
+    rootId: root?.id,
     onSend,
     onSent: ownIndex.add,
+    onNewSend: () => {
+      if (root) {
+        setFollowingLatest(true);
+        scrollToLatest("smooth");
+      } else void showLatestMessages();
+    },
   });
-  const outboxEntries = useOutboxEntries(outboxDraftKey);
-  const loadedMessageIds = useMemo(
-    () => new Set(conversation.messages.map((message) => message.id)),
-    [conversation.messages],
-  );
-  // Keep delivered entries until the real row is loaded; always show failures.
-  const windowAtLatest = Boolean(root) || !conversation.hasNewer;
-  const shownOutbox = outboxEntries.filter((entry) =>
-    entry.state === "unsent"
-      ? true
-      : windowAtLatest && (entry.state === "sending" || !loadedMessageIds.has(entry.messageId)),
-  );
   // The side pane's replies marker (the task popup puts the task in place of the root, so it has
   // none). Pending replies count: the marker is there from the first send, not after it lands.
   const threadMarker =
     Boolean(root) && !rootSlot && conversation.messages.length + shownOutbox.length > 0;
-  useEffect(() => {
-    for (const entry of outboxEntries)
-      if (entry.state === "delivered" && loadedMessageIds.has(entry.messageId))
-        outbox.discard(entry);
-  }, [outboxEntries, loadedMessageIds]);
-  // Only new sends scroll this pane to its latest messages.
-  const knownOutboxIdsRef = useRef<ReadonlySet<string> | undefined>(undefined);
-  useEffect(() => {
-    const known = knownOutboxIdsRef.current;
-    knownOutboxIdsRef.current = new Set(outboxEntries.map((entry) => entry.localId));
-    if (!known) return;
-    if (!outboxEntries.some((entry) => entry.state === "sending" && !known.has(entry.localId)))
-      return;
-    if (root) {
-      setFollowingLatest(true);
-      scrollToLatest("smooth");
-    } else void showLatestMessages();
-  }, [outboxEntries]);
   // The first pending row continues the viewer's run of messages right above it, as a sent one would.
   const outboxContinues = outboxContinuesRun(
     conversation.messages,
