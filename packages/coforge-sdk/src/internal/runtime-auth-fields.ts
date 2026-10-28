@@ -8,7 +8,6 @@ export const RUNTIME_AUTH_PROVIDERS = [
   RUNTIME_PROVIDER.CLAUDE_CODE,
   RUNTIME_PROVIDER.CODEX,
   RUNTIME_PROVIDER.KIRO,
-  RUNTIME_PROVIDER.COMMAND_CODE,
 ] as const;
 export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
 export const RUNTIME_AUTH_LOGIN_FAILURE_REASONS = [
@@ -33,8 +32,6 @@ export const RUNTIME_AUTH_UNSUPPORTED_REASONS = [
 export const RUNTIME_AUTH_FAILURE_DETAIL_CODES = [
   "kiro_device_flow_disabled",
   "kiro_external_idp_unsupported",
-  "command_code_browser_unavailable",
-  "command_code_api_key_env",
 ] as const;
 export type RuntimeAuthFailureDetailCode = (typeof RUNTIME_AUTH_FAILURE_DETAIL_CODES)[number];
 export function isRuntimeAuthFailureDetailCode(

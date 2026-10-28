@@ -577,25 +577,25 @@ test("an unencodable terminal result falls back safely and releases the provider
 test("a failed login reports only allow-listed detail codes, never free provider text", async () => {
   const reports: RuntimeAuthLoginReport[] = [];
   const results: RuntimeAuthLoginResult[] = [
-    { status: "failed", reason: "interaction_failed", detail: "command_code_browser_unavailable" },
+    { status: "failed", reason: "interaction_failed", detail: "kiro_device_flow_disabled" },
     { status: "failed", reason: "rejected", detail: "stdout: token=provider-secret-sentinel" },
   ];
   const adapter: RuntimeAuthAdapter = {
-    provider: "command-code",
+    provider: "kiro",
     async startLogin() {
       return results.shift()!;
     },
     async readStatus() {
-      return { provider: "command-code", state: "logged_out" };
+      return { provider: "kiro", state: "logged_out" };
     },
     async submitCode() {
-      throw new Error("Command Code login completes in the browser");
+      throw new Error("Kiro login completes in the browser");
     },
     async cancel() {},
     async logout() {
       return {
         status: "logged_out",
-        authStatus: { provider: "command-code", state: "logged_out" },
+        authStatus: { provider: "kiro", state: "logged_out" },
       };
     },
   };
@@ -610,15 +610,15 @@ test("a failed login reports only allow-listed detail codes, never free provider
     refresh: async () => {},
     now: () => 1_000,
   });
-  await controller.handle({ ...scope, kind: "login_start", loginId, provider: "command-code" });
+  await controller.handle({ ...scope, kind: "login_start", loginId, provider: "kiro" });
   await controller.handle({
     ...scope,
     kind: "login_start",
     loginId: "rtl_bcdefghijklmnopq",
-    provider: "command-code",
+    provider: "kiro",
   });
   expect(reports.map((report) => report.result)).toEqual([
-    { kind: "failed", reason: "interaction_failed", detail: "command_code_browser_unavailable" },
+    { kind: "failed", reason: "interaction_failed", detail: "kiro_device_flow_disabled" },
     { kind: "failed", reason: "rejected" },
   ]);
   expect(JSON.stringify(reports)).not.toContain("provider-secret-sentinel");

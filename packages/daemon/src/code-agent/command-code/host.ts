@@ -6,7 +6,6 @@ import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
 import { isShellToolName } from "#src/code-agent/send-command-target";
 import { readVersionOutput } from "#src/code-agent/version-probe";
-import { commandCodeAuthProcess } from "./auth-process";
 export const commandCodeRuntimeHost: CommandCodeRuntimeHost = {
   clientInfo: { name: "coforge-daemon", version: COFORGE_DAEMON_VERSION },
   processTreeSpawner: processSpawner,
@@ -31,12 +30,5 @@ export function createCommandCodeAuthHost(command: readonly string[]): CommandCo
     // Human `cmd status` writes "Not authenticated" on stderr. `--json` is the stdout this probe reads.
     runStatus: (cwd, timeoutMs) =>
       runCatalogCommand([...command, "status", "--json"], cwd, Bun.env, timeoutMs),
-    spawn(args, cwd) {
-      const env = agentEnvironment(undefined, Bun.env, undefined, {
-        extraEnv: { NO_COLOR: "1", FORCE_COLOR: "0" },
-      });
-      return commandCodeAuthProcess(processSpawner.spawn([...command, ...args], cwd, env));
-    },
-    apiKeyEnvironmentSet: () => Boolean(Bun.env.COMMAND_CODE_API_KEY),
   };
 }

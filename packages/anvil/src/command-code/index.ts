@@ -17,4 +17,4 @@ export type { CommandCodeRuntimeHost, CommandCodeProviderOptions } from "./host"
 export { COMMAND_CODE_ACP_ARGS, COMMAND_CODE_ACP_TIMEOUT_MS } from "./connection";
 
 export { CommandCodeRuntimeAuthAdapter } from "./auth";
-export type { CommandCodeAuthHost, CommandCodeAuthProcess } from "./auth";
+export type { CommandCodeAuthHost } from "./auth";
