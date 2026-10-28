@@ -4,6 +4,7 @@ import {
   olderStreamPositions,
   streamMovedSince,
   subscriptionGap,
+  subscriptionErrorReporter,
 } from "#src/features/realtime/subscription-gap";
 
 test("a subscribe that did not recover is a first read of the channel", () => {
@@ -59,4 +60,14 @@ test("reads in different epochs, or a channel only one read has, leave no positi
     ),
   ).toEqual({});
   expect(olderStreamPositions({ "chat:user:u1": { offset: 1, epoch: "e1" } }, {})).toEqual({});
+});
+
+test("an expired subscription token is routine until it repeats; a refused subscription is reported", () => {
+  const reporter = subscriptionErrorReporter();
+  expect(reporter.shouldReport(103)).toBe(true);
+  expect(reporter.shouldReport(109)).toBe(false);
+  expect(reporter.shouldReport(109)).toBe(false);
+  expect(reporter.shouldReport(109)).toBe(true);
+  reporter.subscribed();
+  expect(reporter.shouldReport(109)).toBe(false);
 });

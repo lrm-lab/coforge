@@ -16,21 +16,47 @@
  */
 export const REALTIME_WAKE = { hiddenMs: 30_000, tickMs: 5_000, sleptMs: 15_000 };
 
+/** How close to its expiry a connection token is dropped at a wake rather than reused. */
+const TOKEN_MARGIN_MS = 30_000;
+
+/**
+ * Whether the JWT `token` has expired, or will within `marginMs` of `now`, by its own `exp`. A
+ * token that cannot be read counts as expiring: dropping it only costs fetching a new one.
+ */
+export function tokenExpiring(token: string | undefined, now: number, marginMs = TOKEN_MARGIN_MS) {
+  if (!token) return false;
+  try {
+    const payload = token.split(".")[1]!.replaceAll("-", "+").replaceAll("_", "/");
+    const { exp } = JSON.parse(atob(payload)) as { exp?: unknown };
+    return typeof exp !== "number" || exp * 1000 - now < marginMs;
+  } catch {
+    return true;
+  }
+}
+
 export function createRealtimeWake({
   now,
   connected,
   reconnect,
+  dropStaleToken,
   timing = REALTIME_WAKE,
 }: {
   now: () => number;
   connected: () => boolean;
   reconnect: () => void;
+  /** Called at every wake, before anything reconnects: the client's next connect, its own or
+   * this one, must not present a connection token that expired meanwhile. */
+  dropStaleToken: () => void;
   timing?: typeof REALTIME_WAKE;
 }) {
   let hiddenAt: number | undefined;
   let lastTick: number | undefined;
   const reconnectIfConnected = () => {
     if (connected()) reconnect();
+  };
+  const woke = (reconnectNow: boolean) => {
+    dropStaleToken();
+    if (reconnectNow) reconnectIfConnected();
   };
   return {
     hidden() {
@@ -41,28 +67,42 @@ export function createRealtimeWake({
       const away = hiddenAt === undefined ? 0 : now() - hiddenAt;
       hiddenAt = undefined;
       lastTick = now();
-      if (away >= timing.hiddenMs) reconnectIfConnected();
+      woke(away >= timing.hiddenMs);
     },
     tick() {
       if (hiddenAt !== undefined) return;
       const at = now();
       const slept = lastTick !== undefined && at - lastTick >= timing.sleptMs;
       lastTick = at;
-      if (slept) reconnectIfConnected();
+      if (slept) woke(true);
     },
-    online: reconnectIfConnected,
+    online: () => woke(true),
   };
 }
 
-/** Watches the page for the moments above and reconnects `client`; returns the stop. */
-export function watchRealtimeWake(client: {
-  state: string;
-  connect: () => void;
-  disconnect: () => void;
-}) {
+/**
+ * Watches the page for the moments above and reconnects `client`; returns the stop. `token` is
+ * the connection token the client last fetched: at a wake one that has expired, or is about to,
+ * is dropped (`setToken("")`, the client's public way to make its next connect fetch a new one),
+ * so a long sleep or time offline costs no connect rejected with 109 (token expired) and the
+ * retry wait that follows it. Call it before `client.connect()`: its `online` listener must run
+ * before the client's own, which reconnects at once.
+ */
+export function watchRealtimeWake(
+  client: {
+    state: string;
+    connect: () => void;
+    disconnect: () => void;
+    setToken: (token: string) => void;
+  },
+  token: () => string | undefined,
+) {
   const wake = createRealtimeWake({
     now: () => Date.now(),
     connected: () => client.state === "connected",
+    dropStaleToken: () => {
+      if (tokenExpiring(token(), Date.now())) client.setToken("");
+    },
     reconnect: () => {
       client.disconnect();
       client.connect();

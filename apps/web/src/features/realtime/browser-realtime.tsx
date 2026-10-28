@@ -10,7 +10,11 @@ import {
   type Connection,
   type ConnectionEvent,
 } from "./connection-status";
-import type { StreamPosition, SubscribedRecovery } from "./subscription-gap";
+import {
+  subscriptionErrorReporter,
+  type StreamPosition,
+  type SubscribedRecovery,
+} from "./subscription-gap";
 import { watchRealtimeWake } from "./realtime-wake";
 
 /** The one realtime subscription type for the shared Workspace connection. */
@@ -34,12 +38,14 @@ export function BrowserRealtimeProvider({
   useEffect(() => {
     if (!workspaceId) return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    // The token last fetched, so a wake can tell whether it expired meanwhile.
+    let token: string | undefined;
     const next = new Centrifuge(`${protocol}//${location.host}/connection/websocket`, {
-      getToken: getConnectionToken,
+      getToken: async () => (token = await getConnectionToken()),
     });
+    const stopWake = watchRealtimeWake(next, () => token);
     setClient(next);
     next.connect();
-    const stopWake = watchRealtimeWake(next);
     return () => {
       stopWake();
       setClient(null);
@@ -220,7 +226,9 @@ function acquireSharedSubscription(
       leaveHandlers,
       errorHandlers,
     };
+    const errors = subscriptionErrorReporter();
     subscription.on("subscribed", (context) => {
+      errors.subscribed();
       created.position = context.streamPosition;
       const recovery = {
         wasRecovering: context.wasRecovering,
@@ -246,6 +254,10 @@ function acquireSharedSubscription(
     // denied when no valid subscription token is presented) otherwise fails
     // silently, leaving the feature looking connected but never updating.
     subscription.on("error", (event) => {
+      if (!errors.shouldReport(event.error.code)) {
+        console.debug(`realtime subscription token expired on ${channel}; renewing`);
+        return;
+      }
       console.warn(`realtime subscription error on ${channel}`, event.error);
       for (const handler of errorHandlers)
         handler({ channel, code: event.error.code, message: event.error.message });
@@ -428,8 +440,12 @@ export function useRealtimeSubscriptions({
       subscription.on("publication", (publication) =>
         onPublicationRef.current(channel, publication),
       );
+      const errors = subscriptionErrorReporter();
+      subscription.on("subscribed", errors.subscribed);
       subscription.on("error", (event) => {
-        console.warn(`realtime subscription error on ${channel}`, event.error);
+        if (errors.shouldReport(event.error.code))
+          console.warn(`realtime subscription error on ${channel}`, event.error);
+        else console.debug(`realtime subscription token expired on ${channel}; renewing`);
       });
       subscription.subscribe();
       return subscription;
