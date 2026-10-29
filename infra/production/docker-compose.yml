@@ -99,6 +99,9 @@ services:
       # SHA-256 of the release-catalog publish token (docs/release/release-notes.md). Not a
       # secret: the plaintext token lives only in the GitHub repository secret
       # COFORGE_RELEASE_CATALOG_TOKEN_PRODUCTION; without this value every publish answers 503.
+      # The first Marketplace reviewers, from the host's secrets directory
+      # (`coforge_platform_operators`); seeded only when no reviewer exists yet.
+      COFORGE_PLATFORM_OPERATORS: ${COFORGE_PLATFORM_OPERATORS:-}
       COFORGE_RELEASE_CATALOG_PUBLISH_TOKEN_SHA256: 5900baf62055cfe2bad924003eaed72f3e14390f7f21cdbc11ce61e852d5cbd6
       # Private user files (chat attachments, avatars) live in the production OSS bucket; see
       # docs/operations/aliyun-oss-cdn/. No AccessKey pair: the ECS instance carries the

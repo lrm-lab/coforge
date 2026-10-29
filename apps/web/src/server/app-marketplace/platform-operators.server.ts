@@ -159,7 +159,9 @@ export class PlatformOperators {
       .then((row) => row?.role === "app_reviewer");
   }
 
-  async list(): Promise<PlatformOperatorRow[]> {
+  /** Every operator, for an operator; undefined for anyone else. */
+  async list(actorUserId: string): Promise<PlatformOperatorRow[] | undefined> {
+    if (!(await this.isReviewer(actorUserId))) return undefined;
     const rows = await this.db.platformOperator.findMany({
       orderBy: { grantedAt: "asc" },
       select: {

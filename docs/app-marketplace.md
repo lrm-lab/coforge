@@ -112,16 +112,31 @@ page and the editor's Private share link card.
 platform-level permission: it belongs to a person, not to a Workspace membership. Only an operator
 sees the review queue and decides. The check is `AppPublishing.isReviewer`.
 
-The first operator is granted from a shell on the server:
+The first operators come from the deployment's `COFORGE_PLATFORM_OPERATORS`: a comma-separated
+list, each entry an email or a mainland China mobile number (`+8613800138000`). At server start they
+are granted — but only while the table is empty, in one transaction under an advisory lock, so
+several instances starting together seed once and a removed operator is never added back on the next
+boot. An entry that is neither an email nor a usable number is logged at error level and skipped; a
+valid one that matches no account, or more than one, is logged and skipped too. None of that stops
+the Web from booting: without an operator the review queue answers 403 to everyone, exactly as
+before.
+
+Matching needs an address the identity provider **verified** (`users.emailVerified` /
+`users.phoneVerified`). An unverified address is something anyone can type into their own account,
+so it never matches.
+
+Afterwards the review page at `/w/<slug>/app-review` lists the operators and lets one add another by
+a verified email or phone number, or remove one. The last operator cannot be removed: with none
+left nobody could review, and nobody could add one back from the page. The emergency path from a
+shell stays:
 
 ```sh
 cd apps/web
 DATABASE_URL=... bun run scripts/grant-platform-operator.ts person@example.com
 ```
 
-It matches the person's sign-in email (case-insensitive), is repeatable, and grants nothing when the
-email matches no person or more than one (`grantPlatformOperator`). There is no environment variable
-and no operator-grants-operator path yet.
+It matches the same verified email (case-insensitive), is repeatable, and grants nothing when the
+email matches no person or more than one (`grantPlatformOperator`).
 
 ## Pages
 

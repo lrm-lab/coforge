@@ -167,7 +167,7 @@ test.skipIf(!localDatabase)(
       expect(await operators.grant(actor.id, parseOperatorEntry("+8613800138000")!)).toBe(
         "already",
       );
-      const listed = await operators.list();
+      const listed = (await operators.list(actor.id))!;
       expect(listed.map((row) => row.userId)).toEqual([actor.id, peer.id]);
       expect(listed[1]).toMatchObject({
         phone: "+8613800138000",
@@ -178,7 +178,7 @@ test.skipIf(!localDatabase)(
       expect(await operators.revoke(actor.id, peer.id)).toBe("revoked");
       expect(await operators.revoke(actor.id, peer.id)).toBe("missing");
       expect(await operators.revoke(actor.id, actor.id)).toBe("last");
-      expect((await operators.list()).map((row) => row.userId)).toEqual([actor.id]);
+      expect((await operators.list(actor.id))!.map((row) => row.userId)).toEqual([actor.id]);
     } finally {
       await teardown();
     }

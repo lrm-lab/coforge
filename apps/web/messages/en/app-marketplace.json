@@ -143,5 +143,17 @@
   "apps_shared_error": "Couldn't install the app.",
   "apps_shared_privately": "Shared privately",
   "apps_shared_all_installed": "Already installed in every Workspace you manage.",
-  "apps_shared_target_placeholder": "Choose a Workspace"
+  "apps_shared_target_placeholder": "Choose a Workspace",
+  "apps_review_reviewers_title": "Reviewers",
+  "apps_review_reviewers_add": "Add reviewer",
+  "apps_review_reviewers_placeholder": "Email or phone number",
+  "apps_review_reviewers_added_by": "Added by {name}",
+  "apps_review_reviewers_seeded": "Seeded by the deployment",
+  "apps_review_reviewers_remove": "Remove",
+  "apps_review_reviewers_last": "The last reviewer cannot be removed",
+  "apps_review_reviewers_unverified": "Unverified",
+  "apps_review_reviewers_invalid": "Enter an email address or a mobile number.",
+  "apps_review_reviewers_no_user": "No account has that address verified.",
+  "apps_review_reviewers_ambiguous": "More than one account has that address.",
+  "apps_review_reviewers_error": "Couldn't change the reviewers."
 }

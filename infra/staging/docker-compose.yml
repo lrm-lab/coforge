@@ -110,6 +110,9 @@ services:
       COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:?staging cloud cluster token}
       COFORGE_CLOUD_IMAGE_UPDATES_PAUSED: ${COFORGE_CLOUD_IMAGE_UPDATES_PAUSED:-false}
       COFORGE_RETAINED_CLOUD_IMAGE_IDS: ${COFORGE_RETAINED_CLOUD_IMAGE_IDS:-}
+      # The first Marketplace reviewers, one email or mainland phone number each. Seeded only when
+      # no reviewer exists yet; docs/app-marketplace.md.
+      COFORGE_PLATFORM_OPERATORS: ${COFORGE_PLATFORM_OPERATORS:-}
       # Private user files (chat attachments, avatars) live in the staging OSS bucket; see
       # docs/operations/aliyun-oss-cdn/. No AccessKey pair: the ECS instance carries the
       # `coforge-staging-web` RAM role and the SDK reads its STS token from the instance

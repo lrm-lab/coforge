@@ -134,5 +134,17 @@
   "apps_shared_error": "无法安装此应用。",
   "apps_shared_privately": "私密分享",
   "apps_shared_all_installed": "你管理的所有工作区都已安装。",
-  "apps_shared_target_placeholder": "选择工作区"
+  "apps_shared_target_placeholder": "选择工作区",
+  "apps_review_reviewers_title": "审核员",
+  "apps_review_reviewers_add": "添加审核员",
+  "apps_review_reviewers_placeholder": "邮箱或手机号",
+  "apps_review_reviewers_added_by": "由 {name} 添加",
+  "apps_review_reviewers_seeded": "部署时写入",
+  "apps_review_reviewers_remove": "移除",
+  "apps_review_reviewers_last": "不能移除最后一位审核员",
+  "apps_review_reviewers_unverified": "未验证",
+  "apps_review_reviewers_invalid": "请输入邮箱地址或手机号。",
+  "apps_review_reviewers_no_user": "没有账号验证过这个地址。",
+  "apps_review_reviewers_ambiguous": "多个账号使用这个地址。",
+  "apps_review_reviewers_error": "无法修改审核员。"
 }

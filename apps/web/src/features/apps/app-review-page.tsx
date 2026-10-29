@@ -18,6 +18,7 @@ import { AppLogo } from "./app-logo";
 import { checkPermissionGroups } from "./app-permissions";
 import { permissionGroupList } from "./app-permission-copy";
 import { RejectReviewDialog } from "./app-review-reject-dialog";
+import { ReviewersSection } from "./app-reviewers-section";
 import { decideAppReview, type ReviewRequestSummary } from "./app-publishing.functions";
 
 /**
@@ -61,6 +62,7 @@ export function AppReviewPage({ requests }: { requests: ReviewRequestSummary[] }
           </ul>
         )}
       </section>
+      <ReviewersSection />
     </main>
   );
 }

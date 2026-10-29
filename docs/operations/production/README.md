@@ -84,6 +84,7 @@ Not yet enabled in production: OpenTelemetry tracing and Server-Timing.
 | `coforge_web_push_public_key` | VAPID public key (P-256). |
 | `coforge_web_push_private_key` | VAPID private key (P-256). |
 | `coforge_file_delivery_key` | CDN URL-auth primary key for `files.coforge.cn`. Not an OSS credential. |
+| `coforge_platform_operators` | Optional: the first Marketplace reviewers, comma-separated emails or mainland mobile numbers (`+8613800138000`). Granted at start only while no reviewer exists ([Marketplace](../../app-marketplace.md)). |
 | `coforge_github_client_secret` | Optional: GitHub App client secret. Absent, the GitHub integration stays unconfigured. Write it together with the next two files ([runbook](github-connection.md)). |
 | `coforge_github_credential_encryption_key` | GitHub credential encryption key, 64 hex characters (`openssl rand -hex 32`). Never replace it. |
 | `coforge_github_app_slug` | GitHub App slug from `https://github.com/apps/<slug>`. |
