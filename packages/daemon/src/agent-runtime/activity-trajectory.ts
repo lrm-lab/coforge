@@ -163,7 +163,10 @@ export class ActivityTrajectory {
       chars.length > 2000 || pending.truncated
         ? chars.slice(0, 1999).join("") + "…"
         : chars.join("");
-    if (!text) return;
+    // A segment that is only whitespace is no output: providers stream the separators between
+    // tool calls as their own chunk (`"\n\n"`), and each one must not become its own row. Text
+    // that carries words keeps its newlines exactly as they arrived.
+    if (!text.trim()) return;
     this.#forward({
       type: "activity",
       activity: {

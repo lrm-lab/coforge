@@ -162,6 +162,12 @@ for await (const line of console) {
           kind: "execute",
           rawInput: { command: "printf hi" },
         });
+        // ACP resends the call's whole content on every update, exactly as the real CLI does.
+        update({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "shell-1",
+          content: [{ type: "content", content: { type: "text", text: "hi" } }],
+        });
         update({
           sessionUpdate: "tool_call_update",
           toolCallId: "shell-1",

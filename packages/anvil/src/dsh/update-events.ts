@@ -6,6 +6,8 @@ import type { DshRuntimeHost } from "./host";
 export class DshTurnEvents {
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
+  /** The output text already emitted per tool call: ACP resends the whole content each update. */
+  readonly #output = new Map<string, string>();
   readonly #scanner;
   constructor(private readonly host: DshRuntimeHost) {
     this.#scanner = host.createReplyIntentScanner();
@@ -54,11 +56,16 @@ export class DshTurnEvents {
               item?.type === "content" &&
               content?.type === "text" &&
               typeof content.text === "string"
-            )
-              events.push({ type: "tool-output", id, text: content.text });
+            ) {
+              // `content` is the call's whole output, not a delta: only what is new goes out.
+              const text = newOutputText(this.#output.get(id) ?? "", content.text);
+              if (text) events.push({ type: "tool-output", id, text });
+              this.#output.set(id, content.text);
+            }
           }
         if (update.status === "completed" || update.status === "failed") {
           this.#ended.add(id);
+          this.#output.delete(id);
           this.#scanner.complete(id);
           events.push({ type: "tool-end", id, isError: update.status === "failed" });
         }
@@ -71,4 +78,11 @@ export class DshTurnEvents {
   end(): AgentRuntimeEvent[] {
     return this.#scanner.reset().map((id) => ({ type: "reply-intent-retracted", id }));
   }
+}
+
+/** What to emit for a full content that replaces `previous`: the new suffix, nothing when it is
+ * unchanged, and the whole text when the provider rewrote it instead of extending it. */
+function newOutputText(previous: string, content: string): string | undefined {
+  if (content === previous) return undefined;
+  return content.startsWith(previous) ? content.slice(previous.length) || undefined : content;
 }
