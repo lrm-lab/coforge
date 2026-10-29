@@ -333,28 +333,3 @@ test("real routing delivers start/end only to the conversation, with no history 
     }
   }
 }, 120_000);
-    console.info(
-      JSON.stringify({
-        capture: "reply-intent",
-        routed,
-        phases: ["start", "end"],
-        activityCopies: 0,
-        history: 0,
-        boundChannelAndUser: true,
-        deniedChannelCode: channelDenial,
-        deniedUserCode: userDenial,
-        disconnects,
-      }),
-    );
-  } finally {
-    if (disconnects.length)
-      console.info(JSON.stringify({ capture: "reply-intent-disconnects", disconnects }));
-    for (const client of clients) client.disconnect();
-    try {
-      if (containerStarted) await docker("rm", "-f", name);
-    } finally {
-      proxy?.stop(true);
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
-}, 120_000);
