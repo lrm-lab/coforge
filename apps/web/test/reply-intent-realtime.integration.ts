@@ -87,7 +87,7 @@ test("real routing delivers start/end only to the conversation, with no history 
       port: 0,
       async fetch(request) {
         const path = new URL(request.url).pathname;
-        proxyRequests.push(path);
+        proxyRequests.push(`${path} via ${request.headers.get("user-agent") ?? "?"}`);
         if (path === "/jwks") return Response.json(jwks);
         if (path === "/connect")
           return Response.json({
@@ -142,6 +142,7 @@ test("real routing delivers start/end only to the conversation, with no history 
       ).catch(() => "");
       if (hit.includes(kid)) {
         origin = candidate;
+        proxyRequests.push(`probe picked ${candidate}`);
         break;
       }
     }
