@@ -91,6 +91,8 @@ export class RuntimeAuth {
         computerId: string,
         provider?: RuntimeAuthProvider,
       ): Promise<boolean>;
+      /** Whether the Computer takes `status_read`; one that does not is never asked. */
+      supportsStatusRead(workspaceId: string, computerId: string): Promise<boolean>;
     },
     private readonly newLoginId: () => string,
     private readonly now: () => number = Date.now,
@@ -130,6 +132,30 @@ export class RuntimeAuth {
       return { status: "offline" };
     }
     return { status: "started", loginId };
+  }
+
+  /**
+   * Asks the Computer to read one runtime's login status again, as when its page opens: it may
+   * have been signed in or out on the Computer itself, which nothing else tells anyone. The report
+   * comes back like every other one and reaches the caller on their own channel.
+   */
+  async requestStatusRead(
+    principal: Principal,
+    input: { computerId: string; provider: RuntimeAuthProvider },
+  ): Promise<"requested" | RuntimeAuthUnavailable> {
+    const scope = await this.authorize(principal, input.computerId);
+    const [online, supported] = await Promise.all([
+      this.computerStatus.get(scope),
+      this.capability.supportsStatusRead(scope.workspaceId, scope.computerId),
+    ]);
+    if (!online) return "offline";
+    if (!supported) return "needs_upgrade";
+    try {
+      await this.publishIntent(scope, { kind: "status_read", provider: input.provider });
+    } catch {
+      return "offline";
+    }
+    return "requested";
   }
 
   /** Hands the pasted code to the daemon. Only the person who started the login may. */
@@ -295,7 +321,8 @@ export class RuntimeAuth {
         }
       | { kind: "login_code"; loginId: string; code: string }
       | { kind: "login_cancel"; loginId: string }
-      | { kind: "logout"; requestId: string; provider: RuntimeAuthProvider },
+      | { kind: "logout"; requestId: string; provider: RuntimeAuthProvider }
+      | { kind: "status_read"; provider: RuntimeAuthProvider },
   ) {
     return this.api.publish(
       daemonControlChannel(scope.workspaceId, scope.computerId),

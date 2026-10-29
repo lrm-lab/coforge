@@ -29,6 +29,9 @@ type Ports = {
   reportLogin(report: RuntimeAuthLoginReport): Promise<void>;
   reportLogout(report: RuntimeAuthLogoutReport): Promise<void>;
   refresh(): Promise<void>;
+  /** Re-reads one runtime's login status and reports it; a host that can only read them all
+   * refreshes them all instead. */
+  refreshProvider?(provider: RuntimeAuthProvider): Promise<void>;
   now?: () => number;
 };
 type Login = {
@@ -98,6 +101,12 @@ export class RuntimeAuthController {
       login.prompt?.reject(new Error("Runtime authentication cancelled"));
       login.prompt = undefined;
       await login.completion;
+      return;
+    }
+    if (intent.kind === "status_read") {
+      // A page opened the runtime: read it again, since nothing tells the daemon about a sign-in
+      // or sign-out done on the Computer itself.
+      await (this.ports.refreshProvider ?? (() => this.ports.refresh()))(intent.provider);
       return;
     }
     if (intent.kind === "logout") {

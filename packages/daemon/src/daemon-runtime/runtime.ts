@@ -549,6 +549,7 @@ export class DaemonRuntime {
       workingDirectory: connection.workspaceRoot,
       transport: () => this.#transport,
       isStopping: () => this.#stopping,
+      createAdapter: this.runtimeAuthFactory,
     });
     this.#codeAgentInventory = new CodeAgentInventorySync(
       codeAgentDiscovery,
@@ -814,11 +815,6 @@ export class DaemonRuntime {
     return agentId;
   }
 
-  /** Reads and reports every runtime's login status again, e.g. after a login or logout. */
-  refreshRuntimeAuth(): Promise<void> {
-    return this.#runtimeAuth.refresh();
-  }
-
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
     this.#assertRunning();
     const now = () => new Date();
@@ -934,7 +930,8 @@ export class DaemonRuntime {
         },
         workingDirectory: connection.workspaceRoot,
         createAdapter: this.runtimeAuthFactory,
-        refresh: () => this.refreshRuntimeAuth(),
+        refresh: () => this.#runtimeAuth.refresh(),
+        refreshProvider: (provider) => this.#runtimeAuth.refreshProvider(provider),
       });
       this.#runtimeAuthControl = auth?.controller;
       this.#subscribe(auth?.unsubscribe);

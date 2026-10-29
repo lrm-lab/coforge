@@ -28,6 +28,7 @@ test("every intent round-trips and keeps its kind", () => {
     { ...scope, kind: "login_code", loginId, code: "abc-123" },
     { ...scope, kind: "login_cancel", loginId },
     { ...scope, kind: "logout", requestId: "request-1", provider: RUNTIME_PROVIDER.CODEX },
+    { ...scope, kind: "status_read", provider: RUNTIME_PROVIDER.CODEX },
   ];
   for (const intent of intents)
     expect(decodeRuntimeAuthIntent(encodeRuntimeAuthIntent(intent))).toEqual(intent);

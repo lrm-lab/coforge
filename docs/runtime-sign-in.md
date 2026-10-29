@@ -10,6 +10,12 @@ signed in even when its account does not support reading usage. The previous res
 until the Computer replies; the browser then reloads the Computer’s login report. If the fresh
 login report cannot be recorded, Refresh reports an error instead of claiming success.
 
+Opening a runtime’s popover also asks the Computer to read that one runtime’s login status again,
+and reports it like any other status (`runtime-auth:status-read:v1`). A runtime signed in or out
+with its own CLI on the Computer is therefore correct the next time its popover opens; nothing else
+tells the Daemon about that change, and no Computer polls. Computers without the capability are
+never asked, so their popovers keep showing the last report.
+
 ## Kiro enterprise accounts
 
 This enterprise flow currently supports macOS and Linux. Windows does not advertise the

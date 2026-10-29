@@ -28,6 +28,7 @@ let ids = 0;
 let online = true;
 let capable = true;
 let kiroCapable = true;
+let statusReadCapable = true;
 let allowed = new Set<string>();
 let failIntents = false;
 
@@ -45,6 +46,7 @@ function service() {
     {
       supports: async (_workspaceId, _computerId, provider) =>
         provider === "kiro" ? kiroCapable : capable,
+      supportsStatusRead: async () => statusReadCapable,
     },
     () => `rtl_${String(++ids).padStart(20, "0")}`,
     () => clock,
@@ -59,6 +61,7 @@ beforeEach(() => {
   online = true;
   capable = true;
   kiroCapable = true;
+  statusReadCapable = true;
   allowed = new Set(["alice", "bob"]);
   failIntents = false;
 });
@@ -400,4 +403,37 @@ test("Kiro enterprise target reaches only its intent, and old Computers cannot s
       : "";
   const view = await auth.readLogin(alice, { computerId, loginId });
   expect(view).not.toHaveProperty("kiroIdentityCenter");
+});
+
+test("a page opening a runtime asks for just that one to be read again", async () => {
+  expect(await service().requestStatusRead(alice, { computerId, provider: "codex" })).toBe(
+    "requested",
+  );
+  expect(intents()).toEqual([
+    { ...scope(), protocolMajor: 1, kind: "status_read", provider: "codex" },
+  ]);
+  expect(published.filter((entry) => !entry.channel.startsWith("daemon:"))).toEqual([]);
+});
+
+test("a status read on a Computer that is away, old, or not the caller's asks for nothing", async () => {
+  allowed.delete("alice");
+  await expect(
+    service().requestStatusRead(alice, { computerId, provider: "codex" }),
+  ).rejects.toThrow("not available");
+  allowed.add("alice");
+  online = false;
+  expect(await service().requestStatusRead(alice, { computerId, provider: "codex" })).toBe(
+    "offline",
+  );
+  online = true;
+  statusReadCapable = false;
+  expect(await service().requestStatusRead(alice, { computerId, provider: "codex" })).toBe(
+    "needs_upgrade",
+  );
+  statusReadCapable = true;
+  failIntents = true;
+  expect(await service().requestStatusRead(alice, { computerId, provider: "codex" })).toBe(
+    "offline",
+  );
+  expect(intents()).toEqual([]);
 });

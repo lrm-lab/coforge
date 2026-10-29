@@ -66,6 +66,16 @@ export class RuntimeAuthReporter {
     return this.#installed ? this.#collector.refresh() : Promise.resolve();
   }
 
+  /**
+   * Reads one runtime's status again, as when its page opens on the Computer screen: the runtime
+   * may have been signed in or out on the Computer itself, which nothing tells the daemon.
+   */
+  refreshProvider(provider: RuntimeAuthProvider): Promise<void> {
+    return this.#installed?.has(provider)
+      ? this.#collector.refreshProvider(provider)
+      : Promise.resolve();
+  }
+
   /** The inventory report just resolved (ready or reconnect): remember its providers and report. */
   inventoryReported(runtimes: readonly RuntimeMetadata[]): Promise<void> {
     this.#adapters.clear();

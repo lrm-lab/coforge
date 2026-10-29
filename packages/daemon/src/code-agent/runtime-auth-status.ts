@@ -44,6 +44,10 @@ export class RuntimeAuthStatusCollector {
   readonly #dependencies: RuntimeAuthStatusSources;
   #running: Promise<boolean> | undefined;
   #again: Promise<boolean> | undefined;
+  /** The providers the queued pass reads, or undefined for every one of them. */
+  #next: ReadonlySet<RuntimeAuthProvider> | undefined;
+  /** The last collection reported, whose statuses a partial pass leaves alone. */
+  #last: RuntimeAuthCollection | undefined;
 
   constructor(dependencies: RuntimeAuthStatusSources) {
     this.#dependencies = dependencies;
@@ -54,35 +58,62 @@ export class RuntimeAuthStatusCollector {
     if (options.requireReport && !reported) throw new Error("Runtime login status report failed");
   }
 
-  #enqueue(): Promise<boolean> {
-    if (!this.#running) return this.#start();
+  /**
+   * Reads one runtime again and reports it beside every other runtime's last status: what a page
+   * asks for when it opens that runtime, which may have been signed in or out on the Computer
+   * itself. Providers never read yet are read too, so the report is never missing one.
+   */
+  async refreshProvider(
+    provider: RuntimeAuthProvider,
+    options: { requireReport?: boolean } = {},
+  ): Promise<void> {
+    const reported = await this.#enqueue(new Set([provider]));
+    if (options.requireReport && !reported) throw new Error("Runtime login status report failed");
+  }
+
+  #enqueue(providers?: ReadonlySet<RuntimeAuthProvider>): Promise<boolean> {
+    if (!this.#running) {
+      this.#next = undefined;
+      return this.#start(providers);
+    }
+    // A queued pass keeps the union of what was asked for: a whole one subsumes partial ones.
+    this.#next =
+      this.#next === undefined || providers === undefined
+        ? undefined
+        : new Set([...this.#next, ...providers]);
     this.#again ??= this.#running.then(() => {
       this.#again = undefined;
-      return this.#start();
+      const next = this.#next;
+      this.#next = undefined;
+      return this.#start(next);
     });
     return this.#again;
   }
 
-  #start(): Promise<boolean> {
-    const running = this.#collect().finally(() => {
+  #start(providers?: ReadonlySet<RuntimeAuthProvider>): Promise<boolean> {
+    const running = this.#collect(providers).finally(() => {
       if (this.#running === running) this.#running = undefined;
     });
     this.#running = running;
     return running;
   }
 
-  async #collect(): Promise<boolean> {
+  async #collect(providers?: ReadonlySet<RuntimeAuthProvider>): Promise<boolean> {
     const { installedProviders, report, now = Date.now } = this.#dependencies;
     const installed = new Set(await installedProviders().catch(() => [] as readonly string[]));
+    const previous = new Map(this.#last?.runtimes.map((runtime) => [runtime.provider, runtime]));
     const runtimes = await Promise.all(
-      RUNTIME_AUTH_PROVIDERS.map((provider) =>
-        installed.has(provider)
-          ? this.#read(provider)
-          : ({ provider, state: "unavailable", unavailableReason: "not_installed" } as const),
-      ),
+      RUNTIME_AUTH_PROVIDERS.map(async (provider) => {
+        if (!installed.has(provider))
+          return { provider, state: "unavailable", unavailableReason: "not_installed" } as const;
+        const kept = providers && !providers.has(provider) ? previous.get(provider) : undefined;
+        return kept ?? this.#read(provider);
+      }),
     );
+    const collection = { collectedAtMs: now(), runtimes };
     try {
-      await report({ collectedAtMs: now(), runtimes });
+      await report(collection);
+      this.#last = collection;
       return true;
     } catch (error) {
       logger.info("runtime auth status report failed", {

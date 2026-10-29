@@ -37,7 +37,13 @@ message RuntimeAuthLogout {
   string provider = 2;
 }
 
-// The one envelope of the four server-to-daemon intents, so a receiver never guesses which message
+// Asks the daemon to read one runtime's login status again and report it: the page opened that
+// runtime, which may have been signed in or out on the Computer itself.
+message RuntimeAuthStatusRead {
+  string provider = 1;
+}
+
+// The one envelope of the five server-to-daemon intents, so a receiver never guesses which message
 // the bytes are.
 message RuntimeAuthIntent {
   uint32 protocol_major = 1;
@@ -48,6 +54,7 @@ message RuntimeAuthIntent {
     RuntimeAuthLoginCode login_code = 5;
     RuntimeAuthLoginCancel login_cancel = 6;
     RuntimeAuthLogout logout = 7;
+    RuntimeAuthStatusRead status_read = 9;
   }
   string message_type = 8;
 }
