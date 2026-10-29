@@ -113,3 +113,53 @@ test("the preview limit counts the file's own bytes, not the gzipped ones on the
   expect(await read(1001)).toBe("too-large");
   expect(await read(100_000)).toBe("too-large");
 });
+
+/** The route with storage and auth faked to fail in a chosen way. */
+function failedDownload(read: "refused" | "missing" | "storage") {
+  return handleAttachmentDownload(
+    new Request("https://coforge.test/api/attachments/a1?download"),
+    { attachmentId: "a1" },
+    {
+      authenticate: () => ({ id: "user-1" }),
+      database: () => ({}) as never,
+      read: async () => {
+        if (read === "refused") throw new Error("not yours");
+        return {
+          attachment: { ...archive, objectKey: "k" },
+          open: async () => {
+            if (read === "missing") return null;
+            throw new Error("storage said no");
+          },
+        };
+      },
+      delivery: () => null,
+    },
+  );
+}
+
+const archive = { fileName: "avatars.zip", contentType: "application/zip" };
+
+test("an archive streams through the backend, which is the path that was failing", async () => {
+  const response = await download(archive, "PK\u0003\u0004zip", { query: "?download" });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("application/octet-stream");
+  expect(response.headers.get("content-disposition")).toBe('attachment; filename="avatars.zip"');
+});
+
+test("a missing attachment or a refused read answers not_found", async () => {
+  const response = await failedDownload("refused");
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: "not_found" });
+});
+
+test("a row whose stored object is gone says object_missing, not not_found", async () => {
+  const response = await failedDownload("missing");
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ error: "object_missing" });
+});
+
+test("a storage read that throws says storage_error", async () => {
+  const response = await failedDownload("storage");
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ error: "storage_error" });
+});

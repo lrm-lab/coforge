@@ -1,4 +1,3 @@
-import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { requireBrowserUser } from "#src/server/auth/require-user.server";
@@ -12,6 +11,13 @@ import { getDatabaseClient } from "#src/server/db/client.server";
 import { getFileDelivery, type FileDelivery } from "#src/server/files/file-delivery.server";
 import type { StoredFile } from "#src/server/files/file-storage.server";
 import { PRIVATE_NO_STORE } from "#src/server/http/cache-control.server";
+
+/** Why a download did not happen, as the page and the CLI show it. */
+export type AttachmentFailureReason =
+  | "not_found"
+  | "object_missing"
+  | "storage_error"
+  | "persistence_unavailable";
 
 export const Route = createFileRoute("/api/attachments/$attachmentId")({
   server: {
@@ -30,7 +36,8 @@ type AttachmentDownloadDependencies = {
     input: { attachmentId: string; userId: string },
   ): Promise<{
     attachment: { fileName: string; contentType: string; objectKey: string };
-    open(): Promise<StoredFile>;
+    /** Null when the stored object is gone: the row and the permission are fine, the file is not. */
+    open(): Promise<StoredFile | null>;
   }>;
   delivery(): FileDelivery | null;
 };
@@ -55,26 +62,63 @@ export async function handleAttachmentDownload(
 ): Promise<Response> {
   const user = await dependencies.authenticate(request.headers.get("cookie") ?? undefined);
   const db = dependencies.database();
-  if (!db) return textResponse("persistence unavailable", { status: 503 });
+  if (!db) return attachmentFailure("persistence_unavailable", 503);
+  let read: Awaited<ReturnType<AttachmentDownloadDependencies["read"]>>;
   try {
-    const { attachment, open } = await dependencies.read(db, {
+    read = await dependencies.read(db, {
       attachmentId: params.attachmentId,
       userId: user.id,
     });
-    const forceDownload = new URL(request.url).searchParams.has("download");
-    // A file that may only render off our own origin (a PDF, a video) is redirected to the signed delivery
-    // URL as well; when there is no delivery to sign with, `signedRedirect` returns null and the
-    // bytes stream below as an opaque download, exactly as before.
-    const redirect =
-      !forceDownload &&
-      (isInlineImage(attachment.contentType) || isDeliveryInlinePreview(attachment))
-        ? signedRedirect(dependencies, attachment.objectKey)
-        : null;
-    if (redirect) return redirect;
-    return attachmentResponse(request, attachment, await open(), forceDownload);
   } catch {
-    return textResponse("not found", { status: 404 });
+    // No such attachment and one this person may not read answer the same: neither says whether
+    // the other exists.
+    return attachmentFailure("not_found", 404);
   }
+  const { attachment } = read;
+  const forceDownload = new URL(request.url).searchParams.has("download");
+  // A file that may only render off our own origin (a PDF, a video) is redirected to the signed
+  // delivery URL as well; when there is no delivery to sign with, `signedRedirect` returns null and
+  // the bytes stream below as an opaque download, exactly as before.
+  const redirect =
+    !forceDownload && (isInlineImage(attachment.contentType) || isDeliveryInlinePreview(attachment))
+      ? signedRedirect(dependencies, attachment.objectKey)
+      : null;
+  if (redirect) return redirect;
+  // The read above proved the row and the permission; what is left is the object itself, and a
+  // download that fails here says which of the two it was instead of hiding both behind a 404.
+  let file: StoredFile | null;
+  try {
+    file = await read.open();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "attachment_download_failed",
+        reason: "storage_error",
+        errorType: error instanceof Error ? error.name : typeof error,
+      }),
+    );
+    return attachmentFailure("storage_error", 502);
+  }
+  if (!file) {
+    console.error(
+      JSON.stringify({ event: "attachment_download_failed", reason: "object_missing" }),
+    );
+    return attachmentFailure("object_missing", 502);
+  }
+  return attachmentResponse(request, attachment, file, forceDownload);
+}
+
+/**
+ * A download that did not happen, with a reason the page and the CLI can show without a server log:
+ * `not_found` (no such attachment, or not yours), `object_missing` (the row is there, the stored
+ * object is not), `storage_error` (storage could not be read). The body never carries a file name
+ * or an object key.
+ */
+export function attachmentFailure(reason: AttachmentFailureReason, status: number): Response {
+  return new Response(JSON.stringify({ error: reason }), {
+    status,
+    headers: { "Content-Type": "application/json", "cache-control": PRIVATE_NO_STORE },
+  });
 }
 
 /** The CDN redirect for one inline image, or `null` when delivery is off or failing (the caller

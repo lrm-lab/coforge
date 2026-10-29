@@ -30,10 +30,7 @@ export async function attachmentViewRequest(
     }
     throw new CliError({
       code: response.status >= 500 ? "SERVER_5XX" : "VIEW_FAILED",
-      message:
-        response.status === 404
-          ? "Attachment is unavailable."
-          : message || `HTTP ${response.status}`,
+      message: failureMessage(response.status, message),
       retryable: false,
     });
   }
@@ -41,4 +38,24 @@ export async function attachmentViewRequest(
     bytes: new Uint8Array(await response.arrayBuffer()),
     fileName: response.headers.get("content-disposition") ?? undefined,
   };
+}
+
+/**
+ * What a failed download says, from the route's reason (`{ "error": … }`): a missing or forbidden
+ * attachment keeps the wording that never reveals which, and a storage failure says what it is
+ * instead of reading as a missing file. An older server answers bare text, which is relayed.
+ */
+function failureMessage(status: number, reason: string): string {
+  switch (reason) {
+    case "not_found":
+      return "Attachment is unavailable.";
+    case "object_missing":
+      return "The attachment is recorded, but its stored file is missing.";
+    case "storage_error":
+      return "Storage could not be read; try again in a moment.";
+    case "persistence_unavailable":
+      return "The server cannot reach its database.";
+    default:
+      return reason || `HTTP ${status}`;
+  }
 }
