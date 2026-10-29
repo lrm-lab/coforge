@@ -16,10 +16,17 @@ function kiroProbe(versionOutput: string): ExternalCodeAgentProbe {
 }
 
 describe("Kiro minimum CLI version gate", () => {
-  test("does not report Kiro and logs a warning when the CLI is below the compatibility baseline", async () => {
+  test("reports Kiro as unusable and logs a warning when the CLI is below the compatibility baseline", async () => {
     const { records } = await captureDaemonLogs(async () => {
       const runtimes = await discoverExternalCodeAgents(kiroProbe("kiro-cli 2.16.0\n"));
-      expect(runtimes).toEqual([]);
+      expect(runtimes).toEqual([
+        {
+          provider: "kiro",
+          version: "2.16.0",
+          displayName: "Kiro",
+          unavailableCode: "version_unsupported",
+        },
+      ]);
     });
     const warning = records.find(
       (record) => record.properties.event === "code_agent_runtime:version_unsupported",
@@ -70,7 +77,9 @@ describe("Kiro minimum CLI version gate", () => {
           ],
         },
       });
-      expect(inventory.runtimes.some((runtime) => runtime.provider === "kiro")).toBe(false);
+      expect(inventory.runtimes.find((runtime) => runtime.provider === "kiro")).toMatchObject({
+        unavailableCode: "version_unsupported",
+      });
       expect(inventory.catalogs.some((catalog) => catalog.provider === "kiro")).toBe(false);
       expect(await Bun.file(marker).exists()).toBe(false);
     } finally {

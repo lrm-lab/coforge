@@ -1,22 +1,40 @@
-import type { CodeAgentModelCatalog } from "./computer-agent-messages";
-import { requireRuntimeProvider, type RuntimeMetadata } from "./index";
+import type {
+  CodeAgentModelCatalog,
+  RuntimeMetadata,
+  RuntimeUnavailableCode,
+} from "./computer-agent-messages";
+import { requireRuntimeProvider } from "./index";
 
 export const runtimeMetadata = (runtime: RuntimeMetadata) => ({
   ...runtime,
 });
 
+/** A code this build knows, or undefined. A newer daemon's code is dropped rather than read as
+ * one of ours, and a runtime without a known code stays usable. */
+const runtimeUnavailableCode = (value: string | undefined): RuntimeUnavailableCode | undefined =>
+  value === "version_unsupported" || value === "start_failed" || value === "probe_failed"
+    ? value
+    : undefined;
+
 export const decodedRuntimeMetadata = (runtime: {
   provider: string;
   version: string;
   displayName: string;
-}): RuntimeMetadata => ({
-  provider: requireRuntimeProvider(
-    runtime.provider,
-    `unsupported runtime provider: ${runtime.provider}`,
-  ),
-  version: runtime.version,
-  displayName: runtime.displayName,
-});
+  unavailableCode?: string;
+  diagnostic?: string;
+}): RuntimeMetadata => {
+  const unavailableCode = runtimeUnavailableCode(runtime.unavailableCode);
+  return {
+    provider: requireRuntimeProvider(
+      runtime.provider,
+      `unsupported runtime provider: ${runtime.provider}`,
+    ),
+    version: runtime.version,
+    displayName: runtime.displayName,
+    ...(unavailableCode ? { unavailableCode } : {}),
+    ...(unavailableCode && runtime.diagnostic ? { diagnostic: runtime.diagnostic } : {}),
+  };
+};
 
 export const modelCatalog = (catalog: CodeAgentModelCatalog) => ({
   provider: catalog.provider,

@@ -4,11 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
+import type { RuntimeMetadata } from "@lrm/coforge-sdk/internal";
 import {
   fileStatCacheKey,
   readInventoryCache,
   writeInventoryCache,
 } from "#src/code-agent/runtime-inventory-cache";
+
+/** A runtime the version gate refuses: still listed, never usable. */
+const refused = (
+  provider: RuntimeMetadata["provider"],
+  version: string,
+  displayName: string,
+): RuntimeMetadata => ({ provider, version, displayName, unavailableCode: "version_unsupported" });
 
 describe("Code Agent probe cache", () => {
   test("skips the version spawn when the cached probe key still matches the executable", async () => {
@@ -65,7 +73,7 @@ describe("Code Agent probe cache", () => {
     }
   });
 
-  test("re-validates a cached Kiro runtime and drops it when below the compatibility baseline", async () => {
+  test("re-validates a cached Kiro runtime and reports it unusable below the compatibility baseline", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const kiroPath = join(binDirectory, "kiro-cli");
@@ -93,7 +101,7 @@ describe("Code Agent probe cache", () => {
         stateDirectory,
       );
 
-      expect(runtimes).toEqual([]);
+      expect(runtimes).toEqual([refused("kiro", "2.16.0", "Kiro")]);
       // The executable itself is unchanged, so a stale cache hit is rejected without re-spawning;
       // a live re-probe would only reproduce the same gate outcome.
       expect(spawnCalls).toBe(0);
@@ -103,7 +111,7 @@ describe("Code Agent probe cache", () => {
     }
   });
 
-  test("re-validates a cached OpenCode runtime and drops it when below 2.0.30", async () => {
+  test("re-validates a cached OpenCode runtime and reports it unusable below 2.0.30", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const opencodePath = join(binDirectory, "opencode");
@@ -133,7 +141,7 @@ describe("Code Agent probe cache", () => {
         stateDirectory,
       );
 
-      expect(runtimes).toEqual([]);
+      expect(runtimes).toEqual([refused("opencode", "2.0.29", "OpenCode")]);
       expect(spawnCalls).toBe(0);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
@@ -141,7 +149,7 @@ describe("Code Agent probe cache", () => {
     }
   });
 
-  test("re-validates a cached Devin runtime and drops it when below its minimum", async () => {
+  test("re-validates a cached Devin runtime and reports it unusable below its minimum", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const devinPath = join(binDirectory, "devin");
@@ -174,7 +182,7 @@ describe("Code Agent probe cache", () => {
         stateDirectory,
       );
 
-      expect(runtimes).toEqual([]);
+      expect(runtimes).toEqual([refused("devin", "3000.11.100", "Devin")]);
       expect(spawnCalls).toBe(0);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
@@ -182,7 +190,7 @@ describe("Code Agent probe cache", () => {
     }
   });
 
-  test("does not restore a cached OpenCode runtime below 2.0.30 when the live probe rejects it", async () => {
+  test("reports the refused live OpenCode version, not the cached one below 2.0.30", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const opencodePath = join(binDirectory, "opencode");
@@ -205,7 +213,7 @@ describe("Code Agent probe cache", () => {
 
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([refused("opencode", "v2.0.20", "OpenCode")]);
       expect(spawnCalls).toBe(1);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
@@ -213,7 +221,7 @@ describe("Code Agent probe cache", () => {
     }
   });
 
-  test("does not restore a supported cached OpenCode runtime when the live binary is below 2.0.30", async () => {
+  test("reports the live OpenCode binary below 2.0.30 instead of the supported cached runtime", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const opencodePath = join(binDirectory, "opencode");
@@ -235,7 +243,7 @@ describe("Code Agent probe cache", () => {
 
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([refused("opencode", "v2.0.29", "OpenCode")]);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
       await rm(binDirectory, { recursive: true, force: true });
@@ -265,13 +273,20 @@ describe("Code Agent probe cache", () => {
 
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([refused("opencode", "v2.0.29", "OpenCode")]);
       expect((await readInventoryCache(stateDirectory)).opencode).toBeUndefined();
 
       reject = false;
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([
+        {
+          provider: "opencode",
+          version: "",
+          displayName: "OpenCode",
+          unavailableCode: "start_failed",
+        },
+      ]);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
       await rm(binDirectory, { recursive: true, force: true });
@@ -335,7 +350,7 @@ describe("Code Agent probe cache", () => {
     }
   });
 
-  test("keeps a supported cached OpenCode runtime when the live version probe exits non-zero", async () => {
+  test("keeps a supported cached OpenCode runtime, unusable, when the live version probe exits non-zero", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const opencodePath = join(binDirectory, "opencode");
@@ -355,16 +370,25 @@ describe("Code Agent probe cache", () => {
         }),
       };
 
+      // The entry keeps its last known version so the page can name it, but it is not usable:
+      // the CLI itself did not start.
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([{ provider: "opencode", version: "2.0.40", displayName: "OpenCode" }]);
+      ).resolves.toEqual([
+        {
+          provider: "opencode",
+          version: "2.0.40",
+          displayName: "OpenCode",
+          unavailableCode: "start_failed",
+        },
+      ]);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
       await rm(binDirectory, { recursive: true, force: true });
     }
   });
 
-  test("does not restore a cached OpenCode runtime below 2.0.30 when the version probe throws", async () => {
+  test("reports a cached OpenCode runtime below 2.0.30 unusable when the version probe throws", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const opencodePath = join(binDirectory, "opencode");
@@ -385,14 +409,14 @@ describe("Code Agent probe cache", () => {
 
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([refused("opencode", "2.0.29", "OpenCode")]);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
       await rm(binDirectory, { recursive: true, force: true });
     }
   });
 
-  test("does not restore a supported cached Devin runtime when the live binary is below the floor", async () => {
+  test("reports the live Devin binary below the floor instead of the supported cached runtime", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-state-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-probe-cache-bin-"));
     const devinPath = join(binDirectory, "devin");
@@ -414,7 +438,7 @@ describe("Code Agent probe cache", () => {
 
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([refused("devin", "3000.11.100", "Devin")]);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
       await rm(binDirectory, { recursive: true, force: true });

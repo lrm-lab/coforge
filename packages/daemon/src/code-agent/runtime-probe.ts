@@ -1,6 +1,7 @@
 import {
   RUNTIME_PROVIDER,
   type RuntimeMetadata,
+  type RuntimeUnavailableCode,
   diagnosticErrorCode,
 } from "@lrm/coforge-sdk/internal";
 import { processSpawner } from "#src/code-agent/process-host";
@@ -18,6 +19,7 @@ import {
   CATALOG_DISCOVERY_TIMEOUT_MS,
   within,
 } from "@lrm/coforge-anvil";
+import { stderrHint } from "#src/code-agent/version-probe";
 import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "@lrm/coforge-anvil/kiro";
 import { DSH_ACP_VERSION, dshVersionFromOutput } from "@lrm/coforge-anvil/dsh";
 import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "@lrm/coforge-anvil/grok";
@@ -63,7 +65,8 @@ export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
     Bun.spawn({
       cmd: [executable, "--version"],
       stdout: "pipe",
-      stderr: "ignore",
+      // The first stderr line is what a person needs when the CLI cannot start at all.
+      stderr: "pipe",
       // Discovery augmented the PATH (npm prefix, nvm versions); a bare npm launcher only works
       // when the probe child sees the same environment the discovery saw.
       env: env ?? agentEnvironment(undefined),
@@ -111,7 +114,7 @@ async function probeRuntimeVersion(
     const version = await within(providerProbe);
     return version
       ? { kind: "runtime", runtime: { provider, version, displayName: "Codex" } }
-      : { kind: "unavailable" };
+      : { kind: "unavailable", code: "probe_failed" };
   }
   if (provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
     const version = await probeClaudeCodeVersion(executable, (child) =>
@@ -119,9 +122,9 @@ async function probeRuntimeVersion(
     );
     return version
       ? { kind: "runtime", runtime: { provider, version, displayName: "Claude Code" } }
-      : { kind: "unavailable" };
+      : { kind: "unavailable", code: "probe_failed" };
   }
-  const { output, exitCode } = await versionProbeOutput(
+  const { output, exitCode, diagnostic } = await versionProbeOutput(
     probe.spawn(executable, probeEnvironment),
     versionProbeTimeoutMs,
   );
@@ -133,7 +136,8 @@ async function probeRuntimeVersion(
       exit_code: exitCode,
       outcome: "unavailable",
     });
-    return { kind: "unavailable" };
+    // The CLI is installed but could not start: that is a start failure, never a version judgement.
+    return { kind: "unavailable", code: "start_failed", diagnostic };
   }
   // Grok prints `grok <version> (<build hash>)`; the version is the dotted-numeric token, not the
   // last word. Devin reads its own launch gate's parser, so the two can never disagree.
@@ -149,31 +153,31 @@ async function probeRuntimeVersion(
           ? // Read exactly as DSH's launch reads it, so the two never disagree on the pin below.
             (dshVersionFromOutput(output) ?? output.trim())
           : lastWord(output);
-  if (!version) return { kind: "unavailable" };
+  if (!version) return { kind: "unavailable", code: "probe_failed" };
   if (provider === RUNTIME_PROVIDER.KIRO && isKiroVersionUnsupported(version)) {
     logKiroVersionUnsupported(name, version);
-    return { kind: "unavailable" };
+    return { kind: "rejected", version };
   }
   if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeVersionUnsupported(version)) {
     logOpenCodeVersionUnsupported(name, version);
-    return { kind: "rejected" };
+    return { kind: "rejected", version };
   }
   if (provider === RUNTIME_PROVIDER.GROK && isGrokVersionUnsupported(version)) {
     logGrokVersionUnsupported(name, version);
-    return { kind: "unavailable" };
+    return { kind: "rejected", version };
   }
   if (provider === RUNTIME_PROVIDER.ANTIGRAVITY && isAntigravityVersionUnsupported(version)) {
     logAntigravityVersionUnsupported(name, version);
-    return { kind: "unavailable" };
+    return { kind: "rejected", version };
   }
   if (provider === RUNTIME_PROVIDER.COMMAND_CODE && isCommandCodeVersionUnsupported(version)) {
     logCommandCodeVersionUnsupported(name, version);
-    return { kind: "unavailable" };
+    return { kind: "rejected", version };
   }
   if (provider === RUNTIME_PROVIDER.DEVIN && isDevinVersionUnsupported(version)) {
     logDevinVersionUnsupported(name, version);
     // A refused version is not a probe miss: the cached runtime must be dropped, not restored.
-    return { kind: "rejected" };
+    return { kind: "rejected", version };
   }
   // The preview ACP is pinned to one release: any other version is refused, never offered.
   if (provider === RUNTIME_PROVIDER.DSH && version !== DSH_ACP_VERSION) {
@@ -185,7 +189,7 @@ async function probeRuntimeVersion(
       required_version: DSH_ACP_VERSION,
       outcome: "unavailable",
     });
-    return { kind: "rejected" };
+    return { kind: "rejected", version };
   }
   return {
     kind: "runtime",
@@ -193,13 +197,20 @@ async function probeRuntimeVersion(
   };
 }
 
-/** `rejected` is a version the probe read and the floor refused. `unavailable` is a miss: the
- * probe threw, exited non-zero, or printed nothing that could be gated. Only a miss may fall
- * back to a cached runtime. */
+/**
+ * `rejected` is a version the probe read and the gate refused. `unavailable` is a CLI that could
+ * not be read: it exited non-zero (`start_failed`), or ran without printing a version
+ * (`probe_failed`). Both keep the runtime in the inventory as unusable, with the code and the
+ * redacted stderr line that say why; only `rejected` also drops the cached runtime.
+ */
 type RuntimeVersionProbe =
   | { kind: "runtime"; runtime: RuntimeMetadata }
-  | { kind: "rejected" }
-  | { kind: "unavailable" };
+  | { kind: "rejected"; version: string }
+  | {
+      kind: "unavailable";
+      code: "start_failed" | "probe_failed";
+      diagnostic?: string;
+    };
 
 /** An older daemon cached an OpenCode or Devin build before the floor moved. Serving it, including
  * as a probe-failure fallback, would keep offering a CLI this build refuses to launch. */
@@ -220,11 +231,29 @@ function cachedBelowFloor(
   return false;
 }
 
+/** An installed runtime that cannot be used keeps its place in the inventory, with the reason, so
+ * the Computer page and the Agent runtime picker can say why instead of hiding it. `version` is
+ * the last one read when this Computer knew it, and empty when the CLI never printed one. */
+function unusableRuntime(
+  provider: ExternalCodeAgentProvider,
+  version: string,
+  unavailableCode: RuntimeUnavailableCode,
+  diagnostic?: string,
+): RuntimeMetadata {
+  return {
+    provider,
+    version,
+    displayName: externalRuntimeDisplayName(provider),
+    unavailableCode,
+    ...(diagnostic ? { diagnostic } : {}),
+  };
+}
+
 /** A live probe that read a refused version must erase this provider's cached runtime. A later
  * miss would otherwise restore an older, still-supported entry for a different executable. */
 type DiscoveredExternalAgent =
-  | { runtime: RuntimeMetadata; cacheKey: string | undefined }
-  | { dropProvider: ExternalCodeAgentProvider };
+  | { runtime: RuntimeMetadata; cacheKey?: string }
+  | { dropProvider: ExternalCodeAgentProvider; unusable: RuntimeMetadata };
 
 export async function discoverExternalCodeAgents(
   probe: ExternalCodeAgentProbe,
@@ -271,15 +300,22 @@ export async function discoverExternalCodeAgents(
               isKiroVersionUnsupported(cached.runtime.version)
             ) {
               logKiroVersionUnsupported(name, cached.runtime.version);
-              return undefined;
+              return {
+                runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
+              };
             }
-            if (cachedBelowFloor(provider, name, cached.runtime)) return undefined;
+            if (cachedBelowFloor(provider, name, cached.runtime))
+              return {
+                runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
+              };
             if (
               provider === RUNTIME_PROVIDER.COMMAND_CODE &&
               isCommandCodeVersionUnsupported(cached.runtime.version)
             ) {
               logCommandCodeVersionUnsupported(name, cached.runtime.version);
-              return undefined;
+              return {
+                runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
+              };
             }
             logger.info("Code Agent runtime probe served from cache", {
               event: "code_agent_runtime:cache_hit",
@@ -300,21 +336,21 @@ export async function discoverExternalCodeAgents(
           if (probed.kind === "runtime") return { runtime: probed.runtime, cacheKey };
           // The binary on disk was read and refused. Drop the cached runtime now; returning
           // nothing would leave an older supported entry for the next probe miss to restore.
-          if (probed.kind === "rejected") return { dropProvider: provider };
-          // A transient version/app-server failure must not make an installed runtime vanish
-          // from the Computer inventory. Keep the last successful result when the executable
-          // itself is unchanged; the next refresh will retry the live probe.
-          if (cachedBelowFloor(provider, name, cached?.runtime)) return undefined;
-          if (cached?.runtime) {
-            logger.warning("Code Agent runtime probe failed; using cached runtime", {
-              event: "code_agent_runtime:cache_fallback",
+          if (probed.kind === "rejected")
+            return {
+              dropProvider: provider,
+              unusable: unusableRuntime(provider, probed.version, "version_unsupported"),
+            };
+          // A CLI that cannot be read stays in the inventory, unusable, with its own reason and
+          // the redacted stderr line: hiding it is what left the Computer page saying nothing.
+          return {
+            runtime: unusableRuntime(
               provider,
-              executable_name: name,
-              outcome: "degraded",
-            });
-            return { runtime: cached.runtime, cacheKey: undefined };
-          }
-          return undefined;
+              cached?.runtime?.version ?? "",
+              probed.code,
+              probed.diagnostic,
+            ),
+          };
         } catch (error) {
           logger.warning("Code Agent runtime probe failed", {
             event: "code_agent_runtime:probe_failed",
@@ -323,25 +359,24 @@ export async function discoverExternalCodeAgents(
             error_code: diagnosticErrorCode(error),
             outcome: "unavailable",
           });
-          // A transient probe failure must not erase an otherwise known installed runtime.
-          const fallbackCacheKey = executable
-            ? cache
-              ? await fileStatCacheKey([executable])
-              : undefined
-            : undefined;
+          if (!executable) return undefined;
+          const fallbackCacheKey = cache ? await fileStatCacheKey([executable]) : undefined;
           const fallbackCached = fallbackCacheKey ? cache?.[provider] : undefined;
-          if (cachedBelowFloor(provider, name, fallbackCached?.runtime)) return undefined;
-          if (fallbackCached?.runtime) {
-            logger.warning("Code Agent runtime probe failed; using cached runtime", {
-              event: "code_agent_runtime:cache_fallback",
+          if (fallbackCached?.runtime && cachedBelowFloor(provider, name, fallbackCached.runtime))
+            return {
+              runtime: unusableRuntime(
+                provider,
+                fallbackCached.runtime.version,
+                "version_unsupported",
+              ),
+            };
+          return {
+            runtime: unusableRuntime(
               provider,
-              executable_name: name,
-              outcome: "degraded",
-            });
-            return { runtime: fallbackCached.runtime, cacheKey: undefined };
-          }
-          // An executable without a usable version is not available inventory.
-          return undefined;
+              fallbackCached?.runtime?.version ?? "",
+              "probe_failed",
+            ),
+          };
         }
       }),
   );
@@ -355,6 +390,7 @@ export async function discoverExternalCodeAgents(
     if (!result) continue;
     if ("dropProvider" in result) {
       dropped.add(result.dropProvider);
+      runtimes.push(result.unusable);
       continue;
     }
     runtimes.push(result.runtime);
@@ -385,11 +421,17 @@ export async function discoverExternalCodeAgents(
 export async function versionProbeOutput(
   process: ReturnType<CodeAgentProbe["spawn"]>,
   timeoutMs: number = VERSION_PROBE_TIMEOUT_MS,
-): Promise<{ output: string; exitCode: number }> {
+): Promise<{ output: string; exitCode: number; diagnostic?: string }> {
   return withDeadline(
-    Promise.all([new Response(process.stdout).text(), process.exited]).then(
-      ([output, exitCode]) => ({ output, exitCode }),
-    ),
+    Promise.all([
+      new Response(process.stdout).text(),
+      process.stderr ? new Response(process.stderr).text() : Promise.resolve(""),
+      process.exited,
+    ]).then(([output, stderr, exitCode]) => ({
+      output,
+      exitCode,
+      diagnostic: stderrHint(stderr),
+    })),
     timeoutMs,
     () => {
       process.kill?.();
@@ -409,7 +451,7 @@ async function readVersionWithBun(
   const process = Bun.spawn({
     cmd: [executable, "--version"],
     stdout: "pipe",
-    stderr: "ignore",
+    stderr: "pipe",
     env: env ?? agentEnvironment(undefined),
   });
   try {

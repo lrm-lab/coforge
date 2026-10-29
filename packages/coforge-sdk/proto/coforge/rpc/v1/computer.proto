@@ -21,6 +21,8 @@ message RuntimeMetadata {
   string provider = 1;
   string version = 2;
   string display_name = 3;
+  optional string unavailable_code = 4;
+  optional string diagnostic = 5;
 }
 
 message ComputerRegisterResponse {

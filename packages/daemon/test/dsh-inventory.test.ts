@@ -162,8 +162,17 @@ test("DSH inventory refuses any release other than the pinned one", async () => 
   await expect(discoverExternalCodeAgents(probe("0.2.1-rc.2"))).resolves.toEqual([
     { provider: "dsh", version: "0.2.1-rc.2", displayName: "DeepSeek Harness" },
   ]);
-  await expect(discoverExternalCodeAgents(probe("0.2.1"))).resolves.toEqual([]);
-  await expect(discoverExternalCodeAgents(probe("0.2.0"))).resolves.toEqual([]);
+  const refused = (version: string) => ({
+    provider: "dsh" as const,
+    version,
+    displayName: "DeepSeek Harness",
+    unavailableCode: "version_unsupported" as const,
+  });
+  // A refused release stays listed, unusable, so the page can say why.
+  await expect(discoverExternalCodeAgents(probe("0.2.1"))).resolves.toEqual([refused("0.2.1")]);
+  await expect(discoverExternalCodeAgents(probe("0.2.0"))).resolves.toEqual([refused("0.2.0")]);
   // Launch accepts only the bare version, so the inventory must not offer decorated output.
-  await expect(discoverExternalCodeAgents(probe("dsh 0.2.1-rc.2"))).resolves.toEqual([]);
+  await expect(discoverExternalCodeAgents(probe("dsh 0.2.1-rc.2"))).resolves.toEqual([
+    refused("dsh 0.2.1-rc.2"),
+  ]);
 });

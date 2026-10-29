@@ -16,10 +16,18 @@ import type {
   DaemonRuntimeMessageType,
 } from "./index";
 
+/** Why an installed runtime cannot be used: its CLI read a version the gate refuses
+ * (`version_unsupported`), could not start at all (`start_failed`), or ran but printed nothing
+ * that reads as a version (`probe_failed`). A runtime without a code is usable. */
+export type RuntimeUnavailableCode = "version_unsupported" | "start_failed" | "probe_failed";
 export type RuntimeMetadata = {
   provider: RuntimeProvider;
   version: string;
   displayName: string;
+  /** Set only when the runtime is installed but cannot be used; never selectable then. */
+  unavailableCode?: RuntimeUnavailableCode;
+  /** The redacted first stderr line the CLI printed, verbatim; never a sentence we wrote. */
+  diagnostic?: string;
 };
 export type CodeAgentModelMetadata = {
   id: string;

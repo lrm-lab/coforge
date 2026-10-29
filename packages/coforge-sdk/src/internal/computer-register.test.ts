@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AgentStartIntentSchema } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
+import { DaemonRuntimeCodeAgentsUpdateRequestSchema } from "#src/internal/gen/coforge/rpc/v1/daemon_runtime_pb";
 import {
   AGENT_START_MESSAGE_TYPE,
   ComputerRegistrationClient,
@@ -83,6 +84,13 @@ test("daemon runtime code-agent inventory round trips as a complete external sna
         version: "2.1.0",
         displayName: "Claude Code",
       },
+      {
+        provider: RUNTIME_PROVIDER.DSH,
+        version: "",
+        displayName: "DeepSeek Harness",
+        unavailableCode: "start_failed" as const,
+        diagnostic: "No version is set for shim: node",
+      },
     ],
     catalogs: [
       {
@@ -141,6 +149,32 @@ test("daemon runtime code-agent inventory round trips as a complete external sna
   expect(
     decodeDaemonRuntimeCodeAgentsUpdateRequest(encodeDaemonRuntimeCodeAgentsUpdateRequest(request)),
   ).toEqual(request);
+});
+
+test("a runtime unusable code this build does not know leaves the runtime usable", () => {
+  const bytes = toBinary(
+    DaemonRuntimeCodeAgentsUpdateRequestSchema,
+    create(DaemonRuntimeCodeAgentsUpdateRequestSchema, {
+      protocolMajor: 1,
+      requestId: "inventory-2",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      runtimes: [
+        { provider: RUNTIME_PROVIDER.DSH, version: "", displayName: "DeepSeek Harness" },
+        {
+          provider: RUNTIME_PROVIDER.KIRO,
+          version: "2.21.2",
+          displayName: "Kiro",
+          unavailableCode: "auth_expired",
+          diagnostic: "ignored without a known code",
+        },
+      ],
+    }),
+  );
+  expect(decodeDaemonRuntimeCodeAgentsUpdateRequest(bytes).runtimes).toEqual([
+    { provider: RUNTIME_PROVIDER.DSH, version: "", displayName: "DeepSeek Harness" },
+    { provider: RUNTIME_PROVIDER.KIRO, version: "2.21.2", displayName: "Kiro" },
+  ]);
 });
 
 test("Agent start preserves its runtime provider config", () => {

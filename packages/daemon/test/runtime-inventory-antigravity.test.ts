@@ -62,9 +62,16 @@ describe("Antigravity CLI version gate", () => {
     ]);
   });
 
-  test("does not report the runtime, and logs a warning, when the CLI is below the baseline", async () => {
+  test("reports the runtime as unusable, and logs a warning, when the CLI is below the baseline", async () => {
     const { records } = await captureDaemonLogs(async () => {
-      await expect(discoverExternalCodeAgents(agyProbe("1.2.9\n"))).resolves.toEqual([]);
+      await expect(discoverExternalCodeAgents(agyProbe("1.2.9\n"))).resolves.toEqual([
+        {
+          provider: "antigravity",
+          version: "1.2.9",
+          displayName: "Antigravity CLI",
+          unavailableCode: "version_unsupported",
+        },
+      ]);
     });
     const warning = records.find(
       (record) => record.properties.event === "code_agent_runtime:version_unsupported",
@@ -151,9 +158,9 @@ describe("Antigravity CLI model catalog in the inventory", () => {
           environment,
           piModels: async () => [],
         });
-        expect(inventory.runtimes.some((runtime) => runtime.provider === "antigravity")).toBe(
-          false,
-        );
+        expect(
+          inventory.runtimes.find((runtime) => runtime.provider === "antigravity"),
+        ).toMatchObject({ unavailableCode: "version_unsupported" });
         expect(inventory.catalogs.some((catalog) => catalog.provider === "antigravity")).toBe(
           false,
         );

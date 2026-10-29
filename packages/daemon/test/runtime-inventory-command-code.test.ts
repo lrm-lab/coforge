@@ -19,9 +19,16 @@ function commandCodeProbe(versionOutput: string): ExternalCodeAgentProbe {
 }
 
 describe("Command Code minimum CLI version gate", () => {
-  test("does not report Command Code and logs a warning when the CLI is below 1.87.2", async () => {
+  test("reports Command Code as unusable and logs a warning when the CLI is below 1.87.2", async () => {
     const { records } = await captureDaemonLogs(async () => {
-      await expect(discoverExternalCodeAgents(commandCodeProbe("1.87.1\n"))).resolves.toEqual([]);
+      await expect(discoverExternalCodeAgents(commandCodeProbe("1.87.1\n"))).resolves.toEqual([
+        {
+          provider: "command-code",
+          version: "1.87.1",
+          displayName: "Command Code",
+          unavailableCode: "version_unsupported",
+        },
+      ]);
     });
     const warning = records.find(
       (record) => record.properties.event === "code_agent_runtime:version_unsupported",
@@ -53,7 +60,7 @@ describe("Command Code minimum CLI version gate", () => {
     ]);
   });
 
-  test("re-validates a cached Command Code runtime and drops it when below 1.87.2", async () => {
+  test("re-validates a cached Command Code runtime and reports it unusable below 1.87.2", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-command-code-cache-"));
     const binDirectory = await mkdtemp(join(tmpdir(), "coforge-command-code-bin-"));
     const cmdPath = join(binDirectory, "cmd");
@@ -76,7 +83,14 @@ describe("Command Code minimum CLI version gate", () => {
       };
       await expect(
         discoverExternalCodeAgents(probe, { PATH: "" }, undefined, undefined, stateDirectory),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([
+        {
+          provider: "command-code",
+          version: "1.87.1",
+          displayName: "Command Code",
+          unavailableCode: "version_unsupported",
+        },
+      ]);
       expect(spawnCalls).toBe(0);
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });

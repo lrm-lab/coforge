@@ -187,6 +187,7 @@ export interface CodeAgentProbe {
     env?: Readonly<Record<string, string>>,
   ): {
     stdout: ReadableStream<Uint8Array>;
+    stderr?: ReadableStream<Uint8Array>;
     exited: Promise<number>;
     kill?(): void;
   };

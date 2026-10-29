@@ -4,7 +4,7 @@ import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable"
 export const FULL_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 export function probeFor(
-  runtimes: Record<string, { path: string; version: string; exitCode?: number }>,
+  runtimes: Record<string, { path: string; version: string; exitCode?: number; stderr?: string }>,
 ): ExternalCodeAgentProbe {
   return {
     which: (name) => runtimes[name]?.path,
@@ -12,6 +12,7 @@ export function probeFor(
       const runtime = Object.values(runtimes).find((candidate) => candidate.path === executable);
       return {
         stdout: new Blob([runtime?.version ?? ""]).stream(),
+        ...(runtime?.stderr === undefined ? {} : { stderr: new Blob([runtime.stderr]).stream() }),
         exited: Promise.resolve(runtime?.exitCode ?? 0),
       };
     },

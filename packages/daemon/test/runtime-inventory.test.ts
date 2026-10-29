@@ -261,12 +261,58 @@ describe("external Code Agent inventory", () => {
     ]);
   });
 
-  test("omits unusable executables", async () => {
+  test("reports an executable that cannot start as unusable, with its reason", async () => {
     await expect(
       discoverExternalCodeAgents(
         probeFor({ codex: { path: "/bin/codex", version: "", exitCode: 1 } }),
       ),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual([
+      {
+        provider: "codex",
+        version: "",
+        displayName: "Codex",
+        unavailableCode: "start_failed",
+      },
+    ]);
+  });
+
+  test("a runtime that cannot start keeps its redacted stderr first line", async () => {
+    await expect(
+      discoverExternalCodeAgents(
+        probeFor({
+          dsh: {
+            path: "/bin/dsh",
+            version: "",
+            exitCode: 1,
+            stderr: "\nNo version is set for shim: node\nsecond line\n",
+          },
+        }),
+      ),
+    ).resolves.toEqual([
+      {
+        provider: "dsh",
+        version: "",
+        displayName: "DeepSeek Harness",
+        unavailableCode: "start_failed",
+        diagnostic: "No version is set for shim: node",
+      },
+    ]);
+  });
+
+  test("a token-looking stderr line never reaches the inventory", async () => {
+    const runtimes = await discoverExternalCodeAgents(
+      probeFor({
+        dsh: {
+          path: "/bin/dsh",
+          version: "",
+          exitCode: 2,
+          stderr: "auth failed with sk-live-abcdefgh12345678\n",
+        },
+      }),
+    );
+    expect(runtimes).toContainEqual(
+      expect.objectContaining({ diagnostic: "auth failed with [redacted]" }),
+    );
   });
 
   test("uses the Codex app-server probe before reporting the runtime", async () => {
@@ -365,7 +411,14 @@ describe("external Code Agent inventory", () => {
         piModels: async () => [],
         versionProbeTimeoutMs: SHORT_VERSION_PROBE_TIMEOUT_MS,
       });
-      expect(runtimes.filter((runtime) => runtime.provider === "codex")).toEqual([]);
+      expect(runtimes.filter((runtime) => runtime.provider === "codex")).toEqual([
+        {
+          provider: "codex",
+          version: "",
+          displayName: "Codex",
+          unavailableCode: "probe_failed",
+        },
+      ]);
       expect(killed).toBe(true);
     },
     SHORT_VERSION_PROBE_TIMEOUT_MS + 1_000,

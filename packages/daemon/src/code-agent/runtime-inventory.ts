@@ -8,6 +8,7 @@ import {
   RUNTIME_PROVIDER,
   type CodeAgentModelCatalog,
   type RuntimeMetadata,
+  type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
@@ -191,16 +192,17 @@ export async function loadCachedCodeAgentCatalogs(
   const probe = options.probe;
   const environment = options.environment ?? Bun.env;
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
+  const usable = (provider: RuntimeProvider) =>
+    runtimes.some((runtime) => runtime.provider === provider && !runtime.unavailableCode);
   const catalogs: CodeAgentModelCatalog[] = [discoverCoforgeCatalog()];
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CLAUDE_CODE))
+  if (usable(RUNTIME_PROVIDER.CLAUDE_CODE))
     catalogs.push(claudeStaticCatalog(installedClaudeCodeVersion(runtimes)));
   const cache = options.cacheDirectory
     ? await readInventoryCache(options.cacheDirectory)
     : undefined;
   let needsRefresh = false;
   const providers = CACHEABLE_CATALOG_PROVIDERS.filter(
-    (provider) =>
-      provider === RUNTIME_PROVIDER.PI || runtimes.some((runtime) => runtime.provider === provider),
+    (provider) => provider === RUNTIME_PROVIDER.PI || usable(provider),
   );
   for (const provider of providers) {
     const keyPaths = await catalogCacheKeyPaths(
@@ -229,7 +231,7 @@ export async function loadCachedCodeAgentCatalogs(
     catalogs[devinIndex] = filled.catalog;
     if (!filled.complete) needsRefresh = true;
   }
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DSH)) {
+  if (usable(RUNTIME_PROVIDER.DSH)) {
     const dshOptions = await dshCatalogOptions(options);
     const cached = dshOptions ? await dshCatalogs.cached(dshOptions) : undefined;
     if (cached) catalogs.push(cached);
@@ -253,6 +255,8 @@ export async function discoverCodeAgentCatalogs(
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
   const cwd = options.cwd ?? process.cwd();
   const commands = options.commands ?? {};
+  const usable = (provider: RuntimeProvider) =>
+    runtimes.some((runtime) => runtime.provider === provider && !runtime.unavailableCode);
   const resolveExecutable = (provider: ExternalCodeAgentProvider) =>
     resolveExternalCodeAgentExecutable(
       externalCodeAgent[provider],
@@ -262,13 +266,16 @@ export async function discoverCodeAgentCatalogs(
       options.platform ?? process.platform,
     );
   type Discovered = {
-    provider?: (typeof CACHEABLE_CATALOG_PROVIDERS)[number];
     keyPaths?: string[];
     catalog: CodeAgentModelCatalog | undefined;
   };
-  const discoveries: Array<Promise<Discovered>> = [];
-  discoveries.push(Promise.resolve({ catalog: discoverCoforgeCatalog() }));
-  discoveries.push(
+  const discoveries: Array<[RuntimeProvider, Promise<Discovered>]> = [];
+  discoveries.push([
+    RUNTIME_PROVIDER.COFORGE,
+    Promise.resolve({ catalog: discoverCoforgeCatalog() }),
+  ]);
+  discoveries.push([
+    RUNTIME_PROVIDER.PI,
     discoverPiCatalog(
       cwd,
       environment,
@@ -277,15 +284,15 @@ export async function discoverCodeAgentCatalogs(
       options.piCatalogDiscoveryTimeoutMs ?? PI_CATALOG_DISCOVERY_TIMEOUT_MS,
       options.force,
     ).then((catalog) => ({
-      provider: RUNTIME_PROVIDER.PI,
       keyPaths: piCacheKeyPaths(environment),
       catalog,
     })),
-  );
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CODEX)) {
+  ]);
+  if (usable(RUNTIME_PROVIDER.CODEX)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.CODEX);
     if (executable)
-      discoveries.push(
+      discoveries.push([
+        RUNTIME_PROVIDER.CODEX,
         discoverCodexCatalog(
           commands.codex ?? [executable, "app-server"],
           cwd,
@@ -294,150 +301,146 @@ export async function discoverCodeAgentCatalogs(
           options.catalogDiscoveryTimeoutMs ?? CATALOG_DISCOVERY_TIMEOUT_MS,
           options.force,
         ).then((catalog) => ({
-          provider: RUNTIME_PROVIDER.CODEX,
           keyPaths: [executable],
           catalog,
         })),
-      );
+      ]);
   }
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CLAUDE_CODE)) {
-    discoveries.push(
+  if (usable(RUNTIME_PROVIDER.CLAUDE_CODE)) {
+    discoveries.push([
+      RUNTIME_PROVIDER.CLAUDE_CODE,
       Promise.resolve({ catalog: claudeStaticCatalog(installedClaudeCodeVersion(runtimes)) }),
-    );
+    ]);
   }
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.KIRO)) {
+  if (usable(RUNTIME_PROVIDER.KIRO)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.KIRO);
     if (executable)
-      discoveries.push(
+      discoveries.push([
+        RUNTIME_PROVIDER.KIRO,
         discoverKiroCatalog(
           commands.kiro ?? [executable, ...KIRO_ACP_ARGS],
           cwd,
           environment,
           kiroRuntimeHost,
-        )
-          .catch(() => undefined)
-          .then((catalog) => ({
-            provider: RUNTIME_PROVIDER.KIRO,
-            keyPaths: [executable],
-            catalog,
-          })),
-      );
+        ).then((catalog) => ({
+          keyPaths: [executable],
+          catalog,
+        })),
+      ]);
   }
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.CURSOR)) {
+  if (usable(RUNTIME_PROVIDER.CURSOR)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.CURSOR);
     if (executable)
-      discoveries.push(
+      discoveries.push([
+        RUNTIME_PROVIDER.CURSOR,
         discoverCursorCatalog(
           commands.cursor ?? [executable, "models"],
           cwd,
           environment,
           runCatalogCommand,
-        )
-          .catch(() => undefined)
-          .then((catalog) => ({
-            provider: RUNTIME_PROVIDER.CURSOR,
-            keyPaths: [executable],
-            catalog,
-          })),
-      );
+        ).then((catalog) => ({
+          keyPaths: [executable],
+          catalog,
+        })),
+      ]);
   }
   // Grok was the cacheable provider this refresh had no branch for, so its catalog was never
   // probed: an Agent whose runtime is Grok Build saw an empty model list in the UI even though
   // `grok models` lists models fine on the CLI.
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.GROK)) {
+  if (usable(RUNTIME_PROVIDER.GROK)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.GROK);
     if (executable)
-      discoveries.push(
-        discoverGrokCatalog(commands.grok ?? [executable], cwd, environment, grokRuntimeHost)
-          .catch(() => undefined)
-          .then((catalog) => ({
-            provider: RUNTIME_PROVIDER.GROK,
+      discoveries.push([
+        RUNTIME_PROVIDER.GROK,
+        discoverGrokCatalog(commands.grok ?? [executable], cwd, environment, grokRuntimeHost).then(
+          (catalog) => ({
             keyPaths: [executable],
             catalog,
-          })),
-      );
+          }),
+        ),
+      ]);
   }
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.ANTIGRAVITY)) {
+  if (usable(RUNTIME_PROVIDER.ANTIGRAVITY)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.ANTIGRAVITY);
     if (executable)
-      discoveries.push(
+      discoveries.push([
+        RUNTIME_PROVIDER.ANTIGRAVITY,
         discoverAntigravityCatalog(
           commands.antigravity ?? [executable, "models"],
           cwd,
           environment,
           antigravityRuntimeHost.catalogCommandRunner,
         ).then((catalog) => ({
-          provider: RUNTIME_PROVIDER.ANTIGRAVITY,
           keyPaths: [executable],
           catalog,
         })),
-      );
+      ]);
   }
   // OpenCode was the one cacheable provider this refresh had no branch for, so its catalog was
   // never probed: an Agent whose runtime is OpenCode saw an empty model list in the UI even
   // though `opencode models` lists models fine on the CLI.
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.OPENCODE)) {
+  if (usable(RUNTIME_PROVIDER.OPENCODE)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.OPENCODE);
     if (executable)
-      discoveries.push(
+      discoveries.push([
+        RUNTIME_PROVIDER.OPENCODE,
         discoverOpenCodeCatalog(
           commands.opencode ?? [executable, "models"],
           cwd,
           environment,
           runCatalogCommand,
-        )
-          .catch(() => undefined)
-          .then((catalog) => ({
-            provider: RUNTIME_PROVIDER.OPENCODE,
-            keyPaths: [executable],
-            catalog,
-          })),
-      );
+        ).then((catalog) => ({
+          keyPaths: [executable],
+          catalog,
+        })),
+      ]);
   }
   // The model list is session/new's model select. Without this branch a refresh never probes
   // Command Code, so Edit Runtime Configuration stays empty and Refresh fails.
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.COMMAND_CODE)) {
+  if (usable(RUNTIME_PROVIDER.COMMAND_CODE)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.COMMAND_CODE);
     if (executable)
-      discoveries.push(
+      discoveries.push([
+        RUNTIME_PROVIDER.COMMAND_CODE,
         discoverCommandCodeCatalog(
           commands.commandCode ?? [executable],
           cwd,
           environment,
           commandCodeRuntimeHost,
-        )
-          .catch(() => undefined)
-          .then((catalog) => ({
-            provider: RUNTIME_PROVIDER.COMMAND_CODE,
-            keyPaths: [executable],
-            catalog,
-          })),
-      );
+        ).then((catalog) => ({
+          keyPaths: [executable],
+          catalog,
+        })),
+      ]);
   }
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)) {
+  if (usable(RUNTIME_PROVIDER.DEVIN)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.DEVIN);
     if (executable)
-      discoveries.push(
-        discoverDevinCatalog(commands.devin ?? [executable], cwd, environment, devinRuntimeHost)
-          .catch(() => undefined)
-          .then(async (catalog) => {
-            // A model list publishes at discovery speed: efforts fill from the cache only, and
-            // the inventory-sync sweep reports the catalog again once `thought_level` is read.
-            if (!catalog)
-              return { provider: RUNTIME_PROVIDER.DEVIN, keyPaths: [executable], catalog };
-            const { catalog: filled } = await devinCatalogWithCachedEfforts(
-              catalog,
-              options.cacheDirectory,
-              runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)?.version,
-            );
-            return { provider: RUNTIME_PROVIDER.DEVIN, keyPaths: [executable], catalog: filled };
-          }),
-      );
+      discoveries.push([
+        RUNTIME_PROVIDER.DEVIN,
+        discoverDevinCatalog(
+          commands.devin ?? [executable],
+          cwd,
+          environment,
+          devinRuntimeHost,
+        ).then(async (catalog) => {
+          // A model list publishes at discovery speed: efforts fill from the cache only, and
+          // the inventory-sync sweep reports the catalog again once `thought_level` is read.
+          if (!catalog) return { keyPaths: [executable], catalog };
+          const { catalog: filled } = await devinCatalogWithCachedEfforts(
+            catalog,
+            options.cacheDirectory,
+            runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)?.version,
+          );
+          return { keyPaths: [executable], catalog: filled };
+        }),
+      ]);
   }
-  if (runtimes.some((runtime) => runtime.provider === RUNTIME_PROVIDER.DSH)) {
+  if (usable(RUNTIME_PROVIDER.DSH)) {
     const dshOptions = await dshCatalogOptions(options);
     if (dshOptions)
-      discoveries.push(
+      discoveries.push([
+        RUNTIME_PROVIDER.DSH,
         dshCatalogs
           .discover(dshOptions)
           .catch(async (error) => {
@@ -451,9 +454,12 @@ export async function discoverCodeAgentCatalogs(
             return dshCatalogs.cached(dshOptions);
           })
           .then((catalog) => ({ catalog })),
-      );
+      ]);
     else if (options.force)
-      discoveries.push(Promise.reject(new Error("DSH model catalog refresh failed")));
+      discoveries.push([
+        RUNTIME_PROVIDER.DSH,
+        Promise.reject(new Error("DSH model catalog refresh failed")),
+      ]);
   }
   const results = await settleCatalogDiscoveries(discoveries);
   if (options.cacheDirectory) {
@@ -488,5 +494,7 @@ export async function discoverCodeAgentInventory(
 }
 
 function installedClaudeCodeVersion(runtimes: readonly RuntimeMetadata[]): string | undefined {
-  return runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.CLAUDE_CODE)?.version;
+  return runtimes.find(
+    (runtime) => runtime.provider === RUNTIME_PROVIDER.CLAUDE_CODE && !runtime.unavailableCode,
+  )?.version;
 }
