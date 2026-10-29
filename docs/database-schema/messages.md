@@ -100,7 +100,8 @@ whose PostgreSQL text representation occupies at most 4096 UTF-8 bytes. The Web
 writes `md-section {headingId, headingTitle, quote?}` on Markdown,
 `lines {start, end, quote?}` on plain text and `csv-rows {start, end, quote?}`
 on CSV (rows from 1, header excluded) and `video-timestamp {time}` on a video
-(seconds, above 0 and at most 24 hours; task #271); the server accepts only the type the
+or an audio file (seconds, above 0 and at most 24 hours; tasks #271 and #281; the name is
+Raft's, and audio shares it); the server accepts only the type the
 file's preview offers (`attachment-comment-anchors.ts`). There is no stored
 location status or completion status: the viewer discovers lost positions and
 an ordinary ✅ reaction means resolved.

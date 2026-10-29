@@ -100,7 +100,8 @@ export function anchorTypeForPreview(
   if (kind === "text") return "lines";
   if (kind === "csv") return "csv-rows";
   if (kind === "html") return "html-region";
-  if (kind === "video") return "video-timestamp";
+  // An audio file is commented on at a time like a video, with the same anchor (as Raft names it).
+  if (kind === "video" || kind === "audio") return "video-timestamp";
   return null;
 }
 

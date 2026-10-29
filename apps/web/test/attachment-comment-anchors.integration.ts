@@ -27,6 +27,7 @@ test("each previewable kind stores its own anchor, read back on the comment", as
     const csv = await sibling("data.csv", "text/csv");
     const html = await sibling("page.html", "text/html");
     const video = await sibling("demo.mp4", "video/mp4");
+    const audio = await sibling("call.mp3", "audio/mpeg");
     const cases: [string, AttachmentCommentAnchor][] = [
       [f.attachment.id, { type: "lines", data: { start: 3, end: 5, quote: "three to five" } }],
       [markdown.id, { type: "md-section", data: { headingId: "setup", headingTitle: "Setup" } }],
@@ -48,6 +49,7 @@ test("each previewable kind stores its own anchor, read back on the comment", as
         },
       ],
       [video.id, { type: "video-timestamp", data: { time: 83.417 } }],
+      [audio.id, { type: "video-timestamp", data: { time: 12.5 } }],
     ];
     for (const [attachmentId, anchor] of cases) {
       const posted = await comments.post(f.actor, { attachmentId, body: "Here", anchor });
@@ -125,7 +127,7 @@ test("an anchor of another file kind is refused and nothing is written", async (
         },
       }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    // Nor a time: only a video takes one.
+    // Nor a time: only a video or an audio file takes one.
     await expect(
       comments.post(f.actor, {
         attachmentId: f.attachment.id,

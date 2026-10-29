@@ -82,7 +82,9 @@ test("each preview offers its own anchor type; the others are whole-file only", 
   expect(anchorTypeForPreview("csv")).toBe("csv-rows");
   expect(anchorTypeForPreview("html")).toBe("html-region");
   expect(anchorTypeForPreview("video")).toBe("video-timestamp");
-  for (const kind of ["pdf", "audio", null] as const) expect(anchorTypeForPreview(kind)).toBeNull();
+  // An audio file is commented on at a time too, with the video's anchor (task #281).
+  expect(anchorTypeForPreview("audio")).toBe("video-timestamp");
+  for (const kind of ["pdf", null] as const) expect(anchorTypeForPreview(kind)).toBeNull();
 });
 
 test("an anchor's label is its heading, or its first and last line or row", () => {

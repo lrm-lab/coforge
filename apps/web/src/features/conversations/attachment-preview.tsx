@@ -9,7 +9,7 @@ import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { LinesPreview, MarkdownPreview } from "./anchored-previews";
 import { CsvPreview } from "./csv-preview";
 import { HtmlRegionPreview } from "./html-region-preview";
-import { VideoPreview } from "./video-preview";
+import { AudioPreview, VideoPreview } from "./media-preview";
 import type { VideoPlace, VideoStart } from "./video-handoff";
 
 function PreviewStatus({
@@ -210,9 +210,14 @@ function MediaPreview({
 
   if (kind === "audio")
     return (
-      <div className="p-4 sm:p-6">
-        <audio src={src} controls className="w-full" aria-label={fileName} onError={onError} />
-      </div>
+      <AudioPreview
+        fileName={fileName}
+        src={src}
+        onError={onError}
+        anchoring={comments.anchoring}
+        commentsOpen={comments.commentsOpen}
+        pendingAnchor={comments.pendingAnchor}
+      />
     );
   return <VideoPreview fileName={fileName} src={src} onError={onError} {...comments} />;
 }
