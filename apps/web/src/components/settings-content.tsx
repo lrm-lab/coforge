@@ -311,7 +311,6 @@ function Preferences({
   messageFullWidth,
   onMessageFullWidthChange,
 }: SettingsContentProps) {
-  const savedOnDevice = m.preferences_saved_on_device();
   const [messageFontSize, setMessageFontSize] = useMessageFontSize();
   const [showAgentModel, setShowAgentModel] = useShowAgentModel();
   const [liveAgentActivity, setLiveAgentActivity] = useLiveAgentActivity();
@@ -323,12 +322,12 @@ function Preferences({
 
   return (
     <SettingsPage>
+      <p className="text-sm text-tertiary">{m.preferences_saved_on_device()}</p>
       <SettingsGroup icon={TypeIcon} label={m.preferences_appearance()}>
         <SettingsCard>
           <SettingsField
-            label={m.preferences_appearance()}
+            label={m.preferences_light_dark()}
             description={m.preferences_appearance_description()}
-            note={savedOnDevice}
           >
             <ButtonGroup
               aria-label={m.preferences_appearance()}
@@ -356,7 +355,6 @@ function Preferences({
           <SettingsField
             label={m.preferences_message_font_size()}
             description={m.preferences_message_font_size_description()}
-            note={savedOnDevice}
           >
             <ButtonGroup
               aria-label={m.preferences_message_font_size()}
@@ -387,7 +385,6 @@ function Preferences({
             inline
             label={m.preferences_show_agent_model()}
             description={m.preferences_show_agent_model_description()}
-            note={savedOnDevice}
           >
             <Toggle
               size="md"
@@ -396,13 +393,10 @@ function Preferences({
               onChange={setShowAgentModel}
             />
           </SettingsField>
-        </SettingsCard>
-        <SettingsCard>
           <SettingsField
             inline
             label={m.preferences_live_agent_activity()}
             description={m.preferences_live_agent_activity_description()}
-            note={savedOnDevice}
           >
             <Toggle
               size="md"
@@ -411,13 +405,10 @@ function Preferences({
               onChange={setLiveAgentActivity}
             />
           </SettingsField>
-        </SettingsCard>
-        <SettingsCard>
           <SettingsField
             inline
             label={m.preferences_hide_empty_sidebar_sections()}
             description={m.preferences_hide_empty_sidebar_sections_description()}
-            note={savedOnDevice}
           >
             <Toggle
               size="md"
@@ -435,7 +426,6 @@ function Preferences({
             inline
             label={m.preferences_message_full_width()}
             description={m.preferences_message_full_width_description()}
-            note={savedOnDevice}
           >
             <Toggle
               size="md"

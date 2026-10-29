@@ -42,14 +42,11 @@ export function SettingsCard({ children }: { children: React.ReactNode }) {
 export function SettingsField({
   label,
   description,
-  note,
   inline = false,
   children,
 }: {
   label: string;
   description: string;
-  /** Where the value is kept, e.g. "Saved on this device." */
-  note?: string;
   /** Put the control at the end of the row (switches) instead of under the text. */
   inline?: boolean;
   children: React.ReactNode;
@@ -60,15 +57,11 @@ export function SettingsField({
       <p className="mt-1 text-sm text-tertiary">{description}</p>
     </div>
   );
-  const noteText = note && <p className="text-xs font-medium text-tertiary">{note}</p>;
 
   if (inline)
     return (
       <div className="flex items-start justify-between gap-6">
-        <div className="flex min-w-0 flex-col gap-3">
-          {text}
-          {noteText}
-        </div>
+        {text}
         <div className="shrink-0">{children}</div>
       </div>
     );
@@ -77,7 +70,6 @@ export function SettingsField({
     <div className="flex min-w-0 flex-col gap-3">
       {text}
       <div className="min-w-0 max-w-xl">{children}</div>
-      {noteText}
     </div>
   );
 }
