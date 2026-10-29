@@ -12,7 +12,7 @@ import {
  * table is empty, only from an address the identity provider verified, and the review page's
  * add/remove keeps at least one. Skipped unless `DATABASE_URL` points at local PostgreSQL.
  */
-const connectionString = Bun.env.PLATFORM_OPERATOR_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
+const connectionString = Bun.env.DATABASE_URL;
 const localDatabase =
   connectionString && ["127.0.0.1", "localhost"].includes(new URL(connectionString).hostname)
     ? connectionString
