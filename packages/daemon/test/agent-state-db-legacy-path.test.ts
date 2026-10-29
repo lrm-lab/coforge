@@ -57,10 +57,7 @@ test("imports a legacy file when only the CoForge and Agent directories are owne
     legacyRoot,
     `coforge-cli-consumed-seq-${encodeURIComponent(String(process.geteuid?.() ?? "")).replaceAll(".", "%2E")}`,
   );
-  const legacyDirectory = join(
-    cliDirectory,
-    agentId,
-  );
+  const legacyDirectory = join(cliDirectory, agentId);
   directories.push(legacyDirectory);
   await mkdir(legacyDirectory, { recursive: true });
   const legacyPath = join(legacyDirectory, "consumed-seqs.json");
