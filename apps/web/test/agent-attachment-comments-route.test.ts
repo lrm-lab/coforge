@@ -3,6 +3,8 @@ import type { AgentAttachmentCommentsResponse } from "@lrm/coforge-sdk/agent";
 import { AppError } from "#src/lib/app-error";
 import { handleAgentAttachmentCommentsGet } from "#src/routes/api/agent/v1/attachments/$attachmentId.comments";
 import { attachmentMessageRefusal } from "#src/server/attachments/agent-attachment-messages.server";
+import { isAgentAttachmentReadTarget } from "#src/server/attachments/agent-attachment-messages.server";
+import { agentComment } from "#src/server/attachments/agent-attachment-comments.server";
 
 const ID = "9f0c5a52-1111-4222-8333-444455556666";
 const PAGE: AgentAttachmentCommentsResponse = {
@@ -78,4 +80,27 @@ test("a reply target is refused with the top-level comment it should use", async
     code: "INVALID_INPUT",
     retryable: false,
   });
+});
+
+test("Agent comment output does not expose the human reply target", () => {
+  const output = agentComment({
+    id: "comment",
+    sequence: 1,
+    senderKind: "user",
+    senderName: "Frank",
+    senderHandle: null,
+    body: "hello",
+    mentions: [],
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    reactions: [],
+    anchor: null,
+    resolved: false,
+    replyTarget: "attachment:file:comment",
+    replyCount: 0,
+  } as never);
+  expect(output).not.toHaveProperty("replyTarget");
+});
+
+test("Agent read targets accept a comment id", () => {
+  expect(isAgentAttachmentReadTarget(`attachment:${ID}:abcdef12`)).toBe(true);
 });

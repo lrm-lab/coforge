@@ -10,7 +10,7 @@ import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attach
 import { AttachmentComments, type AttachmentCommentView } from "./attachment-comments.server";
 
 /** One comment as an Agent reads it: mentions read back as text, reactions as counts. */
-function agentComment(comment: AttachmentCommentView): AgentAttachmentComment {
+export function agentComment(comment: AttachmentCommentView): AgentAttachmentComment {
   return {
     id: comment.id,
     sequence: comment.sequence,

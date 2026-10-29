@@ -17,6 +17,9 @@ const TARGET = new RegExp(
   `^attachment:(${UUID_LIKE_SOURCE})(?::(${UUID_LIKE_SOURCE}|${MESSAGE_ANCHOR_SOURCE}))?$`,
   "i",
 );
+export function isAgentAttachmentReadTarget(target: string): boolean {
+  return TARGET.test(target);
+}
 const emptyPage = () => ({
   messages: [],
   hasOlder: false,
@@ -39,7 +42,7 @@ export function createAgentAttachmentMessages(
       ? { workspaceId: principal.workspaceId, userId: delegate.userId }
       : principal;
     const access = await comments.readAccess(actor, attachmentId);
-    const rootId = parsed[2] ? (await anchor(attachmentId, parsed[2], true)).id : null;
+    const rootId = parsed[2] ? (await anchor(attachmentId, parsed[2])).id : null;
     return {
       actor,
       access,
@@ -48,12 +51,11 @@ export function createAgentAttachmentMessages(
       canonicalTarget: `attachment:${attachmentId}${rootId ? `:${rootId}` : ""}`,
     };
   }
-  async function anchor(attachmentId: string, value: string, rootOnly = false) {
+  async function anchor(attachmentId: string, value: string) {
     const rows = await db.message.findMany({
       where: {
         attachmentComment: { attachmentId },
         id: messageAnchorWhere(value),
-        ...(rootOnly ? { threadRootId: null } : {}),
       },
       take: 2,
       select: { id: true, sequence: true, threadRootId: true },
@@ -115,14 +117,11 @@ export function createAgentAttachmentMessages(
         async () => {
           if (input.attachmentIds?.length || input.mentions?.length)
             throw new AppError("INVALID_INPUT", { errorId: "attachment-message-text-only" });
-          const { actor, attachmentId, rootId, canonicalTarget } = await resolve(
-            input,
-            input.target,
-          );
-          // Attachment comments are a flat list the Web shows as one panel: a reply target has no
-          // place there, so no write may create one.
-          if (rootId)
+          const parsedTarget = TARGET.exec(input.target);
+          if (!parsedTarget) throw new AppError("INVALID_INPUT");
+          if (parsedTarget[2])
             throw new AppError("INVALID_INPUT", { errorId: "attachment-comments-no-replies" });
+          const { actor, attachmentId, canonicalTarget } = await resolve(input, input.target);
           // post re-authorizes in its source/attachment/discussion transaction and validates root ownership.
           const posted = await comments.post(actor, {
             attachmentId,
@@ -135,7 +134,7 @@ export function createAgentAttachmentMessages(
             sequence: posted.sequence,
             attachments: [],
             target: canonicalTarget,
-            threadRootId: rootId,
+            threadRootId: null,
             workspaceId: input.workspaceId,
             agentId: input.agentId,
           };
