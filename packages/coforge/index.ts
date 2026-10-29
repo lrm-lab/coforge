@@ -1,6 +1,7 @@
 import { CLI_USAGE } from "./src/usage";
 import { commandHelp, invalidArgument } from "./src/command-help";
 import { parseChannelManagementArgs, type ChannelManagementInvocation } from "./src/channel-args";
+import { formatReminderResponse as formatAgentReminderResponse } from "./src/reminder-format";
 import { fstatSync } from "node:fs";
 import { weeklyReportWorkflowSchema } from "@lrm/coforge-sdk/internal";
 import {
@@ -1702,26 +1703,7 @@ function formatReminderResponse(
     const receipt = result as LocalReminderReceiptResponse;
     return `Accepted reminder ${operation} request: id=${receipt.reminderId} revision=${receipt.revision}.`;
   }
-  const cloud = result as AgentReminderOperationResponse;
-  if (operation === "list") {
-    if (!cloud.reminders.length) return "No reminders found.";
-    return cloud.reminders
-      .map(
-        (item) =>
-          `id=${item.reminderId} revision=${item.version} status=${item.status} title=${JSON.stringify(item.title)} next=${item.fireAt} fired=${item.firedAt ?? "-"} time=${item.createdAt} repeat=${item.repeat ?? "none"} tz=${item.timezone ?? "-"} anchor=${item.messageId} target=${item.target}`,
-      )
-      .join("\n");
-  }
-  if (operation === "log") {
-    if (!cloud.events.length) return "No reminder events found.";
-    return cloud.events
-      .map(
-        (event) =>
-          `event=${event.eventId} type=${event.type} time=${event.time} next=${event.nextFireAt ?? "-"}`,
-      )
-      .join("\n");
-  }
-  return `Accepted reminder ${operation} request.`;
+  return formatAgentReminderResponse(operation, result as AgentReminderOperationResponse);
 }
 
 function parseWeeklyReportCollectArgs(args: readonly string[]): WeeklyReportCollectInvocation {

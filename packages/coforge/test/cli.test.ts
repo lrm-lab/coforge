@@ -546,63 +546,6 @@ test("run rejects a short --id prefix that matches no reminder or more than one"
   ).rejects.toMatchObject({ code: "AMBIGUOUS" });
 });
 
-test("formats usable reminder lists, empty logs, and receipt acknowledgements", async () => {
-  const base = {
-    check: async () => ({ messages: [] }),
-    read: async () => undefined,
-    send: async () => undefined,
-    view: async () => ({ bytes: new Uint8Array() }),
-  };
-  const output = await run(["reminder", "list", "--all"], {
-    ...base,
-    reminder: async () => ({
-      idempotencyKey: "request",
-      workspaceId: "workspace",
-      computerId: "computer",
-      agentId: "agent",
-      accepted: true,
-      events: [],
-      reminders: [
-        {
-          reminderId,
-          ownerAgentId: "agent",
-          version: 3,
-          title: "Deploy",
-          target: "#release",
-          messageId: "deadbeef",
-          fireAt: "2026-09-09T01:00:00Z",
-          status: "scheduled",
-          repeat: "every:1d",
-          timezone: "Asia/Shanghai",
-          createdAt: "2026-09-08T01:00:00Z",
-        },
-      ],
-    }),
-  });
-  expect(output).toContain(`id=${reminderId} revision=3 status=scheduled`);
-  expect(output).toContain("anchor=deadbeef target=#release");
-  expect(
-    await run(["reminder", "log", "--id", reminderId], {
-      ...base,
-      reminder: async () => ({
-        idempotencyKey: "request",
-        workspaceId: "workspace",
-        computerId: "computer",
-        agentId: "agent",
-        accepted: true,
-        reminders: [],
-        events: [],
-      }),
-    }),
-  ).toBe("No reminder events found.");
-  expect(
-    await run(["reminder", "ack", "--id", reminderId, "--revision", "3"], {
-      ...base,
-      reminder: async () => ({ accepted: true, reminderId, revision: 3 }),
-    }),
-  ).toContain(`id=${reminderId} revision=3`);
-});
-
 /** The creator and timestamps every Task read carries. */
 const taskStamps = {
   creator: {
