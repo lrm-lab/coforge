@@ -4,13 +4,7 @@ import {
   type AsyncStorage,
   type PersistedQuery,
 } from "@tanstack/query-persist-client-core";
-import {
-  hashKey,
-  notifyManager,
-  type Query,
-  type QueryClient,
-  type QueryKey,
-} from "@tanstack/react-query";
+import { hashKey, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { isAppError } from "#src/lib/app-error";
 import {
@@ -21,6 +15,7 @@ import {
   storedShapeBuster,
   withReadThrough,
 } from "./persisted-queries";
+import { followRestoredReads } from "./restored-reads";
 
 /** Where kept queries go: a key-value store that outlives the page (IndexedDB in the browser). */
 export type PersistedQueryStore = {
@@ -254,7 +249,7 @@ export function installQueryCachePersistence(
     storage,
     buster: storedShapeBuster,
     maxAge,
-    // The read after a restore is `revalidateRestored`'s, not the persister's own (see there).
+    // The read after a restore is `followRestoredReads`'s, not the persister's own (see there).
     refetchOnRestore: false,
     filters: { predicate: (query) => persistsQuery(query.queryKey) },
     serialize: (persisted) => toStored(persisted),
@@ -283,14 +278,10 @@ export function installQueryCachePersistence(
       };
     },
   });
-  /**
-   * A restored read is only a first paint: the network read always follows, whatever the query's
-   * `staleTime` says (the Chat lists never go stale on their own). It follows because the restored
-   * query is marked invalidated, which is what TanStack's own stale check reads: a page that shows
-   * it (now or later) reads it again, and the Chat loader's "marked stale" reads it too. The
-   * persister's own `refetchOnRestore` is a bare `query.fetch()` that a page unmounting meanwhile
-   * cancels for good; an invalidated query stays invalidated until a read of it succeeds.
-   */
+  // A restored read is only a first paint: the network read always follows (`followRestoredReads`).
+  // The persister's own `refetchOnRestore` is a bare `query.fetch()` that a page unmounting
+  // meanwhile cancels for good.
+  const restoredReads = followRestoredReads(queryClient);
   const persisterFn: typeof persister.persisterFn = async (queryFn, context, query) => {
     const restoring = query.state.data === undefined;
     let networkRead = false;
@@ -304,31 +295,9 @@ export function installQueryCachePersistence(
     );
     // After the query took the restored data as its result, which clears the flag.
     if (restoring && !networkRead && readsAfterRestore(query.queryKey))
-      notifyManager.schedule(() => {
-        awaitingRead.add(query.queryHash);
-        void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
-      });
+      restoredReads.restored(query);
     return data;
   };
-  /**
-   * Restored queries whose own read has not succeeded yet. Loading older or newer pages cancels
-   * that read (TanStack's `fetchPreviousPage` cancels a refetch in flight) and its success clears
-   * the invalidation, which would leave the stored copy as the newest page for good: such a query
-   * is invalidated again, until a read of the query itself succeeds.
-   */
-  const awaitingRead = new Set<string>();
-  queryClient.getQueryCache().subscribe((event) => {
-    if (event.type !== "updated" || event.action.type !== "success" || event.action.manual) return;
-    const { queryHash } = event.query;
-    if (!awaitingRead.has(queryHash)) return;
-    if (!event.query.state.fetchMeta?.fetchMore) {
-      awaitingRead.delete(queryHash);
-      return;
-    }
-    notifyManager.schedule(() => {
-      void queryClient.invalidateQueries({ queryKey: event.query.queryKey, exact: true });
-    });
-  });
   // What the server says is gone (deleted, or this person lost access: both are `NOT_FOUND`) does
   // not stay in storage, where nothing would ever read it again but a restore.
   queryClient.getQueryCache().subscribe((event) => {
