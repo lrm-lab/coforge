@@ -173,7 +173,7 @@ test.skipIf(!connectionString)(
         senderMemberId: ownerRow.id,
         viewerId: owner!.id,
         muted: false,
-        collapseLongMessages: true,
+        collapseLongMessages: false,
         pinned: true,
         channelCapabilities: {
           post: true,

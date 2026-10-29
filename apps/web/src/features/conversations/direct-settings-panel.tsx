@@ -148,7 +148,7 @@ function DirectPreferences({
           <Toggle
             size="md"
             aria-label={m.direct_settings_collapse_long_messages()}
-            isSelected={collapseLongMessages !== false}
+            isSelected={collapseLongMessages === true}
             isDisabled={pending !== null}
             onChange={(next) =>
               void change("collapse", async () => {

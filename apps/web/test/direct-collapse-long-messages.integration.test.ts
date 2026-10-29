@@ -67,34 +67,34 @@ async function appErrorCode(promise: Promise<unknown>) {
 }
 
 test.skipIf(!db)(
-  "a DM folds long messages by default; each participant turns it off for themself only",
+  "a DM shows long messages in full by default; each participant turns folding on for themself only",
   async () => {
     const conversations = new DirectConversations(db!);
     const { conversationId } = await conversations.open(workspaceId, ada.id, { userId: grace.id });
     expect(
       (await conversations.page(workspaceId, ada.id, conversationId)).collapseLongMessages,
-    ).toBe(true);
+    ).toBe(false);
 
     expect(
-      await conversations.setCollapseLongMessages(workspaceId, ada.id, conversationId, false),
-    ).toEqual({ collapseLongMessages: false });
+      await conversations.setCollapseLongMessages(workspaceId, ada.id, conversationId, true),
+    ).toEqual({ collapseLongMessages: true });
     expect(
       (await conversations.page(workspaceId, ada.id, conversationId)).collapseLongMessages,
-    ).toBe(false);
+    ).toBe(true);
     // The other participant's view of the same DM, and ada's other DMs, are untouched.
     expect(
       (await conversations.page(workspaceId, grace.id, conversationId)).collapseLongMessages,
-    ).toBe(true);
+    ).toBe(false);
     const withAgent = await conversations.open(workspaceId, ada.id, { agentId: helper.id });
     expect(
       (await conversations.page(workspaceId, ada.id, withAgent.conversationId))
         .collapseLongMessages,
-    ).toBe(true);
+    ).toBe(false);
 
-    await conversations.setCollapseLongMessages(workspaceId, ada.id, conversationId, true);
+    await conversations.setCollapseLongMessages(workspaceId, ada.id, conversationId, false);
     expect(
       (await conversations.page(workspaceId, ada.id, conversationId)).collapseLongMessages,
-    ).toBe(true);
+    ).toBe(false);
   },
 );
 

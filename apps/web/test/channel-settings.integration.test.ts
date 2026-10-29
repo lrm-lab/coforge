@@ -352,22 +352,22 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
-  "long messages collapse by default; each member turns it off for themselves in one channel",
+  "long messages show in full by default; each member turns folding on for themselves in one channel",
   async () => {
     const { db, channels, workspace, owner, creator, bob, team, general } = await setup();
     try {
-      expect((await channels.open(workspace.id, bob.id, team.id)).collapseLongMessages).toBe(true);
-
-      expect(await channels.setCollapseLongMessages(workspace.id, bob.id, team.id, false)).toEqual({
-        collapseLongMessages: false,
-      });
       expect((await channels.open(workspace.id, bob.id, team.id)).collapseLongMessages).toBe(false);
+
+      expect(await channels.setCollapseLongMessages(workspace.id, bob.id, team.id, true)).toEqual({
+        collapseLongMessages: true,
+      });
+      expect((await channels.open(workspace.id, bob.id, team.id)).collapseLongMessages).toBe(true);
       // Only bob's own view of this channel changes.
       expect((await channels.open(workspace.id, creator.id, team.id)).collapseLongMessages).toBe(
-        true,
+        false,
       );
       expect((await channels.open(workspace.id, bob.id, general.id)).collapseLongMessages).toBe(
-        true,
+        false,
       );
 
       // It is a member's own preference: someone who left the channel has none to change.

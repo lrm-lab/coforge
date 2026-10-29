@@ -615,7 +615,7 @@ function PreferencesSection({
           <Toggle
             size="md"
             aria-label={m.channel_settings_collapse_long_messages()}
-            isSelected={conversation.collapseLongMessages !== false}
+            isSelected={conversation.collapseLongMessages === true}
             isDisabled={pending !== null}
             onChange={(collapseLongMessages) =>
               void change("collapse", () =>

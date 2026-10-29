@@ -282,9 +282,9 @@ export class DirectConversations {
         select: { collapseLongMessages: true },
       }),
     ]);
-    // Optional in the type: a page the browser stored before DMs carried it still reads, as on.
+    // Optional in the type: a page the browser stored before DMs carried it reads as off.
     const collapse: { collapseLongMessages?: boolean } = {
-      collapseLongMessages: preference?.collapseLongMessages ?? true,
+      collapseLongMessages: preference?.collapseLongMessages ?? false,
     };
     return { ...page, ...collapse, ...(welcome ? { workspaceAssistantWelcome: true } : {}) };
   }

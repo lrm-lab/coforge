@@ -79,8 +79,8 @@ model ConversationMember {
   chatSectionSortOrder     Int               @default(0)
   chatSection              ChatSection?      @relation(fields: [chatSectionId], references: [id], onDelete: SetNull)
   /// This member's own display preference for this conversation: long messages fold behind
-  /// "Show more". On unless they turn it off.
-  collapseLongMessages     Boolean           @default(true)
+  /// "Show more". Off unless they turn it on, as on Raft.
+  collapseLongMessages     Boolean           @default(false)
   /// Soft leave marker. Member rows can never be deleted once they own a Message/Task
   /// (onDelete: Restrict), so "left" is represented here instead of by row absence.
   /// Re-joining clears this and keeps the row, so read boundaries and mute preferences survive.

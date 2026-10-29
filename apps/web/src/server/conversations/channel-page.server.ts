@@ -131,7 +131,7 @@ export async function openChannel(
     senderMemberId: member?.id ?? "",
     viewerId: member ? userId : undefined,
     muted: member?.channelMuted ?? false,
-    collapseLongMessages: member?.collapseLongMessages ?? true,
+    collapseLongMessages: member?.collapseLongMessages ?? false,
     pinned: Boolean(member?.pins.length),
     channelCapabilities: authority.capabilities,
     // Only a Workspace owner or admin hides #general (`setGeneralHidden`), whatever their role in it.

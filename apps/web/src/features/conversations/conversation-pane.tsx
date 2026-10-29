@@ -290,7 +290,7 @@ export function ConversationPane({
    * row: a row is skipped and laid out again as it leaves and re-enters the viewport, and an
    * expanded message must not re-collapse behind the reader. */
   const { expandedMessages, toggleExpandedMessage } = useMessageExpansion();
-  const collapsible = conversation.collapseLongMessages !== false;
+  const collapsible = conversation.collapseLongMessages === true;
   // Runs of consecutive system messages fold into one summary line (system-message-groups.ts). A
   // run never crosses a day divider or the unread divider, so both stay drawn, and the message the
   // pane opens on (the unread boundary) is always a group's first message or a row of its own.
