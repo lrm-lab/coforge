@@ -137,7 +137,9 @@ test.skipIf(!db)("only a DM's own participant changes its setting", async () => 
       conversations.setCollapseLongMessages(workspaceId, grace.id, withAgent.conversationId, false),
     ),
   ).toBe("NOT_FOUND");
+  // Nobody else's refused write touched Ada's own preference: still the default, no folding
+  // (task #280: long messages show in full unless a member turns folding on).
   expect((await conversations.page(workspaceId, ada.id, conversationId)).collapseLongMessages).toBe(
-    true,
+    false,
   );
 });

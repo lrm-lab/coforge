@@ -407,23 +407,30 @@ test.skipIf(!connectionString)(
   async () => {
     const f = await fixture();
     try {
+      // The open page's signal goes to the channel (`publishJson`); the sidebar row's goes to
+      // each recipient's own channel (`broadcast`), as of task #285.
       const events: unknown[] = [];
+      const broadcasts: unknown[] = [];
       const channels = new PublicChannels(f.db, undefined, {
         publish: async () => {},
         async publishJson(_channel, event) {
           events.push(event);
         },
-        broadcast: async () => {},
+        async broadcast(_channels, event) {
+          broadcasts.push(event);
+        },
       });
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
-      expect(events).toHaveLength(2);
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: "message.available.v1", conversationId: f.team.id }),
-        ]),
-      );
+      expect(events).toEqual([
+        expect.objectContaining({ type: "message.available.v1", conversationId: f.team.id }),
+      ]);
+      expect(broadcasts).toEqual([
+        expect.objectContaining({ type: "conversation.activity.v1", conversationId: f.team.id }),
+      ]);
+      // Setting the same coordinator again writes and announces nothing.
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
-      expect(events).toHaveLength(2);
+      expect(events).toHaveLength(1);
+      expect(broadcasts).toHaveLength(1);
     } finally {
       await f.cleanup();
     }

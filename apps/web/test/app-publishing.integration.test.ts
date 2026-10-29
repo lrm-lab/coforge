@@ -382,14 +382,16 @@ test.skipIf(!db)("an operator reads a pending app's logo; an outsider never does
 test.skipIf(!db)("granting a platform operator is idempotent and needs one match", async () => {
   const suffix = crypto.randomUUID().slice(0, 8);
   const email = `Operator-${suffix}@example.test`;
+  // Only a verified address may be granted (task #277), so the fixture verifies them.
   const user = await db!.user.create({
-    data: { displayName: "op", username: `mkt-grant-${suffix}`, email },
+    data: { displayName: "op", username: `mkt-grant-${suffix}`, email, emailVerified: true },
   });
   const twin = await db!.user.create({
     data: {
       displayName: "twin",
       username: `mkt-twin-${suffix}`,
       email: `twin-${suffix}@example.test`,
+      emailVerified: true,
     },
   });
   const twin2 = await db!.user.create({
@@ -397,6 +399,7 @@ test.skipIf(!db)("granting a platform operator is idempotent and needs one match
       displayName: "twin2",
       username: `mkt-twin2-${suffix}`,
       email: `TWIN-${suffix}@example.test`,
+      emailVerified: true,
     },
   });
   try {
