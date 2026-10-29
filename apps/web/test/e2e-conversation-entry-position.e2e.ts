@@ -235,7 +235,14 @@ Element.prototype.scrollTo = function (...args) {
         }
         if (reading) {
           await browser("wait", "--fn", `${position}?.distance <= 1`);
-          await browser("scroll", "up", "24", "--selector", '[aria-label="Message history" i]');
+          // A reader scrolls with input, and the pane tells reading from its own scrolls by that
+          // input (`ConversationBottomPin.read`). `agent-browser scroll` moves the position with no
+          // input event, so when its scroll event coalesces with the Task rows' growth the pane
+          // takes it for its own and re-pins to the bottom (task #198). A wheel, then its scroll:
+          await browser(
+            "eval",
+            `(() => { const h=${history}; h.dispatchEvent(new WheelEvent("wheel", { deltaY: -24, bubbles: true })); h.scrollBy(0, -24); })()`,
+          );
           await browser("wait", "--fn", `${position}?.distance >= 20`);
         }
         const anchor = reading
@@ -246,7 +253,7 @@ Element.prototype.scrollTo = function (...args) {
         await browser(
           "wait",
           "--fn",
-          `document.body.textContent.toLowerCase().includes('agents keep working after you leave')`,
+          `document.body.textContent.toLowerCase().includes('get notified when your agents finish or need you')`,
         );
         // The opened thread root sits at the end: the banner shrinking the pane must not leave the
         // preview's last row cut off, even before the Task rows fill in. Read two frames on, once:
