@@ -313,7 +313,7 @@ function TaskGroup({
       className={
         board
           ? cn(
-              "flex min-w-0 flex-col rounded-xl bg-secondary transition-shadow md:max-w-80 md:min-w-60 md:flex-1",
+              "flex min-w-0 flex-col rounded-xl bg-secondary transition-shadow md:max-w-80 md:min-w-52 md:flex-1",
               hidable && HIDDEN_COLUMN_CLASS[status],
               !expanded && "md:self-start",
               drop.isOver && "ring-2 ring-brand ring-inset",

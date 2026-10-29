@@ -11,7 +11,7 @@ import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { CreateTaskDialog } from "./create-task-dialog";
-import { isFinishedStatus, type FinishedStatus, type FinishedWindow } from "./finished-tasks";
+import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
 import { TaskDetailMenu } from "./task-detail-dialog";
 import { taskMatches, type FilterableTask } from "./task-filters";
@@ -103,17 +103,10 @@ export function TaskBoard<T extends BoardTask>({
     const group = (column: FinishedColumn<T>) => ({
       count: column.count,
       onExpandedChange: column.onExpandedChange,
-      footer: (
-        <FinishedFooter
-          column={column}
-          list={layout === "list"}
-          completedWindow={completedWindow}
-          onWindowChange={onWindowChange}
-        />
-      ),
+      footer: <FinishedFooter column={column} list={layout === "list"} />,
     });
     return { done: group(done), closed: group(closed) };
-  }, [done, closed, layout, completedWindow, onWindowChange]);
+  }, [done, closed, layout]);
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
   // A Workspace owner or admin sets any status; the board must offer exactly what the server takes.
   const canSetAnyStatus = useCanSetAnyTaskStatus();
@@ -217,19 +210,14 @@ export function TaskBoard<T extends BoardTask>({
 }
 
 /**
- * Under a finished group's cards: the next page, or why there is nothing to show and how to see
- * more (a wider window).
+ * Under a finished group's cards: the next page, placeholders while it loads, or why it did not.
  */
 function FinishedFooter<T extends BoardTask>({
   column,
   list,
-  completedWindow,
-  onWindowChange,
 }: {
   column: FinishedColumn<T>;
   list: boolean;
-  completedWindow: FinishedWindow;
-  onWindowChange: (completedWindow: FinishedWindow) => void;
 }) {
   if (column.failed)
     return (
@@ -240,6 +228,7 @@ function FinishedFooter<T extends BoardTask>({
         </Button>
       </div>
     );
+  // An empty group shows nothing under its count; Display picks how far back Done and Closed reach.
   if (column.rows.length === 0)
     return column.loading ? (
       <div className={cn("flex flex-col", list ? "divide-y divide-secondary" : "gap-2")}>
@@ -249,27 +238,7 @@ function FinishedFooter<T extends BoardTask>({
         <TaskCardSkeleton list={list} />
         <TaskCardSkeleton list={list} />
       </div>
-    ) : (
-      <div className="flex flex-col items-start gap-2 px-2 py-3 text-sm text-tertiary">
-        {completedWindow === "all"
-          ? m.tasks_group_empty()
-          : completedWindow === "week"
-            ? m.tasks_finished_empty_week()
-            : m.tasks_finished_empty_month()}
-        {completedWindow !== "all" && (
-          <div className="flex flex-wrap gap-2">
-            {completedWindow === "week" && (
-              <Button size="xs" color="secondary" onPress={() => onWindowChange("month")}>
-                {m.tasks_finished_show_month()}
-              </Button>
-            )}
-            <Button size="xs" color="secondary" onPress={() => onWindowChange("all")}>
-              {m.tasks_finished_show_all()}
-            </Button>
-          </div>
-        )}
-      </div>
-    );
+    ) : null;
   if (!column.hasMore) return null;
   return (
     <div className="px-2 py-2">
