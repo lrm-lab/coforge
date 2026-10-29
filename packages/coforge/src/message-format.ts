@@ -79,8 +79,28 @@ export function formatAgentDmHint(messages: readonly AgentMessageRecord[]): stri
 }
 
 export function formatMessageLine(message: AgentMessageRecord): string {
+  return messageLine(message, channelSummaryBody(message));
+}
+
+/** The same line with a plain-channel body whole: `resolve` names one message by id, so
+ * summarizing it would answer nothing. `check` keeps the summary that saves the Agent's context. */
+export function formatMessageLineFull(message: AgentMessageRecord): string {
+  return messageLine(message, message.body);
+}
+
+/** What `message resolve` prints: the one message it names, whole, with its Task hint. */
+export function formatMessageResolve(result: unknown): string {
+  const response = result as { messages?: AgentMessageRecord[] };
+  const message = response.messages?.[0];
+  if (!message) throw new Error("message not found or not visible to this Agent");
+  const line = formatMessageLineFull(message);
+  const hint = formatTaskWorkflowHint([message]);
+  return hint ? `${line}\n${hint}` : line;
+}
+
+function messageLine(message: AgentMessageRecord, body: string): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
-  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(channelSummaryBody(message))}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
+  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
 }
 
 export const NON_MEMBER_MENTION_NOTICE =

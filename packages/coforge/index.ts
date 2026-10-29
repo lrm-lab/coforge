@@ -92,6 +92,7 @@ import {
   formatAttachmentUploadSuccess,
   formatHeldSend,
   formatMessageLine,
+  formatMessageResolve,
   formatSendSuccess,
   formatSendCommitted,
   formatTaskWorkflowHint,
@@ -1363,15 +1364,6 @@ function formatVersionInfo(info: VersionInfo): string {
   if (info.daemon) lines.push(`Daemon: ${info.daemon}`);
   if (info.computer) lines.push(`Computer: ${info.computer}`);
   return lines.join("\n");
-}
-
-function formatMessageResolve(result: unknown): string {
-  const response = result as { messages?: AgentMessageRecord[] };
-  const message = response.messages?.[0];
-  if (!message) throw new Error("message not found or not visible to this Agent");
-  const line = formatMessageLine(message);
-  const hint = formatTaskWorkflowHint([message]);
-  return hint ? `${line}\n${hint}` : line;
 }
 
 function formatReaction(messageId: string, emoji: string, remove: boolean): string {

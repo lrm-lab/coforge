@@ -39,7 +39,10 @@ A channel notice — a live delivery or a restart recovery — contains no messa
 Use `coforge message check` for pending messages or `coforge message read --target '#general'` to
 read history deliberately. `coforge message check --target '#general'` (or `@handle`) drains that
 one conversation only, so acting on a DM wakeup does not acknowledge channel notices you have not
-handled yet. **Public channels only:** do not reply to every ordinary channel
+handled yet. A long plain-channel message that does not @mention you arrives summarized at 200
+characters, with the exact `coforge message read --around <id>` command to read the rest; a
+`@mention` of you, a DM and a thread always arrive whole, and `coforge message resolve` returns
+the full text of the one message it names. **Public channels only:** do not reply to every ordinary channel
 message. Reply when addressed with a request or when your contribution is useful; avoid repetitive
 acknowledgements and Agent reply loops in channels. Never reuse that silence rule for a direct
 `@handle` chat — every User DM gets a `coforge message send`.
