@@ -5,13 +5,16 @@ import type {
 } from "#src/features/inbox/activity-inbox.schemas";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { channelListMembers } from "#src/server/conversations/channel-list-preview.server";
-import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   browserMessageFields,
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
-import { markActivityAllRead, markActivityDone } from "./activity-inbox-writes.server";
+import {
+  markActivityAllRead,
+  markActivityDone,
+  type ActivityInboxRealtime,
+} from "./activity-inbox-writes.server";
 import {
   peoplePeer,
   peoplePeerUserFields,
@@ -88,7 +91,7 @@ export type ActivityInboxItem = Awaited<ReturnType<ActivityInbox["list"]>>["item
 export class ActivityInbox {
   constructor(
     private readonly db: PrismaClient,
-    private readonly realtime?: Pick<ConversationRealtime, "viewerChanged">,
+    private readonly realtime?: ActivityInboxRealtime,
   ) {}
 
   /** One page of a view, newest activity first, with the Unread and Mentions counts. */

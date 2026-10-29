@@ -45,6 +45,7 @@ export async function markActivityDone(
       where: { id: item.resolutionId, workspaceId, targetUserId: userId, dismissedAt: null },
       data: { dismissedAt: new Date() },
     });
+    await announceActivityChanged(realtime, workspaceId, userId);
     return;
   }
   const member = await db.conversationMember.findFirst({
@@ -87,6 +88,7 @@ export async function markActivityDone(
     await announceMarked(db, realtime, workspaceId, userId, [
       { conversationId: item.conversationId, channel: member.conversation.channelName !== null },
     ]);
+  await announceActivityChanged(realtime, workspaceId, userId);
 }
 
 /** Tells the person's other pages the badge each moved conversation is left with (Slack's
@@ -152,4 +154,19 @@ export async function markActivityAllRead(
     db.$executeRaw(markThreadsReadSql(workspaceId, directThreadsSql(workspaceId, userId), before)),
   ]);
   await announceMarked(db, realtime, workspaceId, userId, moved);
+  await announceActivityChanged(realtime, workspaceId, userId);
+}
+
+/**
+ * Tells the person's other pages that their Activity inbox changed, so the nav rail's dot reads its
+ * one boolean again. Done and read-all are the only writes that clear it, and neither moves a read
+ * cursor; an ordinary read announces nothing here, because a scroll moves the cursor constantly and
+ * the dot counts items past Done, not past a read.
+ */
+async function announceActivityChanged(
+  realtime: ActivityInboxRealtime | undefined,
+  workspaceId: string,
+  userId: string,
+) {
+  await realtime?.activityChanged?.({ workspaceId, userId });
 }
