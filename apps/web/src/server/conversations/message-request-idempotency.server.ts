@@ -23,6 +23,9 @@ export type PersistedDirectMessage = {
   workspaceId: string;
   agentId?: string;
   target?: string;
+  /** Present when the send joined the channel it posted to, as `#name`. Carried here so a retried
+   * key returns the same answer, not one that lost the fact on the way through storage. */
+  joinedChannel?: string;
 } & Partial<LatestSenderFields>;
 
 export type MessageRequestScope = {

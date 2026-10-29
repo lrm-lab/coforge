@@ -166,7 +166,7 @@ export class SendDirectMessage {
       },
     );
     // A send that joined the channel on the way announces the roster change like `channel join`.
-    if ((message as { joinedChannel?: string }).joinedChannel)
+    if (message.joinedChannel)
       await announceMemberChanged(this.realtime, {
         workspaceId: input.workspaceId,
         conversationIds: [conversation.id],
