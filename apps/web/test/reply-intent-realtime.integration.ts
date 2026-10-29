@@ -385,6 +385,14 @@ test("real routing delivers start/end only to the conversation, with no history 
       );
     for (const client of clients) client.disconnect();
     try {
+      // The server's own log names the refusal a client only reports as `disconnected`.
+      if (containerStarted && stage !== "stolen-denied")
+        console.info(
+          JSON.stringify({
+            capture: "reply-intent-centrifugo-log",
+            log: (await docker("logs", "--tail", "50", name).catch(() => "")).split("\n"),
+          }),
+        );
       if (containerStarted) await docker("rm", "-f", name);
     } finally {
       proxy?.stop(true);
