@@ -13,6 +13,7 @@ import { isAppRegistrationInvocation } from "./app-registration-args";
 import { connectAppRegistrationClient } from "./app-registration-client";
 import { runAppRegistrationCommand } from "./app-registration-commands";
 import { COFORGE_CLI_VERSION } from "./version";
+import { CLI_USAGE } from "./usage";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 export async function runAgentCli(args: readonly string[]): Promise<void> {
@@ -20,6 +21,14 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
   // queries the live daemon for its own and the Computer's version.
   if (args[0] === "--version" || args[0] === "-V") {
     console.log(COFORGE_CLI_VERSION);
+    return;
+  }
+
+  // No command at all is a mistake, not a request: the usage goes to stderr and the process
+  // fails, so a script that forgot its arguments never reads it as a successful run.
+  if (args.length === 0) {
+    console.error(CLI_USAGE);
+    process.exitCode = 1;
     return;
   }
 

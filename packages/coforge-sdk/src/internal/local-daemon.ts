@@ -15,7 +15,7 @@ import {
   LocalRpcResponseSchema,
   AgentMessageResponseSchema,
 } from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
-import { assertValidMessageSender, type MessageSenderKind } from "./message-sender";
+import { assertValidMessageSender } from "./message-sender";
 import {
   decodeMessageAttentionSummary,
   encodeMessageAttentionSummary,
@@ -104,7 +104,11 @@ import type {
   MessageTaskMetadata,
 } from "./agent-message-record";
 
-export type { AgentMessageRecord, LocalAttachment, MessageTaskMetadata } from "./agent-message-record";
+export type {
+  AgentMessageRecord,
+  LocalAttachment,
+  MessageTaskMetadata,
+} from "./agent-message-record";
 
 export function decodeMessageTask(value: {
   number: number;
