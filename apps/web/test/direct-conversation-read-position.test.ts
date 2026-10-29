@@ -5,7 +5,7 @@ import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read
 import { publishConversationReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
-/** What `advanceAgentRead` reads beside the cursor: a direct conversation records a time. */
+/** What `advanceAgentRead` reads beside the cursor. */
 const readAdvanceStores = {
   messageRead: { findFirst: async () => null, create: async () => ({}) },
   conversation: { findUnique: async () => ({ directKey: "user:a|user:b", workspaceId: "w" }) },
@@ -13,7 +13,10 @@ const readAdvanceStores = {
 /** The same for a channel: no direct key, so nothing is recorded. */
 const channelReadStores = {
   ...readAdvanceStores,
-  conversation: { findMany: async () => [], findUnique: async () => ({ directKey: null, workspaceId: "w" }) },
+  conversation: {
+    findMany: async () => [],
+    findUnique: async () => ({ directKey: null, workspaceId: "w" }),
+  },
 };
 
 /** Unread reads and complete latest pages move the Agent's read position monotonically. */
