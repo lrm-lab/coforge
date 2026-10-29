@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "#src/components/base/buttons/button";
 import {
   restoredReadFailures,
+  restoredReadPaused,
   subscribeRestoredReads,
 } from "#src/features/cache-persistence/browser-query-cache";
 import { m } from "#src/paraglide/messages";
@@ -15,7 +16,8 @@ const FAILURES_SHOWN = 2;
 
 /**
  * Says so when a conversation opened from the browser's stored copy could not read its newest
- * messages (task #253): the copy may be days old, and without this it reads as the newest. Its
+ * messages (task #253): `FAILURES_SHOWN` reads failed, or the read was parked while the browser
+ * was offline and has not landed since. The copy may be days old, and without this it reads as the newest. Its
  * retry reads again at once; the reads also go on by themselves (`followRestoredReads`), and the
  * notice goes as soon as one lands. Nothing shows while a read is merely on its way: Raft opens a
  * channel with no such notice either.
@@ -24,12 +26,17 @@ export function ConversationUpdateNotice({ conversationId }: { conversationId: s
   const queryClient = useQueryClient();
   // The conversation is a channel or a DM; only the one opened has a window in the cache.
   const keys = conversationWindowKeys(conversationId);
-  const failures = useSyncExternalStore(
+  const unreachable = useSyncExternalStore(
     useCallback((listener) => subscribeRestoredReads(queryClient, listener), [queryClient]),
-    () => Math.max(...keys.map((key) => restoredReadFailures(queryClient, key))),
-    () => 0,
+    () =>
+      keys.some(
+        (key) =>
+          restoredReadPaused(queryClient, key) ||
+          restoredReadFailures(queryClient, key) >= FAILURES_SHOWN,
+      ),
+    () => false,
   );
-  if (failures < FAILURES_SHOWN) return null;
+  if (!unreachable) return null;
   return (
     <div
       role="status"

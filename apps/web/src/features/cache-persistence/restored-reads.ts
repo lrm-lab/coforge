@@ -19,6 +19,11 @@ export const RESTORED_READ_RETRY = { firstMs: 1_000, maxMs: 30_000 };
  * (`online`) or the page restored from the back-forward cache (`pageshow`, iOS Safari's usual way
  * back) reads again at once.
  *
+ * Offline, TanStack does not fail such a read: it parks it (`fetchStatus: "paused"`) until the
+ * network returns, so no failure is ever counted. A read that was parked is told apart (`paused`)
+ * until it lands: it has not reached the newest messages either, and it resumes by itself once the
+ * network is back, which is no sign yet that it will land.
+ *
  * Loading older or newer pages cancels that read (TanStack's `fetchPreviousPage` cancels a refetch
  * in flight) and its success clears the invalidation, which would leave the stored copy as the
  * newest page for good: such a query is invalidated again, until a read of the query itself
@@ -39,11 +44,17 @@ export function followRestoredReads(
     events?: Pick<Window, "addEventListener">;
   } = {},
 ) {
-  /** Restored queries whose own read has not succeeded yet, with its failures in a row; `restoring`
-   * until that read is asked for (a success before it is the restore's own, not a read). */
+  /** Restored queries whose own read has not succeeded yet, with its failures in a row and whether
+   * it waits for the network; `restoring` until that read is asked for (a success before it is the
+   * restore's own, not a read). */
   const awaiting = new Map<
     string,
-    { failures: number; restoring?: boolean; timer?: ReturnType<typeof setTimeout> }
+    {
+      failures: number;
+      paused?: boolean;
+      restoring?: boolean;
+      timer?: ReturnType<typeof setTimeout>;
+    }
   >();
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
@@ -62,6 +73,10 @@ export function followRestoredReads(
     if (event.type !== "updated") return;
     const entry = awaiting.get(queryHash);
     if (!entry) return;
+    if (!entry.paused && event.query.state.fetchStatus === "paused") {
+      entry.paused = true;
+      notify();
+    }
     const { action } = event;
     if (action.type === "success" && !action.manual) {
       if (entry.restoring) return;
@@ -100,6 +115,7 @@ export function followRestoredReads(
       // Awaited from now, before the page renders the copy: it must not read as the newest.
       const entry = awaiting.get(query.queryHash) ?? { failures: 0 };
       entry.restoring = true;
+      if (query.state.fetchStatus === "paused") entry.paused = true;
       awaiting.set(query.queryHash, entry);
       notifyManager.schedule(() => {
         entry.restoring = false;
@@ -111,7 +127,10 @@ export function followRestoredReads(
     /** How many reads of the restored query `queryHash` failed in a row; 0 once one succeeded, or
      * for a query that was not restored. */
     failures: (queryHash: string) => awaiting.get(queryHash)?.failures ?? 0,
-    /** Called whenever `failures` or `awaiting` may have changed. */
+    /** Whether the read of the restored query `queryHash` was parked offline and has not landed
+     * since. */
+    paused: (queryHash: string) => awaiting.get(queryHash)?.paused ?? false,
+    /** Called whenever `failures`, `paused` or `awaiting` may have changed. */
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => void listeners.delete(listener);

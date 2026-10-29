@@ -61,6 +61,12 @@ export function restoredReadFailures(queryClient: QueryClient, queryKey: readonl
   return installed.get(queryClient)?.restoredReadFailures(queryKey) ?? 0;
 }
 
+/** Whether the read of the restored query `queryKey` was parked offline and has not landed since
+ * (`followRestoredReads`); always false where nothing is kept. */
+export function restoredReadPaused(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  return installed.get(queryClient)?.restoredReadPaused(queryKey) ?? false;
+}
+
 /** Whether the query `queryKey` shows its restored copy still, its own read not yet landed
  * (`followRestoredReads`); always false where nothing is kept. */
 export function awaitingRestoredRead(queryClient: QueryClient, queryKey: readonly unknown[]) {

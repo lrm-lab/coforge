@@ -52,8 +52,10 @@ because the API is experimental.
   and a page opened from its copy hears none of the events that read a conversation again later, so
   a phone whose first reads failed kept a week-old copy as the newest. It backs off (1 to 30
   seconds) while the page is visible, reads at once on `online` and on `pageshow` from the
-  back-forward cache, and after two failures in a row the stream says it could not load the newest
-  messages, with a retry (`ConversationUpdateNotice`).
+  back-forward cache, and after two failures in a row, or once the read was parked offline (TanStack
+  parks it as `paused` rather than failing it, so no failure is counted), the stream says it
+  could not load the newest messages, with a retry (`ConversationUpdateNotice`); the notice goes
+  once the read lands.
 - What the page writes itself (`setQueryData`: realtime messages, sends, read positions, the
   sidebar's TanStack DB writes) is stored too, with the query's newest state, at most once a second
   per query, and started at once when the page is hidden (`flush`; on `pagehide` it is best effort:

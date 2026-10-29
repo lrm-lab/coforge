@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { QueryClient, QueryObserver, onlineManager } from "@tanstack/react-query";
 
 import { followRestoredReads } from "#src/features/cache-persistence/restored-reads";
 
@@ -36,6 +36,8 @@ function setup({ failing = 0, visible = true } = {}) {
     data: () => queryClient.getQueryData(KEY),
     failures: () =>
       restoredReads.failures(queryClient.getQueryCache().find({ queryKey: KEY })!.queryHash),
+    paused: () =>
+      restoredReads.paused(queryClient.getQueryCache().find({ queryKey: KEY })!.queryHash),
     fire: (type: string, event: object = {}) => listeners.get(type)?.(event as Event),
     unsubscribe,
   };
@@ -108,4 +110,42 @@ test("a restored query is awaited from the moment it is restored until its read 
   expect(page.restoredReads.awaiting(hash)).toBe(false);
   // A read that lands at once is heard too, not only one that failed first.
   expect(heard).toBe(1);
+});
+
+test("offline, the read waits for the network and is told apart until it lands", async () => {
+  // TanStack parks a read while offline rather than failing it: no failure is ever counted.
+  onlineManager.setOnline(false);
+  const page = setup({ failing: 1 });
+  // As the app's provider does: the client hears the network come back.
+  page.queryClient.mount();
+  try {
+    let changes = 0;
+    page.restoredReads.subscribe(() => (changes += 1));
+    await tick(5);
+    expect(page.reads()).toBe(0);
+    expect(page.failures()).toBe(0);
+    expect(page.paused()).toBe(true);
+    expect(changes).toBe(1);
+    expect(page.data()).toBe("stored copy");
+
+    // Back online, the first read fails: still not landed, so still told apart.
+    onlineManager.setOnline(true);
+    page.fire("online");
+    await tick(5);
+    expect(page.reads()).toBe(1);
+    expect(page.failures()).toBe(1);
+    expect(page.paused()).toBe(true);
+
+    // The retry lands: the follower lets go, and says so.
+    const before = changes;
+    await tick(15);
+    expect(page.reads()).toBe(2);
+    expect(page.data()).toBe("newest");
+    expect(page.paused()).toBe(false);
+    expect(changes).toBeGreaterThan(before);
+  } finally {
+    page.unsubscribe();
+    page.queryClient.unmount();
+    onlineManager.setOnline(true);
+  }
 });
