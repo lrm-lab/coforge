@@ -345,10 +345,11 @@ describe("SystemCleaner workspace cleanup tip", () => {
     expect((await items()).find((item) => item.itemId === DISK_ITEM)).toMatchObject({
       retention: "transient",
       action: { kind: "run_command", commandId: "manual.workspace_cleanup" },
+      command: "coforge manual get workspace-cleanup",
       title:
         "When it's quiet, remove workspace files you know are unused; check with your owner or creator on anything uncertain",
       summary:
-        "Only raise files added since your last question, and update .coforgemigrateignore as the workspace changes. Guide: coforge manual get workspace-cleanup",
+        "Only raise files added since your last question, and update .coforgemigrateignore as the workspace changes.",
     });
   });
 
@@ -377,7 +378,8 @@ describe("SystemCleaner workspace cleanup tip", () => {
       expect.objectContaining({
         itemId: DISK_ITEM,
         summary:
-          "Only 10.0 GiB of disk space is left. Only raise files added since your last question, and update .coforgemigrateignore as the workspace changes. Guide: coforge manual get workspace-cleanup",
+          "Only 10.0 GiB of disk space is left. Only raise files added since your last question, and update .coforgemigrateignore as the workspace changes.",
+        command: "coforge manual get workspace-cleanup",
       }),
     ]);
     expect(wakes).toEqual([{ agentId: OWNER, itemId: DISK_ITEM }]);

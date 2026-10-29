@@ -121,3 +121,32 @@ describe("AgentAppInbox", () => {
     );
   });
 });
+
+describe("AgentAppInbox commands", () => {
+  test("each built-in class carries the command that acts on its item", async () => {
+    const inbox = await AgentAppInbox.open(root(), "workspace-a", "agent-a");
+    expect((await inbox.upsert(due("2"))).command).toBe(
+      `coforge reminder ack --id ${reminderId} --revision 2`,
+    );
+    expect(
+      (
+        await inbox.upsert({
+          appId: "system.app_registry",
+          notificationClass: "client_secret",
+          sourceRef: { kind: "app_registration", id: "acme-notes", revision: "1" },
+          summary: "secret shown once",
+        })
+      ).command,
+    ).toBe("coforge app rotate-secret --client acme-notes --output <new file>");
+  });
+
+  test("a restored item recomputes its command from the class, not from the file", async () => {
+    const directory = root();
+    const inbox = await AgentAppInbox.open(directory, "workspace-a", "agent-a");
+    await inbox.upsert(due("3"));
+    const reopened = await AgentAppInbox.open(directory, "workspace-a", "agent-a");
+    expect(reopened.list()[0]!.command).toBe(
+      `coforge reminder ack --id ${reminderId} --revision 3`,
+    );
+  });
+});

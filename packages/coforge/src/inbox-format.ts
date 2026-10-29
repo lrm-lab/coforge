@@ -16,7 +16,14 @@ export type InboxPendingRow = {
   firstPendingSequence?: number;
 };
 
-export type InboxAppItem = { title?: string; summary?: string; itemId?: string };
+export type InboxAppItem = {
+  title?: string;
+  summary?: string;
+  itemId?: string;
+  appId?: string;
+  /** The command that acts on the item, when its class has one. */
+  command?: string;
+};
 
 export type InboxCheckResult = {
   view: AgentInboxView;
@@ -141,9 +148,14 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
     sections.push(
       [
         `App items pending: ${result.appItems.length}.`,
-        ...result.appItems.map((app) =>
-          `- ${app.title ?? app.itemId ?? "App item"}: ${app.summary ?? ""}`.trimEnd(),
-        ),
+        ...result.appItems.flatMap((app) => {
+          const id = [app.appId ? `[${app.appId}]` : "", app.itemId ?? ""]
+            .filter(Boolean)
+            .join(" ");
+          const line =
+            `- ${id ? `${id} ` : ""}${app.title ?? "App item"}: ${app.summary ?? ""}`.trimEnd();
+          return app.command ? [line, `  Run: ${app.command}`] : [line];
+        }),
       ].join("\n"),
     );
   if (result.daemonError)

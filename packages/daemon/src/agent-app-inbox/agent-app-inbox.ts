@@ -16,6 +16,8 @@ export type AgentAppItem = Readonly<{
   summary?: string;
   retention: AppInboxRetention;
   action: AppInboxAction;
+  /** The command that acts on this item, when its class has one. */
+  command?: string;
   createdAt: string;
 }>;
 
@@ -107,6 +109,7 @@ export class AgentAppInbox {
       ...(summary === undefined ? {} : { summary }),
       retention: definition.retention,
       action: definition.action,
+      ...(definition.command ? { command: definition.command(sourceRef) } : {}),
       createdAt: previous?.createdAt ?? new Date().toISOString(),
     });
     this.#items.set(itemId, item);
@@ -171,6 +174,7 @@ function restoreItem(raw: unknown): AgentAppItem {
     "summary",
     "retention",
     "action",
+    "command",
     "createdAt",
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key)))
@@ -203,6 +207,8 @@ function restoreItem(raw: unknown): AgentAppItem {
     ...(summary === undefined ? {} : { summary }),
     retention: definition.retention,
     action: definition.action,
+    // Recomputed from the class, never trusted from the file.
+    ...(definition.command ? { command: definition.command(sourceRef) } : {}),
     createdAt: value.createdAt,
   });
 }

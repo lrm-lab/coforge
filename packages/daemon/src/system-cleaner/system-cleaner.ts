@@ -35,7 +35,7 @@ const MEMORY_GUIDANCE =
   "Trim it back to an index: details belong in notes/, and stale entries can go.";
 const CLEANUP_TIP_TITLE =
   "When it's quiet, remove workspace files you know are unused; check with your owner or creator on anything uncertain";
-const CLEANUP_TIP_SUMMARY = `Only raise files added since your last question, and update ${AGENT_MIGRATION_IGNORE_FILE} as the workspace changes. Guide: coforge manual get workspace-cleanup`;
+const CLEANUP_TIP_SUMMARY = `Only raise files added since your last question, and update ${AGENT_MIGRATION_IGNORE_FILE} as the workspace changes.`;
 
 export type CleanerConfig = Readonly<{
   appId: typeof SYSTEM_CLEANER_APP_ID;

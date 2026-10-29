@@ -22,7 +22,7 @@ export async function acceptAppRegistrationNotice(
     notificationClass: APP_REGISTRY_SECRET_CLASS,
     sourceRef: { kind: "app_registration", id: notice.appKey, revision: "1" },
     title: `Registered app ${notice.appName}`.slice(0, 120),
-    summary: `Client secret for ${notice.appKey} (shown once; store it, never post it): ${notice.clientSecret} If lost, run: coforge app rotate-secret --client ${notice.appKey} --output <new file>`,
+    summary: `Client secret for ${notice.appKey} (shown once; store it, never post it): ${notice.clientSecret}`,
   });
   return true;
 }

@@ -95,3 +95,40 @@ test("inbox JSON has the new shape and hides message ordering fields", async () 
   expect(parsed.pendingRows).toEqual([{ target: "@ada", pendingCount: 2, flags: ["dm"] }]);
   expect(output).not.toContain("firstPendingSequence");
 });
+
+test("an App item names its app, item id and the command that acts on it", async () => {
+  const output = await run(["inbox", "check"], {
+    check: async () => ({ messages: [] }),
+    read: async () => undefined,
+    send: async () => ({}),
+    view: async () => undefined,
+    inboxList: async () => ({
+      ok: true,
+      view: "unread",
+      items: [],
+      totals: { conversations: 0, dms: 0, mentions: 0 },
+      hasMore: false,
+      nextBefore: null,
+    }),
+    inboxCheck: async () => ({
+      entries: [
+        {
+          kind: "app",
+          app: {
+            appId: "system.reminder",
+            itemId: "reminder:abc:2",
+            title: "Deploy check",
+            summary: "A reminder is due.",
+            command: "coforge reminder ack --id abc --revision 2",
+          },
+        },
+        // A third-party item carries no command: nothing is invented for it.
+        { kind: "app", app: { appId: "acme.notes", itemId: "note:1", title: "Note" } },
+      ],
+    }),
+  } as never);
+  expect(output).toContain("- [system.reminder] reminder:abc:2 Deploy check: A reminder is due.");
+  expect(output).toContain("  Run: coforge reminder ack --id abc --revision 2");
+  expect(output).toContain("- [acme.notes] note:1 Note:");
+  expect(output.split("Run:").length - 1).toBe(1);
+});

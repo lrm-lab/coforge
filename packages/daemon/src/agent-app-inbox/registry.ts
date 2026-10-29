@@ -15,6 +15,9 @@ export type AppInboxDefinition = Readonly<{
   action: AppInboxAction;
   /** Longest summary this class accepts; defaults to `APP_INBOX_PREVIEW_MAX_CHARS`. */
   summaryMaxChars?: number;
+  /** The command that acts on an item of this class, from its source. `inbox check` prints it as
+   * the item's `Run:` line, so a summary never has to carry a command. */
+  command?: (sourceRef: AppSourceRef) => string;
   /** A `transient` item that is shown once: listing it for the Agent's own read removes it. */
   consumeOnRead?: boolean;
   /** A `transient` item is forgotten this long after it was last minted, read or not. */
@@ -32,6 +35,8 @@ export function reminderDueItemId(reminderId: string, revision: string | number)
 const reminderDue: AppInboxDefinition = {
   retention: "until_explicit_ack",
   action: { kind: "run_command", commandId: "reminder.ack" },
+  command: (sourceRef) =>
+    `coforge reminder ack --id ${sourceRef.id} --revision ${sourceRef.revision}`,
   normalizeSourceRef(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("reminder sourceRef must be {kind,id,revision}");
@@ -67,11 +72,12 @@ export const SYSTEM_CLEANER_CLASSES = {
 function systemCleanerHint(
   { notificationClass, sourceKind }: Readonly<{ notificationClass: string; sourceKind: string }>,
   commandId: string,
+  command: string,
 ): AppInboxDefinition {
   return {
     retention: "transient",
     action: { kind: "run_command", commandId },
-    // The summary carries the command to run, since an App Inbox item has no command field.
+    command: () => command,
     summaryMaxChars: 240,
     normalizeSourceRef(value) {
       if (!value || typeof value !== "object" || Array.isArray(value))
@@ -109,9 +115,9 @@ export const APP_CLIENT_SECRET_TTL_MS = 15 * 60_000;
 
 const appClientSecret: AppInboxDefinition = {
   retention: "transient",
-  // A label for the command that gets another secret, like the cleaner's: nothing dispatches it.
   action: { kind: "run_command", commandId: "app.rotate_secret" },
-  // The summary carries the secret and how to get another, since an item has no other field.
+  command: (sourceRef) => `coforge app rotate-secret --client ${sourceRef.id} --output <new file>`,
+  // The summary carries the secret; the command for another one is the item's `Run:` line.
   summaryMaxChars: 420,
   consumeOnRead: true,
   ttlMs: APP_CLIENT_SECRET_TTL_MS,
@@ -141,10 +147,12 @@ export const AGENT_APP_REGISTRY: Readonly<
     [SYSTEM_CLEANER_CLASSES.memory.notificationClass]: systemCleanerHint(
       SYSTEM_CLEANER_CLASSES.memory,
       "app.config",
+      `coforge app config --app ${SYSTEM_CLEANER_APP_ID}`,
     ),
     [SYSTEM_CLEANER_CLASSES.disk.notificationClass]: systemCleanerHint(
       SYSTEM_CLEANER_CLASSES.disk,
       "manual.workspace_cleanup",
+      "coforge manual get workspace-cleanup",
     ),
   },
 };
