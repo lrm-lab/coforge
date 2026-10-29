@@ -248,6 +248,109 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   "weekly-report": {
     syntax: "coforge weekly-report templates|inbox|members|workflow|context|list|read ...",
   },
+  "inbox check": {
+    syntax: "coforge inbox check [--view unread|mentions] [--before <n>] [--json]",
+    example: "coforge inbox check --view mentions",
+  },
+  "thread list": {
+    syntax: "coforge thread list [--json]",
+  },
+  "thread unfollow": {
+    syntax: "coforge thread unfollow --target '#channel:message-id' [--reason <text>]",
+    example: "coforge thread unfollow --target '#general:12345678'",
+  },
+  "task unclaim": {
+    syntax: "coforge task unclaim --target <target> --number <n> [--expected-revision <n>]",
+  },
+  "task convert": {
+    syntax: "coforge task convert --target <target> --number <n> [--json]",
+  },
+  "task amend": {
+    syntax:
+      "coforge task amend --target <target> --number <n> [--title <title>] [--reviewer-isolation]",
+  },
+  "task history": {
+    syntax: "coforge task history --target <target> --number <n> [--json]",
+  },
+  "task receipt": {
+    syntax: "coforge task receipt --target <target> --number <n> [--json]",
+  },
+  "task delete": {
+    syntax: "coforge task delete --target <target> --number <n> [--json]",
+  },
+  "task show": {
+    syntax: "coforge task show --target <target> --number <n> [--json]",
+  },
+  "reminder log": {
+    syntax: "coforge reminder log --id <id> [--json]",
+  },
+  "reminder ack": {
+    syntax: "coforge reminder ack --id <id> --revision <n> [--json]",
+  },
+  "reminder dismiss": {
+    syntax: "coforge reminder dismiss --id <id> --revision <n> [--json]",
+  },
+  "mention notify": {
+    syntax: "coforge mention notify <resolution-id>... [--json]",
+  },
+  "mention add": {
+    syntax: "coforge mention add <resolution-id>... [--json]",
+  },
+  "mention delivery": {
+    syntax: "coforge mention delivery --message <message-id> [--json]",
+  },
+  "app token": {
+    syntax:
+      "coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
+  },
+  "app invoke": {
+    syntax: "coforge app invoke <app> <action> [--input <json>] [--json]",
+  },
+  "app prepare": {
+    syntax: "coforge app prepare --target <target>",
+  },
+  "app status": {
+    syntax: "coforge app status --app <key> [--json]",
+  },
+  "app rotate-secret": {
+    syntax: "coforge app rotate-secret --app <key> [--json]",
+  },
+  "weekly-report-collect": {
+    syntax:
+      "coforge weekly-report-collect submit-pack|submit-empty|submit-failure --run-id <uuid> --idempotency-key <uuid> [--markdown <path>] [--reason <text>]",
+  },
+  "weekly-report-collect submit-pack": {
+    syntax:
+      "coforge weekly-report-collect submit-pack --run-id <uuid> --idempotency-key <uuid> --markdown <path>",
+  },
+  "weekly-report-collect submit-empty": {
+    syntax: "coforge weekly-report-collect submit-empty --run-id <uuid> --idempotency-key <uuid>",
+  },
+  "weekly-report-collect submit-failure": {
+    syntax:
+      "coforge weekly-report-collect submit-failure --run-id <uuid> --idempotency-key <uuid> --reason <text>",
+  },
+  "weekly-report templates": {
+    syntax: "coforge weekly-report templates [--json]",
+  },
+  "weekly-report inbox": {
+    syntax: "coforge weekly-report inbox [--json]",
+  },
+  "weekly-report members": {
+    syntax: "coforge weekly-report members [--json]",
+  },
+  "weekly-report workflow": {
+    syntax: "coforge weekly-report workflow --input <json-file>",
+  },
+  "weekly-report context": {
+    syntax: "coforge weekly-report context --subject-type report|cycle --subject-id <uuid>",
+  },
+  "weekly-report list": {
+    syntax: "coforge weekly-report list [--cycle-id <uuid>] [--cursor <uuid>] [--limit <n>]",
+  },
+  "weekly-report read": {
+    syntax: "coforge weekly-report read --report-id <uuid> --section <name> [--max-characters <n>]",
+  },
 };
 
 function renderHelp(name: string, entry: HelpEntry): string {

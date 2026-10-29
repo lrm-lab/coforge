@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run } from "../index";
 import type { MessageTransport } from "../index";
+import { CLI_USAGE } from "../src/usage";
+import { commandHelp } from "../src/command-help";
 
 const transport = {} as unknown as MessageTransport;
 
@@ -73,4 +75,16 @@ test("an argument error names the command's own help", () => {
       "Run `coforge message read --help` for the accepted form.",
     );
   }
+});
+
+test("every command the top-level usage lists has its own help entry", async () => {
+  const missing: string[] = [];
+  for (const match of CLI_USAGE.matchAll(/coforge ([a-z-]+ )?([a-z-]+(?:\|[a-z-]+)*)/g)) {
+    const prefix = match[1]?.trim();
+    for (const alternative of match[2]!.split("|")) {
+      const path = prefix ? `${prefix} ${alternative}` : alternative;
+      if (commandHelp(path.split(" ")) === undefined) missing.push(path);
+    }
+  }
+  expect(missing).toEqual([]);
 });
