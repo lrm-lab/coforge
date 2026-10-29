@@ -398,6 +398,16 @@ test.skipIf(!connectionString)(
         boundOperationId: "read-1",
       });
       expect(ov.citationId).toBe("ov-1");
+      await harness.citations.putOpenVikingCitation({
+        workspaceId: harness.workspaceA,
+        citationId: "ov-2",
+        accountId: "acct-a",
+        uri: "viking://fact/2",
+        contentHash: "hash-ov-2",
+        matchedLevel: "L1",
+        excerpt: "Fact two",
+        boundOperationId: "read-1",
+      });
       expect(await harness.citations.getOpenVikingCitation(harness.workspaceB, "ov-1")).toBeNull();
 
       const offer = await harness.citations.putOffer({
@@ -407,10 +417,16 @@ test.skipIf(!connectionString)(
         recipientAgentId: "agent-1",
         recipientRationale: "owns the task",
         messageId: "msg-offer",
-        citations: [{ kind: "openviking", citationId: "ov-1" }],
+        citations: [
+          { kind: "openviking", citationId: "ov-1" },
+          { kind: "openviking", citationId: "ov-2" },
+        ],
       });
       expect(offer.outcome).toBe("saved");
-      expect(offer.offer.citations).toEqual([{ kind: "openviking", citationId: "ov-1" }]);
+      expect(offer.offer.citations).toEqual([
+        { kind: "openviking", citationId: "ov-1" },
+        { kind: "openviking", citationId: "ov-2" },
+      ]);
       expect(await harness.citations.putOffer(offer.offer)).toEqual({
         outcome: "replay",
         offer: offer.offer,

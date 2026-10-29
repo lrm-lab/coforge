@@ -170,17 +170,13 @@ export class PrismaWorkspaceMemoryCitationStore implements WorkspaceMemoryCitati
   private async assertCitationKindIntegrity(input: MemoryOfferRecord): Promise<void> {
     for (const citation of input.citations) {
       if (citation.kind !== "openviking") throw new WorkspaceMemoryCitationKindError();
-      const record = await this.db.openVikingCitationRecord.findUnique({
-        where: {
-          workspaceId_citationId: {
-            workspaceId: input.workspaceId,
-            citationId: citation.citationId,
-          },
-        },
-        select: { citationId: true },
-      });
-      if (!record) throw new WorkspaceMemoryCitationKindError();
     }
+    const citationIds = [...new Set(input.citations.map((citation) => citation.citationId))];
+    const records = await this.db.openVikingCitationRecord.findMany({
+      where: { workspaceId: input.workspaceId, citationId: { in: citationIds } },
+      select: { citationId: true },
+    });
+    if (records.length !== citationIds.length) throw new WorkspaceMemoryCitationKindError();
   }
 }
 
