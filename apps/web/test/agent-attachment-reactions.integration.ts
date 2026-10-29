@@ -4,7 +4,7 @@ import { handleAgentMessageReaction } from "#src/routes/api/agent/v1/messages_.$
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { agentAttachmentMessagesFixture } from "./helpers/agent-attachment-messages-fixture";
 
-test("Agent HTTP adds and removes a comment checkmark visible to the human Web discussion", async () => {
+test("an Agent's comment reaction is refused, and the human Web discussion stays untouched", async () => {
   const f = await agentAttachmentMessagesFixture();
   try {
     const comment = await f.comments.post(f.actor, {
@@ -26,18 +26,19 @@ test("Agent HTTP adds and removes a comment checkmark visible to the human Web d
         f.principal,
         repository,
       );
-    let version = 0;
-    for (const active of [true, true, false, false]) {
+    for (const active of [true, false]) {
       const response = await react(active);
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ messageId: comment.id, emoji: "✅", active });
+      // The Web comment panel shows top-level comments only, so an Agent reaction has nowhere to
+      // appear; it is refused with that reason rather than silently doing nothing.
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: "attachment comments take no reactions; react to a message instead",
+      });
       const human = await f.comments.list(f.actor, { attachmentId: f.attachment.id });
-      expect(human.comments[0]!.resolved).toBe(active);
-      expect(human.comments[0]!.reactionVersion).toBe(++version);
-      expect(human.comments[0]!.reactions ?? []).toMatchObject(
-        active ? [{ emoji: "✅", count: 1 }] : [],
-      );
+      expect(human.comments[0]!.resolved).toBe(false);
+      expect(human.comments[0]!.reactions ?? []).toEqual([]);
     }
+    expect(await f.db.messageReaction.count({ where: { messageId: comment.id } })).toBe(0);
     expect(await f.db.agentMessageDelivery.count({ where: { messageId: comment.id } })).toBe(0);
   } finally {
     await f.close();
@@ -95,7 +96,7 @@ for (const restriction of [
   "workspace",
   "deleted",
 ] as const) {
-  test(`comment reaction refuses ${restriction} without treating a discussion seat as authority`, async () => {
+  test(`comment reaction is refused under ${restriction}, never authorized by a discussion seat`, async () => {
     const f = await agentAttachmentMessagesFixture();
     try {
       const comment = await f.comments.post(f.actor, {
@@ -157,10 +158,17 @@ for (const restriction of [
         principal,
         repository,
       );
-      if (["archived", "read-only"].includes(restriction)) expect(response.status).toBe(403);
-      else if (["owner-only", "left", "hidden"].includes(restriction))
-        expect(response.status).toBe(404);
-      else expect(response.status).toBeGreaterThanOrEqual(400);
+      if (["workspace", "deleted"].includes(restriction)) {
+        // The comment is not even visible to this principal, so it is not named as a comment.
+        expect(response.status).toBeGreaterThanOrEqual(400);
+      } else {
+        // Refused before any authority is read: a comment reaction has no place to show, so no
+        // restriction can make it succeed and no discussion seat can authorize one.
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: "attachment comments take no reactions; react to a message instead",
+        });
+      }
       expect(await f.db.messageReaction.count({ where: { messageId: comment.id } })).toBe(0);
     } finally {
       await f.close();
@@ -168,7 +176,7 @@ for (const restriction of [
   });
 }
 
-test("assistant reactions use the bound human, while short comment anchors remain ordinary-only", async () => {
+test("comment reactions stay refused for a bound assistant, while ordinary ones still work", async () => {
   const { WorkspaceAssistants } = await import("#src/server/agents/workspace-assistants.server");
   const f = await agentAttachmentMessagesFixture();
   try {
@@ -193,26 +201,22 @@ test("assistant reactions use the bound human, while short comment anchors remai
         principal,
         repository,
       );
-    expect((await react(root.id.slice(0, 13))).status).toBe(400);
-    expect((await react(f.message.id.slice(0, 13), f.principal, "👍")).status).toBe(200);
-    expect((await react(root.id, f.principal, "bad emoji")).status).toBe(400);
+    // Short anchors, bad emoji, comments, replies, an uppercased id and an assistant bound to a
+    // person: all refused, because the Web comment panel has nowhere to show a reaction.
     const owner = await new WorkspaceAssistants(f.db).ensure(f.workspace.id, f.owner.id);
     const viewer = await new WorkspaceAssistants(f.db).ensure(f.workspace.id, f.viewer.id);
-    expect((await react(reply.id, { ...f.principal, agentId: owner.agentId })).status).toBe(200);
-    expect((await react(root.id, { ...f.principal, agentId: viewer.agentId })).status).toBe(403);
-    const stored = await f.db.messageReaction.findFirstOrThrow({
-      where: { messageId: reply.id },
-      include: { member: true },
-    });
-    expect(stored.member.userId).toBe(f.owner.id);
-    expect(stored.member.agentId).toBeNull();
-    expect(
-      (await f.comments.list(f.actor, { attachmentId: f.attachment.id, rootId: root.id }))
-        .comments[0]!.resolved,
-    ).toBe(true);
-    const canonical = await react(root.id.toUpperCase());
-    expect(canonical.status).toBe(200);
-    expect(await canonical.json()).toMatchObject({ messageId: root.id });
+    for (const response of [
+      await react(root.id.slice(0, 13)),
+      await react(root.id, f.principal, "bad emoji"),
+      await react(reply.id, { ...f.principal, agentId: owner.agentId }),
+      await react(root.id, { ...f.principal, agentId: viewer.agentId }),
+      await react(root.id.toUpperCase()),
+    ])
+      expect(response.status).toBe(400);
+    expect(await f.db.messageReaction.count({ where: { messageId: root.id } })).toBe(0);
+    expect(await f.db.messageReaction.count({ where: { messageId: reply.id } })).toBe(0);
+    // An ordinary message reaction is what an Agent may still do.
+    expect((await react(f.message.id.slice(0, 13), f.principal, "👍")).status).toBe(200);
   } finally {
     await f.close();
   }

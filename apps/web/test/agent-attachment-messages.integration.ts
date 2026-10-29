@@ -5,7 +5,7 @@ import { handleAgentMessagesGet, handleAgentMessagesPost } from "#src/routes/api
 import { expect, test } from "bun:test";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 
-test("attachment messages read roots, send a reply, and preserve the existing Web discussion", async () => {
+test("attachment messages read roots and a comment's thread, and refuse to reply", async () => {
   const f = await agentAttachmentMessagesFixture();
   try {
     expect((await f.messages.read(f.principal, f.target, {})).messages).toEqual([]);
@@ -20,25 +20,28 @@ test("attachment messages read roots, send a reply, and preserve the existing We
     expect(page.messages.map((m) => [m.id, m.target, m.body])).toEqual([
       [root.id, f.target, "review this"],
     ]);
-    const replyTarget = `${f.target}:${root.id}`;
-    const sent = await f.messages.executeFromAgent({
-      ...f.principal,
-      target: replyTarget,
-      body: "reviewed",
-      idempotencyKey: crypto.randomUUID(),
-    });
-    const replies = await f.comments.list(f.actor, {
+    // The Web discussion replies; the Agent can still read that comment's thread by its target.
+    const webReply = await f.comments.post(f.actor, {
       attachmentId: f.attachment.id,
       rootId: root.id,
+      body: "answered on the Web",
     });
-    expect(replies.comments.map((m) => [m.id, m.body, m.senderKind])).toEqual([
-      [sent.id, "reviewed", "agent"],
-    ]);
+    const replyTarget = `${f.target}:${root.id}`;
     const read = await f.messages.read(f.principal, replyTarget, {});
-    expect(read.messages.map((m) => [m.id, m.target])).toEqual([[sent.id, replyTarget]]);
-    expect((await f.messages.read(f.principal, f.target, {})).messages.map((m) => m.id)).toEqual([
-      root.id,
-    ]);
+    expect(read.messages.map((m) => [m.id, m.target])).toEqual([[webReply.id, replyTarget]]);
+    // Replying is refused: the Web comment panel shows top-level comments only, so a reply an
+    // Agent sent would be invisible there.
+    await expect(
+      f.messages.executeFromAgent({
+        ...f.principal,
+        target: replyTarget,
+        body: "reviewed",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(
+      (await f.comments.list(f.actor, { attachmentId: f.attachment.id })).comments.map((m) => m.id),
+    ).toEqual([root.id]);
   } finally {
     await f.close();
   }
@@ -75,32 +78,23 @@ test("attachment authority survives no source membership loss, but committed sen
   }
 });
 
-test("short anchors stay scoped to this attachment's roots, and reply foreign roots fail", async () => {
+test("short anchors stay scoped to this attachment's roots, and every reply is refused", async () => {
   const f = await agentAttachmentMessagesFixture();
   try {
     const root = await f.comments.post(f.actor, { attachmentId: f.attachment.id, body: "root" });
     const short = root.id.slice(0, 13);
-    const target = `${f.target}:${root.id}`;
-    const sent = await f.messages.executeFromAgent({
-      ...f.principal,
-      target: `${f.target}:${short}`,
-      body: "scoped",
-      idempotencyKey: crypto.randomUUID(),
-    });
-    expect(
-      (await f.messages.read(f.principal, `${f.target}:${short}`, {})).messages.map((m) => [
-        m.id,
-        m.target,
-      ]),
-    ).toEqual([[sent.id, target]]);
-    await expect(
-      f.messages.executeFromAgent({
-        ...f.principal,
-        target: `${f.target}:${f.message.id}`,
-        body: "foreign",
-        idempotencyKey: crypto.randomUUID(),
-      }),
-    ).rejects.toBeDefined();
+    // A short anchor still selects this attachment's root for a read.
+    expect((await f.messages.read(f.principal, `${f.target}:${short}`, {})).messages).toEqual([]);
+    for (const anchor of [short, root.id, f.message.id]) {
+      await expect(
+        f.messages.executeFromAgent({
+          ...f.principal,
+          target: `${f.target}:${anchor}`,
+          body: "scoped",
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    }
     await expect(
       f.messages.read({ ...f.principal, workspaceId: crypto.randomUUID() }, f.target, {}),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });

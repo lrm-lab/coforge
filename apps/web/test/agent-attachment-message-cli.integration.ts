@@ -22,7 +22,7 @@ import { handleAgentMessagesGet, handleAgentMessagesPost } from "#src/routes/api
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { agentAttachmentMessagesFixture } from "./helpers/agent-attachment-messages-fixture";
 
-test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and replies to a file comment", async () => {
+test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads a file comment and refuses to reply", async () => {
   const f = await agentAttachmentMessagesFixture();
   const root = await mkdtemp(join(tmpdir(), "coforge-attachment-cli-"));
   let proxy: ReturnType<typeof startAgentProxy> | undefined;
@@ -132,7 +132,7 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
     });
     const token = proxy.issue(f.principal.agentId, apiKey);
     const cliPath = new URL("../../../packages/coforge/src/cli.ts", import.meta.url).pathname;
-    const cli = async (args: string[], body?: string) => {
+    const runCli = async (args: string[], body?: string) => {
       const child = Bun.spawn([process.execPath, cliPath, ...args], {
         env: {
           ...Object.fromEntries(
@@ -154,54 +154,67 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
       ]);
+      return { exit, stdout, stderr };
+    };
+    const cli = async (args: string[], body?: string) => {
+      const { exit, stdout, stderr } = await runCli(args, body);
       expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
       return stdout;
     };
     const capabilities = await cli(["attachment", "comments", f.attachment.id]);
-    expect(capabilities).toContain(`coforge message react --message-id ${comment.id} --emoji ✅`);
-    const resolution = [];
-    for (const remove of [false, true]) {
-      const output = await cli([
-        "message",
-        "react",
-        "--message-id",
-        comment.id,
-        "--emoji",
-        "✅",
-        ...(remove ? ["--remove"] : []),
-      ]);
-      const humanPage = await f.comments.list(f.actor, { attachmentId: f.attachment.id });
-      expect(humanPage.comments[0]!.resolved).toBe(!remove);
-      resolution.push({ output, resolved: humanPage.comments[0]!.resolved });
-    }
+    // A comment takes no reactions and no replies: the Web panel shows top-level comments only.
+    expect(capabilities).not.toContain("message react");
+    expect(capabilities).toContain(`message read --target '${f.target}'`);
+    expect(capabilities).toContain(`message send --target '${f.target}'`);
+    const reaction = await runCli([
+      "message",
+      "react",
+      "--message-id",
+      comment.id,
+      "--emoji",
+      "✅",
+    ]);
+    expect(reaction.exit).not.toBe(0);
+    expect(`${reaction.stdout}${reaction.stderr}`).toContain(
+      "attachment comments take no reactions",
+    );
+    expect(
+      (await f.comments.list(f.actor, { attachmentId: f.attachment.id })).comments[0]!.resolved,
+    ).toBe(false);
     const before = await cli(["message", "read", "--target", f.target, "--unread"]);
     expect(before).toContain("Please review this file");
+    // The generic message line still names the thread a message sits in; replies to it are
+    // refused above.
     expect(before).toContain(`replyTarget=${f.target}:${comment.id.slice(0, 13)}`);
     expect(before).toContain("Coverage: top-level messages");
     const target = `${f.target}:${comment.id.slice(0, 13)}`;
+    // Reading one comment's thread is still allowed (it is empty: the Web has no replies); only
+    // replying to it is refused.
     const threadedRead = await cli(["message", "read", "--target", target]);
-    expect(threadedRead).toContain("Please review this file");
-    const send = await cli(
+    expect(threadedRead).toContain(`No messages in ${target}`);
+    const send = await runCli(
       ["message", "send", "--target", target],
       "Reviewed through the real CLI",
     );
+    expect(send.exit).not.toBe(0);
+    expect(`${send.stdout}${send.stderr}`).toContain("attachment comments have no replies");
     const after = await cli(["message", "read", "--target", `${f.target}:${comment.id}`]);
-    expect(after).toContain("Reviewed through the real CLI");
+    expect(after).toContain("No messages in");
     const human = await f.comments.list(f.actor, {
       attachmentId: f.attachment.id,
       rootId: comment.id,
     });
-    expect(human.comments.map((m) => m.body)).toEqual(["Reviewed through the real CLI"]);
+    expect(human.comments).toEqual([]);
     console.log(
       JSON.stringify({
         artifact: "attachment-message-cli",
         attachmentId: f.attachment.id,
         rootId: comment.id,
-        replyId: human.comments[0]!.id,
+        replyId: null,
         capabilities,
-        resolution,
+        reaction: { exit: reaction.exit, output: `${reaction.stdout}${reaction.stderr}` },
         before,
-        send,
+        send: { exit: send.exit, output: `${send.stdout}${send.stderr}` },
         after,
         humanReadback: human.comments.map((m) => ({ id: m.id, body: m.body })),
       }),
