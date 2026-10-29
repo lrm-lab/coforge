@@ -16,6 +16,8 @@ export function runtimeUnavailableReason(
       ? m.computer_runtime_unavailable_version_unsupported()
       : unavailableCode === "start_failed"
         ? m.computer_runtime_unavailable_start_failed()
-        : m.computer_runtime_unavailable_probe_failed();
+        : unavailableCode === "probe_failed"
+          ? m.computer_runtime_unavailable_probe_failed()
+          : m.computer_runtime_unavailable_unknown();
   return diagnostic ? `${reason} (${diagnostic})` : reason;
 }

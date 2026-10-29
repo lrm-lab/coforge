@@ -151,7 +151,7 @@ test("daemon runtime code-agent inventory round trips as a complete external sna
   ).toEqual(request);
 });
 
-test("a runtime unusable code this build does not know leaves the runtime usable", () => {
+test("a runtime unusable code this build does not know stays unusable", () => {
   const bytes = toBinary(
     DaemonRuntimeCodeAgentsUpdateRequestSchema,
     create(DaemonRuntimeCodeAgentsUpdateRequestSchema, {
@@ -173,7 +173,13 @@ test("a runtime unusable code this build does not know leaves the runtime usable
   );
   expect(decodeDaemonRuntimeCodeAgentsUpdateRequest(bytes).runtimes).toEqual([
     { provider: RUNTIME_PROVIDER.DSH, version: "", displayName: "DeepSeek Harness" },
-    { provider: RUNTIME_PROVIDER.KIRO, version: "2.21.2", displayName: "Kiro" },
+    {
+      provider: RUNTIME_PROVIDER.KIRO,
+      version: "2.21.2",
+      displayName: "Kiro",
+      unavailableCode: "unknown",
+      diagnostic: "ignored without a known code",
+    },
   ]);
 });
 

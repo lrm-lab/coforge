@@ -12,7 +12,7 @@ export const decodedRuntimeMetadata = (runtime: {
   unavailableCode?: string;
   diagnostic?: string;
 }): RuntimeMetadata => {
-  // A newer daemon's code is dropped rather than read as one of ours: the runtime stays usable.
+  // A newer daemon's code reads as `unknown`, never as a usable runtime.
   const unavailableCode = parseRuntimeUnavailableCode(runtime.unavailableCode);
   return {
     provider: requireRuntimeProvider(

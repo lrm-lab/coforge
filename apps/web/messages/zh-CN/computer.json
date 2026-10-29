@@ -165,6 +165,7 @@
   "computer_runtime_unavailable_version_unsupported": "版本不受支持，升级后才能使用",
   "computer_runtime_unavailable_start_failed": "无法启动",
   "computer_runtime_unavailable_probe_failed": "无法读取版本",
+  "computer_runtime_unavailable_unknown": "无法使用",
   "computer_runtime_rescan_error": "电脑报告了失败：{message}",
   "computer_runtime_rescan_partial": "有运行时无法使用，原因见各自旁边。",
   "computer_runtime_rescan_failed": "电脑没有响应这次重新检测，请重试。",

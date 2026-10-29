@@ -18,8 +18,14 @@ import type {
 
 /** Why an installed runtime cannot be used: its CLI read a version the gate refuses
  * (`version_unsupported`), could not start at all (`start_failed`), or ran but printed nothing
- * that reads as a version (`probe_failed`). A runtime without a code is usable. */
-export type RuntimeUnavailableCode = "version_unsupported" | "start_failed" | "probe_failed";
+ * that reads as a version (`probe_failed`). `unknown` is a reason a newer daemon reported that
+ * this build does not name — the runtime is still unusable, never offered. A runtime without a
+ * code is usable. */
+export type RuntimeUnavailableCode =
+  | "version_unsupported"
+  | "start_failed"
+  | "probe_failed"
+  | "unknown";
 export type RuntimeMetadata = {
   provider: RuntimeProvider;
   version: string;

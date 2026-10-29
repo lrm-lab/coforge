@@ -43,11 +43,13 @@ export function parseRuntimeProvider(value: unknown): RuntimeProvider | undefine
     : undefined;
 }
 
-/** Why an installed runtime cannot be used, when this build knows the code. */
+/** Why an installed runtime cannot be used. A code this build does not name is `unknown`: the
+ * daemon said the runtime is unusable, and not knowing its reason does not make it usable. */
 export function parseRuntimeUnavailableCode(value: unknown): RuntimeUnavailableCode | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
   return value === "version_unsupported" || value === "start_failed" || value === "probe_failed"
     ? value
-    : undefined;
+    : "unknown";
 }
 
 /**
