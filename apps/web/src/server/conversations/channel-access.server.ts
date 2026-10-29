@@ -46,8 +46,9 @@ export async function getAgentChannel(
  * `getAgentChannel` for the send path: the Agent's channel, or one it could join anyway on the
  * way to posting — visible (as above), unarchived, and the Agent public (a private Agent can
  * never be a channel member). `needsJoin` marks the latter; the membership itself is written by
- * the send's transaction, so a failed send leaves none. Anything else is the same
- * `ACCESS_DENIED` a non-member's send has always had.
+ * the send's transaction, so a failed send leaves none. An app's bot is refused: it posts only
+ * where it was added. Anything else is the same `ACCESS_DENIED` a non-member's send has always
+ * had.
  */
 export async function getAgentSendChannel(
   db: PrismaClient,
@@ -70,11 +71,16 @@ export async function getAgentSendChannel(
   if (member && member.leftAt === null)
     return { id: channel.id, channelName: channel.channelName, needsJoin: false };
   if (channel.archivedAt) throw new AppError("ACCESS_DENIED");
-  const agent = await db.agent.findFirst({
-    where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-    select: { visibility: true },
-  });
-  if (agent?.visibility !== AGENT_VISIBILITY.PUBLIC) throw new AppError("ACCESS_DENIED");
+  const [agent, bot] = await Promise.all([
+    db.agent.findFirst({
+      where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+      select: { visibility: true },
+    }),
+    // An app's bot is an installed identity, not a member of the Workspace's conversations: it
+    // posts only where it was added, never by joining on the way.
+    db.appInstallationBot.findFirst({ where: { agentId }, select: { id: true } }),
+  ]);
+  if (agent?.visibility !== AGENT_VISIBILITY.PUBLIC || bot) throw new AppError("ACCESS_DENIED");
   return { id: channel.id, channelName: channel.channelName, needsJoin: true };
 }
 
