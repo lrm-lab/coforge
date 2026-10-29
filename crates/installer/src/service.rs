@@ -36,7 +36,7 @@ pub(crate) mod fakes;
 pub use error::ServiceError;
 pub use launchd::{Launchd, current_uid};
 pub use port::{CommandLine, CommandOutput, CommandRunner, RunError, SystemRunner};
-pub use systemd::{OwnCgroup, ProcessCgroup, SystemdUser};
+pub use systemd::{OwnCgroup, OwnSessionBus, ProcessCgroup, SystemdUser, UserSessionBus};
 pub use windows_task::WindowsTask;
 
 /// What the service manager says about the supervisor service.
@@ -156,7 +156,14 @@ pub fn for_platform<'a>(
             })?;
             Box::new(Launchd::new(runner, clock, &names, home, uid)?)
         }
-        Platform::Linux => Box::new(SystemdUser::new(runner, clock, &names, &OwnCgroup, home)?),
+        Platform::Linux => Box::new(SystemdUser::new(
+            runner,
+            clock,
+            &names,
+            &OwnCgroup,
+            &OwnSessionBus,
+            home,
+        )?),
         Platform::Windows => {
             let system_root =
                 std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_owned());

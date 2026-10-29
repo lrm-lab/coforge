@@ -118,9 +118,9 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/service/launchd.rs`: the macOS backend, `launchctl` in the `gui/<uid>` domain; install writes
   the plist. Install tests in `src/service/launchd/install_tests.rs`.
 - `src/service/systemd.rs`: the Linux backend, `systemctl --user`; install writes the unit under
-  the home directory, then `daemon-reload` and `enable`. Install tests in
-  `src/service/systemd/install_tests.rs`. `ProcessCgroup` (`OwnCgroup` reads
-  `/proc/self/cgroup`) tells whether the caller runs inside the unit; other backends answer no.
+  the home directory, then `daemon-reload` and `enable` (tests in `src/service/systemd/`).
+  `ProcessCgroup`/`UserSessionBus` (`OwnCgroup`, `OwnSessionBus`): whether the caller is inside
+  the unit, and `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS` for `systemctl` when it lacks them.
 - `src/service/windows_task.rs`: the Windows backend, the scheduled task through `schtasks` and
   `Get-ScheduledTask`; install is `schtasks /Create /XML /F`. Install tests in
   `src/service/windows_task/install_tests.rs`.

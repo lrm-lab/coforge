@@ -71,6 +71,72 @@ pub(crate) fn cgroup_names_unit(listing: &str, unit: &str) -> bool {
     })
 }
 
+/// What the caller's environment lacks for `systemctl --user` to find this user's session bus.
+/// A provider-spawned shell can carry neither variable — an Agent's Codex shell on a Linux
+/// host had no `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS` (2026-10-29, s144) even though the
+/// user bus was there — so when `/run/user/<uid>/bus` exists and is this user's, the backend
+/// adds both itself. Anything else leaves `systemctl` to report its own failure.
+pub trait UserSessionBus {
+    /// `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS` pairs to give a `systemctl` command, or none.
+    fn environment(&self) -> Vec<(String, String)>;
+}
+
+/// The calling process's own bus probe: its environment, effective uid, and the filesystem.
+pub struct OwnSessionBus;
+
+impl UserSessionBus for OwnSessionBus {
+    fn environment(&self) -> Vec<(String, String)> {
+        detected_session_bus()
+    }
+}
+
+/// The bus `/run/user/<uid>` provides when the environment names none. Pure decision for the
+/// tests: `has_env` whether the caller already has a variable, `owns_bus` whether the socket
+/// path exists and is `uid`'s.
+#[cfg(any(target_os = "linux", test))]
+fn session_bus_environment(
+    has_env: impl Fn(&str) -> bool,
+    uid: u32,
+    owns_bus: impl Fn(&Path) -> bool,
+) -> Vec<(String, String)> {
+    // With either variable the environment already finds the bus; nothing is added.
+    if has_env("XDG_RUNTIME_DIR") || has_env("DBUS_SESSION_BUS_ADDRESS") {
+        return Vec::new();
+    }
+    let directory = PathBuf::from(format!("/run/user/{uid}"));
+    let bus = directory.join("bus");
+    if !owns_bus(&bus) {
+        return Vec::new();
+    }
+    vec![
+        (
+            "XDG_RUNTIME_DIR".to_owned(),
+            directory.to_string_lossy().into_owned(),
+        ),
+        (
+            "DBUS_SESSION_BUS_ADDRESS".to_owned(),
+            format!("unix:path={}", bus.to_string_lossy()),
+        ),
+    ]
+}
+
+#[cfg(target_os = "linux")]
+fn detected_session_bus() -> Vec<(String, String)> {
+    use std::os::unix::fs::MetadataExt;
+    let uid = unsafe { libc::geteuid() };
+    session_bus_environment(
+        |name| std::env::var_os(name).is_some(),
+        uid,
+        |bus| bus.metadata().is_ok_and(|meta| meta.uid() == uid),
+    )
+}
+
+/// Off Linux there is no user systemd to reach, so nothing is supplied.
+#[cfg(not(target_os = "linux"))]
+fn detected_session_bus() -> Vec<(String, String)> {
+    Vec::new()
+}
+
 pub struct SystemdUser<'a> {
     runner: &'a dyn CommandRunner,
     clock: &'a dyn Clock,
@@ -78,6 +144,9 @@ pub struct SystemdUser<'a> {
     unit: String,
     /// `<home>/.config/systemd/user/<unit>`.
     unit_file: PathBuf,
+    /// The session-bus variables `systemctl --user` gets when the caller's own environment
+    /// lacks them (`UserSessionBus`); empty when nothing was supplied.
+    bus_env: Vec<(String, String)>,
 }
 
 impl<'a> SystemdUser<'a> {
@@ -87,6 +156,7 @@ impl<'a> SystemdUser<'a> {
         clock: &'a dyn Clock,
         service: &CoordinatorService,
         cgroup: &'a dyn ProcessCgroup,
+        bus: &'a dyn UserSessionBus,
         home: &Path,
     ) -> Result<Self, ServiceError> {
         let unit = &service.systemd_user_unit;
@@ -102,33 +172,32 @@ impl<'a> SystemdUser<'a> {
             cgroup,
             unit: unit.clone(),
             unit_file: home.join(".config").join("systemd").join("user").join(unit),
+            bus_env: bus.environment(),
         })
     }
 
+    /// One `systemctl` command with the session-bus environment, when there is one to add.
+    fn line(&self, args: &[&str]) -> CommandLine {
+        CommandLine::new(SYSTEMCTL, args.iter().copied()).with_env(self.bus_env.iter().cloned())
+    }
+
     fn systemctl(&self, verb: &str, bound: Duration) -> Result<Attempt, ServiceError> {
-        execute(
-            self.runner,
-            CommandLine::new(SYSTEMCTL, ["--user", verb, &self.unit]),
-            bound,
-        )
+        execute(self.runner, self.line(&["--user", verb, &self.unit]), bound)
     }
 
     /// What systemd says about the unit, in one read-only call.
     fn read(&self) -> Result<Unit, ServiceError> {
         let attempt = execute(
             self.runner,
-            CommandLine::new(
-                SYSTEMCTL,
-                [
-                    "--user",
-                    "show",
-                    &self.unit,
-                    "--property=LoadState",
-                    "--property=ActiveState",
-                    "--property=SubState",
-                    "--property=MainPID",
-                ],
-            ),
+            self.line(&[
+                "--user",
+                "show",
+                &self.unit,
+                "--property=LoadState",
+                "--property=ActiveState",
+                "--property=SubState",
+                "--property=MainPID",
+            ]),
             COMMAND_BOUND,
         )?;
         if !attempt.succeeded() {
@@ -251,7 +320,7 @@ impl SupervisorService for SystemdUser<'_> {
         definition::write_private(&self.unit_file, &definition.contents)?;
         let reload = execute(
             self.runner,
-            CommandLine::new(SYSTEMCTL, ["--user", "daemon-reload"]),
+            self.line(&["--user", "daemon-reload"]),
             COMMAND_BOUND,
         )?;
         if !reload.succeeded() {

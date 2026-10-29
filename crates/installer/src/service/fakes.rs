@@ -52,6 +52,18 @@ impl ProcessCgroup for FixedCgroup {
     }
 }
 
+/// A session-bus probe that answers `environment` as the test scripted.
+pub(crate) struct ScriptedBus(pub(crate) &'static [(&'static str, &'static str)]);
+
+impl super::systemd::UserSessionBus for ScriptedBus {
+    fn environment(&self) -> Vec<(String, String)> {
+        self.0
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect()
+    }
+}
+
 /// One expected command and what it answers.
 pub(crate) struct Step {
     expect: String,

@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use super::*;
 use crate::clock::VirtualClock;
-use crate::service::fakes::{FixedCgroup, ScriptedRunner, Step, cannot_run, exits, ok};
+use crate::service::fakes::{
+    FixedCgroup, ScriptedBus, ScriptedRunner, Step, cannot_run, exits, ok,
+};
 use crate::service::{
     RunError, ServiceState, StartOutcome, SupervisorService, coordinator_service,
 };
@@ -64,8 +66,10 @@ fn a_caller_whose_cgroup_names_the_unit_is_inside_it_under_cgroup_v1_and_v2() {
     ));
     let names = coordinator_service();
 
-    let inside_v2 = SystemdUser::new(&runner, &clock, &names, &v2, home()).unwrap();
-    let inside_v1 = SystemdUser::new(&runner, &clock, &names, &v1, home()).unwrap();
+    let inside_v2 =
+        SystemdUser::new(&runner, &clock, &names, &v2, &ScriptedBus(&[]), home()).unwrap();
+    let inside_v1 =
+        SystemdUser::new(&runner, &clock, &names, &v1, &ScriptedBus(&[]), home()).unwrap();
 
     assert!(inside_v2.caller_is_inside_unit().unwrap());
     assert!(inside_v1.caller_is_inside_unit().unwrap());
@@ -79,8 +83,17 @@ fn a_caller_outside_the_unit_is_not_inside_it_even_when_the_name_is_a_prefix() {
     let prefix = FixedCgroup(Some(OTHER_CGROUP_V2));
     let elsewhere = FixedCgroup(Some("0::/user.slice/user-501.slice/session-3.scope\n"));
 
-    let prefix = SystemdUser::new(&runner, &clock, &names, &prefix, home()).unwrap();
-    let elsewhere = SystemdUser::new(&runner, &clock, &names, &elsewhere, home()).unwrap();
+    let prefix =
+        SystemdUser::new(&runner, &clock, &names, &prefix, &ScriptedBus(&[]), home()).unwrap();
+    let elsewhere = SystemdUser::new(
+        &runner,
+        &clock,
+        &names,
+        &elsewhere,
+        &ScriptedBus(&[]),
+        home(),
+    )
+    .unwrap();
 
     assert!(!prefix.caller_is_inside_unit().unwrap());
     assert!(!elsewhere.caller_is_inside_unit().unwrap());
@@ -92,7 +105,15 @@ fn a_cgroup_listing_that_cannot_be_read_is_an_error_not_an_outside_caller() {
     let clock = VirtualClock::new();
     let names = coordinator_service();
     let unreadable = FixedCgroup(None);
-    let systemd = SystemdUser::new(&runner, &clock, &names, &unreadable, home()).unwrap();
+    let systemd = SystemdUser::new(
+        &runner,
+        &clock,
+        &names,
+        &unreadable,
+        &ScriptedBus(&[]),
+        home(),
+    )
+    .unwrap();
 
     assert!(matches!(
         systemd.caller_is_inside_unit(),
@@ -114,6 +135,7 @@ impl Scenario {
             &self.clock,
             &coordinator_service(),
             &OwnCgroup,
+            &ScriptedBus(&[]),
             home(),
         )
         .unwrap()
@@ -475,6 +497,7 @@ fn a_unit_name_the_contract_cannot_have_is_refused() {
             &scenario.clock,
             &names,
             &OwnCgroup,
+            &ScriptedBus(&[]),
             home(),
         );
         assert!(
@@ -482,4 +505,84 @@ fn a_unit_name_the_contract_cannot_have_is_refused() {
             "{bad:?}"
         );
     }
+}
+
+/// `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS` a probe supplies when the caller's own
+/// environment has neither and the bus socket is this user's.
+const PROVIDED_BUS: &[(&str, &str)] = &[
+    ("XDG_RUNTIME_DIR", "/run/user/501"),
+    ("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/501/bus"),
+];
+
+#[test]
+fn systemctl_commands_carry_the_session_bus_the_environment_lacks() {
+    let runner = ScriptedRunner::new(vec![
+        ok(
+            "XDG_RUNTIME_DIR=/run/user/501 \
+             DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/501/bus \
+             systemctl --user show coforge-daemon.service --property=LoadState \
+             --property=ActiveState --property=SubState --property=MainPID",
+            &shown("loaded", "inactive", "dead", 0),
+        ),
+        ok(
+            "XDG_RUNTIME_DIR=/run/user/501 \
+             DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/501/bus \
+             systemctl --user reset-failed coforge-daemon.service",
+            "",
+        ),
+        ok(
+            "XDG_RUNTIME_DIR=/run/user/501 \
+             DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/501/bus \
+             systemctl --user start coforge-daemon.service",
+            "",
+        ),
+        ok(
+            "XDG_RUNTIME_DIR=/run/user/501 \
+             DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/501/bus \
+             systemctl --user show coforge-daemon.service --property=LoadState \
+             --property=ActiveState --property=SubState --property=MainPID",
+            &shown("loaded", "active", "running", 4321),
+        ),
+    ]);
+    let clock = VirtualClock::new();
+    let bus = ScriptedBus(PROVIDED_BUS);
+    let systemd = SystemdUser::new(
+        &runner,
+        &clock,
+        &coordinator_service(),
+        &OwnCgroup,
+        &bus,
+        home(),
+    )
+    .unwrap();
+
+    assert!(matches!(
+        systemd.start().unwrap(),
+        StartOutcome { pid: Some(4321) }
+    ));
+}
+
+#[test]
+fn the_session_bus_is_supplied_only_when_the_environment_has_neither_variable() {
+    let uid = 501;
+    let owns = |_: &Path| true;
+    assert!(
+        session_bus_environment(|name| name == "XDG_RUNTIME_DIR", uid, owns).is_empty(),
+        "XDG_RUNTIME_DIR already set"
+    );
+    assert!(
+        session_bus_environment(|name| name == "DBUS_SESSION_BUS_ADDRESS", uid, owns).is_empty(),
+        "DBUS_SESSION_BUS_ADDRESS already set"
+    );
+    assert_eq!(
+        session_bus_environment(|_| false, uid, owns),
+        vec![
+            ("XDG_RUNTIME_DIR".to_owned(), "/run/user/501".to_owned()),
+            (
+                "DBUS_SESSION_BUS_ADDRESS".to_owned(),
+                "unix:path=/run/user/501/bus".to_owned()
+            ),
+        ]
+    );
+    assert!(session_bus_environment(|_| false, uid, |_| false).is_empty());
 }

@@ -5,7 +5,7 @@ use super::*;
 use crate::clock::VirtualClock;
 use crate::service::coordinator_service;
 use crate::service::fakes::{
-    FixedCgroup, ScriptedRunner, Step, definition, exits, modified, ok, place_dated,
+    FixedCgroup, ScriptedBus, ScriptedRunner, Step, definition, exits, modified, ok, place_dated,
 };
 use crate::test_support::Scratch;
 
@@ -30,6 +30,7 @@ fn install(
         &clock,
         &coordinator_service(),
         &FixedCgroup(Some("")),
+        &ScriptedBus(&[]),
         home,
     )
     .unwrap()

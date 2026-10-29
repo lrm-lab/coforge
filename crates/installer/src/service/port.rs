@@ -7,11 +7,13 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// One command to run: a program and its arguments, never a shell string.
+/// One command to run: a program, its arguments, and variables added on top of the inherited
+/// environment, never a shell string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandLine {
     program: String,
     args: Vec<String>,
+    env: Vec<(String, String)>,
 }
 
 impl CommandLine {
@@ -23,7 +25,14 @@ impl CommandLine {
         Self {
             program: program.to_owned(),
             args: args.into_iter().map(Into::into).collect(),
+            env: Vec::new(),
         }
+    }
+
+    /// Variables set on the command's own environment, over anything it inherits.
+    pub fn with_env(mut self, env: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.env = env.into_iter().collect();
+        self
     }
 
     pub fn program(&self) -> &str {
@@ -33,11 +42,23 @@ impl CommandLine {
     pub fn args(&self) -> &[String] {
         &self.args
     }
+
+    pub fn env(&self) -> &[(String, String)] {
+        &self.env
+    }
 }
 
 /// The command as a person would type it, so an error can tell them what to run themselves.
+/// Added variables are prefixed `NAME=value`, the form a shell takes.
 impl fmt::Display for CommandLine {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (name, value) in &self.env {
+            if value.is_empty() || value.contains(char::is_whitespace) {
+                write!(formatter, "{name}=\"{value}\" ")?;
+            } else {
+                write!(formatter, "{name}={value} ")?;
+            }
+        }
         formatter.write_str(&self.program)?;
         for arg in &self.args {
             if arg.is_empty() || arg.contains(char::is_whitespace) {
@@ -92,6 +113,7 @@ impl CommandRunner for SystemRunner {
         let mut child = Command::new(command.program())
             .args(command.args())
             .env("LC_ALL", "C")
+            .envs(command.env().iter().map(|(name, value)| (name, value)))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
