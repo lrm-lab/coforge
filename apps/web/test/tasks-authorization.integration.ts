@@ -467,17 +467,21 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
     expect(afterStaleUnclaim.tasks.find((task) => task.number === ownership.number)).toEqual(
       reclaimed.tasks[0],
     );
-    const done = await board.execute(
-      { workspaceId: workspace.id, agentId: agent!.id },
-      {
-        operation: "update",
-        idempotencyKey: crypto.randomUUID(),
-        target: `#${publicChannel.channelName}`,
-        number: ownership.number,
-        status: "done",
-        expectedRevision: reclaimed.tasks[0]!.revision,
-      },
-    );
+    // In progress → In review → Done: a direct jump is refused.
+    const move = (status: "in_review" | "done") =>
+      board.execute(
+        { workspaceId: workspace.id, agentId: agent!.id },
+        {
+          operation: "update",
+          idempotencyKey: crypto.randomUUID(),
+          target: `#${publicChannel.channelName}`,
+          number: ownership.number,
+          status,
+        },
+      );
+    await expect(move("done")).rejects.toThrow("ACCESS_DENIED");
+    await move("in_review");
+    const done = await move("done");
     for (const expectedRevision of [reclaimed.tasks[0]!.revision, done.tasks[0]!.revision]) {
       await expect(
         board.execute(
@@ -585,24 +589,15 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         number: ownerRace.number,
       },
     );
-    const ownerReset = await board.execute(
-      { workspaceId: workspace.id, userId: alice!.id },
-      {
-        operation: "update",
-        idempotencyKey: crypto.randomUUID(),
-        conversationId: publicChannel.id,
-        number: ownerRace.number,
-        status: "todo",
-        expectedRevision: ownerClaim.tasks[0]!.revision,
-      },
-    );
+    // No reset to To do here: In progress only goes forward, so the Task stays where the claim
+    // left it and the release works from that revision.
     const releaseCommand = {
       operation: "assign" as const,
       idempotencyKey: crypto.randomUUID(),
       conversationId: publicChannel.id,
       number: ownerRace.number,
       assignee: null,
-      expectedRevision: ownerReset.tasks[0]!.revision,
+      expectedRevision: ownerClaim.tasks[0]!.revision,
     };
     // Another Agent may not take the Task away from the Agent holding it.
     await expect(
@@ -614,7 +609,7 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
           target: `#${publicChannel.channelName}`,
           number: ownerRace.number,
           assignee: null,
-          expectedRevision: ownerReset.tasks[0]!.revision,
+          expectedRevision: ownerClaim.tasks[0]!.revision,
         },
       ),
     ).rejects.toThrow("ACCESS_DENIED");
