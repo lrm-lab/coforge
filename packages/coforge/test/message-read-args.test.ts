@@ -16,9 +16,9 @@ test("message read --unread reads from the read position and takes no history an
   for (const anchor of ["--before", "--after", "--around"])
     expect(() =>
       parseArgs(["message", "read", "--target", "@ada", "--unread", anchor, "abcd1234"]),
-    ).toThrow("Usage:");
+    ).toThrow("--unread reads forward from your read position");
   expect(() => parseArgs(["message", "read", "--target", "@ada", "--unread", "--unread"])).toThrow(
-    "Usage:",
+    '"--unread" is given more than once',
   );
 });
 
@@ -30,7 +30,7 @@ test("message read without --unread keeps its one-anchor window", () => {
   });
   expect(() =>
     parseArgs(["message", "read", "--target", "@ada", "--before", "a", "--after", "b"]),
-  ).toThrow("Usage:");
+  ).toThrow("Give at most one of --before, --after and --around.");
 });
 
 test("message read --unread asks the transport for unread and prints the unread window", async () => {

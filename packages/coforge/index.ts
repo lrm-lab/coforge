@@ -1,4 +1,6 @@
 import { CLI_USAGE } from "./src/usage";
+import { commandHelp, invalidArgument } from "./src/command-help";
+import { parseChannelManagementArgs, type ChannelManagementInvocation } from "./src/channel-args";
 import { fstatSync } from "node:fs";
 import { weeklyReportWorkflowSchema } from "@lrm/coforge-sdk/internal";
 import {
@@ -195,11 +197,7 @@ export type AttachmentUploadInvocation = {
   mimeType?: string;
   json?: boolean;
 };
-export type ChannelManagementInvocation = {
-  command: "channel-manage";
-  channel: Omit<ChannelCommand, "idempotencyKey">;
-  json?: boolean;
-};
+export type { ChannelManagementInvocation } from "./src/channel-args";
 export type ReminderInvocation = Omit<LocalReminderRequest, "context" | "idempotencyKey"> & {
   command: "reminder";
 };
@@ -435,8 +433,14 @@ export function parseArgs(
   if (args[0] === "message" && isMessageCommand(args[1])) {
     if (args[1] === "check") {
       if (args.length === 2) return { command: "check" };
-      if (args[2] === "--target" && args[3] && args.length === 4)
-        return { command: "check", target: args[3] };
+      if (args[2] === "--target") {
+        const target = args[3];
+        if (!target) throw invalidArgument("message check", "--target needs a value.");
+        if (args.length !== 4)
+          throw invalidArgument("message check", `Unknown argument "${args[4] ?? ""}".`);
+        return { command: "check", target };
+      }
+      throw invalidArgument("message check", `Unknown argument "${args[2] ?? ""}".`);
     }
     if (args[1] === "resolve") {
       const messageId = args[2];
@@ -497,6 +501,14 @@ export function parseArgs(
         else throw new Error("Usage:");
       }
       const outputMode = json ? "json" : "text";
+      if (!target?.trim())
+        throw withOutputMode(
+          invalidArgument(
+            "message send",
+            "--target is required, for example '#general' or '@ada'.",
+          ),
+          outputMode,
+        );
       // Repeatable; duplicate values collapse to one occurrence. No client-side count cap; the
       // server enforces the per-message limit.
       const attachmentIds = rawAttachmentIds.length ? [...new Set(rawAttachmentIds)] : undefined;
@@ -563,7 +575,10 @@ export function parseArgs(
         };
     }
   }
-  throw new Error(CLI_USAGE);
+  throw invalidArgument(
+    args.slice(0, 2).join(" "),
+    `"${args.join(" ")}" is not a command this CLI knows. Run \`coforge manual get manual\` for the command list.`,
+  );
 }
 
 /**
@@ -609,143 +624,6 @@ function parseMentionSelectors(
     }
   }
   return result;
-}
-
-const CHANNEL_MANAGEMENT_BOOLEAN_FLAGS = new Set(["--private", "--public", "--json"]);
-
-/** Rejects `--private`/`--public`: every channel is public and there is no private/visibility
- * column. */
-function privateChannelsUnsupportedError(): CliError {
-  return new CliError({
-    code: "UNSUPPORTED",
-    message: "private channels are not supported in CoForge; every channel is public.",
-    retryable: false,
-  });
-}
-
-/** Requires a regular channel target for `join`, `leave`, `update`, `lifecycle archive|unarchive`,
- * `add-member`, and `remove-member` — never for `info`/`members` (which accept a wider target
- * grammar) or `create` (which has no target at all). Rejects a thread target, an `@user` DM, or a
- * bare name with no leading `#`. */
-function requireRegularChannelTarget(target: string): string {
-  if (!/^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target))
-    throw new CliError({
-      code: "INVALID_TARGET",
-      message:
-        "Target must be a regular channel in the form '#channel-name'. DMs and thread targets are not supported.",
-      retryable: false,
-    });
-  return target;
-}
-
-/** Generic `--flag value` / `--boolean-flag` parser shared by the `channel` subcommands below. */
-function parseChannelFlags(
-  args: readonly string[],
-  allowed: readonly string[],
-): Map<string, string> {
-  const values = new Map<string, string>();
-  for (let index = 0; index < args.length; index++) {
-    const name = args[index];
-    if (!name || !allowed.includes(name) || values.has(name)) throw new Error("Usage:");
-    if (CHANNEL_MANAGEMENT_BOOLEAN_FLAGS.has(name)) {
-      values.set(name, "true");
-      continue;
-    }
-    const value = args[++index];
-    if (!value) throw new Error("Usage:");
-    values.set(name, value);
-  }
-  return values;
-}
-
-/**
- * `channel info|members|join|leave|create|update|lifecycle archive|unarchive|add-member|
- * remove-member`. `mute`/`unmute` are parsed separately, above, and unchanged.
- */
-function parseChannelManagementArgs(args: readonly string[]): ChannelManagementInvocation {
-  const sub = args[0];
-  if (sub === "info" || sub === "members") {
-    const target = args[1];
-    if (!target || args.length !== 2) throw new Error("Usage:");
-    return { command: "channel-manage", channel: { operation: sub, target } };
-  }
-  if (sub === "lifecycle") {
-    const action = args[1];
-    if (action !== "archive" && action !== "unarchive") throw new Error("Usage:");
-    const values = parseChannelFlags(args.slice(2), ["--target", "--json"]);
-    const target = values.get("--target");
-    if (!target) throw new Error("Usage:");
-    return {
-      command: "channel-manage",
-      channel: { operation: action, target: requireRegularChannelTarget(target) },
-      json: values.has("--json"),
-    };
-  }
-  if (sub === "join" || sub === "leave") {
-    const values = parseChannelFlags(args.slice(1), ["--target", "--json"]);
-    const target = values.get("--target");
-    if (!target) throw new Error("Usage:");
-    return {
-      command: "channel-manage",
-      channel: { operation: sub, target: requireRegularChannelTarget(target) },
-      json: values.has("--json"),
-    };
-  }
-  if (sub === "create") {
-    const values = parseChannelFlags(args.slice(1), [
-      "--name",
-      "--description",
-      "--private",
-      "--json",
-    ]);
-    if (values.has("--private")) throw privateChannelsUnsupportedError();
-    const name = values.get("--name");
-    if (!name) throw new Error("Usage:");
-    return {
-      command: "channel-manage",
-      channel: { operation: "create", name, description: values.get("--description") },
-      json: values.has("--json"),
-    };
-  }
-  if (sub === "update") {
-    const values = parseChannelFlags(args.slice(1), [
-      "--target",
-      "--name",
-      "--description",
-      "--public",
-      "--private",
-      "--json",
-    ]);
-    if (values.has("--private") || values.has("--public")) throw privateChannelsUnsupportedError();
-    const target = values.get("--target");
-    if (!target) throw new Error("Usage:");
-    const name = values.get("--name");
-    const description = values.get("--description");
-    if (name === undefined && description === undefined) throw new Error("Usage:");
-    return {
-      command: "channel-manage",
-      channel: {
-        operation: "update",
-        target: requireRegularChannelTarget(target),
-        name,
-        description,
-      },
-      json: values.has("--json"),
-    };
-  }
-  if (sub === "add-member" || sub === "remove-member") {
-    const values = parseChannelFlags(args.slice(1), ["--target", "--user", "--agent", "--json"]);
-    const target = values.get("--target");
-    const user = values.get("--user");
-    const agent = values.get("--agent");
-    if (!target || (user === undefined) === (agent === undefined)) throw new Error("Usage:");
-    return {
-      command: "channel-manage",
-      channel: { operation: sub, target: requireRegularChannelTarget(target), user, agent },
-      json: values.has("--json"),
-    };
-  }
-  throw new Error("Usage:");
 }
 
 const MANUAL_INTENT_REASON_MIN_LENGTH = 12;
@@ -936,6 +814,11 @@ function parseActionPrepareArgs(args: readonly string[]): ActionPrepareInvocatio
 }
 
 export async function run(args: readonly string[], transport: MessageTransport): Promise<unknown> {
+  if (args.length === 0) return CLI_USAGE;
+  if (args.includes("--help")) {
+    const help = commandHelp(args.filter((arg) => arg !== "--help"));
+    if (help) return help;
+  }
   const invocation = parseArgs(args);
   if (invocation.command === "whoami") {
     return runWhoami(

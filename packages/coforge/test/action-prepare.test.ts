@@ -1,3 +1,4 @@
+import { CLI_USAGE } from "../src/usage";
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { parseArgs, run, type MessageTransport } from "../index";
 import { CliError } from "#src/cli-error";
@@ -58,7 +59,11 @@ test("parseArgs rejects an unknown flag on 'action prepare'", () => {
 });
 
 test("the top-level usage string mentions 'coforge action prepare'", () => {
-  expect(() => parseArgs(["nonsense"])).toThrow(/coforge action prepare --target <target>/);
+  expect(CLI_USAGE).toContain("coforge action prepare --target <target>");
+});
+
+test("an unknown command names the manual instead of dumping the whole usage", () => {
+  expect(() => parseArgs(["nonsense"])).toThrow(/is not a command this CLI knows/);
 });
 
 // --- run(): stdin-independent error path ------------------------------------

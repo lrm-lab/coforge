@@ -26,7 +26,9 @@ test("inbox check parses view, before and json", () => {
     view: "mentions",
     before: 42,
   });
-  expect(() => parseArgs(["inbox", "ack", "--item", "reminder:id:1"])).toThrow("Usage:");
+  expect(() => parseArgs(["inbox", "ack", "--item", "reminder:id:1"])).toThrow(
+    "is not a command this CLI knows",
+  );
   expect(() => parseArgs(["inbox", "check", "--bogus"])).toThrow("Usage:");
   expect(() => parseArgs(["inbox", "check", "--view", "all"])).toThrow(
     "--view must be one of unread, mentions; got all",
