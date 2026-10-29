@@ -22,6 +22,12 @@ export function composerDraftKey(conversationId: string, threadRootId?: string):
     : `${DRAFT_KEY_PREFIX}${conversationId}`;
 }
 
+/** Storage key for a file's comment field (`useCommentDraft`): one per file, never a conversation's
+ * (whose keys are ids). */
+export function attachmentCommentDraftKey(attachmentId: string): string {
+  return `${DRAFT_KEY_PREFIX}attachment-comments:${attachmentId}`;
+}
+
 /** The saved draft text, or `""` when none exists or storage is unavailable. */
 export function readComposerDraft(key: string): string {
   const storage = browserLocalStorage();

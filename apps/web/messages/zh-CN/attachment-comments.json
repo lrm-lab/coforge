@@ -6,7 +6,6 @@
   "attachment_preview_outline": "大纲",
   "attachment_preview_outline_label": "Markdown 大纲",
   "attachment_comments_input": "评论 {name}…",
-  "attachment_comments_post": "发表评论",
   "attachment_comments_empty": "还没有评论",
   "attachment_comments_loading": "正在加载评论…",
   "attachment_comments_load_failed": "无法加载评论。",

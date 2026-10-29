@@ -160,7 +160,9 @@ export function useReferenceCompletion({
       return true;
     }
     if (event.key === "Escape") {
+      // Closing the list is all it does: a dialog or pane around the field must not close too.
       event.preventDefault();
+      event.stopPropagation();
       setQuery(undefined);
       return true;
     }

@@ -1,16 +1,21 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { MarkerPin01, MessageSquare01, Send01, XClose } from "@untitledui/icons";
+import { MarkerPin01, MessageSquare01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { TextArea } from "#src/components/base/textarea/textarea";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { postAttachmentComment } from "./attachment-comments.functions";
 import { CommentRow, useCommentDraft, useCommentPages } from "./attachment-comment-thread";
+import { dragCarriesFiles } from "./composer-behavior";
+import { ComposerField } from "./composer-field";
+import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
+import { useConversationHostChannels } from "./conversation-host";
 import { attachmentCommentsQueryKey } from "./conversation-query-keys";
+import { useReferenceCompletion } from "./use-reference-completion";
 import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { ANCHOR_HIGHLIGHT_MS, type AnchorSurface } from "./attachment-anchoring";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
@@ -28,6 +33,13 @@ function anchorLabel(anchor: AttachmentCommentAnchor): string {
   return single
     ? m.attachment_comments_anchor_row({ range })
     : m.attachment_comments_anchor_rows({ range });
+}
+
+/** Turns away files dragged over the comment field: a comment carries none. */
+function refuseFileDrop(event: DragEvent) {
+  if (!dragCarriesFiles(event.dataTransfer.types)) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "none";
 }
 
 type Placed = { comment: AttachmentCommentView; order: number | null };
@@ -129,6 +141,7 @@ export function AttachmentCommentsPane({
   }, [all, surface]);
   const canComment = Boolean(state?.canComment && !query.isError);
   const draft = useCommentDraft(
+    attachmentId,
     canComment,
     async (body) => {
       // A place chosen while this posts is the next comment's.
@@ -137,11 +150,20 @@ export function AttachmentCommentsPane({
       if (anchor) onClearAnchor?.(anchor);
     },
     () => queryClient.invalidateQueries({ queryKey, exact: true }),
+    () => completion.textareaRef.current?.focus(),
   );
+  // The thread composer's field: `#` lists the Workspace's channels; `@` stays closed until a
+  // comment can notify the people it names (task #269).
+  const completion = useReferenceCompletion({
+    mentionables: undefined,
+    channels: useConversationHostChannels(),
+    value: draft.body,
+    onChange: draft.setBody,
+  });
   // A place chosen in the preview is what the reader is about to write about.
   useEffect(() => {
-    if (pendingAnchor || focusRequest) draft.input.current?.focus();
-  }, [pendingAnchor, focusRequest, draft.input]);
+    if (pendingAnchor || focusRequest) completion.textareaRef.current?.focus();
+  }, [pendingAnchor, focusRequest, completion.textareaRef]);
   // The comment last jumped from stays marked as long as its place is.
   const [jumped, setJumped] = useState<string | null>(null);
   const clearJumped = useRef(0);
@@ -240,6 +262,10 @@ export function AttachmentCommentsPane({
           event.preventDefault();
           void draft.submit();
         }}
+        // A comment takes no files: a file dropped here is refused rather than opened by the
+        // browser in place of the page.
+        onDragOver={refuseFileDrop}
+        onDrop={refuseFileDrop}
       >
         {disabledText && <p className="text-sm text-tertiary">{disabledText}</p>}
         {pendingAnchor && (
@@ -256,33 +282,21 @@ export function AttachmentCommentsPane({
             </AnchorChip>
           </div>
         )}
-        <div className="relative">
-          <TextArea
-            aria-label={m.attachment_comments_input({ name: fileName })}
-            placeholder={m.attachment_comments_input({ name: fileName })}
+        {/* The thread composer's box and field, without its margins: the pane pads it. */}
+        <div className={cn(COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS, "m-0 md:mx-0")}>
+          <ComposerField
+            completion={completion}
             value={draft.body}
-            onChange={draft.setBody}
-            textAreaRef={draft.input}
-            {...draft.keys}
-            maxLength={8_000}
-            rows={3}
-            // 14px text and placeholder and no resize handle, as in Raft.
-            size="sm"
+            onValueChange={draft.setBody}
+            label={m.attachment_comments_input({ name: fileName })}
+            placeholder={m.attachment_comments_input({ name: fileName })}
+            onSubmit={() => void draft.submit()}
+            sendDisabled={!canComment || !draft.body.trim() || draft.sending}
             isDisabled={!canComment}
             // Read-only, not disabled, while sending: a disabled field drops focus to the page, and
             // the dialog would no longer hear Escape.
             isReadOnly={draft.sending}
-            // Room for the send button in the corner, as in Raft.
-            textAreaClassName="resize-none pr-11"
-          />
-          <ButtonUtility
-            type="submit"
-            icon={Send01}
-            size="xs"
-            color="secondary"
-            tooltip={m.attachment_comments_post()}
-            isDisabled={!canComment || !draft.body.trim() || draft.sending}
-            className="absolute right-2 bottom-2 enabled:bg-brand-solid enabled:text-white enabled:ring-0 enabled:hover:bg-brand-solid_hover"
+            maxLength={8_000}
           />
         </div>
         {draft.sendFailed && (

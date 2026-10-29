@@ -151,7 +151,7 @@ const openPreview = `
 const post = (body: string) => `
   await page.waitForFunction(() => document.activeElement?.tagName === "TEXTAREA", undefined, { timeout: 5000 });
   await page.fill('[role="dialog"] textarea', ${JSON.stringify(body)});
-  await page.click("loc=role:button[name='Post Comment']");
+  await page.click("loc=role:button[name='Send']");
   await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(body)}, { timeout: 10000 });
 `;
 

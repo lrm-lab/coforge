@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { clockLabel } from "#src/lib/dates";
@@ -8,7 +8,7 @@ import { cn } from "#src/lib/utils";
 import { getLocale } from "#src/paraglide/runtime";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
 import { loadAttachmentComments } from "./attachment-comments.functions";
-import { shouldSendOnEnter } from "./composer-behavior";
+import { attachmentCommentDraftKey, readComposerDraft, writeComposerDraft } from "./composer-draft";
 import { attachmentCommentsQueryKey } from "./conversation-query-keys";
 import { MessageBody } from "./message-body";
 
@@ -36,22 +36,28 @@ export function useCommentPages(attachmentId: string) {
 }
 
 /**
- * The comment field's draft and sending state. `send` posts the draft; `refresh` reads the
- * lists it changes again, whether or not it was posted. The field keeps focus throughout. Spread
- * `keys` on the field: Enter sends and Shift+Enter starts a new line, as in the composer and in
- * Raft, and an Enter that confirms an IME composition sends nothing.
+ * The comment field's draft and sending state. The draft is kept on this device per file, as a
+ * conversation's is (`composer-draft.ts`), so leaving the preview loses nothing. `send` posts it;
+ * `refresh` reads the lists it changes again, whether or not it was posted. The field keeps focus
+ * throughout (`focus`, given the field after a send).
  */
 export function useCommentDraft(
+  attachmentId: string,
   canComment: boolean,
   send: (body: string) => Promise<unknown>,
   refresh: () => Promise<unknown>,
+  focus: () => void,
 ) {
-  const [body, setBody] = useState("");
+  const draftKey = attachmentCommentDraftKey(attachmentId);
+  // The draft read for the file shown: another file reads its own, not this one's.
+  const [draft, setDraft] = useState(() => ({ key: draftKey, body: readComposerDraft(draftKey) }));
+  const body = draft.key === draftKey ? draft.body : readComposerDraft(draftKey);
+  const setBody = (value: string) => {
+    writeComposerDraft(draftKey, value);
+    setDraft({ key: draftKey, body: value });
+  };
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
-  const input = useRef<HTMLTextAreaElement>(null);
-  const composing = useRef(false);
-  const compositionEndedAt = useRef<number | null>(null);
   async function submit() {
     if (!body.trim() || sending || !canComment) return;
     setSending(true);
@@ -66,31 +72,10 @@ export function useCommentDraft(
       setSending(false);
       // The post button disables itself once the draft is cleared, which drops focus to the page
       // (and the dialog stops hearing Escape); give it back to the field.
-      input.current?.focus();
+      focus();
     }
   }
-  const keys = {
-    onTextAreaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      const key = {
-        key: event.key,
-        shiftKey: event.shiftKey,
-        isComposing: event.nativeEvent.isComposing || composing.current,
-        keyCode: event.keyCode,
-      };
-      const composition = { lastCompositionEndAt: compositionEndedAt.current, now: Date.now() };
-      if (!shouldSendOnEnter(key, composition)) return;
-      event.preventDefault();
-      void submit();
-    },
-    onTextAreaCompositionStart: () => {
-      composing.current = true;
-    },
-    onTextAreaCompositionEnd: () => {
-      composing.current = false;
-      compositionEndedAt.current = Date.now();
-    },
-  };
-  return { body, setBody, sending, sendFailed, input, submit, keys };
+  return { body, setBody, sending, sendFailed, submit };
 }
 
 /**

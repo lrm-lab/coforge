@@ -6,7 +6,6 @@
   "attachment_preview_outline": "Outline",
   "attachment_preview_outline_label": "Markdown outline",
   "attachment_comments_input": "Comment on {name}…",
-  "attachment_comments_post": "Post Comment",
   "attachment_comments_empty": "No comments yet",
   "attachment_comments_loading": "Loading comments…",
   "attachment_comments_load_failed": "Comments could not be loaded.",
