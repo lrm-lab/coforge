@@ -120,11 +120,11 @@ export function ComputerRuntimeList({
               </PopoverAction>
             );
           };
-          const unusable = runtime.unavailableCode && (
-            <p key="unusable" className="px-4 py-3 text-sm text-tertiary">
-              {runtimeUnavailableReason(runtime.unavailableCode, runtime.diagnostic)}
-            </p>
-          );
+          // A runtime that cannot start has nothing to sign in to, no usage to read and nothing to
+          // share: the popover keeps its name, version, reason and Refresh.
+          const unusableReason = runtime.unavailableCode
+            ? runtimeUnavailableReason(runtime.unavailableCode, runtime.diagnostic)
+            : undefined;
           const unavailable = auth?.state === "unavailable" && auth.unavailableReason && (
             <p key="account" className="px-4 py-3 text-sm text-tertiary">
               {unsupportedText(auth.unavailableReason, runtime.displayName)}
@@ -165,15 +165,16 @@ export function ComputerRuntimeList({
                 runtime={runtime}
                 computerOnline={computer.online}
                 timeZone={timeZone}
-                showUsage={computer.ownedByCurrentUser}
-                auth={auth}
-                account={account}
+                showUsage={computer.ownedByCurrentUser && !unusableReason}
+                auth={unusableReason ? undefined : auth}
+                account={unusableReason ? undefined : account}
+                notice={unusableReason}
                 triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
                 trigger={(status) => <RuntimeChip runtime={runtime} status={status} />}
                 actions={
-                  (visibility || unusable || unavailable) && [visibility, unusable, unavailable]
+                  !unusableReason && (visibility || unavailable) && [visibility, unavailable]
                 }
-                accountAction={accountAction}
+                accountAction={unusableReason ? undefined : accountAction}
               />
             </li>
           );

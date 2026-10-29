@@ -106,6 +106,7 @@ export function RuntimeUsage({
   auth,
   account,
   accountAction,
+  notice,
 }: {
   computerId: string;
   runtime: Runtime;
@@ -133,6 +134,8 @@ export function RuntimeUsage({
   account?: AccountState;
   /** Signs the runtime in or out for the login state the popover shows, if the viewer may. */
   accountAction?: (shown: AccountState | undefined) => ReactNode;
+  /** A line under the version: why this runtime cannot be used, when it cannot. */
+  notice?: ReactNode;
 }) {
   const supportsUsage = showUsage && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
@@ -151,7 +154,9 @@ export function RuntimeUsage({
     <RuntimeIdentity runtime={runtime} health={health} />
   );
 
-  if (!supportsUsage && !footer && !actions && !account) return resolvedTrigger;
+  // A runtime that reports no usage still opens for its footer, an action, its login state, or the
+  // reason it cannot be used at all.
+  if (!supportsUsage && !footer && !actions && !account && !notice) return resolvedTrigger;
 
   // The dot is named here too: the trigger's aria-label replaces the dot's own name, a login
   // state first, as the chip draws it.
@@ -192,6 +197,7 @@ export function RuntimeUsage({
               footer={footer}
               actions={actions}
               accountAction={accountAction?.(shown)}
+              notice={notice}
             />
           )}
         </Dialog>
@@ -222,6 +228,7 @@ export function RuntimeUsagePopoverContent({
   footer,
   actions,
   accountAction,
+  notice,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
   /** False for a runtime that reports no usage: only the runtime band and the footer show. */
@@ -239,6 +246,8 @@ export function RuntimeUsagePopoverContent({
   footer?: ReactNode;
   actions?: ReactNode;
   accountAction?: ReactNode;
+  /** A line under the version: why this runtime cannot be used, when it cannot. */
+  notice?: ReactNode;
 }) {
   const hydrated = useHydrated();
   const snapshot = data?.result?.snapshot;
@@ -290,6 +299,7 @@ export function RuntimeUsagePopoverContent({
                 )}
               </p>
             )}
+            {notice && <p className="text-sm text-tertiary">{notice}</p>}
             {auth && (
               <p className="text-xs text-tertiary">{m.computer_runtime_account_visibility()}</p>
             )}
@@ -299,7 +309,7 @@ export function RuntimeUsagePopoverContent({
               </p>
             )}
           </div>
-          {showUsage && (
+          {(showUsage || notice) && (
             // `isLoading` (React Aria's `isPending`) keeps focus on the button mid-press, where
             // `isDisabled` would drop it (task #109). The tooltip repeats its name.
             <Tooltip title={refreshLabel}>

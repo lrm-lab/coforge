@@ -166,7 +166,6 @@
   "computer_runtime_unavailable_probe_failed": "Could not read its version",
   "computer_runtime_unavailable_unknown": "Cannot be used",
   "computer_runtime_rescan_error": "The Computer reported a failure: {message}",
-  "computer_runtime_rescan_partial": "Some runtimes cannot be used. The reason is beside each one.",
   "computer_runtime_rescan_failed": "The Computer did not answer the rescan. Try again.",
   "computer_runtime_detection_pending": "Detecting runtimes… the list below is the last confirmed one.",
   "computer_runtimes": "Runtimes",

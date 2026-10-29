@@ -122,7 +122,7 @@ export function ComputerDetail({
       setRescanning(false);
     }
   };
-  const rescanNotice = runtimeRescanNotice(rescanResult, computer.runtimes);
+  const rescanNotice = runtimeRescanNotice(rescanResult);
   const workspaceSlug = useWorkspaceSlug();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const {
@@ -312,11 +312,6 @@ export function ComputerDetail({
                   {rescanNotice.message
                     ? m.computer_runtime_rescan_error({ message: rescanNotice.message })
                     : m.computer_runtime_rescan_failed()}
-                </p>
-              )}
-              {!rescanning && rescanNotice.kind === "partial" && (
-                <p className="mt-1 text-sm text-tertiary" role="status">
-                  {m.computer_runtime_rescan_partial()}
                 </p>
               )}
               {computer.runtimes.length ? (
