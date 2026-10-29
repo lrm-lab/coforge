@@ -67,6 +67,21 @@ export async function assigneeMember(
   return matches.find((member) => member.userId) ?? matches[0] ?? null;
 }
 
+/**
+ * Whether this member manages Tasks whatever their status: a Workspace owner or admin for a
+ * person, or an Agent whose own server role is one. An Agent never inherits its owner's role.
+ */
+export async function isTaskManager(tx: Transaction, workspaceId: string, member: Member) {
+  if (member.agentId) return member.agent?.role === "owner" || member.agent?.role === "admin";
+  const membership = member.userId
+    ? await tx.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: member.userId } },
+        select: { role: true },
+      })
+    : null;
+  return membership?.role === "owner" || membership?.role === "admin";
+}
+
 /** Only Workspace owners and admins may delete or record receipts on Tasks they do not hold. */
 export async function requireManager(tx: Transaction, workspaceId: string, member: Member) {
   const membership = member.userId

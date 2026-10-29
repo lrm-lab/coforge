@@ -78,12 +78,14 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
     await run(asAlice, { operation: "create", conversationId: work.id, title: "Unassigned" });
     const started = await selfAssigned(`#${work.channelName}`, "Started by the Agent");
     const finished = await selfAssigned(`#${work.channelName}`, "Finished");
-    await run(asAgent, {
-      operation: "update",
-      target: `#${work.channelName}`,
-      number: finished.number,
-      status: "done",
-    });
+    // A Task moves forward through the board, so Done is reached through In Review.
+    for (const status of ["in_progress", "in_review", "done"] as const)
+      await run(asAgent, {
+        operation: "update",
+        target: `#${work.channelName}`,
+        number: finished.number,
+        status,
+      });
     const inDirect = await selfAssigned(`@${alice.username}`, "Direct work");
     const inArchived = await selfAssigned(`#${archived.channelName}`, "Archived work");
     await selfAssigned(`#${hidden.channelName}`, "Hidden work");

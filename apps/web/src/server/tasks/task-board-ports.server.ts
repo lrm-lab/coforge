@@ -30,7 +30,12 @@ export type Member = {
   userId: string | null;
   agentId: string | null;
   user?: HumanNames | null;
-  agent?: { name: string; displayName?: string | null } | null;
+  agent?: {
+    name: string;
+    displayName?: string | null;
+    /** The Agent's own server role; never inherited from its owner. */
+    role?: string | null;
+  } | null;
 };
 /** The member a Task is assigned to: named in a notice by handle alone. */
 export type Assignee = Omit<Member, "user" | "agent"> & {
@@ -42,7 +47,7 @@ export const MEMBER_SELECT = {
   userId: true,
   agentId: true,
   user: { select: { username: true, displayName: true } },
-  agent: { select: { name: true, displayName: true } },
+  agent: { select: { name: true, displayName: true, role: true } },
 } satisfies Prisma.ConversationMemberSelect;
 /** One conversation of one Workspace: where a Task lives and where its notices go. */
 export type ConversationRef = { conversationId: string; workspaceId: string };

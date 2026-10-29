@@ -9,7 +9,8 @@ import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports
 import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./task-change.server";
 import { withNotices } from "./task-notice-posting.server";
 import { signalTaskChange, announceTasks } from "./task-publication.server";
-import { requireManager } from "./task-assignees.server";
+import { requireManager, isTaskManager } from "./task-assignees.server";
+import { ordinaryTaskStatusMove } from "./task-status-transitions.server";
 
 export async function updateTaskStatus(
   ports: TaskBoardPorts,
@@ -18,22 +19,19 @@ export async function updateTaskStatus(
   command: TaskCommand,
 ) {
   const { conversationId } = conversation;
+  const status = command.status;
+  if (status === undefined || status === "all") throw new AppError("INVALID_INPUT");
   const task = await findTaskByNumber(ports.db, conversationId, command.number!);
   if (!task) throw new AppError("NOT_FOUND");
   assertExpectedRevision(task, command.expectedRevision);
-  const isOwner = task.ownerMemberId === member.id;
-  if (member.agentId && !isOwner) throw new AppError("ACCESS_DENIED");
-  if (!isOwner && !member.userId) throw new AppError("ACCESS_DENIED");
-  if (
-    !isOwner &&
-    command.status !== "todo" &&
-    command.status !== "done" &&
-    command.status !== "closed"
-  )
-    throw new AppError("ACCESS_DENIED");
-  if (command.status !== "todo" && command.status !== "closed" && !task.ownerMemberId)
+  // Anyone who may speak in this conversation moves a Task, an Agent included; a Workspace owner
+  // or admin may set any status, everyone else only along the board's own transitions.
+  if (!(await isTaskManager(ports.db, conversation.workspaceId, member)))
+    if (!ordinaryTaskStatusMove(storedTaskStatus(task.status), status))
+      throw new AppError("ACCESS_DENIED");
+  if (status !== "todo" && status !== "closed" && !task.ownerMemberId)
     throw new AppError("CONFLICT");
-  if (command.status === "done" && task.createsResource && !task.resourceReceipt)
+  if (status === "done" && task.createsResource && !task.resourceReceipt)
     throw new AppError("CONFLICT");
   const updated = await withNotices(ports, conversation, async (tx, notices) => {
     const { task: updated } = await commitTaskChange(
@@ -41,7 +39,7 @@ export async function updateTaskStatus(
       member,
       task,
       { ownerMemberId: task.ownerMemberId },
-      { status: command.status },
+      { status },
     );
     if (updated.status !== task.status)
       await notices.inThread(updated, (quoted) =>

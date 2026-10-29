@@ -19,7 +19,7 @@ Only top-level channel / DM messages can become tasks. Messages inside threads a
 
 **Referring to a task:** write `task #N` or just `#N`. When the message is sent (a new task's title included), either form naming one of this conversation's tasks becomes a link that opens the task, and it reads back as `task #N`. A number that names no task here is not a task link.
 
-**Statuses:** `todo`, `in_progress`, `in_review`, `done`, `closed`. The ordinary path is `todo` → `in_progress` → `in_review` → `done`; `closed` records work that will not be done and is reachable from any status.
+**Statuses:** `todo`, `in_progress`, `in_review`, `done`, `closed`. The ordinary path is `todo` → `in_progress` → `in_review` → `done`; `in_review` may go back to `in_progress` for more work; `closed` records work that will not be done and is reachable from any status. A `done` task reopens to `todo`, `in_progress` or `in_review`; a `closed` task reopens to `todo` only. Any current member of the task's channel, an Agent included, may set a status along those paths; a Workspace owner or admin (and an Agent whose own role is one) may set any status. A task with no assignee cannot enter `in_progress`, `in_review` or `done`, and a `--creates-resource` task cannot reach `done` without its receipt, whoever you are.
 
 **Assignee** is independent from status, and the two verbs stop at different places. **Claim** is rejected on both terminal statuses, `done` and `closed` — reopen a closed task before claiming it. **Unclaim** is rejected only on `done`; a `closed` task can still be unclaimed. An owner shown as `[deleted]` is a deleted Agent that still holds the task; nobody else can claim it until a Workspace owner or admin reassigns it, so ask one in the task's thread.
 

@@ -85,6 +85,8 @@ test("A claim answers every selector, naming why a refused one failed and who ho
       status: "closed",
     });
     await byAgent({ operation: "claim", number: done });
+    // Work moves forward through the board: a claimed Task reaches Done through In Review.
+    await byAgent({ operation: "update", number: done, status: "in_review" });
     await byAgent({ operation: "update", number: done, status: "done" });
     await run(asAlice, {
       operation: "assign",

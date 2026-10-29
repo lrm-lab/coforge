@@ -33,6 +33,50 @@ for (const kind of ["user", "agent"] as const) {
   for (const role of kind === "user"
     ? ["owner", "admin", "member"]
     : ["owner", "admin", "member", "unknown"]) {
+    test(`${kind} ${role} moves a Task along the board, or to any status when privileged`, async () => {
+      const f = await taskAssignmentFixture(kind, role);
+      try {
+        const privileged = role === "owner" || role === "admin";
+        const task = (
+          await f.board.execute(f.ownerActor, {
+            ...f.command("user"),
+            operation: "create",
+            title: "Moves",
+            assignee: `@${f.peerAgent.name}`,
+          })
+        ).tasks[0]!;
+        // Whoever may speak in the channel moves a Task, but only along the board's transitions:
+        // Todo does not jump to Done.
+        const jump = f.board.execute(f.actor, {
+          ...f.command(),
+          operation: "update",
+          number: task.number,
+          status: "done",
+        });
+        if (privileged) expect((await jump).tasks[0]!.status).toBe("done");
+        else await expect(jump).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+        if (!privileged)
+          expect(
+            (
+              await f.board.execute(f.actor, {
+                ...f.command(),
+                operation: "update",
+                number: task.number,
+                status: "in_progress",
+              })
+            ).tasks[0]!.status,
+          ).toBe("in_progress");
+      } finally {
+        await f.close();
+      }
+    });
+  }
+}
+
+for (const kind of ["user", "agent"] as const) {
+  for (const role of kind === "user"
+    ? ["owner", "admin", "member"]
+    : ["owner", "admin", "member", "unknown"]) {
     test(`${kind} ${role} uses its current Workspace role to reserve, reassign and unassign others`, async () => {
       const f = await taskAssignmentFixture(kind, role);
       try {
