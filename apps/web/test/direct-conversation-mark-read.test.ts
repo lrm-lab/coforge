@@ -5,11 +5,20 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 describe("PrismaDirectConversationRepository read position", () => {
   test("markRead clamps the boundary to the conversation end and stays monotone", async () => {
     const updated: { where: object; data: object }[] = [];
+    const reads: { data: object }[] = [];
     const db = {
       $transaction: async (callback: (tx: object) => Promise<void>) =>
         callback({
           message: {
             findFirst: async () => ({ sequence: 7 }),
+          },
+          // A direct conversation: the cursor's move is recorded with its time (`recordReadAdvance`).
+          conversation: {
+            findUnique: async () => ({ directKey: "direct-key", workspaceId: "workspace-1" }),
+          },
+          messageRead: {
+            findFirst: async () => null,
+            create: async (input: { data: object }) => reads.push(input),
           },
           conversationMember: {
             findFirst: async () => ({ id: "member-1" }),
@@ -44,6 +53,9 @@ describe("PrismaDirectConversationRepository read position", () => {
         },
         data: { unreadFromSequence: null },
       },
+    ]);
+    expect(reads).toMatchObject([
+      { data: { conversationId: "conversation-1", memberId: "member-1", sequence: 7 } },
     ]);
 
     // An empty conversation refuses to move the cursor to a non-positive boundary.

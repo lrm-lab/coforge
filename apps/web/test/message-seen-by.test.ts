@@ -50,6 +50,8 @@ function dbFor({
       findMany: async ({ where }: { where: { id?: { not?: string } } }) =>
         members.filter((member) => member.id !== where.id?.not),
     },
+    // No read time kept: the message was read before they were, or not at all.
+    messageRead: { findFirst: async () => null },
   };
 }
 

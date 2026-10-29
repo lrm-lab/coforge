@@ -6,6 +6,7 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 describe("PrismaDirectConversationRepository Agent read cursor", () => {
   test("bounds and monotonically advances only the authorized Agent conversation", async () => {
     const updates: object[] = [];
+    const reads: { data: object }[] = [];
     const db = {
       agent: { findMany: async () => [] },
       user: { findUnique: async () => ({ id: "user-1" }) },
@@ -15,7 +16,17 @@ describe("PrismaDirectConversationRepository Agent read cursor", () => {
           updates.push(input);
           return { count: 1 };
         },
+        findFirstOrThrow: async () => ({ id: "member-agent-1" }),
       },
+      // A direct conversation: the move is recorded with its time, in the same transaction.
+      conversation: {
+        findUnique: async () => ({ directKey: "direct-key", workspaceId: "workspace-1" }),
+      },
+      messageRead: {
+        findFirst: async () => null,
+        create: async (input: { data: object }) => reads.push(input),
+      },
+      $transaction: async (run: (tx: unknown) => Promise<unknown>) => run(db),
     } as unknown as PrismaClient;
     class TestConversationRepository extends PrismaDirectConversationRepository {
       override async userIdForUsername(target: string) {
@@ -55,6 +66,9 @@ describe("PrismaDirectConversationRepository Agent read cursor", () => {
         },
         data: { agentReadThroughSequence: 9 },
       },
+    ]);
+    expect(reads).toMatchObject([
+      { data: { conversationId: "conversation-1", memberId: "member-agent-1", sequence: 9 } },
     ]);
   });
 

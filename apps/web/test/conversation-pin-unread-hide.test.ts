@@ -40,6 +40,8 @@ function fixture(options: { member?: boolean; newestSequence?: number } = {}) {
     conversation: {
       // `channel()`: the access check each mutation begins with.
       findFirst: async () => ({ id: CHANNEL_ID, channelName: "ops", archivedAt: null }),
+      // A channel: a read keeps no read time (`recordReadAdvance`).
+      findUnique: async () => ({ directKey: null, workspaceId: "workspace-1" }),
       findMany: async () => [
         {
           id: CHANNEL_ID,
