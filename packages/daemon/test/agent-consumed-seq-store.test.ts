@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
@@ -332,4 +332,20 @@ test("a database a newer build wrote is refused instead of migrated", async () =
   expect(() => AgentStateDb.open(stateDirectory, "agent-1")).toThrow(
     "Agent state database version 999 is newer than this daemon (1)",
   );
+});
+
+test("removing an Agent closes its ledger and deletes its directory", async () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  store.write("agent-1", {
+    targets: { "@ada": { conversationId: "conversation-1", seq: 7 } },
+    aliases: {},
+    nextReadOrder: 2,
+  });
+  expect(existsSync(dbPath(stateDirectory))).toBe(true);
+  store.remove("agent-1");
+  // A deleted Agent leaves no database behind in the daemon's state directory.
+  expect(existsSync(join(stateDirectory, "agent-state", "agent-1"))).toBe(false);
+  // The next use opens a fresh, empty ledger rather than a closed handle.
+  expect(store.read("agent-1").targets).toEqual({});
 });

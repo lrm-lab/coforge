@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { normalizeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
 import { AgentStateDb } from "./agent-state-db";
-import { isSafePathScope } from "./path-scope";
+import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 /** One Agent's consumed cursor for one target: `seq` is the frontier the Agent has consumed
  * (monotonic, never lower), `readOrder` when the target was last reviewed, ordered against every
@@ -201,6 +203,21 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
       );
       deleteUnlisted(db, "consumed_seq_aliases", "spelling", spellings);
     })();
+  }
+
+  /**
+   * Forgets one Agent's ledger: closes its handle and deletes `agent-state/<agentId>`. Called when
+   * the Agent is deleted or moves to another Computer, so the state directory does not accumulate
+   * a database per Agent that ever existed.
+   */
+  remove(agentId: string): void {
+    if (!isSafePathScope(agentId)) throw new Error("invalid consumed-sequence Agent scope");
+    this.#dbs.get(agentId)?.close();
+    this.#dbs.delete(agentId);
+    rmSync(join(this.#root, "agent-state", escapePathIdentity(agentId)), {
+      recursive: true,
+      force: true,
+    });
   }
 
   close(): void {

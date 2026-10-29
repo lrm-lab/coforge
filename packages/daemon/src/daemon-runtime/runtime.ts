@@ -395,7 +395,7 @@ export class DaemonRuntime {
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = generateRuntimeInstanceId();
-  /** The consumed cursor and each Agent's draft ledger, durable for the reasons its store gives. */
+  /** The consumed cursor and draft ledger; its store says why it is durable. */
   readonly #consumedSeqs: AgentConsumedSeqStore;
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
@@ -3338,6 +3338,8 @@ export class DaemonRuntime {
   #forgetLocalAgent(agentId: string): void {
     this.systemCleaner.replaceOwnerSnapshot(agentId, null);
     this.#offlineResidency.forget(agentId);
+    this.#agentInboxes.delete(agentId);
+    this.#consumedSeqs.remove(agentId);
   }
 
   /** Presents what was kept across an exit or a runtime's end, as at idle. */
@@ -3653,7 +3655,6 @@ export class DaemonRuntime {
   #agentInbox(agentId: string): AgentInboxStateMachine {
     const existing = this.#agentInboxes.get(agentId);
     if (existing) return existing;
-    // The held-send draft lives in the Agent's state.db next to its consumed cursor.
     const inbox = new AgentInboxStateMachine(
       new AgentMessageDraftStore(this.#consumedSeqs.stateDb(agentId)),
     );
