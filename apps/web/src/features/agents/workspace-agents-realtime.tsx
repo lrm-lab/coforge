@@ -159,15 +159,20 @@ export function WorkspaceAgentsProvider({
   const heldAgents = useRef<readonly LiveAgent[]>([]);
   // The Agents a mounted view reads the display of: held too, and read as soon as one is watched
   // that the store has no display for.
-  const watched = useMemo(
-    () =>
-      createDisplayWatchRegistry((agentId) => {
-        const known = heldAgents.current.find((agent) => agent.id === agentId);
-        if (known && (!known.isExtra || known.display)) return;
+  const watched = useMemo(() => {
+    let rereadQueued = false;
+    return createDisplayWatchRegistry((agentId) => {
+      const known = heldAgents.current.find((agent) => agent.id === agentId);
+      if (known && (!known.isExtra || known.display)) return;
+      // A page of views watched at once (the Members cards) reads the extras once, not per view.
+      if (rereadQueued) return;
+      rereadQueued = true;
+      queueMicrotask(() => {
+        rereadQueued = false;
         void queryClient.invalidateQueries({ queryKey: extraAgentsQueryKey(workspaceId) });
-      }),
-    [queryClient, workspaceId],
-  );
+      });
+    });
+  }, [queryClient, workspaceId]);
   const readExtraAgents = useCallback(
     () =>
       loadExtras({

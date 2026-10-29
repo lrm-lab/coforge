@@ -24,8 +24,6 @@ import {
 } from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
-import type { AgentStatusView } from "./agent-status-realtime";
-import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { MemberDialogs, type MemberDialog } from "./member-dialogs";
 import { AgentDeleteDialog } from "./agent-delete-dialog";
@@ -54,15 +52,6 @@ type ComputerOption = {
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-export type AgentView = {
-  id: string;
-  name: string;
-  displayName: string;
-  description?: string;
-  status: AgentStatusView;
-  display?: AgentDisplaySnapshot;
-};
-
 export type MemberTab = "agent" | "human";
 export type OwnerFilter = "all" | "mine";
 
@@ -71,7 +60,6 @@ export function AgentsContent({
   memberType,
   owner,
   onFiltersChange,
-  agents,
   computers,
   profileAgentId,
   profilePersonId,
@@ -86,7 +74,6 @@ export function AgentsContent({
   memberType: MemberTab;
   owner: OwnerFilter;
   onFiltersChange: (filters: { memberType?: MemberTab; owner?: OwnerFilter }) => void;
-  agents: AgentView[];
   computers: ComputerOption[];
   profileAgentId?: string;
   /** The person whose profile the panel shows (`profile=user:<id>`). */
@@ -120,7 +107,6 @@ export function AgentsContent({
   const canDeleteAgent = canInviteMember;
   const onAgentTab = memberType === "agent";
   const tabTotal = onAgentTab ? summary.agentCount : summary.peopleCount;
-  const ownedAgents = new Map(agents.map((agent) => [agent.id, agent]));
   const filtersActive = onAgentTab && owner === "mine";
   const searchLabel = onAgentTab ? m.member_search_agents() : m.member_search_humans();
   // Keep the cards already on screen while a changed filter or search loads its first page.
@@ -290,7 +276,6 @@ export function AgentsContent({
               <AgentCard
                 key={member.id}
                 member={member}
-                ownedAgent={ownedAgents.get(member.id)}
                 selected={member.id === profileAgentId}
                 // Without a time-zone preference the server and browser zones differ, so the date
                 // is only formatted after mount (the same rule as RelativeTime).

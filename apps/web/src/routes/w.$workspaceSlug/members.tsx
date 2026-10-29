@@ -104,7 +104,6 @@ function AgentsPage() {
           resetScroll: false,
         });
       }}
-      agents={visibleAgents}
       computers={computers}
       profileAgentId={agentIdFromProfileParam(profile)}
       profilePersonId={personIdFromProfileParam(profile)}

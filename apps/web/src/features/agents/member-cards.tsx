@@ -18,7 +18,8 @@ import {
   formatPersonProfileParam,
 } from "./profile-panel/profile-panel-search";
 import { AgentDisplayAvatar, AgentStackFace } from "./agent-display-avatar";
-import type { AgentView } from "./agents-content";
+import { useWatchAgentDisplay } from "./watched-agent-displays";
+import { useLiveAgent } from "./workspace-agents-realtime";
 
 type DirectoryAgent = MemberAgent;
 type DirectoryPerson = MemberPerson;
@@ -108,20 +109,22 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
 
 export function AgentCard({
   member,
-  ownedAgent,
   selected,
   createdOn,
   canEdit,
   onDelete,
 }: {
   member: DirectoryAgent;
-  ownedAgent?: AgentView;
   selected: boolean;
   createdOn: string;
   canEdit: boolean;
   /** Present only for a viewer who may delete Agents. */
   onDelete?: () => void;
 }) {
+  // Every Agent's status, the viewer's own and the others' alike, as Raft's members list shows it
+  // (task #290): another member's Agent is an extra, whose display is read while a card shows it.
+  useWatchAgentDisplay(member.id);
+  const display = useLiveAgent(member.id)?.display;
   const navigate = useNavigate();
   const openDirectConversation = useOpenDirectConversation();
   const workspaceSlug = useWorkspaceSlug();
@@ -145,22 +148,13 @@ export function AgentCard({
       className={cn(CARD_CLASS, selected && "ring-2 ring-brand")}
     >
       <div className="flex items-start justify-between gap-3">
-        {ownedAgent ? (
-          <AgentDisplayAvatar
-            agentId={member.id}
-            name={member.displayName}
-            src={member.avatarUrl}
-            display={ownedAgent.display}
-            size="lg"
-          />
-        ) : (
-          <IdentityAvatar
-            size="lg"
-            alt={member.displayName}
-            src={member.avatarUrl ?? undefined}
-            name={member.displayName}
-          />
-        )}
+        <AgentDisplayAvatar
+          agentId={member.id}
+          name={member.displayName}
+          src={member.avatarUrl}
+          display={display}
+          size="lg"
+        />
         <div className="flex min-h-9 shrink-0 items-center gap-1">
           {member.canMessage && (
             <Button
