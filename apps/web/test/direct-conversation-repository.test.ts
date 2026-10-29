@@ -6,6 +6,27 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { personAvatarUrl } from "#src/lib/person-picture";
 
+// Fake member rows for the read seam: `leftAt` must be present and null — an omitted field is
+// not "active" to the viewer-side check, so a fake row carries it like the real select does.
+const activeMembers = () => [
+  {
+    id: "user-member",
+    userId: "user-1",
+    agentId: null,
+    leftAt: null,
+    user: { id: "user-1", username: "alice" },
+    agent: null,
+  },
+  {
+    id: "agent-member",
+    userId: null,
+    agentId: "agent-1",
+    leftAt: null,
+    user: null,
+    agent: { id: "agent-1", name: "helper", displayName: "Helper" },
+  },
+];
+
 describe("PrismaDirectConversationRepository", () => {
   test("scopes a delivery ACK to the Agent's current Computer assignment", async () => {
     const updates: object[] = [];
@@ -112,22 +133,7 @@ describe("PrismaDirectConversationRepository", () => {
       $queryRaw: async () => [],
       conversation: {
         findUnique: async () => ({
-          members: [
-            {
-              id: "user-member",
-              userId: "user-1",
-              agentId: null,
-              user: { id: "user-1", username: "alice" },
-              agent: null,
-            },
-            {
-              id: "agent-member",
-              userId: null,
-              agentId: "agent-1",
-              user: null,
-              agent: { id: "agent-1", name: "helper", displayName: "Helper" },
-            },
-          ],
+          members: activeMembers(),
         }),
       },
       message: {
@@ -191,6 +197,7 @@ describe("PrismaDirectConversationRepository", () => {
                   id: "user-member",
                   userId: "user-1",
                   agentId: null,
+                  leftAt: null,
                   user: {
                     id: "user-1",
                     username: "alice",
@@ -204,6 +211,7 @@ describe("PrismaDirectConversationRepository", () => {
                   id: "agent-member",
                   userId: null,
                   agentId: "agent-1",
+                  leftAt: null,
                   user: null,
                   agent: {
                     id: "agent-1",
@@ -280,22 +288,7 @@ describe("PrismaDirectConversationRepository", () => {
     const db = {
       conversation: {
         findUnique: async () => ({
-          members: [
-            {
-              id: "user-member",
-              userId: "user-1",
-              agentId: null,
-              user: { id: "user-1", username: "alice" },
-              agent: null,
-            },
-            {
-              id: "agent-member",
-              userId: null,
-              agentId: "agent-1",
-              user: null,
-              agent: { id: "agent-1", name: "helper", displayName: "Helper" },
-            },
-          ],
+          members: activeMembers(),
         }),
       },
       message: { findMany: async () => [] },

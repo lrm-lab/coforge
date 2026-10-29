@@ -107,7 +107,9 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
   });
   // The other side keeps its row after leaving; the viewer's own side must not: a member who
   // left cannot read the DM back through this seam.
-  const sender = row?.members.find((member) => member.userId === userId && member.leftAt === null);
+  const sender = row?.members.find(
+    (member) => member.userId === userId && member.leftAt === null,
+  );
   if (!row || !sender) throw new Error("conversation scope is not authorized");
   const agent = row.members.find((member) => member.agent)?.agent;
   const peer = agent ? undefined : await peerOf(ports, row, userId);

@@ -70,6 +70,7 @@ describe("openForUser reports dmWritable", () => {
               id: "member-user",
               userId: options.viewerId,
               agentId: null,
+              leftAt: null,
               readThroughSequence: 0,
               user: { id: options.viewerId, username: "viewer" },
             },
@@ -77,6 +78,7 @@ describe("openForUser reports dmWritable", () => {
               id: "member-agent",
               userId: null,
               agentId: "agent-1",
+              leftAt: null,
               readThroughSequence: 0,
               agent: {
                 id: "agent-1",
