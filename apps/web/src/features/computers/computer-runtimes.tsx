@@ -170,7 +170,14 @@ export function ComputerRuntimeList({
                 account={unusableReason ? undefined : account}
                 notice={unusableReason}
                 triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
-                trigger={(status) => <RuntimeChip runtime={runtime} status={status} />}
+                trigger={(status) => (
+                  // A runtime that cannot start keeps its warning dot: it is the one thing that
+                  // shows the problem without opening the popover.
+                  <RuntimeChip
+                    runtime={runtime}
+                    status={unusableReason ? { ok: false, label: unusableReason } : status}
+                  />
+                )}
                 actions={
                   !unusableReason && (visibility || unavailable) && [visibility, unavailable]
                 }
