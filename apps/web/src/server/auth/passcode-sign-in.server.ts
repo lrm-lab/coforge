@@ -36,6 +36,12 @@ export type PasscodeSignInResult =
  * against the limits (`rateLimits`, by `clientAddress` when the request has one, and by the
  * destination) and refused without calling Authing when one is exceeded; a code sent costs money
  * and reaches a stranger. Redis and the log only ever see the destination's hash, or nothing.
+ *
+ * The limits and the answers are the same ones `sendPasswordResetCode` (`password-reset.server`)
+ * gives, and that is deliberate rather than incidental. The two stay separate functions for the
+ * one thing that must differ: this code makes the account of a first code sign-in (`autoRegister`),
+ * so a destination Authing does not know is a new account and gets its code, while a reset code
+ * for the same destination is refused by Authing and the refusal must not show.
  */
 export async function sendSignInCode(input: {
   config: AuthingConfig;

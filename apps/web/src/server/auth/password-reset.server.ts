@@ -43,9 +43,14 @@ export type ResetPasswordResult =
 
 /**
  * Has Authing send the code that sets a new password to a phone number or an email. Counted
- * against the same limits as a sign-in code (`admitCodeSend`). A request is answered `sent`
- * whatever Authing says about the destination: it refuses one no account has, and that must not
- * show, so a refusal and its own throttle are logged without the destination and not reported.
+ * against the same limits as a sign-in code (`admitCodeSend`), which is deliberate: a code costs
+ * money and reaches a stranger whatever it is for. A request is answered `sent` whatever Authing
+ * says about the destination: it refuses one no account has, and that must not show, so a refusal
+ * and its own throttle are logged without the destination and not reported.
+ *
+ * That refusal is the one intended difference from `sendSignInCode` (`passcode-sign-in.server`):
+ * a sign-in code makes the account of a first code sign-in, so an unknown destination gets one,
+ * and this one may not. The two therefore stay separate functions rather than sharing one.
  */
 export async function sendPasswordResetCode(input: {
   config: AuthingConfig;
