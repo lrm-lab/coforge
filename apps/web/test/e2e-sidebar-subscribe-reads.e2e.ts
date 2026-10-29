@@ -49,6 +49,7 @@ const COUNTED = [
   "listSavedMessages",
   "loadDirectConversationPreferences",
   "loadDirectConversationBadges",
+  "loadActivityNavAttention",
 ] as const;
 type Counted = (typeof COUNTED)[number];
 const noReads = (): Record<Counted, number> => ({
@@ -57,6 +58,7 @@ const noReads = (): Record<Counted, number> => ({
   listSavedMessages: 0,
   loadDirectConversationPreferences: 0,
   loadDirectConversationBadges: 0,
+  loadActivityNavAttention: 0,
 });
 
 /** This build's Server Function ids by export name, as the build states them
@@ -282,6 +284,7 @@ test("with nothing published between the reads and the subscriptions, every list
     listSavedMessages: 1,
     loadDirectConversationPreferences: 1,
     loadDirectConversationBadges: 1,
+    loadActivityNavAttention: 1,
   });
 }, 300_000);
 
@@ -302,4 +305,44 @@ test("a publication between the read and the subscriptions has the channel list 
   // whether their own position was read before the publication depends on the parallel reads.
   results.published = { ...proxy.reads };
   expect(proxy.reads.listPublicChannels).toBe(2);
+}, 300_000);
+
+/**
+ * Task #285's rule, as a regression: a message is announced to the viewer's own channel with the
+ * row it changes, so the sidebar writes that row and the Activity dot lights itself — neither
+ * reads anything. Ten messages, ten events, zero list reads and zero attention reads; the numbers
+ * land in `reads.json` beside the others.
+ */
+test("ten messages move the sidebar and the dot without a single read", async () => {
+  await browser("open", `${proxy.origin}${workspacePath}`);
+  await chatIsLive();
+  await browser("wait", "--load", "networkidle");
+  const channel = await db.conversation.findFirstOrThrow({
+    where: { workspaceId, channelName: { not: null } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+
+  proxy.reset();
+  const before = { ...proxy.reads };
+  for (let sequence = 1; sequence <= 10; sequence++) {
+    await publish(userConversationChannel(DEV_BROWSER_USER.id), {
+      type: "conversation.activity.v1",
+      workspaceId,
+      conversationId: channel.id,
+      messageId: `e2e-activity-${sequence}`,
+      sequence,
+      kind: "channel",
+      createdAt: new Date().toISOString(),
+      preview: `message ${sequence}`,
+      sender: { kind: "user", name: "Someone Else" },
+      senderUserId: "e2e-someone-else",
+    });
+  }
+  await browser("wait", "--load", "networkidle");
+
+  results["activity:before"] = before;
+  results["activity:after"] = { ...proxy.reads };
+  expect(proxy.reads.listPublicChannels).toBe(0);
+  expect(proxy.reads.loadActivityNavAttention).toBe(0);
 }, 300_000);
