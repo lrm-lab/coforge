@@ -43,7 +43,8 @@ export async function attachmentViewRequest(
 /**
  * What a failed download says, from the route's reason (`{ "error": … }`): a missing or forbidden
  * attachment keeps the wording that never reveals which, and a storage failure says what it is
- * instead of reading as a missing file. An older server answers bare text, which is relayed.
+ * instead of reading as a missing file. An older server answers bare text: a 404's is the same
+ * missing or forbidden attachment and gets the same wording; any other's is relayed.
  */
 function failureMessage(status: number, reason: string): string {
   switch (reason) {
@@ -56,6 +57,7 @@ function failureMessage(status: number, reason: string): string {
     case "persistence_unavailable":
       return "The server cannot reach its database.";
     default:
+      if (status === 404) return "Attachment is unavailable.";
       return reason || `HTTP ${status}`;
   }
 }

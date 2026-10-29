@@ -28,8 +28,16 @@ function fakeDb(options: { assistant?: boolean } = {}) {
       }),
     },
     conversation: {
+      // The Agent's own membership comes with the channel (`getAgentSendChannel`).
       findFirst: async ({ where }: { where: { channelName: string } }) =>
-        where.channelName === "general" ? { id: "channel-general" } : null,
+        where.channelName === "general"
+          ? {
+              id: "channel-general",
+              channelName: "general",
+              archivedAt: null,
+              members: [{ id: "member-agent-1", leftAt: null }],
+            }
+          : null,
       findUnique: async ({
         where,
       }: {
