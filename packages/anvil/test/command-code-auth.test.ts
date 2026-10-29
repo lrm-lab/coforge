@@ -125,6 +125,78 @@ test("Command Code whoami failure falls back to the status user and never fails 
   });
 });
 
+test("Command Code retries whoami after an unparseable lookup instead of caching the fallback", async () => {
+  let whoamiCalls = 0;
+  const adapter = new CommandCodeRuntimeAuthAdapter({
+    runStatus: async () => ({
+      output: '{"authenticated":true,"user":{"name":"amy@example.com"},"version":"1.87.3"}\n',
+      exitCode: 0,
+    }),
+    runWhoami: async () => {
+      whoamiCalls += 1;
+      return whoamiCalls === 1
+        ? { output: "Account details unavailable\n", exitCode: 0 }
+        : { output: "Email: amy@example.com\n", exitCode: 0 };
+    },
+    maskAccountLabel: (value) => `${value.slice(0, 3)}****@example.com`,
+  });
+
+  await expect(adapter.readStatus({ workingDirectory: "/tmp" })).resolves.toEqual({
+    provider: "command-code",
+    state: "logged_in",
+    account: { maskedLabel: "amy****@example.com" },
+  });
+  await expect(adapter.readStatus({ workingDirectory: "/tmp" })).resolves.toEqual({
+    provider: "command-code",
+    state: "logged_in",
+    account: { maskedLabel: "amy****@example.com" },
+  });
+  expect(whoamiCalls).toBe(2);
+});
+
+test("Command Code auth caches whoami per adapter instead of sharing across tests or runtimes", async () => {
+  let firstCalls = 0;
+  let secondCalls = 0;
+  const status = {
+    output: '{"authenticated":true,"user":{"name":"isolated@example.com"},"version":"1.87.3"}\n',
+    exitCode: 0,
+  };
+  const host = (increment: () => void) => ({
+    runStatus: async () => status,
+    runWhoami: async () => {
+      increment();
+      return { output: "Email: isolated@example.com\n", exitCode: 0 };
+    },
+    maskAccountLabel: (value: string) => `${value.slice(0, 3)}****@example.com`,
+  });
+
+  const first = new CommandCodeRuntimeAuthAdapter(host(() => (firstCalls += 1)));
+  const second = new CommandCodeRuntimeAuthAdapter(host(() => (secondCalls += 1)));
+  await first.readStatus({ workingDirectory: "/tmp" });
+  await second.readStatus({ workingDirectory: "/tmp" });
+  expect(firstCalls).toBe(1);
+  expect(secondCalls).toBe(1);
+});
+
+test("Command Code whoami receives only the remaining auth status deadline", async () => {
+  let whoamiTimeout = 0;
+  const adapter = new CommandCodeRuntimeAuthAdapter({
+    runStatus: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { output: '{"authenticated":true,"user":{"name":"amy"}}', exitCode: 0 };
+    },
+    runWhoami: async (_cwd, timeoutMs) => {
+      whoamiTimeout = timeoutMs;
+      return { output: "Email: amy@example.com\n", exitCode: 0 };
+    },
+    maskAccountLabel: (value) => `${value.slice(0, 3)}****@example.com`,
+  });
+
+  await adapter.readStatus({ workingDirectory: "/tmp", timeoutMs: 40 });
+  expect(whoamiTimeout).toBeGreaterThan(0);
+  expect(whoamiTimeout).toBeLessThan(40);
+});
+
 test("Command Code auth never starts browser login from the adapter", async () => {
   const adapter = new CommandCodeRuntimeAuthAdapter({
     runStatus: async () => ({ output: "", exitCode: 1 }),

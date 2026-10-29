@@ -45,16 +45,17 @@ export interface CommandCodeAuthHost {
  * polling `readStatus` does not hit the account service; a changed `user` names a new account
  * and re-reads it. The raw `user` (which may name an email) and the address are never kept.
  */
-let whoamiCache: { identity: string; maskedLabel?: string } | undefined;
-
 export class CommandCodeRuntimeAuthAdapter implements RuntimeAuthAdapter {
   readonly provider = RUNTIME_PROVIDER.COMMAND_CODE;
+  #whoamiCache: { identity: string; maskedLabel?: string } | undefined;
+
   constructor(private readonly host: CommandCodeAuthHost) {}
   async readStatus(options: {
     workingDirectory: string;
     timeoutMs?: number;
   }): Promise<RuntimeAuthStatus> {
     const timeoutMs = options.timeoutMs ?? COMMAND_CODE_AUTH_STATUS_TIMEOUT_MS;
+    const deadline = Date.now() + timeoutMs;
     try {
       const result = await withDeadline(
         this.host.runStatus(options.workingDirectory, timeoutMs),
@@ -69,19 +70,24 @@ export class CommandCodeRuntimeAuthAdapter implements RuntimeAuthAdapter {
           // `status --json` with a torn payload still reads as logged in below.
         }
         const identity = String(Bun.hash(JSON.stringify(status?.user ?? null)));
-        if (whoamiCache?.identity !== identity)
-          whoamiCache = {
-            identity,
-            maskedLabel: await this.#accountLabel(
-              options.workingDirectory,
-              timeoutMs,
-              status?.user,
-            ),
+        if (this.#whoamiCache?.identity !== identity) {
+          const remainingMs = Math.max(0, deadline - Date.now());
+          const account = await this.#accountLabel(
+            options.workingDirectory,
+            remainingMs,
+            status?.user,
+          );
+          if (account.cacheable) this.#whoamiCache = { identity, maskedLabel: account.maskedLabel };
+          return {
+            provider: this.provider,
+            state: "logged_in",
+            ...runtimeAuthAccount({ maskedLabel: account.maskedLabel }),
           };
+        }
         return {
           provider: this.provider,
           state: "logged_in",
-          ...runtimeAuthAccount({ maskedLabel: whoamiCache.maskedLabel }),
+          ...runtimeAuthAccount({ maskedLabel: this.#whoamiCache.maskedLabel }),
         };
       }
       if (result.exitCode === 1 && commandCodeLoggedOut(result.output))
@@ -93,7 +99,12 @@ export class CommandCodeRuntimeAuthAdapter implements RuntimeAuthAdapter {
   }
   /** The masked email for this account, or the status `user` masked when `whoami` fails; an
    * unmaskable value (e.g. a bare name) carries no label rather than leaking. */
-  async #accountLabel(cwd: string, timeoutMs: number, user: unknown): Promise<string | undefined> {
+  async #accountLabel(
+    cwd: string,
+    timeoutMs: number,
+    user: unknown,
+  ): Promise<{ maskedLabel?: string; cacheable: boolean }> {
+    if (timeoutMs <= 0) return { maskedLabel: this.#fallbackAccountLabel(user), cacheable: false };
     try {
       const result = await withDeadline(
         this.host.runWhoami(cwd, timeoutMs),
@@ -103,11 +114,14 @@ export class CommandCodeRuntimeAuthAdapter implements RuntimeAuthAdapter {
       if (result.exitCode === 0) {
         const email = commandCodeEmail(result.output);
         const masked = email && this.host.maskAccountLabel(email);
-        if (masked) return masked;
+        if (masked) return { maskedLabel: masked, cacheable: true };
       }
     } catch {
       // Offline or a CLI failure: the status `user` below.
     }
+    return { maskedLabel: this.#fallbackAccountLabel(user), cacheable: false };
+  }
+  #fallbackAccountLabel(user: unknown): string | undefined {
     const name = asRecord(user)?.name;
     return typeof name === "string" ? this.host.maskAccountLabel(name) : undefined;
   }

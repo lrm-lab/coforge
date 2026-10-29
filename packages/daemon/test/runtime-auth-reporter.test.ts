@@ -153,6 +153,63 @@ describe("the Workspace runtime's login status reporter", () => {
   });
 });
 
+test("reuses an adapter across refreshes so its account lookup cache survives", async () => {
+  let adapterCreations = 0;
+  let whoamiCalls = 0;
+  let lookupDone = false;
+  const sent: RuntimeAuthStatusReport[] = [];
+  const reporter = new RuntimeAuthReporter({
+    owner: { workspaceId: "workspace-a", computerId: "computer-a" },
+    workingDirectory: "/workspace",
+    transport: () =>
+      ({
+        reportRuntimeAuthStatus: async (report: RuntimeAuthStatusReport) => {
+          sent.push(report);
+        },
+      }) as unknown as DaemonConnectionClient,
+    isStopping: () => false,
+    createAdapter: (provider: RuntimeAuthProvider) => {
+      adapterCreations += 1;
+      return {
+        readStatus: async () => {
+          if (!lookupDone) {
+            lookupDone = true;
+            whoamiCalls += 1;
+          }
+          return { provider, state: "logged_in", account: { maskedLabel: "amy****@example.com" } };
+        },
+      } as unknown as RuntimeAuthAdapter;
+    },
+  });
+
+  await reporter.inventoryReported([runtime("command-code")] as RuntimeMetadata[]);
+  await reporter.refresh();
+  expect(sent).toHaveLength(2);
+  expect(adapterCreations).toBe(1);
+  expect(whoamiCalls).toBe(1);
+});
+
+test("recreates adapters when a new inventory is observed", async () => {
+  let adapterCreations = 0;
+  const reporter = new RuntimeAuthReporter({
+    owner: { workspaceId: "workspace-a", computerId: "computer-a" },
+    workingDirectory: "/workspace",
+    transport: () =>
+      ({ reportRuntimeAuthStatus: async () => {} }) as unknown as DaemonConnectionClient,
+    isStopping: () => false,
+    createAdapter: (provider: RuntimeAuthProvider) => {
+      adapterCreations += 1;
+      return {
+        readStatus: async () => ({ provider, state: "logged_out" }),
+      } as unknown as RuntimeAuthAdapter;
+    },
+  });
+
+  await reporter.inventoryReported([runtime("command-code")] as RuntimeMetadata[]);
+  await reporter.inventoryObserved([runtime("command-code")] as RuntimeMetadata[]);
+  expect(adapterCreations).toBe(2);
+});
+
 test("a usage refresh refuses to claim completion when the auth report was rejected", async () => {
   const { reporter, fail } = subject();
   await reporter.inventoryReported([runtime("kiro")] as RuntimeMetadata[]);

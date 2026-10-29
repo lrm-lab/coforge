@@ -30,6 +30,7 @@ type Ports = {
  */
 export class RuntimeAuthReporter {
   readonly #collector: RuntimeAuthStatusCollector;
+  readonly #adapters = new Map<RuntimeAuthProvider, RuntimeAuthAdapter>();
   /** The providers with an auth-status surface the last inventory held; undefined until one is known. */
   #installed: ReadonlySet<RuntimeAuthProvider> | undefined;
 
@@ -37,8 +38,14 @@ export class RuntimeAuthReporter {
     const createAdapter = ports.createAdapter ?? createRuntimeAuthAdapter;
     this.#collector = new RuntimeAuthStatusCollector({
       installedProviders: async () => [...(this.#installed ?? [])],
-      readStatus: (provider) =>
-        createAdapter(provider).readStatus({ workingDirectory: ports.workingDirectory }),
+      readStatus: (provider) => {
+        let adapter = this.#adapters.get(provider);
+        if (!adapter) {
+          adapter = createAdapter(provider);
+          this.#adapters.set(provider, adapter);
+        }
+        return adapter.readStatus({ workingDirectory: ports.workingDirectory });
+      },
       report: async ({ collectedAtMs, runtimes }) => {
         const transport = ports.transport();
         if (ports.isStopping() || !transport.reportRuntimeAuthStatus)
@@ -61,12 +68,14 @@ export class RuntimeAuthReporter {
 
   /** The inventory report just resolved (ready or reconnect): remember its providers and report. */
   inventoryReported(runtimes: readonly RuntimeMetadata[]): Promise<void> {
+    this.#adapters.clear();
     this.#installed = loginCapable(runtimes);
     return this.refresh();
   }
 
   /** Every re-discovery re-reads auth: an unchanged provider list can hide a new executable or environment. */
   inventoryObserved(runtimes: readonly RuntimeMetadata[]): Promise<void> {
+    this.#adapters.clear();
     this.#installed = loginCapable(runtimes);
     return this.refresh();
   }
