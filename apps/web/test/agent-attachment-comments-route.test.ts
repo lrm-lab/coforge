@@ -99,4 +99,3 @@ test("Agent comment output does not expose the human reply target", () => {
   } as never);
   expect(output).not.toHaveProperty("replyTarget");
 });
-
