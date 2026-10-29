@@ -38,6 +38,8 @@ describe("PrismaDirectConversationRepository", () => {
           return [{ mentionOutcome: null, mentionLaunchId: null }];
         },
       },
+      conversation: { findUnique: async () => ({ directKey: null, workspaceId: "w" }) },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
 
     await new PrismaDirectConversationRepository(db).receiveDeliveryAck({
@@ -95,6 +97,8 @@ describe("PrismaDirectConversationRepository", () => {
           return [];
         },
       },
+      conversation: { findUnique: async () => ({ directKey: null, workspaceId: "w" }) },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
     class TestConversationRepository extends PrismaDirectConversationRepository {
       override async getOrCreateUserAgent() {
@@ -142,6 +146,7 @@ describe("PrismaDirectConversationRepository", () => {
           return [message("root-5", 5), message("root-3", 3), message("root-1", 1)];
         },
       },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
     class TestConversationRepository extends PrismaDirectConversationRepository {
       override async getOrCreateUserAgent() {
@@ -292,6 +297,7 @@ describe("PrismaDirectConversationRepository", () => {
         }),
       },
       message: { findMany: async () => [] },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
     class TestConversationRepository extends PrismaDirectConversationRepository {
       override async getOrCreateUserAgent() {
@@ -333,6 +339,8 @@ describe("PrismaDirectConversationRepository", () => {
           ];
         },
       },
+      conversation: { findUnique: async () => ({ directKey: null, workspaceId: "w" }) },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
     const updates = await new PrismaDirectConversationRepository(db).updatesSince(
       "workspace-1",
@@ -387,6 +395,7 @@ describe("PrismaDirectConversationRepository", () => {
           return rows;
         },
       },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
     class TestConversationRepository extends PrismaDirectConversationRepository {
       override async userIdForUsername() {
@@ -481,6 +490,8 @@ describe("PrismaDirectConversationRepository", () => {
           ];
         },
       },
+      conversation: { findUnique: async () => ({ directKey: null, workspaceId: "w" }) },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
     class TestConversationRepository extends PrismaDirectConversationRepository {
       override async userIdForUsername() {
@@ -545,6 +556,8 @@ describe("PrismaDirectConversationRepository", () => {
           },
         ],
       },
+      conversation: { findUnique: async () => ({ directKey: null, workspaceId: "w" }) },
+      messageRead: { findFirst: async () => null, create: async () => ({}) },
     } as unknown as PrismaClient;
     class TestConversationRepository extends PrismaDirectConversationRepository {
       override async userIdForUsername() {

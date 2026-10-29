@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { recordReadAdvance } from "#src/server/conversations/human-unread.server";
 
 /** Moves a member's read position in a thread forward to `sequence`, never back. */
 export async function advanceThreadRead(
@@ -55,5 +56,7 @@ export async function advanceAgentRead(
     where: { conversationId, agentId, agentReadThroughSequence: { lt: sequence } },
     data: { agentReadThroughSequence: sequence },
   });
+  if (result.count > 0 && memberId)
+    await recordReadAdvance(db, { conversationId, memberId, sequence });
   return result.count > 0;
 }

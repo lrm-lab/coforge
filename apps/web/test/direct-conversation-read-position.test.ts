@@ -5,6 +5,17 @@ import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read
 import { publishConversationReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
+/** What `advanceAgentRead` reads beside the cursor: a direct conversation records a time. */
+const readAdvanceStores = {
+  messageRead: { findFirst: async () => null, create: async () => ({}) },
+  conversation: { findUnique: async () => ({ directKey: "user:a|user:b", workspaceId: "w" }) },
+};
+/** The same for a channel: no direct key, so nothing is recorded. */
+const channelReadStores = {
+  ...readAdvanceStores,
+  conversation: { findMany: async () => [], findUnique: async () => ({ directKey: null, workspaceId: "w" }) },
+};
+
 /** Unread reads and complete latest pages move the Agent's read position monotonically. */
 
 test("an unanchored canonical read advances across a missing sequence", async () => {
@@ -32,6 +43,7 @@ test("an unanchored canonical read advances across a missing sequence", async ()
         },
       ],
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
     override async userIdForUsername() {
@@ -108,6 +120,7 @@ test("a plain latest read advances a User-Agent DM when the full unread page fit
         },
       ],
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
     override async userIdForUsername() {
@@ -168,6 +181,7 @@ test("a plain latest read leaves the cursor when unread messages exceed the page
           actionCard: null,
         })),
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
     override async userIdForUsername() {
@@ -220,6 +234,7 @@ test("a plain latest read advances when only the tail of a full page is unread",
           actionCard: null,
         })),
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
     override async userIdForUsername() {
@@ -271,6 +286,7 @@ test("a plain latest read advances across a sequence gap when the omitted row is
           actionCard: null,
         })),
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
     override async userIdForUsername() {
@@ -330,6 +346,7 @@ test("a plain historical read never advances the User-Agent DM cursor", async ()
               },
             ],
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
     override async resolveAgentTarget() {
@@ -393,6 +410,7 @@ test("an Agent peer read does not publish a User-Agent DM event", async () => {
         },
       ],
     },
+    messageRead: { findFirst: async () => null, create: async () => ({}) },
   } as unknown as PrismaClient;
   await new PrismaDirectConversationRepository(
     db,
@@ -430,6 +448,7 @@ test("an app event session read does not publish a User-Agent DM event", async (
         },
       ],
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   await new PrismaDirectConversationRepository(
     db,
@@ -464,6 +483,7 @@ test("publishes a conversation read position only after the database advances", 
         },
       ],
     },
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   class TestConversationRepository extends PrismaDirectConversationRepository {
     override async resolveAgentTarget() {
@@ -508,6 +528,7 @@ test("thread reads stay silent while channel reads publish the shared event", as
   const db = {
     conversationMember: { updateMany: async () => ({ count: 1 }) },
     $executeRaw: async () => 1,
+    ...readAdvanceStores,
   } as unknown as PrismaClient;
   expect(
     await advanceAgentReadPosition({
@@ -569,7 +590,7 @@ test("channel main reads publish while DM thread reads stay silent", async () =>
       updateMany: async () => ({ count: 1 }),
     },
     threadRead: { findUnique: async () => ({ readThroughSequence: 1 }) },
-    conversation: { findMany: async () => [] },
+    ...channelReadStores,
     message: {
       findMany: async () => [
         {
@@ -588,6 +609,7 @@ test("channel main reads publish while DM thread reads stay silent", async () =>
       ],
     },
     $executeRaw: async () => 1,
+    messageRead: { findFirst: async () => null, create: async () => ({}) },
   } as unknown as PrismaClient;
   const page = {
     unread: true,
