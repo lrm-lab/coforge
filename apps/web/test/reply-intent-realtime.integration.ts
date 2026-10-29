@@ -176,7 +176,9 @@ test("real routing delivers start/end only to the conversation, with no history 
           ],
         },
       }),
-      { mode: 0o600 },
+      // Readable by the container's user: 0o600 rides through Docker Desktop's share but a
+      // Linux runner bind-mounts the mode as-is and Centrifugo then reports no config at all.
+      { mode: 0o644 },
     );
     await docker(
       "run",
