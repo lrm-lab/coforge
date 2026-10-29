@@ -105,8 +105,12 @@ export {
 export {
   cleanupComputerUpgradeJob,
   computerUpgradeJobLabel,
+  computerUpgradeJobPaths,
   computerUpgradeTaskName,
   computerUpgradeUnitName,
+  launchComputerUpgrade,
+  type ComputerUpgradeJobPaths,
+  type LaunchComputerUpgradeOptions,
 } from "#src/platform/computer-upgrade-launcher";
 export { readComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
 export { resolveComputerInstallDirectory } from "#src/platform/computer-install-directory";
