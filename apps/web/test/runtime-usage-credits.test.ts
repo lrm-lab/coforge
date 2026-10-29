@@ -44,7 +44,8 @@ test("both runtime entry points open the popover on a press, as on Raft", async 
   const content = await Bun.file(
     new URL("../src/features/computers/runtime-usage.tsx", import.meta.url).pathname,
   ).text();
-  expect(content).toContain("<DialogTrigger>");
+  // A trigger with props still presses open; only a hover trigger would regress the behaviour.
+  expect(content).toMatch(/<DialogTrigger[\s>]/);
   expect(content).not.toContain("HoverPopover");
 });
 
