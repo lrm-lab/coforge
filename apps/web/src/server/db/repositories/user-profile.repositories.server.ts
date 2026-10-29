@@ -25,6 +25,10 @@ export class PrismaUserProfileRepository {
         avatarObjectKey: true,
         createdAt: true,
         welcomedAt: true,
+        email: true,
+        emailVerified: true,
+        phone: true,
+        phoneVerified: true,
       },
     });
     if (!profile) throw new AppError("NOT_FOUND");
@@ -43,6 +47,12 @@ export class PrismaUserProfileRepository {
       hasAvatar: profile.avatarObjectKey !== null,
       /** When the account was created, as an ISO instant. */
       joinedAt: profile.createdAt.toISOString(),
+      /** The email and phone number the identity provider last reported, each with whether it
+       * verified them; only the person themselves is shown these. */
+      email: profile.email,
+      emailVerified: profile.emailVerified,
+      phone: profile.phone,
+      phoneVerified: profile.phoneVerified,
     };
   }
 

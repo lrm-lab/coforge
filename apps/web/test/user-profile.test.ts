@@ -155,6 +155,37 @@ describe("PrismaUserProfileRepository", () => {
     expect((await asked.repository.get("user-1")).named).toBe(true);
   });
 
+  test("gives the person their own email and phone number, each with whether it was verified", async () => {
+    const both = profileRepository({
+      username: "ada",
+      displayName: "Countess",
+      welcomedAt: null,
+      email: "ada@example.com",
+      emailVerified: true,
+      phone: "+8613800138000",
+      phoneVerified: false,
+    });
+    expect(await both.repository.get("user-1")).toMatchObject({
+      email: "ada@example.com",
+      emailVerified: true,
+      phone: "+8613800138000",
+      phoneVerified: false,
+    });
+
+    const emailOnly = profileRepository({
+      username: "ada",
+      displayName: "Countess",
+      welcomedAt: null,
+      email: "ada@example.com",
+    });
+    expect(await emailOnly.repository.get("user-1")).toMatchObject({
+      email: "ada@example.com",
+      emailVerified: false,
+      phone: null,
+      phoneVerified: false,
+    });
+  });
+
   test("a person with a blank name is shown as unnamed, never by their username", async () => {
     const unnamed = profileRepository({ username: "ada", displayName: "  ", welcomedAt: null });
     const profile = await unnamed.repository.get("user-1");
@@ -352,9 +383,17 @@ function profileRepository(row: {
   username: string;
   displayName: string;
   welcomedAt: Date | null;
+  email?: string | null;
+  emailVerified?: boolean;
+  phone?: string | null;
+  phoneVerified?: boolean;
 }) {
   const updates: unknown[] = [];
   const stored = {
+    email: null,
+    emailVerified: false,
+    phone: null,
+    phoneVerified: false,
     ...row,
     description: "",
     avatarObjectKey: null,
