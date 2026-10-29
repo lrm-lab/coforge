@@ -11,5 +11,9 @@
   "conversation_attachment_remove": "移除附件",
   "conversation_attachment_tray": "待发送的附件",
   "conversation_attachment_uploading": "正在上传 {progress}%",
-  "conversation_attachment_failed": "上传失败"
+  "conversation_attachment_failed": "上传失败",
+  "conversation_attachment_too_large": "超过 {limit}",
+  "conversation_attachment_signed_out": "登录已过期，刷新页面后重试",
+  "conversation_attachment_forbidden": "没有权限在这里上传",
+  "conversation_attachment_offline": "网络断开，联网后重试"
 }

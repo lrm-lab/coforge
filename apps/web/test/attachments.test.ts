@@ -283,6 +283,30 @@ test("attachment HTTP boundary maps expected and unexpected failures without dia
   expect(JSON.stringify(failure)).not.toContain("127.0.0.1");
 });
 
+test("an upload refused for a reason the composer can say answers that reason (task #291)", async () => {
+  const neverStores = async () => {
+    throw new Error("must not store a refused upload");
+  };
+  // A session that ended answers 401, not the sign-in redirect a page gets, which a script follows.
+  const signedOut = await handleAttachmentUpload(attachmentUploadRequest(), {
+    authenticate: () => null,
+    database: () => ({}) as never,
+    store: neverStores,
+  });
+  expect(signedOut.status).toBe(401);
+  expect(await signedOut.json()).toEqual({ reason: "signed_out" });
+
+  const form = new FormData();
+  form.set("conversationId", "conversation-1");
+  form.set("file", new File([new Uint8Array(ATTACHMENT_MAX_BYTES + 1)], "big.zip"));
+  const tooLarge = await handleAttachmentUpload(
+    new Request("https://coforge.test/api/attachments", { method: "POST", body: form }),
+    { authenticate: () => ({ id: "user-1" }), database: () => ({}) as never, store: neverStores },
+  );
+  expect(tooLarge.status).toBe(413);
+  expect(await tooLarge.json()).toEqual({ reason: "too_large" });
+});
+
 test("attachment HTTP boundary maps unavailable persistence without inventing a reference", async () => {
   const response = await handleAttachmentUpload(attachmentUploadRequest(), {
     authenticate: () => ({ id: "user-1" }),

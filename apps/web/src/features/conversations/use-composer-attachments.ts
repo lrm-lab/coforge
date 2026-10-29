@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { uploadAttachment, type PendingAttachment } from "./composer-attachments";
+import { oversizedUpload, stillUploading, UploadRefused } from "./upload-failure";
 import { localId } from "./composer-behavior";
 
 /** At most 10 attachments per send, mirroring the server-side `attachmentIds` bound
@@ -13,12 +14,18 @@ export const MAX_ATTACHMENTS = 10;
  */
 export function useComposerAttachments(conversationId: string) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const uploading = attachments.some((item) => !item.id && !item.failed);
-  const anyFailed = attachments.some((item) => item.failed);
+  const uploading = attachments.some(stillUploading);
+  const anyFailed = attachments.some((item) => item.failure);
 
   /** Uploads one already-added pending attachment, tracking it by `localId` regardless of
    * later reordering or removal of the others in `attachments`. */
   async function uploadOne(pending: PendingAttachment) {
+    // A retry starts over: the tile shows it uploading, not the failure it is retrying.
+    setAttachments((current) =>
+      current.map((item) =>
+        item.localId === pending.localId ? { ...item, failure: undefined, progress: 0 } : item,
+      ),
+    );
     try {
       const id = await uploadAttachment(conversationId, pending.file, (progress) =>
         setAttachments((current) =>
@@ -30,11 +37,10 @@ export function useComposerAttachments(conversationId: string) {
           item.localId === pending.localId ? { ...item, id, progress: 100 } : item,
         ),
       );
-    } catch {
+    } catch (error) {
+      const failure = error instanceof UploadRefused ? error.failure : "failed";
       setAttachments((current) =>
-        current.map((item) =>
-          item.localId === pending.localId ? { ...item, failed: true } : item,
-        ),
+        current.map((item) => (item.localId === pending.localId ? { ...item, failure } : item)),
       );
     }
   }
@@ -45,15 +51,16 @@ export function useComposerAttachments(conversationId: string) {
     const room = Math.max(0, MAX_ATTACHMENTS - attachments.length);
     const accepted = files.slice(0, room);
     if (accepted.length === 0) return;
+    // A file past the limit says so on its tile at once and is never sent.
     const pendingItems: PendingAttachment[] = accepted.map((file) => ({
       localId: localId(),
       file,
       progress: 0,
-      failed: false,
+      failure: oversizedUpload(file),
     }));
     setAttachments((current) => [...current, ...pendingItems]);
     for (const pending of pendingItems) {
-      await uploadOne(pending);
+      if (!pending.failure) await uploadOne(pending);
     }
   }
 

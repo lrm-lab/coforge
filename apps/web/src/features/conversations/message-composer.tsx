@@ -501,7 +501,6 @@ export function MessageComposer({
                   <AttachmentTile
                     key={item.localId}
                     attachment={item}
-                    uploading={!item.id && !item.failed}
                     onRemove={() =>
                       setAttachments((current) =>
                         current.filter((other) => other.localId !== item.localId),

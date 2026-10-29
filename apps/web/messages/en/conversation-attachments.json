@@ -11,5 +11,9 @@
   "conversation_attachment_remove": "Remove Attachment",
   "conversation_attachment_tray": "Attachments to send",
   "conversation_attachment_uploading": "Uploading {progress}%",
-  "conversation_attachment_failed": "Upload failed"
+  "conversation_attachment_failed": "Upload failed",
+  "conversation_attachment_too_large": "Over {limit}",
+  "conversation_attachment_signed_out": "Signed out. Reload the page and try again",
+  "conversation_attachment_forbidden": "You can't upload here",
+  "conversation_attachment_offline": "No connection. Try again when online"
 }

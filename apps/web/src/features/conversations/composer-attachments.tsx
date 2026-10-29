@@ -13,6 +13,14 @@ import {
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { cx } from "#src/utils/cx";
+import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
+import {
+  refusedUploadFailure,
+  retryableUploadFailure,
+  stillUploading,
+  UploadRefused,
+  type UploadFailure,
+} from "./upload-failure";
 import { m } from "#src/paraglide/messages";
 import { LoadingImage } from "./loading-image";
 
@@ -25,8 +33,27 @@ export type PendingAttachment = {
   id?: string;
   /** 0 to 100 while uploading. */
   progress: number;
-  failed: boolean;
+  /** Why it did not upload; absent while it uploads or once it has. */
+  failure?: UploadFailure;
 };
+
+/** What the tile says for a failure. */
+export function uploadFailureLabel(failure: UploadFailure): string {
+  switch (failure) {
+    case "too_large":
+      return m.conversation_attachment_too_large({
+        limit: getReadableFileSize(ATTACHMENT_MAX_BYTES),
+      });
+    case "signed_out":
+      return m.conversation_attachment_signed_out();
+    case "forbidden":
+      return m.conversation_attachment_forbidden();
+    case "offline":
+      return m.conversation_attachment_offline();
+    case "failed":
+      return m.conversation_attachment_failed();
+  }
+}
 
 /** Upload a composer attachment, reporting progress, and resolve with its id. */
 export function uploadAttachment(
@@ -50,9 +77,9 @@ export function uploadAttachment(
         } catch (cause) {
           reject(cause);
         }
-      } else reject(new Error(request.responseText || `upload failed (${request.status})`));
+      } else reject(new UploadRefused(refusedUploadFailure(request.status)));
     };
-    request.onerror = () => reject(new Error("upload failed"));
+    request.onerror = () => reject(new UploadRefused("offline"));
     request.send(form);
   });
 }
@@ -65,16 +92,15 @@ export function uploadAttachment(
  */
 export function AttachmentTile({
   attachment,
-  uploading,
   onRemove,
   onRetry,
 }: {
   attachment: PendingAttachment;
-  uploading: boolean;
   onRemove: () => void;
   onRetry: () => void;
 }) {
   const { file } = attachment;
+  const uploading = stillUploading(attachment);
   const isImage = file.type.startsWith("image/");
   const [previewUrl, setPreviewUrl] = useState<string>();
   useEffect(() => {
@@ -84,8 +110,8 @@ export function AttachmentTile({
   }, [file]);
   const typeLabel = fileTypeLabel(file.name, file.type);
   const typeAndSize = `${typeLabel ? `${typeLabel} · ` : ""}${getReadableFileSize(file.size)}`;
-  const status = attachment.failed
-    ? m.conversation_attachment_failed()
+  const status = attachment.failure
+    ? uploadFailureLabel(attachment.failure)
     : uploading
       ? m.conversation_attachment_uploading({ progress: attachment.progress })
       : typeAndSize;
@@ -100,7 +126,7 @@ export function AttachmentTile({
           className={cx(
             "overflow-hidden rounded-lg border border-primary bg-primary p-0 shadow-xs hover:bg-primary_hover",
             isImage ? "size-16" : "h-16 w-[13rem] justify-start px-3",
-            attachment.failed && "border-error",
+            attachment.failure && "border-error",
           )}
         >
           {isImage ? (
@@ -129,7 +155,7 @@ export function AttachmentTile({
                 <span
                   className={cx(
                     "truncate text-xs",
-                    attachment.failed ? "text-error-primary" : "text-tertiary",
+                    attachment.failure ? "text-error-primary" : "text-tertiary",
                   )}
                 >
                   {status}
@@ -174,7 +200,7 @@ export function AttachmentTile({
                         : typeAndSize}
                     </p>
                     {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
-                    {attachment.failed && (
+                    {attachment.failure && retryableUploadFailure(attachment.failure) && (
                       <Button color="link-color" size="sm" onPress={onRetry} className="mt-1">
                         {m.controls_retry()}
                       </Button>
@@ -210,7 +236,7 @@ export function AttachmentTile({
           className="pointer-events-none absolute inset-x-2 bottom-1.5 h-1 w-auto"
         />
       )}
-      {attachment.failed && isImage && (
+      {attachment.failure && isImage && (
         <AlertCircle
           aria-hidden="true"
           className="pointer-events-none absolute top-1/2 left-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary text-fg-error-primary"
