@@ -42,6 +42,9 @@ export function createLoginCommand(
   });
   return {
     async run(serverUrl, options) {
+      // The profile is local: a build that belongs to the other environment is refused here,
+      // before the daemon preflight could fail for a reason of its own and hide that answer.
+      await loadBuildProfile(config, serverUrl, "login");
       const platform = currentComputerPlatform();
       const stateDirectory = resolveComputerStateDirectory({
         platform: platform.os,
@@ -65,7 +68,6 @@ export function createLoginCommand(
           "Could not verify the local Daemon environment. Login was not started.",
         );
       }
-      await loadBuildProfile(config, serverUrl, "login");
       await login.run({ serverUrl, json: options.json });
     },
   };

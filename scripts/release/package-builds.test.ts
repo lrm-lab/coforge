@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -57,7 +58,9 @@ test.each([
     expect(computer.exitCode).toBe(0);
     expect(computer.stderr.toString()).toBe("");
 
-    const state = await mkdtemp(join(tmpdir(), "coforge-package-build-"));
+    // A real path: on macOS `tmpdir()` runs through `/var` -> `/private/var`, and the Daemon
+    // refuses a state directory reached through a symbolic link.
+    const state = realpathSync(await mkdtemp(join(tmpdir(), "coforge-package-build-")));
     try {
       const home = join(state, "home");
       const profileDirectory = join(home, ".coforge/computer");
