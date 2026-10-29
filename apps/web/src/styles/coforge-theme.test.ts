@@ -59,11 +59,11 @@ test("every CoForge colour token either has a dark-mode value or says why it is 
   expect(unexplained).toEqual([]);
 });
 
-test("the sidebar's dark rows do not paint an opaque fill over its gradient", () => {
+test("the sidebar's rows do not paint a resting fill over its gradient", () => {
   const dark = block(/\.dark-mode\s*\{/);
   // An opaque fill reads darker than the gradient at the top of the column and lighter at the
-  // bottom, which is what turned the nav into eight blocks.
-  expect(dark).toMatch(/--color-sidebar-item:\s*transparent;/);
+  // bottom, which is what turned the nav into eight blocks, in either theme.
+  expect(css).not.toMatch(/--color-sidebar-item:/);
   // The rail and the expanded rows share one highlight, so the current item cannot look like two
   // different things depending on which sidebar is showing.
   expect(dark).toMatch(/--color-sidebar-item-active:\s*var\(--color-sidebar-accent\);/);
