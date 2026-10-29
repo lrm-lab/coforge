@@ -13,6 +13,8 @@
 //   and object methods are not.
 // - A module whose name appears in any import counts as used, so an unrelated same-named import
 //   can hide it (a missed finding, never a wrong removal).
+// - A `const` with an explicit type and a literal `true`/`false` initializer is a compile-time
+//   assertion (`const check: Both<A, B> = true`), not a value; it is not reported.
 //
 // Why not knip or jscpd: knip reports unused files and exports for a whole workspace, and jscpd
 // finds duplicated blocks, but neither knows this repository's candidate rules (apps/*/src and
@@ -167,14 +169,27 @@ function lineOf(text: string, index: number): number {
   return text.slice(0, index).split("\n").length;
 }
 
-/** The names a file exports with a value or type declaration, with their line. */
-export function declaredExports(text: string): { name: string; kind: ExportKind; line: number }[] {
+/** The names a file exports with a value or type declaration, with their line and whether the
+ * declaration only exists for the compiler. */
+export function declaredExports(text: string): {
+  name: string;
+  kind: ExportKind;
+  line: number;
+  assertion: boolean;
+}[] {
+  const stripped = stripNoise(text);
   const declaration =
     /^export\s+(?:declare\s+)?(?:async\s+)?(function|const\s+enum|const|let|class|type|interface|enum)\s+([A-Za-z_$][\w$]*)/gm;
-  return [...stripNoise(text).matchAll(declaration)].map((match) => ({
+  return [...stripped.matchAll(declaration)].map((match) => ({
     name: match[2]!,
     kind: match[1] === "type" || match[1] === "interface" ? "type" : "value",
     line: lineOf(text, match.index!),
+    // `const check: Both<A, B> = true` is a compile-time assertion, not a value anyone reads.
+    assertion:
+      match[1] === "const" &&
+      /^\s*:\s*[^=;]{1,200}=\s*(?:true|false)\s*[;\n]/.test(
+        stripped.slice(match.index! + match[0].length),
+      ),
   }));
 }
 
@@ -292,7 +307,8 @@ export function analyze(files: ReadonlyMap<string, string>): AuditReport {
       .replace(/\.tsx?$/, "");
     if (!imported.has(stem) && !loadedByPath(path, literals))
       modules.push({ path, lines: text.split("\n").length });
-    for (const { name, kind, line } of declaredExports(text)) {
+    for (const { name, kind, line, assertion } of declaredExports(text)) {
+      if (assertion) continue;
       // References outside the declaring file, less every other file's declaration of the name:
       // a name only its own file uses is not dead code, but it is dead as an export.
       const sameFileUses = occurrences(text, name);

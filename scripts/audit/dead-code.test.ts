@@ -29,9 +29,9 @@ test("a declaration is found with the kind and the line it starts on", () => {
     "export type Gamma = string;",
   ].join("\n");
   expect(declaredExports(text)).toEqual([
-    { name: "alpha", kind: "value", line: 3 },
-    { name: "beta", kind: "value", line: 4 },
-    { name: "Gamma", kind: "type", line: 5 },
+    { name: "alpha", kind: "value", line: 3, assertion: false },
+    { name: "beta", kind: "value", line: 4, assertion: false },
+    { name: "Gamma", kind: "type", line: 5, assertion: false },
   ]);
 });
 
@@ -42,7 +42,7 @@ test("a declaration inside a comment is not an export", () => {
 
 test("a const enum is one declaration, not a declaration named enum", () => {
   expect(declaredExports("export const enum Mode {\n  A,\n}\n")).toEqual([
-    { name: "Mode", kind: "value", line: 1 },
+    { name: "Mode", kind: "value", line: 1, assertion: false },
   ]);
 });
 
@@ -75,6 +75,16 @@ test("an export nothing names is unused, one its own file uses is internal, one 
   expect(report.internal.map((entry) => entry.name)).toEqual(["internal"]);
   expect(report.unused[0]).toMatchObject({ path: "packages/x/src/a.ts", line: 1, sameFileUses: 1 });
   expect(report.internal[0]).toMatchObject({ sameFileUses: 2 });
+});
+
+test("a compile-time assertion constant is not reported as dead code", () => {
+  const report = analyze(
+    new Map([
+      ["packages/x/src/events.ts", "export const eventsMatch: Both<A, B> = true;"],
+      ["packages/x/src/flag.ts", "export const flag = true;"],
+    ]),
+  );
+  expect(report.unused.map((entry) => entry.name)).toEqual(["flag"]);
 });
 
 test("two dead declarations of one name are both unused", () => {
