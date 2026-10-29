@@ -101,7 +101,9 @@ export function followRestoredReads(
       clearTimeout(entry.timer);
       entry.timer = undefined;
       const query = queryClient.getQueryCache().get(queryHash);
-      if (query) read(query.queryKey);
+      // A parked read resumes by itself when the network returns; reading it again would cancel it
+      // for a second request.
+      if (query && query.state.fetchStatus !== "paused") read(query.queryKey);
     }
   };
   events?.addEventListener("online", readAllNow);
@@ -115,7 +117,6 @@ export function followRestoredReads(
       // Awaited from now, before the page renders the copy: it must not read as the newest.
       const entry = awaiting.get(query.queryHash) ?? { failures: 0 };
       entry.restoring = true;
-      if (query.state.fetchStatus === "paused") entry.paused = true;
       awaiting.set(query.queryHash, entry);
       notifyManager.schedule(() => {
         entry.restoring = false;

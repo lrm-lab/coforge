@@ -37,6 +37,7 @@ export function createConversationReconciler<T extends ConversationMessage>(
   let failures = 0;
   let caughtUp = false;
   const listeners = new Set<() => void>();
+  const notify = () => listeners.forEach((listener) => listener());
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const readToTheEnd = async (signal: AbortSignal) => {
@@ -61,15 +62,15 @@ export function createConversationReconciler<T extends ConversationMessage>(
       reading = controller;
       try {
         await readToTheEnd(controller.signal);
+        const changed = failures > 0 || !caughtUp;
         failures = 0;
-        if (!caughtUp) {
-          caughtUp = true;
-          listeners.forEach((listener) => listener());
-        }
+        caughtUp = true;
+        if (changed) notify();
       } catch (error) {
         // Abandoned by a restart, which asked for the read that follows, or by `stop`.
         if (controller.signal.aborted) continue;
         failures += 1;
+        notify();
         console.warn("conversation catch-up failed", failures, error);
         const delay = Math.min(retry.maxMs, retry.firstMs * 2 ** (failures - 1));
         retryTimer = setTimeout(
@@ -97,7 +98,9 @@ export function createConversationReconciler<T extends ConversationMessage>(
   return {
     /** Whether a read has caught the conversation up since this reconciler started (its open). */
     caughtUp: () => caughtUp,
-    /** Called when `caughtUp` turns true. */
+    /** How many catch-ups failed in a row; 0 once one landed. */
+    failures: () => failures,
+    /** Called when `caughtUp` or `failures` changes. */
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => void listeners.delete(listener);

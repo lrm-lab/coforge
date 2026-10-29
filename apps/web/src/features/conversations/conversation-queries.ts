@@ -287,7 +287,16 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   useEffect(() => reconciliation.stop, [reconciliation]);
   // Whether this open has read what arrived since the window was last read (the divider waits).
   const caughtUp = useSyncExternalStore(reconciliation.subscribe, reconciliation.caughtUp);
-  const shown = useMemo(() => ({ ...conversation, caughtUp }), [conversation, caughtUp]);
+  const catchUpFailures = useSyncExternalStore(reconciliation.subscribe, reconciliation.failures);
+  const shown = useMemo(
+    () => ({
+      ...conversation,
+      caughtUp,
+      catchUpFailures,
+      retryCatchUp: () => void reconciliation.reconcile({ restart: true }),
+    }),
+    [conversation, caughtUp, catchUpFailures, reconciliation],
+  );
   // The window's own network read moves the reconciler past what it holds (see `advance`); the
   // page's own writes to the window (a sent message merged in) do not, since messages from others
   // that arrived before it may still be unread.

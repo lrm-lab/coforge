@@ -51,7 +51,7 @@ export function ConversationComposerFooter({
   const recentHandles = useRecentConversationHandles(conversation.messages);
   return (
     <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-      {!root && <ConversationUpdateNotice conversationId={conversation.conversationId} />}
+      {!root && <ConversationUpdateNotice conversation={conversation} />}
       {!readOnlyNotice && !root && <NotificationActivationBanner />}
       {readOnlyNotice ?? (
         <MessageComposer

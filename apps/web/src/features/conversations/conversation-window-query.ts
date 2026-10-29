@@ -1,6 +1,6 @@
 // The stream's TanStack infinite query: a conversation's bounded window of pages, and the size and
 // cursor each page is read with (the window's rules are in `lib/conversation-window.ts`).
-import { infiniteQueryOptions, type InfiniteData } from "@tanstack/react-query";
+import { infiniteQueryOptions, onlineManager, type InfiniteData } from "@tanstack/react-query";
 
 import {
   CONVERSATION_WINDOW_MAX_PAGES,
@@ -83,6 +83,15 @@ export function conversationPages<M extends PageMessage, T extends ConversationP
     },
     initialPageParam: undefined as ConversationWindowCursor,
     maxPages: CONVERSATION_WINDOW_MAX_PAGES,
+    // The window opens from the browser's stored copy, and that restore runs inside the read (the
+    // persister wraps `queryFn`). The app's `online` mode parks a read offline before it starts,
+    // so a page reloaded and then cut off never looked at the copy and stayed on its skeleton
+    // (task #253). `offlineFirst` runs the read once whatever the network, which serves the copy.
+    // TanStack parks only a retry, and reads do not retry (`retry: false`): a read that fails
+    // offline is retried at once, which parks it until the network returns, as `online` did.
+    networkMode: "offlineFirst",
+    retry: () => !onlineManager.isOnline(),
+    retryDelay: 0,
     // Pages[0] is the oldest loaded window, the latest is the live end. Each direction derives its
     // cursor from the boundary page, and an honest `hasNewer` tells whether the newest retained page
     // is still the tail.

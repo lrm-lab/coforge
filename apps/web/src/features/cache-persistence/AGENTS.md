@@ -55,7 +55,8 @@ because the API is experimental.
   back-forward cache, and after two failures in a row, or once the read was parked offline (TanStack
   parks it as `paused` rather than failing it, so no failure is counted), the stream says it
   could not load the newest messages, with a retry (`ConversationUpdateNotice`); the notice goes
-  once the read lands.
+  once the read lands. A conversation held in this page's memory says the same when its catch-up
+  (`createConversationReconciler`) failed twice in a row, or has not landed while offline.
 - What the page writes itself (`setQueryData`: realtime messages, sends, read positions, the
   sidebar's TanStack DB writes) is stored too, with the query's newest state, at most once a second
   per query, and started at once when the page is hidden (`flush`; on `pagehide` it is best effort:
@@ -95,6 +96,10 @@ because the API is experimental.
 - Browser only. `installBrowserQueryCachePersistence` does nothing where there is no IndexedDB, so
   the server render's per-request QueryClient never sees a persister. Do not put persistence
   options in the QueryClient's `dehydrate` defaults: the SSR integration reads those too.
-- `networkMode` stays `online`; a persister would otherwise make every query `offlineFirst`.
+- `networkMode` stays `online`; a persister would otherwise make every query `offlineFirst`. A kept
+  query opened without the network in reach reads `offlineFirst` (the conversation windows,
+  `conversationPages`): the restore runs inside the read, which `online` parks before it starts.
+  Its read that fails offline is retried at once, which parks it until the network returns
+  (TanStack parks only a retry).
 - The browser test is `test/e2e-query-cache-persistence.e2e.ts` (opt-in, like the other `*.e2e.ts`:
   local Web at `COFORGE_E2E_WEB_URL` and `agent-browser`; its proxy holds the Chat reads).
