@@ -39,26 +39,14 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
       textValue={person.displayName}
       className={cn(CARD_CLASS, selected && "ring-2 ring-brand")}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <MemberAvatar
           size="lg"
           userId={person.id}
           name={person.displayName}
           src={person.avatarUrl}
         />
-        {/* Every member card offers it, the viewer's own too: that opens their DM with themself. */}
-        <div className="flex min-h-9 shrink-0 items-center">
-          <Button
-            size="sm"
-            color="secondary"
-            onPress={() => void openDirectConversation({ userId: person.id })}
-          >
-            {m.member_private_chat()}
-          </Button>
-        </div>
-      </div>
-      <div className="min-w-0">
-        <h2 className="truncate text-md font-semibold text-primary">
+        <h2 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">
           <Link
             to="/w/$workspaceSlug/members"
             params={{ workspaceSlug }}
@@ -70,7 +58,7 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
             })}
             aria-label={m.member_person_open_profile({ name: person.displayName })}
             aria-current={selected ? "page" : undefined}
-            className="inline-flex min-h-11 items-center rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2 sm:min-h-0"
+            className="rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2"
           >
             {person.displayName}
           </Link>
@@ -78,9 +66,18 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
             <span className="sr-only">, {online ? m.member_online() : m.member_offline()}</span>
           )}
         </h2>
+        {/* Every member card offers it, the viewer's own too: that opens their DM with themself. */}
+        <Button
+          size="sm"
+          color="secondary"
+          className="shrink-0"
+          onPress={() => void openDirectConversation({ userId: person.id })}
+        >
+          {m.member_private_chat()}
+        </Button>
       </div>
-      {/* Fixed two-line slot, as on Agent cards, so a row's footers line up. */}
-      <p className="line-clamp-2 min-h-10 text-sm break-words text-secondary">
+      {/* Fixed two-line slot, as on Agent cards, so a row's footers line up; one column needs none. */}
+      <p className="line-clamp-2 text-sm break-words text-secondary sm:min-h-10">
         {person.description}
       </p>
       {total > 0 && (
@@ -147,7 +144,7 @@ export function AgentCard({
       textValue={member.displayName}
       className={cn(CARD_CLASS, selected && "ring-2 ring-brand")}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <AgentDisplayAvatar
           agentId={member.id}
           name={member.displayName}
@@ -155,7 +152,26 @@ export function AgentCard({
           display={display}
           size="lg"
         />
-        <div className="flex min-h-9 shrink-0 items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-md font-semibold text-primary">
+            <Link
+              to="/w/$workspaceSlug/members"
+              params={{ workspaceSlug }}
+              resetScroll={false}
+              search={(previous) => ({
+                ...previous,
+                profile: formatAgentProfileParam(member.id),
+              })}
+              aria-label={m.agent_open_profile({ name: member.displayName })}
+              aria-current={selected ? "page" : undefined}
+              className="rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2"
+            >
+              {member.displayName}
+            </Link>
+          </h2>
+          <p className="truncate text-sm text-tertiary">@{member.name}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           {member.canMessage && (
             <Button
               size="sm"
@@ -200,40 +216,19 @@ export function AgentCard({
           </Dropdown.Root>
         </div>
       </div>
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <h2 className="min-w-0 truncate text-md font-semibold text-primary">
-            <Link
-              to="/w/$workspaceSlug/members"
-              params={{ workspaceSlug }}
-              resetScroll={false}
-              search={(previous) => ({
-                ...previous,
-                profile: formatAgentProfileParam(member.id),
-              })}
-              aria-label={m.agent_open_profile({ name: member.displayName })}
-              aria-current={selected ? "page" : undefined}
-              className="inline-flex min-h-11 items-center rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2 sm:min-h-0"
-            >
-              {member.displayName}
-            </Link>
-          </h2>
-          <span className="flex max-w-[55%] min-w-0 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
-            <Monitor aria-hidden="true" className="size-3.5 shrink-0" />
-            <span className="truncate">
-              {member.computerId === null
-                ? m.member_no_computer()
-                : member.computerName || m.agent_computer_unnamed()}
-            </span>
-          </span>
-        </div>
-        <p className="truncate text-sm text-tertiary">@{member.name}</p>
-      </div>
-      {/* Fixed two-line slot so every card in a row lines its footer up. */}
-      <p className="line-clamp-2 min-h-10 text-sm break-words text-secondary">
+      {/* Fixed two-line slot so every card in a row lines its footer up; one column needs none. */}
+      <p className="line-clamp-2 text-sm break-words text-secondary sm:min-h-10">
         {member.description}
       </p>
       <div className="mt-auto flex min-w-0 items-center gap-4 pt-1 text-sm text-tertiary">
+        <span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
+          <Monitor aria-hidden="true" className="size-3.5 shrink-0" />
+          <span className="truncate">
+            {member.computerId === null
+              ? m.member_no_computer()
+              : member.computerName || m.agent_computer_unnamed()}
+          </span>
+        </span>
         <Tooltip title={m.member_created_by()} arrow>
           <TooltipTrigger className="flex min-w-0 cursor-default items-center gap-2 rounded-sm outline-focus-ring focus-visible:outline-2">
             <IdentityAvatar
