@@ -15,6 +15,7 @@
       "./messages/{locale}/agent-turn-interrupt.json",
       "./messages/{locale}/agent-profile.json",
       "./messages/{locale}/conversations.json",
+      "./messages/{locale}/conversation-attachments.json",
       "./messages/{locale}/channels.json",
       "./messages/{locale}/activity-inbox.json",
       "./messages/{locale}/search.json",

@@ -16,7 +16,8 @@ import {
 } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
-import { AttachmentTile, uploadAttachment, type PendingAttachment } from "./composer-attachments";
+import { AttachmentTile } from "./composer-attachments";
+import { MAX_ATTACHMENTS, useComposerAttachments } from "./use-composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
@@ -58,10 +59,6 @@ export type SentMessage = {
 
 /** No name kept as text: one set every reset returns, so a state already holding it does not change. */
 const NO_NAMES: ReadonlySet<string> = new Set();
-
-/** At most 10 attachments per send, mirroring the server-side `attachmentIds` bound
- * (`conversation.schemas.ts`'s `attachmentIdsSchema`, the Agent API's `AgentMessagesSendRequest`). */
-const MAX_ATTACHMENTS = 10;
 
 /**
  * The message form at the foot of a conversation or thread. Owns the draft, the pending
@@ -215,7 +212,8 @@ export function MessageComposer({
       );
     },
   });
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const { attachments, setAttachments, uploading, anyFailed, uploadOne, addFiles } =
+    useComposerAttachments(conversationId);
   // Set only by editing an unsent Task back into the composer: Send then sends it as a Task again.
   const [asTask, setAsTask] = useState(false);
   // The edited-back Task belongs to its draft; another conversation's Send is a plain send again.
@@ -241,8 +239,6 @@ export function MessageComposer({
   // affordance does not flicker as the pointer crosses child element boundaries.
   const dragDepthRef = useRef(0);
   const [draggingFile, setDraggingFile] = useState(false);
-  const uploading = attachments.some((item) => !item.id && !item.failed);
-  const anyFailed = attachments.some((item) => item.failed);
   const composerDisabled = !hydrated;
   const dropDisabled = composerDisabled || uploading;
   const taskMode = !inThread && Boolean(canSendAsTask);
@@ -253,47 +249,6 @@ export function MessageComposer({
     attachments.length > MAX_ATTACHMENTS ||
     (!body.trim() && attachments.length === 0);
   const placeholder = composerPlaceholder(inThread, target);
-
-  /** Uploads one already-added pending attachment, tracking it by `localId` regardless of
-   * later reordering or removal of the others in `attachments`. */
-  async function uploadOne(pending: PendingAttachment) {
-    try {
-      const id = await uploadAttachment(conversationId, pending.file, (progress) =>
-        setAttachments((current) =>
-          current.map((item) => (item.localId === pending.localId ? { ...item, progress } : item)),
-        ),
-      );
-      setAttachments((current) =>
-        current.map((item) =>
-          item.localId === pending.localId ? { ...item, id, progress: 100 } : item,
-        ),
-      );
-    } catch {
-      setAttachments((current) =>
-        current.map((item) =>
-          item.localId === pending.localId ? { ...item, failed: true } : item,
-        ),
-      );
-    }
-  }
-
-  /** Adds and uploads one or more files, sequentially (one `/api/attachments` request at a
-   * time, never in parallel), stopping at `MAX_ATTACHMENTS`. */
-  async function addFiles(files: File[]) {
-    const room = Math.max(0, MAX_ATTACHMENTS - attachments.length);
-    const accepted = files.slice(0, room);
-    if (accepted.length === 0) return;
-    const pendingItems: PendingAttachment[] = accepted.map((file) => ({
-      localId: localId(),
-      file,
-      progress: 0,
-      failed: false,
-    }));
-    setAttachments((current) => [...current, ...pendingItems]);
-    for (const pending of pendingItems) {
-      await uploadOne(pending);
-    }
-  }
 
   function pinMention(mention: Mentionable) {
     setPins((current) => addMentionPin(current, mentionPinFor(mention)));
