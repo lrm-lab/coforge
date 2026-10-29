@@ -40,6 +40,7 @@ export function CollapsibleMessageBody({
   expanded,
   collapsible = true,
   onToggleExpanded,
+  trailing,
   ...bodyProps
 }: ComponentProps<typeof MessageBody> & {
   expanded: boolean;
@@ -99,24 +100,33 @@ export function CollapsibleMessageBody({
         )}
         style={collapsed ? { maxHeight: COLLAPSED_MESSAGE_MAX_HEIGHT } : undefined}
       >
-        <MessageBody body={body} mentions={mentions} {...bodyProps} />
+        {/* Collapsed, the last word is under the cut: what follows it moves up beside the control. */}
+        <MessageBody
+          body={body}
+          mentions={mentions}
+          trailing={collapsed ? undefined : trailing}
+          {...bodyProps}
+        />
       </div>
       {foldable && (
-        <Button
-          color="link-gray"
-          size="sm"
-          className="mt-0.5 w-fit font-semibold"
-          aria-expanded={expanded}
-          onPress={onToggleExpanded}
-          iconTrailing={
-            <ChevronDown
-              aria-hidden="true"
-              className={cn("size-3.5 transition-transform", expanded && "rotate-180")}
-            />
-          }
-        >
-          {expanded ? m.conversation_message_show_less() : m.conversation_message_show_more()}
-        </Button>
+        <div className="flex items-center">
+          <Button
+            color="link-gray"
+            size="sm"
+            className="mt-0.5 w-fit font-semibold"
+            aria-expanded={expanded}
+            onPress={onToggleExpanded}
+            iconTrailing={
+              <ChevronDown
+                aria-hidden="true"
+                className={cn("size-3.5 transition-transform", expanded && "rotate-180")}
+              />
+            }
+          >
+            {expanded ? m.conversation_message_show_less() : m.conversation_message_show_more()}
+          </Button>
+          {collapsed && trailing}
+        </div>
       )}
     </>
   );

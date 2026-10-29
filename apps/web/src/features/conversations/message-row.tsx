@@ -28,6 +28,7 @@ import { gutterClockLabel } from "./gutter-clock-label";
 import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { SystemMessageRow } from "./system-message-row";
 import { MessageRowFooter } from "./message-row-footer";
+import { OwnMessageTicks } from "./message-status-markers";
 import { MessageSenderGutter } from "./message-sender-gutter";
 import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
 import type { MessageView } from "./message-view";
@@ -250,6 +251,12 @@ export const MessageRow = memo(function MessageRow({
         else toast.error(m.conversation_copy_failed());
       }),
   };
+  const displayBody = attachmentMessageDisplayBody(message);
+  // An own message's ticks follow its last word; one with no text keeps them at its bottom right.
+  const textTicks =
+    readState && !message.actionCard && displayBody.trim() ? (
+      <OwnMessageTicks readState={readState} inline />
+    ) : undefined;
   return (
     // Spacing (design spec, docs/design/page-skeleton-and-density.md): a message with a sender
     // heading keeps 12px between its content and its hover background on all four sides; a
@@ -298,7 +305,7 @@ export const MessageRow = memo(function MessageRow({
           gutterTime={gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
           fullTime={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
         />
-        <div className="relative flex min-w-0 flex-1 flex-col gap-0.5 has-[[data-read-ticks=latest]]:pr-5 lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[data-read-ticks]]:pr-5">
+        <div className="relative flex min-w-0 flex-1 flex-col gap-0.5 has-[[data-read-ticks=latest]]:pr-5 lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[data-read-ticks=hover]]:pr-5">
           {!grouped && (
             <MessageSenderLine
               message={message}
@@ -335,7 +342,8 @@ export const MessageRow = memo(function MessageRow({
               )}
             >
               <CollapsibleMessageBody
-                body={attachmentMessageDisplayBody(message)}
+                body={displayBody}
+                trailing={textTicks}
                 mentions={message.mentions}
                 plainMentions={plainMentions}
                 viewerId={viewerId}
@@ -368,7 +376,7 @@ export const MessageRow = memo(function MessageRow({
             }
             showsTask={showsTask}
             onOpenThread={onOpenThread}
-            readState={readState}
+            cornerTicks={textTicks ? undefined : readState}
           />
         </div>
         {(onOpenThread || onToggleReaction || onToggleSave || copyable || actions.seenBy) && (

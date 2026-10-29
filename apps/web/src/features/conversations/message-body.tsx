@@ -1,4 +1,10 @@
-import { useMemo, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import Markdown, { type Components, type ExtraProps, type Options } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
@@ -7,7 +13,12 @@ import type { Element } from "hast";
 import { MESSAGE_REMARK_PLUGINS, escapeLiteralHtml } from "#src/lib/message-syntax";
 import { AgentMentionChip, PersonMentionChip } from "./mention-chip-hover";
 import { followInternalLinkClick, internalAppHref } from "./internal-app-href";
-import { mentionHandlesByToken, rehypeReferenceChips, type ChipMention } from "./message-markdown";
+import {
+  mentionHandlesByToken,
+  rehypeReferenceChips,
+  rehypeTrailingSlot,
+  type ChipMention,
+} from "./message-markdown";
 import type { MentionRef } from "./mention-text";
 import type {
   OpenAgentProfile,
@@ -46,6 +57,7 @@ export function MessageBody({
   onOpenPersonProfile,
   onOpenTask,
   channelNames,
+  trailing,
 }: {
   body: string;
   mentions?: readonly MentionRef[];
@@ -67,32 +79,29 @@ export function MessageBody({
    * its current name; any other id reads as the plain `#name` it stored. Absent (e.g. a Saved card,
    * itself one link), every reference reads as plain `#name`. */
   channelNames?: ReadonlyMap<string, string>;
+  /** Inline content after the last word (an own message's ticks), placed by
+   * `rehypeTrailingSlot`. */
+  trailing?: ReactNode;
 }) {
   const source = useMemo(() => escapeLiteralHtml(body), [body]);
   const handles = useMemo(() => mentionHandlesByToken(mentions), [mentions]);
   // A body with no token and no plain `@handle` to resolve skips the chip pass entirely.
   const hasReference =
     source.includes("<@") || (plainMentions !== undefined && plainMentions.size > 0);
+  const hasTrailing = trailing !== undefined && trailing !== null;
   // Typed against react-markdown's own plugin list so the plugin-with-options tuple form
   // type-checks without a cast.
-  const rehypePlugins = useMemo<NonNullable<Options["rehypePlugins"]>>(
-    () =>
-      hasReference
-        ? [
-            rehypeSanitize,
-            [
-              rehypeReferenceChips,
-              {
-                mentions: handles,
-                viewerId,
-                plainMentions,
-                channelNames,
-              },
-            ],
-          ]
-        : [rehypeSanitize],
-    [hasReference, handles, viewerId, plainMentions, channelNames],
-  );
+  const rehypePlugins = useMemo<NonNullable<Options["rehypePlugins"]>>(() => {
+    const plugins: NonNullable<Options["rehypePlugins"]> = [rehypeSanitize];
+    if (hasReference)
+      plugins.push([
+        rehypeReferenceChips,
+        { mentions: handles, viewerId, plainMentions, channelNames },
+      ]);
+    // After sanitizing, which would strip the slot's marker.
+    if (hasTrailing) plugins.push(rehypeTrailingSlot);
+    return plugins;
+  }, [hasReference, handles, viewerId, plainMentions, channelNames, hasTrailing]);
   // The `span` override recognises the chips `rehypeReferenceChips` injects: a mention chip
   // (`data-mention-agent-id` or `data-mention-user-id`) becomes an accessible button, a task reference
   // (`data-task-reference-number`) its Task's badge (`TaskReference`), a channel-reference chip
@@ -108,15 +117,25 @@ export function MessageBody({
 
   return (
     <div className="message-markdown">
-      <Markdown
-        remarkPlugins={MESSAGE_REMARK_PLUGINS}
-        rehypePlugins={rehypePlugins}
-        components={components}
-      >
-        {source}
-      </Markdown>
+      <TrailingContext.Provider value={trailing}>
+        <Markdown
+          remarkPlugins={MESSAGE_REMARK_PLUGINS}
+          rehypePlugins={rehypePlugins}
+          components={components}
+        >
+          {source}
+        </Markdown>
+      </TrailingContext.Provider>
     </div>
   );
+}
+
+/** What `MessageBody` was given to follow its last word; read by the slot `rehypeTrailingSlot`
+ * marks, so the Markdown components stay the same object whatever it is. */
+const TrailingContext = createContext<ReactNode>(undefined);
+
+function TrailingSlot() {
+  return useContext(TrailingContext);
 }
 
 const MARKDOWN_COMPONENTS = {
@@ -206,6 +225,8 @@ function chipSpan(
   }: ComponentPropsWithoutRef<"span"> & ExtraProps) {
     void node;
     // `data-*` attributes arrive on props via react-markdown's hast → props mapping.
+    if ((props as Record<string, unknown>)["data-trailing-slot"] !== undefined)
+      return <TrailingSlot />;
     const channelId = (props as Record<string, unknown>)["data-channel-id"];
     if (typeof channelId === "string") {
       return (
