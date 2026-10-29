@@ -31,8 +31,7 @@ import { newerPageCommit, positionJumpDecision } from "./conversation-thread-sea
 import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
 import { latestTopLevelSequence } from "./conversation-unread";
 import { streamState, type StreamRead } from "./stream-state";
-import { MessageComposer } from "./message-composer";
-import { useMentionCandidates } from "./mention-candidates";
+import { ConversationComposerFooter } from "./conversation-composer-footer";
 import { ThreadPaneHeader, type ThreadFollow } from "./thread-pane-header";
 import { makeReferenceBodyFormatter } from "./mention-text";
 import type { ChipMention } from "./message-markdown";
@@ -40,7 +39,6 @@ import type { ChannelSuggestion } from "./reference-completion";
 import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
 import { outboxContinuesRun, ownMessageReadState } from "./conversation-pane-layout";
 import { useMessageExpansion } from "./use-message-expansion";
-import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 import { optimisticSavedEntry } from "./saved-messages-collection";
 import { OutboxMessageRow } from "./outbox-message-row";
 import { SystemMessageGroup } from "./system-message-group";
@@ -56,7 +54,6 @@ import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ReplyingAgentsLine } from "#src/features/agents/replying-agents-line";
-import { NotificationActivationBanner } from "#src/features/notifications/notification-activation-banner";
 
 export function ConversationPane({
   conversation,
@@ -134,11 +131,6 @@ export function ConversationPane({
   /** Called exactly once per consumed jump, to strip the param one-shot like a hash. */
   onJumpMessageConsumed?: () => void;
 }) {
-  const mentionCandidates = useMentionCandidates(
-    conversation.mentionables,
-    conversation.viewerId,
-    mentionCompletion,
-  );
   // Days and times follow the viewer's locale and time zone (their saved one, else the browser's).
   // The pane is only ever rendered in the browser, so the locale is known at once.
   const timeZone = useTimeZone();
@@ -247,10 +239,6 @@ export function ConversationPane({
   );
   const lastSequence = conversation.messages.at(-1)?.sequence;
   const firstSequence = conversation.messages[0]?.sequence;
-  // Handles that recently sent a message here, most-recent first: the mention completion popup
-  // ranks these candidates ahead of alphabetical order within a match tier. Deduplicated by
-  // handle so the same person's older messages don't push their own recent one down.
-  const recentHandles = useRecentConversationHandles(conversation.messages);
   const isOwn = (message: { senderMemberId?: string | null }) =>
     isViewerMessage(message, conversation.senderMemberId);
   // Only derived from the loaded page when no indexed own-message source is wired up.
@@ -960,25 +948,18 @@ export function ConversationPane({
         </div>
       </div>
 
-      <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-        {!readOnlyNotice && !root && <NotificationActivationBanner />}
-        {readOnlyNotice ?? (
-          <MessageComposer
-            conversationId={conversation.conversationId}
-            threadRootId={root?.id}
-            inThread={Boolean(root)}
-            target={root ? undefined : composerTarget}
-            mentionables={mentionCandidates}
-            mentionOutsiders={conversation.mentionOutsiders}
-            recentHandles={recentHandles}
-            channels={channels}
-            onSend={onSend}
-            canSendAsTask={canSendAsTask}
-            onSent={ownIndex.add}
-            quotedDraft={quotedDraft}
-          />
-        )}
-      </div>
+      <ConversationComposerFooter
+        conversation={conversation}
+        root={root}
+        readOnlyNotice={readOnlyNotice}
+        mentionCompletion={mentionCompletion}
+        composerTarget={composerTarget}
+        channels={channels}
+        onSend={onSend}
+        canSendAsTask={canSendAsTask}
+        onSent={ownIndex.add}
+        quotedDraft={quotedDraft}
+      />
     </div>
   );
 }
