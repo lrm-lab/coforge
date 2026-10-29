@@ -16,7 +16,7 @@ import {
 } from "./composer-outbox";
 import type { ChipMention } from "./message-reference-chips";
 import { MessageBody } from "./message-body";
-import { messagePaddingClass, ROW_CLASS, RUN_START_CLASS } from "./message-row";
+import { messageRowKind, messagePaddingClass, ROW_CLASS, RUN_START_CLASS } from "./message-row";
 import { canEditUnsent, failureAnnounced, failureNeedsAnnouncing } from "./use-message-outbox";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
@@ -118,6 +118,7 @@ export function OutboxMessageRow({
   return (
     <li
       data-outbox-state={entry.state}
+      data-message-row={messageRowKind(grouped)}
       // Same geometry as `MessageRow` (see there).
       className={cn(ROW_CLASS, !grouped && RUN_START_CLASS)}
     >

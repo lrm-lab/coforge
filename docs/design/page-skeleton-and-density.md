@@ -22,7 +22,7 @@
 
 用户确认参考 Slack 消息流：采用保留头像的 [Clean 布局](https://slack.com/help/articles/213893898-Change-how-messages-are-displayed)，不是隐藏头像的 Compact 模式或左右气泡。
 消息、附件和任务引用沿正文列左对齐；同一发送者五分钟内的连续消息合组，跨日期不合组。
-间距（设计稿 task #99，2026-11-03 按 Raft 改了底边）：消息内容距 hover 背景左右各 12px，每一行底边都只留 4px；带发送者名字的消息顶上另留 12px。所以同一发送者的连续消息距上一行永远是 4px，不管上一行带不带名字，第一条和后面几条读成一组（Raft 同：每行上下各 4px，带名字的行顶上多 8px）。两段发送者之间内容到内容 32px，手机（`md` 以下）收紧为 24px（task #118：32px 在窄屏短消息之间读成一条空带）。hover 背景是不透明的 `#F7F8FB`（`--color-message-hover`，设计指定；`#E0E5F1` 只用于边框和分割线，不铺底），圆角 8px（`rounded-lg`），悬停操作栏是实底、细边、带阴影的浮条，压在这条消息的上边线上（task #459）。日期和未读分割线距上下内容各 16px，线色 `border-secondary`，日期标签带同色描边。
+间距（设计稿 task #99，2026-11-03 按 Raft 改了底边）：消息内容距 hover 背景左右各 12px，每一行底边都只留 4px；带发送者名字的消息顶上另留 12px。所以同一发送者的连续消息距上一行永远是 4px，不管上一行带不带名字，第一条和后面几条读成一组（Raft 同：每行上下各 4px，带名字的行顶上多 8px）。两段发送者之间内容到内容 32px，手机（`md` 以下）收紧为 24px（task #118：32px 在窄屏短消息之间读成一条空带）。两条消息之间的间距全部做成上下两条各占一半的内边距，所以相邻两条的 hover 背景在两条消息正中间相接，不会一条停在自己文字边上、中间留一条谁也不属于的缝（task #255，设计师 jing 提）：同一组里各 2px，两组之间各 16px（手机 12px）。挨着日期、未读分割线或系统提示的那一边保持原样。hover 背景是不透明的 `#F7F8FB`（`--color-message-hover`，设计指定；`#E0E5F1` 只用于边框和分割线，不铺底），圆角 8px（`rounded-lg`），悬停操作栏是实底、细边、带阴影的浮条，压在这条消息的上边线上（task #459）。日期和未读分割线距上下内容各 16px，线色 `border-secondary`，日期标签带同色描边。
 短日期分隔与时分时间戳承担辅助信息，已有 thread 才在消息下显示回复摘要。
 [Slack thread 示例](https://slack.com/help/articles/115000769927-Use-threads-to-organize-discussions)是按需消息操作的参考；Web 的触摸适配保留无描边的消息菜单入口，不能只靠 hover。
 输入区与附件排版参考 [Untitled Messaging examples](https://www.untitledui.com/react/components/messaging)，继续组合已安装的官方基础组件，不复制受 PRO 授权限制的源码。

@@ -47,10 +47,26 @@ export { groupsWithPrevious } from "./message-view";
  * changes which rows count as near the viewport, which lays out more of them — a feedback loop
  * that pins the main thread until the renderer is killed. */
 export const ROW_CLASS = "flex flex-col";
-/** The margin above a row that starts a sender run (see `MessageRow`'s spacing). */
-export const RUN_START_CLASS = "mt-2 first:mt-0 md:mt-4";
-/** A message's padding inside its hover background: 12px above a sender heading, 4px below all. */
-export const messagePaddingClass = (grouped: boolean) => (grouped ? "pb-1" : "pt-3 pb-1");
+/** The margin above a row that starts a sender run (see `MessageRow`'s spacing): none under
+ * another message row, whose gap is padding instead. */
+export const RUN_START_CLASS = "mt-2 first:mt-0 md:mt-4 [[data-message-row]+&]:mt-0";
+/**
+ * A message's padding inside its hover background. Between two message rows the whole gap is
+ * padding, split evenly, so two hover backgrounds meet halfway between the messages (task #255):
+ * 2px each inside a sender run, 16px each between runs from `md` up, 12px on a phone. Next to
+ * anything else (a divider, a notice, the list's start) a row keeps 4px below and 12px above its
+ * sender heading, with the run's margin. The row is a direct child of its `li`, which carries
+ * `data-message-row` (`messageRowKind`).
+ */
+export const messagePaddingClass = (grouped: boolean) =>
+  cn(
+    grouped ? "pt-0.5" : "pt-3 md:[[data-message-row]+[data-message-row=start]>&]:pt-4",
+    "pb-1 [li:has(+[data-message-row=continue])>&]:pb-0.5 [li:has(+[data-message-row=start])>&]:pb-3 md:[li:has(+[data-message-row=start])>&]:pb-4",
+  );
+/** What a row is to the rows around it: a sender run's continuation, its start, or a start under a
+ * divider (which keeps its own spacing). */
+export const messageRowKind = (grouped: boolean, divided = false) =>
+  grouped ? "continue" : divided ? "divided" : "start";
 
 /**
  * One history row: optional day divider, then the message with its hover actions.
@@ -220,14 +236,16 @@ export const MessageRow = memo(function MessageRow({
     ) : undefined;
   return (
     // Spacing (docs/design/page-skeleton-and-density.md): a message keeps 12px between its
-    // content and its hover background at the sides, and every row ends 4px under its content, so
-    // a same-sender continuation sits 4px under the row above whether that row has the sender
-    // heading or not, as in Raft. A row with the sender heading also keeps 12px above it. Two
-    // sender runs are 32px apart content to content from `md` up and 24px on a phone, where 32px
-    // read as a blank band between short messages (task #118). The row is inset 4px (24px column:
-    // 12px) so the content stays on the stream's column with the composer and the dividers.
+    // content and its hover background at the sides; a same-sender continuation sits 4px under the
+    // row above whether that row has the sender heading or not, as in Raft. Two sender runs are
+    // 32px apart content to content from `md` up and 24px on a phone, where 32px read as a blank
+    // band between short messages (task #118). Between two message rows that gap is padding split
+    // evenly, so hover backgrounds meet halfway (`messagePaddingClass`, task #255). The row is
+    // inset 4px (24px column: 12px) so the content stays on the stream's column with the composer
+    // and the dividers.
     <li
       data-message-id={message.id}
+      data-message-row={messageRowKind(grouped, dayChanged || unreadStartsHere)}
       className={cn(
         ROW_CLASS,
         !grouped && !dayChanged && !unreadStartsHere && RUN_START_CLASS,
