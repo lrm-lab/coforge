@@ -34,12 +34,12 @@ export function ProjectsContent({
           </Button>
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-page py-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-page py-6">
         {projects.length === 0 ? (
-          <Empty className="min-h-64">
+          <Empty>
             <EmptyHeader>
-              <EmptyMedia>
-                <Folder aria-hidden="true" className="size-12 text-quaternary" />
+              <EmptyMedia variant="icon">
+                <Folder aria-hidden="true" />
               </EmptyMedia>
               <EmptyTitle>
                 <h2>{m.projects_empty_title()}</h2>

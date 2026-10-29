@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { RecordDetail } from "#src/features/records/record-detail";
-import { EmptyRecord } from "#src/features/records/records-layout";
+import { EmptyRecord } from "#src/features/records/records-empty";
 import { loadRecordSubject } from "#src/features/records/records.functions";
 import { latestWeeklyLanding } from "#src/features/records/records-sidebar";
 import { isAppError } from "#src/lib/app-error";

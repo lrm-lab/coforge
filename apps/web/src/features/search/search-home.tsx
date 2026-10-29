@@ -50,7 +50,7 @@ export function SearchHome({
 
   if (history.length === 0 && frequent.entities.length === 0 && !frequent.failed) {
     return (
-      <div className="flex min-h-0 flex-1 items-start justify-center px-6 pt-16">
+      <div className="flex min-h-0 flex-1 flex-col">
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">

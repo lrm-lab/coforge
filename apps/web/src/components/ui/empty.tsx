@@ -58,7 +58,8 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="empty-description"
       className={cn(
-        "text-center text-sm text-tertiary [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-brand-secondary",
+        // keep-all: Chinese wraps at its punctuation, not mid-word; anywhere: a run with none still wraps.
+        "text-center text-sm break-keep text-tertiary [overflow-wrap:anywhere] [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-brand-secondary",
         className,
       )}
       {...props}
