@@ -179,6 +179,8 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads and
     expect(before).toContain(`replyTarget=${f.target}:${comment.id.slice(0, 13)}`);
     expect(before).toContain("Coverage: top-level messages");
     const target = `${f.target}:${comment.id.slice(0, 13)}`;
+    const threadedRead = await cli(["message", "read", "--target", target]);
+    expect(threadedRead).toContain("Please review this file");
     const send = await cli(
       ["message", "send", "--target", target],
       "Reviewed through the real CLI",

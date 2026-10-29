@@ -3,7 +3,6 @@ import type { AgentAttachmentCommentsResponse } from "@lrm/coforge-sdk/agent";
 import { AppError } from "#src/lib/app-error";
 import { handleAgentAttachmentCommentsGet } from "#src/routes/api/agent/v1/attachments/$attachmentId.comments";
 import { attachmentMessageRefusal } from "#src/server/attachments/agent-attachment-messages.server";
-import { isAgentAttachmentReadTarget } from "#src/server/attachments/agent-attachment-messages.server";
 import { agentComment } from "#src/server/attachments/agent-attachment-comments.server";
 
 const ID = "9f0c5a52-1111-4222-8333-444455556666";
@@ -101,6 +100,3 @@ test("Agent comment output does not expose the human reply target", () => {
   expect(output).not.toHaveProperty("replyTarget");
 });
 
-test("Agent read targets accept a comment id", () => {
-  expect(isAgentAttachmentReadTarget(`attachment:${ID}:abcdef12`)).toBe(true);
-});

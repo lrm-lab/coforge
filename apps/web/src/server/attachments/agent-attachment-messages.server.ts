@@ -17,9 +17,6 @@ const TARGET = new RegExp(
   `^attachment:(${UUID_LIKE_SOURCE})(?::(${UUID_LIKE_SOURCE}|${MESSAGE_ANCHOR_SOURCE}))?$`,
   "i",
 );
-export function isAgentAttachmentReadTarget(target: string): boolean {
-  return TARGET.test(target);
-}
 const emptyPage = () => ({
   messages: [],
   hasOlder: false,
