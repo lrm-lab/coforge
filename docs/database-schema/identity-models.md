@@ -55,11 +55,13 @@ other; the signed session and every consumer of it treat the email as optional.
 (`+8613800138000`), on the same terms: nullable, not unique, never a way to sign
 in or to link two accounts. A number this platform cannot itself use as a code
 destination (a provider's foreign one) is left out. `User.emailVerified` and
-`User.phoneVerified` record whether the provider vouches for each address
-(`email_verified`, `phone_number_verified`); a claim it stops reporting reads as
-unverified, the safe direction. Anything that grants access by an address — a
-platform operator matched by email or phone — requires the verified flag: an
-address anyone can type into their own account must never match someone else.
+`User.phoneVerified` record what the provider said about each address
+(`email_verified`, `phone_number_verified`): `true` when it vouches for it,
+`false` when it says it does not, `null` when it has not said — every account
+before these columns existed, until its next sign-in. Anything that grants
+access by an address — a platform operator matched by email or phone — requires
+`true`: an address anyone can type into their own account must never match
+someone else, and an unknown answer grants nothing.
 
 `User.displayName` is the one name teammates see, and it is required, as Slack
 requires a name: an account is created with the name its sign-in provider

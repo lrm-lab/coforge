@@ -87,8 +87,6 @@ test("passes Authing preferred_username to first-identity resolution and stores 
     provider: "authing",
     subject: "provider-subject-not-a-username",
     email: "ada@example.com",
-    emailVerified: false,
-    phoneVerified: false,
     preferredUsername: "ada",
   });
   expect(completed.user.username).toBe("ada");
@@ -116,8 +114,6 @@ test("the profile's name and nickname reach user resolution, so a username can b
     provider: "authing",
     subject: "s",
     email: null,
-    emailVerified: false,
-    phoneVerified: false,
     name: "Ada Lovelace",
     nickname: "Ace",
   });
@@ -152,8 +148,6 @@ test("an account with no email reaches user resolution with a null email, and no
     provider: "authing",
     subject: "authing-phone-user",
     email: null,
-    emailVerified: false,
-    phoneVerified: false,
   });
 });
 
@@ -179,7 +173,6 @@ test("the profile's phone number reaches user resolution as E.164, from either c
       provider: "authing",
       subject: "phone-claim",
       email: null,
-      emailVerified: false,
       phone: "+8613800138000",
       phoneVerified: true,
     },
@@ -187,7 +180,6 @@ test("the profile's phone number reaches user resolution as E.164, from either c
       provider: "authing",
       subject: "legacy-claim",
       email: null,
-      emailVerified: false,
       phone: "+8613800138000",
       phoneVerified: true,
     },
@@ -214,7 +206,6 @@ test("the profile's verified email reaches user resolution with its verification
     subject: "verified-email",
     email: "ada@example.com",
     emailVerified: true,
-    phoneVerified: false,
   });
 });
 
@@ -240,7 +231,6 @@ test("an unverified phone number is stored, and recorded as unverified", async (
       provider: "authing",
       subject: "unverified",
       email: null,
-      emailVerified: false,
       phone: "+8613800138000",
       phoneVerified: false,
     },
@@ -248,9 +238,7 @@ test("an unverified phone number is stored, and recorded as unverified", async (
       provider: "authing",
       subject: "no-claim",
       email: null,
-      emailVerified: false,
       phone: "+8613800138000",
-      phoneVerified: false,
     },
   ]);
 });
@@ -277,14 +265,12 @@ test("a phone number this platform cannot use reaches user resolution as no phon
       provider: "authing",
       subject: "foreign",
       email: null,
-      emailVerified: false,
       phoneVerified: true,
     },
     {
       provider: "authing",
       subject: "empty",
       email: null,
-      emailVerified: false,
       phoneVerified: true,
     },
   ]);

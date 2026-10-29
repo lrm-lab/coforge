@@ -116,6 +116,7 @@ function ReviewerRow({
   onRemove: () => void;
 }) {
   const address = row.email ?? row.phone ?? "";
+  // null is "the provider has not said", which shows no label at all rather than a wrong one.
   const verified = row.email ? row.emailVerified : row.phoneVerified;
   // The last reviewer's control stays on screen but does nothing; its reason is the tooltip, as
   // the page keeps no room for a second line of explanation.
@@ -146,7 +147,7 @@ function ReviewerRow({
         <span className="text-sm font-medium text-primary">{row.name}</span>
         <span className="text-sm text-tertiary">
           {address}
-          {verified ? null : ` · ${m.apps_review_reviewers_unverified()}`}
+          {verified === false ? ` · ${m.apps_review_reviewers_unverified()}` : null}
         </span>
         <span className="text-xs text-quaternary">
           {row.grantedByName

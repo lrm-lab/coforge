@@ -193,6 +193,12 @@ test.skipIf(!connectionString)(
         emailVerified: false,
         phoneVerified: false,
       });
+      // A new account has not been told anything yet.
+      const unknown = await login(`sub-unknown-${suffix}`, { email: `new-${suffix}@example.com` });
+      expect(await storedVerification(unknown.id)).toEqual({
+        emailVerified: null,
+        phoneVerified: null,
+      });
 
       const before = userWrites().length;
       await login(`sub-verified-${suffix}`, {
@@ -207,12 +213,12 @@ test.skipIf(!connectionString)(
       });
       expect(userWrites().length - before).toBe(1);
 
-      // A provider that stops vouching for an address leaves it stored but unverified: the safe
-      // direction, since only a verified address may match an operator.
+      // A provider that says nothing leaves the answer unknown (null), not a false "unverified":
+      // only `true` ever matches an operator, so the safe direction holds either way.
       await login(`sub-verified-${suffix}`, { email: `ada-${suffix}@example.com` });
       expect(await storedVerification(first.id)).toEqual({
-        emailVerified: false,
-        phoneVerified: false,
+        emailVerified: null,
+        phoneVerified: null,
       });
     } finally {
       await teardown();

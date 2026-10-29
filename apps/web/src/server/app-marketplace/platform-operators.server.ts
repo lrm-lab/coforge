@@ -141,9 +141,10 @@ export type PlatformOperatorRow = {
   userId: string;
   name: string;
   email: string | null;
-  emailVerified: boolean;
+  /** `null` when the provider has not said whether it verified the address. */
+  emailVerified: boolean | null;
   phone: string | null;
-  phoneVerified: boolean;
+  phoneVerified: boolean | null;
   grantedAt: string;
   /** The operator who granted it; null for the first one, seeded by the deployment. */
   grantedByName: string | null;

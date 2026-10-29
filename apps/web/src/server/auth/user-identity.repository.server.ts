@@ -16,8 +16,10 @@ export class UserIdentityRepository {
     // unverified, which is the safe direction: only a verified address may match an operator.
     const email = profile.email || undefined;
     const phone = profile.phone || undefined;
-    const emailVerified = profile.emailVerified === true;
-    const phoneVerified = profile.phoneVerified === true;
+    // `null` is "the provider has not said", which is what an account carries until a sign-in
+    // reports one; only `true` ever grants anything.
+    const emailVerified = profile.emailVerified ?? null;
+    const phoneVerified = profile.phoneVerified ?? null;
     const identity = await this.findIdentity(provider, providerSubject);
     if (identity) {
       const changed = {

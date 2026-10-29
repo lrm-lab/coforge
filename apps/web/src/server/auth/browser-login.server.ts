@@ -19,12 +19,12 @@ export type InternalUserResolver = (input: {
   provider: string;
   subject: string;
   email: string | null;
-  /** Whether the provider says it verified that email. */
-  emailVerified: boolean;
+  /** Whether the provider says it verified that email; absent when it did not say. */
+  emailVerified?: boolean;
   /** The provider's phone number in E.164 (`+8613800138000`), when it reported a usable one. */
   phone?: string;
-  /** Whether the provider says it verified that number. */
-  phoneVerified: boolean;
+  /** Whether the provider says it verified that number; absent when it did not say. */
+  phoneVerified?: boolean;
   preferredUsername?: string;
   /** What the provider reported as the person's name, for a username when nothing better names them. */
   name?: string;
@@ -75,8 +75,16 @@ export async function completeBrowserLogin(input: {
   // the provider verified it is recorded beside it, never assumed: a missing claim reads as
   // unverified, and only a verified address may match a platform operator.
   const phone = e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined;
-  const emailVerified = profile.email_verified === true;
-  const phoneVerified = profile.phone_number_verified === true || profile.phone_verified === true;
+  // A claim the provider does not answer is unknown, not "unverified": the account keeps null
+  // until it says something.
+  const emailVerified =
+    typeof profile.email_verified === "boolean" ? profile.email_verified : undefined;
+  const phoneVerified =
+    typeof profile.phone_number_verified === "boolean"
+      ? profile.phone_number_verified
+      : typeof profile.phone_verified === "boolean"
+        ? profile.phone_verified
+        : undefined;
   const { resolveUser } = input;
   const resolved = resolveUser
     ? await atSignInStage("user_resolution", () =>
@@ -84,9 +92,9 @@ export async function completeBrowserLogin(input: {
           provider: "authing",
           subject: profile.sub,
           email,
-          emailVerified,
+          ...(emailVerified === undefined ? {} : { emailVerified }),
           ...(phone ? { phone } : {}),
-          phoneVerified,
+          ...(phoneVerified === undefined ? {} : { phoneVerified }),
           ...(profile.preferred_username ? { preferredUsername: profile.preferred_username } : {}),
           ...(profile.name?.trim() ? { name: profile.name.trim() } : {}),
           ...(profile.nickname?.trim() ? { nickname: profile.nickname.trim() } : {}),
