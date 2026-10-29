@@ -208,8 +208,9 @@ function readLegacyJson(path: string, agentId: string): { present: boolean; valu
 /** The first rule `path` breaks against the legacy stores' own path policy, or `undefined`. */
 function unsafeLegacyPath(path: string): string | undefined {
   const uid = process.geteuid?.();
-  // Every ancestor the stores created: the root, CoForge's directory under it, and the Agent's.
-  const levels = [dirname(dirname(dirname(path))), dirname(dirname(path)), dirname(path)];
+  // Check only directories created by the legacy store. The OS temp directory itself is outside
+  // our ownership boundary (and is root-owned on Linux), so including it rejects every import.
+  const levels = [dirname(dirname(path)), dirname(path)];
   for (const level of levels) {
     let status;
     try {
