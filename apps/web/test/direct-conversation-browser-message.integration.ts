@@ -223,3 +223,43 @@ test("a direct conversation's page and poll return the same browser message shap
     await db.$disconnect();
   }
 });
+
+test("a member whose own side soft-left cannot read the DM back", async () => {
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString)
+    throw new Error("CHANNEL_TEST_DATABASE_URL is required (local PostgreSQL)");
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const id = crypto.randomUUID();
+  const user = await db.user.create({
+    data: { username: `dm-left-${id.slice(0, 8)}`, displayName: "Left Member" },
+  });
+  const workspace = await db.workspace.create({
+    data: { slug: id, name: "DM left", members: { create: { userId: user.id } } },
+  });
+  try {
+    const agent = await db.agent.create({
+      data: {
+        workspaceId: workspace.id,
+        ownerId: user.id,
+        name: "helper",
+        displayName: "Helper",
+        runtimeConfig: {},
+      },
+    });
+    const repo = new PrismaDirectConversationRepository(db);
+    const { conversationId } = await repo.memberForUser(workspace.id, user.id, agent.id);
+    await db.conversationMember.update({
+      where: { conversationId_userId: { conversationId, userId: user.id } },
+      data: { leftAt: new Date() },
+    });
+    // The DM still exists and the Agent's side may have left, but the viewer's own soft-left row
+    // is not a seat they may read from.
+    await expect(
+      repo.openConversationForUser(workspace.id, user.id, conversationId),
+    ).rejects.toThrow("conversation scope is not authorized");
+  } finally {
+    await db.workspace.delete({ where: { id: workspace.id } });
+    await db.user.delete({ where: { id: user.id } });
+    await db.$disconnect();
+  }
+});

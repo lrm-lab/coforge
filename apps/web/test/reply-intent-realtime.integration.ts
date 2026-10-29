@@ -46,6 +46,9 @@ test("real routing delivers start/end only to the conversation, with no history 
   const directory = await mkdtemp(join(tmpdir(), "coforge-reply-intent-"));
   const name = `coforge-reply-intent-${crypto.randomUUID()}`;
   const clients: Centrifuge[] = [];
+  // A client the server drops mid-test otherwise reports only `disconnected`: keep the
+  // server's own code/reason so the CI log names the denial instead.
+  const disconnects: { userId: string; code: number; reason: string }[] = [];
   let containerStarted = false;
   let proxy: ReturnType<typeof Bun.serve> | undefined;
   try {
@@ -144,6 +147,20 @@ test("real routing delivers start/end only to the conversation, with no history 
       COFORGE_CENTRIFUGO_API_URL: `${endpoint}/api`,
       COFORGE_CENTRIFUGO_API_KEY: apiKey,
     });
+    // The container accepts connections before Centrifugo is answering: on a cold CI runner a
+    // first request can hit a half-up server. Wait for any HTTP answer before clients dial.
+    {
+      const deadline = Date.now() + 15_000;
+      for (;;) {
+        const up = await fetch(endpoint).then(
+          () => true,
+          () => false,
+        );
+        if (up) break;
+        if (Date.now() > deadline) throw new Error("Centrifugo container did not come up");
+        await Bun.sleep(100);
+      }
+    }
     async function connection(userId: string) {
       const client = new Centrifuge(`${endpoint.replace("http", "ws")}/connection/websocket`, {
         token:
@@ -153,6 +170,9 @@ test("real routing delivers start/end only to the conversation, with no history 
         timeout: 5_000,
       });
       clients.push(client);
+      client.on("disconnected", ({ code, reason }) => {
+        disconnects.push({ userId, code, reason });
+      });
       client.connect();
       await client.ready(15_000);
       return client;
@@ -281,9 +301,12 @@ test("real routing delivers start/end only to the conversation, with no history 
         boundChannelAndUser: true,
         deniedChannelCode: channelDenial,
         deniedUserCode: userDenial,
+        disconnects,
       }),
     );
   } finally {
+    if (disconnects.length)
+      console.info(JSON.stringify({ capture: "reply-intent-disconnects", disconnects }));
     for (const client of clients) client.disconnect();
     try {
       if (containerStarted) await docker("rm", "-f", name);

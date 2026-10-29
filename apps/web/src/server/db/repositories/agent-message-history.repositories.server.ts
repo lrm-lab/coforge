@@ -112,8 +112,8 @@ export async function readAgentMessagePage(
     });
     if (publication) void conversationReadChanged?.(publication)?.catch(() => {});
   };
-  // An `unread` read starts at the read position. A latest or anchored page moves it only when the
-  // shared contiguity rule proves that it joins the existing read-through.
+  // An `unread` read starts at the read position. A latest page moves it only when the shared
+  // contiguity rule proves that it joins the existing read-through; an anchored page never joins.
   const window =
     page.around && anchor
       ? await readWindowAround(db, scope, anchor.sequence, limit)
@@ -125,17 +125,21 @@ export async function readAgentMessagePage(
         : undefined;
   if (window) {
     const latestSequence = window.rows.at(-1)?.sequence ?? readThrough;
-    const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
-      anchor: "latest",
-      readThrough,
-      minSequence: window.rows[0]?.sequence,
-      maxSequence: latestSequence,
-      hasOlder: window.hasOlder,
-      sequenceBeforePage:
-        "sequenceBeforePage" in window && typeof window.sequenceBeforePage === "number"
-          ? window.sequenceBeforePage
-          : undefined,
-    });
+    // An anchored page never joins: jumping to a middle message says nothing about what sits
+    // between it and the read-through, so it reports no boundary and moves nothing.
+    const modelSeenUpToSeq = page.around
+      ? null
+      : agentHistoryModelSeenBoundary({
+          anchor: "latest",
+          readThrough,
+          minSequence: window.rows[0]?.sequence,
+          maxSequence: latestSequence,
+          hasOlder: window.hasOlder,
+          sequenceBeforePage:
+            "sequenceBeforePage" in window && typeof window.sequenceBeforePage === "number"
+              ? window.sequenceBeforePage
+              : undefined,
+        });
     const agentReadThroughSequence =
       modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
     if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);

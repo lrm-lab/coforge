@@ -173,15 +173,15 @@ test("reports reach only the starter, in order, and the result frees the provide
 
   await auth.receiveLoginReport(
     scope(),
-    loginReport(loginId, 2, { result: { kind: "logged_in" } }),
+    loginReport(loginId, 3, { result: { kind: "logged_in" } }),
   );
   // Nothing follows a result.
   await auth.receiveLoginReport(
     scope(),
-    loginReport(loginId, 3, { result: { kind: "cancelled" } }),
+    loginReport(loginId, 4, { result: { kind: "cancelled" } }),
   );
   expect(await auth.readLogin(alice, { computerId, loginId })).toMatchObject({
-    sequence: 2,
+    sequence: 3,
     result: { kind: "logged_in" },
   });
   expect((await auth.startLogin(bob, { computerId, provider: "claude-code" })).status).toBe(

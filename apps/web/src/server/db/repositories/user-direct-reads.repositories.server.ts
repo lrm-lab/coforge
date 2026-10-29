@@ -8,7 +8,6 @@ import { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
-import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
@@ -65,11 +64,13 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
     select: {
       directKey: true,
       members: {
-        where: ACTIVE_MEMBER_WHERE,
         select: {
           id: true,
           userId: true,
           agentId: true,
+          // The other side keeps its row after leaving (a deleted Agent's DM stays readable);
+          // only the seen-by aggregate below restricts itself to active members.
+          leftAt: true,
           // The viewer's own conversation-level read cursor: the client positions the
           // initial view at the first unread message and draws the divider there.
           readThroughSequence: true,
@@ -104,7 +105,9 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
       },
     },
   });
-  const sender = row?.members.find((member) => member.userId === userId);
+  // The other side keeps its row after leaving; the viewer's own side must not: a member who
+  // left cannot read the DM back through this seam.
+  const sender = row?.members.find((member) => member.userId === userId && member.leftAt === null);
   if (!row || !sender) throw new Error("conversation scope is not authorized");
   const agent = row.members.find((member) => member.agent)?.agent;
   const peer = agent ? undefined : await peerOf(ports, row, userId);
@@ -171,7 +174,10 @@ export async function openConversationForUser(
   return {
     conversationId,
     senderMemberId: sender.id,
-    othersReadThroughSequence: othersReadThroughSequence(sender.id, members),
+    othersReadThroughSequence: othersReadThroughSequence(
+      sender.id,
+      members.filter((member) => member.leftAt === null),
+    ),
     // The viewer's conversation-level read boundary: first unread = first top-level
     // message past this. Thread replies are positioned by their thread instead.
     readThroughSequence: sender.readThroughSequence,

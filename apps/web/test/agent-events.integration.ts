@@ -213,16 +213,21 @@ test("events drain and recovery keep the unread rule across channels, direct mes
       {
         workspaceId: workspace.id,
         conversationId: opened.conversationId,
-        agentId: agent.id,
+        memberId: dmAgentMember.id,
         readThroughSequence: readRoot.sequence,
+      },
+      {
+        workspaceId: workspace.id,
+        conversationId: general.id,
+        memberId: channelAgentMember.id,
+        readThroughSequence: late.sequence,
       },
     ]);
     expect(await repo.drainAgentEvents(workspace.id, agent.id, 50)).toEqual({
       messages: [],
       hasMore: false,
     });
-    expect(agentReadChanges).toHaveLength(1);
-    void late;
+    expect(agentReadChanges).toHaveLength(2);
   } finally {
     await db.agentMessageDelivery.deleteMany({ where: { workspaceId: workspace.id } });
     await db.message.deleteMany({ where: { workspaceId: workspace.id } });
