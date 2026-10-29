@@ -3336,7 +3336,6 @@ export class DaemonRuntime {
     this.systemCleaner.replaceOwnerSnapshot(agentId, null);
     this.#offlineResidency.forget(agentId);
     this.#agentInboxes.delete(agentId);
-    this.#consumedSeqs.remove(agentId);
   }
 
   /** Presents what was kept across an exit or a runtime's end, as at idle. */
