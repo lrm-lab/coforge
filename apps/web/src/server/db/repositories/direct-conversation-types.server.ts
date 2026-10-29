@@ -107,6 +107,13 @@ export type DirectConversationRepository = {
     peer: { kind: "user"; userId: string } | { kind: "agent"; agentId: string };
   }>;
   getAgentChannel?(workspaceId: string, agentId: string, target: string): Promise<{ id: string }>;
+  /** The send path's channel: the Agent's channel, or one it can still join on the way to
+   * posting (`needsJoin` — the send's own transaction writes the membership). */
+  getAgentSendChannel?(
+    workspaceId: string,
+    agentId: string,
+    target: string,
+  ): Promise<{ id: string; channelName?: string | null; needsJoin: boolean }>;
   resolveAgentTarget?(
     workspaceId: string,
     agentId: string,
@@ -256,6 +263,9 @@ export type DirectConversationRepository = {
     attachmentIds?: string[],
     threadRootId?: string,
     mentions?: readonly AgentMentionBinding[],
+    memoryHintId?: string,
+    /** A channel send may join the channel first, in this send's own transaction. */
+    joinChannel?: boolean,
   ): Promise<
     {
       id: string;

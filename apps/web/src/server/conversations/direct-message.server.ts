@@ -7,7 +7,7 @@ import type {
   LatestSenderFields,
 } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
-import type { ConversationRealtime } from "./conversation-realtime.server";
+import { announceMemberChanged, type ConversationRealtime } from "./conversation-realtime.server";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { deliveryMentionsAgent } from "./mentions.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
@@ -118,13 +118,17 @@ export class SendDirectMessage {
         );
     if (!isChannel && !direct) throw new Error("target user not found");
     const dmUserId = direct?.peer.kind === "user" ? direct.peer.userId : undefined;
-    const conversation = isChannel
-      ? await this.conversations.getAgentChannel?.(
+    // The send path's channel: the Agent's own, or one it can still join on the way to posting —
+    // the send's transaction writes that membership with the message.
+    const sendChannel = isChannel
+      ? await (this.conversations.getAgentSendChannel ?? this.conversations.getAgentChannel)?.call(
+          this.conversations,
           input.workspaceId,
           input.agentId,
           input.target.split(":")[0]!,
         )
-      : direct?.conversation;
+      : undefined;
+    const conversation = isChannel ? sendChannel : direct?.conversation;
     if (!conversation) throw new Error("channel access is unavailable");
     const message = await this.idempotency.execute(
       {
@@ -142,6 +146,8 @@ export class SendDirectMessage {
             input.attachmentIds,
             input.target.split(":")[1],
             input.mentions,
+            undefined,
+            isChannel && (sendChannel as { needsJoin?: boolean } | undefined)?.needsJoin === true,
           )
           .catch(async (error: unknown) => {
             // A limit between two Agents is told to whoever reads their conversation, once.
@@ -160,6 +166,12 @@ export class SendDirectMessage {
         return persisted;
       },
     );
+    // A send that joined the channel on the way announces the roster change like `channel join`.
+    if (message.joinedChannel)
+      await announceMemberChanged(this.realtime, {
+        workspaceId: input.workspaceId,
+        conversationIds: [conversation.id],
+      });
     const publications = (async () => {
       // A channel message fans out to the Workspace; a DM goes only to its human viewer, naming
       // the sending Agent's badge so the browser needs no conversation alias. A DM between two
