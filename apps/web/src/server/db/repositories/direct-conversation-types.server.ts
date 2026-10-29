@@ -1,4 +1,5 @@
 import type { MessageSenderKind, MessageTaskMetadata } from "@lrm/coforge-sdk/internal";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 import type { noteAgentDmLimit } from "#src/server/conversations/agent-dm-limits.server";
 import type { PendingMentionActionView } from "#src/server/conversations/pending-mention-actions.server";
@@ -90,6 +91,11 @@ export type AgentMentionReport = {
 export type HistoryWindow = { beforeSequence?: number; afterSequence?: number; limit?: number };
 
 export type DirectConversationRepository = {
+  /** The client behind it, where the implementation has one: a caller announcing a committed
+   * message reads that message and its recipients here (`conversation-activity.server.ts`)
+   * instead of opening a second client. A fake without one announces only the open page's
+   * signal. */
+  readonly database?: PrismaClient;
   userIdForUsername?(target: string): Promise<string>;
   noteAgentDmLimit?(input: Parameters<typeof noteAgentDmLimit>[1]): Promise<void>;
   openAgentDirect?(

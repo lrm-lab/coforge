@@ -40,6 +40,7 @@ export type ChannelSendPorts = {
   realtime?: ConversationRealtime;
   publisher?: CentrifugoServerApi;
 };
+import { announceMessage } from "./conversation-activity.server";
 
 export async function sendChannel(
   ctx: ChannelSendPorts,
@@ -259,7 +260,7 @@ export async function sendChannel(
   if (created) await ctx.notifications?.notifyMessage(message.id);
   if (ctx.realtime) {
     try {
-      await ctx.realtime.messageAvailable({
+      await announceMessage(ctx.db, ctx.realtime, {
         conversationId: channelId,
         messageId: message.id,
         sequence: message.sequence,

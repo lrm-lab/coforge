@@ -89,6 +89,13 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     if (oneRequest) this.#agentChannels = new Map();
   }
 
+  /** The client this repository reads and writes. A caller that announces a committed message
+   * (`conversation-activity.server.ts`) reads that message and its recipients through it rather
+   * than opening a second client. */
+  get database(): PrismaClient {
+    return this.db;
+  }
+
   /** What the operations in the `agent-*` and `user-direct-reads` modules run on; its channel
    * lookup is this instance's, so they share the one-request cache. */
   get #ports(): DirectConversationPorts {

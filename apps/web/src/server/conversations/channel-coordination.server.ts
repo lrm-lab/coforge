@@ -12,6 +12,7 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import { resolveChannelAuthority } from "./channel-authority.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { announceMessage } from "./conversation-activity.server";
 
 /**
  * One sentence, like the Task notices: who changed the coordinator, to whom. What a coordinator
@@ -170,7 +171,7 @@ export async function changeChannelCoordinator(
           };
         }),
       ),
-      (realtime ?? new CentrifugoConversationRealtime(publisher)).messageAvailable({
+      announceMessage(db, realtime ?? new CentrifugoConversationRealtime(publisher), {
         workspaceId,
         conversationId: channelId,
         messageId: message.id,

@@ -29,6 +29,7 @@ type UserDirectMessageInput = {
   /** Runs inside the send's transaction once the message and its uploads are written. */
   withinSend?: SentMessageHook;
 };
+import { announceMessage } from "./conversation-activity.server";
 
 /** Opens the viewer's direct conversation with `peerUserId`, starting it on first open. */
 export async function openPeopleDirectConversation(
@@ -86,7 +87,10 @@ export class UserDirectConversations {
   constructor(
     private readonly db: PrismaClient,
     private readonly idempotency: MessageRequestIdempotency,
-    private readonly realtime?: Pick<ConversationRealtime, "messageAvailable">,
+    private readonly realtime?: Pick<
+      ConversationRealtime,
+      "messageAvailable" | "conversationActivity"
+    >,
   ) {}
 
   /** Opens the viewer's direct conversation with `peerUserId`, starting it on first open. */
@@ -130,7 +134,7 @@ export class UserDirectConversations {
       () => this.store(input, sender.id),
     );
     try {
-      await this.realtime?.messageAvailable({
+      await announceMessage(this.db, this.realtime, {
         conversationId,
         messageId: message.id,
         sequence: message.sequence,

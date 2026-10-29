@@ -13,6 +13,7 @@ import { deliveryMentionsAgent } from "./mentions.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
+import { announceMessage } from "./conversation-activity.server";
 
 export class ReadDirectMessages {
   constructor(private readonly conversations: DirectConversationRepository) {}
@@ -241,7 +242,7 @@ export class SendDirectMessage {
   ) {
     if (!this.realtime) return;
     try {
-      await this.realtime.messageAvailable({
+      await announceMessage(this.conversations.database, this.realtime, {
         conversationId,
         messageId: message.id,
         sequence: message.sequence,

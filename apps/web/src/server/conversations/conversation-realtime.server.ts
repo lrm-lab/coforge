@@ -6,6 +6,7 @@ import {
   type ActivityChangedEvent,
   type ChannelCreatedEvent,
   type ChannelUpdatedEvent,
+  type ConversationActivityEvent,
   type MessageAvailableEvent,
   type MessageReactionEvent,
   type MemberChangedEvent,
@@ -149,6 +150,13 @@ export type ReactionSignal = Omit<MessageReactionEvent, "type">;
 
 export type ConversationRealtime = {
   messageAvailable(input: ConversationRealtimeMessage & { publicationId?: string }): Promise<void>;
+  /** One message's row data and unread effect, to each named person's own channel
+   * (`ConversationActivityEvent`). Optional: a port without it announces none, and a page falls
+   * back to its own reconciliation. */
+  conversationActivity?(input: {
+    userIds: readonly string[];
+    event: ConversationActivityEvent;
+  }): Promise<void>;
   /** A push telling each named channel's open pages that its member list is stale. */
   memberChanged(input: { workspaceId: string; conversationIds: readonly string[] }): Promise<void>;
   /** A push telling the Workspace's sidebars and the channel's open pages that its name,
@@ -275,54 +283,39 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     );
   }
 
+  /**
+   * One new message, to its conversation's own channel only: that is what the open page needs to
+   * reconcile, and only people who may read the conversation can subscribe to it. Everything the
+   * sidebar and the Activity dot need travels as `conversation.activity.v1` to each recipient's
+   * own channel (`announceMessage`, `conversation-activity.server.ts`), so a channel's message
+   * never reaches a tab that is not in it and no tab re-reads a list to learn about one message.
+   */
   async messageAvailable(input: ConversationRealtimeMessage & { publicationId?: string }) {
     const { publicationId, directUserIds, directPair, ...message } = input;
+    void directUserIds;
+    void directPair;
     const event: MessageAvailableEvent = {
       type: "message.available.v1",
       ...message,
     };
-    const idempotencyKey = publicationId ?? input.messageId;
-    if (directUserIds) {
-      // Each member's copy names the other person (themself, in their own conversation).
-      await Promise.all([
-        this.centrifugo.publishJson(
-          conversationRealtimeChannel(input.conversationId),
-          event,
-          idempotencyKey,
-        ),
-        ...[...new Set(directUserIds)].map((memberId) =>
-          this.centrifugo.publishJson(
-            userConversationChannel(memberId),
-            {
-              ...event,
-              peerUserId: directPair?.find((other) => other !== memberId) ?? memberId,
-            } satisfies MessageAvailableEvent,
-            idempotencyKey,
-          ),
-        ),
-      ]);
-      return;
-    }
-    // The per-conversation channel drives the open conversation's reconciliation. The workspace
-    // channel drives the sidebar's unread counts for every channel; a direct message instead
-    // goes to its viewer's own channel, so DM metadata never reaches the whole Workspace.
-    const fanOutChannel = input.userId
-      ? input.agentId
-        ? userConversationChannel(input.userId)
-        : undefined
-      : input.workspaceId
-        ? workspaceConversationChannel(input.workspaceId)
-        : undefined;
-    await Promise.all([
-      this.centrifugo.publishJson(
-        conversationRealtimeChannel(input.conversationId),
-        event,
-        idempotencyKey,
-      ),
-      fanOutChannel
-        ? this.centrifugo.publishJson(fanOutChannel, event, idempotencyKey)
-        : Promise.resolve(),
-    ]);
+    await this.centrifugo.publishJson(
+      conversationRealtimeChannel(input.conversationId),
+      event,
+      publicationId ?? input.messageId,
+    );
+  }
+
+  async conversationActivity(input: {
+    userIds: readonly string[];
+    event: ConversationActivityEvent;
+  }) {
+    // One request for every recipient's own channel; a fresh key, as Centrifugo drops a key it
+    // saw minutes ago.
+    await this.centrifugo.broadcast(
+      input.userIds.map(userConversationChannel),
+      input.event,
+      crypto.randomUUID(),
+    );
   }
 }
 
