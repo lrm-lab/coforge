@@ -55,6 +55,16 @@ export function adoptReadThrough(queryClient: QueryClient, queryKey: readonly un
   installed.get(queryClient)?.adoptReadThrough(queryKey);
 }
 
+/** Reads of the restored query `queryKey` that failed in a row, and the way to hear them change
+ * (`followRestoredReads`); always 0 where nothing is kept. */
+export function restoredReadFailures(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  return installed.get(queryClient)?.restoredReadFailures(queryKey) ?? 0;
+}
+
+export function subscribeRestoredReads(queryClient: QueryClient, listener: () => void) {
+  return installed.get(queryClient)?.subscribeRestoredReads(listener) ?? (() => {});
+}
+
 /** Stores the kept query `queryKey` now, not after the page-write delay (`store`). Resolves at
  * once where nothing is kept. */
 export async function storeQueryNow(queryClient: QueryClient, queryKey: readonly unknown[]) {

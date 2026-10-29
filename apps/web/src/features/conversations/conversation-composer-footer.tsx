@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { NotificationActivationBanner } from "#src/features/notifications/notification-activation-banner";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import type { DirectConversationView } from "./conversation-types";
+import { ConversationUpdateNotice } from "./conversation-update-notice";
 import { useMentionCandidates } from "./mention-candidates";
 import { MessageComposer } from "./message-composer";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
@@ -11,7 +12,8 @@ type ComposerProps = ComponentProps<typeof MessageComposer>;
 
 /**
  * The foot of a conversation pane: its composer, or the read-only notice in its place, and in the
- * main stream the notification prompt above it. The composer's @-candidates and recent senders
+ * main stream the notification prompt above it, under a notice when the newest messages could not
+ * be read. The composer's @-candidates and recent senders
  * come from the conversation it writes to.
  */
 export function ConversationComposerFooter({
@@ -49,6 +51,7 @@ export function ConversationComposerFooter({
   const recentHandles = useRecentConversationHandles(conversation.messages);
   return (
     <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
+      {!root && <ConversationUpdateNotice conversationId={conversation.conversationId} />}
       {!readOnlyNotice && !root && <NotificationActivationBanner />}
       {readOnlyNotice ?? (
         <MessageComposer

@@ -94,6 +94,7 @@
   "conversation_loading_your_messages": "正在加载我发送的消息…",
   "conversation_loading_older": "正在加载更早消息…",
   "conversation_load_older_failed": "更早的消息加载失败。",
+  "conversation_load_latest_failed": "最新的消息加载失败。",
   "conversation_history_load_error": "消息加载失败，请重试。",
   "conversation_attachment_label": "添加附件",
   "conversation_drop_to_upload": "拖放以上传",

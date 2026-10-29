@@ -367,6 +367,9 @@ export function installQueryCachePersistence(
     },
   });
   return {
+    /** Reads of the restored query `queryKey` that failed in a row (`followRestoredReads`). */
+    restoredReadFailures: (queryKey: QueryKey) => restoredReads.failures(hashKey(queryKey)),
+    subscribeRestoredReads: restoredReads.subscribe,
     /**
      * Stores the kept queries the page already holds: a read that finished while nobody was known
      * yet (a client-side entry into a Workspace from a page outside one) wrote nothing, and a query

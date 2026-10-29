@@ -8,7 +8,9 @@
  * - the page comes back after `hiddenMs` hidden;
  * - a tick every `tickMs` while the page is visible lands `sleptMs` late: the computer slept.
  *   Ticks are not counted while hidden, where the browser slows timers to one a minute;
- * - the browser is back online.
+ * - the browser is back online;
+ * - the page is restored from the back-forward cache (`pageshow` with `persisted`: iOS Safari's
+ *   usual way back to a page), however long it sat there.
  * Only a connection that still says it is connected is reconnected: one the client already knows
  * is down, it is reconnecting itself, and a second connect would cut that one off (a wake from
  * sleep fired the client's own reconnect and this one together: two sockets, the first dropped
@@ -77,6 +79,11 @@ export function createRealtimeWake({
       if (slept) woke(true);
     },
     online: () => woke(true),
+    restored() {
+      hiddenAt = undefined;
+      lastTick = now();
+      woke(true);
+    },
   };
 }
 
@@ -118,13 +125,18 @@ export function watchRealtimeWake(
     timer = window.setInterval(() => wake.tick(), REALTIME_WAKE.tickMs);
   };
   const onOnline = () => wake.online();
+  const onPageShow = (event: PageTransitionEvent) => {
+    if (event.persisted) wake.restored();
+  };
   if (document.visibilityState === "hidden") wake.hidden();
   else timer = window.setInterval(() => wake.tick(), REALTIME_WAKE.tickMs);
   document.addEventListener("visibilitychange", onVisibility);
   window.addEventListener("online", onOnline);
+  window.addEventListener("pageshow", onPageShow);
   return () => {
     window.clearInterval(timer);
     document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("online", onOnline);
+    window.removeEventListener("pageshow", onPageShow);
   };
 }

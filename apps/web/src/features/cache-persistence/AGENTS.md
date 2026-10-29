@@ -48,7 +48,12 @@ because the API is experimental.
   shown as kept (with when it was taken) and not read again. Do not set the persister's `refetchOnRestore`: it is a bare
   `query.fetch()` that a page unmounting meanwhile cancels for good. Loading older or newer pages
   cancels that read and clears the mark, so a restored query is marked again until a read of the
-  query itself succeeds.
+  query itself succeeds. That read is retried until it succeeds (`restored-reads.ts`, task #253): queries do not retry,
+  and a page opened from its copy hears none of the events that read a conversation again later, so
+  a phone whose first reads failed kept a week-old copy as the newest. It backs off (1 to 30
+  seconds) while the page is visible, reads at once on `online` and on `pageshow` from the
+  back-forward cache, and after two failures in a row the stream says it could not load the newest
+  messages, with a retry (`ConversationUpdateNotice`).
 - What the page writes itself (`setQueryData`: realtime messages, sends, read positions, the
   sidebar's TanStack DB writes) is stored too, with the query's newest state, at most once a second
   per query, and started at once when the page is hidden (`flush`; on `pagehide` it is best effort:

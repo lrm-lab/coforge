@@ -105,3 +105,13 @@ test("every wake drops a stale token before anything reconnects, even one the cl
   reconnecting.wake.visible();
   expect(reconnecting.events).toEqual(["drop stale token", "drop stale token"]);
 });
+
+test("a page restored from the back-forward cache reconnects at once, however briefly it was away", () => {
+  const page = setup();
+  page.wake.restored();
+  expect(page.events).toEqual(["drop stale token", "reconnect"]);
+  // Its tick counts from the restore, not from before the page was put away.
+  page.at(5_000);
+  page.wake.tick();
+  expect(page.reconnects()).toBe(1);
+});

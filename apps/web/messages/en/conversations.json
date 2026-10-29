@@ -98,6 +98,7 @@
   "conversation_loading_your_messages": "Loading your messages…",
   "conversation_loading_older": "Loading older messages…",
   "conversation_load_older_failed": "Older messages could not be loaded.",
+  "conversation_load_latest_failed": "The newest messages could not be loaded.",
   "conversation_history_load_error": "Messages could not be loaded. Try again.",
   "conversation_attachment_label": "Add attachment",
   "conversation_drop_to_upload": "Drop to upload",

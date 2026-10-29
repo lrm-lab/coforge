@@ -108,13 +108,20 @@ export function subscribeToConversationRealtime(
     },
   });
   const onBack = () => requestReconciliation({ restart: true });
+  // Restored from the back-forward cache (iOS Safari's usual way back), which need not fire
+  // `visibilitychange`.
+  const onPageShow = (event: PageTransitionEvent) => {
+    if (event.persisted) onBack();
+  };
   const safetyTimer = window.setInterval(() => requestReconciliation(), 30_000);
   document.addEventListener("visibilitychange", onBack);
   window.addEventListener("online", onBack);
+  window.addEventListener("pageshow", onPageShow);
   return () => {
     window.clearInterval(safetyTimer);
     document.removeEventListener("visibilitychange", onBack);
     window.removeEventListener("online", onBack);
+    window.removeEventListener("pageshow", onPageShow);
     releaseSubscription();
   };
 }
