@@ -1,16 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ClipboardEvent,
-  type CompositionEvent,
-  type DragEvent,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
@@ -19,18 +7,14 @@ import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { useResizeObserver } from "#src/hooks/use-resize-observer";
 import {
   dragCarriesFiles,
   filesFromDrop,
   filesFromPaste,
   localId,
-  shouldSendAsTaskOnEnter,
   composerPlaceholder,
-  shouldSendOnEnter,
-  forcesStackedLayout,
 } from "./composer-behavior";
-import { ComposerSendButton } from "./composer-send-button";
+import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { AttachmentTile, uploadAttachment, type PendingAttachment } from "./composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
@@ -55,10 +39,8 @@ import {
 } from "./mention-pins";
 import type { ChannelSuggestion } from "./reference-completion";
 import { useReferenceCompletion } from "./use-reference-completion";
-import { ReferenceSuggestionList } from "./reference-suggestions";
 import { PendingMentionStrip, type PendingMention } from "./pending-mention-strip";
 import { UnpinnedMentionHint } from "./unpinned-mention-hint";
-import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
@@ -80,10 +62,6 @@ const NO_NAMES: ReadonlySet<string> = new Set();
 /** At most 10 attachments per send, mirroring the server-side `attachmentIds` bound
  * (`conversation.schemas.ts`'s `attachmentIdsSchema`, the Agent API's `AgentMessagesSendRequest`). */
 const MAX_ATTACHMENTS = 10;
-
-/** What sets the width of a line of draft text: shared by the textarea and its hidden one-line
- * copy, which measures whether the draft fits the one-line text column. */
-const DRAFT_LINE_CLASS = "px-3 text-md";
 
 /**
  * The message form at the foot of a conversation or thread. Owns the draft, the pending
@@ -138,7 +116,6 @@ export function MessageComposer({
   /** A message of the current user's was accepted by the server. */
   onSent?: (message: SentMessage) => void;
 }) {
-  const composerId = useId();
   const hydrated = useHydrated();
   const toast = useAppToast();
   // Device-local draft, scoped to this chat (and thread): typing here never touches another
@@ -260,9 +237,6 @@ export function MessageComposer({
     // with the quote in it.
     requestAnimationFrame(focusComposer);
   }, [quotedDraft]);
-  // IME composition tracking for Enter-to-send: see composer-behavior.ts.
-  const isComposingRef = useRef(false);
-  const lastCompositionEndAtRef = useRef<number | null>(null);
   // Counts nested dragenter/dragleave pairs across the form's descendants, so the drop
   // affordance does not flicker as the pointer crosses child element boundaries.
   const dragDepthRef = useRef(0);
@@ -278,25 +252,7 @@ export function MessageComposer({
     anyFailed ||
     attachments.length > MAX_ATTACHMENTS ||
     (!body.trim() && attachments.length === 0);
-  // Whether the draft would wrap in the one-line text column, read from a hidden copy of it that
-  // always sits in that column (see `forcesStackedLayout`). Once a newline or an attachment
-  // stacks the composer anyway, the copy stays empty rather than laying out the draft twice.
-  const stacksAnyway = forcesStackedLayout(body, attachments.length);
   const placeholder = composerPlaceholder(inThread, target);
-  // The placeholder must fit too, or the composer stays stacked and typing never moves the box.
-  const lineMirrorText = stacksAnyway ? "" : `${body}\n${placeholder}`;
-  const lineMirrorRef = useRef<HTMLSpanElement>(null);
-  const [overflowsLine, setOverflowsLine] = useState(false);
-  const measureLine = useCallback(() => {
-    const mirror = lineMirrorRef.current;
-    if (mirror) setOverflowsLine(mirror.scrollWidth > mirror.clientWidth);
-  }, []);
-  // Before paint, so a restored long draft never shows a frame on one line.
-  useLayoutEffect(measureLine, [lineMirrorText, measureLine]);
-  useResizeObserver({ ref: lineMirrorRef, onResize: measureLine });
-  const stacked = stacksAnyway || overflowsLine;
-  // Stacked, `+` and send sit on the bottom bar (row 3, under the attachments).
-  const barRow = stacked ? "row-start-3" : "row-start-1";
 
   /** Uploads one already-added pending attachment, tracking it by `localId` regardless of
    * later reordering or removal of the others in `attachments`. */
@@ -348,10 +304,7 @@ export function MessageComposer({
   }
 
   function focusComposer() {
-    const textarea = completion.textareaRef.current;
-    if (!textarea) return;
-    textarea.focus({ preventScroll: true });
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    focusDraftEnd(completion.textareaRef.current);
   }
 
   // Opening a conversation or thread puts the caret in its composer, as a chat app does, so the
@@ -416,39 +369,6 @@ export function MessageComposer({
     };
     requestAnimationFrame(focusComposer);
   });
-
-  function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // The open completion owns navigation and confirmation keys; Enter must not send while a
-    // candidate is being picked. During IME composition the keys belong to the IME.
-    if (completion.handleKeyDown(event, isComposingRef.current)) return;
-    const composition = { lastCompositionEndAt: lastCompositionEndAtRef.current, now: Date.now() };
-    const key = {
-      key: event.key,
-      shiftKey: event.shiftKey,
-      metaKey: event.metaKey,
-      ctrlKey: event.ctrlKey,
-      isComposing: event.nativeEvent.isComposing || isComposingRef.current,
-      keyCode: event.keyCode,
-    };
-    if (taskMode && shouldSendAsTaskOnEnter(key, composition)) {
-      event.preventDefault();
-      submit(true);
-      return;
-    }
-    if (shouldSendOnEnter(key, composition)) {
-      event.preventDefault();
-      submit();
-    }
-  }
-
-  function compositionStart(_event: CompositionEvent<HTMLTextAreaElement>) {
-    isComposingRef.current = true;
-  }
-
-  function compositionEnd(_event: CompositionEvent<HTMLTextAreaElement>) {
-    isComposingRef.current = false;
-    lastCompositionEndAtRef.current = Date.now();
-  }
 
   /** Paste images through the same upload path as the paperclip button. Covers three clipboard
    * shapes: real file bytes (Finder copies, screenshot tools), image URLs without bytes (copied
@@ -598,125 +518,71 @@ export function MessageComposer({
           }}
         />
       )}
-      <label htmlFor={composerId} className="sr-only">
-        {m.conversation_message_label()}
-      </label>
-      {/* One grid for both shapes: on one line `+`, the text and send share a row; stacked, the
-          text spans the top, the attachments sit under it, and `+` and send drop to a bar whose
-          middle cell is the one-line text column (so neither may change width between shapes).
-          Only classes change, so the textarea (focus, caret, IME state) is never remounted. */}
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1">
-        <textarea
-          id={composerId}
-          ref={completion.textareaRef}
-          rows={1}
-          value={body}
-          disabled={composerDisabled}
-          onChange={(event) => {
-            setBody(event.target.value);
-            completion.track(event.target.value, event.target.selectionStart);
-            if (retryRef.current && event.target.value.trim() !== retryRef.current.body)
-              retryRef.current = undefined;
-          }}
-          onSelect={(event) =>
-            completion.track(event.currentTarget.value, event.currentTarget.selectionStart)
-          }
-          onBlur={completion.close}
-          onKeyDown={keyDown}
-          onCompositionStart={compositionStart}
-          onCompositionEnd={compositionEnd}
-          onPaste={paste}
-          aria-expanded={completion.open || undefined}
-          aria-controls={completion.open ? completion.listboxId : undefined}
-          aria-activedescendant={
-            completion.open ? completion.optionId(completion.activeIndex) : undefined
-          }
-          placeholder={placeholder}
-          // Fits what it shows, placeholder included (as Raft's); scrolls only past max height.
-          className={cx(
-            "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 outline-none [field-sizing:content] placeholder:text-placeholder disabled:opacity-50",
-            DRAFT_LINE_CLASS,
-            stacked ? "col-span-full" : "col-start-2",
-          )}
-        />
-        {/* The draft and placeholder, unwrapped, in the one-line column: wider means a wrap. */}
-        <span
-          ref={lineMirrorRef}
-          aria-hidden="true"
-          className={cx(
-            "invisible col-start-2 h-0 min-w-0 overflow-hidden whitespace-pre",
-            DRAFT_LINE_CLASS,
-            barRow,
-          )}
-        >
-          {lineMirrorText}
-        </span>
-        {attachments.length > 0 && (
-          <div className="col-span-full row-start-2 flex flex-col gap-1">
-            <ul
-              aria-label={m.conversation_attachment_tray()}
-              className="flex flex-wrap gap-2 px-3 pt-1 pb-1"
-            >
-              {attachments.map((item) => (
-                <AttachmentTile
-                  key={item.localId}
-                  attachment={item}
-                  uploading={!item.id && !item.failed}
-                  onRemove={() =>
-                    setAttachments((current) =>
-                      current.filter((other) => other.localId !== item.localId),
-                    )
-                  }
-                  onRetry={() => void uploadOne(item)}
-                />
-              ))}
-            </ul>
-            {attachments.length > MAX_ATTACHMENTS && (
-              <p className="px-2 text-sm text-error-primary">
-                {m.conversation_attachment_limit({ max: MAX_ATTACHMENTS })}
-              </p>
-            )}
-          </div>
+      <ComposerField
+        completion={completion}
+        value={body}
+        onValueChange={(value) => {
+          setBody(value);
+          if (retryRef.current && value.trim() !== retryRef.current.body)
+            retryRef.current = undefined;
+        }}
+        label={m.conversation_message_label()}
+        placeholder={placeholder}
+        onSubmit={submit}
+        sendDisabled={sendDisabled}
+        isDisabled={composerDisabled}
+        taskMode={taskMode}
+        asTask={asTask}
+        attachmentCount={attachments.length}
+        onPaste={paste}
+        below={
+          attachments.length > 0 && (
+            <div className="col-span-full row-start-2 flex flex-col gap-1">
+              <ul
+                aria-label={m.conversation_attachment_tray()}
+                className="flex flex-wrap gap-2 px-3 pt-1 pb-1"
+              >
+                {attachments.map((item) => (
+                  <AttachmentTile
+                    key={item.localId}
+                    attachment={item}
+                    uploading={!item.id && !item.failed}
+                    onRemove={() =>
+                      setAttachments((current) =>
+                        current.filter((other) => other.localId !== item.localId),
+                      )
+                    }
+                    onRetry={() => void uploadOne(item)}
+                  />
+                ))}
+              </ul>
+              {attachments.length > MAX_ATTACHMENTS && (
+                <p className="px-2 text-sm text-error-primary">
+                  {m.conversation_attachment_limit({ max: MAX_ATTACHMENTS })}
+                </p>
+              )}
+            </div>
+          )
+        }
+        leading={(className) => (
+          <FileTrigger
+            allowsMultiple
+            onSelect={(list) => {
+              const files = Array.from(list ?? []);
+              if (files.length > 0) void addFiles(files);
+            }}
+          >
+            <Button
+              color="tertiary"
+              size="xs"
+              iconLeading={Plus}
+              aria-label={m.conversation_attachment_label()}
+              isDisabled={composerDisabled}
+              className={className}
+            />
+          </FileTrigger>
         )}
-        <FileTrigger
-          allowsMultiple
-          onSelect={(list) => {
-            const files = Array.from(list ?? []);
-            if (files.length > 0) void addFiles(files);
-          }}
-        >
-          <Button
-            color="tertiary"
-            size="xs"
-            iconLeading={Plus}
-            aria-label={m.conversation_attachment_label()}
-            isDisabled={composerDisabled}
-            className={cx("col-start-1", barRow, stacked && "mt-1")}
-          />
-        </FileTrigger>
-        <ComposerSendButton
-          asTask={asTask}
-          taskMode={taskMode}
-          isDisabled={sendDisabled}
-          onChoose={(wantTask) => {
-            submit(wantTask);
-            // The closing menu hands focus back to its trigger; take it back after.
-            requestAnimationFrame(focusComposer);
-          }}
-          className={cx("col-start-3", barRow, stacked && "mt-1")}
-        />
-      </div>
-      {completion.open && completion.trigger && (
-        <ReferenceSuggestionList
-          id={completion.listboxId}
-          trigger={completion.trigger}
-          items={completion.items}
-          activeIndex={completion.activeIndex}
-          optionId={completion.optionId}
-          onChoose={completion.choose}
-          onHighlight={completion.setActiveIndex}
-        />
-      )}
+      />
     </form>
   );
 }
