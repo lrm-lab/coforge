@@ -94,11 +94,18 @@ export function parseStoredRuntimeAuth(value: unknown): {
  */
 export function runtimeAuthView(
   column: unknown,
-  viewer: { showAccount: boolean; visibleProviders: readonly string[] },
+  viewer: {
+    showAccount: boolean;
+    /** The runtimes this viewer may see; an unusable one has no login state to show. */
+    runtimes: readonly { provider: string; unavailableCode?: string | null }[];
+  },
 ): Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>> {
+  const visibleProviders = viewer.runtimes
+    .filter((runtime) => !runtime.unavailableCode)
+    .map((runtime) => runtime.provider);
   const view: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>> = {};
   for (const status of Object.values(parseStoredRuntimeAuth(column)?.runtimes ?? {})) {
-    if (!viewer.visibleProviders.includes(status.provider)) continue;
+    if (!visibleProviders.includes(status.provider)) continue;
     const { provider, state, unavailableReason } = status;
     view[provider] = viewer.showAccount
       ? status

@@ -161,9 +161,11 @@ function ComputerDetailPage() {
           // As the reference Computer: its creator, or whoever manages the Workspace's Computers.
           computer.ownedByCurrentUser || computer.canManageAgents
             ? async () => {
-                const { status } = await rescanRuntimes({ data: { computerId } });
+                const result = await rescanRuntimes({ data: { computerId } });
                 await router.invalidate({ sync: true });
-                return status === "refreshed";
+                return result.status === "error"
+                  ? { status: "error", message: result.message }
+                  : { status: result.status };
               }
             : undefined
         }

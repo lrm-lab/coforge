@@ -4,6 +4,9 @@ import {
   storedRuntimeAuth,
 } from "#src/server/computers/computer-runtime-auth.server";
 
+/** The Computer's runtime rows as the view takes them: usable unless a test says otherwise. */
+const runtimeRows = (providers: readonly string[]) => providers.map((provider) => ({ provider }));
+
 test("a supported runtime's report survives storage without depending on the writer's provider list", () => {
   const kiro = {
     provider: "kiro",
@@ -11,8 +14,10 @@ test("a supported runtime's report survives storage without depending on the wri
     account: { methodLabel: "IAM Identity Center" },
   } as const;
   const stored = JSON.parse(JSON.stringify(storedRuntimeAuth(123, [kiro])));
-  expect(runtimeAuthView(stored, { showAccount: true, visibleProviders: ["codex"] })).toEqual({});
-  expect(runtimeAuthView(stored, { showAccount: true, visibleProviders: ["kiro"] })).toEqual({
+  expect(runtimeAuthView(stored, { showAccount: true, runtimes: runtimeRows(["codex"]) })).toEqual(
+    {},
+  );
+  expect(runtimeAuthView(stored, { showAccount: true, runtimes: runtimeRows(["kiro"]) })).toEqual({
     kiro,
   });
   expect(stored.collectedAtMs).toBe(123);
@@ -30,9 +35,9 @@ test("an unknown provider is preserved with safe labels but never projected to a
   expect(stored.runtimes).toEqual({
     "future-cli": { provider: "future-cli", state: "logged_in", account: { planLabel: "Pro" } },
   });
-  expect(runtimeAuthView(stored, { showAccount: true, visibleProviders: ["future-cli"] })).toEqual(
-    {},
-  );
+  expect(
+    runtimeAuthView(stored, { showAccount: true, runtimes: runtimeRows(["future-cli"]) }),
+  ).toEqual({});
   expect(JSON.stringify(stored)).not.toContain("secret");
 });
 

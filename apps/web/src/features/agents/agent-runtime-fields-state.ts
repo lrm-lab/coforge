@@ -3,6 +3,7 @@ import {
   RUNTIME_PROVIDER_SUPPORTS_FAST_MODE,
   type CodeAgentModelMetadata,
   type RuntimeProvider,
+  type RuntimeUnavailableCode,
 } from "@lrm/coforge-sdk/internal";
 import { isPiBuiltinModelProvider } from "./agent.schemas";
 import { modelProviderDisplayName } from "./model-provider-display";
@@ -14,7 +15,14 @@ export type RuntimeCatalog = {
   observedAt?: string | Date;
 };
 export type RuntimeOptions = {
+  /** The providers this person may pick here. */
   providers: string[];
+  /** Installed but unusable providers, listed and not selectable, each with its reason. */
+  unusable: {
+    provider: RuntimeProvider;
+    unavailableCode: RuntimeUnavailableCode;
+    diagnostic?: string | null;
+  }[];
   catalogs: RuntimeCatalog[];
 };
 

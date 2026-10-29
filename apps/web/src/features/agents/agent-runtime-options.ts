@@ -5,7 +5,35 @@ import {
   getComputerRuntimeCatalog,
   listComputers,
 } from "#src/features/computers/computers.functions";
+import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
 import type { RuntimeOptions } from "./agent-runtime-fields";
+
+/** A Computer's runtimes as the runtime picker needs them: the ones this person may pick, and
+ * the installed ones that cannot be used, each with its reason so the list explains itself. */
+export function runtimeOptionsFromRuntimes(
+  runtimes: readonly {
+    provider: RuntimeProvider;
+    unavailableCode?: RuntimeUnavailableCode | null;
+    diagnostic?: string | null;
+  }[],
+): Pick<RuntimeOptions, "providers" | "unusable"> {
+  return {
+    providers: runtimes
+      .filter((runtime) => !runtime.unavailableCode)
+      .map((runtime) => runtime.provider),
+    unusable: runtimes.flatMap((runtime) =>
+      runtime.unavailableCode
+        ? [
+            {
+              provider: runtime.provider,
+              unavailableCode: runtime.unavailableCode,
+              diagnostic: runtime.diagnostic,
+            },
+          ]
+        : [],
+    ),
+  };
+}
 
 /**
  * The `AgentRuntimeFields.onLoad` loader shared by the full Agent detail page's edit dialog
@@ -22,13 +50,8 @@ export function useAgentRuntimeOptionsLoader(): (computerId: string) => Promise<
         loadComputers(),
         loadCatalog({ data: { computerId } }),
       ]);
-      return {
-        providers:
-          computers
-            .find((computer) => computer.id === computerId)
-            ?.runtimes.map((runtime) => runtime.provider) ?? [],
-        catalogs,
-      };
+      const runtimes = computers.find((computer) => computer.id === computerId)?.runtimes ?? [];
+      return { ...runtimeOptionsFromRuntimes(runtimes), catalogs };
     },
     [loadComputers, loadCatalog],
   );

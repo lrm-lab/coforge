@@ -14,6 +14,7 @@ import { RuntimeChip } from "./runtime-chip";
 import { RuntimeSignInDialog, unsupportedText } from "./runtime-sign-in-dialog";
 import { RuntimeSignOutDialog } from "./runtime-sign-out-dialog";
 import { RuntimeUsage } from "./runtime-usage";
+import { runtimeUnavailableReason } from "./runtime-unavailable-reason";
 import type { AccountState } from "./runtime-usage-status";
 import {
   isRuntimeLoginStateProvider,
@@ -119,6 +120,11 @@ export function ComputerRuntimeList({
               </PopoverAction>
             );
           };
+          const unusable = runtime.unavailableCode && (
+            <p key="unusable" className="px-4 py-3 text-sm text-tertiary">
+              {runtimeUnavailableReason(runtime.unavailableCode, runtime.diagnostic)}
+            </p>
+          );
           const unavailable = auth?.state === "unavailable" && auth.unavailableReason && (
             <p key="account" className="px-4 py-3 text-sm text-tertiary">
               {unsupportedText(auth.unavailableReason, runtime.displayName)}
@@ -164,7 +170,9 @@ export function ComputerRuntimeList({
                 account={account}
                 triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
                 trigger={(status) => <RuntimeChip runtime={runtime} status={status} />}
-                actions={(visibility || unavailable) && [visibility, unavailable]}
+                actions={
+                  (visibility || unusable || unavailable) && [visibility, unusable, unavailable]
+                }
                 accountAction={accountAction}
               />
             </li>

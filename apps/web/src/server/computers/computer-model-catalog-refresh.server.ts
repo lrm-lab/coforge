@@ -53,7 +53,8 @@ export class ComputerModelCatalogRefresh {
         const result = await results.read(request.requestId);
         if (result) {
           if (!result.accepted || result.status !== "refreshed" || !result.catalogs)
-            return { status: "error" as const };
+            // The daemon's own sentence, when it sent one: it names the failure the page shows.
+            return { status: "error" as const, message: result.message };
           return { status: "refreshed" as const, catalogs: result.catalogs };
         }
         await this.timing.wait();

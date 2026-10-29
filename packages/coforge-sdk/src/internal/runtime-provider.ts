@@ -1,3 +1,5 @@
+import type { RuntimeUnavailableCode } from "./computer-agent-messages";
+
 export const RUNTIME_PROVIDER = {
   COFORGE: "coforge",
   CODEX: "codex",
@@ -38,6 +40,13 @@ export function requireRuntimeProvider(value: unknown, message: string): Runtime
 export function parseRuntimeProvider(value: unknown): RuntimeProvider | undefined {
   return typeof value === "string" && RUNTIME_PROVIDERS.has(value)
     ? (value as RuntimeProvider)
+    : undefined;
+}
+
+/** Why an installed runtime cannot be used, when this build knows the code. */
+export function parseRuntimeUnavailableCode(value: unknown): RuntimeUnavailableCode | undefined {
+  return value === "version_unsupported" || value === "start_failed" || value === "probe_failed"
+    ? value
     : undefined;
 }
 

@@ -109,9 +109,16 @@ test("a terminal probe error and a missing reply stay failures and clear pending
           },
         },
       );
-      expect(
-        await refresh.execute({ userId: "user-1", workspaceId: "workspace-1" }, "computer-1"),
-      ).toEqual({ status: outcome });
+      const result = await refresh.execute(
+        { userId: "user-1", workspaceId: "workspace-1" },
+        "computer-1",
+      );
+      // The daemon's own sentence reaches the page, which names the failure with it.
+      expect(result).toEqual(
+        outcome === "error"
+          ? { status: "error", message: "fixture probe failed" }
+          : { status: outcome },
+      );
       expect(await results.read(request!.requestId)).toBeUndefined();
       await results.accept({ ...request!, accepted: true, status: "refreshed", catalogs: [] });
       expect(await results.read(request!.requestId)).toBeUndefined();

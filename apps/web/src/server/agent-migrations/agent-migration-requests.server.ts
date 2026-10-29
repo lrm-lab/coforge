@@ -38,6 +38,7 @@ const RUNTIME_REFUSALS: Record<AgentRuntimeSelectionRefusal, string> = {
   not_connected: "agent-migration-target-unavailable",
   runtime_unconfirmed: "agent-migration-runtime-unconfirmed",
   runtime_missing: "agent-migration-runtime-missing",
+  runtime_unusable: "agent-migration-runtime-unusable",
   runtime_not_shared: "agent-migration-runtime-not-shared",
   model_missing: "agent-migration-model-missing",
   fast_mode_unsupported: "agent-migration-fast-mode-unsupported",

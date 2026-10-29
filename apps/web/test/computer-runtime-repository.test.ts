@@ -108,8 +108,57 @@ describe("PrismaComputerRuntimeRepository", () => {
           provider: "codex",
           version: "1",
           displayName: "Codex",
+          unavailableCode: null,
+          diagnostic: null,
         },
-        update: { version: "1", displayName: "Codex", observedAt: expect.any(Date) },
+        update: {
+          version: "1",
+          displayName: "Codex",
+          unavailableCode: null,
+          diagnostic: null,
+          observedAt: expect.any(Date),
+        },
+      },
+    });
+  });
+
+  test("keeps an unusable runtime's row and reason, and drops its stale catalog", async () => {
+    const { db, calls } = recordingTransaction();
+
+    await new PrismaComputerRuntimeRepository(db).replace(
+      { workspaceId: "workspace-1", computerId: "computer-1" },
+      [
+        { provider: "codex", version: "1", displayName: "Codex" },
+        {
+          provider: "dsh",
+          version: "",
+          displayName: "DeepSeek Harness",
+          unavailableCode: "start_failed",
+          diagnostic: "No version is set for shim: node",
+        },
+      ],
+      [],
+    );
+
+    expect(calls).toContainEqual({
+      operation: "upsertRuntime",
+      args: expect.objectContaining({
+        create: expect.objectContaining({
+          provider: "dsh",
+          unavailableCode: "start_failed",
+          diagnostic: "No version is set for shim: node",
+        }),
+      }),
+    });
+    // The unusable runtime is still installed, so its row stays; only its stale models go.
+    expect(calls).toContainEqual({
+      operation: "deleteCatalogs",
+      args: {
+        where: {
+          workspaceId: "workspace-1",
+          computerId: "computer-1",
+          provider: { notIn: ["codex"] },
+        },
       },
     });
   });

@@ -88,6 +88,7 @@ const coforgeModel = model({
 });
 const options: RuntimeOptions = {
   providers: ["pi"],
+  unusable: [],
   catalogs: [
     { provider: RUNTIME_PROVIDER.PI, models: [piModel] },
     { provider: RUNTIME_PROVIDER.COFORGE, models: [coforgeModel] },

@@ -1,8 +1,18 @@
-import type { RuntimeProvider, AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import type {
+  RuntimeProvider,
+  RuntimeUnavailableCode,
+  AgentDisplaySnapshot,
+} from "@lrm/coforge-sdk/internal";
 import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil";
 
 import type { ComputerIdentity } from "./computer-identity";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
+
+/** What a rescan the page asked for came back with: the daemon answered, or it did not in time,
+ * or it answered with a failure of its own. */
+export type RuntimeRescanResult =
+  | { status: "refreshed" | "timeout" }
+  | { status: "error"; message?: string };
 
 export const RESTART_POLL_INTERVAL_MS = 2_000;
 export const RESTART_MAX_POLLS = 31;
@@ -35,6 +45,10 @@ export type ComputerDetailView = ComputerIdentity & {
     provider: RuntimeProvider;
     version: string;
     displayName: string;
+    /** Set when the runtime is installed but cannot be used; it is never selectable then. */
+    unavailableCode?: RuntimeUnavailableCode | null;
+    /** The CLI's own redacted stderr line, verbatim; only with an `unavailableCode`. */
+    diagnostic?: string | null;
     isPublic: boolean;
   }[];
   agents: {

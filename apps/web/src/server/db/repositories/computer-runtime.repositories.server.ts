@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
+  parseRuntimeUnavailableCode,
   requireRuntimeProvider,
   type CodeAgentModelCatalog,
   type RuntimeMetadata,
@@ -17,6 +18,8 @@ const runtimeShape = {
   provider: true,
   version: true,
   displayName: true,
+  unavailableCode: true,
+  diagnostic: true,
   observedAt: true,
   isPublic: true,
   computer: { select: { ownerId: true } },
@@ -33,6 +36,8 @@ function mapRuntime(runtime: {
   provider: string;
   version: string;
   displayName: string;
+  unavailableCode: string | null;
+  diagnostic: string | null;
   observedAt: Date;
   isPublic: boolean;
   computer: { ownerId: string };
@@ -42,6 +47,7 @@ function mapRuntime(runtime: {
     ...record,
     ownerId: computer.ownerId,
     provider: runtimeProvider(record.provider),
+    unavailableCode: parseRuntimeUnavailableCode(record.unavailableCode) ?? null,
   };
 }
 
@@ -105,14 +111,17 @@ export class PrismaComputerRuntimeRepository implements ComputerRuntimeVisibilit
         },
       });
       // A provider that is still installed but reported no catalog this round (for example its
-      // model CLI probe failed) keeps its last-known models: only providers that are no longer an
-      // installed runtime are dropped. This keeps one failing provider from clearing every
-      // model catalog on the Computer.
+      // model CLI probe failed) keeps its last-known models: only providers that are no longer a
+      // usable runtime are dropped. This keeps one failing provider from clearing every model
+      // catalog on the Computer, and an unusable runtime never keeps a stale one.
+      const usableProviders = runtimes
+        .filter((runtime) => !runtime.unavailableCode)
+        .map((runtime) => runtime.provider);
       await transaction.computerModelCatalog.deleteMany({
         where: {
           workspaceId: scope.workspaceId,
           computerId: scope.computerId,
-          ...(providers.length ? { provider: { notIn: providers } } : {}),
+          ...(usableProviders.length ? { provider: { notIn: usableProviders } } : {}),
         },
       });
       for (const runtime of runtimes) {
@@ -130,15 +139,25 @@ export class PrismaComputerRuntimeRepository implements ComputerRuntimeVisibilit
             provider: runtime.provider,
             version: runtime.version,
             displayName: runtime.displayName,
+            unavailableCode: runtime.unavailableCode ?? null,
+            diagnostic: runtime.diagnostic ?? null,
           },
           update: {
             version: runtime.version,
             displayName: runtime.displayName,
+            // A runtime that became usable again clears its reason.
+            unavailableCode: runtime.unavailableCode ?? null,
+            diagnostic: runtime.diagnostic ?? null,
             observedAt: new Date(),
           },
         });
       }
+      const unusable = new Set(
+        runtimes.filter((runtime) => runtime.unavailableCode).map((runtime) => runtime.provider),
+      );
       for (const catalog of catalogs) {
+        // An unusable runtime has no models to offer, whatever a stale report still says.
+        if (unusable.has(catalog.provider)) continue;
         await transaction.computerModelCatalog.upsert({
           where: {
             workspaceId_computerId_provider: {

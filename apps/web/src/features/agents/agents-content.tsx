@@ -38,13 +38,18 @@ import { useOpenAgentProfile } from "#src/features/agents/profile-panel/open-age
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 import { PersonProfilePanel } from "./person-profile-panel";
 import { AgentCard, PersonCard } from "./member-cards";
+import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
 
 type ComputerOption = {
   id: string;
   name: string;
   displayName: string;
   online?: boolean;
-  runtimes: { provider: string }[];
+  runtimes: {
+    provider: RuntimeProvider;
+    unavailableCode?: RuntimeUnavailableCode | null;
+    diagnostic?: string | null;
+  }[];
 };
 
 const appRoute = getRouteApi("/w/$workspaceSlug");

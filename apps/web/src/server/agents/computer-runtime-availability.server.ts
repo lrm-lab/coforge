@@ -1,4 +1,8 @@
-import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_PROVIDER,
+  parseRuntimeUnavailableCode,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
@@ -36,7 +40,10 @@ export async function computerRuntimeRefusal(
     select: {
       computer: {
         select: {
-          runtimes: { where: { workspaceId }, select: { provider: true } },
+          runtimes: {
+            where: { workspaceId },
+            select: { provider: true, unavailableCode: true },
+          },
           modelCatalogs: {
             where: {
               workspaceId,
@@ -66,6 +73,13 @@ export async function computerRuntimeRefusal(
     connected: Boolean(connection),
     reported: new Set(
       connection?.computer.runtimes.map(({ provider }) => provider as RuntimeProvider),
+    ),
+    // Normalized exactly as the repository reads it, so an unknown stored code stays usable here
+    // too instead of refusing a runtime the picker offers.
+    unusable: new Set(
+      connection?.computer.runtimes.flatMap(({ provider, unavailableCode }) =>
+        parseRuntimeUnavailableCode(unavailableCode) ? [provider as RuntimeProvider] : [],
+      ),
     ),
     providers,
     models: models ?? [],

@@ -82,6 +82,11 @@ model ComputerRuntime {
   provider    String
   version     String
   displayName String
+  /// Why this installed runtime cannot be used: the daemon's `unavailable_code`
+  /// (`version_unsupported`, `start_failed`, `probe_failed`). Null means usable.
+  unavailableCode String?
+  /// The runtime's own redacted first stderr line, verbatim; never a sentence we wrote.
+  diagnostic      String?
   observedAt  DateTime  @default(now())
   isPublic    Boolean   @default(false)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

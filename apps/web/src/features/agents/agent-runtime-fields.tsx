@@ -37,6 +37,7 @@ import {
 } from "./agent-runtime-fields-state";
 import { RUNTIME_PROVIDER_DISPLAY_ORDER, runtimeProviderLabel } from "./runtime-provider-display";
 import { RuntimeProviderMark } from "./runtime-provider-mark";
+import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
 import { useCommandCodeEfforts } from "./use-command-code-efforts";
 import { useRuntimeCatalogRefresh } from "./use-runtime-catalog-refresh";
 
@@ -296,6 +297,20 @@ export function AgentRuntimeFields({
             />
           ),
         )}
+        {(options?.unusable ?? [])
+          .filter((entry) => !providers.has(entry.provider))
+          .map((entry) => (
+            // Shown, never selectable: the person learns why the runtime they know about is
+            // missing from the list instead of finding it gone.
+            <Select.Item
+              key={entry.provider}
+              id={entry.provider}
+              label={runtimeProviderLabel(entry.provider)}
+              supportingText={runtimeUnavailableReason(entry.unavailableCode, entry.diagnostic)}
+              icon={<RuntimeProviderMark provider={entry.provider} />}
+              isDisabled
+            />
+          ))}
       </Select>
       {failed ? (
         <Input

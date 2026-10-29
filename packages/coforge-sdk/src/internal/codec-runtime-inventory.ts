@@ -1,20 +1,9 @@
-import type {
-  CodeAgentModelCatalog,
-  RuntimeMetadata,
-  RuntimeUnavailableCode,
-} from "./computer-agent-messages";
-import { requireRuntimeProvider } from "./index";
+import type { CodeAgentModelCatalog, RuntimeMetadata } from "./computer-agent-messages";
+import { requireRuntimeProvider, parseRuntimeUnavailableCode } from "./index";
 
 export const runtimeMetadata = (runtime: RuntimeMetadata) => ({
   ...runtime,
 });
-
-/** A code this build knows, or undefined. A newer daemon's code is dropped rather than read as
- * one of ours, and a runtime without a known code stays usable. */
-const runtimeUnavailableCode = (value: string | undefined): RuntimeUnavailableCode | undefined =>
-  value === "version_unsupported" || value === "start_failed" || value === "probe_failed"
-    ? value
-    : undefined;
 
 export const decodedRuntimeMetadata = (runtime: {
   provider: string;
@@ -23,7 +12,8 @@ export const decodedRuntimeMetadata = (runtime: {
   unavailableCode?: string;
   diagnostic?: string;
 }): RuntimeMetadata => {
-  const unavailableCode = runtimeUnavailableCode(runtime.unavailableCode);
+  // A newer daemon's code is dropped rather than read as one of ours: the runtime stays usable.
+  const unavailableCode = parseRuntimeUnavailableCode(runtime.unavailableCode);
   return {
     provider: requireRuntimeProvider(
       runtime.provider,

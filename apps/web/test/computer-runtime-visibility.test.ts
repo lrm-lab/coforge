@@ -15,6 +15,8 @@ function fixture() {
       provider: "codex",
       version: "1",
       displayName: "Codex",
+      unavailableCode: null,
+      diagnostic: null,
       observedAt: new Date("2026-09-03T00:00:00Z"),
       isPublic: false,
     },
@@ -26,6 +28,8 @@ function fixture() {
       provider: "claude-code",
       version: "2",
       displayName: "Claude Code",
+      unavailableCode: null,
+      diagnostic: null,
       observedAt: new Date("2026-09-03T00:00:00Z"),
       isPublic: true,
     },
@@ -37,6 +41,8 @@ function fixture() {
       provider: "codex",
       version: "1",
       displayName: "Codex",
+      unavailableCode: null,
+      diagnostic: null,
       observedAt: new Date("2026-09-03T00:00:00Z"),
       isPublic: false,
     },
@@ -48,6 +54,8 @@ function fixture() {
       provider: "codex",
       version: "2",
       displayName: "Codex from another Workspace",
+      unavailableCode: null,
+      diagnostic: null,
       observedAt: new Date("2026-09-04T00:00:00Z"),
       isPublic: true,
     },
@@ -94,6 +102,28 @@ describe("ComputerRuntimeVisibility", () => {
     expect(await visibility.canSelect(member, "computer-1", "codex")).toBe(false);
     await visibility.setPublic(owner, "owned-private", true);
     expect(await visibility.canSelect(member, "computer-1", "codex")).toBe(true);
+  });
+
+  test("an unusable runtime is never selectable, even to its owner", async () => {
+    const { records, visibility } = fixture();
+    const runtime = records.find((record) => record.id === "owned-private")!;
+    runtime.unavailableCode = "start_failed";
+    runtime.diagnostic = "No version is set for shim: node";
+
+    expect(
+      await visibility.canSelect(
+        { userId: "user-1", workspaceId: "workspace-1" },
+        "computer-1",
+        "codex",
+      ),
+    ).toBe(false);
+    expect(
+      await visibility.ownedRuntime(
+        { userId: "user-1", workspaceId: "workspace-1" },
+        "computer-1",
+        "codex",
+      ),
+    ).toMatchObject({ unavailableCode: "start_failed" });
   });
 
   test("publication does not grant owner-only runtime management", async () => {

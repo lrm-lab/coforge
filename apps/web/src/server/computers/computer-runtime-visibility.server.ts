@@ -1,4 +1,4 @@
-import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
 
 export type ComputerRuntimeRecord = {
   id: string;
@@ -8,6 +8,10 @@ export type ComputerRuntimeRecord = {
   provider: RuntimeProvider;
   version: string;
   displayName: string;
+  /** Why the runtime cannot be used; null when it can. */
+  unavailableCode: RuntimeUnavailableCode | null;
+  /** The runtime's own redacted stderr line, verbatim; only with an `unavailableCode`. */
+  diagnostic: string | null;
   observedAt: Date;
   isPublic: boolean;
 };
@@ -37,13 +41,16 @@ export class ComputerRuntimeVisibility {
     );
   }
 
+  /** Whether this person may pick the runtime for an Agent. An unusable runtime is never
+   * selectable, however it is shared. */
   async canSelect(principal: RuntimePrincipal, computerId: string, provider: RuntimeProvider) {
     const runtime = await this.runtimes.findInWorkspace(
       principal.workspaceId,
       computerId,
       provider,
     );
-    return runtime?.ownerId === principal.userId || runtime?.isPublic === true;
+    if (!runtime || runtime.unavailableCode) return false;
+    return runtime.ownerId === principal.userId || runtime.isPublic;
   }
 
   /** The runtime row itself, only when the current user owns it — so a caller that also needs

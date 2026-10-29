@@ -49,7 +49,10 @@ export function useRuntimeCatalogRefresh({
         return {
           ...current,
           [computerId]: {
+            // The refresh re-reads model catalogs only; whether each runtime is usable comes from
+            // the Computer rows, which this dialog re-reads when it opens.
             providers: previous?.providers ?? [],
+            unusable: previous?.unusable ?? [],
             catalogs: [
               ...(previous?.catalogs ?? []).filter(
                 (catalog) => !refreshedProviders.has(catalog.provider),

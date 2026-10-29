@@ -35,8 +35,10 @@ import {
   RESTART_MAX_POLLS,
   RESTART_POLL_INTERVAL_MS,
   type ComputerDetailView,
+  type RuntimeRescanResult,
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
+import { runtimeRescanNotice } from "./runtime-rescan-notice";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
 export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
@@ -87,7 +89,7 @@ export function ComputerDetail({
   onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
   /** Asks the Computer which runtimes it has, now; resolves whether it answered. */
-  onRescanRuntimes?: () => Promise<boolean>;
+  onRescanRuntimes?: () => Promise<RuntimeRescanResult>;
   onSelectAgent?: (agentId: string) => void;
   onExecuteAgentControl?: AgentControlExecute;
   latestComputerVersion?: string | null;
@@ -107,19 +109,20 @@ export function ComputerDetail({
   const [imageUpdateOpen, setImageUpdateOpen] = useState(false);
   const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
   const [rescanning, setRescanning] = useState(false);
-  const [rescanFailed, setRescanFailed] = useState(false);
+  const [rescanResult, setRescanResult] = useState<RuntimeRescanResult | undefined>(undefined);
   const rescan = async () => {
     if (!onRescanRuntimes || rescanning) return;
     setRescanning(true);
-    setRescanFailed(false);
+    setRescanResult(undefined);
     try {
-      setRescanFailed(!(await onRescanRuntimes()));
+      setRescanResult(await onRescanRuntimes());
     } catch {
-      setRescanFailed(true);
+      setRescanResult({ status: "timeout" });
     } finally {
       setRescanning(false);
     }
   };
+  const rescanNotice = runtimeRescanNotice(rescanResult, computer.runtimes);
   const workspaceSlug = useWorkspaceSlug();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const {
@@ -299,9 +302,21 @@ export function ComputerDetail({
                   {m.computer_runtime_detection_pending()}
                 </p>
               )}
-              {rescanFailed && !rescanning && (
+              {!rescanning && rescanNotice.kind === "timeout" && (
                 <p className="mt-1 text-sm text-error-primary" role="alert">
                   {m.computer_runtime_rescan_failed()}
+                </p>
+              )}
+              {!rescanning && rescanNotice.kind === "error" && (
+                <p className="mt-1 text-sm text-error-primary" role="alert">
+                  {rescanNotice.message
+                    ? m.computer_runtime_rescan_error({ message: rescanNotice.message })
+                    : m.computer_runtime_rescan_failed()}
+                </p>
+              )}
+              {!rescanning && rescanNotice.kind === "partial" && (
+                <p className="mt-1 text-sm text-tertiary" role="status">
+                  {m.computer_runtime_rescan_partial()}
                 </p>
               )}
               {computer.runtimes.length ? (
@@ -454,7 +469,11 @@ export function ComputerDetail({
               name: computer.name,
               displayName: computer.displayName,
               online: computer.online,
-              runtimes: computer.runtimes.map((runtime) => ({ provider: runtime.provider })),
+              runtimes: computer.runtimes.map((runtime) => ({
+                provider: runtime.provider,
+                unavailableCode: runtime.unavailableCode,
+                diagnostic: runtime.diagnostic,
+              })),
             },
           ]}
           defaults={{ computerId: computer.id }}

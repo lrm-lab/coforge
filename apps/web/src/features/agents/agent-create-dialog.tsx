@@ -19,6 +19,8 @@ import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields"
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
 import type { CreateAgentInput } from "./agent.schemas";
+import { runtimeOptionsFromRuntimes } from "./agent-runtime-options";
+import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 
 export type AgentCreateComputerOption = {
@@ -26,7 +28,11 @@ export type AgentCreateComputerOption = {
   name: string;
   displayName: string;
   online?: boolean;
-  runtimes: { provider: string }[];
+  runtimes: {
+    provider: RuntimeProvider;
+    unavailableCode?: RuntimeUnavailableCode | null;
+    diagnostic?: string | null;
+  }[];
 };
 
 /** The Agent-create form, shared by the Members page ("New agent") and an `agent:create`
@@ -172,10 +178,9 @@ export function AgentCreateDialog({
                     open={open}
                     computerId={computerId}
                     onLoad={async (id) => ({
-                      providers:
-                        computers
-                          .find((computer) => computer.id === id)
-                          ?.runtimes.map((runtime) => runtime.provider) ?? [],
+                      ...runtimeOptionsFromRuntimes(
+                        computers.find((computer) => computer.id === id)?.runtimes ?? [],
+                      ),
                       catalogs: await onLoadRuntimeCatalog(id),
                     })}
                   />

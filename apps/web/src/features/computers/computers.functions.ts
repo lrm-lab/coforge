@@ -246,7 +246,7 @@ export const listComputers = createServerFn({ method: "GET" })
           // The account and plan only for whoever may sign the runtimes in or out (task #94).
           runtimeAuth: runtimeAuthView(computer.runtimeAuth, {
             showAccount: computer.ownerId === user.id || canManage,
-            visibleProviders: computerRuntimes.map((runtime) => runtime.provider),
+            runtimes: computerRuntimes,
           }),
           online: statuses[index] ?? false,
           runtimeDetecting: detecting[index] ?? false,

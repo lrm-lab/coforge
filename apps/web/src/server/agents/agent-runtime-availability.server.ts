@@ -44,25 +44,28 @@ export type AgentRuntimeSelectionRefusal =
   | "not_connected"
   | "runtime_unconfirmed"
   | "runtime_missing"
+  | "runtime_unusable"
   | "runtime_not_shared"
   | "model_missing"
   | "fast_mode_unsupported";
 
 /**
  * Why `agentRuntimeSelectionIsAvailable` refuses this selection, or null when it does not.
- * `reported` is every runtime the Computer reported, shared or not; `providers` only those this
- * person may select there.
+ * `reported` is every runtime the Computer reported, shared or not; `unusable` those it reported
+ * as installed but not usable; `providers` only those this person may select there.
  */
 export function agentRuntimeSelectionRefusal(
   config: AgentRuntimeSelection,
   inventory: Parameters<typeof agentRuntimeSelectionIsAvailable>[1] & {
     reported: ReadonlySet<RuntimeProvider>;
+    unusable: ReadonlySet<RuntimeProvider>;
   },
 ): AgentRuntimeSelectionRefusal | null {
   if (!inventory.connected) return "not_connected";
   if (agentRuntimeSelectionIsAvailable(config, inventory)) return null;
   if (inventory.reported.size === 0) return "runtime_unconfirmed";
   if (!providerIsSelectable(config.provider, inventory.reported)) return "runtime_missing";
+  if (providerIsSelectable(config.provider, inventory.unusable)) return "runtime_unusable";
   if (!providerIsSelectable(config.provider, inventory.providers)) return "runtime_not_shared";
   // Provider and sharing are settled; a Fast request this runtime cannot apply, or the model.
   if (fastModeUnsupported(config)) return "fast_mode_unsupported";

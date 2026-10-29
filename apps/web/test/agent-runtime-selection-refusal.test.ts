@@ -15,6 +15,7 @@ function inventory(
   options: {
     connected?: boolean;
     reported?: RuntimeProvider[];
+    unusable?: RuntimeProvider[];
     selectable?: RuntimeProvider[];
     models?: unknown[];
   } = {},
@@ -22,6 +23,7 @@ function inventory(
   return {
     connected: options.connected ?? true,
     reported: new Set(options.reported ?? [RUNTIME_PROVIDER.CLAUDE_CODE]),
+    unusable: new Set(options.unusable ?? []),
     providers: new Set(options.selectable ?? options.reported ?? [RUNTIME_PROVIDER.CLAUDE_CODE]),
     models: options.models ?? [sonnet],
   };
@@ -44,6 +46,18 @@ test("each reason a Computer cannot run the Agent is told apart, as the referenc
   expect(
     agentRuntimeSelectionRefusal(claude, inventory({ reported: [RUNTIME_PROVIDER.CODEX] })),
   ).toBe("runtime_missing");
+  // It has the runtime, but the runtime itself cannot be used: never selectable, whatever the
+  // sharing says.
+  expect(
+    agentRuntimeSelectionRefusal(
+      claude,
+      inventory({
+        reported: [RUNTIME_PROVIDER.CLAUDE_CODE],
+        unusable: [RUNTIME_PROVIDER.CLAUDE_CODE],
+        selectable: [],
+      }),
+    ),
+  ).toBe("runtime_unusable");
   // It has the runtime, but its owner has not shared it with this person.
   expect(
     agentRuntimeSelectionRefusal(

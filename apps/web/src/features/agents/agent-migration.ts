@@ -119,6 +119,10 @@ const REFUSALS: Record<
     message: m.agent_migration_error_runtime_missing,
     fixAt: "target",
   },
+  "agent-migration-runtime-unusable": {
+    message: m.agent_migration_error_runtime_unusable,
+    fixAt: "target",
+  },
   "agent-migration-runtime-not-shared": {
     message: m.agent_migration_error_runtime_not_shared,
     fixAt: "target",
