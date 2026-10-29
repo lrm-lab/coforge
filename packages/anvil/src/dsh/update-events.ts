@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { acpToolOutput } from "#src/acp-tool-output";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { DshRuntimeHost } from "./host";
 
@@ -48,21 +49,11 @@ export class DshTurnEvents {
         const id = nonEmptyString(update.toolCallId);
         if (!id || !this.#started.has(id) || this.#ended.has(id)) return [];
         const events: AgentRuntimeEvent[] = [];
-        if (Array.isArray(update.content))
-          for (const value of update.content) {
-            const item = asRecord(value);
-            const content = asRecord(item?.content);
-            if (
-              item?.type === "content" &&
-              content?.type === "text" &&
-              typeof content.text === "string"
-            ) {
-              // `content` is the call's whole output, not a delta: only what is new goes out.
-              const text = newOutputText(this.#output.get(id) ?? "", content.text);
-              if (text) events.push({ type: "tool-output", id, text });
-              this.#output.set(id, content.text);
-            }
-          }
+        const output = acpToolOutput(this.#output.get(id) ?? "", update.content);
+        if (output) {
+          if (output.text) events.push({ type: "tool-output", id, text: output.text });
+          this.#output.set(id, output.full);
+        }
         if (update.status === "completed" || update.status === "failed") {
           this.#ended.add(id);
           this.#output.delete(id);
@@ -78,11 +69,4 @@ export class DshTurnEvents {
   end(): AgentRuntimeEvent[] {
     return this.#scanner.reset().map((id) => ({ type: "reply-intent-retracted", id }));
   }
-}
-
-/** What to emit for a full content that replaces `previous`: the new suffix, nothing when it is
- * unchanged, and the whole text when the provider rewrote it instead of extending it. */
-function newOutputText(previous: string, content: string): string | undefined {
-  if (content === previous) return undefined;
-  return content.startsWith(previous) ? content.slice(previous.length) || undefined : content;
 }
