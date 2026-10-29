@@ -67,7 +67,13 @@ const SeenIcon = ({ large = false }: { large?: boolean; className?: string }) =>
 
 function ReaderAvatar({ reader, size = "xs" }: { reader: Reader; size?: "xs" | "sm" }) {
   return reader.kind === "agent" ? (
-    <AgentDisplayAvatar agentId={reader.id} name={reader.label} size={size} cornerDot={false} />
+    <AgentDisplayAvatar
+      agentId={reader.id}
+      name={reader.label}
+      src={reader.avatarUrl}
+      size={size}
+      cornerDot={false}
+    />
   ) : (
     <IdentityAvatar
       size={size}
