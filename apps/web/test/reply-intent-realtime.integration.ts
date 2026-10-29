@@ -49,8 +49,23 @@ test("real routing delivers start/end only to the conversation, with no history 
   // A client the server drops mid-test otherwise reports only `disconnected`: keep the
   // server's own code/reason so the CI log names the denial instead.
   const disconnects: { userId: string; code: number; reason: string }[] = [];
+  // Which awaited step the failure hit, if it fails: printed with the disconnect record so a
+  // CI-only rejection names its promise.
+  let stage = "starting";
+  // A denied subscription drops the whole client, which rejects its in-flight subscribe
+  // command with `clientDisconnected` — a rejection the client library leaves unhandled and
+  // which can land a tick after the denial resolves. That is the denial under test, not a
+  // defect: contain it for the whole test, and log each swallowed rejection so the CI log
+  // names it if the source ever changes.
+  const swallowed: unknown[] = [];
+  const denialRejection = (reason: unknown) => {
+    if (typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === 3)
+      swallowed.push(reason);
+    else throw reason;
+  };
   let containerStarted = false;
   let proxy: ReturnType<typeof Bun.serve> | undefined;
+  process.on("unhandledRejection", denialRejection);
   try {
     const { privateKey, publicKey } = await generateKeyPair("EdDSA", { extractable: true });
     const kid = "reply-intent-test";
@@ -194,6 +209,7 @@ test("real routing delivers start/end only to the conversation, with no history 
     });
     conversation.subscribe();
     await conversation.ready();
+    stage = "conversation-ready";
     const activity = viewer.newSubscription("agent:activity:w", {
       token: await issueAgentActivitySubscriptionToken(
         { userId: "viewer", workspaceId: "w" },
@@ -208,7 +224,9 @@ test("real routing delivers start/end only to the conversation, with no history 
     });
     activity.subscribe();
     await activity.ready();
+    stage = "activity-ready";
     const daemon = await connection("daemon");
+    stage = "daemon-connected";
     for (const phase of ["start", "end"] as const) {
       const delivered = event<void>((resolve) => {
         acknowledge = resolve;
@@ -230,6 +248,7 @@ test("real routing delivers start/end only to the conversation, with no history 
       await expect(daemon.publish("agent:activity:w", frame)).rejects.toMatchObject({ code: 1000 });
       await delivered;
     }
+    stage = "published";
     expect(received.map((data) => decodeAgentActivityFrame(data as Uint8Array))).toMatchObject([
       {
         replyIntent: {
@@ -264,18 +283,9 @@ test("real routing delivers start/end only to the conversation, with no history 
       body: JSON.stringify({ method: "history", params: { channel: "chat:c", limit: 100 } }),
     }).then((response) => response.json())) as { result: { publications?: unknown[] } };
     expect(history.result.publications ?? []).toEqual([]);
-    // A denied subscription drops the whole client, which rejects its in-flight subscribe
-    // command with `clientDisconnected` — a rejection the client library leaves unhandled.
-    // That is the denial under test, not a defect: contain it for exactly this check.
-    const denialRejection = (reason: unknown) => {
-      if (typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === 3)
-        return;
-      throw reason;
-    };
     let channelDenial = 0;
     let userDenial = 0;
-    process.on("unhandledRejection", denialRejection);
-    try {
+    {
       const outsider = viewer.newSubscription("chat:another", {
         token: await issueConversationRealtimeToken(
           { userId: "viewer", conversationId: "c" },
@@ -290,7 +300,9 @@ test("real routing delivers start/end only to the conversation, with no history 
       void outsider.ready().catch(() => {});
       channelDenial = await rejectedChannel;
       expect(channelDenial).toBe(3500);
+      stage = "outsider-denied";
       const otherUser = await connection("other");
+      stage = "other-connected";
       const stolen = otherUser.newSubscription("chat:c", {
         token: await issueConversationRealtimeToken(
           { userId: "viewer", conversationId: "c" },
@@ -305,8 +317,7 @@ test("real routing delivers start/end only to the conversation, with no history 
       void stolen.ready().catch(() => {});
       userDenial = await rejectedUser;
       expect(userDenial).toBe(3500);
-    } finally {
-      process.off("unhandledRejection", denialRejection);
+      stage = "stolen-denied";
     }
     console.info(
       JSON.stringify({
@@ -322,8 +333,11 @@ test("real routing delivers start/end only to the conversation, with no history 
       }),
     );
   } finally {
-    if (disconnects.length)
-      console.info(JSON.stringify({ capture: "reply-intent-disconnects", disconnects }));
+    process.off("unhandledRejection", denialRejection);
+    if (disconnects.length || swallowed.length || stage !== "stolen-denied")
+      console.info(
+        JSON.stringify({ capture: "reply-intent-disconnects", stage, disconnects, swallowed }),
+      );
     for (const client of clients) client.disconnect();
     try {
       if (containerStarted) await docker("rm", "-f", name);
