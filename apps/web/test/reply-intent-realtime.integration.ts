@@ -111,7 +111,41 @@ test("real routing delivers start/end only to the conversation, with no history 
         });
       },
     });
-    const origin = `http://host.docker.internal:${proxy.port}`;
+    // The container must reach this Bun server back; host.docker.internal does not route on
+    // every Linux Docker setup (CI runs showed the proxy was never hit). Ask a throwaway
+    // container which address it can actually reach: the bridge gateway IP or the magic name.
+    const candidates = [`http://host.docker.internal:${proxy.port}`];
+    const gateway = await docker(
+      "network",
+      "inspect",
+      "bridge",
+      "--format",
+      "{{(index .IPAM.Config 0).Gateway}}",
+    ).catch(() => "");
+    if (gateway.trim()) candidates.push(`http://${gateway.trim()}:${proxy.port}`);
+    let origin = "";
+    for (const candidate of candidates) {
+      const hit = await docker(
+        "run",
+        "--rm",
+        "--entrypoint",
+        "wget",
+        "--add-host",
+        "host.docker.internal:host-gateway",
+        "centrifugo/centrifugo:v6.9.2",
+        "-q",
+        "-T",
+        "3",
+        "-O",
+        "-",
+        `${candidate}/jwks`,
+      ).catch(() => "");
+      if (hit.includes(kid)) {
+        origin = candidate;
+        break;
+      }
+    }
+    if (!origin) throw new Error("no address reaches the test proxy from inside a container");
     const config = join(directory, "config.json");
     await writeFile(
       config,
