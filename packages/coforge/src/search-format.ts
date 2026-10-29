@@ -2,7 +2,6 @@ import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import { fenceMessageBody } from "./message-body-format";
 import {
   formatLocalTimeWithOffset,
-  messageSender,
   neutralizeReferenceLiterals,
   taskSuffix,
 } from "./message-format";
@@ -214,7 +213,7 @@ export function formatSearchResults(
     [
       `<result ref="msg:${message.id}">`,
       `Source: ${message.target}`,
-      `Sender: ${neutralizeReferenceLiterals(messageSender(message))}`,
+      `Sender: ${searchSender(message)}`,
       `Time: ${formatLocalTimeWithOffset(message.createdAt)}`,
       ...(message.task ? [taskSuffix(message).trim()] : []),
       "",
@@ -226,4 +225,11 @@ export function formatSearchResults(
   );
 
   return [header, "", blocks.join("\n\n"), "", SEARCH_CONTEXT_TIP, ...next].join("\n");
+}
+
+/** A result's sender as the reference client names it: the handle and its type, without repeating
+ * the sender's whole description on every result. */
+function searchSender(message: AgentMessageRecord): string {
+  if (message.senderKind === "system") return "system";
+  return neutralizeReferenceLiterals(`@${message.senderHandle} (${message.senderKind})`);
 }

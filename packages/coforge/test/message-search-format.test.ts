@@ -27,7 +27,7 @@ test("formatSearchResults renders a query header, result blocks, and the context
   expect(output).toContain('Search results for: "release" (1 result · truncated=false)');
   expect(output).toContain('<result ref="msg:aaaaaaaa-0000-4000-8000-000000000001">');
   expect(output).toContain("Source: #general");
-  expect(output).toContain("Sender: user:ada");
+  expect(output).toContain("Sender: user:ada (human)");
   expect(output).toContain("Time: 2026-09-07 18:00:00 +08:00");
   expect(output).toContain("<preview>\n<match>release</match> plan\n</preview>");
   expect(
@@ -51,7 +51,7 @@ test("formatSearchResults shows a result's task between its time and preview", (
     hasMore: false,
   });
   expect(output).toContain(
-    "Time: 2026-09-07 18:00:00 +08:00\n[task #7 status=in_progress owner=@ada]\n\n<preview>",
+    "Time: 2026-09-07 18:00:00 +08:00\n[task #7 status=in_progress assignee=@ada]\n\n<preview>",
   );
 });
 

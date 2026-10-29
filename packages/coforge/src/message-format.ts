@@ -56,7 +56,7 @@ export function attachmentSuffix(message: AgentMessageRecord): string {
 export function taskSuffix(message: AgentMessageRecord): string {
   if (!message.task) return "";
   const owner = message.task.owner
-    ? ` owner=@${message.task.owner.handle}${message.task.owner.deleted ? " [deleted]" : ""}`
+    ? ` assignee=@${message.task.owner.handle}${message.task.owner.deleted ? " [deleted]" : ""}`
     : "";
   return ` [task #${message.task.number} status=${message.task.status}${owner}]`;
 }

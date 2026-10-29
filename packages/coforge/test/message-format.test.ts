@@ -101,7 +101,7 @@ test("formatMessageLine renders the shared bracket line with attachment and task
   });
   expect(formatMessageLine(withTask)).toBe(
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
-      " [task #12 status=in_progress owner=@ada]",
+      " [task #12 status=in_progress assignee=@ada]",
   );
 
   const withDeletedOwner = message({
@@ -113,7 +113,7 @@ test("formatMessageLine renders the shared bracket line with attachment and task
   });
   expect(formatMessageLine(withDeletedOwner)).toBe(
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
-      " [task #46 status=in_progress owner=@kiro [deleted]]",
+      " [task #46 status=in_progress assignee=@kiro [deleted]]",
   );
 
   const withTaskNoOwner = message({ task: { number: 3, status: "todo" } });
@@ -207,10 +207,10 @@ test("formatReadWindow reports older/newer availability and includes an around l
   );
   expect(lines[3]).toBe("");
   expect(lines[4]).toBe(
-    "[1/2 msg=11111111-0000-4000-8000-000000000001 time=2026-09-07 10:00:00Z type=human replyTarget=#general:11111111-0000] @ada: first",
+    "[1/2 msg=11111111-0000-4000-8000-000000000001 seq=1 time=2026-09-07 10:00:00Z type=human replyTarget=#general:11111111-0000] @ada: first",
   );
   expect(lines[5]).toBe(
-    "[2/2 msg=22222222-0000-4000-8000-000000000002 time=2026-09-07 10:00:00Z type=human replyTarget=#general:22222222-0000] @ada: second",
+    "[2/2 msg=22222222-0000-4000-8000-000000000002 seq=1 time=2026-09-07 10:00:00Z type=human replyTarget=#general:22222222-0000] @ada: second",
   );
   expect(lines.at(-2)).toBe("");
   expect(lines.at(-1)).toBe("End of window: 2/2 shown.");
