@@ -27,8 +27,9 @@ export type SendSignInCodeResult =
   | { status: "send_failed" };
 
 export type PasscodeSignInResult =
-  | Exclude<AuthingSignInResult, { status: "invalid_credentials" }>
-  /** Authing refused the code: wrong, expired, or already used. */
+  | Extract<AuthingSignInResult, { status: "signed_in" | "failed" }>
+  /** Authing refused the code: wrong, expired, or already used — or the account, which a code
+   * sign-in reports the same way so the page never says which. */
   | { status: "invalid_code" };
 
 /**
@@ -103,5 +104,9 @@ export async function signInWithPasscode(
     resolveUser: input.resolveUser,
     now: input.now,
   });
-  return result.status === "invalid_credentials" ? { status: "invalid_code" } : result;
+  // A code sign-in has no password, so a refusal it can see is a refused code, whatever the
+  // password paths would have said about the account.
+  return result.status === "signed_in" || result.status === "failed"
+    ? result
+    : { status: "invalid_code" };
 }

@@ -45,6 +45,36 @@ const REFUSAL_REASONS = {
 /** The ways of signing in, each a step Authing can refuse what the person gave. */
 export type SignInStage = keyof typeof REFUSAL_REASONS;
 
+/**
+ * Why Authing refused a password sign-in, from its `apiCode`
+ * (https://docs.authing.cn/v2/reference/error-code.html). `credentials` covers a wrong password and
+ * an account that does not exist together: telling them apart would let anyone test which addresses
+ * have an account.
+ */
+export type PasswordRefusal =
+  | "credentials"
+  | "no_password"
+  | "locked"
+  | "code_required"
+  | "quota"
+  | "misconfigured";
+
+const PASSWORD_REFUSALS: Record<string, PasswordRefusal> = {
+  "2004": "credentials", // the user does not exist
+  "2006": "credentials", // the password is wrong
+  "2027": "no_password", // registered through OAuth, so it has no password to check
+  "2005": "locked",
+  "2000": "code_required", // the account needs a verification code before it signs in
+  "2002": "quota", // the user pool's monthly login quota is spent
+  "2011": "misconfigured", // the app does not exist in the pool
+  "2036": "misconfigured", // the user is not in this pool
+};
+
+/** The refusal `apiCode` names; anything else stays a plain refusal, which the log still carries. */
+export function passwordRefusal(apiCode: string | undefined): PasswordRefusal {
+  return (apiCode && PASSWORD_REFUSALS[apiCode]) || "credentials";
+}
+
 /** Authing answered the sign-in and refused what was typed (the email and password, or the
  * verification code) or the code GitHub sent. A `SignInFailure` of its own step, so it passes
  * through `atSignInStage` as itself. */
@@ -53,10 +83,14 @@ export class InvalidCredentialsError extends SignInFailure {
    * misconfigured app can be told from a wrong password. */
   readonly statusCode: number;
 
+  /** A password sign-in's cause, from `apiCode`; absent for the other stages. */
+  readonly refusal: PasswordRefusal | undefined;
+
   constructor(statusCode: number, providerError?: string, stage: SignInStage = "password_sign_in") {
     super(stage, { reason: REFUSAL_REASONS[stage], providerError });
     this.name = "InvalidCredentialsError";
     this.statusCode = statusCode;
+    this.refusal = stage === "password_sign_in" ? passwordRefusal(providerError) : undefined;
   }
 }
 

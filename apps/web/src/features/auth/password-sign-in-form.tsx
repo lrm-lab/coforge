@@ -9,10 +9,22 @@ import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { signInWithEmailPassword } from "./sign-in.functions";
 
-type Problem = "invalid_credentials" | "failed";
+type Problem =
+  | "invalid_credentials"
+  | "no_password"
+  | "account_locked"
+  | "code_required"
+  | "login_quota_exhausted"
+  | "login_unavailable"
+  | "failed";
 
 const problemText: Record<Problem, () => string> = {
   invalid_credentials: () => m.login_invalid_credentials(),
+  no_password: () => m.login_no_password(),
+  account_locked: () => m.login_account_locked(),
+  code_required: () => m.login_code_required(),
+  login_quota_exhausted: () => m.login_quota_exhausted(),
+  login_unavailable: () => m.login_unavailable(),
   failed: () => m.login_failed(),
 };
 

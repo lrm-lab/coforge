@@ -2,6 +2,7 @@ import {
   InvalidCredentialsError,
   type AuthingAuthentication,
   type AuthingTokens,
+  type PasswordRefusal,
   type SignInStage,
 } from "./authing-authentication.server";
 import { completeBrowserLogin, type InternalUserResolver } from "./browser-login.server";
@@ -35,8 +36,17 @@ export type AuthingSignInResult =
       /** Whether the person finished first sign-in; when not, the name step comes next. */
       welcomed: boolean;
     }
-  /** Authing refused what the person typed (the password, or the code), or the GitHub code. */
+  /** Authing refused what the person typed (the password, or the code), or the GitHub code. A
+   * password sign-in says why where Authing does: the account has no password, it is locked, it
+   * needs a code first, or the pool's quota is spent. */
   | { status: "invalid_credentials" }
+  | { status: "no_password" }
+  | { status: "account_locked" }
+  | { status: "code_required" }
+  | { status: "login_quota_exhausted" }
+  /** The deployment's Authing app is misconfigured: logged, and the page says only that signing in
+   * is unavailable. */
+  | { status: "login_unavailable" }
   /** Anything else went wrong, and was logged; nothing the person typed was at fault. */
   | { status: "failed" };
 
@@ -87,7 +97,7 @@ export async function signInThroughAuthing(input: {
   } catch (error) {
     if (error instanceof InvalidCredentialsError) {
       reportSignInRejected(error);
-      return { status: "invalid_credentials" };
+      return { status: refusalStatus(error.refusal) };
     }
     reportSignInFailure(error);
     return { status: "failed" };
@@ -114,4 +124,24 @@ function persistedIdentityResolver(): InternalUserResolver {
       name: identity.name,
       nickname: identity.nickname,
     });
+}
+
+/** What a refused password sign-in tells the page, from why Authing refused it. */
+function refusalStatus(
+  refusal: PasswordRefusal | undefined,
+): Exclude<AuthingSignInResult["status"], "signed_in" | "failed"> {
+  switch (refusal) {
+    case "no_password":
+      return "no_password";
+    case "locked":
+      return "account_locked";
+    case "code_required":
+      return "code_required";
+    case "quota":
+      return "login_quota_exhausted";
+    case "misconfigured":
+      return "login_unavailable";
+    default:
+      return "invalid_credentials";
+  }
 }
