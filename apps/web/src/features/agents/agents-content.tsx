@@ -192,7 +192,7 @@ export function AgentsContent({
             ? canCreateAgent && (
                 <Button
                   size="sm"
-                  color="primary"
+                  color="secondary"
                   iconLeading={Plus}
                   onPress={() => onDialogChange("create-agent")}
                 >
@@ -202,7 +202,7 @@ export function AgentsContent({
             : canInviteMember && (
                 <Button
                   size="sm"
-                  color="primary"
+                  color="secondary"
                   iconLeading={UsersPlus}
                   onPress={() => onDialogChange("invite")}
                 >
