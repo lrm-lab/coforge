@@ -7,13 +7,13 @@ describe("the sender's own DM message", () => {
     const agentDm = {
       conversationId: "dm-agent",
       sequence: 3,
-      agentId: "agent-a",
+      kind: "direct" as const,
       senderUserId: "viewer",
     };
     const memberDm = {
       conversationId: "dm-member",
       sequence: 2,
-      peerUserId: "grace",
+      kind: "direct" as const,
       senderUserId: "viewer",
     };
     expect(applyUnreadEvent({}, agentDm, { conversations: new Set(), viewerId: "viewer" })).toEqual(
@@ -28,11 +28,7 @@ describe("the sender's own DM message", () => {
     });
     // The other member's copy of the same message still counts.
     expect(
-      applyUnreadEvent(
-        {},
-        { ...memberDm, peerUserId: "viewer" },
-        { conversations: new Set(), viewerId: "grace" },
-      ),
+      applyUnreadEvent({}, { ...memberDm }, { conversations: new Set(), viewerId: "grace" }),
     ).toEqual({ "dm-member": 1, "dm-member:seq": 2 });
   });
 });

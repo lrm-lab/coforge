@@ -8,7 +8,8 @@ import {
 import {
   decodeChannelCreatedEvent,
   decodeChannelUpdatedEvent,
-  decodeMessageAvailableEvent,
+  decodeConversationActivityEvent,
+  type ConversationActivityEvent,
   type ViewerEvent,
 } from "./conversation-realtime";
 
@@ -39,16 +40,22 @@ export function seedUnreadCounts(entries: readonly UnreadChannel[]): UnreadCount
   return next;
 }
 
+/**
+ * What the badge rule reads of one `conversation.activity.v1`: which conversation it is, how far
+ * the conversation has moved, whether it is a channel or a direct message, and who wrote it. The
+ * sender's kind is lifted out of the event because a system message never counts, exactly as
+ * `HUMAN_UNREAD_MESSAGE_SQL` says.
+ */
 export type UnreadEventInput = {
   conversationId: string;
   sequence: number;
   threadRootId?: string;
-  /** Present on a signal of a DM with an Agent: that Agent. */
-  agentId?: string;
-  /** Present on a signal of a DM between members: the other member. */
-  peerUserId?: string;
-  /** Present on a person's message: that person. */
+  /** Absent reads as a channel, which is what every event that names no other kind is. */
+  kind?: ConversationActivityEvent["kind"];
+  /** Absent reads as a person's message. */
+  senderKind?: ConversationActivityEvent["sender"]["kind"];
   senderUserId?: string;
+  senderAgentId?: string;
 };
 
 /** A message the viewer wrote themself, from any page or device. */
@@ -57,12 +64,21 @@ function isOwnMessage(event: UnreadEventInput, viewerId: string | undefined) {
 }
 
 /**
- * Applies one `message.available.v1` event. Only a top-level message in a listed,
- * not-currently-open conversation bumps the badge: thread replies belong to their thread
- * target (reading a thread never consumes the main conversation's unread), and the open
- * conversation is being read right now. Every badge is keyed by its conversation id; a channel
- * event counts only for a listed channel, a direct-message event (it names the Agent or member on
- * the other side) always.
+ * Whether one message counts toward the viewer's unread badge at all, the same three exclusions
+ * the server's unread rule makes (`HUMAN_UNREAD_MESSAGE_SQL`): the viewer's own message, and a
+ * system message, which has no sender and is never unread. An Agent's message always counts, the
+ * viewer's own Agent included.
+ */
+export function countsForViewer(event: UnreadEventInput, viewerId: string | undefined): boolean {
+  return (event.senderKind ?? "user") !== "system" && !isOwnMessage(event, viewerId);
+}
+
+/**
+ * Applies one `conversation.activity.v1` event to the sidebar's badges. Only a top-level message
+ * in a not-currently-open conversation bumps one: a thread reply belongs to its thread target
+ * (reading a thread never consumes the main conversation's unread), and the open conversation is
+ * being read right now. A channel counts only while the viewer's channel list holds it; a direct
+ * message counts even before its list has it, so a DM someone else started shows its badge at once.
  */
 export function applyUnreadEvent(
   current: UnreadCounts,
@@ -71,20 +87,20 @@ export function applyUnreadEvent(
     openConversationId?: string;
     /** Every listed channel's conversation id. */
     conversations: ReadonlySet<string>;
-    /** The viewer, whose own message never counts (`MessageAvailableEvent.senderUserId`). */
+    /** The viewer, whose own message never counts (`ConversationActivityEvent.senderUserId`). */
     viewerId?: string;
   },
 ): UnreadCounts {
   if (event.conversationId === options.openConversationId) return current;
   if (event.threadRootId) return current;
   const key = event.conversationId;
-  const direct = event.agentId !== undefined || event.peerUserId !== undefined;
-  if (!direct && !options.conversations.has(key)) return current;
+  if ((event.kind ?? "channel") === "channel" && !options.conversations.has(key)) return current;
   const highWater = current[`${key}:seq`] ?? 0;
   if (event.sequence <= highWater) return current;
-  // The viewer's own message moves the high-water without counting, so the same message sent
-  // again without a sender (a Task change re-sends its message) is not counted either.
-  if (isOwnMessage(event, options.viewerId)) return { ...current, [`${key}:seq`]: event.sequence };
+  // A message that does not count still moves the high-water, so a replayed copy of it is never
+  // counted later.
+  if (!countsForViewer(event, options.viewerId))
+    return { ...current, [`${key}:seq`]: event.sequence };
   return {
     ...current,
     [`${key}:seq`]: event.sequence,
@@ -93,64 +109,37 @@ export function applyUnreadEvent(
 }
 
 /**
- * The Agent a DM signal names when the viewer's Agents do not know it yet (one made from an
- * action card or in another tab, writing first): its DM row only lists once they have it, so the
- * page must re-read them too. Undefined for a known Agent, a DM between members, or a channel.
+ * The Agent that wrote a direct message when the viewer's Agents do not know it yet (one made
+ * from an action card or in another tab, writing first): its DM row only lists once they have it,
+ * so the page must re-read them too. Undefined for a known Agent, a DM between people, or a
+ * channel.
  */
 export function unknownAgentOf(
   event: UnreadEventInput,
   knownAgentIds: ReadonlySet<string>,
 ): string | undefined {
-  return event.agentId !== undefined && !knownAgentIds.has(event.agentId)
-    ? event.agentId
+  return event.kind === "direct" &&
+    event.senderAgentId !== undefined &&
+    !knownAgentIds.has(event.senderAgentId)
+    ? event.senderAgentId
     : undefined;
 }
 
 /**
- * Which list a new message makes stale when it landed in a chat the sidebar is not showing: one
- * the viewer closed, or a DM that started after the list was read. Such a message brings the chat
- * in, so the sidebar re-reads that one list: the DM list for a DM (its signal names the Agent or
- * member on the other side), else the channel list. Thread replies and listed chats never do.
+ * Which list a new message makes stale because the sidebar cannot write its row: one the viewer
+ * closed, or a DM that started after the list was read. Such a message brings the chat in, so the
+ * sidebar re-reads that one list. A listed chat, a thread reply and the viewer's own message never
+ * do — the first two write their row from the event, and the server brings a closed chat back only
+ * for someone else's message.
  */
 export function closedConversationLists(
   event: UnreadEventInput,
   listed: ReadonlySet<string>,
   viewerId?: string,
 ): readonly ChatList[] {
-  // The server brings a closed chat back only for someone else's message.
   if (event.threadRootId || listed.has(event.conversationId) || isOwnMessage(event, viewerId))
     return [];
-  return event.agentId !== undefined || event.peerUserId !== undefined ? ["dms"] : ["channels"];
-}
-
-/**
- * Which list a top-level message makes stale in a DM the sidebar already lists: the DM list, so
- * the row shows its new last message time and preview. Incoming and the viewer's own message
- * alike (a send from another tab or device). Thread replies and channels never do; an unlisted DM
- * is `closedConversationLists`' case, so the two rules never both name the list.
- */
-export function directRowRefreshLists(
-  event: UnreadEventInput,
-  listed: ReadonlySet<string>,
-): readonly ChatList[] {
-  const direct = event.agentId !== undefined || event.peerUserId !== undefined;
-  if (!direct || event.threadRootId || !listed.has(event.conversationId)) return [];
-  return ["dms"];
-}
-
-/**
- * Which list a top-level message makes stale in a channel the sidebar already lists: the channel
- * list, so the row shows its new last message time and preview. Incoming and the viewer's own
- * message alike (a send from another tab or device). Thread replies and DMs never do; an unlisted
- * channel is `closedConversationLists`' case, so the two rules never both name the list.
- */
-export function channelRowRefreshLists(
-  event: UnreadEventInput,
-  listed: ReadonlySet<string>,
-): readonly ChatList[] {
-  const direct = event.agentId !== undefined || event.peerUserId !== undefined;
-  if (direct || event.threadRootId || !listed.has(event.conversationId)) return [];
-  return ["channels"];
+  return event.kind === "direct" ? ["dms"] : ["channels"];
 }
 
 /** A conversation was read: clear its badge and remember the boundary it was read to. */
@@ -221,13 +210,10 @@ export function sidebarListsChangedBy(event: ViewerEvent): readonly ChatList[] {
   return event.type.startsWith("dm.") ? ["dms"] : ["channels"];
 }
 
-/** A message signal, or undefined for any other publication on the viewer's channel. */
-export function decodeMessageSignal(data: unknown): UnreadEventInput | undefined {
-  try {
-    return decodeMessageAvailableEvent(data);
-  } catch {
-    return undefined;
-  }
+/** One message's activity event, or undefined for any other publication on a signal channel. */
+export function decodeActivitySignal(data: unknown): UnreadEventInput | undefined {
+  const event = decodeConversationActivityEvent(data);
+  return event && { ...event, senderKind: event.sender.kind };
 }
 
 /**

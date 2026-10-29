@@ -16,9 +16,13 @@ import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
-import { markActivityInboxRead } from "./activity-inbox.functions";
+import { loadActivityInbox, markActivityInboxRead } from "./activity-inbox.functions";
 import { useActivityInboxRealtime } from "./use-activity-inbox-realtime";
-import { ACTIVITY_INBOX_QUERY_PREFIX, activityInboxQuery } from "./activity-inbox-queries";
+import {
+  ACTIVITY_INBOX_QUERY_PREFIX,
+  activityInboxQuery,
+  type ActivityInboxPage,
+} from "./activity-inbox-queries";
 import { useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
@@ -96,9 +100,25 @@ export function ActivityInboxView({
     () => Promise.all([refreshList(), refreshSidebar()]).then(() => undefined),
     [refreshList, refreshSidebar],
   );
+  // A message reads only the first page again: the rows below it keep their place and are read
+  // again when the viewer scrolls to them, so a busy channel cannot make every loaded page a
+  // request. Anything else that reaches the inbox still refreshes it whole.
+  const loadFirstPage = useServerFn(loadActivityInbox);
+  const refreshFirstPage = useCallback(() => {
+    const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
+    void loadFirstPage({ data: { filter, offset: 0 } })
+      .then((page) =>
+        queryClient.setQueryData<{ pages: ActivityInboxPage[]; pageParams: unknown[] }>(
+          queryKey,
+          (current) =>
+            current ? { ...current, pages: [page, ...current.pages.slice(1)] } : current,
+        ),
+      )
+      .catch(() => undefined);
+  }, [filter, loadFirstPage, queryClient, workspaceId]);
   useActivityInboxRealtime({
-    workspaceId,
     userId: user.id,
+    onMessage: refreshFirstPage,
     onActivity: refreshList,
     refreshOnPins: true,
   });

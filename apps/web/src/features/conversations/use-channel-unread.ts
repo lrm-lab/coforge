@@ -8,10 +8,11 @@ import {
   getWorkspaceConversationSubscriptionToken,
 } from "#src/features/realtime/realtime.functions";
 import {
-  decodeMessageAvailableEvent,
+  decodeConversationActivityEvent,
   decodeViewerEvent,
   userConversationChannel,
   workspaceConversationChannel,
+  type ConversationActivityEvent,
 } from "./conversation-realtime";
 import {
   applyMarked,
@@ -19,9 +20,6 @@ import {
   channelSignalOf,
   closedConversationLists,
   clearUnread,
-  decodeMessageSignal,
-  directRowRefreshLists,
-  channelRowRefreshLists,
   rereadMissedBySubscribe,
   replaceUnreadCounts,
   sidebarListsChangedBy,
@@ -54,6 +52,7 @@ export function useChannelUnread({
   onClosedConversationActivity,
   onChannelSignal,
   onSidebarListsChanged,
+  onConversationActivity,
   readPosition,
   onReadCursorMoved,
 }: {
@@ -85,6 +84,8 @@ export function useChannelUnread({
   ) => Promise<StreamPosition | undefined> | undefined;
   /** The viewer's read cursor in a conversation moved, here or elsewhere (`storedCursorMove`). */
   onReadCursorMoved: (move: ReturnType<typeof storedCursorMove>) => void;
+  /** One message in a chat the sidebar lists: write that row from the event, no read. */
+  onConversationActivity: (event: ConversationActivityEvent) => void;
 }): UnreadState {
   const [counts, setCounts] = useState<UnreadCounts>({});
   const getWorkspaceToken = useServerFn(getWorkspaceConversationSubscriptionToken);
@@ -99,6 +100,7 @@ export function useChannelUnread({
     onSidebarListsChanged,
     readPosition,
     onReadCursorMoved,
+    onConversationActivity,
   });
   refs.current = {
     userId,
@@ -110,6 +112,7 @@ export function useChannelUnread({
     onSidebarListsChanged,
     readPosition,
     onReadCursorMoved,
+    onConversationActivity,
   };
   const rereadMissed = useCallback(
     (kind: "workspace" | "user", channel: string, recovery: SubscribedRecovery) =>
@@ -122,36 +125,11 @@ export function useChannelUnread({
     [],
   );
 
+  // The Workspace channel carries channel facts and Task changes only: a message never reaches
+  // every member's tab, so nothing here counts one.
   const onPublication = useCallback((publication: { data: unknown }) => {
     const signal = channelSignalOf(publication.data);
-    if (signal) {
-      refs.current.onChannelSignal(signal);
-      return;
-    }
-    try {
-      const event = decodeMessageAvailableEvent(publication.data);
-      const {
-        channels: channelRows,
-        openConversationId: open,
-        listedConversationIds: listed,
-        onClosedConversationActivity: reopenFromActivity,
-      } = refs.current;
-      const conversations = new Set(channelRows.map((channel) => channel.id));
-      const viewerId = refs.current.userId;
-      const stale = closedConversationLists(event, listed, viewerId);
-      if (stale.length > 0) reopenFromActivity(stale, event);
-      const rowLists = channelRowRefreshLists(event, listed);
-      if (rowLists.length > 0) refs.current.onSidebarListsChanged(rowLists);
-      setCounts((current) =>
-        applyUnreadEvent(current, event, {
-          conversations,
-          openConversationId: open,
-          viewerId,
-        }),
-      );
-    } catch {
-      // An undecodable publication never breaks the badge; reconciliation repairs state.
-    }
+    if (signal) refs.current.onChannelSignal(signal);
   }, []);
 
   useRealtimeSubscription({
@@ -163,19 +141,11 @@ export function useChannelUnread({
         void rereadMissed("workspace", workspaceConversationChannel(workspaceId), recovery);
     },
   });
-  // The viewer's own channel also carries their `ViewerEvent`s; the Workspace channel never does.
-  const onUserPublication = useCallback(
-    (publication: { data: unknown }) => {
-      const event = decodeViewerEvent(publication.data);
-      if (!event) {
-        onPublication(publication);
-        const message = decodeMessageSignal(publication.data);
-        const lists = message
-          ? directRowRefreshLists(message, refs.current.listedConversationIds)
-          : [];
-        if (lists.length > 0) refs.current.onSidebarListsChanged(lists);
-        return;
-      }
+  // The viewer's own channel carries their `ViewerEvent`s and every message they may read: their
+  // channels' and their direct conversations' alike.
+  const onUserPublication = useCallback((publication: { data: unknown }) => {
+    const event = decodeViewerEvent(publication.data);
+    if (event) {
       if ("unreadCount" in event) {
         const open = refs.current.openConversationId;
         setCounts((current) => applyMarked(current, event, { openConversationId: open }));
@@ -183,9 +153,43 @@ export function useChannelUnread({
       }
       const lists = sidebarListsChangedBy(event);
       if (lists.length > 0) refs.current.onSidebarListsChanged(lists);
-    },
-    [onPublication],
-  );
+      return;
+    }
+    const activity = decodeConversationActivityEvent(publication.data);
+    if (!activity) return;
+    // The badge rule needs only the shape below; the row writer gets the whole event, whose
+    // preview and sender are what the row shows.
+    const message: UnreadEventInput = {
+      conversationId: activity.conversationId,
+      sequence: activity.sequence,
+      kind: activity.kind,
+      senderKind: activity.sender.kind,
+      ...(activity.threadRootId ? { threadRootId: activity.threadRootId } : {}),
+      ...(activity.senderUserId ? { senderUserId: activity.senderUserId } : {}),
+      ...(activity.senderAgentId ? { senderAgentId: activity.senderAgentId } : {}),
+    };
+    const {
+      channels: channelRows,
+      openConversationId: open,
+      listedConversationIds: listed,
+      onClosedConversationActivity: reopenFromActivity,
+      onConversationActivity: writeRow,
+    } = refs.current;
+    const conversations = new Set(channelRows.map((channel) => channel.id));
+    const viewerId = refs.current.userId;
+    const stale = closedConversationLists(message, listed, viewerId);
+    // A chat the list does not hold is brought in by a read of that one list; every other row is
+    // written from the event itself.
+    if (stale.length > 0) reopenFromActivity(stale, message);
+    else writeRow(activity);
+    setCounts((current) =>
+      applyUnreadEvent(current, message, {
+        conversations,
+        openConversationId: open,
+        viewerId,
+      }),
+    );
+  }, []);
   useRealtimeSubscription({
     channel: userId ? userConversationChannel(userId) : undefined,
     getToken: userId ? getUserToken : undefined,

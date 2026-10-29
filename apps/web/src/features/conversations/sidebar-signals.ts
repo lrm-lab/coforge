@@ -5,6 +5,7 @@ import { channelNamesAfter, type ChannelSignal } from "./channel-signals";
 import { channelNamesQueryKey, sidebarChannelsQueryKey } from "./conversation-query-keys";
 import type { ChatList } from "./conversation-unread";
 import type { Sidebar } from "./sidebar-collections";
+import type { ConversationActivityEvent } from "./conversation-realtime";
 
 type ChannelNamesRead = Awaited<ReturnType<typeof listChannelNames>>;
 
@@ -38,4 +39,42 @@ export function applyChannelSignalToLists(
   )
     stale.push("channels");
   return stale;
+}
+
+/**
+ * Writes one message's `conversation.activity.v1` into the row it changes, with no read: the
+ * channel row's last message (time, preview, sender) or the DM row's. False when the list cannot
+ * take it — not synced yet, a save is being retried (whose rollback would undo a direct write), or
+ * the row is not in the list at all — and the caller re-reads that one list instead.
+ */
+export function applyConversationActivityToRow(
+  sidebar: Sidebar | undefined,
+  event: ConversationActivityEvent,
+  viewerId: string | undefined,
+): boolean {
+  if (!sidebar || sidebar.savesRetrying.count() > 0) return false;
+  const id = event.conversationId;
+  if (event.kind === "channel") {
+    if (sidebar.channels.status !== "ready" || !sidebar.channels.has(id)) return false;
+    sidebar.channels.utils.writeUpdate({
+      id,
+      lastMessage: {
+        createdAt: event.createdAt,
+        preview: event.preview,
+        sender: {
+          kind: event.sender.kind,
+          name: event.sender.name,
+          mine: viewerId !== undefined && event.senderUserId === viewerId,
+        },
+      },
+    });
+    return true;
+  }
+  if (sidebar.directs.status !== "ready" || !sidebar.directs.has(id)) return false;
+  sidebar.directs.utils.writeUpdate({
+    conversationId: id,
+    lastMessageAt: event.createdAt,
+    lastMessagePreview: event.preview,
+  });
+  return true;
 }

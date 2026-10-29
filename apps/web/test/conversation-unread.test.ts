@@ -11,8 +11,6 @@ import {
   storedCursorMove,
   clearUnread,
   closedConversationLists,
-  channelRowRefreshLists,
-  directRowRefreshLists,
   seedUnreadCounts,
   unknownAgentOf,
   replaceUnreadCounts,
@@ -128,7 +126,7 @@ describe("applyUnreadEvent", () => {
     // or member on the other side): a DM created after the last list fetch still bumps live.
     const next = applyUnreadEvent(
       {},
-      { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1" },
+      { conversationId: "dm-conversation", sequence: 4, kind: "direct" },
       { conversations: new Set() },
     );
     expect(next).toEqual({ "dm-conversation": 1, "dm-conversation:seq": 4 });
@@ -137,7 +135,7 @@ describe("applyUnreadEvent", () => {
   test("bumps a DM between members by its conversation id too", () => {
     const next = applyUnreadEvent(
       {},
-      { conversationId: "dm-people", sequence: 2, peerUserId: "grace" },
+      { conversationId: "dm-people", sequence: 2, kind: "direct" },
       { conversations: new Set() },
     );
     expect(next).toEqual({ "dm-people": 1, "dm-people:seq": 2 });
@@ -147,7 +145,7 @@ describe("applyUnreadEvent", () => {
     const seeded = { "dm-conversation": 1, "dm-conversation:seq": 4 };
     const next = applyUnreadEvent(
       seeded,
-      { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1" },
+      { conversationId: "dm-conversation", sequence: 4, kind: "direct" },
       { conversations: new Set() },
     );
     expect(next).toEqual(seeded);
@@ -155,8 +153,8 @@ describe("applyUnreadEvent", () => {
 
   test("suppresses a DM event while that DM is the open conversation", () => {
     for (const event of [
-      { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1" },
-      { conversationId: "dm-conversation", sequence: 4, peerUserId: "grace" },
+      { conversationId: "dm-conversation", sequence: 4, kind: "direct" as const },
+      { conversationId: "dm-conversation", sequence: 4, kind: "direct" as const },
     ])
       expect(
         applyUnreadEvent({}, event, {
@@ -169,7 +167,7 @@ describe("applyUnreadEvent", () => {
   test("never counts a thread reply in a DM", () => {
     const next = applyUnreadEvent(
       {},
-      { conversationId: "dm-conversation", sequence: 4, agentId: "agent-1", threadRootId: "r1" },
+      { conversationId: "dm-conversation", sequence: 4, kind: "direct", threadRootId: "r1" },
       { conversations: new Set() },
     );
     expect(next).toEqual({});
@@ -388,28 +386,19 @@ test("a new top-level message in a chat the sidebar is not showing makes only th
   // and a DM that started after the sidebar read its list, re-read the DM list.
   expect(closedConversationLists(message, listed)).toEqual(["channels"]);
   expect(
-    closedConversationLists(
-      { ...message, conversationId: "dm-closed", agentId: "agent-closed" },
-      listed,
-    ),
+    closedConversationLists({ ...message, conversationId: "dm-closed", kind: "direct" }, listed),
   ).toEqual(["dms"]);
   expect(
-    closedConversationLists({ ...message, conversationId: "dm-new", agentId: "agent-new" }, listed),
+    closedConversationLists({ ...message, conversationId: "dm-new", kind: "direct" }, listed),
   ).toEqual(["dms"]);
   expect(
-    closedConversationLists(
-      { ...message, conversationId: "dm-member", peerUserId: "grace" },
-      listed,
-    ),
+    closedConversationLists({ ...message, conversationId: "dm-member", kind: "direct" }, listed),
   ).toEqual(["dms"]);
 
   // Listed chats and thread replies do not: nothing new would appear in the list.
   expect(closedConversationLists({ ...message, conversationId: "channel-1" }, listed)).toEqual([]);
   expect(
-    closedConversationLists(
-      { ...message, conversationId: "dm-listed", agentId: "agent-open" },
-      listed,
-    ),
+    closedConversationLists({ ...message, conversationId: "dm-listed", kind: "direct" }, listed),
   ).toEqual([]);
   expect(closedConversationLists({ ...message, threadRootId: "root-1" }, listed)).toEqual([]);
 });
@@ -418,9 +407,12 @@ test("a DM signal from an Agent outside the viewer's roster names that Agent; an
   const known = new Set(["agent-known"]);
   const message = { conversationId: "dm-1", sequence: 1 };
   // A new Agent (made from an action card, or in another tab) writing first: its row needs it.
-  expect(unknownAgentOf({ ...message, agentId: "agent-new" }, known)).toBe("agent-new");
-  expect(unknownAgentOf({ ...message, agentId: "agent-known" }, known)).toBeUndefined();
-  expect(unknownAgentOf({ ...message, peerUserId: "grace" }, known)).toBeUndefined();
+  expect(unknownAgentOf({ ...message, kind: "direct", senderAgentId: "agent-new" }, known)).toBe(
+    "agent-new",
+  );
+  expect(
+    unknownAgentOf({ ...message, kind: "direct", senderAgentId: "agent-known" }, known),
+  ).toBeUndefined();
   expect(unknownAgentOf({ ...message, conversationId: "channel-1" }, known)).toBeUndefined();
 });
 
@@ -780,98 +772,5 @@ describe("a person's own message", () => {
     expect(
       closedConversationLists({ ...own, senderUserId: "someone" }, new Set(), "viewer"),
     ).toEqual(["channels"]);
-  });
-});
-
-describe("a listed DM row's last message and preview", () => {
-  // A top-level message in a DM the sidebar already lists re-reads the DM list, so the row shows
-  // its new last message time and preview. The viewer's own message does too, from another tab
-  // or device; a thread reply and a channel message do not.
-  const listed = new Set(["dm-listed", "channel-1"]);
-  const message = { conversationId: "dm-listed", sequence: 6 };
-
-  test("an incoming top-level message in a listed DM re-reads the DM list", () => {
-    expect(directRowRefreshLists({ ...message, agentId: "agent-1" }, listed)).toEqual(["dms"]);
-    expect(
-      directRowRefreshLists({ ...message, peerUserId: "grace", senderUserId: "grace" }, listed),
-    ).toEqual(["dms"]);
-  });
-
-  test("the viewer's own top-level message in a listed DM re-reads the DM list", () => {
-    expect(
-      directRowRefreshLists({ ...message, peerUserId: "grace", senderUserId: "viewer" }, listed),
-    ).toEqual(["dms"]);
-  });
-
-  test("a thread reply in a listed DM does not re-read the DM list", () => {
-    expect(
-      directRowRefreshLists({ ...message, agentId: "agent-1", threadRootId: "root-1" }, listed),
-    ).toEqual([]);
-  });
-
-  test("a channel message does not re-read the DM list", () => {
-    expect(directRowRefreshLists({ conversationId: "channel-1", sequence: 6 }, listed)).toEqual([]);
-  });
-
-  test("an unlisted DM is left to closedConversationLists, which re-reads the same list once", () => {
-    const unlisted = { ...message, conversationId: "dm-new", agentId: "agent-new" };
-    expect(directRowRefreshLists(unlisted, listed)).toEqual([]);
-    expect(closedConversationLists(unlisted, listed)).toEqual(["dms"]);
-  });
-});
-
-describe("a listed channel row's last message and preview", () => {
-  // A top-level message in a channel the sidebar already lists re-reads the channel list, so the
-  // row shows its new last message time and preview. The viewer's own message does too, from
-  // another tab or device; a thread reply, a DM and an unlisted channel do not (the last one is
-  // left to closedConversationLists, which re-reads the same list once).
-  const listed = new Set(["channel-listed", "dm-listed"]);
-  const message = { conversationId: "channel-listed", sequence: 6 };
-
-  test("an incoming top-level message in a listed channel re-reads the channel list", () => {
-    expect(channelRowRefreshLists({ ...message, senderUserId: "grace" }, listed)).toEqual([
-      "channels",
-    ]);
-  });
-
-  test("the viewer's own top-level message in a listed channel re-reads the channel list", () => {
-    expect(channelRowRefreshLists({ ...message, senderUserId: "viewer" }, listed)).toEqual([
-      "channels",
-    ]);
-  });
-
-  test("a thread reply in a listed channel does not re-read the channel list", () => {
-    expect(
-      channelRowRefreshLists({ ...message, senderUserId: "grace", threadRootId: "root-1" }, listed),
-    ).toEqual([]);
-  });
-
-  test("a DM message does not re-read the channel list", () => {
-    expect(
-      channelRowRefreshLists(
-        { ...message, conversationId: "dm-listed", agentId: "agent-1" },
-        listed,
-      ),
-    ).toEqual([]);
-    expect(
-      channelRowRefreshLists(
-        { ...message, conversationId: "dm-listed", peerUserId: "grace", senderUserId: "grace" },
-        listed,
-      ),
-    ).toEqual([]);
-  });
-
-  test("an unlisted channel is left to closedConversationLists, which re-reads the same list once", () => {
-    const unlisted = { conversationId: "channel-new", sequence: 2, senderUserId: "grace" };
-    expect(channelRowRefreshLists(unlisted, listed)).toEqual([]);
-    expect(closedConversationLists(unlisted, listed, "viewer")).toEqual(["channels"]);
-  });
-
-  test("a muted or sidebar-hidden channel still re-reads the channel list while it is listed", () => {
-    // The listed set holds every non-archived channel row, muted or closed from the sidebar, so the
-    // rule does not look at either state.
-    expect(channelRowRefreshLists({ ...message, senderUserId: "grace" }, listed)).toEqual([
-      "channels",
-    ]);
   });
 });

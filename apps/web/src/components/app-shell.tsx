@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type FC, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, type FC, type ReactNode } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -50,22 +50,23 @@ export type AppUser = {
   avatarUrl?: string | null;
 };
 
-/** Whether the viewer has unread activity anywhere — the nav Activity dot. Shares the inbox's
- * query prefix (an Activity page refresh also re-reads it) and re-reads on the same realtime
- * message signals the Activity page listens to, so a new message moves it without navigation. */
-function useActivityAttention(user: AppUser, workspaceId?: string) {
+/**
+ * Whether the viewer has unread activity anywhere — the nav Activity dot. A message the server sent
+ * to this person's own channel lights it with no read at all; anything else that reaches the inbox
+ * (`activity.changed.v1`: a mention from outside the channel, a Task assignment) re-reads the one
+ * boolean, as does an Activity page refresh, which shares this query.
+ */
+function useActivityAttention(user: AppUser) {
   const queryClient = useQueryClient();
-  const refresh = useCallback(
-    () =>
-      queryClient.invalidateQueries({
-        queryKey: [...ACTIVITY_INBOX_QUERY_PREFIX, "nav-attention"],
-      }),
-    [queryClient],
+  const attentionKey = useMemo(() => [...ACTIVITY_INBOX_QUERY_PREFIX, "nav-attention"], []);
+  const light = useCallback(
+    () => queryClient.setQueryData<{ hasUnread: boolean }>(attentionKey, { hasUnread: true }),
+    [attentionKey, queryClient],
   );
   useActivityInboxRealtime({
-    workspaceId: workspaceId ?? "",
     userId: user.id,
-    onActivity: refresh,
+    onMessage: light,
+    onActivity: light,
   });
   const query = useQuery(activityNavAttentionQuery());
   return query.data?.hasUnread ?? false;
@@ -180,7 +181,7 @@ export function AppShell({
     // Remembered within the Workspace, so it holds the path under `/w/<slug>`.
     rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${search}`);
   }, [workspaceId, base, pathname, searchStr]);
-  const hasActivityAttention = useActivityAttention(user, workspaceId);
+  const hasActivityAttention = useActivityAttention(user);
   const navItems = useNavItems(
     base,
     recordsPreview,

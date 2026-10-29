@@ -1,4 +1,5 @@
 import type { MessageSenderKind, MessageTaskMetadata } from "@lrm/coforge-sdk/internal";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 import type { noteAgentDmLimit } from "#src/server/conversations/agent-dm-limits.server";
 import type { PendingMentionActionView } from "#src/server/conversations/pending-mention-actions.server";
@@ -90,6 +91,11 @@ export type AgentMentionReport = {
 export type HistoryWindow = { beforeSequence?: number; afterSequence?: number; limit?: number };
 
 export type DirectConversationRepository = {
+  /** The client behind it, where the implementation has one: a caller announcing a committed
+   * message reads that message and its recipients here (`conversation-activity.server.ts`)
+   * instead of opening a second client. A fake without one announces only the open page's
+   * signal. */
+  readonly database?: PrismaClient;
   userIdForUsername?(target: string): Promise<string>;
   noteAgentDmLimit?(input: Parameters<typeof noteAgentDmLimit>[1]): Promise<void>;
   openAgentDirect?(
@@ -101,13 +107,6 @@ export type DirectConversationRepository = {
     peer: { kind: "user"; userId: string } | { kind: "agent"; agentId: string };
   }>;
   getAgentChannel?(workspaceId: string, agentId: string, target: string): Promise<{ id: string }>;
-  /** The send path's channel: the Agent's channel, or one it can still join on the way to
-   * posting (`needsJoin`). */
-  getAgentSendChannel?(
-    workspaceId: string,
-    agentId: string,
-    target: string,
-  ): Promise<{ id: string; channelName?: string | null; needsJoin: boolean }>;
   resolveAgentTarget?(
     workspaceId: string,
     agentId: string,
@@ -257,9 +256,6 @@ export type DirectConversationRepository = {
     attachmentIds?: string[],
     threadRootId?: string,
     mentions?: readonly AgentMentionBinding[],
-    memoryHintId?: string,
-    /** A channel send may join the channel first, in this send's transaction. */
-    joinChannel?: boolean,
   ): Promise<
     {
       id: string;
@@ -271,8 +267,6 @@ export type DirectConversationRepository = {
       deliveryId?: string;
       workspaceId: string;
       agentId: string;
-      /** Present when this send joined the channel it posted to, as `#name`. */
-      joinedChannel?: string;
       target: string;
       /** Attention rows created for other Agents @mentioned in a channel message (never the sender). */
       deliveries?: { deliveryId: string; agentId: string; computerId: string | null }[];

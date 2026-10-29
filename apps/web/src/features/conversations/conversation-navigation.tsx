@@ -46,6 +46,7 @@ import { unknownAgentOf, unreadIdsToKeep, type SeededList } from "./conversation
 import { useChannelUnread } from "./use-channel-unread";
 import {
   useApplyChannelSignal,
+  useApplyConversationActivity,
   useListReadPosition,
   useRefreshSidebar,
   useSavesRetrying,
@@ -146,6 +147,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const readPosition = useListReadPosition();
   const queryClient = useQueryClient();
   const applyChannelSignal = useApplyChannelSignal();
+  const applyConversationActivity = useApplyConversationActivity();
   const knownAgentIds = useMemo(() => new Set(agents.map((agent) => agent.id)), [agents]);
   // One re-read of the Agents at a time.
   const rosterRefresh = useRef<Promise<void> | undefined>(undefined);
@@ -170,6 +172,8 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             rosterRefresh.current = undefined;
           });
     },
+    // A message in a chat the sidebar lists: its row is written from the event, not re-read.
+    onConversationActivity: applyConversationActivity,
     // A channel was created, changed or is gone: applied from the event, not re-read.
     onChannelSignal: applyChannelSignal,
     // The viewer joined, left, closed, muted or pinned a chat elsewhere: only the lists named

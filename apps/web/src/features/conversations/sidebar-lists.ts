@@ -13,9 +13,10 @@ import {
   type ChannelRow,
   type Sidebar,
 } from "./sidebar-collections";
-import { applyChannelSignalToLists } from "./sidebar-signals";
+import { applyChannelSignalToLists, applyConversationActivityToRow } from "./sidebar-signals";
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
+import type { ConversationActivityEvent } from "./conversation-realtime";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";
 import {
   chatSectionOrderQuery,
@@ -149,6 +150,21 @@ export function useApplyChannelSignal() {
       if (stale.length > 0) void refresh(stale);
     },
     [queryClient, workspaceId, sidebar, refresh],
+  );
+}
+
+/** Writes one message's row into the sidebar from its `conversation.activity.v1`, with no read;
+ * a row the list does not hold (a closed chat, a DM nobody has read yet) re-reads its own list. */
+export function useApplyConversationActivity() {
+  const sidebar = useSidebar();
+  const refresh = useRefreshSidebar();
+  const { viewerId } = useSidebarLists();
+  return useMemo(
+    () => (event: ConversationActivityEvent) => {
+      if (!applyConversationActivityToRow(sidebar, event, viewerId))
+        void refresh([event.kind === "channel" ? "channels" : "dms"]);
+    },
+    [sidebar, refresh, viewerId],
   );
 }
 
