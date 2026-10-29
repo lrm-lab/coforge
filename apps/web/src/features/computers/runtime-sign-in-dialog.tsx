@@ -450,6 +450,8 @@ function failureText(failure: LoginFailure, runtime: string): string {
         return m.runtime_auth_kiro_device_disabled();
       if (failure.detail === "kiro_external_idp_unsupported")
         return m.runtime_auth_kiro_external_idp();
+      if (failure.detail === "codex_login_start_failed")
+        return m.runtime_auth_codex_start_failed({ runtime });
       switch (failure.reason) {
         case "timed_out":
           return m.runtime_auth_failed_timed_out();

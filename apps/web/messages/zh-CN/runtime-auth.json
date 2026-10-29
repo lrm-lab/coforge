@@ -24,6 +24,7 @@
   "runtime_auth_failed_ended": "这次登录已结束，请重新开始。",
   "runtime_auth_failed_timed_out": "登录超时，已停止。",
   "runtime_auth_failed_rejected": "{runtime} 没有接受这次登录。",
+  "runtime_auth_codex_start_failed": "{runtime} 在那台 Computer 上没能启动登录。请重试；如果一直失败，请在那台 Computer 上用 Codex 命令行登录。",
   "runtime_auth_failed_not_logged_in": "登录流程结束了，但 {runtime} 仍未登录。",
   "runtime_auth_failed_interaction": "{runtime} 需要的操作这里无法显示，请在那台 Computer 上登录。",
   "runtime_auth_failed_process": "{runtime} 在登录完成前退出了。",

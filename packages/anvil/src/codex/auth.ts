@@ -162,6 +162,8 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     const earlyCompletions: RecordValue[] = [];
     let interactionFailed = false;
     let cancelledBySignal = false;
+    /** `account/login/start` answered with an error, so no device code ever arrived. */
+    let startFailed = false;
     let resolveCompletion!: (record: RecordValue) => void;
     const completion = new Promise<RecordValue>((resolve) => {
       resolveCompletion = resolve;
@@ -192,10 +194,15 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
         },
       });
       await process.send({ method: "initialized", params: {} });
-      const response = await process.request({
-        method: "account/login/start",
-        params: { type: "chatgptDeviceCode" },
-      });
+      const response = await process
+        .request({
+          method: "account/login/start",
+          params: { type: "chatgptDeviceCode" },
+        })
+        .catch((error: unknown) => {
+          startFailed = true;
+          throw error;
+        });
       const result = asRecord(response.result);
       loginId = typeof result?.loginId === "string" ? result.loginId : undefined;
       const verificationUrl =
@@ -288,6 +295,10 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       };
     } catch (error) {
       if (cancelledBySignal || this.#active?.cancelled) return { status: "cancelled" };
+      // An app-server that answered `account/login/start` with an error never got as far as
+      // offering a device code: the sign-in did not start, rather than being refused.
+      if (startFailed && process.exitCode === undefined && !interactionFailed)
+        return { status: "failed", reason: "rejected", detail: "codex_login_start_failed" };
       return {
         status: "failed",
         reason: interactionFailed

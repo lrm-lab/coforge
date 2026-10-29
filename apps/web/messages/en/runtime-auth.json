@@ -24,6 +24,7 @@
   "runtime_auth_failed_ended": "This sign-in has ended. Start it again.",
   "runtime_auth_failed_timed_out": "The sign-in took too long and stopped.",
   "runtime_auth_failed_rejected": "{runtime} did not accept the sign-in.",
+  "runtime_auth_codex_start_failed": "{runtime} could not start the sign-in on the Computer. Try again; if it keeps failing, sign in with the Codex CLI on the Computer.",
   "runtime_auth_failed_not_logged_in": "The sign-in finished, but {runtime} is still not signed in.",
   "runtime_auth_failed_interaction": "{runtime} asked for something this page can't show. Sign in on the Computer itself.",
   "runtime_auth_failed_process": "{runtime} stopped before the sign-in finished.",

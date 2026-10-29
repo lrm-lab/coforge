@@ -242,6 +242,26 @@ test("does not emit device code when a matching completion arrived before start 
   expect(events).toEqual([]);
 });
 
+test("classifies a login start the app-server answered with an error", async () => {
+  const process = new FakeProcess();
+  const original = process.request.bind(process);
+  process.request = async (command) => {
+    if (command.method === "account/login/start") throw new Error("request timed out");
+    return original(command);
+  };
+  await expect(
+    new CodexRuntimeAuthAdapter({
+      host: fixtureCodexAuthHost,
+      create: () => process,
+    }).startLogin({ workingDirectory: "/tmp" }, { onEvent() {}, prompt: async () => "" }),
+  ).resolves.toEqual({
+    status: "failed",
+    reason: "rejected",
+    detail: "codex_login_start_failed",
+  });
+  expect(process.disposed).toBe(true);
+});
+
 test("classifies an exited app-server with its exit code", async () => {
   const process = new FakeProcess();
   process.exitCode = 7;

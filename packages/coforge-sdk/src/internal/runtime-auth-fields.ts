@@ -33,6 +33,8 @@ export const RUNTIME_AUTH_UNSUPPORTED_REASONS = [
 export const RUNTIME_AUTH_FAILURE_DETAIL_CODES = [
   "kiro_device_flow_disabled",
   "kiro_external_idp_unsupported",
+  /** Codex's app-server answered the login start with an error, so no device code arrived. */
+  "codex_login_start_failed",
 ] as const;
 export type RuntimeAuthFailureDetailCode = (typeof RUNTIME_AUTH_FAILURE_DETAIL_CODES)[number];
 export function isRuntimeAuthFailureDetailCode(
