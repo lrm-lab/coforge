@@ -40,6 +40,8 @@ export const AGENT_MESSAGE_INCLUDE = {
   task: TASK_METADATA_SELECT,
   actionCard: ACTION_CARD_STATE_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
+  // The thread's reply count, so a history line can say how many answers a message has.
+  _count: { select: { replies: true } },
 } satisfies Prisma.MessageInclude;
 
 export type DirectConversationMessageRow = Prisma.MessageGetPayload<{
@@ -97,6 +99,7 @@ export function toAgentMessage(
     actionCard?: { state: string } | null;
     memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
     mentions?: MessageMentionRef[];
+    _count?: { replies: number };
   },
   target: string,
   readerAgentId?: string,
@@ -118,6 +121,7 @@ export function toAgentMessage(
     createdAt: row.createdAt,
     target,
     attachments: row.attachments,
+    ...(row._count?.replies ? { replyCount: row._count.replies } : {}),
     ...(task ? { task } : {}),
     ...(row.memoryHint?.deliveredAt && row.memoryHint.targetAgentId === readerAgentId
       ? { memoryHint: { hint_id: row.memoryHint.id, tool: "memory_disposition" as const } }

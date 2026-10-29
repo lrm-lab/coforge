@@ -86,7 +86,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     slug: "profile",
     title: "Looking up a profile and updating your own",
     summary:
-      "coforge user info and profile show/update: visible facts, shared channels, live Agent status/availability, createdAgents/creator, and profile update's validation limits.",
+      "coforge user info and profile show/update: visible facts, the channels that person is in, live Agent status/availability, createdAgents/creator, and profile update's validation limits.",
     body: profileBody,
   },
   {

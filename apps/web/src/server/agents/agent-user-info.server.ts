@@ -204,13 +204,13 @@ export async function findWorkspaceUser(
   };
 }
 
-/** Public channels (every Conversation with a `channelName` is public) both
- * the caller and the target currently belong to (`leftAt: null`). Never inspects a channel the
- * caller itself is not a member of, so a channel invisible to the caller can never leak here. */
-async function sharedChannelMemberships(
+/** Every channel the target currently belongs to (`leftAt: null`), as the reference client lists
+ * them. CoForge has no private channel: every Conversation with a `channelName` is public to the
+ * Workspace, so the target's channel list leaks nothing the caller cannot already see. Keep the
+ * visibility filter: a future private channel stays out unless the caller may see it. */
+async function targetChannelMemberships(
   db: PrismaClient,
   workspaceId: string,
-  callerAgentId: string,
   target: { kind: "human" | "agent"; id: string },
 ): Promise<AgentUserInfoMembership[]> {
   const conversations = await db.conversation.findMany({
@@ -219,7 +219,12 @@ async function sharedChannelMemberships(
       channelName: { not: null },
       archivedAt: null,
       ...VISIBLE_CONVERSATION_WHERE,
-      members: { some: { agentId: callerAgentId, leftAt: null } },
+      members: {
+        some:
+          target.kind === "agent"
+            ? { agentId: target.id, leftAt: null }
+            : { userId: target.id, leftAt: null },
+      },
     },
     orderBy: { channelName: "asc" },
     select: {
@@ -243,8 +248,8 @@ async function sharedChannelMemberships(
 }
 
 /** Resolves `GET /api/agent/v1/users/:name`.
- * Narrow, visible facts about one human or Agent in the caller's Workspace, plus the public
- * channels both the caller and the target belong to. 404s as `user_not_found` when neither a
+ * Narrow, visible facts about one human or Agent in the caller's Workspace, plus every channel
+ * the target belongs to. 404s as `user_not_found` when neither a
  * human nor an Agent of that name exists in the caller's Workspace. */
 export async function resolveAgentUserInfo(
   db: PrismaClient,
@@ -273,7 +278,7 @@ export async function resolveAgentUserInfo(
         error: `User not found or not visible: @${name}`,
       },
     };
-  const memberships = await sharedChannelMemberships(db, principal.workspaceId, principal.agentId, {
+  const memberships = await targetChannelMemberships(db, principal.workspaceId, {
     kind: target.kind,
     id: target.id,
   });

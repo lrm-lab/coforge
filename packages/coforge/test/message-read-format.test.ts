@@ -167,3 +167,23 @@ test("a plain latest read reports when it advanced the server read position", ()
   expect(output).toContain("Read position: seq 1 → 4.");
   expect(output).not.toContain("Server unread cursor before this read");
 });
+
+test("a history row carries the thread's reply count when it has replies", () => {
+  const base = {
+    id: "11111111-0000-4000-8000-000000000001",
+    sequence: 3,
+    senderKind: "human" as const,
+    senderHandle: "ada",
+    senderDescription: "",
+    target: "#general",
+    body: "hello",
+    createdAt: "2026-09-07T10:00:00Z",
+    attachments: [],
+  };
+  const withReplies = formatReadWindow("#general", {
+    messages: [{ ...base, replyCount: 4 } as never],
+  });
+  expect(withReplies).toContain("seq=3 replyCount=4");
+  const withoutReplies = formatReadWindow("#general", { messages: [base as never] });
+  expect(withoutReplies).not.toContain("replyCount=");
+});

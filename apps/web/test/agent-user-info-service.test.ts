@@ -112,17 +112,23 @@ function baseDb(overrides: { agent?: unknown; membership?: unknown; callerAgent?
       }: {
         where: {
           workspaceId: string;
-          members: { some: { agentId: string; leftAt: null } };
+          members: { some: { agentId?: string; userId?: string; leftAt: null } };
         };
       }) => {
         expect(where.workspaceId).toBe(WORKSPACE_ID);
         expect(where.members.some.leftAt).toBeNull();
-        expect(typeof where.members.some.agentId).toBe("string");
-        // Simulates Prisma's own filter: only conversations the caller is a member of are ever
-        // returned. #secret (caller not a member) is never in this list.
+        // The membership filter names the target, never the caller: the reference client lists
+        // every channel that person is in, whether or not the caller is there too.
+        expect(where.members.some.agentId ?? where.members.some.userId).toBe(
+          where.members.some.agentId ?? "user-alice",
+        );
         return [
           {
             channelName: "general",
+            members: [{ channelRole: "member" }],
+          },
+          {
+            channelName: "secret",
             members: [{ channelRole: "member" }],
           },
         ];
@@ -152,7 +158,10 @@ test("user info: human target returns visible facts and no Agent-only fields", a
     isSelf: false,
   });
   expect(outcome.body.user).not.toHaveProperty("status");
-  expect(outcome.body.memberships).toEqual([{ channel: "#general", role: "member" }]);
+  expect(outcome.body.memberships).toEqual([
+    { channel: "#general", role: "member" },
+    { channel: "#secret", role: "member" },
+  ]);
 });
 
 test("user info: Agent target reports live status from the shared display projection", async () => {
@@ -244,10 +253,9 @@ test("user info: an unknown name 404s as user_not_found", async () => {
   });
 });
 
-test("user info: memberships never include a channel the caller cannot see", async () => {
-  // baseDb's conversation.findMany asserts the caller-membership filter is always applied and
-  // only ever returns "#general" (never "#secret"); this test pins that the response reflects
-  // exactly that filtered set, not a superset.
+test("user info: memberships list every channel the target is in, not only shared ones", async () => {
+  // baseDb's conversation.findMany asserts the membership filter names the target; a channel the
+  // caller is not in is still the target's channel and is listed.
   const outcome = await resolveAgentUserInfo(
     baseDb() as never,
     {
@@ -258,8 +266,7 @@ test("user info: memberships never include a channel the caller cannot see", asy
   );
   expect(outcome.status).toBe(200);
   if (outcome.status !== 200) throw new Error("unreachable");
-  expect(outcome.body.memberships.map((m) => m.channel)).toEqual(["#general"]);
-  expect(outcome.body.memberships.some((m) => m.channel === "#secret")).toBe(false);
+  expect(outcome.body.memberships.map((m) => m.channel)).toEqual(["#general", "#secret"]);
 });
 
 test("user info: a private Agent the caller cannot see answers agent_not_visible, not its details", async () => {

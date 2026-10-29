@@ -146,7 +146,7 @@ export function formatReadWindow(
   messages.forEach((message, index) => {
     const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
     lines.push(
-      `[${index + 1}/${messages.length} msg=${message.id} seq=${message.sequence} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}] ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}`,
+      `[${index + 1}/${messages.length} msg=${message.id} seq=${message.sequence}${message.replyCount ? ` replyCount=${message.replyCount}` : ""} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}] ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}`,
     );
   });
 

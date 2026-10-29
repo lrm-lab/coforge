@@ -98,38 +98,13 @@ export type LocalAgentMessageRequest = LocalMessageSearchFields & {
   /** `message send` only: confirms a top-level send despite newer thread read context under the same parent. Never leaves the daemon. */
   targetConfirmed?: boolean;
 };
-export type LocalAttachment = {
-  id: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-};
-export type AgentMessageRecord = {
-  memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
-  id: string;
-  sequence: number;
-  senderKind: MessageSenderKind;
-  /** Public handle without a leading "@"; required for "human"/"agent", empty for "system". */
-  senderHandle: string;
-  /** The sender's role text; empty when there is none. */
-  senderDescription: string;
-  target: string;
-  body: string;
-  createdAt: string;
-  /** Always present, possibly empty; order matches send/upload order. */
-  attachments: LocalAttachment[];
-  task?: MessageTaskMetadata;
-  /** True when this message personally @mentioned the reading Agent. */
-  mentionsAgent?: boolean;
-  /** True when the reading Agent is not in the channel and was notified of this one message. */
-  nonMemberMention?: boolean;
-};
-export type MessageTaskMetadata = {
-  number: number;
-  status: import("./tasks").TaskStatus;
-  /** `handle` has no leading "@"; `deleted` marks an Agent deleted while still holding the Task. */
-  owner?: { displayName: string; handle: string; deleted?: boolean };
-};
+import type {
+  AgentMessageRecord,
+  LocalAttachment,
+  MessageTaskMetadata,
+} from "./agent-message-record";
+
+export type { AgentMessageRecord, LocalAttachment, MessageTaskMetadata } from "./agent-message-record";
 
 export function decodeMessageTask(value: {
   number: number;
