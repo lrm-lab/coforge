@@ -66,8 +66,9 @@ conversation), oldest first, at most 100 per page (`--limit` outside 1–100 or 
 ```
 
 `✅` marks a comment a person marked handled. The anchor is `§ <heading>` (markdown section),
-`L<n>` / `L<a>–<b>` (lines), `rows <n>` / `rows <a>–<b>` (CSV) or a quote of at most 60 characters
-ending in `…` (HTML region). When older comments remain, `More: coforge attachment comments <id>
+`L<n>` / `L<a>–<b>` (lines), `rows <n>` / `rows <a>–<b>` (CSV), `@ <m:ss>` / `@ <h:mm:ss>` (a time
+in a video, e.g. `[anchor: @ 1:23]`) or a quote of at most 60 characters ending in `…` (HTML region).
+A type this CLI does not know prints as the type itself. When older comments remain, `More: coforge attachment comments <id>
 --before <seq>` follows. The footer lists the commands to read the discussion and to comment on the
 attachment. With no comments it prints `No comments on attachment <id>.`; an unknown or unreadable
 attachment is `NOT_FOUND`.

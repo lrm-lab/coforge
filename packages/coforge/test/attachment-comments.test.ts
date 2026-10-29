@@ -44,14 +44,18 @@ test("a comment line shows the 13-character id, UTC time, sender type, anchor an
   );
 });
 
-test("anchors read as a section, lines, rows or a quote", () => {
+test("anchors read as a section, lines, rows, a video time or a quote", () => {
   const anchor = (type: string, data: Record<string, unknown>) =>
     lineOf(comment({ anchor: { type, data } }));
   expect(anchor("md-section", { headingTitle: "Install" })).toContain("[anchor: § Install]");
   expect(anchor("lines", { start: 3, end: 5 })).toContain("[anchor: L3–5]");
   expect(anchor("csv-rows", { start: 2, end: 2 })).toContain("[anchor: rows 2]");
   expect(anchor("csv-rows", { start: 2, end: 9 })).toContain("[anchor: rows 2–9]");
+  expect(anchor("video-timestamp", { time: 83.4 })).toContain("[anchor: @ 1:23]");
+  expect(anchor("video-timestamp", { time: 3_725 })).toContain("[anchor: @ 1:02:05]");
+  // A time this CLI cannot read, or a type it does not know, prints as the type.
   expect(anchor("video-timestamp", {})).toContain("[anchor: video-timestamp]");
+  expect(anchor("audio-timestamp", { time: 3 })).toContain("[anchor: audio-timestamp]");
 });
 
 test("an HTML quote is cut at 60 characters with an ellipsis, and a short one is kept", () => {

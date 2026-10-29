@@ -76,6 +76,15 @@ const range = (start: unknown, end: unknown, prefix: string) => {
 
 const HTML_QUOTE_LIMIT = 60;
 
+/** A time in a video as players show it: `m:ss`, or `h:mm:ss` from an hour on. */
+function videoTime(seconds: number): string {
+  const whole = Math.floor(seconds);
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const rest = String(whole % 60).padStart(2, "0");
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+}
+
 /** Where a comment points, in a few characters; a type this CLI does not know prints as itself. */
 function anchorSummary({ type, data }: AgentAttachmentCommentAnchor): string {
   if (type === "md-section") {
@@ -88,6 +97,10 @@ function anchorSummary({ type, data }: AgentAttachmentCommentAnchor): string {
     const quote = typeof data.quote === "string" ? data.quote.replace(/\s+/g, " ").trim() : "";
     if (!quote) return "HTML region";
     return quote.length > HTML_QUOTE_LIMIT ? `${quote.slice(0, HTML_QUOTE_LIMIT)}…` : quote;
+  }
+  if (type === "video-timestamp") {
+    const time = Number(data.time);
+    return Number.isFinite(time) && time >= 0 ? `@ ${videoTime(time)}` : type;
   }
   return type;
 }

@@ -20,11 +20,12 @@ import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-com
 import { ANCHOR_HIGHLIGHT_MS, type AnchorSurface } from "./attachment-anchoring";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
 
-/** How a comment's place reads: `§ heading`, or its lines or rows. */
+/** How a comment's place reads: `§ heading`, a video's time, or its lines or rows. */
 function anchorLabel(anchor: AttachmentCommentAnchor): string {
   const range = anchorRangeLabel(anchor);
   if (anchor.type === "md-section") return m.attachment_comments_anchor_section({ title: range });
   if (anchor.type === "html-region") return range || m.attachment_comments_anchor_region();
+  if (anchor.type === "video-timestamp") return range;
   const single = anchor.data.start === anchor.data.end;
   if (anchor.type === "lines")
     return single
@@ -72,7 +73,7 @@ function AnchorPlace({
   onJump?: (anchor: AttachmentCommentAnchor) => void;
 }) {
   const place = anchorLabel(anchor);
-  const quote = anchor.data.quote;
+  const quote = "quote" in anchor.data ? anchor.data.quote : undefined;
   return (
     <div className="mt-1 min-w-0 space-y-1.5">
       {found ? (

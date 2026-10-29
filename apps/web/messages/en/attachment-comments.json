@@ -34,5 +34,6 @@
   "attachment_comments_anchor_jump": "Go to {place}",
   "image_lightbox_previous": "Previous Image",
   "image_lightbox_next": "Next Image",
-  "image_lightbox_position": "Image {index} of {count}"
+  "image_lightbox_position": "Image {index} of {count}",
+  "attachment_comments_add_timestamp": "Add Timestamp {time}"
 }

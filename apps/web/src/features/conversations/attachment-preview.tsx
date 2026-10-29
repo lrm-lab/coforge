@@ -3,12 +3,13 @@ import { useState } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import type { AttachmentPreviewKind } from "./attachment-preview-kind";
-import { joinExclusivePlayback } from "./inline-video-exclusive";
 import { useMediaSource } from "./media-source";
 import type { Anchoring } from "./attachment-anchoring";
+import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { LinesPreview, MarkdownPreview } from "./anchored-previews";
 import { CsvPreview } from "./csv-preview";
 import { HtmlRegionPreview } from "./html-region-preview";
+import { VideoPreview } from "./video-preview";
 
 function PreviewStatus({
   state,
@@ -64,6 +65,7 @@ export function AttachmentPreview({
   text,
   anchoring,
   commentsOpen,
+  pendingAnchor,
 }: {
   fileName: string;
   kind: AttachmentPreviewKind;
@@ -73,10 +75,12 @@ export function AttachmentPreview({
   previewUrl?: string;
   /** A text kind's content, read before the preview opens (`readPreviewText`). */
   text?: string;
-  /** Lets the reader comment on a place in a Markdown, text, CSV or HTML file. */
+  /** Lets the reader comment on a place in a Markdown, text, CSV or HTML file, or a video. */
   anchoring?: Anchoring;
-  /** Whether the comments show beside the preview (an HTML file's comment mode needs them). */
+  /** Whether the comments show beside the preview (an HTML file's or a video's comment mode). */
   commentsOpen?: boolean;
+  /** The place the next comment is about: a video offers its time while it has none. */
+  pendingAnchor?: AttachmentCommentAnchor | null;
 }) {
   if (kind === "pdf")
     return previewUrl ? (
@@ -85,7 +89,17 @@ export function AttachmentPreview({
       <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />
     );
   if (kind === "video" || kind === "audio")
-    return <MediaPreview fileName={fileName} kind={kind} href={href} previewUrl={previewUrl} />;
+    return (
+      <MediaPreview
+        fileName={fileName}
+        kind={kind}
+        href={href}
+        previewUrl={previewUrl}
+        anchoring={anchoring}
+        commentsOpen={commentsOpen}
+        pendingAnchor={pendingAnchor}
+      />
+    );
   if (text === undefined)
     return <PreviewStatus state={{ status: "error", tooLarge: false }} href={href} />;
   return (
@@ -163,11 +177,15 @@ function MediaPreview({
   kind,
   href,
   previewUrl,
+  ...comments
 }: {
   fileName: string;
   kind: "video" | "audio";
   href: string;
   previewUrl?: string;
+  anchoring?: Anchoring;
+  commentsOpen?: boolean;
+  pendingAnchor?: AttachmentCommentAnchor | null;
 }) {
   const source = useMediaSource({ fileName, href, previewUrl });
   const [onFallback, setOnFallback] = useState(false);
@@ -183,17 +201,5 @@ function MediaPreview({
         <audio src={src} controls className="w-full" aria-label={fileName} onError={onError} />
       </div>
     );
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center bg-black/90 p-4">
-      <video
-        // Playing it here pauses the message's own player behind the dialog.
-        ref={joinExclusivePlayback}
-        src={src}
-        controls
-        className="max-h-full max-w-full"
-        aria-label={fileName}
-        onError={onError}
-      />
-    </div>
-  );
+  return <VideoPreview fileName={fileName} src={src} onError={onError} {...comments} />;
 }

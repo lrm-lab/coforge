@@ -9,6 +9,7 @@ import {
   parseAttachmentCommentAnchor,
   sectionAt,
   storedText,
+  videoTimeLabel,
 } from "#src/features/conversations/attachment-comment-anchors";
 import { parseCsv } from "#src/features/conversations/csv-table";
 
@@ -80,8 +81,8 @@ test("each preview offers its own anchor type; the others are whole-file only", 
   expect(anchorTypeForPreview("text")).toBe("lines");
   expect(anchorTypeForPreview("csv")).toBe("csv-rows");
   expect(anchorTypeForPreview("html")).toBe("html-region");
-  for (const kind of ["pdf", "video", "audio", null] as const)
-    expect(anchorTypeForPreview(kind)).toBeNull();
+  expect(anchorTypeForPreview("video")).toBe("video-timestamp");
+  for (const kind of ["pdf", "audio", null] as const) expect(anchorTypeForPreview(kind)).toBeNull();
 });
 
 test("an anchor's label is its heading, or its first and last line or row", () => {
@@ -198,4 +199,24 @@ test("a quote across table cells matches its row, however the cells were joined"
     start: 3,
     end: 3,
   });
+});
+
+test("a video time is kept to the millisecond, above 0 and at most 24 hours", () => {
+  const at = (time: unknown) =>
+    parseAttachmentCommentAnchor({ type: "video-timestamp", data: { time } });
+  expect(at(83.417)).toEqual({ type: "video-timestamp", data: { time: 83.417 } });
+  expect(at(24 * 60 * 60)).not.toBeNull();
+  for (const time of [0, -1, 24 * 60 * 60 + 1, Number.NaN, Number.POSITIVE_INFINITY, "83"])
+    expect(at(time)).toBeNull();
+  expect(
+    parseAttachmentCommentAnchor({ type: "video-timestamp", data: { time: 5, quote: "x" } }),
+  ).toBeNull();
+});
+
+test("a video time reads as m:ss, and h:mm:ss from an hour on", () => {
+  expect(videoTimeLabel(0.4)).toBe("0:00");
+  expect(videoTimeLabel(83.9)).toBe("1:23");
+  expect(videoTimeLabel(3_599)).toBe("59:59");
+  expect(videoTimeLabel(3_725)).toBe("1:02:05");
+  expect(anchorRangeLabel({ type: "video-timestamp", data: { time: 83.4 } })).toBe("1:23");
 });

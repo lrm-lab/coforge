@@ -26,6 +26,7 @@ test("each previewable kind stores its own anchor, read back on the comment", as
     const markdown = await sibling("guide.md", "text/markdown");
     const csv = await sibling("data.csv", "text/csv");
     const html = await sibling("page.html", "text/html");
+    const video = await sibling("demo.mp4", "video/mp4");
     const cases: [string, AttachmentCommentAnchor][] = [
       [f.attachment.id, { type: "lines", data: { start: 3, end: 5, quote: "three to five" } }],
       [markdown.id, { type: "md-section", data: { headingId: "setup", headingTitle: "Setup" } }],
@@ -46,6 +47,7 @@ test("each previewable kind stores its own anchor, read back on the comment", as
           },
         },
       ],
+      [video.id, { type: "video-timestamp", data: { time: 83.417 } }],
     ];
     for (const [attachmentId, anchor] of cases) {
       const posted = await comments.post(f.actor, { attachmentId, body: "Here", anchor });
@@ -121,6 +123,14 @@ test("an anchor of another file kind is refused and nothing is written", async (
           type: "html-region",
           data: { x: 0, y: 0, w: 5, h: 5, viewportWidth: 1, documentWidth: 1, documentHeight: 1 },
         },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    // Nor a time: only a video takes one.
+    await expect(
+      comments.post(f.actor, {
+        attachmentId: f.attachment.id,
+        body: "Wrong kind",
+        anchor: { type: "video-timestamp", data: { time: 12 } },
       }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect((await comments.list(f.actor, { attachmentId: f.attachment.id })).comments).toEqual([]);

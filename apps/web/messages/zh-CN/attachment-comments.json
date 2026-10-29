@@ -34,5 +34,6 @@
   "attachment_comments_anchor_jump": "跳到{place}",
   "image_lightbox_previous": "上一张",
   "image_lightbox_next": "下一张",
-  "image_lightbox_position": "第 {index} 张，共 {count} 张"
+  "image_lightbox_position": "第 {index} 张，共 {count} 张",
+  "attachment_comments_add_timestamp": "添加时间戳 {time}"
 }

@@ -95,11 +95,12 @@ reactions. A reply is a comment Message whose `threadRootId` is its root
 comment's (one level: a reply to a reply joins the same root) and has no anchor. Composite foreign keys keep the attachment, Workspace, discussion
 and Message together. Anchor type and JSON data are both null for a whole-file
 comment or both present for a positional anchor. The type is one of
-`md-section`, `lines`, `csv-rows`, `html-region`; stored data is a JSON object
+`md-section`, `lines`, `csv-rows`, `html-region`, `video-timestamp`; stored data is a JSON object
 whose PostgreSQL text representation occupies at most 4096 UTF-8 bytes. The Web
 writes `md-section {headingId, headingTitle, quote?}` on Markdown,
 `lines {start, end, quote?}` on plain text and `csv-rows {start, end, quote?}`
-on CSV (rows from 1, header excluded); the server accepts only the type the
+on CSV (rows from 1, header excluded) and `video-timestamp {time}` on a video
+(seconds, above 0 and at most 24 hours; task #271); the server accepts only the type the
 file's preview offers (`attachment-comment-anchors.ts`). There is no stored
 location status or completion status: the viewer discovers lost positions and
 an ordinary ✅ reaction means resolved.

@@ -199,6 +199,7 @@ export function AttachmentReviewDialog({
                         text={text}
                         anchoring={anchoring}
                         commentsOpen={commentsExpanded}
+                        pendingAnchor={pendingAnchor}
                       />
                     ) : (
                       <Empty>

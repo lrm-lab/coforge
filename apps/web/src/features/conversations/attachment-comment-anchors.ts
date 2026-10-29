@@ -31,6 +31,9 @@ const range = z
   .strict()
   .refine((value) => value.start <= value.end);
 const pixels = z.number().int().min(0).max(ANCHOR_PIXEL_MAX);
+/** A video time past any recording a preview plays: 24 hours, in seconds. The server cannot read a
+ * video's length, so the bound is fixed. */
+const VIDEO_TIME_MAX = 24 * 60 * 60;
 
 export const attachmentCommentAnchor = z.discriminatedUnion("type", [
   z
@@ -66,6 +69,20 @@ export const attachmentCommentAnchor = z.discriminatedUnion("type", [
         .strict(),
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("video-timestamp"),
+      // Seconds into the video, to the millisecond, as Raft stores it; never the very start.
+      data: z
+        .object({
+          time: z
+            .number()
+            .refine(Number.isFinite)
+            .refine((time) => time > 0 && time <= VIDEO_TIME_MAX),
+        })
+        .strict(),
+    })
+    .strict(),
 ]);
 export type AttachmentCommentAnchor = z.infer<typeof attachmentCommentAnchor>;
 
@@ -83,6 +100,7 @@ export function anchorTypeForPreview(
   if (kind === "text") return "lines";
   if (kind === "csv") return "csv-rows";
   if (kind === "html") return "html-region";
+  if (kind === "video") return "video-timestamp";
   return null;
 }
 
@@ -206,12 +224,22 @@ export function rangeLocator(texts: readonly string[]) {
   };
 }
 
+/** A time in a video as players show it: `m:ss`, or `h:mm:ss` from an hour on. */
+export function videoTimeLabel(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const rest = String(whole % 60).padStart(2, "0");
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+}
+
 /**
- * An anchor's own label: the heading for a section, the start of the quote for a region (empty
+ * An anchor's own label: the time for a video, the heading for a section, the start of the quote for a region (empty
  * when it kept none, for the caller's generic name), else its first and last line or row.
  */
 export function anchorRangeLabel(anchor: AttachmentCommentAnchor): string {
   if (anchor.type === "md-section") return anchor.data.headingTitle;
+  if (anchor.type === "video-timestamp") return videoTimeLabel(anchor.data.time);
   if (anchor.type === "html-region") {
     const characters = Array.from(anchor.data.quote ?? "");
     return characters.length > REGION_LABEL_MAX
