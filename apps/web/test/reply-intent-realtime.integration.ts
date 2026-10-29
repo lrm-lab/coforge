@@ -264,37 +264,75 @@ test("real routing delivers start/end only to the conversation, with no history 
       body: JSON.stringify({ method: "history", params: { channel: "chat:c", limit: 100 } }),
     }).then((response) => response.json())) as { result: { publications?: unknown[] } };
     expect(history.result.publications ?? []).toEqual([]);
-    const outsider = viewer.newSubscription("chat:another", {
-      token: await issueConversationRealtimeToken(
-        { userId: "viewer", conversationId: "c" },
-        environment,
-      ),
-    });
-    const rejectedChannel = event<number>((resolve) => {
-      outsider.once("unsubscribed", ({ code }) => resolve(code));
-      viewer.once("disconnected", ({ code }) => resolve(code));
-    });
-    outsider.subscribe();
-    // A denial drops the whole client, so the subscription's pending readiness rejects with
-    // `clientDisconnected`: expected here, consumed so it cannot fail the test unhandled.
-    void outsider.ready().catch(() => {});
-    const channelDenial = await rejectedChannel;
-    expect(channelDenial).toBe(3500);
-    const otherUser = await connection("other");
-    const stolen = otherUser.newSubscription("chat:c", {
-      token: await issueConversationRealtimeToken(
-        { userId: "viewer", conversationId: "c" },
-        environment,
-      ),
-    });
-    const rejectedUser = event<number>((resolve) => {
-      stolen.once("unsubscribed", ({ code }) => resolve(code));
-      otherUser.once("disconnected", ({ code }) => resolve(code));
-    });
-    stolen.subscribe();
-    void stolen.ready().catch(() => {});
-    const userDenial = await rejectedUser;
-    expect(userDenial).toBe(3500);
+    // A denied subscription drops the whole client, which rejects its in-flight subscribe
+    // command with `clientDisconnected` — a rejection the client library leaves unhandled.
+    // That is the denial under test, not a defect: contain it for exactly this check.
+    const denialRejection = (reason: unknown) => {
+      if (typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === 3)
+        return;
+      throw reason;
+    };
+    let channelDenial = 0;
+    let userDenial = 0;
+    process.on("unhandledRejection", denialRejection);
+    try {
+      const outsider = viewer.newSubscription("chat:another", {
+        token: await issueConversationRealtimeToken(
+          { userId: "viewer", conversationId: "c" },
+          environment,
+        ),
+      });
+      const rejectedChannel = event<number>((resolve) => {
+        outsider.once("unsubscribed", ({ code }) => resolve(code));
+        viewer.once("disconnected", ({ code }) => resolve(code));
+      });
+      outsider.subscribe();
+      void outsider.ready().catch(() => {});
+      channelDenial = await rejectedChannel;
+      expect(channelDenial).toBe(3500);
+      const otherUser = await connection("other");
+      const stolen = otherUser.newSubscription("chat:c", {
+        token: await issueConversationRealtimeToken(
+          { userId: "viewer", conversationId: "c" },
+          environment,
+        ),
+      });
+      const rejectedUser = event<number>((resolve) => {
+        stolen.once("unsubscribed", ({ code }) => resolve(code));
+        otherUser.once("disconnected", ({ code }) => resolve(code));
+      });
+      stolen.subscribe();
+      void stolen.ready().catch(() => {});
+      userDenial = await rejectedUser;
+      expect(userDenial).toBe(3500);
+    } finally {
+      process.off("unhandledRejection", denialRejection);
+    }
+    console.info(
+      JSON.stringify({
+        capture: "reply-intent",
+        routed,
+        phases: ["start", "end"],
+        activityCopies: 0,
+        history: 0,
+        boundChannelAndUser: true,
+        deniedChannelCode: channelDenial,
+        deniedUserCode: userDenial,
+        disconnects,
+      }),
+    );
+  } finally {
+    if (disconnects.length)
+      console.info(JSON.stringify({ capture: "reply-intent-disconnects", disconnects }));
+    for (const client of clients) client.disconnect();
+    try {
+      if (containerStarted) await docker("rm", "-f", name);
+    } finally {
+      proxy?.stop(true);
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+}, 120_000);
     console.info(
       JSON.stringify({
         capture: "reply-intent",
