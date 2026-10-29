@@ -184,12 +184,7 @@ import { controlPayloadShape } from "./control-payload";
 import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { getLogger } from "@logtape/logtape";
-import {
-  AGENT_RPC_TIMEOUT_MS,
-  agentHeaders,
-  channelEndpointFor,
-  sendAgentJson,
-} from "./agent-http-wire";
+import { agentHeaders, channelEndpointFor, sendAgentJson } from "./agent-http-wire";
 import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import { adaptAgentHistoryResponse } from "./agent-history-response";
@@ -199,6 +194,7 @@ import {
   adaptAgentSearchResponse,
   adaptAgentSendResponse,
 } from "./agent-message-adapters";
+import { requestAgentConfig } from "./agent-config-request";
 import type { AgentHttpInput } from "./agent-http-wire";
 import {
   defaultAgentMessageHttpClient,
@@ -1556,15 +1552,16 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   /** One request against the Agent API key endpoint; `what` names the caller in errors. */
-  async #agentApiKeyRequest(what: string, method: "POST" | "DELETE", body: unknown) {
-    const response = await fetch(this.#serverEndpoint(what, "/api/agent-api-keys"), {
+  #agentApiKeyRequest(what: string, method: "POST" | "DELETE", body: unknown) {
+    return requestAgentConfig({
+      url: () => this.#serverEndpoint(what, "/api/agent-api-keys"),
+      what,
       method,
-      headers: { authorization: `Bearer ${this.#token}`, "content-type": "application/json" },
+      token: this.#token,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
+      // Revoking is not retried: one request per key, exactly when its Agent is gone.
+      ...(method === "DELETE" ? { retryDelaysMs: [] } : {}),
     });
-    if (!response.ok) throw new Error(`${what} request failed (${response.status})`);
-    return response;
   }
 
   async requestAgentApiKey(input: { agentId: string; workspaceId: string }): Promise<string> {

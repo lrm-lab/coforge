@@ -6,6 +6,10 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { RuntimeModelNotFoundError, RuntimeStartFailedError } from "@lrm/coforge-anvil";
 import { fingerprintRuntimeError } from "./runtime-error-activity";
+import {
+  AgentConfigRequestError,
+  type AgentConfigFailure,
+} from "#src/connection/agent-config-request";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { RUNTIME_ERROR_CLASS } from "./runtime-error-classification";
 
@@ -90,13 +94,26 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
 ];
 
-/** The server did not hand this launch its configuration and Agent API key. */
+/** The server did not hand this launch its configuration and Agent API key. The reason code stays
+ * one, but what actually happened is kept: a Computer that could not reach the server must not be
+ * told to upgrade, which is what someone read out of the one generic sentence before. */
 export class AgentAuthorizationError extends Error {
   readonly code = LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED;
+  readonly failure: AgentConfigFailure | undefined;
+  readonly upstreamCode: string | undefined;
   constructor(cause: unknown) {
     super(`Agent launch configuration could not be obtained: ${thrownMessage(cause)}`, { cause });
     this.name = "AgentAuthorizationError";
+    const config = cause instanceof AgentConfigRequestError ? cause : undefined;
+    this.failure = config?.failure;
+    this.upstreamCode = config?.upstreamCode;
   }
+}
+
+/** Whether the refusal itself says this Computer's version is the problem. Only then does the
+ * explanation suggest an upgrade; a 403 alone means many things. */
+function namesVersionRefusal(error: AgentAuthorizationError): boolean {
+  return /version/iu.test(error.upstreamCode ?? "") || /version/iu.test(error.message);
 }
 
 /** The launch failure reason a typed error carries, or `runtime_spawn_failed`. */
@@ -117,13 +134,40 @@ function launchFailureDetail(
   runtimeName: string,
 ): string {
   switch (reason) {
-    case LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED:
+    case LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED: {
+      const authorization = error instanceof AgentAuthorizationError ? error : undefined;
+      // One reason code, three different situations (task #155): only the server naming a
+      // version problem earns an upgrade suggestion.
+      if (authorization?.failure === "network")
+        return (
+          "Agent authorization could not be prepared: this Computer could not reach the server, " +
+          "and the request was retried. Check this Computer's network connection, then start the " +
+          "Agent again."
+        );
+      if (authorization?.failure === "server")
+        return (
+          "Agent authorization could not be prepared: the server did not answer reliably, and the " +
+          "request was retried. Try starting the Agent again in a moment; if it keeps failing, " +
+          "check `coforge-computer status`."
+        );
+      if (authorization && namesVersionRefusal(authorization))
+        return (
+          "Agent authorization could not be prepared: the server refused this Computer because " +
+          "its version is not accepted. Update it with `coforge-computer upgrade`, then start the " +
+          "Agent again."
+        );
+      if (authorization?.failure === "refused")
+        return (
+          "Agent authorization could not be prepared: the server refused this Computer's request " +
+          "for the Agent's launch credentials. Check that this Computer is still connected to the " +
+          "Workspace with `coforge-computer status`, then start the Agent again."
+        );
       return (
         "Agent authorization could not be prepared: this Computer could not obtain the Agent's " +
-        "launch credentials from the server. Check the Workspace connection and this Computer's " +
-        "version with `coforge-computer status`; if the Computer is behind the server, update it " +
-        "with `coforge-computer upgrade`, then start the Agent again."
+        "launch credentials from the server. Check the Workspace connection with " +
+        "`coforge-computer status`, then start the Agent again."
       );
+    }
     case LAUNCH_FAILURE_REASON.RUNTIME_NOT_FOUND:
       return (
         `${runtimeName} is not installed on this Computer, or it is not on the PATH the ` +

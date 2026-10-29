@@ -11912,9 +11912,8 @@ describe("a launch that cannot start says why", () => {
       detailKind: "runtime_error",
       detail:
         "Agent authorization could not be prepared: this Computer could not obtain the Agent's " +
-        "launch credentials from the server. Check the Workspace connection and this Computer's " +
-        "version with `coforge-computer status`; if the Computer is behind the server, update it " +
-        "with `coforge-computer upgrade`, then start the Agent again.",
+        "launch credentials from the server. Check the Workspace connection with " +
+        "`coforge-computer status`, then start the Agent again.",
       runtimeError: { errorClass: "LauncherError", errorReason: "agent_authorization_failed" },
     });
   });
