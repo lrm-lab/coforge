@@ -1,5 +1,7 @@
 import { CLI_USAGE } from "./src/usage";
 import { commandHelp, invalidArgument } from "./src/command-help";
+import { runMessageResolve } from "./src/message-resolve";
+import { formatReaction } from "./src/message-format";
 import { parseChannelManagementArgs, type ChannelManagementInvocation } from "./src/channel-args";
 import { formatReminderResponse as formatAgentReminderResponse } from "./src/reminder-format";
 import { fstatSync } from "node:fs";
@@ -95,7 +97,6 @@ import {
   formatAttachmentUploadSuccess,
   formatHeldSend,
   formatMessageLine,
-  formatMessageResolve,
   formatSendSuccess,
   formatSendCommitted,
   formatUndeliveredMentions,
@@ -1212,7 +1213,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   if (command === "resolve") {
     if (!transport.resolve) throw new Error("Message resolve transport is unavailable");
-    return formatMessageResolve(await transport.resolve(invocation.messageId));
+    return runMessageResolve(transport.resolve, invocation.messageId);
   }
   if (command === "react") {
     if (!transport.react) throw new Error("Message reaction transport is unavailable");
@@ -1247,11 +1248,6 @@ function formatVersionInfo(info: VersionInfo): string {
   if (info.daemon) lines.push(`Daemon: ${info.daemon}`);
   if (info.computer) lines.push(`Computer: ${info.computer}`);
   return lines.join("\n");
-}
-
-function formatReaction(messageId: string, emoji: string, remove: boolean): string {
-  const shortId = messageId.slice(0, 13);
-  return `Reaction ${emoji} ${remove ? "removed from" : "added to"} message ${shortId}.`;
 }
 
 /** A send whose lost answer the daemon confirmed by its key: only its message id is known. */

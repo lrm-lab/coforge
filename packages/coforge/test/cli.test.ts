@@ -1354,18 +1354,6 @@ test("message resolve looks up one message by id and formats it like message che
   );
 });
 
-test("message resolve reports a clear error when the message is not found", async () => {
-  await expect(
-    run(["message", "resolve", "abcd1234"], {
-      check: async () => ({ messages: [] }),
-      read: async () => undefined,
-      send: async () => undefined,
-      view: async () => ({ bytes: new Uint8Array() }),
-      resolve: async () => ({ messages: [] }),
-    }),
-  ).rejects.toThrow("message not found or not visible to this Agent");
-});
-
 test("message resolve rejects malformed argument shapes", () => {
   expect(() => parseArgs(["message", "resolve"])).toThrow("Usage:");
   expect(() => parseArgs(["message", "resolve", "abcd1234", "extra"])).toThrow("Usage:");

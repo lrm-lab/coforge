@@ -1,3 +1,4 @@
+import { CliError } from "./cli-error";
 import { channelSummaryBody } from "./message-summary";
 import { fenceMessageBody } from "./message-body-format";
 import { shortId } from "./short-id";
@@ -88,11 +89,32 @@ export function formatMessageLineFull(message: AgentMessageRecord): string {
   return messageLine(message, message.body);
 }
 
+/** The error `message resolve` raises for an id no message answers, with where to look next. */
+export function messageNotFoundError(messageId: string): CliError {
+  return new CliError({
+    code: "NOT_FOUND",
+    message: `No message this Agent can see matches "${messageId}".`,
+    retryable: false,
+    suggestedNextAction:
+      'Find it with `coforge message search --query "<words from the message>"`, or read the conversation with `coforge message read --target <target> --around <seq>`.',
+  });
+}
+
+/** The error an ambiguous prefix raises: the server refuses to guess which message was meant. */
+export function ambiguousMessageIdError(messageId: string): CliError {
+  return new CliError({
+    code: "AMBIGUOUS_ID",
+    message: `"${messageId}" matches more than one message.`,
+    retryable: false,
+    suggestedNextAction: "Pass the full message id (`msg=` in a message line) instead of a prefix.",
+  });
+}
+
 /** What `message resolve` prints: the one message it names, whole, with its Task hint. */
-export function formatMessageResolve(result: unknown): string {
+export function formatMessageResolve(result: unknown, messageId = ""): string {
   const response = result as { messages?: AgentMessageRecord[] };
   const message = response.messages?.[0];
-  if (!message) throw new Error("message not found or not visible to this Agent");
+  if (!message) throw messageNotFoundError(messageId);
   const line = formatMessageLineFull(message);
   const hint = formatTaskWorkflowHint([message]);
   return hint ? `${line}\n${hint}` : line;
@@ -367,4 +389,9 @@ export function memoryHintSuffix(message: AgentMessageRecord): string {
   return message.memoryHint
     ? `\n[Memory Hint hint_id=${message.memoryHint.hint_id} tool=${message.memoryHint.tool}]`
     : "";
+}
+
+/** What `message react` prints: which message the emoji landed on. */
+export function formatReaction(messageId: string, emoji: string, remove: boolean): string {
+  return `Reaction ${emoji} ${remove ? "removed from" : "added to"} message ${messageId.slice(0, 13)}.`;
 }
