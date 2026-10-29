@@ -37,7 +37,7 @@ export function UnreadDivider() {
       {/* A neutral rule with the label at its end: the divider marks where reading resumes, so
           it has to be findable, but a coloured bar across the middle of the pane is the loudest
           thing on screen. The day divider above uses the same rule. */}
-      <span aria-hidden="true" className="h-px flex-1 bg-secondary" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
       <span className="shrink-0 text-md text-brand-secondary">
         {m.conversation_unread_divider()}
       </span>
