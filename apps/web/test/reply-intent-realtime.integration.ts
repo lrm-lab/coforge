@@ -390,7 +390,9 @@ test("real routing delivers start/end only to the conversation, with no history 
         console.info(
           JSON.stringify({
             capture: "reply-intent-centrifugo-log",
-            log: (await docker("logs", "--tail", "50", name).catch(() => "")).split("\n"),
+            log: (
+              await Bun.$`docker logs --tail 50 ${name} 2>&1`.text().catch(() => "")
+            ).split("\n"),
           }),
         );
       if (containerStarted) await docker("rm", "-f", name);
