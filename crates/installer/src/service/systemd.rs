@@ -103,19 +103,18 @@ fn session_bus_environment(
     if has_env("XDG_RUNTIME_DIR") || has_env("DBUS_SESSION_BUS_ADDRESS") {
         return Vec::new();
     }
-    let directory = PathBuf::from(format!("/run/user/{uid}"));
-    let bus = directory.join("bus");
-    if !owns_bus(&bus) {
+    // A Unix path, spelled with `/` whatever host this is compiled for: a `PathBuf` join would
+    // write `\bus` into the address on Windows, where these tests also run.
+    let directory = format!("/run/user/{uid}");
+    let bus = format!("{directory}/bus");
+    if !owns_bus(Path::new(&bus)) {
         return Vec::new();
     }
     vec![
-        (
-            "XDG_RUNTIME_DIR".to_owned(),
-            directory.to_string_lossy().into_owned(),
-        ),
+        ("XDG_RUNTIME_DIR".to_owned(), directory),
         (
             "DBUS_SESSION_BUS_ADDRESS".to_owned(),
-            format!("unix:path={}", bus.to_string_lossy()),
+            format!("unix:path={bus}"),
         ),
     ]
 }
