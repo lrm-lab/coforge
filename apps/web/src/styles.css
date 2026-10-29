@@ -46,10 +46,11 @@
   --spacing-page: var(--page-gutter);
 }
 
-/* A list column beside a conversation pane (Activity, Search): 35rem, at most half the page so
-   the conversation keeps room (docs/design/sizing-units.md). */
+/* A list column beside a conversation pane (Activity, Search): the width its resize handle keeps
+   (`LIST_COLUMN` in conversation-list-width.ts, 380px = 23.75rem by default), at most half the
+   page so the conversation keeps room (docs/design/sizing-units.md). */
 @utility w-list-column {
-  width: min(35rem, 50%);
+  width: min(var(--list-column-width, 23.75rem), 50%);
 }
 
 /* Inter has no CJK glyphs: Noto Sans SC is the Chinese UI font, with the installed

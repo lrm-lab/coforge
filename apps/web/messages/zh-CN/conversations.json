@@ -2,6 +2,7 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "conversation_back_to_list": "返回会话列表",
   "conversation_list_resize": "调整会话列表宽度",
+  "list_column_resize": "调整列表宽度",
   "conversation_loading": "正在加载消息…",
   "channels_title": "群聊",
   "conversation_unread_divider": "新消息",

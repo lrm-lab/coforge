@@ -5,6 +5,8 @@ import { SearchLg } from "@untitledui/icons";
 import { Input } from "#src/components/base/input/input";
 import { PageHeader } from "#src/components/layout/page-header";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
+import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
+import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -165,7 +167,7 @@ export function SearchPage({
             // Below `SEARCH_LIST_BESIDE_FROM` the preview takes the list's place; the list stays mounted.
             preview
               ? cx(
-                  "flex w-list-column shrink-0 flex-col",
+                  "relative flex w-list-column shrink-0 flex-col",
                   LIST_BESIDE_CLASSES[SEARCH_LIST_BESIDE_FROM].list,
                 )
               : "flex min-w-0 flex-1 flex-col"
@@ -241,6 +243,12 @@ export function SearchPage({
                 input.current?.focus();
               }}
               onOpen={(entity) => memory.recordOpen("", searchEntityKey(entity))}
+            />
+          )}
+          {preview && (
+            <ConversationListResizeHandle
+              column={LIST_COLUMN}
+              visibleFrom={SEARCH_LIST_BESIDE_FROM}
             />
           )}
         </div>

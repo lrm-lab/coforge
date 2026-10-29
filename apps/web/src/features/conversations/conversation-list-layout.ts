@@ -1,67 +1,73 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { browserLocalStorage } from "#src/features/browser-local-storage";
-import {
-  LIST_WIDTH_DEFAULT,
-  LIST_WIDTH_KEY,
-  LIST_WIDTH_PROPERTY,
-  clampListWidth,
-  parseListWidth,
-} from "./conversation-list-width";
+import { clampListWidth, parseListWidth, type ListColumn } from "./conversation-list-width";
 
-/** What the server renders and the browser hydrates with: the stored width only reaches the markup
- * through the property the boot script set on `<html>`. */
-const SERVER_WIDTH = LIST_WIDTH_DEFAULT;
+type Store = {
+  current: number | undefined;
+  listeners: Set<() => void>;
+};
 
-let current: number | undefined;
-const listeners = new Set<() => void>();
+const stores = new Map<ListColumn, Store>();
 
-function readStoredWidth(): number {
+function store(column: ListColumn): Store {
+  let found = stores.get(column);
+  if (!found) {
+    found = { current: undefined, listeners: new Set() };
+    stores.set(column, found);
+  }
+  return found;
+}
+
+function readStoredWidth(column: ListColumn): number {
   try {
     return (
-      parseListWidth(browserLocalStorage()?.getItem(LIST_WIDTH_KEY) ?? null) ?? LIST_WIDTH_DEFAULT
+      parseListWidth(column, browserLocalStorage()?.getItem(column.key) ?? null) ??
+      column.defaultWidth
     );
   } catch {
     // Blocked storage keeps the default.
-    return LIST_WIDTH_DEFAULT;
+    return column.defaultWidth;
   }
 }
 
-export function getListWidth(): number {
-  return (current ??= readStoredWidth());
+export function getListWidth(column: ListColumn): number {
+  return (store(column).current ??= readStoredWidth(column));
 }
 
 /** Shows `width` now, on the page and to its readers, without keeping it: a drag in progress. The
  * property on `<html>` is what the column's CSS follows, as it was at boot. */
-export function applyListWidth(width: number) {
-  if (getListWidth() === width) return;
-  current = width;
-  document.documentElement.style.setProperty(LIST_WIDTH_PROPERTY, `${width}px`);
-  for (const listener of listeners) listener();
+export function applyListWidth(column: ListColumn, width: number) {
+  if (getListWidth(column) === width) return;
+  const columnStore = store(column);
+  columnStore.current = width;
+  document.documentElement.style.setProperty(column.property, `${width}px`);
+  for (const listener of columnStore.listeners) listener();
 }
 
 /** Keeps what is showing as this device's preference. A blocked storage is not an error: this page
  * still follows it. */
-export function commitListWidth() {
+export function commitListWidth(column: ListColumn) {
   try {
-    browserLocalStorage()?.setItem(LIST_WIDTH_KEY, String(Math.round(getListWidth())));
+    browserLocalStorage()?.setItem(column.key, String(Math.round(getListWidth(column))));
   } catch {
     // Private mode or blocked storage.
   }
 }
 
-export function setListWidth(width: number) {
-  applyListWidth(clampListWidth(width));
-  commitListWidth();
+export function setListWidth(column: ListColumn, width: number) {
+  applyListWidth(column, clampListWidth(column, width));
+  commitListWidth(column);
 }
 
-function subscribe(listener: () => void) {
+function subscribe(column: ListColumn, listener: () => void) {
   // Changes made in another tab while nothing listened are caught up on here.
-  applyListWidth(readStoredWidth());
+  applyListWidth(column, readStoredWidth(column));
+  const { listeners } = store(column);
   listeners.add(listener);
   // Another tab changed the preference: follow it.
   const onStorage = (event: StorageEvent) => {
-    if (event.key !== null && event.key !== LIST_WIDTH_KEY) return;
-    applyListWidth(readStoredWidth());
+    if (event.key !== null && event.key !== column.key) return;
+    applyListWidth(column, readStoredWidth(column));
   };
   window.addEventListener("storage", onStorage);
   return () => {
@@ -70,6 +76,13 @@ function subscribe(listener: () => void) {
   };
 }
 
-export function useListWidth(): number {
-  return useSyncExternalStore(subscribe, getListWidth, () => SERVER_WIDTH);
+/** The column's width as kept; what the server renders and the browser hydrates with is the
+ * default, since the stored width only reaches the markup through the property the boot script
+ * set on `<html>`. */
+export function useListWidth(column: ListColumn): number {
+  return useSyncExternalStore(
+    useCallback((listener: () => void) => subscribe(column, listener), [column]),
+    () => getListWidth(column),
+    () => column.defaultWidth,
+  );
 }

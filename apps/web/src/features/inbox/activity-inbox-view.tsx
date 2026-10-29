@@ -9,6 +9,8 @@ import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
+import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
+import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -162,10 +164,13 @@ export function ActivityInboxView({
       data-activity-list
       className={cn(
         "flex min-h-0 flex-col",
-        // Raft's 35rem column beside the conversation at `lg`.
+        // Raft's list column beside the conversation at `lg`, as wide as its handle keeps it.
         // Narrower, the conversation takes the page in its place; the list stays mounted.
         opened
-          ? cn("w-list-column shrink-0", LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list)
+          ? cn(
+              "relative w-list-column shrink-0",
+              LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
+            )
           : "min-w-0 flex-1",
       )}
     >
@@ -236,6 +241,12 @@ export function ActivityInboxView({
           fetchNextPage={query.fetchNextPage}
         />
       </div>
+      {opened && (
+        <ConversationListResizeHandle
+          column={LIST_COLUMN}
+          visibleFrom={ACTIVITY_LIST_BESIDE_FROM}
+        />
+      )}
     </div>
   );
   // One tree at every width, so crossing `lg` keeps the list (and its scroll) mounted.
