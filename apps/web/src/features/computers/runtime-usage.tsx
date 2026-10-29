@@ -1,6 +1,7 @@
 import { RefreshCw01 as RefreshCw, XClose } from "@untitledui/icons";
 import { type ReactNode } from "react";
 import { useHydrated } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
 
@@ -17,6 +18,8 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
+import { isSignableRuntimeProvider } from "./runtime-login-chip";
+import { requestRuntimeAuthStatus } from "./runtime-auth.functions";
 import { useRuntimeUsage } from "./use-runtime-usage";
 import { RuntimeUsageWindows } from "./runtime-usage-windows-list";
 import {
@@ -143,6 +146,14 @@ export function RuntimeUsage({
     computerOnline,
     signedIn: account === "logged_in",
   });
+  // Opening the popover asks the Computer to read this runtime's login status again: it may have
+  // been signed in or out on the Computer itself, which nothing else tells us. The Computer's
+  // report reaches this page on the caller's channel, like any other.
+  const requestStatus = useServerFn(requestRuntimeAuthStatus);
+  const rereadLogin = () => {
+    if (!isSignableRuntimeProvider(runtime.provider)) return;
+    void requestStatus({ data: { computerId, provider: runtime.provider } }).catch(() => {});
+  };
 
   const usageRead = usageReadForAuth(usage.data, account);
   const shown = shownAccount(account, usageRead);
@@ -170,7 +181,7 @@ export function RuntimeUsage({
     .join(" · ");
 
   return (
-    <DialogTrigger>
+    <DialogTrigger onOpenChange={(open) => open && rereadLogin()}>
       <AriaButton aria-label={label} className={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}>
         {resolvedTrigger}
       </AriaButton>

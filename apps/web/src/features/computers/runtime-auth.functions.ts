@@ -6,6 +6,7 @@ import {
   readRuntimeAuthLogoutInputSchema,
   runtimeAuthLoginInputSchema,
   runtimeAuthLogoutInputSchema,
+  runtimeAuthStatusReadInputSchema,
   startRuntimeAuthLoginInputSchema,
   submitRuntimeAuthCodeInputSchema,
 } from "./runtime-auth.schemas";
@@ -33,6 +34,18 @@ export const cancelRuntimeAuthLogin = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     return userRuntimeAuth(db).cancelLogin({ userId: user.id, workspaceId }, data);
+  });
+
+/**
+ * Asks the Computer to read one runtime's login status again, as its page opens: it may have been
+ * signed in or out on the Computer itself. The report arrives on the caller's own channel.
+ */
+export const requestRuntimeAuthStatus = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(runtimeAuthStatusReadInputSchema)
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    return userRuntimeAuth(db).requestStatusRead({ userId: user.id, workspaceId }, data);
   });
 
 /** The caller's login as it stands: what a page opened or reconnected mid-login missed. */

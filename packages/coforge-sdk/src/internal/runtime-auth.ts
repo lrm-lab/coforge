@@ -25,6 +25,8 @@ export const RUNTIME_AUTH_INTENT_METHOD = RPC_METHODS.daemonRuntimeAuthIntent;
 export const RUNTIME_AUTH_LOGIN_REPORT_METHOD = RPC_METHODS.daemonRuntimeAuthLoginReport;
 export const RUNTIME_AUTH_LOGOUT_REPORT_METHOD = RPC_METHODS.daemonRuntimeAuthLogoutReport;
 export const RUNTIME_AUTH_CAPABILITY = "runtime-auth:v1" as const;
+/** The daemon takes `status_read`: a page asks for one runtime's login status to be read again. */
+export const RUNTIME_AUTH_STATUS_READ_CAPABILITY = "runtime-auth:status-read:v1" as const;
 
 export * from "./runtime-auth-kiro";
 export const KIRO_IDENTITY_CENTER_AUTH_CAPABILITY = "runtime-auth:kiro-idc:v1" as const;

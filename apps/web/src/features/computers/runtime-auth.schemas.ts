@@ -32,6 +32,11 @@ export const submitRuntimeAuthCodeInputSchema = z.object({
   code: z.string().min(1).max(4096),
 });
 export const runtimeAuthLoginInputSchema = z.object({ computerId, loginId });
+/** Asking for one runtime's login status to be read again: its page opened. */
+export const runtimeAuthStatusReadInputSchema = z.object({
+  computerId,
+  provider: z.enum(RUNTIME_AUTH_PROVIDERS),
+});
 export const runtimeAuthLogoutInputSchema = z.object({
   computerId,
   provider: z.enum(RUNTIME_AUTH_PROVIDERS),

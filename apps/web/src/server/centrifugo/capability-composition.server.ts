@@ -5,6 +5,7 @@ import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-c
 import { getAgentTurnInterruptCapabilityLease } from "#src/server/agents/agent-turn-interrupt-capability.server";
 import {
   getRuntimeAuthCapabilityLease,
+  getRuntimeAuthStatusReadCapabilityLease,
   getKiroIdentityCenterCapabilityLease,
 } from "#src/server/computers/runtime-auth-capability.server";
 import {
@@ -23,6 +24,7 @@ export function daemonCapabilityLeases() {
     getAppRegistrationNoticeCapabilityLease(),
     getAgentTurnInterruptCapabilityLease(),
     getRuntimeAuthCapabilityLease(),
+    getRuntimeAuthStatusReadCapabilityLease(),
     getKiroIdentityCenterCapabilityLease(),
     getPiChatCapabilityLease(),
     getPiChatControlsLease(),

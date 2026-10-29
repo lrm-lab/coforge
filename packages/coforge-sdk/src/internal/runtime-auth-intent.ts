@@ -26,6 +26,8 @@ export type RuntimeAuthIntent = RuntimeAuthScope &
     | { kind: "login_code"; loginId: string; code: string }
     | { kind: "login_cancel"; loginId: string }
     | { kind: "logout"; requestId: string; provider: RuntimeAuthProvider }
+    /** Read one runtime's login status again and report it, as when its page opens. */
+    | { kind: "status_read"; provider: RuntimeAuthProvider }
   );
 
 function checkIntent(value: RuntimeAuthIntent): RuntimeAuthIntent {
@@ -57,6 +59,8 @@ function checkIntent(value: RuntimeAuthIntent): RuntimeAuthIntent {
         requestId: requestId(value.requestId),
         provider: providerOf(value.provider),
       };
+    case "status_read":
+      return { ...base, kind: "status_read", provider: providerOf(value.provider) };
     default:
       throw new Error("invalid runtime auth intent");
   }
@@ -87,6 +91,11 @@ export function encodeRuntimeAuthIntent(value: RuntimeAuthIntent): Uint8Array {
         return {
           case: "logout" as const,
           value: { requestId: checked.requestId, provider: checked.provider },
+        };
+      case "status_read":
+        return {
+          case: "statusRead" as const,
+          value: { provider: checked.provider },
         };
     }
   })();
@@ -122,6 +131,8 @@ export function decodeRuntimeAuthIntent(bytes: Uint8Array): RuntimeAuthIntent {
       return checkIntent({ ...base, kind: "login_cancel", ...body.value } as RuntimeAuthIntent);
     case "logout":
       return checkIntent({ ...base, kind: "logout", ...body.value } as RuntimeAuthIntent);
+    case "statusRead":
+      return checkIntent({ ...base, kind: "status_read", ...body.value } as RuntimeAuthIntent);
     default:
       throw new Error("invalid runtime auth intent");
   }

@@ -116,6 +116,38 @@ describe("collecting the runtimes' login status", () => {
     ).toEqual(["logged_out", "logged_in"]);
   });
 
+  test("one runtime asked for keeps every other runtime's last status and reads only it", async () => {
+    const signedOut = new Set<string>();
+    const { collector, reports, reads } = subject({
+      installed: ["codex", "kiro"],
+      read: async (provider) => ({
+        provider,
+        state: signedOut.has(provider) ? "logged_out" : "logged_in",
+      }),
+    });
+    await collector.refresh();
+    reads.length = 0;
+    // The runtime was signed out on the Computer; its page opening is what asks for this.
+    signedOut.add("codex");
+    await collector.refreshProvider("codex");
+    expect(reads).toEqual(["codex"]);
+    expect(reports[1]!.runtimes).toEqual([
+      { provider: "claude-code", state: "unavailable", unavailableReason: "not_installed" },
+      { provider: "codex", state: "logged_out" },
+      { provider: "kiro", state: "logged_in" },
+      { provider: "command-code", state: "unavailable", unavailableReason: "not_installed" },
+      { provider: "devin", state: "unavailable", unavailableReason: "not_installed" },
+    ]);
+  });
+
+  test("a runtime asked for before any collection reads every one, so none is missing", async () => {
+    const { collector, reports, reads } = subject({ installed: ["codex"] });
+    await collector.refreshProvider("codex");
+    expect(reads).toEqual(["codex"]);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.runtimes).toHaveLength(5);
+  });
+
   test("a report that fails is not an error for whoever asked", async () => {
     const collector = new RuntimeAuthStatusCollector({
       installedProviders: async () => [],

@@ -2,6 +2,7 @@ import { kiroEnterpriseAuthSupported } from "#src/code-agent/kiro/auth-host";
 import {
   REMINDER_CAPABILITY,
   RUNTIME_AUTH_CAPABILITY,
+  RUNTIME_AUTH_STATUS_READ_CAPABILITY,
   KIRO_IDENTITY_CENTER_AUTH_CAPABILITY,
   APP_CONFIG_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
@@ -28,7 +29,7 @@ export function readyCapabilities(
     APP_CONFIG_CAPABILITY,
     AGENT_TURN_INTERRUPT_CAPABILITY,
     APP_REGISTRATION_NOTICE_CAPABILITY,
-    ...(runtimeAuth ? [RUNTIME_AUTH_CAPABILITY] : []),
+    ...(runtimeAuth ? [RUNTIME_AUTH_CAPABILITY, RUNTIME_AUTH_STATUS_READ_CAPABILITY] : []),
     ...(runtimeAuth && kiroEnterpriseAuthSupported(platform)
       ? [KIRO_IDENTITY_CENTER_AUTH_CAPABILITY]
       : []),
