@@ -140,7 +140,9 @@ export function formatReadWindow(
   if (taskHint) lines.push(taskHint);
   lines.push("");
 
-  const includeReplyTarget = !isThreadTarget(target);
+  // An attachment takes top-level comments only, so naming a reply target there would point an
+  // Agent at a send that is refused.
+  const includeReplyTarget = !isThreadTarget(target) && !target.startsWith("attachment:");
   messages.forEach((message, index) => {
     const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
     lines.push(

@@ -232,6 +232,14 @@ test("formatReadWindow omits replyTarget when the target is already a thread tar
   expect(output).not.toContain("replyTarget=");
 });
 
+test("formatReadWindow omits replyTarget for an attachment, which takes no replies", () => {
+  const output = formatReadWindow("attachment:11111111-0000-4000-8000-000000000001", {
+    messages: [message()],
+  });
+  expect(output).toContain("] @ada: hello there");
+  expect(output).not.toContain("replyTarget=");
+});
+
 test("formatReadWindow reports an empty window with nothing else", () => {
   expect(formatReadWindow("#general", { messages: [] })).toBe("No messages in #general.");
 });

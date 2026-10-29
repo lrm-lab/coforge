@@ -183,9 +183,8 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads a f
     ).toBe(false);
     const before = await cli(["message", "read", "--target", f.target, "--unread"]);
     expect(before).toContain("Please review this file");
-    // The generic message line still names the thread a message sits in; replies to it are
-    // refused above.
-    expect(before).toContain(`replyTarget=${f.target}:${comment.id.slice(0, 13)}`);
+    // No reply hint on an attachment: replies to a comment are refused above.
+    expect(before).not.toContain("replyTarget=");
     expect(before).toContain("Coverage: top-level messages");
     const target = `${f.target}:${comment.id.slice(0, 13)}`;
     // Reading one comment's thread is still allowed (it is empty: the Web has no replies); only
