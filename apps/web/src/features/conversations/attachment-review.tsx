@@ -11,6 +11,7 @@ import type { AnchorSurface, Anchoring } from "./attachment-anchoring";
 import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { AttachmentCommentsPane } from "./attachment-comments";
 import { AttachmentPreview } from "./attachment-preview";
+import type { VideoHandoff, VideoPlace, VideoStart } from "./video-handoff";
 import {
   TEXT_PREVIEW_MAX_BYTES,
   isTextPreviewKind,
@@ -43,10 +44,18 @@ type ReviewFile = {
 export function AttachmentReviewDialog({
   file,
   children,
+  videoHandoff,
 }: {
   file: ReviewFile;
   children: (state: { loading: boolean }) => ReactNode;
+  /** A video's player in the message: the preview carries on from its place, and back. */
+  videoHandoff?: VideoHandoff;
 }) {
+  // Where the message's player was as the preview opened, and where the preview's is now: closing
+  // hands that back, or the start again if the preview never got going (closed before it loaded,
+  // or failed).
+  const [videoStart, setVideoStart] = useState<VideoStart>();
+  const videoPlace = useRef<VideoPlace | undefined>(undefined);
   // A preview opens on the file alone; on an HTML page showing the comments also marks regions.
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [commentsOnPhone, setCommentsOnPhone] = useState(false);
@@ -86,12 +95,19 @@ export function AttachmentReviewDialog({
     if (!next) {
       setOpen(false);
       setPendingAnchor(null);
+      const place = videoPlace.current ?? videoStart?.place;
+      if (place) videoHandoff?.give(place);
       return;
     }
     // A file found to have no preview after all (past the limit, or no text) downloads instead,
     // as one without a preview does from its card.
     if (read === "too-large" || read === "unavailable") return download(`${href}?download`);
-    if (!isTextPreviewKind(kind) || read !== undefined) return setOpen(true);
+    if (!isTextPreviewKind(kind) || read !== undefined) {
+      // Only an opening preview takes the message's player's place (and pauses it).
+      videoPlace.current = undefined;
+      setVideoStart(videoHandoff?.take());
+      return setOpen(true);
+    }
     if (loading) return;
     setLoading(true);
     const controller = new AbortController();
@@ -200,6 +216,8 @@ export function AttachmentReviewDialog({
                         anchoring={anchoring}
                         commentsOpen={commentsExpanded}
                         pendingAnchor={pendingAnchor}
+                        videoStart={videoStart}
+                        onVideoPlace={(place) => (videoPlace.current = place)}
                       />
                     ) : (
                       <Empty>

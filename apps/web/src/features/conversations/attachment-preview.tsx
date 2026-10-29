@@ -10,6 +10,7 @@ import { LinesPreview, MarkdownPreview } from "./anchored-previews";
 import { CsvPreview } from "./csv-preview";
 import { HtmlRegionPreview } from "./html-region-preview";
 import { VideoPreview } from "./video-preview";
+import type { VideoPlace, VideoStart } from "./video-handoff";
 
 function PreviewStatus({
   state,
@@ -66,6 +67,8 @@ export function AttachmentPreview({
   anchoring,
   commentsOpen,
   pendingAnchor,
+  videoStart,
+  onVideoPlace,
 }: {
   fileName: string;
   kind: AttachmentPreviewKind;
@@ -81,6 +84,9 @@ export function AttachmentPreview({
   commentsOpen?: boolean;
   /** The place the next comment is about: a video offers its time while it has none. */
   pendingAnchor?: AttachmentCommentAnchor | null;
+  /** Where a video carries on from, and who hears its place as it moves (`VideoHandoff`). */
+  videoStart?: VideoStart;
+  onVideoPlace?: (place: VideoPlace) => void;
 }) {
   if (kind === "pdf")
     return previewUrl ? (
@@ -98,6 +104,8 @@ export function AttachmentPreview({
         anchoring={anchoring}
         commentsOpen={commentsOpen}
         pendingAnchor={pendingAnchor}
+        videoStart={videoStart}
+        onVideoPlace={onVideoPlace}
       />
     );
   if (text === undefined)
@@ -186,8 +194,13 @@ function MediaPreview({
   anchoring?: Anchoring;
   commentsOpen?: boolean;
   pendingAnchor?: AttachmentCommentAnchor | null;
+  videoStart?: VideoStart;
+  onVideoPlace?: (place: VideoPlace) => void;
 }) {
-  const source = useMediaSource({ fileName, href, previewUrl });
+  // The copy the message's player holds is played as it is, not read again.
+  const shared = comments.videoStart?.src;
+  const read = useMediaSource({ fileName, href, previewUrl, enabled: !shared });
+  const source: typeof read = shared ? { status: "ready", src: shared } : read;
   const [onFallback, setOnFallback] = useState(false);
   const [failed, setFailed] = useState(false);
   if (source.status !== "ready") return <PreviewStatus state={source} href={href} />;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download01, Expand01, RefreshCw01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -11,6 +11,7 @@ import { InlineVideoPlayer } from "./inline-video-player";
 import { InlineVideoSpinner } from "./inline-video-spinner";
 import { useMediaSource } from "./media-source";
 import type { MessageView } from "./message-view";
+import { placeOf, resumeAt, type VideoHandoff } from "./video-handoff";
 
 type Attachment = MessageView["attachments"][number];
 
@@ -23,7 +24,8 @@ const LOAD_MARGIN = "160px";
  * `LOAD_MARGIN` of the screen; a spinner holds its box until the video is known. A file the
  * browser cannot play, or one that failed to load, says so in its box and offers the download (and
  * a retry for a failed load). The top-right button opens the attachment's preview with its
- * comments, as the file card does. `href` is the authenticated attachment route.
+ * comments, as the file card does, carrying on from where this player is (`VideoHandoff`).
+ * `href` is the authenticated attachment route.
  */
 export function InlineVideo({ attachment, href }: { attachment: Attachment; href: string }) {
   const [watchNear, nearNow] = useNearViewport(true, LOAD_MARGIN);
@@ -41,6 +43,26 @@ export function InlineVideo({ attachment, href }: { attachment: Attachment; href
     attempt,
   });
   const shownFailure = failure ?? (source.status === "error" ? "failed" : undefined);
+  const video = useRef<HTMLVideoElement | null>(null);
+  // Without delivery the player holds the whole file in memory: the preview plays that copy.
+  const heldCopy = useRef<string | undefined>(undefined);
+  heldCopy.current = !attachment.previewUrl && source.status === "ready" ? source.src : undefined;
+  // The preview carries on from here, and this player from where the preview left off.
+  const handoff = useMemo<VideoHandoff>(
+    () => ({
+      take() {
+        const element = video.current;
+        if (!element) return undefined;
+        const place = placeOf(element);
+        element.pause();
+        return { place, src: heldCopy.current };
+      },
+      give(place) {
+        if (video.current) resumeAt(video.current, place);
+      },
+    }),
+    [],
+  );
   const retry = () => {
     setFailure(undefined);
     setAttempt((count) => count + 1);
@@ -64,11 +86,12 @@ export function InlineVideo({ attachment, href }: { attachment: Attachment; href
           label={attachment.fileName}
           onSize={setSize}
           onFailed={setFailure}
+          videoRef={video}
         />
       ) : (
         <InlineVideoSpinner />
       )}
-      <AttachmentReviewDialog file={attachment}>
+      <AttachmentReviewDialog file={attachment} videoHandoff={handoff}>
         {() => (
           <ButtonUtility
             icon={Expand01}

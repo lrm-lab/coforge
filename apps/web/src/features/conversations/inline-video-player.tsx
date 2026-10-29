@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
 
 import { joinExclusivePlayback } from "./inline-video-exclusive";
 import { inlineVideoErrorOutcome } from "./inline-video-playback";
@@ -18,14 +18,18 @@ export function InlineVideoPlayer({
   label,
   onSize,
   onFailed,
+  videoRef,
 }: {
   src: string;
   fallbackSrc?: string;
   label: string;
   onSize: (size: { width: number; height: number }) => void;
   onFailed: (outcome: "unsupported" | "failed") => void;
+  /** The element, for the preview to take its place from (`VideoHandoff`). */
+  videoRef?: RefObject<HTMLVideoElement | null>;
 }) {
-  const video = useRef<HTMLVideoElement>(null);
+  const ownRef = useRef<HTMLVideoElement>(null);
+  const video = videoRef ?? ownRef;
   const [onFallback, setOnFallback] = useState(false);
   const [shown, setShown] = useState(false);
   const metadataLoaded = useRef(false);

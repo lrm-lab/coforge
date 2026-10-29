@@ -14,5 +14,10 @@ Part of [Conversations UI](AGENTS.md).
   it was. Without delivery the whole file is read through the route, up to 50 MB; a larger one is a
   file card. A file the browser cannot read says so and offers the download; a failed load offers a
   retry too (`inlineVideoErrorOutcome`). A tap on the player never opens the message's action sheet.
+- Expanding a video carries on in the preview from where the message's player was, playing if it
+  played, and closing the preview carries its place back (`video-handoff.ts`, task #284; Telegram
+  does the same). Both stream the same signed URL, which the CDN serves as `private, max-age=1800`,
+  so the browser reuses what it already read; a file held in memory (no delivery) is handed over
+  as it is rather than read again.
 - Videos are not transcoded: an MP4 whose index sits at its end (no faststart) still plays, only
   starts later.

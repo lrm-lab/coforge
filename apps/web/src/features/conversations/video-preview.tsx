@@ -6,6 +6,7 @@ import { m } from "#src/paraglide/messages";
 import type { Anchoring } from "./attachment-anchoring";
 import { videoTimeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { joinExclusivePlayback } from "./inline-video-exclusive";
+import { resumeAt, type VideoPlace, type VideoStart } from "./video-handoff";
 
 /** The events after which the video's paused state or time may read differently. */
 const PLAYBACK_EVENTS = ["loadedmetadata", "timeupdate", "pause", "play", "seeked", "ended"];
@@ -24,6 +25,8 @@ export function VideoPreview({
   anchoring,
   commentsOpen,
   pendingAnchor,
+  videoStart,
+  onVideoPlace,
 }: {
   fileName: string;
   src: string;
@@ -31,8 +34,15 @@ export function VideoPreview({
   anchoring?: Anchoring;
   commentsOpen?: boolean;
   pendingAnchor?: AttachmentCommentAnchor | null;
+  /** Where the message's player was: the preview carries on from there (`VideoHandoff`). */
+  videoStart?: VideoStart;
+  /** Hears the preview's place as it moves, for the message's player to carry on from. */
+  onVideoPlace?: (place: VideoPlace) => void;
 }) {
   const video = useRef<HTMLVideoElement | null>(null);
+  // Read when the element arrives and as it plays, not again on each render.
+  const handoff = useRef({ videoStart, onVideoPlace });
+  handoff.current.onVideoPlace = onVideoPlace;
   const [playback, setPlayback] = useState({ paused: true, time: 0 });
   const beside = useBreakpoint("lg");
   const commenting = Boolean(anchoring && commentsOpen && beside);
@@ -48,8 +58,13 @@ export function VideoPreview({
     video.current = element;
     if (!element) return;
     const leave = joinExclusivePlayback(element);
-    const read = () =>
-      setPlayback({ paused: element.paused || element.ended, time: element.currentTime });
+    const start = handoff.current.videoStart?.place;
+    if (start) resumeAt(element, start);
+    const read = () => {
+      const paused = element.paused || element.ended;
+      setPlayback({ paused, time: element.currentTime });
+      handoff.current.onVideoPlace?.({ time: element.currentTime, playing: !paused });
+    };
     for (const type of PLAYBACK_EVENTS) element.addEventListener(type, read);
     return () => {
       for (const type of PLAYBACK_EVENTS) element.removeEventListener(type, read);
