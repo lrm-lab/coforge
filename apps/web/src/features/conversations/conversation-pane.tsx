@@ -231,11 +231,10 @@ export function ConversationPane({
   const [newerCommit, setNewerCommit] = useState(0);
   const appliedNewerCommitRef = useRef(0);
   // The initial position and divider are captured once per conversation or thread open.
-  const { firstUnread, openBoundary } = useConversationOpenBoundary(
-    conversation.messages,
-    conversation.readThroughSequence,
-    conversation.conversationId,
+  const { boundary: openBoundary, openKey } = useConversationOpenBoundary(
+    conversation,
     root?.id,
+    followingLatest,
   );
   const lastSequence = conversation.messages.at(-1)?.sequence;
   const firstSequence = conversation.messages[0]?.sequence;
@@ -322,7 +321,7 @@ export function ConversationPane({
     const firstRender = previousConversationIdRef.current === undefined;
     const changedConversation =
       previousConversationIdRef.current !== undefined &&
-      previousConversationIdRef.current !== conversation.conversationId;
+      previousConversationIdRef.current !== openKey;
     const previousLastSequence = previousLastSequenceRef.current;
     const receivedMessageCount =
       previousLastSequence === undefined
@@ -330,7 +329,7 @@ export function ConversationPane({
         : conversation.messages.filter(
             (message) => !isOwn(message) && message.sequence > previousLastSequence,
           ).length;
-    previousConversationIdRef.current = conversation.conversationId;
+    previousConversationIdRef.current = openKey;
     previousLastSequenceRef.current = lastSequence;
     if (firstRender || changedConversation || followingLatestRef.current) {
       setNewMessageCount(0);
@@ -345,7 +344,7 @@ export function ConversationPane({
         setFollowingLatest(false);
         return undefined;
       }
-      const openMessageId = opening ? conversationOpenPosition(firstUnread) : undefined;
+      const openMessageId = opening ? conversationOpenPosition(openBoundary) : undefined;
       if (openMessageId && !window.location.hash) {
         if (conversation.messages.some((message) => message.id === openMessageId)) {
           setFollowingLatest(false);
@@ -362,7 +361,7 @@ export function ConversationPane({
       setNewMessageCount((count) => count + receivedMessageCount);
     }
     return undefined;
-  }, [conversation.conversationId, lastSequence]);
+  }, [openKey, lastSequence]);
 
   useLayoutEffect(() => {
     const history = historyRef.current;

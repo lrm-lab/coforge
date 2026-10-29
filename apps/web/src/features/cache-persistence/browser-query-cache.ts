@@ -61,6 +61,12 @@ export function restoredReadFailures(queryClient: QueryClient, queryKey: readonl
   return installed.get(queryClient)?.restoredReadFailures(queryKey) ?? 0;
 }
 
+/** Whether the query `queryKey` shows its restored copy still, its own read not yet landed
+ * (`followRestoredReads`); always false where nothing is kept. */
+export function awaitingRestoredRead(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  return installed.get(queryClient)?.awaitingRestoredRead(queryKey) ?? false;
+}
+
 export function subscribeRestoredReads(queryClient: QueryClient, listener: () => void) {
   return installed.get(queryClient)?.subscribeRestoredReads(listener) ?? (() => {});
 }

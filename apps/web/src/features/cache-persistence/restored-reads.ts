@@ -39,8 +39,12 @@ export function followRestoredReads(
     events?: Pick<Window, "addEventListener">;
   } = {},
 ) {
-  /** Restored queries whose own read has not succeeded yet, with its failures in a row. */
-  const awaiting = new Map<string, { failures: number; timer?: ReturnType<typeof setTimeout> }>();
+  /** Restored queries whose own read has not succeeded yet, with its failures in a row; `restoring`
+   * until that read is asked for (a success before it is the restore's own, not a read). */
+  const awaiting = new Map<
+    string,
+    { failures: number; restoring?: boolean; timer?: ReturnType<typeof setTimeout> }
+  >();
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
   const read = (queryKey: QueryKey) =>
@@ -50,7 +54,7 @@ export function followRestoredReads(
     if (!entry) return;
     clearTimeout(entry.timer);
     awaiting.delete(queryHash);
-    if (entry.failures) notify();
+    notify();
   };
   queryClient.getQueryCache().subscribe((event) => {
     const { queryHash } = event.query;
@@ -60,6 +64,7 @@ export function followRestoredReads(
     if (!entry) return;
     const { action } = event;
     if (action.type === "success" && !action.manual) {
+      if (entry.restoring) return;
       if (!event.query.state.fetchMeta?.fetchMore) return settle(queryHash);
       notifyManager.schedule(() => read(event.query.queryKey));
     } else if (action.type === "error") {
@@ -92,15 +97,21 @@ export function followRestoredReads(
     /** `query` took its restored copy as its result (which clears the invalidation): mark it so
      * its own read follows. */
     restored(query: Query) {
+      // Awaited from now, before the page renders the copy: it must not read as the newest.
+      const entry = awaiting.get(query.queryHash) ?? { failures: 0 };
+      entry.restoring = true;
+      awaiting.set(query.queryHash, entry);
       notifyManager.schedule(() => {
-        if (!awaiting.has(query.queryHash)) awaiting.set(query.queryHash, { failures: 0 });
+        entry.restoring = false;
         read(query.queryKey);
       });
     },
+    /** Whether the restored query `queryHash` is still waiting for a read of its own to succeed. */
+    awaiting: (queryHash: string) => awaiting.has(queryHash),
     /** How many reads of the restored query `queryHash` failed in a row; 0 once one succeeded, or
      * for a query that was not restored. */
     failures: (queryHash: string) => awaiting.get(queryHash)?.failures ?? 0,
-    /** Called whenever `failures` may have changed. */
+    /** Called whenever `failures` or `awaiting` may have changed. */
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => void listeners.delete(listener);

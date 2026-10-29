@@ -95,3 +95,17 @@ test("a query read successfully once is no longer followed", async () => {
   await tick(2);
   expect(page.reads()).toBe(1);
 });
+
+test("a restored query is awaited from the moment it is restored until its read lands", async () => {
+  const page = setup();
+  const hash = page.queryClient.getQueryCache().find({ queryKey: KEY })!.queryHash;
+  let heard = 0;
+  page.restoredReads.subscribe(() => (heard += 1));
+  // Before the read is even asked for: the page renders the copy now, and must not take it as new.
+  expect(page.restoredReads.awaiting(hash)).toBe(true);
+  await tick(5);
+  expect(page.data()).toBe("newest");
+  expect(page.restoredReads.awaiting(hash)).toBe(false);
+  // A read that lands at once is heard too, not only one that failed first.
+  expect(heard).toBe(1);
+});

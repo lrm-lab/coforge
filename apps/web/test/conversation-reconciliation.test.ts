@@ -190,3 +190,26 @@ test("a call made as a read ends is not lost", async () => {
   await wait(5);
   expect(reads).toBe(2);
 });
+
+test("an open is caught up only once a read has landed, after what it read was merged", async () => {
+  let reads = 0;
+  const heard: boolean[] = [];
+  const reconciler = createConversationReconciler(
+    { afterSequence: 5 },
+    () => (++reads === 1 ? timeout() : Promise.resolve(arrived)),
+    () => heard.push(reconciler.caughtUp()),
+    fast,
+  );
+  reconciler.subscribe(() => heard.push(reconciler.caughtUp()));
+
+  // The unread divider waits on this (task #276): a failed read has not caught anything up.
+  await reconciler.reconcile();
+  expect(reconciler.caughtUp()).toBe(false);
+  await wait(30);
+
+  // The merge is seen while still not caught up, so the divider can land on what it brought.
+  expect(heard).toEqual([false, true]);
+  // Heard once: a later read merges as caught up, and no one is told again.
+  await reconciler.reconcile();
+  expect(heard).toEqual([false, true, true]);
+});

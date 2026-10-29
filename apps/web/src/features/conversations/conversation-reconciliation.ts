@@ -35,6 +35,8 @@ export function createConversationReconciler<T extends ConversationMessage>(
   let active: Promise<void> | undefined;
   let reading: AbortController | undefined;
   let failures = 0;
+  let caughtUp = false;
+  const listeners = new Set<() => void>();
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const readToTheEnd = async (signal: AbortSignal) => {
@@ -60,6 +62,10 @@ export function createConversationReconciler<T extends ConversationMessage>(
       try {
         await readToTheEnd(controller.signal);
         failures = 0;
+        if (!caughtUp) {
+          caughtUp = true;
+          listeners.forEach((listener) => listener());
+        }
       } catch (error) {
         // Abandoned by a restart, which asked for the read that follows, or by `stop`.
         if (controller.signal.aborted) continue;
@@ -89,6 +95,13 @@ export function createConversationReconciler<T extends ConversationMessage>(
     }));
 
   return {
+    /** Whether a read has caught the conversation up since this reconciler started (its open). */
+    caughtUp: () => caughtUp,
+    /** Called when `caughtUp` turns true. */
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
     /**
      * The window read past the cursor by itself (its own refetch), so what it holds is not read
      * again. It only moves forward: a window that slid back into history does not move it back.

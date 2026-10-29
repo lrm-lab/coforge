@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import {
   queryOptions,
   useQueryClient,
@@ -60,6 +60,12 @@ export const directConversationQuery = (conversationId: string) =>
 export const publicChannelQuery = (channelId: string) =>
   conversationPages(["conversation", "channel", channelId], (page, signal) =>
     loadPublicChannel({ data: { channelId, ...page }, signal }),
+  );
+
+/** The kept windows a conversation may have: a channel's or a DM's, whichever it is. */
+export const conversationWindowKeys = (conversationId: string) =>
+  [publicChannelQuery, directConversationQuery].map(
+    (query) => query(conversationId).query.queryKey,
   );
 
 /** The window an around read answers, without `anchorThreadRootId`, which only its caller needs:
@@ -279,6 +285,9 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     [conversationId],
   );
   useEffect(() => reconciliation.stop, [reconciliation]);
+  // Whether this open has read what arrived since the window was last read (the divider waits).
+  const caughtUp = useSyncExternalStore(reconciliation.subscribe, reconciliation.caughtUp);
+  const shown = useMemo(() => ({ ...conversation, caughtUp }), [conversation, caughtUp]);
   // The window's own network read moves the reconciler past what it holds (see `advance`); the
   // page's own writes to the window (a sent message merged in) do not, since messages from others
   // that arrived before it may still be unread.
@@ -384,7 +393,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   };
 
   return {
-    conversation,
+    conversation: shown,
     reconciliation,
     mergeUpdates,
     /** Tell refetch whether replacing the retained window with the newest page may discard rows. */
