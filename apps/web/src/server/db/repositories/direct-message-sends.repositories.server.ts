@@ -1,9 +1,7 @@
 import { deliveryTarget } from "./direct-conversation-agent-message.server";
-import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { assertAgentDmWithinLimits } from "#src/server/conversations/agent-dm-limits.server";
-import { humanRef, liveAgentPeer, peerSeatTarget } from "./agent-peer-direct.repositories.server";
+import { liveAgentPeer, peerSeatTarget } from "./agent-peer-direct.repositories.server";
 import { resolveMessage, type DirectConversationPorts } from "./agent-targets.repositories.server";
-import { isAppBot } from "#src/features/agents/agent-system-kind";
 import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
@@ -17,6 +15,8 @@ import {
   storeMessageBody,
 } from "#src/server/conversations/message-references.server";
 import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
+import { joinChannelAsAgentIn } from "#src/server/conversations/agent-channel-join.server";
+import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import {
   recordPendingMentionActions,
   unboundMentionTargets,
@@ -25,164 +25,7 @@ import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
-import {
-  attachmentView,
-  ATTACHMENT_VIEW_SELECT,
-  type AttachmentViewRow,
-} from "#src/server/attachments/attachment-view.server";
 import type { AgentMentionBinding } from "./direct-conversation-types.server";
-
-export async function sendMessage(
-  ports: DirectConversationPorts,
-  conversationId: string,
-  senderMemberId: string,
-  senderUserId: string,
-  body: string,
-  attachmentIds?: string[],
-  threadRootId?: string,
-  withinSend?: SentMessageHook,
-) {
-  // The thread-root read needs only the conversation id, so it runs beside the member load.
-  const [conversation, root] = await Promise.all([
-    ports.db.conversation.findUnique({
-      where: { id: conversationId },
-      select: {
-        workspaceId: true,
-        members: {
-          select: {
-            id: true,
-            userId: true,
-            agentId: true,
-            user: { select: { username: true, description: true } },
-            agent: {
-              select: {
-                name: true,
-                computerId: true,
-                ownerId: true,
-                visibility: true,
-                systemKind: true,
-              },
-            },
-          },
-        },
-      },
-    }),
-    threadRootId ? resolveMessage(ports, conversationId, threadRootId, true) : undefined,
-  ]);
-  if (!conversation) throw new Error("conversation not found");
-  const sender = conversation.members.find(
-    (member) => member.id === senderMemberId && member.userId === senderUserId,
-  );
-  const agents = conversation.members.filter((member) => member.agentId !== null);
-  if (!sender) throw new Error("sender is not a conversation member");
-  if (conversation.members.length !== 2 || agents.length !== 1 || !agents[0]?.agentId)
-    throw new Error("only User-Agent direct conversations are supported");
-  // A private Agent's direct conversation stays scoped to its own creator: once it
-  // goes private, an existing DM held by anyone else stops accepting new messages, though its
-  // history stays readable.
-  if (agents[0].agent && !canDirectMessageAgent(senderUserId, agents[0].agent))
-    throw new AppError("AGENT_DM_RESTRICTED");
-  const message = await ports.db.$transaction(async (tx) => {
-    const sequence = await allocateSequence(tx, conversationId);
-    // Validated before the message exists, then linked (messageId + position) once it does; see
-    // the multi-attachment transaction pattern shared by every send path in this file.
-    const requestedAttachmentIds = attachmentIds ?? [];
-    const availableAttachments = requestedAttachmentIds.length
-      ? await tx.attachment.findMany({
-          where: {
-            id: { in: [...new Set(requestedAttachmentIds)] },
-            conversationId,
-            workspaceId: conversation.workspaceId,
-            uploaderId: senderUserId,
-            messageId: null,
-          },
-          select: ATTACHMENT_VIEW_SELECT,
-        })
-      : [];
-    const attachmentsById = new Map(
-      availableAttachments.map((attachment) => [attachment.id, attachment]),
-    );
-    const attachments: AttachmentViewRow[] = [];
-    for (const attachmentId of requestedAttachmentIds) {
-      const attachment = attachmentsById.get(attachmentId);
-      if (!attachment) throw new Error("attachment is not available for this message");
-      attachments.push(attachment);
-    }
-    // A DM keeps plain `@handle` text (no mention targets), but its task and channel
-    // references are stored as tokens like every other conversation's.
-    const stored = await storeMessageBody(
-      tx,
-      { workspaceId: conversation.workspaceId, conversationId },
-      body,
-      { targets: [] },
-    );
-    const created = await tx.message.create({
-      data: {
-        conversationId,
-        workspaceId: conversation.workspaceId,
-        senderMemberId,
-        threadRootId: root?.id,
-        body: stored.body,
-        sequence,
-        deliveries: {
-          create: {
-            workspaceId: conversation.workspaceId,
-            conversationId,
-            agentId: agents[0]!.agentId!,
-            sequence,
-          },
-        },
-      },
-      select: {
-        id: true,
-        body: true,
-        createdAt: true,
-        sequence: true,
-        // Carried so the browser signal can exclude thread replies from channel unread.
-        threadRootId: true,
-        deliveries: { select: { deliveryId: true } },
-      },
-    });
-    await Promise.all(
-      attachments.map((attachment, position) =>
-        tx.attachment.update({
-          where: { id: attachment.id },
-          data: { messageId: created.id, position },
-        }),
-      ),
-    );
-    await withinSend?.(tx, {
-      id: created.id,
-      conversationId,
-      workspaceId: conversation.workspaceId,
-      body: created.body,
-      senderMemberId,
-      threadRootId: created.threadRootId,
-    });
-    return { ...created, attachments };
-  });
-  const senderIdentity = agentMessageSender({ agentId: null, agent: null, user: sender.user });
-  const senderRef = await humanRef(
-    ports.db,
-    conversation.workspaceId,
-    agents[0].agentId,
-    senderIdentity.handle,
-  );
-  return {
-    ...message,
-    deliveryId: message.deliveries[0]!.deliveryId,
-    workspaceId: conversation.workspaceId,
-    agentId: agents[0].agentId,
-    computerId: agents[0].agent?.computerId ?? undefined,
-    appBot: isAppBot(agents[0].agent),
-    target: `@${agents[0].agent?.name ?? "unknown"}`,
-    latestSenderKind: senderIdentity.kind,
-    latestSenderHandle: senderIdentity.handle,
-    latestSenderDescription: senderIdentity.description,
-    deliveryTarget: deliveryTarget(senderRef, root?.id),
-    attachments: message.attachments.map((attachment) => attachmentView(attachment)),
-  };
-}
 
 export async function sendAgentMessage(
   ports: DirectConversationPorts,
@@ -193,6 +36,10 @@ export async function sendAgentMessage(
   threadRootId?: string,
   mentions?: readonly AgentMentionBinding[],
   memoryHintId?: string,
+  /** A channel send may join the channel first: the Agent's membership lands in this send's
+   * transaction (with the same `channel.member_added` recording `channel join` makes), so a
+   * failed send leaves none. The caller limits it to channels the Agent could join anyway. */
+  joinChannel?: boolean,
 ) {
   const conversation = await ports.db.conversation.findUnique({
     where: { id: conversationId },
@@ -253,9 +100,12 @@ export async function sendAgentMessage(
       }
     }
   }
-  // Between two Agents the other is the recipient, while live.
-  if (!sender || (!conversation.channelName && !(agentPeer ? peer : user)))
-    throw new AgentSendRejectedError(403, "agent is not a conversation member");
+  // Between two Agents the other is the recipient, while live. A channel send that joins on the
+  // way keeps its missing `sender` for the transaction below instead of refusing here.
+  const joining = joinChannel === true && !sender && conversation.channelName !== null;
+  if (!sender || (!conversation.channelName && !(agentPeer ? peer : user))) {
+    if (!joining) throw new AgentSendRejectedError(403, "agent is not a conversation member");
+  }
   // A private Agent's own outbound DM is just as read-only as the human side of it
   // ("neither side can send"). Channels are unaffected — a private Agent is never a channel
   // member in the first place, so this only ever narrows the direct-conversation case.
@@ -287,6 +137,23 @@ export async function sendAgentMessage(
     },
   } satisfies Prisma.MessageSelect;
   const result = await ports.db.$transaction(async (tx) => {
+    if (joining) {
+      // Read the archive state inside the transaction, so a channel archived since the send's
+      // resolution still refuses, taking the membership with it.
+      const state = await tx.conversation.findUniqueOrThrow({
+        where: { id: conversationId },
+        select: { archivedAt: true },
+      });
+      if (state.archivedAt) throw new AppError("CONFLICT");
+      await joinChannelAsAgentIn(tx, conversation.workspaceId, conversationId, agentId);
+      sender = await tx.conversationMember.findFirstOrThrow({
+        where: { conversationId, agentId, ...ACTIVE_MEMBER_WHERE },
+        include: {
+          agent: MESSAGE_SENDER_SELECT.select.agent,
+          user: MESSAGE_SENDER_SELECT.select.user,
+        },
+      });
+    }
     let hint;
     if (memoryHintId) {
       await tx.$queryRaw`SELECT id FROM memory_hint_records
@@ -304,6 +171,7 @@ export async function sendAgentMessage(
         return { ...existing, attachments: [] };
       }
     }
+    if (!sender) throw new AgentSendRejectedError(403, "agent is not a conversation member");
     const sequence = await allocateSequence(tx, conversationId);
     if (peer)
       await assertAgentDmWithinLimits(tx, {
@@ -473,10 +341,12 @@ export async function sendAgentMessage(
     );
     return { ...created, attachments };
   });
-  // Never falls back to the internal Agent id: a missing name fails loudly.
-  const senderIdentity = agentMessageSender({ agentId, agent: sender.agent, user: null });
+  // Never falls back to the internal Agent id: a missing name fails loudly. A joining send's
+  // `sender` came from the transaction above; the throws before it keep it non-null here.
+  const senderIdentity = agentMessageSender({ agentId, agent: sender!.agent, user: null });
   return {
     ...result,
+    joinedChannel: joining ? `#${conversation.channelName}` : undefined,
     // Agent-originated messages must never be enqueued back to the sender.
     deliveryId: undefined,
     workspaceId: conversation.workspaceId,

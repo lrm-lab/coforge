@@ -361,7 +361,8 @@ export function agentMessagesPostDependencies(db: PrismaClient) {
       target: string;
     }) => {
       try {
-        const conversation = await repository.getAgentChannel(workspaceId, agentId, target);
+        // The send path's channel: the offer check covers a channel the send would join too.
+        const conversation = await repository.getAgentSendChannel(workspaceId, agentId, target);
         return explicitMemoryQuestionRequiresOffer(
           db,
           { workspaceId, agentId, conversationId: conversation.id },

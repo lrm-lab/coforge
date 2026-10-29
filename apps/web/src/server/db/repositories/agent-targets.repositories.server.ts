@@ -43,6 +43,13 @@ export type DirectConversationPorts = {
     agentId: string,
     target: string,
   ) => Promise<{ id: string }>;
+  /** The send path's channel: the Agent's channel, or one it can still join on the way to
+   * posting (`needsJoin` — the send's own transaction writes the membership). */
+  getAgentSendChannel?: (
+    workspaceId: string,
+    agentId: string,
+    target: string,
+  ) => Promise<{ id: string; channelName?: string | null; needsJoin: boolean }>;
   findUserAgentConversation(
     workspaceId: string,
     userId: string,
@@ -235,6 +242,7 @@ async function resolveAgentPostTarget(
     target,
     directConversation,
     peerConversation,
+    true,
   );
 }
 
@@ -245,13 +253,19 @@ async function resolveAgentTargetUsing(
   target: string,
   directConversation: (userId: string) => Promise<{ id: string }>,
   peerConversation: (peerAgentId: string) => Promise<{ id: string }>,
+  /** A send (or a send's reads) resolves a channel the Agent may still join; other reads keep
+   * the member-only lookup. */
+  sendTarget = false,
 ): Promise<ResolvedAgentTarget> {
   const resolved = await resolveAgentConversationTarget({
     db: ports.db,
     workspaceId,
     agentId,
     target,
-    getChannel: (parentTarget) => ports.getAgentChannel(workspaceId, agentId, parentTarget),
+    getChannel: (parentTarget) =>
+      sendTarget
+        ? (ports.getAgentSendChannel ?? ports.getAgentChannel)(workspaceId, agentId, parentTarget)
+        : ports.getAgentChannel(workspaceId, agentId, parentTarget),
     directConversation,
     peerConversation,
   });

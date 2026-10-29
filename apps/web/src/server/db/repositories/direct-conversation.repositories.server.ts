@@ -42,8 +42,12 @@ import {
 } from "./agent-peer-direct.repositories.server";
 import { type PrismaClient } from "#src/generated/prisma/client";
 import { userIdOfUsernameTarget } from "./public-user-target.repositories.server";
-import { sendAgentMessage, sendMessage } from "./direct-message-sends.repositories.server";
-import { getAgentChannel } from "#src/server/conversations/channel-access.server";
+import { sendMessage } from "./direct-message-send.repositories.server";
+import { sendAgentMessage } from "./direct-message-sends.repositories.server";
+import {
+  getAgentChannel,
+  getAgentSendChannel,
+} from "#src/server/conversations/channel-access.server";
 import { type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
 import { type ConversationReadRealtimePort } from "./agent-read-groups.repositories.server";
@@ -76,6 +80,11 @@ export type {
 export class PrismaDirectConversationRepository implements DirectConversationRepository {
   /** Channel lookups this instance has made, kept only when it serves a single request. */
   readonly #agentChannels?: Map<string, Promise<{ id: string }>>;
+  /** Send-path channel lookups, kept for a single request beside `#agentChannels`. */
+  readonly #agentSendChannels?: Map<
+    string,
+    Promise<{ id: string; channelName?: string | null; needsJoin: boolean }>
+  >;
 
   /**
    * Cache channel lookups only for this request, sharing send freshness/Memory reads.
@@ -86,7 +95,10 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     { oneRequest = false }: { oneRequest?: boolean } = {},
     private readonly realtime?: ReactionPort & ConversationReadRealtimePort,
   ) {
-    if (oneRequest) this.#agentChannels = new Map();
+    if (oneRequest) {
+      this.#agentChannels = new Map();
+      this.#agentSendChannels = new Map();
+    }
   }
 
   /** What the operations in the `agent-*` and `user-direct-reads` modules run on; its channel
@@ -97,6 +109,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       realtime: this.realtime,
       getAgentChannel: (workspaceId, agentId, target) =>
         this.getAgentChannel(workspaceId, agentId, target),
+      getAgentSendChannel: (workspaceId, agentId, target) =>
+        this.getAgentSendChannel(workspaceId, agentId, target),
       findUserAgentConversation: (workspaceId, userId, agentId) =>
         this.findUserAgentConversation(workspaceId, userId, agentId),
       getOrCreateUserAgent: (workspaceId, userId, agentId) =>
@@ -117,6 +131,20 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     let lookup = lookups.get(key);
     if (!lookup) {
       lookup = getAgentChannel(this.db, workspaceId, agentId, target);
+      lookups.set(key, lookup);
+    }
+    return lookup;
+  }
+
+  /** The send path's channel lookup, shared by the send's Memory check, freshness check and the
+   * send itself. Cached like `getAgentChannel`: the send's transaction rechecks what it writes. */
+  getAgentSendChannel(workspaceId: string, agentId: string, target: string) {
+    const lookups = this.#agentSendChannels;
+    if (!lookups) return getAgentSendChannel(this.db, workspaceId, agentId, target);
+    const key = `${workspaceId}:${agentId}:${target}`;
+    let lookup = lookups.get(key);
+    if (!lookup) {
+      lookup = getAgentSendChannel(this.db, workspaceId, agentId, target);
       lookups.set(key, lookup);
     }
     return lookup;
@@ -362,6 +390,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     threadRootId?: string,
     mentions?: readonly AgentMentionBinding[],
     memoryHintId?: string,
+    joinChannel?: boolean,
   ) {
     return sendAgentMessage(
       this.#ports,
@@ -372,6 +401,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       threadRootId,
       mentions,
       memoryHintId,
+      joinChannel,
     );
   }
 }

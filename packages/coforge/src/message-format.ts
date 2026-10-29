@@ -152,6 +152,8 @@ export function neutralizeReferenceLiterals(text: string): string {
 
 type SendResponse = {
   messageId?: string;
+  /** The channel this send joined on the way, as `#name`. */
+  joinedChannel?: string;
 };
 
 export function formatSendSuccess(
@@ -162,13 +164,16 @@ export function formatSendSuccess(
   queued = false,
 ): string {
   const verb = queued ? "queued" : "sent";
+  const joined = response.joinedChannel
+    ? `\nJoined ${response.joinedChannel}. To mute it, run \`coforge channel mute --target '${response.joinedChannel}'\`.`
+    : "";
   const base = !response.messageId
-    ? `Message ${verb} to ${target}.`
+    ? `Message ${verb} to ${target}.${joined}`
     : (() => {
         const hint = isThreadTarget(target)
           ? ""
           : ` (to reply in this message's thread, use target "${target}:${shortId(response.messageId!)}")`;
-        return `Message ${verb} to ${target}. Message ID: ${response.messageId}${hint}`;
+        return `Message ${verb} to ${target}. Message ID: ${response.messageId}${hint}${joined}`;
       })();
   if (!recentUnread?.length) return base;
   const lines = [

@@ -186,6 +186,8 @@ export type AgentSendDecisionResponse = {
   pendingMentionActions?: AgentPendingMentionAction[];
   /** Sent only: `@handle`s that name nobody the Agent can see. */
   unresolvedMentionHandles?: string[];
+  /** Sent only: the channel this send joined on the way, as `#name`. */
+  joinedChannel?: string;
 };
 
 /** Response for the resolve route (GET /api/agent/v1/messages/:id/resolve). */

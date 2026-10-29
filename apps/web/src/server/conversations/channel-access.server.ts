@@ -5,6 +5,7 @@ import type { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-pu
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
@@ -39,6 +40,42 @@ export async function getAgentChannel(
   });
   if (!channel) throw new AppError("ACCESS_DENIED");
   return channel;
+}
+
+/**
+ * `getAgentChannel` for the send path: the Agent's channel, or one it could join anyway on the
+ * way to posting — visible (as above), unarchived, and the Agent public (a private Agent can
+ * never be a channel member). `needsJoin` marks the latter; the membership itself is written by
+ * the send's transaction, so a failed send leaves none. Anything else is the same
+ * `ACCESS_DENIED` a non-member's send has always had.
+ */
+export async function getAgentSendChannel(
+  db: PrismaClient,
+  workspaceId: string,
+  agentId: string,
+  target: string,
+) {
+  if (!/^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target)) throw new AppError("INVALID_INPUT");
+  const channel = await db.conversation.findFirst({
+    where: { workspaceId, channelName: target.slice(1), ...VISIBLE_CONVERSATION_WHERE },
+    select: {
+      id: true,
+      channelName: true,
+      archivedAt: true,
+      members: { where: { agentId }, select: { id: true, leftAt: true } },
+    },
+  });
+  if (!channel) throw new AppError("ACCESS_DENIED");
+  const member = channel.members[0];
+  if (member && member.leftAt === null)
+    return { id: channel.id, channelName: channel.channelName, needsJoin: false };
+  if (channel.archivedAt) throw new AppError("ACCESS_DENIED");
+  const agent = await db.agent.findFirst({
+    where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+    select: { visibility: true },
+  });
+  if (agent?.visibility !== AGENT_VISIBILITY.PUBLIC) throw new AppError("ACCESS_DENIED");
+  return { id: channel.id, channelName: channel.channelName, needsJoin: true };
 }
 
 /**

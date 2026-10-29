@@ -130,5 +130,5 @@ test("an App item names its app, item id and the command that acts on it", async
   expect(output).toContain("- [system.reminder] reminder:abc:2 Deploy check: A reminder is due.");
   expect(output).toContain("  Run: coforge reminder ack --id abc --revision 2");
   expect(output).toContain("- [acme.notes] note:1 Note:");
-  expect(output.split("Run:").length - 1).toBe(1);
+  expect((output as string).split("Run:").length - 1).toBe(1);
 });

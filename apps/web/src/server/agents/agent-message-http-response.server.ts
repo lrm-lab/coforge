@@ -16,6 +16,8 @@ export function mapSendResult(idempotencyKey: string, result: AgentSendMessageRe
     reason: result.reason,
     producerFactId: result.producerFactId,
     messageId: result.messageId,
+    // Sent only: the channel the send joined on the way, as `#name`.
+    joinedChannel: result.state === "sent" ? result.joinedChannel : undefined,
     availableActions: result.availableActions ? [...result.availableActions] : undefined,
     continueAnywaySuggested: result.continueAnywaySuggested,
     // Held-context fields are only ever present on a held result; a sent one carries none.

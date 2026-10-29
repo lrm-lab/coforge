@@ -1,5 +1,6 @@
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import type { AgentMessageOperationsPorts } from "./agent-message-ports";
+import { agentSendResponse } from "./agent-send-result";
 import { getLogger } from "@logtape/logtape";
 import {
   freshnessDecisionFactId,
@@ -483,32 +484,7 @@ export class AgentMessageOperations {
       duration_ms: Math.round(performance.now() - startedAt),
       outcome: result.accepted ? "ok" : "rejected",
     });
-    return {
-      idempotencyKey,
-      accepted: result.accepted,
-      attentionCount: result.attentionCount,
-      messageId: result.messageId ?? "",
-      messages: contextWasWithheld ? [] : result.messages,
-      summaries: [],
-      // The send contract, carried to the Agent unchanged.
-      state: result.state,
-      decision: result.decision,
-      reason: result.reason,
-      producerFactId: result.producerFactId,
-      availableActions: result.availableActions,
-      continueAnywaySuggested: result.continueAnywaySuggested,
-      newMessageCount: result.newMessageCount,
-      shownMessageCount: result.shownMessageCount,
-      omittedMessageCount: result.omittedMessageCount,
-      freshnessContextMode: result.freshnessContextMode,
-      withheldMessageCount: contextWasWithheld
-        ? (result.withheldMessageCount ?? result.attentionCount)
-        : undefined,
-      recentUnread,
-      // What a sent message did not deliver, for the Agent's `coforge mention` recovery.
-      pendingMentionActions: result.pendingMentionActions,
-      unresolvedMentionHandles: result.unresolvedMentionHandles,
-    };
+    return agentSendResponse({ idempotencyKey, result, contextWasWithheld, recentUnread });
   }
 
   /** Forwards read/search/mute/unmute/unfollow unchanged; an unpaged read settles attention. */

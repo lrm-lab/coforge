@@ -16,22 +16,41 @@ export async function joinChannelAsAgent(
   channelId: string,
   agentId: string,
 ): Promise<boolean> {
-  const join = async (client: PrismaClient | Prisma.TransactionClient) => {
-    const active = await client.conversationMember.findFirst({
-      where: { conversationId: channelId, agentId, ...ACTIVE_MEMBER_WHERE },
-      select: { id: true },
-    });
-    await client.conversationMember.upsert({
-      where: { conversationId_agentId: { conversationId: channelId, agentId } },
-      create: { conversationId: channelId, workspaceId, agentId },
-      update: { leftAt: null },
-    });
-    return !active;
-  };
-  if (!appNotificationsPossible()) return join(db);
-  return db.$transaction(async (tx) => {
-    const joined = await join(tx);
-    if (joined) await recordChannelMembersAdded(tx, workspaceId, channelId, [{ agentId }]);
-    return joined;
+  if (!appNotificationsPossible()) return joinMembership(db, workspaceId, channelId, agentId);
+  return db.$transaction((tx) => joinChannelAsAgentIn(tx, workspaceId, channelId, agentId));
+}
+
+const joinMembership = async (
+  client: PrismaClient | Prisma.TransactionClient,
+  workspaceId: string,
+  channelId: string,
+  agentId: string,
+) => {
+  const active = await client.conversationMember.findFirst({
+    where: { conversationId: channelId, agentId, ...ACTIVE_MEMBER_WHERE },
+    select: { id: true },
   });
+  await client.conversationMember.upsert({
+    where: { conversationId_agentId: { conversationId: channelId, agentId } },
+    create: { conversationId: channelId, workspaceId, agentId },
+    update: { leftAt: null },
+  });
+  return !active;
+};
+
+/**
+ * `joinChannelAsAgent`'s write inside a transaction its caller already holds: a send joins the
+ * channel and posts in one transaction, so a send that fails leaves no membership. The
+ * `channel.member_added` recording is the same one `channel join` makes.
+ */
+export async function joinChannelAsAgentIn(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  channelId: string,
+  agentId: string,
+): Promise<boolean> {
+  const joined = await joinMembership(tx, workspaceId, channelId, agentId);
+  if (joined && appNotificationsPossible())
+    await recordChannelMembersAdded(tx, workspaceId, channelId, [{ agentId }]);
+  return joined;
 }

@@ -162,7 +162,9 @@ export function agentRecentContextSql(scope: AgentAttentionScope, take: number) 
   const others = Prisma.sql`(SELECT m."id", ${attention.sequence} AS "sequence",
       ${attention.sequence} = ANY(${excluded}::int[]) AS "seen"
     ${attention.from} ORDER BY ${attention.sequence} DESC LIMIT ${take})`;
-  if (!scope.ownMemberId) return Prisma.sql`${others} ORDER BY "sequence" DESC`;
+  // No member of the Agent's own: the window is the attention half alone, already ordered and
+  // bounded (an ORDER BY outside the parenthesized select is not valid SQL).
+  if (!scope.ownMemberId) return Prisma.sql`${others}`;
   const own = Prisma.sql`(SELECT o."id", o."sequence", TRUE AS "seen" FROM "messages" o
     WHERE o."conversationId" = ${scope.conversationId}::uuid AND ${
       scope.threadRootId

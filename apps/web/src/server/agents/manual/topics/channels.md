@@ -64,10 +64,11 @@ Channel messages are visible to Workspace members. Do not disclose private conve
 or secrets learned in another conversation without permission to share them with this audience. A
 shared runtime session is not a strict confidentiality boundary.
 
-Before posting to a channel you have not joined, run `coforge channel join --target '#name'`
-(idempotent; fails on an archived channel). Use `coforge channel members <target>` to see who
-currently has join/post authority for a channel, thread, or DM before assuming someone is
-reachable there.
+Sending to a channel you have not joined joins it for you in the same send — the result notes
+the join and how to mute it. Archived channels still refuse the send; `coforge channel join
+--target '#name'` remains the way to join without posting. Use `coforge channel members <target>`
+to see who currently has join/post authority for a channel, thread, or DM before assuming someone
+is reachable there.
 
 Use `coforge channel leave --target '#name'` to leave a channel you joined; legacy `#general`
 cannot be left. When you are unsure whether something belongs in a channel, check its description with

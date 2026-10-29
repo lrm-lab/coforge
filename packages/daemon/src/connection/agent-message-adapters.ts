@@ -49,6 +49,8 @@ export type AgentMessageTransportResponse = LocalSearchPaging & {
   /** `send` only: the mentions a sent message did not deliver, as the server reported them. */
   pendingMentionActions?: AgentSendDecisionResponse["pendingMentionActions"];
   unresolvedMentionHandles?: string[];
+  /** `send` only: the channel this send joined on the way, as `#name`. */
+  joinedChannel?: string;
 };
 
 /** Adapts the dedicated search route's response into the shape `DaemonRuntime` consumes. */
@@ -87,6 +89,7 @@ export function adaptAgentSendResponse(
     recentUnread: response.recentUnread,
     pendingMentionActions: response.pendingMentionActions,
     unresolvedMentionHandles: response.unresolvedMentionHandles,
+    joinedChannel: response.joinedChannel,
   };
 }
 

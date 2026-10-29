@@ -105,7 +105,7 @@ These rules apply to `src/server/db/`.
 - `user-direct-reads.repositories.server.ts` reads a person's DM (window, peer, updates) and advances their read cursors.
 - `agent-message-reads.repositories.server.ts` reads an Agent's message pages and advances its read-through; `agent-recovery.repositories.server.ts` reads pending deliveries and the recovery context.
 - `agent-event-drain.repositories.server.ts` drains an Agent's owed attention; `agent-target-freshness.repositories.server.ts` reads a send's pending and recent context.
-- `direct-message-sends.repositories.server.ts` owns the send transactions (`sendMessage`, `sendAgentMessage`): sequence allocation, attachment claiming, mention resolution and deliveries.
+- `direct-message-sends.repositories.server.ts` owns the send transactions: `direct-message-send.repositories.server.ts` a person's DM send, `direct-message-sends.repositories.server.ts` an Agent's channel or DM send (its channel join on the way): sequence allocation, attachment claiming, mention resolution and deliveries.
 - `mention-delivery.repositories.server.ts` keeps tracked @mention outcomes on
   `agent_message_deliveries`. Every write is conditional on the outcome still
   being open (pending or unknown) and, for a daemon report, on the row still

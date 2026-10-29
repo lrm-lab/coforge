@@ -308,6 +308,20 @@ test("formatSendSuccess adds a reply-thread hint only for a non-thread target", 
   ).toBe("Message sent to @ada:11111111. Message ID: aaaaaaaa-0000-4000-8000-000000000001");
 });
 
+test("formatSendSuccess appends the joined-channel notice with the mute command", () => {
+  expect(
+    formatSendSuccess("#general", {
+      messageId: "aaaaaaaa-0000-4000-8000-000000000001",
+      joinedChannel: "#general",
+    }),
+  ).toBe(
+    "Message sent to #general. Message ID: aaaaaaaa-0000-4000-8000-000000000001" +
+      ' (to reply in this message\'s thread, use target "#general:aaaaaaaa-0000")\n' +
+      "Joined #general. To mute it, run `coforge channel mute --target '#general'`.",
+  );
+  expect(formatSendSuccess("#general", { messageId: "m-1" })).not.toContain("Joined ");
+});
+
 test("formatSendSuccess omits the id and reply hint when messageId is missing or empty", () => {
   expect(formatSendSuccess("@user", {})).toBe("Message sent to @user.");
   expect(formatSendSuccess("@user", { messageId: "" })).toBe("Message sent to @user.");

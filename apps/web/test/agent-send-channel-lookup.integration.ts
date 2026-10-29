@@ -5,7 +5,6 @@ import {
   agentMessagesPostDependencies,
   handleAgentMessagesPost,
 } from "#src/routes/api/agent/v1/messages";
-import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 
 /**
  * An Agent's channel send resolves its channel for the Memory Offer check, for the freshness check
@@ -130,25 +129,29 @@ test.skipIf(!runnable)("an Agent's channel send looks its channel up once", asyn
 });
 
 test.skipIf(!runnable)(
-  "an Agent removed after its channel was looked up cannot send in the same request",
+  "an Agent removed after its channel was looked up rejoins on the send's own read",
   async () => {
     await withChannel(async ({ workspaceId, agentId, memberId, channelName }) => {
       const { repository, sender } = agentMessagesPostDependencies(db);
       await repository.getAgentChannel(workspaceId, agentId, `#${channelName}`);
       await db.conversationMember.update({ where: { id: memberId }, data: { leftAt: new Date() } });
 
-      const sending = sender.executeFromAgent({
+      const sent = await sender.executeFromAgent({
         idempotencyKey: crypto.randomUUID(),
         workspaceId,
         agentId,
         target: `#${channelName}`,
         body: "after removal",
       });
-      // The kept lookup still names the channel; the send's own membership read refuses it.
-      await expect(sending).rejects.toEqual(
-        new AgentSendRejectedError(403, "agent is not a conversation member"),
-      );
-      expect(await db.message.count({ where: { workspaceId } })).toBe(0);
+      // The kept lookup still names the channel; the send's own read sees the soft-left row and
+      // rejoins it in the send's transaction — `channel join` rejoins a left member the same way.
+      expect(sent.joinedChannel).toBe(`#${channelName}`);
+      const member = await db.conversationMember.findUniqueOrThrow({
+        where: { id: memberId },
+        select: { leftAt: true },
+      });
+      expect(member.leftAt).toBeNull();
+      expect(await db.message.count({ where: { workspaceId } })).toBe(1);
     });
   },
 );

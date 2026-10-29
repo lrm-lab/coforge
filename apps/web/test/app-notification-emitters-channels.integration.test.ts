@@ -6,6 +6,7 @@ import type { MessageRequestIdempotency } from "#src/server/conversations/messag
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { joinGeneralChannel } from "#src/server/conversations/general-channel.server";
+import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.server";
 import { workspaceMemberDirectory } from "#src/server/workspaces/member-directory-store.server";
 import {
@@ -162,6 +163,28 @@ const environment = defineEmitterCases([
     }),
     act: (env, fixture, { channel, agent }) =>
       agentChannels(env).join(fixture.workspace.id, agent.id, `#${channel.channelName}`),
+    data: (_fixture, { channel, agent }) => ({ channel_id: channel.id, agent_id: agent.id }),
+    refuse: (_fixture, { agent }) => memberRow("agentId", agent.id),
+  }),
+  emitterCase({
+    type: "channel.member_added",
+    label: "an Agent joins by sending to the channel",
+    setup: async (env, fixture) => ({
+      channel: await channelOf(env, fixture),
+      agent: await agentIn(env, fixture),
+    }),
+    act: (env, fixture, { channel, agent }) =>
+      new SendDirectMessage(
+        new PrismaDirectConversationRepository(env.db),
+        { execute: async (_scope: unknown, persist: () => unknown) => persist() },
+        { publish: async () => [] } as never,
+      ).executeFromAgent({
+        idempotencyKey: crypto.randomUUID(),
+        workspaceId: fixture.workspace.id,
+        agentId: agent.id,
+        target: `#${channel.channelName}`,
+        body: "hello",
+      }),
     data: (_fixture, { channel, agent }) => ({ channel_id: channel.id, agent_id: agent.id }),
     refuse: (_fixture, { agent }) => memberRow("agentId", agent.id),
   }),
