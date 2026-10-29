@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { readMessageSeenBy } from "#src/server/conversations/message-seen-by.server";
+import { advanceAgentRead } from "#src/server/db/repositories/thread-read-position.server";
 
 /**
  * When the other side read a direct message: the row an advance writes, the five-second
@@ -130,6 +131,47 @@ test.skipIf(!connectionString)(
         }),
       ).rejects.toThrow("NOT_FOUND");
       expect(alice.id).not.toBe(bob.id);
+    } finally {
+      await teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "an Agent reading through message check records when, too",
+  async () => {
+    const { db, workspace, conversation, message, alice, teardown } = await setup();
+    try {
+      const agent = await db.agent.create({
+        data: {
+          workspaceId: workspace.id,
+          name: `read-agent-${crypto.randomUUID().slice(0, 8)}`,
+          displayName: "Reader",
+          ownerId: alice.id,
+          runtimeConfig: {},
+        },
+      });
+      const member = await db.conversationMember.create({
+        data: { conversationId: conversation.id, workspaceId: workspace.id, agentId: agent.id },
+      });
+
+      await advanceAgentRead(db, {
+        memberId: member.id,
+        conversationId: conversation.id,
+        workspaceId: workspace.id,
+        agentId: agent.id,
+        threadRootId: null,
+        sequence: 1,
+      });
+
+      const seen = await readMessageSeenBy(db, {
+        workspaceId: workspace.id,
+        userId: alice.id,
+        conversationId: conversation.id,
+        messageId: message.id,
+      });
+      expect(seen.seen).toEqual([{ kind: "agent", id: agent.id }]);
+      expect(typeof seen.seenAt).toBe("string");
     } finally {
       await teardown();
     }
