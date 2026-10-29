@@ -4,7 +4,9 @@ import { RecordCatalog } from "#src/server/records/record-catalog.server";
 
 test("loadCatalog lists cycles without report content and marks unread by id only", async () => {
   let cycleQuery: { select?: { reports?: { select?: Record<string, unknown> } } } | undefined;
-  let unreadQuery: { where?: Record<string, unknown>; select?: Record<string, unknown> } | undefined;
+  let unreadQuery:
+    | { where?: Record<string, unknown>; select?: Record<string, unknown> }
+    | undefined;
   const db = {
     workspaceMembership: {
       findUnique: async () => ({ role: "member" }),
@@ -95,9 +97,7 @@ test("loadCatalog lists cycles without report content and marks unread by id onl
     kind: "member",
     hiddenFromAuthor: false,
   });
-  expect(catalog.myReports).toEqual([
-    expect.objectContaining({ id: "mine-unread", unread: true }),
-  ]);
+  expect(catalog.myReports).toEqual([expect.objectContaining({ id: "mine-unread", unread: true })]);
 });
 
 test("loadCatalog hides other leaders' template parents under 成员周报", async () => {
