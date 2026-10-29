@@ -114,6 +114,7 @@ test("loadCatalog omits an author-hidden submission from 我的周报 and keeps 
           : { id: "member-1", username: "member", displayName: "Member" },
     },
     weeklyReportTemplate: { findMany: async () => [] },
+    weeklyReport: { findMany: async () => [] },
   } as unknown as PrismaClient;
 
   const authorCatalog = await new RecordCatalog(db).loadCatalog({

@@ -5,9 +5,13 @@ These rules also cover `src/server/records/`.
 - Workspace Records (weekly reports) belong to `features/records/` (list/detail,
   settings, stats, side comments, and Server Functions) and
   `server/records/record-catalog.server.ts` (cycles, reports,
-  templates, favorites, notes, and comments). Persistence is Prisma under
-  Workspace membership. Report bodies use lightweight outline JSON keyed by
-  template-dimension tabs. Side panels retain platform comments and Collect cards alongside the private
+  templates, favorites, notes, and comments) and
+  `server/records/record-catalog-load.server.ts` (`loadCatalog` directory).
+  Persistence is Prisma under Workspace membership. Report bodies use lightweight
+  outline JSON keyed by template-dimension tabs. `loadCatalog` must not pull
+  `WeeklyReport.content` for the directory: select list metadata only, and
+  resolve「我的周报」unread with an id-only JSON-path query. Side panels retain
+  platform comments and Collect cards alongside the private
   assistant conversation.
   The weekly-report assistant's on-demand reads reuse `RecordCatalog` through
   Agent HTTPS `POST /api/agent/v1/weekly-reports`, authorized as the assistant owner User.
