@@ -115,17 +115,10 @@ export function formatAttachmentComments(response: AgentAttachmentCommentsRespon
       `More: coforge attachment comments ${attachmentId} --before ${comments[0]!.sequence}`,
     );
   lines.push(`Read: coforge message read --target 'attachment:${attachmentId}'`);
-  if (response.viewer.canComment) {
+  // Attachment comments are a flat list: a reply target or a reaction on one has no place the
+  // Web shows, so the CLI never suggests one.
+  if (response.viewer.canComment)
     lines.push(`Comment: coforge message send --target 'attachment:${attachmentId}'`);
-    for (const comment of comments)
-      lines.push(`Reply: coforge message send --target 'attachment:${attachmentId}:${comment.id}'`);
-  }
-  if (response.viewer.canResolve && response.viewer.resolveAction)
-    for (const comment of comments)
-      if (!comment.resolved)
-        lines.push(
-          `Mark handled: coforge message react --message-id ${comment.id} --emoji ${response.viewer.resolveAction.emoji}`,
-        );
   if (!response.viewer.canComment)
     lines.push(
       `You cannot comment on this attachment (${response.viewer.reason ?? "unavailable"}).`,

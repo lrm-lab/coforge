@@ -41,6 +41,13 @@ export async function handleAgentMessageReaction(
     };
     return Response.json(response);
   } catch (error) {
+    // A reaction on an attachment comment has nowhere to show in the Web, so it is refused with
+    // the reason rather than a bare "invalid input".
+    if (isAppError(error) && error.errorId === "attachment-comments-no-reactions")
+      return Response.json(
+        { error: "attachment comments take no reactions; react to a message instead" },
+        { status: 400 },
+      );
     return isAppError(error)
       ? agentRouteDomainErrorResponse(error, "message reaction failed")
       : agentRouteErrorResponse(error, "message reaction failed");

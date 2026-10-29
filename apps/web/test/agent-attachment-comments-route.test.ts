@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { AgentAttachmentCommentsResponse } from "@lrm/coforge-sdk/agent";
 import { AppError } from "#src/lib/app-error";
 import { handleAgentAttachmentCommentsGet } from "#src/routes/api/agent/v1/attachments/$attachmentId.comments";
+import { attachmentMessageRefusal } from "#src/server/attachments/agent-attachment-messages.server";
 
 const ID = "9f0c5a52-1111-4222-8333-444455556666";
 const PAGE: AgentAttachmentCommentsResponse = {
@@ -64,4 +65,17 @@ test("an attachment the Agent may not read is NOT_FOUND", async () => {
   });
   expect(response.status).toBe(404);
   expect(await response.json()).toMatchObject({ ok: false, errorCode: "NOT_FOUND" });
+});
+
+test("a reply target is refused with the top-level comment it should use", async () => {
+  // The Web's attachment panel is one flat list: a reply would be stored where nobody sees it.
+  const refusal = attachmentMessageRefusal(
+    new AppError("INVALID_INPUT", { errorId: "attachment-comments-no-replies" }),
+  );
+  expect(refusal?.status).toBe(400);
+  expect(await refusal?.json()).toEqual({
+    error: `attachment comments have no replies; comment on the attachment itself with --target 'attachment:<id>'`,
+    code: "INVALID_INPUT",
+    retryable: false,
+  });
 });

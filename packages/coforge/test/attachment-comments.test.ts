@@ -74,7 +74,7 @@ test("the page names the full id and, when older comments remain, how to read th
   expect(text).toContain(`## Comments on attachment ${ID} (1)`);
   expect(text).toContain(`More: coforge attachment comments ${ID} --before 4`);
   expect(text).toContain(`Read: coforge message read --target 'attachment:${ID}'`);
-  expect(text).toContain(`Reply: coforge message send --target 'attachment:${ID}:${MSG}'`);
+  expect(text).toContain(`Comment: coforge message send --target 'attachment:${ID}'`);
 });
 
 test("an attachment without comments says so", () => {
@@ -143,14 +143,17 @@ test("--json returns the response as is", async () => {
   expect(seen).toEqual([{ attachmentId: ID, limit: 2, before: undefined }]);
 });
 
-test("only an actionable viewer sees the exact checkmark command for each root", () => {
-  const command = `coforge message react --message-id ${MSG} --emoji ✅`;
-  expect(formatAttachmentComments(page([comment()]))).toContain(command);
-  expect(formatAttachmentComments(page([comment({ resolved: true })]))).not.toContain(command);
-  expect(
+test("no reply or checkmark command is ever printed: neither has a write path", () => {
+  for (const text of [
+    formatAttachmentComments(page([comment()])),
+    formatAttachmentComments(page([comment({ resolved: true })])),
     formatAttachmentComments({
       ...page([comment()]),
       viewer: { canComment: false, canResolve: false, reason: "not-member" },
     }),
-  ).not.toContain(command);
+  ]) {
+    expect(text).not.toContain("Reply:");
+    expect(text).not.toContain("Mark handled:");
+    expect(text).not.toContain("message react");
+  }
 });

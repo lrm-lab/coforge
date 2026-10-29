@@ -65,26 +65,22 @@ conversation), oldest first, at most 100 per page (`--limit` outside 1–100 or 
 [msg=<13-char id> time=<UTC> type=<human|agent|system>] ✅ [anchor: <where>] @sender: <body>
 ```
 
-`✅` marks a resolved comment. The anchor is `§ <heading>` (markdown section), `L<n>` / `L<a>–<b>`
-(lines), `rows <n>` / `rows <a>–<b>` (CSV) or a quote of at most 60 characters ending in `…`
-(HTML region). When older comments remain, `More: coforge attachment comments <id> --before <seq>`
-follows. The footer lists commands to read, reply and mark a root comment handled when allowed.
-With no comments it prints `No comments on attachment <id>.`; an unknown or unreadable attachment is
-`NOT_FOUND`.
+`✅` marks a comment a person marked handled. The anchor is `§ <heading>` (markdown section),
+`L<n>` / `L<a>–<b>` (lines), `rows <n>` / `rows <a>–<b>` (CSV) or a quote of at most 60 characters
+ending in `…` (HTML region). When older comments remain, `More: coforge attachment comments <id>
+--before <seq>` follows. The footer lists the commands to read the discussion and to comment on the
+attachment. With no comments it prints `No comments on attachment <id>.`; an unknown or unreadable
+attachment is `NOT_FOUND`.
 
-Read a discussion with `coforge message read --target 'attachment:<full-attachment-uuid>'`.
-Post a plain-text root comment to that target, or reply to a root comment with
-`coforge message send --target 'attachment:<full-attachment-uuid>:<root-comment-id>'`, body on stdin.
-The command footer prints executable targets. Short comment ids resolve only within this file's
-root comments; an ambiguous id requires the full UUID. Message windows and `--unread` follow
-normal history semantics. Source-conversation access is checked on every read and new write;
-archived/read-only sources refuse writes. Uploads and explicit mention selectors are rejected
-on these sends. Comment conversation ids grant no generic read/search/inbox/resolve access.
+Read a discussion with `coforge message read --target 'attachment:<full-attachment-uuid>'` and post
+a plain-text comment to the same target, body on stdin. Comments are one flat list, as the Web's
+attachment panel shows them: there are no replies to a comment and no reactions on one, and the
+server refuses both (`attachment:<uuid>:<comment-id>` as a send target, and `message react` on a
+comment id). Message windows and `--unread` follow normal history semantics. Source-conversation
+access is checked on every read and new write; archived/read-only sources refuse writes. Uploads and
+explicit mention selectors are rejected on these sends. Comment conversation ids grant no generic
+read/search/inbox/resolve access.
 
-The JSON `viewer` includes required `canComment` and `canResolve` booleans. Only when writable,
-`resolveAction:{type:"reaction",emoji:"✅"}` describes marking a comment handled. A read-only
-viewer has `canResolve:false`, no action, and a reason. For unresolved root comments, the text footer prints the exact command:
-`coforge message react --message-id <full-comment-uuid> --emoji ✅`. Add `--remove` to undo your
-checkmark; the comment remains resolved while anyone else's ✅ remains. Other valid reactions
-work too. Comment reactions require the full UUID and recheck AttachmentComments source access;
-short message IDs retain ordinary-message semantics. Platform assistants act as their bound human.
+The JSON `viewer` still reports `canComment` and `canResolve`; a read-only viewer has
+`canResolve:false` with a reason. The CLI prints no command for either beyond the top-level comment
+above, because a comment's handled mark and its replies have no write path from an Agent.

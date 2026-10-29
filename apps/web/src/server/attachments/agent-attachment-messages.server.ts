@@ -119,11 +119,14 @@ export function createAgentAttachmentMessages(
             input,
             input.target,
           );
+          // Attachment comments are a flat list the Web shows as one panel: a reply target has no
+          // place there, so no write may create one.
+          if (rootId)
+            throw new AppError("INVALID_INPUT", { errorId: "attachment-comments-no-replies" });
           // post re-authorizes in its source/attachment/discussion transaction and validates root ownership.
           const posted = await comments.post(actor, {
             attachmentId,
             body: input.body,
-            ...(rootId ? { rootId } : {}),
           });
           return {
             id: posted.id,
@@ -163,7 +166,9 @@ export function attachmentMessageRefusal(error: unknown) {
               ? "attachment discussion sends support plain text only; attachments and explicit mentions are unsupported"
               : error.errorId === "attachment-comments-no-preview"
                 ? "this file has no preview (a type without one, or a text file over 5 MB), so it takes no comments"
-                : "attachment message is not available",
+                : error.errorId === "attachment-comments-no-replies"
+                  ? `attachment comments have no replies; comment on the attachment itself with --target 'attachment:<id>'`
+                  : "attachment message is not available",
           code: error.code,
           retryable: false,
         },
