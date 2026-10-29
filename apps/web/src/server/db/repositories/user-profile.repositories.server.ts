@@ -48,7 +48,7 @@ export class PrismaUserProfileRepository {
       /** When the account was created, as an ISO instant. */
       joinedAt: profile.createdAt.toISOString(),
       /** The email and phone number the identity provider last reported, each with whether it
-       * verified them; only the person themselves is shown these. */
+       * verified them (null until it has said); only the person themselves is shown these. */
       email: profile.email,
       emailVerified: profile.emailVerified,
       phone: profile.phone,

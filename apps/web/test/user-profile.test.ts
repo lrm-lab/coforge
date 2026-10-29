@@ -180,9 +180,10 @@ describe("PrismaUserProfileRepository", () => {
     });
     expect(await emailOnly.repository.get("user-1")).toMatchObject({
       email: "ada@example.com",
-      emailVerified: false,
+      // Not yet said by the provider: unknown, not unverified.
+      emailVerified: null,
       phone: null,
-      phoneVerified: false,
+      phoneVerified: null,
     });
   });
 
@@ -384,16 +385,16 @@ function profileRepository(row: {
   displayName: string;
   welcomedAt: Date | null;
   email?: string | null;
-  emailVerified?: boolean;
+  emailVerified?: boolean | null;
   phone?: string | null;
-  phoneVerified?: boolean;
+  phoneVerified?: boolean | null;
 }) {
   const updates: unknown[] = [];
   const stored = {
     email: null,
-    emailVerified: false,
+    emailVerified: null,
     phone: null,
-    phoneVerified: false,
+    phoneVerified: null,
     ...row,
     description: "",
     avatarObjectKey: null,

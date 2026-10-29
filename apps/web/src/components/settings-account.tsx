@@ -32,12 +32,12 @@ export type AccountProfile = {
   displayName: string | null;
   /** Null for an account made with a phone number alone. */
   email: string | null;
-  /** Whether the identity provider verified `email`. */
-  emailVerified: boolean;
+  /** Whether the identity provider verified `email`; null until it has said. */
+  emailVerified: boolean | null;
   /** E.164; null when the provider reported none. */
   phone: string | null;
-  /** Whether the identity provider verified `phone`. */
-  phoneVerified: boolean;
+  /** Whether the identity provider verified `phone`; null until it has said. */
+  phoneVerified: boolean | null;
   description: string;
   avatarUrl: string | null;
   /** False while `avatarUrl` is only the default cartoon. */
@@ -383,22 +383,23 @@ function ContactValue({
 }: {
   label: string;
   value: string;
-  verified: boolean;
+  /** Null while the provider has not said: the address alone, no tag. */
+  verified: boolean | null;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <dt className="text-sm font-semibold text-primary">{label}</dt>
       <dd className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 truncate font-mono text-sm text-primary">{value}</span>
-        {verified ? (
+        {verified === true ? (
           <BadgeWithIcon type="pill-color" size="sm" color="success" iconLeading={Check}>
             {m.settings_contact_verified()}
           </BadgeWithIcon>
-        ) : (
+        ) : verified === false ? (
           <Badge type="pill-color" size="sm" color="warning">
             {m.settings_contact_unverified()}
           </Badge>
-        )}
+        ) : null}
       </dd>
     </div>
   );
