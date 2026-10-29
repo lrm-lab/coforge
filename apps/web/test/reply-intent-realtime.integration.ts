@@ -49,6 +49,9 @@ test("real routing delivers start/end only to the conversation, with no history 
   // A client the server drops mid-test otherwise reports only `disconnected`: keep the
   // server's own code/reason so the CI log names the denial instead.
   const disconnects: { userId: string; code: number; reason: string }[] = [];
+  // Every path Centrifugo asked the proxy for: if a CI failure shows /jwks was never
+  // fetched, host.docker.internal did not reach this process from the container.
+  const proxyRequests: string[] = [];
   // Which awaited step the failure hit, if it fails: printed with the disconnect record so a
   // CI-only rejection names its promise.
   let stage = "starting";
@@ -84,6 +87,7 @@ test("real routing delivers start/end only to the conversation, with no history 
       port: 0,
       async fetch(request) {
         const path = new URL(request.url).pathname;
+        proxyRequests.push(path);
         if (path === "/jwks") return Response.json(jwks);
         if (path === "/connect")
           return Response.json({
@@ -336,7 +340,13 @@ test("real routing delivers start/end only to the conversation, with no history 
     process.off("unhandledRejection", denialRejection);
     if (disconnects.length || swallowed.length || stage !== "stolen-denied")
       console.info(
-        JSON.stringify({ capture: "reply-intent-disconnects", stage, disconnects, swallowed }),
+        JSON.stringify({
+          capture: "reply-intent-disconnects",
+          stage,
+          disconnects,
+          swallowed,
+          proxyRequests,
+        }),
       );
     for (const client of clients) client.disconnect();
     try {
