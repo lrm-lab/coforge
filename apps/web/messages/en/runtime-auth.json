@@ -22,7 +22,7 @@
   "runtime_auth_failed_start": "The sign-in could not start. Try again.",
   "runtime_auth_failed_cancelled": "The sign-in was cancelled.",
   "runtime_auth_failed_ended": "This sign-in has ended. Start it again.",
-  "runtime_auth_failed_timed_out": "The sign-in took too long and stopped.",
+  "runtime_auth_failed_timed_out": "{runtime} could not reach the sign-in service in time. Check the Computer's network, then try again.",
   "runtime_auth_failed_rejected": "{runtime} did not accept the sign-in.",
   "runtime_auth_failed_not_logged_in": "The sign-in finished, but {runtime} is still not signed in.",
   "runtime_auth_failed_interaction": "{runtime} asked for something this page can't show. Sign in on the Computer itself.",

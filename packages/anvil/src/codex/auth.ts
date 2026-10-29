@@ -17,6 +17,9 @@ const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CO
 
 export const CODEX_LOGIN_MINIMUM_VERSION = "0.118.0";
 export const CODEX_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
+/** The app-server answers `initialize` and `account/login/start` from memory; a reply that takes
+ * this long means it cannot reach the sign-in service, so the sign-in must fail rather than wait. */
+export const CODEX_LOGIN_START_TIMEOUT_MS = 30_000;
 export const CODEX_LOGIN_STATUS_TIMEOUT_MS = 20_000;
 export const CODEX_LOGOUT_TIMEOUT_MS = 60_000;
 export const CODEX_LOGOUT_MINIMUM_VERSION = "0.15.0";
@@ -80,6 +83,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
   readonly #version: string | undefined;
   readonly #create: CodexAppServerFactory;
   readonly #accountReadTimeoutMs: number;
+  readonly #loginStartTimeoutMs: number;
   readonly #runCli: CodexCliRunner;
   #active?: { id: string; process: CodexAppServerProcess; cancelled: boolean };
 
@@ -89,12 +93,14 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     version?: string;
     create?: CodexAppServerFactory;
     accountReadTimeoutMs?: number;
+    loginStartTimeoutMs?: number;
     runCli?: CodexCliRunner;
   }) {
     this.#host = options.host;
     this.#command = options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"];
     this.#version = options.version;
     this.#accountReadTimeoutMs = options.accountReadTimeoutMs ?? 20_000;
+    this.#loginStartTimeoutMs = options.loginStartTimeoutMs ?? CODEX_LOGIN_START_TIMEOUT_MS;
     this.#runCli =
       options.runCli ?? ((command, cwd, timeoutMs) => this.#host.runCli(command, cwd, timeoutMs));
     this.#create =
@@ -184,18 +190,24 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     };
     interaction.signal?.addEventListener("abort", abort, { once: true });
     try {
-      await process.request({
-        method: "initialize",
-        params: {
-          clientInfo: this.#host.clientInfo,
-          capabilities: { experimentalApi: true },
-        },
-      });
+      await this.#withinStart(
+        process.request({
+          method: "initialize",
+          params: {
+            clientInfo: this.#host.clientInfo,
+            capabilities: { experimentalApi: true },
+          },
+        }),
+        "initialize",
+      );
       await process.send({ method: "initialized", params: {} });
-      const response = await process.request({
-        method: "account/login/start",
-        params: { type: "chatgptDeviceCode" },
-      });
+      const response = await this.#withinStart(
+        process.request({
+          method: "account/login/start",
+          params: { type: "chatgptDeviceCode" },
+        }),
+        "account/login/start",
+      );
       const result = asRecord(response.result);
       loginId = typeof result?.loginId === "string" ? result.loginId : undefined;
       const verificationUrl =
@@ -288,6 +300,12 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       };
     } catch (error) {
       if (cancelledBySignal || this.#active?.cancelled) return { status: "cancelled" };
+      if (error instanceof CodexLoginStartTimeoutError)
+        return {
+          status: "failed",
+          reason: "timed_out",
+          detail: `${RUNTIME_PROVIDER.CODEX} app-server did not answer ${error.method} within ${this.#loginStartTimeoutMs} ms`,
+        };
       return {
         status: "failed",
         reason: interactionFailed
@@ -317,6 +335,15 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       this.#active.cancelled = true;
       await this.#active.process.dispose().catch(() => undefined);
     }
+  }
+  /** Bounds the handshakes before the device code exists: an app-server that cannot reach the
+   * sign-in service leaves the request unanswered, and the sign-in must not wait on it. */
+  #withinStart<T>(work: Promise<T>, method: string): Promise<T> {
+    return withTimeout(
+      work,
+      this.#loginStartTimeoutMs,
+      () => new CodexLoginStartTimeoutError(method),
+    );
   }
   async logout(options: {
     workingDirectory: string;
@@ -366,12 +393,24 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
   }
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+/** The app-server kept a handshake unanswered past its deadline. */
+class CodexLoginStartTimeoutError extends Error {
+  constructor(readonly method: string) {
+    super(`codex app-server did not answer ${method}`);
+    this.name = "CodexLoginStartTimeoutError";
+  }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => Error = () => new Error("request timed out"),
+): Promise<T> {
   let handle: ReturnType<typeof setTimeout> | undefined;
   const result = await Promise.race([
     promise,
     new Promise<never>((_, reject) => {
-      handle = setTimeout(() => reject(new Error("request timed out")), timeoutMs);
+      handle = setTimeout(() => reject(onTimeout()), timeoutMs);
     }),
   ]);
   if (handle) clearTimeout(handle);

@@ -290,6 +290,30 @@ test("returns timed_out when device login exceeds its deadline", async () => {
   await expect(login).resolves.toMatchObject({ status: "failed", reason: "timed_out" });
 });
 
+test.each(["initialize", "account/login/start"] as const)(
+  "fails a sign-in whose %s is never answered by the app-server",
+  async (method) => {
+    const process = new FakeProcess();
+    const original = process.request.bind(process);
+    process.request = async (command) =>
+      command.method === method ? await new Promise<never>(() => {}) : original(command);
+    const started = Date.now();
+    await expect(
+      new CodexRuntimeAuthAdapter({
+        host: fixtureCodexAuthHost,
+        create: () => process,
+        loginStartTimeoutMs: 20,
+      }).startLogin({ workingDirectory: "/tmp" }, { onEvent() {}, prompt: async () => "" }),
+    ).resolves.toEqual({
+      status: "failed",
+      reason: "timed_out",
+      detail: `codex app-server did not answer ${method} within 20 ms`,
+    });
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(process.disposed).toBe(true);
+  },
+);
+
 test("keeps a successful login when account/read times out", async () => {
   const process = new FakeProcess();
   const original = process.request.bind(process);

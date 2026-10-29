@@ -22,7 +22,7 @@
   "runtime_auth_failed_start": "没能启动登录，请重试。",
   "runtime_auth_failed_cancelled": "登录已取消。",
   "runtime_auth_failed_ended": "这次登录已结束，请重新开始。",
-  "runtime_auth_failed_timed_out": "登录超时，已停止。",
+  "runtime_auth_failed_timed_out": "{runtime} 未能及时连上登录服务。请检查这台 Computer 的网络后重试。",
   "runtime_auth_failed_rejected": "{runtime} 没有接受这次登录。",
   "runtime_auth_failed_not_logged_in": "登录流程结束了，但 {runtime} 仍未登录。",
   "runtime_auth_failed_interaction": "{runtime} 需要的操作这里无法显示，请在那台 Computer 上登录。",

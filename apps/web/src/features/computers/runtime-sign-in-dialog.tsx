@@ -54,6 +54,9 @@ type Target = {
 /** At most this many views wait for the login id the start returns; a login sends far fewer. */
 const EARLY_VIEW_LIMIT = 16;
 
+/** How often a dialog that has shown nothing yet reads the login back, in case its push was lost. */
+const SIGN_IN_CATCH_UP_MS = 15_000;
+
 /**
  * Signs a Computer's runtime in from the web, as on Raft: the dialog shows what the runtime's own
  * flow asks for (a page to open, a device code, a code to paste back) until it ends. The code and
@@ -181,6 +184,20 @@ function SignInAttempt({
   }, []);
 
   const running = state.phase === "starting" || state.phase === "running";
+  // A sign-in that shows nothing yet is waiting on the daemon's first report. Its push is best
+  // effort (the server swallows a failed publication), so read it back instead of waiting forever;
+  // the stored login reports a start that never answered as timed_out.
+  const waiting =
+    state.phase === "starting" ||
+    (state.phase === "running" &&
+      !state.link &&
+      state.info === undefined &&
+      state.prompt === undefined);
+  useEffect(() => {
+    if (!waiting) return;
+    const handle = setInterval(catchUp, SIGN_IN_CATCH_UP_MS);
+    return () => clearInterval(handle);
+  }, [waiting]);
   const close = () => {
     closed.current = true;
     if (running && loginId.current)
@@ -452,7 +469,7 @@ function failureText(failure: LoginFailure, runtime: string): string {
         return m.runtime_auth_kiro_external_idp();
       switch (failure.reason) {
         case "timed_out":
-          return m.runtime_auth_failed_timed_out();
+          return m.runtime_auth_failed_timed_out({ runtime });
         case "rejected":
           return m.runtime_auth_failed_rejected({ runtime });
         case "not_logged_in":
