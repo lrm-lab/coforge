@@ -6,7 +6,6 @@ import { nextHrefAfterSignIn } from "#src/features/auth/return-to";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { readGitHubSignInConfigOrNull } from "#src/server/auth/config.server";
 import { signInWithPassword } from "#src/server/auth/password-sign-in.server";
-import { getSignInRateLimits } from "#src/server/auth/sign-in-rate-limits.server";
 import { signInRequestContext } from "#src/server/auth/sign-in-request.server";
 
 /**
@@ -34,7 +33,6 @@ export const signInWithEmailPassword = createServerFn({ method: "POST" })
       ...signIn,
       secure,
       credentials: { email: data.email, password: data.password },
-      rateLimits: getSignInRateLimits(),
       clientAddress,
     });
     if (result.status !== "signed_in") return { ok: false, problem: result.status } as const;

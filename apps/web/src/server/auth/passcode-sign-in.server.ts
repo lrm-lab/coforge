@@ -99,8 +99,6 @@ export async function signInWithPasscode(
     authing,
     sessionSecret: input.sessionSecret,
     secure: input.secure,
-    account: codeDestinationKey(input.destination),
-    rateLimits: input.rateLimits,
     clientAddress: input.clientAddress,
     resolveUser: input.resolveUser,
     now: input.now,

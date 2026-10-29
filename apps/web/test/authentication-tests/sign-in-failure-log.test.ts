@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
 import type { AuthingConfig } from "#src/server/auth/authing-authentication.server";
 import { reportSignInFailure } from "#src/server/auth/login-failure.server";
-import { NO_SIGN_IN_RATE_LIMITS } from "#src/server/auth/sign-in-rate-limits.server";
 import { signInWithPassword } from "#src/server/auth/password-sign-in.server";
 
 // A failed sign-in tells the browser only that it failed. The operator's only account of why is the
@@ -92,7 +91,6 @@ async function attempt(options: Attempt = {}) {
       sessionSecret,
       secure: false,
       credentials: { email, password },
-      rateLimits: NO_SIGN_IN_RATE_LIMITS,
       ...(options.persisted
         ? {}
         : {

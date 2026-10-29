@@ -15,7 +15,7 @@ import {
 } from "#src/server/auth/password-reset.server";
 import {
   getCodeSendRateLimits,
-  getSignInRateLimits,
+  getResetCodeRateLimits,
 } from "#src/server/auth/sign-in-rate-limits.server";
 import { signInRequestContext } from "#src/server/auth/sign-in-request.server";
 
@@ -76,7 +76,7 @@ export const resetPassword = createServerFn({ method: "POST" })
       destination,
       passCode: data.code,
       newPassword: data.password,
-      rateLimits: getSignInRateLimits(),
+      rateLimits: getResetCodeRateLimits(),
       clientAddress,
     });
     return result.status === "updated"

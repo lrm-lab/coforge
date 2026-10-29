@@ -15,9 +15,9 @@ import {
 } from "./login-failure.server";
 import {
   admitCodeSend,
-  admitSignIn,
+  admitResetCodeAttempt,
   type CodeSendRateLimits,
-  type SignInRateLimits,
+  type ResetCodeRateLimits,
 } from "./sign-in-rate-limits.server";
 import { codeDestinationKey, type CodeDestination } from "#src/features/auth/code-destination";
 
@@ -95,14 +95,14 @@ export async function resetPasswordWithCode(input: {
   destination: CodeDestination;
   passCode: string;
   newPassword: string;
-  rateLimits: SignInRateLimits;
+  rateLimits: ResetCodeRateLimits;
   /** The client's address, counted against the address limit. */
   clientAddress?: string | undefined;
   authing?: AuthingAuthentication;
 }): Promise<ResetPasswordResult> {
   const authing = input.authing ?? createAuthingAuthentication(input.config);
   try {
-    const admission = await admitSignIn(input.rateLimits, {
+    const admission = await admitResetCodeAttempt(input.rateLimits, {
       account: codeDestinationKey(input.destination),
       clientAddress: input.clientAddress,
     });

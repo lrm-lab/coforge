@@ -9,7 +9,6 @@ import { githubSignInHref, type SignInError } from "./return-to";
 const errorText: Record<SignInError, () => string> = {
   github_denied: () => m.login_github_denied(),
   github_failed: () => m.login_github_failed(),
-  rate_limited: () => m.login_rate_limited(),
 };
 
 /** The logo in the button's text colour, as the icon the button styles. */

@@ -11,7 +11,6 @@ import {
   startGitHubSignIn,
 } from "./github-sign-in.server";
 import { redirect } from "./http.server";
-import { getSignInRateLimits } from "./sign-in-rate-limits.server";
 import { signInRequestContext } from "./sign-in-request.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 import { textResponse } from "#src/server/http/text-response.server";
@@ -69,7 +68,6 @@ export async function githubSignInCallbackHandler({
     authingConfig: signIn.config,
     sessionSecret: signIn.sessionSecret,
     secure,
-    rateLimits: getSignInRateLimits(),
     clientAddress,
   });
   if (result.status === "back") {

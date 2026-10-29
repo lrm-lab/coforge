@@ -43,8 +43,8 @@ export function localizedReturnHref(path: string): string {
 }
 
 /** Why a sign-in that left the page (for GitHub) sent the person back to it: they refused on
- * GitHub, it did not work, or too many attempts came from their address. */
-export const SIGN_IN_ERRORS = ["github_denied", "github_failed", "rate_limited"] as const;
+ * GitHub, or it did not work. Signing in has no attempt limit, so nothing reports one here. */
+export const SIGN_IN_ERRORS = ["github_denied", "github_failed"] as const;
 export type SignInError = (typeof SIGN_IN_ERRORS)[number];
 
 /** The `error` of a sign-in page URL, or `undefined` when it names none of `SIGN_IN_ERRORS`. */

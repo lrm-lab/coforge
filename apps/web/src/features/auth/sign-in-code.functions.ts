@@ -10,10 +10,7 @@ import {
 import { nextHrefAfterSignIn } from "#src/features/auth/return-to";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { sendSignInCode, signInWithPasscode } from "#src/server/auth/passcode-sign-in.server";
-import {
-  getCodeSendRateLimits,
-  getSignInRateLimits,
-} from "#src/server/auth/sign-in-rate-limits.server";
+import { getCodeSendRateLimits } from "#src/server/auth/sign-in-rate-limits.server";
 import { signInRequestContext } from "#src/server/auth/sign-in-request.server";
 
 /**
@@ -71,7 +68,6 @@ export const signInWithCode = createServerFn({ method: "POST" })
       secure,
       destination,
       passCode: data.code,
-      rateLimits: getSignInRateLimits(),
       clientAddress,
     });
     if (result.status !== "signed_in") return { ok: false, problem: result.status } as const;

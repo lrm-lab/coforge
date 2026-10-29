@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 
 import type { GitHubSignInConfig } from "#src/server/auth/config.server";
 import { completeGitHubSignIn, startGitHubSignIn } from "#src/server/auth/github-sign-in.server";
-import { NO_SIGN_IN_RATE_LIMITS } from "#src/server/auth/sign-in-rate-limits.server";
 
 // A person sent to /login?prompt=login (Login with CoForge asking for a fresh sign-in) who goes out
 // to GitHub must come back to a sign-in page that still asks for one, not on to the page they were
@@ -44,7 +43,6 @@ function comeBack(started: ReturnType<typeof start>, query: Record<string, strin
     authingConfig,
     sessionSecret,
     secure: true,
-    rateLimits: NO_SIGN_IN_RATE_LIMITS,
   });
 }
 

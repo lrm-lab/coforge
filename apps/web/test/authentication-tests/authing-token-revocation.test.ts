@@ -2,7 +2,6 @@ import { expect, spyOn, test } from "bun:test";
 
 import type { AuthingAuthentication } from "#src/server/auth/authing-authentication.server";
 import { signInThroughAuthing } from "#src/server/auth/authing-sign-in.server";
-import { NO_SIGN_IN_RATE_LIMITS } from "#src/server/auth/sign-in-rate-limits.server";
 
 // CoForge keeps its own session, so Authing's token is revoked once a sign-in has it: whatever
 // happens after the tokens are obtained, and without the person waiting for Authing to answer.
@@ -38,7 +37,6 @@ async function signIn(
       authing,
       sessionSecret: "test-session-secret-at-least-32-characters",
       secure: false,
-      rateLimits: NO_SIGN_IN_RATE_LIMITS,
       resolveUser: async () => ({
         id: "user-1",
         username: "ada",
@@ -108,7 +106,6 @@ test("a revocation that fails is logged without the token and does not fail the 
       authing,
       sessionSecret: "test-session-secret-at-least-32-characters",
       secure: false,
-      rateLimits: NO_SIGN_IN_RATE_LIMITS,
       resolveUser: async () => ({
         id: "user-1",
         username: "ada",

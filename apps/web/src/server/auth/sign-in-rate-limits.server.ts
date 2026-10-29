@@ -9,10 +9,11 @@ import {
 import { openRedisClient } from "#src/server/redis-client.server";
 
 /**
- * The limits on sign-in attempts and on sending sign-in verification codes. Authing sees every call
- * from this server's address, so its own per-address limits would either never trip for an
- * attacker or lock everyone out; these are ours, checked before Authing is called. Every attempt
- * counts, whatever its outcome.
+ * The limits on sending verification codes, and on guessing a password-reset code. Signing in has
+ * no attempt limit of its own: a lockout costs a person their account and an attacker nothing they
+ * cannot spend elsewhere (Frank, 2026-10-29). Authing sees every call from this server's address,
+ * so its own per-address limits would either never trip for an attacker or lock everyone out;
+ * these are ours, checked before Authing is called. Every attempt counts, whatever its outcome.
  */
 export const SIGN_IN_WINDOW_MS = 15 * 60_000;
 /** Attempts per client address in a window (the address is the proxy's view of the client). */
@@ -45,7 +46,7 @@ export const CODE_SEND_ADDRESS_LIMIT = 20;
  */
 export const CODE_SEND_DESTINATION_LIMIT = 10;
 
-export type SignInRateLimits = {
+export type ResetCodeRateLimits = {
   address: AppRateLimit;
   /** Per account and client address together. */
   accountAddress: AppRateLimit;
@@ -61,7 +62,7 @@ export type CodeSendLimit = "address" | "destination";
 export type SignInAdmission = { allowed: true } | { allowed: false; limit: SignInLimit };
 export type CodeSendAdmission = { allowed: true } | { allowed: false; limit: CodeSendLimit };
 
-export const NO_SIGN_IN_RATE_LIMITS: SignInRateLimits = {
+export const NO_RESET_CODE_RATE_LIMITS: ResetCodeRateLimits = {
   address: NO_RATE_LIMIT,
   accountAddress: NO_RATE_LIMIT,
   account: NO_RATE_LIMIT,
@@ -74,16 +75,16 @@ function counted(normalized: string): string {
 }
 
 /**
- * Admits or refuses one sign-in attempt, checking from the narrowest limit out: the address, then
+ * Admits or refuses one attempt to set a password with a code, checking from the narrowest limit
+ * out: the address, then
  * the account from this address, then the account from everywhere. A refusal at one does not count
  * at the next, so a flood from one address is stopped at its own limits and cannot use up what
  * protects a victim from being locked out. Without an address only the account (from everywhere)
- * is limited. A sign-in with no account to name before Authing answers (GitHub's) is limited by its
- * address alone. The account (an email, or a phone number as `codeDestinationKey` writes it) is
- * counted by the hash of its trimmed, lower-cased form, and the pair by the hash of both.
+ * The account (an email, or a phone number as `codeDestinationKey` writes it) is counted by the
+ * hash of its trimmed, lower-cased form, and the pair by the hash of both.
  */
-export async function admitSignIn(
-  limits: SignInRateLimits,
+export async function admitResetCodeAttempt(
+  limits: ResetCodeRateLimits,
   attempt: { account?: string | undefined; clientAddress?: string | undefined },
 ): Promise<SignInAdmission> {
   const { clientAddress } = attempt;
@@ -118,7 +119,7 @@ export async function admitCodeSend(
   return byDestination.allowed ? { allowed: true } : { allowed: false, limit: "destination" };
 }
 
-type AllLimits = { signIn: SignInRateLimits; codeSend: CodeSendRateLimits };
+type AllLimits = { signIn: ResetCodeRateLimits; codeSend: CodeSendRateLimits };
 
 let limits: AllLimits | undefined;
 
@@ -129,7 +130,7 @@ function allLimits(): AllLimits {
 
 /** The sign-in limits over the web server's Redis (`REDIS_URL`), built once. Without a `REDIS_URL`
  * nothing is counted, the same as when Redis is down, and the outage log says so once. */
-export function getSignInRateLimits(): SignInRateLimits {
+export function getResetCodeRateLimits(): ResetCodeRateLimits {
   return allLimits().signIn;
 }
 

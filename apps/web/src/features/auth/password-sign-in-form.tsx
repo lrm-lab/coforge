@@ -9,11 +9,10 @@ import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { signInWithEmailPassword } from "./sign-in.functions";
 
-type Problem = "invalid_credentials" | "rate_limited" | "failed";
+type Problem = "invalid_credentials" | "failed";
 
 const problemText: Record<Problem, () => string> = {
   invalid_credentials: () => m.login_invalid_credentials(),
-  rate_limited: () => m.login_rate_limited(),
   failed: () => m.login_failed(),
 };
 

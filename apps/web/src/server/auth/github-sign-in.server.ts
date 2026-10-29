@@ -134,7 +134,6 @@ export async function completeGitHubSignIn(
     authing,
     sessionSecret: input.sessionSecret,
     secure: input.secure,
-    rateLimits: input.rateLimits,
     clientAddress: input.clientAddress,
     resolveUser: input.resolveUser,
     now: input.now,
@@ -147,7 +146,7 @@ export async function completeGitHubSignIn(
       returnTo,
     };
   }
-  return back(result.status === "rate_limited" ? "rate_limited" : "github_failed");
+  return back("github_failed");
 }
 
 /** The `Set-Cookie` that ends a sign-in's state: it is good for one return from GitHub. */

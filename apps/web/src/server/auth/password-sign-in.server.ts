@@ -28,8 +28,6 @@ export async function signInWithPassword(
     authing,
     sessionSecret: input.sessionSecret,
     secure: input.secure,
-    account: input.credentials.email,
-    rateLimits: input.rateLimits,
     clientAddress: input.clientAddress,
     resolveUser: input.resolveUser,
     now: input.now,
