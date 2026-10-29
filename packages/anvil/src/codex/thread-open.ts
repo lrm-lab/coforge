@@ -149,22 +149,13 @@ function threadRequest(
         // danger-full-access policy does not use workspace-write restrictions.
         "sandbox_workspace_write.network_access": true,
         allow_login_shell: false,
+        // The Agent's shell sees everything the session was launched with; the default
+        // exclusions still keep KEY/SECRET/TOKEN variables out. An include list once dropped
+        // XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS, which left `systemctl --user` with no
+        // user bus on Linux (Codex folds `filters`/`include_only` into an allowlist).
         shell_environment_policy: {
           inherit: "all",
           ignore_default_excludes: false,
-          filters: {
-            "COFORGE_*": "include",
-            HOME: "include",
-            PATH: "include",
-            XDG_CONFIG_HOME: "include",
-            XDG_DATA_HOME: "include",
-            XDG_CACHE_HOME: "include",
-            TMPDIR: "include",
-            TEMP: "include",
-            TMP: "include",
-            LANG: "include",
-            LC_ALL: "include",
-          },
         },
       },
       ...(!sessionId ? { serviceName: "coforge_daemon" } : {}),

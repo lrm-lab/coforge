@@ -522,15 +522,15 @@ function hasAgentInstructions(value: unknown): boolean {
 function hasCoforgeEnvironmentPolicy(params: Record<string, unknown> | undefined): boolean {
   const config = record(params?.config);
   const policy = record(config?.shell_environment_policy);
-  const filters = record(policy?.filters);
   return (
     config?.allow_login_shell === false &&
     config?.["sandbox_workspace_write.network_access"] === true &&
     policy?.inherit === "all" &&
     policy.ignore_default_excludes === false &&
-    filters?.["COFORGE_*"] === "include" &&
-    filters.PATH === "include" &&
-    filters.HOME === "include"
+    // Any include list is an allowlist and drops the session bus and desktop variables.
+    policy.filters === undefined &&
+    policy.include_only === undefined &&
+    policy.exclude === undefined
   );
 }
 
