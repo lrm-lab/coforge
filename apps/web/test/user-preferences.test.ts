@@ -5,6 +5,7 @@ import {
   formatCalendarDate,
   formatClockTime,
   formatDateForDisplay,
+  formatMomentForDisplay,
   formatRelativeTime,
   resolveTimeZone,
   validateTimeZone,
@@ -85,6 +86,20 @@ describe("user time zone preferences", () => {
     expect(losAngeles).toContain("5:00 AM");
     expect(tokyo).toContain("Aug 31, 2026");
     expect(tokyo).toContain("9:00 PM");
+  });
+
+  test("formats a moment to the second with its full date, in the viewer's zone and clock", () => {
+    const instant = new Date("2026-10-27T08:19:30.000Z");
+
+    expect(formatMomentForDisplay(instant, "Asia/Shanghai", "zh-CN", "24h")).toBe(
+      "2026年10月27日 16:19:30",
+    );
+    expect(formatMomentForDisplay(instant, "America/Los_Angeles", "en-US", "12h")).toContain(
+      "October 27, 2026",
+    );
+    expect(formatMomentForDisplay(instant, "America/Los_Angeles", "en-US", "12h")).toContain(
+      "1:19:30 AM",
+    );
   });
 
   test("formats a calendar date in the viewer's time zone and language, without a time", () => {

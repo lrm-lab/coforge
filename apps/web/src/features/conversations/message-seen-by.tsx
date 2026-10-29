@@ -9,14 +9,21 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { formatMomentForDisplay } from "#src/lib/dates";
+import { useTimeFormat } from "#src/lib/time-format-context";
+import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { mentionKey, type Mentionable } from "./mention-text";
 import { loadMessageSeenBy } from "./message-seen-by.functions";
 
 /**
  * Who has seen one of the viewer's messages (Telegram's "N Seen"): the members whose read position
  * reached it, asked for only when the menu opens. Names and faces come from the conversation's own
- * member directory (`SeenByDirectory`), so the answer itself carries ids only.
+ * member directory (`SeenByDirectory`), so the answer itself carries ids only. In a direct message
+ * the answer says when instead (Telegram's "read at"): the other side is the only reader, so the
+ * row gives the time and no name. A message read before read times were kept has none, and keeps
+ * the count.
  */
 const SeenByDirectoryContext = createContext<readonly Mentionable[] | undefined>(undefined);
 
@@ -39,22 +46,30 @@ type Reader = Pick<Mentionable, "kind" | "id" | "label" | "avatarUrl">;
 function useSeenBy(conversationId: string, messageId: string, enabled: boolean) {
   const directory = useContext(SeenByDirectoryContext);
   const load = useServerFn(loadMessageSeenBy);
-  const { data: seen } = useQuery({
+  const { data } = useQuery({
     queryKey: ["conversation", "seen-by", conversationId, messageId],
-    queryFn: async () => (await load({ data: { conversationId, messageId } })).seen,
+    queryFn: () => load({ data: { conversationId, messageId } }),
     enabled,
     staleTime: 10_000,
   });
   return useMemo(() => {
-    if (!seen) return undefined;
+    if (!data) return undefined;
+    const { seen, seenAt } = data;
     const members = new Map(directory?.map((member) => [mentionKey(member), member]));
     const readers = seen.flatMap((reader): Reader[] => {
       const member = members.get(mentionKey(reader));
       return member ? [member] : [];
     });
     // Counted like the ticks count them, even a reader the directory cannot name yet.
-    return { readers, count: seen.length };
-  }, [seen, directory]);
+    return { readers, count: seen.length, seenAt };
+  }, [data, directory]);
+}
+
+/** When the other side of a direct message read it, in the viewer's own zone and clock. */
+function useSeenAtLabel(seenAt: string | undefined) {
+  const timeZone = useTimeZone();
+  const timeFormat = useTimeFormat();
+  return seenAt && formatMomentForDisplay(seenAt, timeZone, getLocale(), timeFormat);
 }
 
 /** Two overlapping checks, the read ticks' mark (`ReadTicks`), as a menu row's icon. */
@@ -118,6 +133,7 @@ export function MessageSeenByMenu({
   const [open, setOpen] = useState(false);
   const seen = useSeenBy(conversationId, messageId, open);
   const readers = seen?.readers;
+  const seenAt = useSeenAtLabel(seen?.seenAt);
   return (
     <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
       <ButtonUtility
@@ -128,9 +144,12 @@ export function MessageSeenByMenu({
         aria-label={m.conversation_more_actions()}
         className="p-1 *:data-icon:size-3.5"
       />
-      <Dropdown.Popover placement="bottom end" className="w-56">
+      {/* A read time is one line, as wide as it needs. */}
+      <Dropdown.Popover placement="bottom end" className="w-max min-w-56">
         <Dropdown.Menu aria-label={m.conversation_more_actions()}>
-          {readers?.length ? (
+          {seenAt ? (
+            <Dropdown.Item icon={SeenIcon} label={seenAt} />
+          ) : readers?.length ? (
             <SubmenuTrigger>
               <Dropdown.Item textValue={seenLabel(seen?.count)} icon={SeenIcon}>
                 <span className="flex items-center">
@@ -178,20 +197,21 @@ export function MessageSeenBySheetEntry({
   const [expanded, setExpanded] = useState(false);
   const seen = useSeenBy(conversationId, messageId, true);
   const readers = seen?.readers;
+  const seenAt = useSeenAtLabel(seen?.seenAt);
   return (
     <>
       <Button
         color="tertiary"
         size="md"
         noTextPadding
-        isDisabled={!readers?.length}
-        aria-expanded={readers?.length ? expanded : undefined}
+        isDisabled={!seenAt && !readers?.length}
+        aria-expanded={!seenAt && readers?.length ? expanded : undefined}
         onPress={() => setExpanded((value) => !value)}
         className="w-full justify-start rounded-lg py-3 [&>[data-text]]:flex [&>[data-text]]:flex-1 [&>[data-text]]:items-center"
       >
         <SeenIcon large />
-        <span className="grow text-left">{seenLabel(seen?.count)}</span>
-        {readers?.length ? (
+        <span className="grow text-left">{seenAt || seenLabel(seen?.count)}</span>
+        {!seenAt && readers?.length ? (
           <>
             <ReaderFaces readers={readers} />
             {expanded ? (
@@ -202,7 +222,7 @@ export function MessageSeenBySheetEntry({
           </>
         ) : null}
       </Button>
-      {expanded && readers?.length ? (
+      {!seenAt && expanded && readers?.length ? (
         <ul
           aria-label={m.conversation_seen_by()}
           className="flex max-h-60 flex-col overflow-y-auto"

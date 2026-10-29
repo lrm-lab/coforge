@@ -59,6 +59,22 @@ export function formatDateForDisplay(
   }).format(new Date(value));
 }
 
+/** A moment to the second, with its full date: "2026年10月27日 16:19:30" in Chinese, the language's
+ * own long date and time elsewhere (for example "October 27, 2026 at 4:19:30 PM"). */
+export function formatMomentForDisplay(
+  value: Date | string,
+  timeZone: string | null | undefined,
+  locale: string,
+  timeFormat: TimeFormat | null = null,
+) {
+  return dateTimeFormat(locale, {
+    dateStyle: "long",
+    timeStyle: "medium",
+    hour12: hour12For(timeFormat),
+    timeZone: resolveTimeZone(timeZone, browserTimeZone()),
+  }).format(new Date(value));
+}
+
 /** The calendar day only, no time of day: "2026.07.23" in Chinese, the language's own medium
  * date elsewhere (for example "Jul 23, 2026"). */
 export function formatCalendarDate(
