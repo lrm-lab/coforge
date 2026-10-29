@@ -14,6 +14,8 @@ type AuthingProfile = {
   email?: string;
   phone_number?: string;
   phone?: string;
+  phone_number_verified?: boolean;
+  phone_verified?: boolean;
   name?: string;
   nickname?: string;
   preferred_username?: string;
@@ -144,7 +146,7 @@ test("an account with no email reaches user resolution with a null email, and no
   expect(resolved).toEqual({ provider: "authing", subject: "authing-phone-user", email: null });
 });
 
-test("the profile's phone number reaches user resolution as E.164, from either claim", async () => {
+test("the profile's verified phone number reaches user resolution as E.164, from either claim", async () => {
   const resolved: unknown[] = [];
   const resolveUser: InternalUserResolver = async (input) => {
     resolved.push(input);
@@ -155,12 +157,38 @@ test("the profile's phone number reaches user resolution as E.164, from either c
       welcomedAt: null,
     };
   };
-  await signIn({ sub: "phone-claim", phone_number: " 138 0013 8000 " }, resolveUser);
-  await signIn({ sub: "legacy-claim", phone: "+8613800138000" }, resolveUser);
+  await signIn(
+    { sub: "phone-claim", phone_number: " 138 0013 8000 ", phone_number_verified: true },
+    resolveUser,
+  );
+  await signIn({ sub: "legacy-claim", phone: "+8613800138000", phone_verified: true }, resolveUser);
 
   expect(resolved).toEqual([
     { provider: "authing", subject: "phone-claim", email: null, phone: "+8613800138000" },
     { provider: "authing", subject: "legacy-claim", email: null, phone: "+8613800138000" },
+  ]);
+});
+
+test("an unverified phone number never reaches user resolution, so it can never match", async () => {
+  const resolved: unknown[] = [];
+  const resolveUser: InternalUserResolver = async (input) => {
+    resolved.push(input);
+    return {
+      id: "00000000-0000-5000-8000-000000000007",
+      username: "user-0a1b2c3d",
+      displayName: "Unnamed",
+      welcomedAt: null,
+    };
+  };
+  await signIn(
+    { sub: "unverified", phone_number: "13800138000", phone_number_verified: false },
+    resolveUser,
+  );
+  await signIn({ sub: "no-claim", phone_number: "13800138000" }, resolveUser);
+
+  expect(resolved).toEqual([
+    { provider: "authing", subject: "unverified", email: null },
+    { provider: "authing", subject: "no-claim", email: null },
   ]);
 });
 
@@ -175,8 +203,11 @@ test("a phone number this platform cannot use reaches user resolution as no phon
       welcomedAt: null,
     };
   };
-  await signIn({ sub: "foreign", phone_number: "+14155550100" }, resolveUser);
-  await signIn({ sub: "empty", phone_number: "" }, resolveUser);
+  await signIn(
+    { sub: "foreign", phone_number: "+14155550100", phone_number_verified: true },
+    resolveUser,
+  );
+  await signIn({ sub: "empty", phone_number: "", phone_number_verified: true }, resolveUser);
 
   expect(resolved).toEqual([
     { provider: "authing", subject: "foreign", email: null },

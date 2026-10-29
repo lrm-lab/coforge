@@ -25,6 +25,10 @@ export type AuthingProfile = {
    * `phone` field on some pools. Either, read by `browser-login` into the account's phone. */
   phone_number?: string | null;
   phone?: string | null;
+  /** Whether Authing verified the number; its own field on some pools. Only a number it says is
+   * verified is stored, so a number anyone can type into their own account never matches. */
+  phone_number_verified?: boolean | null;
+  phone_verified?: boolean | null;
   name?: string | null;
   nickname?: string | null;
   preferred_username?: string | null;

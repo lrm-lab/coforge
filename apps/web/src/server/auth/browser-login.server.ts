@@ -67,8 +67,13 @@ export async function completeBrowserLogin(input: {
     input.authing.fetchUserInfo(tokens.accessToken),
   );
   const email = profile.email?.trim().toLowerCase() || null;
-  // Only a number this platform can use is stored; a provider's foreign format is not one.
-  const phone = e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined;
+  // Only a number this platform can use *and* Authing says it verified is stored: an unverified
+  // number is one the person typed into their own account, so it must never match a platform
+  // operator. A missing claim reads as unverified.
+  const verifiedPhone = profile.phone_number_verified === true || profile.phone_verified === true;
+  const phone = verifiedPhone
+    ? (e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined)
+    : undefined;
   const { resolveUser } = input;
   const resolved = resolveUser
     ? await atSignInStage("user_resolution", () =>
