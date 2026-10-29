@@ -1,30 +1,17 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { AppError } from "#src/lib/app-error";
 import type {
   ActivityInboxFilter,
   ActivityItemDone,
 } from "#src/features/inbox/activity-inbox.schemas";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { channelListMembers } from "#src/server/conversations/channel-list-preview.server";
-import {
-  announceViewerEvent,
-  type ConversationRealtime,
-} from "#src/server/conversations/conversation-realtime.server";
+import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   browserMessageFields,
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
-import {
-  directThreadsSql,
-  followedChannelThreadsSql,
-  humanReadStates,
-  markConversationDoneSql,
-  markConversationsReadSql,
-  markThreadDoneSql,
-  markThreadsReadSql,
-} from "#src/server/conversations/human-unread.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
+import { markActivityAllRead, markActivityDone } from "./activity-inbox-writes.server";
 import {
   peoplePeer,
   peoplePeerUserFields,
@@ -177,82 +164,7 @@ export class ActivityInbox {
    * message.
    */
   async markDone(workspaceId: string, userId: string, item: ActivityItemDone) {
-    await this.authorize(workspaceId, userId);
-    if (item.kind === "mention_action") {
-      await this.db.pendingMentionAction.updateMany({
-        where: { id: item.resolutionId, workspaceId, targetUserId: userId, dismissedAt: null },
-        data: { dismissedAt: new Date() },
-      });
-      return;
-    }
-    const member = await this.db.conversationMember.findFirst({
-      where: { conversationId: item.conversationId, workspaceId, userId, ...ACTIVE_MEMBER_WHERE },
-      select: {
-        id: true,
-        readThroughSequence: true,
-        unreadFromSequence: true,
-        conversation: { select: { channelName: true } },
-      },
-    });
-    if (!member) throw new AppError("ACCESS_DENIED");
-    const rootMessageId = item.kind === "thread" ? item.rootMessageId : null;
-    const latest = await this.db.message.findFirst({
-      where: { conversationId: item.conversationId, threadRootId: rootMessageId },
-      orderBy: { sequence: "desc" },
-      select: { sequence: true },
-    });
-    const boundary = Math.min(item.throughSequence, latest?.sequence ?? 0);
-    if (boundary < 1) return;
-    await this.db.$executeRaw(
-      rootMessageId
-        ? markThreadDoneSql(
-            {
-              memberId: member.id,
-              conversationId: item.conversationId,
-              workspaceId,
-              rootMessageId,
-            },
-            boundary,
-          )
-        : markConversationDoneSql(member.id, boundary),
-    );
-    // A conversation's Done reads it too, so its badge moves when the read cursor or a mark-unread
-    // marker moves (a thread's Done never touches the badge).
-    const readMoved =
-      member.readThroughSequence < boundary ||
-      (member.unreadFromSequence !== null && member.unreadFromSequence <= boundary);
-    if (!rootMessageId && readMoved)
-      await this.announceMarked(workspaceId, userId, [
-        { conversationId: item.conversationId, channel: member.conversation.channelName !== null },
-      ]);
-  }
-
-  /** Tells the person's other pages the badge each moved conversation is left with (Slack's
-   * `channel_marked` / `im_marked`), as a read inside the conversation does. */
-  private async announceMarked(
-    workspaceId: string,
-    userId: string,
-    moved: readonly { conversationId: string; channel: boolean }[],
-  ) {
-    if (moved.length === 0) return;
-    const states = await humanReadStates(
-      this.db,
-      userId,
-      moved.map((row) => row.conversationId),
-    );
-    await Promise.all(
-      moved.map(({ conversationId, channel }) =>
-        announceViewerEvent(this.realtime, {
-          userIds: [userId],
-          event: {
-            type: channel ? "channel.marked.v1" : "dm.marked.v1",
-            workspaceId,
-            conversationId,
-            ...(states.get(conversationId) ?? { unreadCount: 0, readThroughSequence: 0 }),
-          },
-        }),
-      ),
-    );
+    return markActivityDone(this.db, this.realtime, workspaceId, userId, item);
   }
 
   /** Whether the viewer has any unread activity: all the nav rail's Activity dot shows. Every online
@@ -280,29 +192,7 @@ export class ActivityInbox {
    * only Done removes them.
    */
   async markAllRead(workspaceId: string, userId: string, options: { before: Date }) {
-    await this.authorize(workspaceId, userId);
-    const { before } = options;
-    const [moved] = await this.db.$transaction([
-      this.db.$queryRaw<{ conversationId: string; channel: boolean }[]>(
-        markConversationsReadSql(workspaceId, userId, before),
-      ),
-      this.db.pendingMentionAction.updateMany({
-        where: {
-          workspaceId,
-          targetUserId: userId,
-          notifiedAt: { not: null, lte: before },
-          targetReadAt: null,
-        },
-        data: { targetReadAt: new Date() },
-      }),
-      this.db.$executeRaw(
-        markThreadsReadSql(workspaceId, followedChannelThreadsSql(workspaceId, userId), before),
-      ),
-      this.db.$executeRaw(
-        markThreadsReadSql(workspaceId, directThreadsSql(workspaceId, userId), before),
-      ),
-    ]);
-    await this.announceMarked(workspaceId, userId, moved);
+    return markActivityAllRead(this.db, this.realtime, workspaceId, userId, options);
   }
 
   private authorize(workspaceId: string, userId: string) {
