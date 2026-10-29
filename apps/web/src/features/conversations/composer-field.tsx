@@ -22,7 +22,13 @@ import type { useReferenceCompletion } from "./use-reference-completion";
 
 /** What sets the width of a line of draft text: shared by the textarea and its hidden one-line
  * copy, which measures whether the draft fits the one-line text column. */
-const DRAFT_LINE_CLASS = "px-3 text-md";
+const DRAFT_LINE_CLASS = "pr-3 text-md";
+
+/** On one line beside `+`, the text starts as far from its glyph as the glyph is from the frame
+ * (the button's own 8px padding and the 4px column gap already sit between them); anywhere else
+ * it is inset like the frame's other content. */
+const BESIDE_LEADING_CLASS = "pl-1";
+const INSET_CLASS = "pl-3";
 
 /** Puts the caret at the end of the draft, without scrolling the page to it. */
 export function focusDraftEnd(textarea: HTMLTextAreaElement | null) {
@@ -102,6 +108,7 @@ export function ComposerField({
   const stacked = stacksAnyway || overflowsLine;
   // Stacked, `+` and send sit on the bottom bar (row 3, under the attachments).
   const barRow = stacked ? "row-start-3" : "row-start-1";
+  const oneLineInset = leading ? BESIDE_LEADING_CLASS : INSET_CLASS;
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // The open completion owns navigation and confirmation keys; Enter must not send while a
@@ -172,7 +179,7 @@ export function ComposerField({
           className={cx(
             "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 outline-none [field-sizing:content] placeholder:text-placeholder disabled:opacity-50",
             DRAFT_LINE_CLASS,
-            stacked ? "col-span-full" : "col-start-2",
+            stacked ? cx("col-span-full", INSET_CLASS) : cx("col-start-2", oneLineInset),
           )}
         />
         {/* The draft and placeholder, unwrapped, in the one-line column: wider means a wrap. */}
@@ -182,6 +189,7 @@ export function ComposerField({
           className={cx(
             "invisible col-start-2 h-0 min-w-0 overflow-hidden whitespace-pre",
             DRAFT_LINE_CLASS,
+            oneLineInset,
             barRow,
           )}
         >
