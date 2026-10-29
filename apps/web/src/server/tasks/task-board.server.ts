@@ -41,6 +41,20 @@ export class TaskBoard {
     });
   }
 
+  /**
+   * What the viewer may do on the board beyond the ordinary status transitions: a Workspace owner
+   * or admin sets any status (`taskStatusMoveAllowed`). The browser's board reads it so it offers
+   * exactly the moves the server accepts, never a 403 for a drag the menu offered.
+   */
+  async authority(workspaceId: string, userId: string) {
+    const membership = await this.db.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { role: true },
+    });
+    if (!membership) throw new AppError("ACCESS_DENIED");
+    return { canSetAnyStatus: membership.role === "owner" || membership.role === "admin" };
+  }
+
   // The Workspace Tasks page's reads live in `TaskOverviewReads`; these keep the board's entry
   // points.
   overview(workspaceId: string, userId: string) {

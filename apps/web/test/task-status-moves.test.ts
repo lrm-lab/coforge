@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { ordinaryTaskStatusMove } from "#src/server/tasks/task-status-transitions.server";
+import { ordinaryTaskStatusMove, taskStatusMoveAllowed } from "@lrm/coforge-sdk/internal";
 
 /** The whole table, so a change to it is a change here on purpose. */
 const TABLE: Record<string, string[]> = {
@@ -35,4 +35,14 @@ test("work does not skip ahead, and a closed Task reopens only to Todo", () => {
 
 test("the same status is not a move", () => {
   for (const status of STATUSES) expect(ordinaryTaskStatusMove(status, status)).toBe(true);
+});
+
+test("a Workspace owner or admin sets any status; everyone else follows the table", () => {
+  for (const from of STATUSES)
+    for (const to of STATUSES) {
+      expect(taskStatusMoveAllowed(from, to, { manager: true })).toBe(true);
+      expect(taskStatusMoveAllowed(from, to, { manager: false })).toBe(
+        ordinaryTaskStatusMove(from, to),
+      );
+    }
 });

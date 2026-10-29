@@ -65,6 +65,7 @@ export function TaskWorkflow<T extends TaskView>({
   layout,
   statuses = TASK_STATUSES,
   currentMemberId,
+  canSetAnyStatus = false,
   disabled,
   onMove,
   renderTask,
@@ -81,6 +82,9 @@ export function TaskWorkflow<T extends TaskView>({
   /** Hides or shows a board column; given, each column's menu offers "Hide column". */
   onHiddenChange?: (status: TaskStatus, hidden: boolean) => void;
   currentMemberId: (task: T) => string | null;
+  /** The viewer sets any Task status (a Workspace owner or admin), so the board offers every
+   * move the server accepts, not only the ordinary transitions. */
+  canSetAnyStatus?: boolean;
   disabled?: boolean;
   onMove: (task: T, command: TaskMoveCommand) => Promise<void>;
   renderTask: (task: T, controls: TaskControls) => ReactNode;
@@ -121,13 +125,13 @@ export function TaskWorkflow<T extends TaskView>({
       !disabled &&
       !pending &&
       active &&
-      getTaskMoveCommand(active, currentMemberId(active), status),
+      getTaskMoveCommand(active, currentMemberId(active), status, { canSetAnyStatus }),
     );
 
   const controls = (task: T): TaskControls => {
     if (disabled) return { handle: null, moves: [] };
     const moves = TASK_STATUSES.filter((status) =>
-      getTaskMoveCommand(task, currentMemberId(task), status),
+      getTaskMoveCommand(task, currentMemberId(task), status, { canSetAnyStatus }),
     ).map((status) => ({ status, onMove: () => void move(task, status) }));
     if (moves.length === 0) return { handle: null, moves };
     const isPending = Boolean(pending);
@@ -217,7 +221,7 @@ export function TaskWorkflow<T extends TaskView>({
 
   async function move(task: T, status: TaskStatus) {
     if (disabled || saving.current) return;
-    const command = getTaskMoveCommand(task, currentMemberId(task), status);
+    const command = getTaskMoveCommand(task, currentMemberId(task), status, { canSetAnyStatus });
     if (!command) return;
     saving.current = true;
     setError(false);

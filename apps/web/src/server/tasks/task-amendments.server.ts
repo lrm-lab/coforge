@@ -1,5 +1,9 @@
 import { taskSelection } from "./task-view.server";
-import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
+import {
+  taskStatusMoveAllowed,
+  type TaskCommand,
+  type TaskResult,
+} from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-realtime.server";
 import { noticeActor, noticeText } from "./task-notices.server";
@@ -10,7 +14,6 @@ import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./ta
 import { withNotices } from "./task-notice-posting.server";
 import { signalTaskChange, announceTasks } from "./task-publication.server";
 import { requireManager, isTaskManager } from "./task-assignees.server";
-import { ordinaryTaskStatusMove } from "./task-status-transitions.server";
 
 export async function updateTaskStatus(
   ports: TaskBoardPorts,
@@ -26,9 +29,12 @@ export async function updateTaskStatus(
   assertExpectedRevision(task, command.expectedRevision);
   // Anyone who may speak in this conversation moves a Task, an Agent included; a Workspace owner
   // or admin may set any status, everyone else only along the board's own transitions.
-  if (!(await isTaskManager(ports.db, conversation.workspaceId, member)))
-    if (!ordinaryTaskStatusMove(storedTaskStatus(task.status), status))
-      throw new AppError("ACCESS_DENIED");
+  if (
+    !taskStatusMoveAllowed(storedTaskStatus(task.status), status, {
+      manager: await isTaskManager(ports.db, conversation.workspaceId, member),
+    })
+  )
+    throw new AppError("ACCESS_DENIED");
   if (status !== "todo" && status !== "closed" && !task.ownerMemberId)
     throw new AppError("CONFLICT");
   if (status === "done" && task.createsResource && !task.resourceReceipt)

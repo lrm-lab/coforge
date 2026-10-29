@@ -67,11 +67,15 @@ These rules apply to `src/features/tasks/`.
   it.
 - Cards and list rows carry no status select: the column or group is the
   status. Moves go through drag or the card menu's "Move to" section, which
-  both offer every move `getTaskMoveCommand` allows.
+  both offer every move `getTaskMoveCommand` allows. That helper reads the one
+  status table the server uses (`taskStatusMoveAllowed` in the SDK) and the
+  viewer's `canSetAnyStatus` from `useCanSetAnyTaskStatus`, so the board never
+  offers a move the server answers 403 for, and a Workspace owner or admin is
+  offered every status.
 - Overview membership metadata only controls which UI actions are offered;
   the server still authorizes each command.
-- The task popup (`task-detail-dialog.tsx`) offers only the status moves in
-  `STATUS_TRANSITIONS` (`task-move.ts`); board drags keep every move the
+- The task popup (`task-detail-dialog.tsx`) offers only the status moves
+  `taskStatusOptions` (`task-move.ts`) allows; board drags keep every move the
   server allows. Its thread comes from the Task's conversation: a
   conversation page renders it, and the `/tasks` popup
   (`overview-task-popup.tsx`) renders that conversation's own popup through

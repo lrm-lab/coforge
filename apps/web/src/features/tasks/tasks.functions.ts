@@ -56,6 +56,15 @@ const taskCommand = z
   })
   .strict();
 
+/** What the viewer may do on the board besides the ordinary status moves: owner and admin set
+ * any status. The board reads it once per Workspace and offers only the moves the server accepts. */
+export const loadTaskBoardAuthority = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
+    const { user, db, workspaceId } = context;
+    return new TaskBoard(db).authority(workspaceId, user.id);
+  });
+
 export const loadTaskOverview = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {

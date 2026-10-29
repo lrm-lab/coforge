@@ -19,6 +19,7 @@ import type { TaskBoardView } from "./task-board-search";
 import type { OverviewTaskCommand } from "./task-overview-collection";
 import { TaskToolbar } from "./task-toolbar";
 import { statusLabel, TaskWorkflow, type TaskControls } from "./task-workflow";
+import { useCanSetAnyTaskStatus } from "./task-board-authority";
 import { TaskCardSkeleton } from "./tasks-pending";
 import type { FinishedColumn, FinishedTasks } from "./use-finished-tasks";
 
@@ -114,6 +115,8 @@ export function TaskBoard<T extends BoardTask>({
     return { done: group(done), closed: group(closed) };
   }, [done, closed, layout, completedWindow, onWindowChange]);
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
+  // A Workspace owner or admin sets any status; the board must offer exactly what the server takes.
+  const canSetAnyStatus = useCanSetAnyTaskStatus();
   // The Tasks page is the page's main content; a conversation's tab sits inside its page.
   const Root = conversation ? "section" : "main";
   return (
@@ -173,6 +176,7 @@ export function TaskBoard<T extends BoardTask>({
         )}
         <TaskWorkflow
           tasks={visible}
+          canSetAnyStatus={canSetAnyStatus}
           layout={layout}
           statuses={empty || loading ? [] : status ? [status] : TASK_STATUSES}
           paged={paged}
