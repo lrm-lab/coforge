@@ -9,6 +9,8 @@ import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 export type UsernameProfile = {
   preferredUsername?: string | null;
   email?: string | null;
+  /** The provider's phone number in E.164, stored on the account and never used to name it. */
+  phone?: string | null;
   name?: string | null;
   nickname?: string | null;
 };

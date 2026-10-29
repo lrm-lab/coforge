@@ -11,12 +11,17 @@ export class UserIdentityRepository {
   }
 
   async resolve(provider: string, providerSubject: string, profile: UsernameProfile = {}) {
-    // The provider's latest email is stored on every login; it never selects the User.
+    // The provider's latest email and phone are stored on every login; neither selects the User.
     const email = profile.email || undefined;
+    const phone = profile.phone || undefined;
     const identity = await this.findIdentity(provider, providerSubject);
     if (identity) {
-      if (!email || identity.user.email === email) return identity.user;
-      return this.db.user.update({ where: { id: identity.user.id }, data: { email } });
+      const changed = {
+        ...(email && identity.user.email !== email ? { email } : {}),
+        ...(phone && identity.user.phone !== phone ? { phone } : {}),
+      };
+      if (Object.keys(changed).length === 0) return identity.user;
+      return this.db.user.update({ where: { id: identity.user.id }, data: changed });
     }
     const id = crypto.randomUUID();
     return this.usernames.create(profile, async (username) => {
@@ -29,6 +34,7 @@ export class UserIdentityRepository {
             // it at first sign-in (`welcomedAt`).
             displayName: initialDisplayName(profile),
             email,
+            phone,
             identities: { create: { provider, providerSubject } },
           },
         });

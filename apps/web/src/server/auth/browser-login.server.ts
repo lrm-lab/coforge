@@ -1,4 +1,5 @@
 import { initialDisplayName } from "#src/features/auth/name-prefill";
+import { e164Phone } from "#src/features/auth/code-destination";
 import type { AuthingAuthentication, AuthingTokens } from "./authing-authentication.server";
 import { atSignInStage } from "./login-failure.server";
 import { readSignedValue as readSigned, signValue as sign } from "./signed-value.server";
@@ -18,6 +19,8 @@ export type InternalUserResolver = (input: {
   provider: string;
   subject: string;
   email: string | null;
+  /** The provider's phone number in E.164 (`+8613800138000`), when it reported a usable one. */
+  phone?: string;
   preferredUsername?: string;
   /** What the provider reported as the person's name, for a username when nothing better names them. */
   name?: string;
@@ -64,6 +67,8 @@ export async function completeBrowserLogin(input: {
     input.authing.fetchUserInfo(tokens.accessToken),
   );
   const email = profile.email?.trim().toLowerCase() || null;
+  // Only a number this platform can use is stored; a provider's foreign format is not one.
+  const phone = e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined;
   const { resolveUser } = input;
   const resolved = resolveUser
     ? await atSignInStage("user_resolution", () =>
@@ -71,6 +76,7 @@ export async function completeBrowserLogin(input: {
           provider: "authing",
           subject: profile.sub,
           email,
+          ...(phone ? { phone } : {}),
           ...(profile.preferred_username ? { preferredUsername: profile.preferred_username } : {}),
           ...(profile.name?.trim() ? { name: profile.name.trim() } : {}),
           ...(profile.nickname?.trim() ? { nickname: profile.nickname.trim() } : {}),

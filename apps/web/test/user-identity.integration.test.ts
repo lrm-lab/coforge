@@ -14,6 +14,7 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 
 type LoginProfile = {
   email?: string | null;
+  phone?: string | null;
   preferredUsername?: string | null;
   name?: string | null;
   nickname?: string | null;
@@ -35,13 +36,15 @@ async function setup() {
   };
   const storedEmail = async (userId: string) =>
     (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } })).email;
+  const storedPhone = async (userId: string) =>
+    (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true } })).phone;
   const userWrites = () =>
     statements.filter((query) => query.startsWith('UPDATE "public"."users"'));
   const teardown = async () => {
     await db.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
     await db.$disconnect();
   };
-  return { db, suffix, userIds, login, storedEmail, userWrites, teardown };
+  return { db, suffix, userIds, login, storedEmail, storedPhone, userWrites, teardown };
 }
 
 test.skipIf(!connectionString)("a first login stores the email the provider reported", async () => {
@@ -104,6 +107,72 @@ test.skipIf(!connectionString)(
 
       expect(await storedEmail(known.id)).toBe(`kept-${suffix}@example.com`);
       expect(await storedEmail(anonymous.id)).toBeNull();
+    } finally {
+      await teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a first login stores the phone number the provider reported",
+  async () => {
+    const { suffix, login, storedPhone, teardown } = await setup();
+    try {
+      const user = await login(`sub-phone-${suffix}`, {
+        email: `ada-${suffix}@example.com`,
+        phone: "+8613800138000",
+      });
+
+      expect(user.phone).toBe("+8613800138000");
+      expect(await storedPhone(user.id)).toBe("+8613800138000");
+    } finally {
+      await teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a later login with a different phone number updates the same User, and one without keeps it",
+  async () => {
+    const { suffix, login, storedPhone, userWrites, teardown } = await setup();
+    try {
+      const first = await login(`sub-phone-change-${suffix}`, {
+        email: `ada-${suffix}@example.com`,
+        phone: "+8613800138000",
+      });
+      const before = userWrites().length;
+
+      const second = await login(`sub-phone-change-${suffix}`, {
+        email: `ada-${suffix}@example.com`,
+        phone: "+8613900139000",
+      });
+
+      expect(second.id).toBe(first.id);
+      expect(await storedPhone(first.id)).toBe("+8613900139000");
+      expect(userWrites().length - before).toBe(1);
+
+      const unchanged = userWrites().length;
+      await login(`sub-phone-change-${suffix}`, { email: `ada-${suffix}@example.com` });
+      expect(await storedPhone(first.id)).toBe("+8613900139000");
+      expect(userWrites().length - unchanged).toBe(0);
+    } finally {
+      await teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "the phone number is not an identity key: another subject with the same number is another User",
+  async () => {
+    const { suffix, login, storedPhone, teardown } = await setup();
+    try {
+      const phone = "+8613800138000";
+      const original = await login(`sub-phone-pool-a-${suffix}`, { phone });
+      const other = await login(`sub-phone-pool-b-${suffix}`, { phone });
+
+      expect(other.id).not.toBe(original.id);
+      expect(await storedPhone(original.id)).toBe(phone);
+      expect(await storedPhone(other.id)).toBe(phone);
     } finally {
       await teardown();
     }

@@ -51,6 +51,10 @@ the legacy external column is removed. `User.email` is the latest email the
 identity provider reported at login, nullable, not unique, not an identity key.
 An account registered with a phone number alone has none and signs in like any
 other; the signed session and every consumer of it treat the email as optional.
+`User.phone` is the latest phone number the provider reported, in E.164
+(`+8613800138000`), on the same terms: nullable, not unique, never a way to sign
+in or to link two accounts, and only a number this platform can itself use as a
+code destination is stored (a provider's foreign number is left out).
 
 `User.displayName` is the one name teammates see, and it is required, as Slack
 requires a name: an account is created with the name its sign-in provider

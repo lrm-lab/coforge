@@ -12,6 +12,8 @@ const sessionSecret = "test-session-secret-at-least-32-characters";
 type AuthingProfile = {
   sub: string;
   email?: string;
+  phone_number?: string;
+  phone?: string;
   name?: string;
   nickname?: string;
   preferred_username?: string;
@@ -140,6 +142,46 @@ test("an account with no email reaches user resolution with a null email, and no
   });
 
   expect(resolved).toEqual({ provider: "authing", subject: "authing-phone-user", email: null });
+});
+
+test("the profile's phone number reaches user resolution as E.164, from either claim", async () => {
+  const resolved: unknown[] = [];
+  const resolveUser: InternalUserResolver = async (input) => {
+    resolved.push(input);
+    return {
+      id: "00000000-0000-5000-8000-000000000005",
+      username: "user-0a1b2c3d",
+      displayName: "Unnamed",
+      welcomedAt: null,
+    };
+  };
+  await signIn({ sub: "phone-claim", phone_number: " 138 0013 8000 " }, resolveUser);
+  await signIn({ sub: "legacy-claim", phone: "+8613800138000" }, resolveUser);
+
+  expect(resolved).toEqual([
+    { provider: "authing", subject: "phone-claim", email: null, phone: "+8613800138000" },
+    { provider: "authing", subject: "legacy-claim", email: null, phone: "+8613800138000" },
+  ]);
+});
+
+test("a phone number this platform cannot use reaches user resolution as no phone at all", async () => {
+  const resolved: unknown[] = [];
+  const resolveUser: InternalUserResolver = async (input) => {
+    resolved.push(input);
+    return {
+      id: "00000000-0000-5000-8000-000000000006",
+      username: "user-0a1b2c3d",
+      displayName: "Unnamed",
+      welcomedAt: null,
+    };
+  };
+  await signIn({ sub: "foreign", phone_number: "+14155550100" }, resolveUser);
+  await signIn({ sub: "empty", phone_number: "" }, resolveUser);
+
+  expect(resolved).toEqual([
+    { provider: "authing", subject: "foreign", email: null },
+    { provider: "authing", subject: "empty", email: null },
+  ]);
 });
 
 // The session's `name` is what the provider reported (its name, else its nickname), kept only to

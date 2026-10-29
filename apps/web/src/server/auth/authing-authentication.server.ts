@@ -21,6 +21,10 @@ export type AuthingTokens = { accessToken: string };
 export type AuthingProfile = {
   sub: string;
   email?: string | null;
+  /** The OIDC claim (`phone` is in the scope); Authing answers `phone_number`, and its own
+   * `phone` field on some pools. Either, read by `browser-login` into the account's phone. */
+  phone_number?: string | null;
+  phone?: string | null;
   name?: string | null;
   nickname?: string | null;
   preferred_username?: string | null;

@@ -47,6 +47,13 @@ export function codeDestinationKey(destination: CodeDestination): string {
     : `${destination.countryCode}${destination.phone}`;
 }
 
+/** A phone number as the platform stores and compares it (`+8613800138000`): the form a code is
+ * sent to, or null when what was given is not one (an email, or another country's number). */
+export function e164Phone(input: string): string | null {
+  const destination = parseCodeDestination(input);
+  return destination?.kind === "phone" ? codeDestinationKey(destination) : null;
+}
+
 /** Whether `value` looks like a verification code: four to eight digits. */
 export function isSignInCode(value: string): boolean {
   return SIGN_IN_CODE.test(value);
