@@ -121,7 +121,7 @@ test(
 );
 
 test(
-  "a failed background DSH probe keeps other catalogs while explicit refresh reports failure",
+  "a failed DSH probe keeps the other catalogs, background and explicit refresh alike",
   async () => {
     const cwd = await mkdtemp(join(tmpdir(), "dsh-inventory-failure-"));
     const options = {
@@ -143,9 +143,10 @@ test(
       const catalogs = await discoverCodeAgentCatalogs(runtimes, options);
       expect(catalogs.some((catalog) => catalog.provider === "coforge")).toBe(true);
       expect(catalogs.some((catalog) => catalog.provider === "dsh")).toBe(false);
-      await expect(
-        discoverCodeAgentCatalogs(runtimes, { ...options, force: true }),
-      ).rejects.toThrow();
+      // An explicit refresh is one provider's failure too: the other catalogs still come back.
+      const forced = await discoverCodeAgentCatalogs(runtimes, { ...options, force: true });
+      expect(forced.some((catalog) => catalog.provider === "coforge")).toBe(true);
+      expect(forced.some((catalog) => catalog.provider === "dsh")).toBe(false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

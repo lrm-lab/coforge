@@ -42,6 +42,7 @@ import {
   updateInventoryCache,
 } from "./runtime-inventory-cache";
 import { discoverExternalCodeAgents } from "./runtime-probe";
+import { settleCatalogDiscoveries } from "./catalog-discovery-settle";
 import { claudeStaticCatalog } from "@lrm/coforge-anvil/claude-code";
 import { discoverCodexCatalog } from "@lrm/coforge-anvil/codex";
 import { codexCatalogHost } from "./codex/host";
@@ -454,7 +455,7 @@ export async function discoverCodeAgentCatalogs(
     else if (options.force)
       discoveries.push(Promise.reject(new Error("DSH model catalog refresh failed")));
   }
-  const results = await Promise.all(discoveries);
+  const results = await settleCatalogDiscoveries(discoveries);
   if (options.cacheDirectory) {
     const cacheDirectory = options.cacheDirectory;
     const probedAt = Date.now();
