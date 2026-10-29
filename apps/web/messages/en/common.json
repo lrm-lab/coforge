@@ -43,6 +43,8 @@
   "login_invalid_code": "The verification code is incorrect or expired.",
   "login_send_failed": "Could not send the code. Try again.",
   "login_forgot_password": "Forgot password?",
+  "login_no_account": "No account?",
+  "login_create_account": "Create one with a code",
   "login_reset_title": "Reset your password",
   "login_reset_new_password_label": "New password",
   "login_reset_submit": "Reset password",

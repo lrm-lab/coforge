@@ -37,12 +37,15 @@ export function PasswordSignInForm({
   returnTo,
   prompt,
   initialEmail = "",
+  onCreateAccount,
 }: {
   returnTo?: string | undefined;
   /** `"login"` when the page was asked to sign the person in afresh; the reset page keeps it. */
   prompt?: "login" | undefined;
   /** What the email field starts with. */
   initialEmail?: string | undefined;
+  /** Takes someone without an account to the code sign-in, which creates one. */
+  onCreateAccount: () => void;
 }) {
   const submit = useServerFn(signInWithEmailPassword);
   const [email, setEmail] = useState(initialEmail);
@@ -120,6 +123,12 @@ export function PasswordSignInForm({
       >
         {m.login_submit()}
       </Button>
+      <p className="mt-6 text-center text-md text-tertiary">
+        {m.login_no_account()} {/* lg is the link size whose text matches the line's text-md. */}
+        <Button color="link-color" size="lg" noTextPadding onPress={onCreateAccount}>
+          {m.login_create_account()}
+        </Button>
+      </p>
     </form>
   );
 }

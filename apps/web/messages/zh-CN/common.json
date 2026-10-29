@@ -43,6 +43,8 @@
   "login_invalid_code": "验证码不正确或已过期。",
   "login_send_failed": "验证码发送失败，请重试。",
   "login_forgot_password": "忘记密码？",
+  "login_no_account": "没有账号？",
+  "login_create_account": "用验证码注册",
   "login_reset_title": "重置密码",
   "login_reset_new_password_label": "新密码",
   "login_reset_submit": "重置密码",

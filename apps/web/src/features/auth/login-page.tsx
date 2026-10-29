@@ -1,3 +1,5 @@
+import { useState } from "react";
+import type { Key } from "react-aria-components";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { m } from "#src/paraglide/messages";
@@ -15,7 +17,8 @@ import { PasswordSignInForm } from "./password-sign-in-form";
  * when the deployment has it (`github`; `error` is why a GitHub sign-in came back). Coming back
  * from setting a password (`passwordUpdated`), it says so and has the destination filled in: on
  * the password tab for an email, on the code tab for a phone number, which has no password
- * sign-in.
+ * sign-in. The password tab has no sign-up of its own: "No account?" switches to the code tab,
+ * whose first sign-in creates the account.
  */
 export function LoginPage({
   returnTo,
@@ -33,6 +36,7 @@ export function LoginPage({
   const byPassword =
     passwordUpdated !== undefined &&
     parseCodeDestination(passwordUpdated.destination)?.kind === "email";
+  const [tab, setTab] = useState<Key>(byPassword ? "password" : "code");
   return (
     <AuthSplitLayout>
       <div className="flex w-full flex-col gap-8">
@@ -47,7 +51,7 @@ export function LoginPage({
             {byPassword ? m.login_password_updated() : m.login_password_updated_phone()}
           </p>
         ) : null}
-        <Tabs defaultSelectedKey={byPassword ? "password" : "code"}>
+        <Tabs selectedKey={tab} onSelectionChange={setTab}>
           <TabList aria-label={m.login_title()} type="underline" size="md" fullWidth>
             <Tab id="code">{m.login_tab_code()}</Tab>
             <Tab id="password">{m.login_tab_password()}</Tab>
@@ -63,6 +67,7 @@ export function LoginPage({
               returnTo={returnTo}
               prompt={prompt}
               initialEmail={byPassword ? passwordUpdated?.destination : undefined}
+              onCreateAccount={() => setTab("code")}
             />
           </TabPanel>
         </Tabs>
