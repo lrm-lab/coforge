@@ -115,8 +115,8 @@ export class AgentStateDb {
   #importLegacyJson(agentId: string): void {
     if (readMeta(this.#db, "legacyImported") === "true") return;
     const legacy = legacyPaths(agentId);
-    const consumed = readLegacyJson(legacy.consumedSeqs);
-    const draft = readLegacyJson(legacy.drafts);
+    const consumed = readLegacyJson(legacy.consumedSeqs, agentId);
+    const draft = readLegacyJson(legacy.drafts, agentId);
     if (!consumed.present && !draft.present) {
       writeMeta(this.#db, "legacyImported", "true");
       return;
@@ -176,15 +176,59 @@ function rmdirSyncQuiet(path: string): void {
   }
 }
 
-/** `present` says the file exists; `value` is its parsed content, or `undefined` when it cannot
- * parse — the difference decides whether the file is removed or left for recovery. */
-function readLegacyJson(path: string): { present: boolean; value: unknown } {
+/**
+ * `present` says the file exists; `value` is its parsed content, or `undefined` when it cannot
+ * parse — the difference decides whether the file is removed or left for recovery.
+ *
+ * The legacy root is the OS temp directory, which every local user can write. The JSON stores
+ * refused a linked or foreign directory before writing; the import applies the same rules before
+ * reading, or another user could plant a `continue-state.json` (or a symlink to one) and have its
+ * content become this Agent's pending send.
+ */
+function readLegacyJson(path: string, agentId: string): { present: boolean; value: unknown } {
   if (!existsSync(path)) return { present: false, value: undefined };
+  const refusal = unsafeLegacyPath(path);
+  if (refusal !== undefined) {
+    logger.warn("skipping a legacy Agent state file that is not ours", {
+      event: "agent_state.migration_refused",
+      agent_id: agentId,
+      reason: refusal,
+    });
+    // Left in place and left unimported: the marker stays unset, so a repaired file can still
+    // be imported later.
+    return { present: true, value: undefined };
+  }
   try {
     return { present: true, value: JSON.parse(readFileSync(path, "utf8")) };
   } catch {
     return { present: true, value: undefined };
   }
+}
+
+/** The first rule `path` breaks against the legacy stores' own path policy, or `undefined`. */
+function unsafeLegacyPath(path: string): string | undefined {
+  const uid = process.geteuid?.();
+  // Every ancestor the stores created: the root, CoForge's directory under it, and the Agent's.
+  const levels = [dirname(dirname(dirname(path))), dirname(dirname(path)), dirname(path)];
+  for (const level of levels) {
+    let status;
+    try {
+      status = lstatSync(level);
+    } catch {
+      return "missing-directory";
+    }
+    if (status.isSymbolicLink() || !status.isDirectory()) return "not-a-directory";
+    if (uid !== undefined && status.uid !== uid) return "foreign-directory";
+  }
+  let file;
+  try {
+    file = lstatSync(path);
+  } catch {
+    return "missing-file";
+  }
+  if (file.isSymbolicLink() || !file.isFile()) return "not-a-file";
+  if (uid !== undefined && file.uid !== uid) return "foreign-file";
+  return undefined;
 }
 
 function readMeta(db: Database, key: string): string | undefined {
