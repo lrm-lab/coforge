@@ -9,6 +9,7 @@ import { assertStartupConfig } from "#src/server/startup-config.server";
 import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
 import { startWeeklyReportScheduleTickFromEnv } from "#src/server/records/weekly-report-schedule-tick.server";
 import { startWorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
+import { startPlatformOperatorSeedingFromEnv } from "#src/server/app-marketplace/platform-operator-seeding.server";
 
 // This module loads on the first request (Nitro loads the SSR entry lazily), not at boot. It
 // validates and installs the configuration the request handlers read, so a request never runs
@@ -22,6 +23,8 @@ ensureWorkspaceMemoryLifecycle();
 // COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS is set; external HTTP cron remains valid.
 startWeeklyReportScheduleTickFromEnv();
 startWorkspaceAssistantOnboarding();
+// The first Marketplace operators, from the deployment's config; only when none exists yet.
+startPlatformOperatorSeedingFromEnv();
 // The app notification outbox's pg-boss workers run in the process that serves requests. This
 // entry loads on the first request, which the deployment's health check makes at start.
 startAppNotificationQueueAtServerStartFromEnv();
