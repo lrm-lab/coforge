@@ -19,7 +19,6 @@ import { assertValidMessageSender } from "./message-sender";
 import {
   decodeMessageAttentionSummary,
   encodeMessageAttentionSummary,
-  type MessageAttentionSummary,
 } from "./local-attention-summary";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
 

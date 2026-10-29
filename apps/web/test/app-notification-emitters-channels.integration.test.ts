@@ -176,7 +176,7 @@ const environment = defineEmitterCases([
     act: (env, fixture, { channel, agent }) =>
       new SendDirectMessage(
         new PrismaDirectConversationRepository(env.db),
-        { execute: async (_scope: unknown, persist: () => unknown) => persist() },
+        { execute: async (_scope, persist) => persist() },
         { publish: async () => [] } as never,
       ).executeFromAgent({
         idempotencyKey: crypto.randomUUID(),
