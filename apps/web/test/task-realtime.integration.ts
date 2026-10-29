@@ -163,9 +163,14 @@ test("a Task write's announcement and its message signal never share a publicati
   await run({ operation: "claim", number: created.number });
   await run({ operation: "unclaim", number: created.number });
   await run({ operation: "delete", number: created.number });
-  expect(published.filter((entry) => entry.startsWith("chat:workspace:")).length).toBeGreaterThan(
-    4,
-  );
+  // The Workspace channel carries the Task announcements only: a message signal goes to the
+  // conversation's own channel (task #285), so four writes are four publications here.
+  expect(published.filter((entry) => entry.startsWith("chat:workspace:")).length).toBe(4);
+  // That conversation's channel carries both kinds, and no two share a key — Centrifugo drops a
+  // second publication with the same key on the same channel.
+  expect(
+    published.filter((entry) => entry.startsWith(`chat:${conversation.id} `)).length,
+  ).toBeGreaterThan(4);
   expect(new Set(published).size).toBe(published.length);
 });
 
