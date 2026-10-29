@@ -42,12 +42,8 @@ import {
 } from "#src/features/cache-persistence/browser-query-cache";
 import { projectsQuery } from "#src/features/projects/project-tree-queries";
 import { rememberConversation } from "./last-conversation";
-import {
-  unknownAgentOf,
-  unreadIdsToKeep,
-  useChannelUnread,
-  type SeededList,
-} from "./conversation-unread";
+import { unknownAgentOf, unreadIdsToKeep, type SeededList } from "./conversation-unread";
+import { useChannelUnread } from "./use-channel-unread";
 import {
   useApplyChannelSignal,
   useListReadPosition,
