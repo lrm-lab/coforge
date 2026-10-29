@@ -275,6 +275,9 @@ test("real routing delivers start/end only to the conversation, with no history 
       viewer.once("disconnected", ({ code }) => resolve(code));
     });
     outsider.subscribe();
+    // A denial drops the whole client, so the subscription's pending readiness rejects with
+    // `clientDisconnected`: expected here, consumed so it cannot fail the test unhandled.
+    void outsider.ready().catch(() => {});
     const channelDenial = await rejectedChannel;
     expect(channelDenial).toBe(3500);
     const otherUser = await connection("other");
@@ -289,6 +292,7 @@ test("real routing delivers start/end only to the conversation, with no history 
       otherUser.once("disconnected", ({ code }) => resolve(code));
     });
     stolen.subscribe();
+    void stolen.ready().catch(() => {});
     const userDenial = await rejectedUser;
     expect(userDenial).toBe(3500);
     console.info(
