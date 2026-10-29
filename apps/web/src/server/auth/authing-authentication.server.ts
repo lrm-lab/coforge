@@ -21,12 +21,14 @@ export type AuthingTokens = { accessToken: string };
 export type AuthingProfile = {
   sub: string;
   email?: string | null;
+  /** Whether Authing verified the address; only a verified one may match a platform operator. */
+  email_verified?: boolean | null;
   /** The OIDC claim (`phone` is in the scope); Authing answers `phone_number`, and its own
    * `phone` field on some pools. Either, read by `browser-login` into the account's phone. */
   phone_number?: string | null;
   phone?: string | null;
-  /** Whether Authing verified the number; its own field on some pools. Only a number it says is
-   * verified is stored, so a number anyone can type into their own account never matches. */
+  /** Whether Authing verified the number; its own field on some pools. Only a verified number may
+   * match a platform operator, so one anyone can type into their own account cannot. */
   phone_number_verified?: boolean | null;
   phone_verified?: boolean | null;
   name?: string | null;

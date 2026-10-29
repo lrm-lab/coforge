@@ -12,6 +12,7 @@ const sessionSecret = "test-session-secret-at-least-32-characters";
 type AuthingProfile = {
   sub: string;
   email?: string;
+  email_verified?: boolean;
   phone_number?: string;
   phone?: string;
   phone_number_verified?: boolean;
@@ -86,6 +87,8 @@ test("passes Authing preferred_username to first-identity resolution and stores 
     provider: "authing",
     subject: "provider-subject-not-a-username",
     email: "ada@example.com",
+    emailVerified: false,
+    phoneVerified: false,
     preferredUsername: "ada",
   });
   expect(completed.user.username).toBe("ada");
@@ -113,6 +116,8 @@ test("the profile's name and nickname reach user resolution, so a username can b
     provider: "authing",
     subject: "s",
     email: null,
+    emailVerified: false,
+    phoneVerified: false,
     name: "Ada Lovelace",
     nickname: "Ace",
   });
@@ -143,10 +148,16 @@ test("an account with no email reaches user resolution with a null email, and no
     };
   });
 
-  expect(resolved).toEqual({ provider: "authing", subject: "authing-phone-user", email: null });
+  expect(resolved).toEqual({
+    provider: "authing",
+    subject: "authing-phone-user",
+    email: null,
+    emailVerified: false,
+    phoneVerified: false,
+  });
 });
 
-test("the profile's verified phone number reaches user resolution as E.164, from either claim", async () => {
+test("the profile's phone number reaches user resolution as E.164, from either claim, with its verification", async () => {
   const resolved: unknown[] = [];
   const resolveUser: InternalUserResolver = async (input) => {
     resolved.push(input);
@@ -164,12 +175,50 @@ test("the profile's verified phone number reaches user resolution as E.164, from
   await signIn({ sub: "legacy-claim", phone: "+8613800138000", phone_verified: true }, resolveUser);
 
   expect(resolved).toEqual([
-    { provider: "authing", subject: "phone-claim", email: null, phone: "+8613800138000" },
-    { provider: "authing", subject: "legacy-claim", email: null, phone: "+8613800138000" },
+    {
+      provider: "authing",
+      subject: "phone-claim",
+      email: null,
+      emailVerified: false,
+      phone: "+8613800138000",
+      phoneVerified: true,
+    },
+    {
+      provider: "authing",
+      subject: "legacy-claim",
+      email: null,
+      emailVerified: false,
+      phone: "+8613800138000",
+      phoneVerified: true,
+    },
   ]);
 });
 
-test("an unverified phone number never reaches user resolution, so it can never match", async () => {
+test("the profile's verified email reaches user resolution with its verification", async () => {
+  let resolved: unknown;
+  await signIn(
+    { sub: "verified-email", email: " Ada@Example.com ", email_verified: true },
+    async (input) => {
+      resolved = input;
+      return {
+        id: "00000000-0000-5000-8000-000000000008",
+        username: "ada",
+        displayName: "Ada",
+        welcomedAt: null,
+      };
+    },
+  );
+
+  expect(resolved).toEqual({
+    provider: "authing",
+    subject: "verified-email",
+    email: "ada@example.com",
+    emailVerified: true,
+    phoneVerified: false,
+  });
+});
+
+test("an unverified phone number is stored, and recorded as unverified", async () => {
   const resolved: unknown[] = [];
   const resolveUser: InternalUserResolver = async (input) => {
     resolved.push(input);
@@ -187,8 +236,22 @@ test("an unverified phone number never reaches user resolution, so it can never 
   await signIn({ sub: "no-claim", phone_number: "13800138000" }, resolveUser);
 
   expect(resolved).toEqual([
-    { provider: "authing", subject: "unverified", email: null },
-    { provider: "authing", subject: "no-claim", email: null },
+    {
+      provider: "authing",
+      subject: "unverified",
+      email: null,
+      emailVerified: false,
+      phone: "+8613800138000",
+      phoneVerified: false,
+    },
+    {
+      provider: "authing",
+      subject: "no-claim",
+      email: null,
+      emailVerified: false,
+      phone: "+8613800138000",
+      phoneVerified: false,
+    },
   ]);
 });
 
@@ -210,8 +273,20 @@ test("a phone number this platform cannot use reaches user resolution as no phon
   await signIn({ sub: "empty", phone_number: "", phone_number_verified: true }, resolveUser);
 
   expect(resolved).toEqual([
-    { provider: "authing", subject: "foreign", email: null },
-    { provider: "authing", subject: "empty", email: null },
+    {
+      provider: "authing",
+      subject: "foreign",
+      email: null,
+      emailVerified: false,
+      phoneVerified: true,
+    },
+    {
+      provider: "authing",
+      subject: "empty",
+      email: null,
+      emailVerified: false,
+      phoneVerified: true,
+    },
   ]);
 });
 

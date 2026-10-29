@@ -19,8 +19,12 @@ export type InternalUserResolver = (input: {
   provider: string;
   subject: string;
   email: string | null;
+  /** Whether the provider says it verified that email. */
+  emailVerified: boolean;
   /** The provider's phone number in E.164 (`+8613800138000`), when it reported a usable one. */
   phone?: string;
+  /** Whether the provider says it verified that number. */
+  phoneVerified: boolean;
   preferredUsername?: string;
   /** What the provider reported as the person's name, for a username when nothing better names them. */
   name?: string;
@@ -67,13 +71,12 @@ export async function completeBrowserLogin(input: {
     input.authing.fetchUserInfo(tokens.accessToken),
   );
   const email = profile.email?.trim().toLowerCase() || null;
-  // Only a number this platform can use *and* Authing says it verified is stored: an unverified
-  // number is one the person typed into their own account, so it must never match a platform
-  // operator. A missing claim reads as unverified.
-  const verifiedPhone = profile.phone_number_verified === true || profile.phone_verified === true;
-  const phone = verifiedPhone
-    ? (e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined)
-    : undefined;
+  // Only a number this platform can use is stored; a provider's foreign format is not one. Whether
+  // the provider verified it is recorded beside it, never assumed: a missing claim reads as
+  // unverified, and only a verified address may match a platform operator.
+  const phone = e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined;
+  const emailVerified = profile.email_verified === true;
+  const phoneVerified = profile.phone_number_verified === true || profile.phone_verified === true;
   const { resolveUser } = input;
   const resolved = resolveUser
     ? await atSignInStage("user_resolution", () =>
@@ -81,7 +84,9 @@ export async function completeBrowserLogin(input: {
           provider: "authing",
           subject: profile.sub,
           email,
+          emailVerified,
           ...(phone ? { phone } : {}),
+          phoneVerified,
           ...(profile.preferred_username ? { preferredUsername: profile.preferred_username } : {}),
           ...(profile.name?.trim() ? { name: profile.name.trim() } : {}),
           ...(profile.nickname?.trim() ? { nickname: profile.nickname.trim() } : {}),

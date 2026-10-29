@@ -14,7 +14,9 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 
 type LoginProfile = {
   email?: string | null;
+  emailVerified?: boolean;
   phone?: string | null;
+  phoneVerified?: boolean;
   preferredUsername?: string | null;
   name?: string | null;
   nickname?: string | null;
@@ -38,13 +40,28 @@ async function setup() {
     (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } })).email;
   const storedPhone = async (userId: string) =>
     (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true } })).phone;
+  const storedVerification = async (userId: string) =>
+    db.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { emailVerified: true, phoneVerified: true },
+    });
   const userWrites = () =>
     statements.filter((query) => query.startsWith('UPDATE "public"."users"'));
   const teardown = async () => {
     await db.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
     await db.$disconnect();
   };
-  return { db, suffix, userIds, login, storedEmail, storedPhone, userWrites, teardown };
+  return {
+    db,
+    suffix,
+    userIds,
+    login,
+    storedEmail,
+    storedPhone,
+    storedVerification,
+    userWrites,
+    teardown,
+  };
 }
 
 test.skipIf(!connectionString)("a first login stores the email the provider reported", async () => {
@@ -155,6 +172,48 @@ test.skipIf(!connectionString)(
       await login(`sub-phone-change-${suffix}`, { email: `ada-${suffix}@example.com` });
       expect(await storedPhone(first.id)).toBe("+8613900139000");
       expect(userWrites().length - unchanged).toBe(0);
+    } finally {
+      await teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a login records whether the provider verified each address, and follows a changed answer",
+  async () => {
+    const { suffix, login, storedVerification, userWrites, teardown } = await setup();
+    try {
+      const first = await login(`sub-verified-${suffix}`, {
+        email: `ada-${suffix}@example.com`,
+        emailVerified: false,
+        phone: "+8613800138000",
+        phoneVerified: false,
+      });
+      expect(await storedVerification(first.id)).toEqual({
+        emailVerified: false,
+        phoneVerified: false,
+      });
+
+      const before = userWrites().length;
+      await login(`sub-verified-${suffix}`, {
+        email: `ada-${suffix}@example.com`,
+        emailVerified: true,
+        phone: "+8613800138000",
+        phoneVerified: true,
+      });
+      expect(await storedVerification(first.id)).toEqual({
+        emailVerified: true,
+        phoneVerified: true,
+      });
+      expect(userWrites().length - before).toBe(1);
+
+      // A provider that stops vouching for an address leaves it stored but unverified: the safe
+      // direction, since only a verified address may match an operator.
+      await login(`sub-verified-${suffix}`, { email: `ada-${suffix}@example.com` });
+      expect(await storedVerification(first.id)).toEqual({
+        emailVerified: false,
+        phoneVerified: false,
+      });
     } finally {
       await teardown();
     }

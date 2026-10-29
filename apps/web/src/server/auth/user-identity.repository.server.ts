@@ -11,14 +11,20 @@ export class UserIdentityRepository {
   }
 
   async resolve(provider: string, providerSubject: string, profile: UsernameProfile = {}) {
-    // The provider's latest email and phone are stored on every login; neither selects the User.
+    // The provider's latest email and phone, and whether it vouches for each, are stored on every
+    // login; none of them selects the User. A claim the provider stops reporting reads as
+    // unverified, which is the safe direction: only a verified address may match an operator.
     const email = profile.email || undefined;
     const phone = profile.phone || undefined;
+    const emailVerified = profile.emailVerified === true;
+    const phoneVerified = profile.phoneVerified === true;
     const identity = await this.findIdentity(provider, providerSubject);
     if (identity) {
       const changed = {
         ...(email && identity.user.email !== email ? { email } : {}),
         ...(phone && identity.user.phone !== phone ? { phone } : {}),
+        ...(identity.user.emailVerified !== emailVerified ? { emailVerified } : {}),
+        ...(identity.user.phoneVerified !== phoneVerified ? { phoneVerified } : {}),
       };
       if (Object.keys(changed).length === 0) return identity.user;
       return this.db.user.update({ where: { id: identity.user.id }, data: changed });
@@ -34,7 +40,9 @@ export class UserIdentityRepository {
             // it at first sign-in (`welcomedAt`).
             displayName: initialDisplayName(profile),
             email,
+            emailVerified,
             phone,
+            phoneVerified,
             identities: { create: { provider, providerSubject } },
           },
         });

@@ -125,7 +125,9 @@ function persistedIdentityResolver(): InternalUserResolver {
   return (identity) =>
     identities.resolve(identity.provider, identity.subject, {
       email: identity.email,
+      emailVerified: identity.emailVerified,
       phone: identity.phone,
+      phoneVerified: identity.phoneVerified,
       preferredUsername: identity.preferredUsername,
       name: identity.name,
       nickname: identity.nickname,

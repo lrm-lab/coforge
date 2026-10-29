@@ -4,10 +4,18 @@ model User {
   username                    String                          @unique
   /// The latest email the identity provider reported at login. Not unique and never an identity key.
   email                       String?
-  /// The latest phone number the identity provider reported at login *and* says it verified, in
-  /// E.164 (`+8613800138000`). Reported by the provider, not an identity key: it never signs anyone
-  /// in and never links two accounts. Null when the provider reports none, or an unverified one.
+  /// Whether the provider says it verified that email (`email_verified`). Recorded, never assumed:
+  /// a platform operator is matched only on a verified one, so an address anyone can type into
+  /// their own account cannot claim the role. False when the provider does not say.
+  emailVerified               Boolean                         @default(false)
+  /// The latest phone number the identity provider reported at login, in E.164
+  /// (`+8613800138000`). Reported by the provider, not an identity key: it never signs anyone in
+  /// and never links two accounts. Null when the provider reports none, or one this platform
+  /// cannot use as a code destination.
   phone                       String?
+  /// Whether the provider says it verified that number (`phone_number_verified`), on the same
+  /// terms as `emailVerified`.
+  phoneVerified               Boolean                         @default(false)
   /// The name teammates see. Required, as Slack requires a name: an account starts with the name
   /// its sign-in provider reported (`initialDisplayName`), and a person confirms it at first
   /// sign-in. A person is never shown by `username`.
