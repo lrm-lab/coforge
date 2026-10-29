@@ -97,7 +97,7 @@ test("inbox JSON has the new shape and hides message ordering fields", async () 
 });
 
 test("an App item names its app, item id and the command that acts on it", async () => {
-  const output = await run(["inbox", "check"], {
+  const output = (await run(["inbox", "check"], {
     check: async () => ({ messages: [] }),
     read: async () => undefined,
     send: async () => ({}),
@@ -126,7 +126,7 @@ test("an App item names its app, item id and the command that acts on it", async
         { kind: "app", app: { appId: "acme.notes", itemId: "note:1", title: "Note" } },
       ],
     }),
-  } as never);
+  } as never)) as string;
   expect(output).toContain("- [system.reminder] reminder:abc:2 Deploy check: A reminder is due.");
   expect(output).toContain("  Run: coforge reminder ack --id abc --revision 2");
   expect(output).toContain("- [acme.notes] note:1 Note:");
