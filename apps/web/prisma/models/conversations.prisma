@@ -51,6 +51,7 @@ model Conversation {
   tasks          Task[]
   actionCards    ActionCard[]
   savedMessages  SavedMessage[]
+  messageReads   MessageRead[]
   pins           ConversationPin[]
   project        Project?               @relation("ProjectConversations", fields: [projectId], references: [id], onDelete: SetNull)
   coordinatorAgent Agent?               @relation("ConversationCoordinator", fields: [coordinatorAgentId, workspaceId], references: [id, workspaceId], onDelete: NoAction)
@@ -113,6 +114,7 @@ model ConversationMember {
   mentions                 MessageMention[]
   sentPendingMentionActions PendingMentionAction[]
   savedMessages            SavedMessage[]
+  messageReads             MessageRead[]
   pins                     ConversationPin[]
   ownedTasks               Task[]            @relation("TaskOwner")
   createdTasks             Task[]            @relation("TaskCreator")
@@ -124,6 +126,26 @@ model ConversationMember {
   @@index([workspaceId, agentId])
   @@index([chatSectionId])
   @@map("conversation_members")
+}
+
+/// One reader's advance through a direct conversation: the highest sequence they had read at a
+/// moment, appended when their cursor moves forward. Direct messages only — a channel's read
+/// positions are not kept this way. An advance within five seconds of the reader's last row updates
+/// that row instead of appending, so a fast scroll does not write one row per message. Append-only
+/// otherwise: nothing rewrites an older row, and the conversation's deletion takes them all.
+model MessageRead {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  workspaceId    String             @db.Uuid
+  conversationId String             @db.Uuid
+  memberId       String             @db.Uuid
+  /// The highest sequence this reader had read when the row was written.
+  sequence       Int
+  readAt         DateTime           @default(now())
+  conversation   Conversation       @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+
+  @@index([conversationId, memberId, sequence])
+  @@map("message_reads")
 }
 
 model ThreadRead {

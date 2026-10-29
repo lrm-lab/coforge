@@ -3,6 +3,7 @@ import type { DirectConversationPorts } from "./agent-targets.repositories.serve
 import { resolveMessage } from "./agent-targets.repositories.server";
 import { readDirectConversationMessagesPage } from "./agent-message-history-adapter.server";
 import { advanceThreadRead } from "./thread-read-position.server";
+import { recordReadAdvance } from "#src/server/conversations/human-unread.server";
 import {
   MESSAGE_MENTIONS_SELECT,
   type MessageMentionRef,
@@ -84,14 +85,29 @@ export async function advanceResolvedAgentReadThrough(
       bounded,
     );
   } else if (bounded)
-    await ports.db.conversationMember.updateMany({
-      where: {
-        conversationId,
-        workspaceId,
-        agentId,
-        agentReadThroughSequence: { lt: bounded },
-      },
-      data: { agentReadThroughSequence: bounded },
+    await ports.db.$transaction(async (tx) => {
+      const advanced = await tx.conversationMember.updateMany({
+        where: {
+          conversationId,
+          workspaceId,
+          agentId,
+          agentReadThroughSequence: { lt: bounded },
+        },
+        data: { agentReadThroughSequence: bounded },
+      });
+      // The other side of a direct message reads when the Agent's cursor moves; a channel keeps no
+      // such record.
+      if (advanced.count > 0) {
+        const member = await tx.conversationMember.findFirstOrThrow({
+          where: { conversationId, workspaceId, agentId },
+          select: { id: true },
+        });
+        await recordReadAdvance(tx, {
+          conversationId,
+          memberId: member.id,
+          sequence: bounded,
+        });
+      }
     });
   return bounded;
 }

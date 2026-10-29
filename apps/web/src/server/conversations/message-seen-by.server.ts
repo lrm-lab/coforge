@@ -16,7 +16,7 @@ export type MessageSeenBy = { kind: "user" | "agent"; id: string };
 export async function readMessageSeenBy(
   db: PrismaClient,
   input: MessageSeenByInput,
-): Promise<{ seen: MessageSeenBy[] }> {
+): Promise<{ seen: MessageSeenBy[]; seenAt?: string }> {
   const authorization = await new ConversationHistory(db).authorize(
     input.workspaceId,
     input.userId,
@@ -51,7 +51,25 @@ export async function readMessageSeenBy(
     },
   });
 
+  // When the other side first read it, for a direct conversation only: a channel keeps no such
+  // record, and the caller shows no time rather than a guess.
+  const firstRead = await db.messageRead.findFirst({
+    where: {
+      conversationId: input.conversationId,
+      workspaceId: input.workspaceId,
+      memberId: { not: authorization.activeMemberId },
+      sequence: { gte: message.sequence },
+    },
+    orderBy: { readAt: "asc" },
+    select: { readAt: true, conversation: { select: { directKey: true } } },
+  });
+  const seenAt =
+    firstRead?.conversation.directKey === null || !firstRead
+      ? undefined
+      : firstRead.readAt.toISOString();
+
   return {
+    ...(seenAt ? { seenAt } : {}),
     seen: members.flatMap((member) => {
       const id = member.agentId ?? member.userId;
       const readThrough = member.agentId

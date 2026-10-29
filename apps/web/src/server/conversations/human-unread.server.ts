@@ -115,6 +115,12 @@ export async function markHumanRead(
       data: { unreadFromSequence: null },
     });
     if (advanced.count === 0 && consumed.count === 0) return undefined;
+    if (advanced.count > 0)
+      await recordReadAdvance(tx, {
+        conversationId,
+        memberId: member.id,
+        sequence: boundary,
+      });
     return {
       memberId: member.id,
       readThroughAdvanced: advanced.count > 0,
@@ -272,4 +278,54 @@ export function directThreadsSql(workspaceId: string, userId: string) {
     WHERE cm."userId" = ${userId}::uuid
       AND cm."workspaceId" = ${workspaceId}::uuid
       AND cm."leftAt" IS NULL`;
+}
+
+/**
+ * How close two advances of the same reader may be before the second updates the first's row
+ * instead of appending. A fast scroll moves the cursor many times a second, and one row per move
+ * would be one row per message read, not per reading.
+ */
+export const READ_ADVANCE_COALESCE_MS = 5_000;
+
+/**
+ * Records that `memberId` has read a direct conversation up to `sequence` at `at`. Direct messages
+ * only: a channel's read positions are not kept this way. It runs in the caller's transaction,
+ * beside the cursor move it records, so the two cannot disagree; an advance within
+ * `READ_ADVANCE_COALESCE_MS` of that reader's last row updates that row rather than appending.
+ * A channel, a member who has left, or a sequence that did not move writes nothing.
+ */
+export async function recordReadAdvance(
+  tx: Pick<Prisma.TransactionClient, "conversation" | "messageRead">,
+  advance: { conversationId: string; memberId: string; sequence: number; at?: Date },
+): Promise<void> {
+  if (advance.sequence < 1) return;
+  const conversation = await tx.conversation.findUnique({
+    where: { id: advance.conversationId },
+    select: { directKey: true, workspaceId: true },
+  });
+  if (!conversation?.directKey) return;
+  const at = advance.at ?? new Date();
+  const last = await tx.messageRead.findFirst({
+    where: { conversationId: advance.conversationId, memberId: advance.memberId },
+    orderBy: { readAt: "desc" },
+    select: { id: true, sequence: true, readAt: true },
+  });
+  if (last && at.getTime() - last.readAt.getTime() < READ_ADVANCE_COALESCE_MS) {
+    // The same reading, still going: the row keeps its place and takes the newer boundary.
+    if (advance.sequence > last.sequence)
+      await tx.messageRead.update({
+        where: { id: last.id },
+        data: { sequence: advance.sequence, readAt: at },
+      });
+    return;
+  }
+  await tx.messageRead.create({
+    data: {
+      workspaceId: conversation.workspaceId,
+      conversationId: advance.conversationId,
+      memberId: advance.memberId,
+      sequence: advance.sequence,
+      readAt: at,
+    },
+  });
 }
