@@ -15,7 +15,11 @@ const unused = async () => {
  * The section order as the sidebar's hook sees it: a tracked result that renders again only when a
  * property the hook reads changes, and each render works out whether a drag may start.
  */
-function sidebarOrder(reads: Array<() => Promise<string[]>>) {
+function sidebarOrder(
+  reads: Array<() => Promise<string[]>>,
+  // Each read answers once, so by default a failed one is not tried again here.
+  tries: { retry?: number | false; retryDelay?: number } = { retry: false },
+) {
   const api: ChatSectionsApi = {
     list: unused,
     order: () => reads.shift()!().then((order) => ({ streamPositions: {}, order })),
@@ -26,7 +30,7 @@ function sidebarOrder(reads: Array<() => Promise<string[]>>) {
     move: unused,
   };
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const options = chatSectionOrderQuery("w1", api);
+  const options = { ...chatSectionOrderQuery("w1", api), ...tries };
   const observer = new QueryObserver(queryClient, options);
   const renders: boolean[] = [];
   const render = () => {
@@ -80,6 +84,23 @@ describe("chatSectionOrderReady, as the sidebar renders it", () => {
     followUp.fail(new Error("read failed"));
     await reading;
     expect(order.renders.at(-1)).toBe(false);
+    order.unsubscribe();
+  });
+
+  test("is true once a failed read, tried again, lands", async () => {
+    // The query's own retries, without their wait.
+    const order = sidebarOrder(
+      [
+        async () => ["pinned", "channels"],
+        async () => Promise.reject(new Error("blip")),
+        async () => ["channels", "pinned"],
+      ],
+      { retryDelay: 0 },
+    );
+    await order.queryClient.fetchQuery(order.options);
+    await order.queryClient.invalidateQueries({ queryKey: order.options.queryKey });
+
+    expect(order.renders.at(-1)).toBe(true);
     order.unsubscribe();
   });
 

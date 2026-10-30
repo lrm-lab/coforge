@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import type { WorkspaceUserContext } from "#src/features/auth/function-auth";
+import { CHAT_LIST_READS } from "#src/features/conversations/chat-list-reads";
 import {
   userConversationChannel,
   workspaceConversationChannel,
@@ -67,19 +68,10 @@ test("every list answers as its own read did, after one read of the positions it
     const steps: string[] = [];
     const { reads, streams } = recordedStreams(steps);
 
-    const results = await readChatLists(
-      context,
-      [
-        "channels",
-        "channelNames",
-        "saved",
-        "directPreferences",
-        "directBadges",
-        "sections",
-        "sectionOrder",
-      ],
-      { streams, onboard: async () => void steps.push("onboarding") },
-    );
+    const results = await readChatLists(context, CHAT_LIST_READS, {
+      streams,
+      onboard: async () => void steps.push("onboarding"),
+    });
 
     const workspace = workspaceConversationChannel(workspaceId);
     const viewer = userConversationChannel(user.id);

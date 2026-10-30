@@ -30,15 +30,9 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/query-cache-persistence");
 
-/** The reads Chat makes for what the browser keeps: the two sidebar lists' calls, the channel
- * names and the conversation. */
-const CHAT_READS = [
-  "listPublicChannels",
-  "loadDirectConversationPreferences",
-  "loadDirectConversationBadges",
-  "listChannelNames",
-  "loadPublicChannel",
-] as const;
+/** The reads Chat makes for what the browser keeps: its lists (the sidebar's, the channel names,
+ * the sections, all in one call) and the conversation. */
+const CHAT_READS = ["loadChatLists", "loadPublicChannel"] as const;
 
 /** This build's Server Function ids, by export name. The id on the wire is the hash the build gave
  * the function - it does not encode the name, so it cannot be decoded back out of the URL. The

@@ -62,6 +62,10 @@ export const chatSectionOrderQuery = (workspaceId: string, api = serverChatSecti
   queryKey: ["conversation", "sidebar", workspaceId, "section-order"] as const,
   queryFn: api.order,
   refetchOnWindowFocus: false,
+  // A read that failed leaves the order invalidated, which holds every section drag back
+  // (`chatSectionOrderReady`) until the next change is announced: it is tried again first, waiting
+  // a little longer each time, and offline it waits for the network.
+  retry: 3,
   // `chatSectionOrderReady` reads the invalidation flag, which is not on the result: a read starts
   // whenever the query is invalidated, so a view of it renders again when one starts or ends.
   notifyOnChangeProps: ["data", "status", "fetchStatus"] satisfies NotifyOnChangeProps,

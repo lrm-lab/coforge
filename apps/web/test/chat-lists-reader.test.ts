@@ -75,3 +75,25 @@ test("a call that failed as a whole rejects every list it named", async () => {
     { status: "rejected", reason: failure },
   ]);
 });
+
+test("lists asked for in one Workspace are not read once the page has moved to another", async () => {
+  let page = "acme";
+  const calls: ChatListRead[][] = [];
+  const read = createChatListReader(
+    async (lists) => {
+      calls.push(lists);
+      return answerEach(lists);
+    },
+    { workspace: () => page },
+  );
+  const left = read("channels");
+  page = "globex";
+  const arrived = read("channels");
+
+  expect(await arrived).toBe("channels" as never);
+  expect(
+    isAppErrorCode(await left.catch((cause: unknown) => cause), "TEMPORARILY_UNAVAILABLE"),
+  ).toBe(true);
+  // Only the new Workspace's batch was sent.
+  expect(calls).toEqual([["channels"]]);
+});

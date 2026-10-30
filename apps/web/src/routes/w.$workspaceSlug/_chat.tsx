@@ -14,10 +14,6 @@ import {
   savedMessagesQuery,
 } from "#src/features/conversations/conversation-queries";
 import { NO_SAVED } from "#src/features/conversations/saved-messages-collection";
-import {
-  chatSectionOrderQuery,
-  chatSectionsQuery,
-} from "#src/features/conversations/chat-sections";
 
 export const Route = createFileRoute("/w/$workspaceSlug/_chat")({
   // Chat's lists and conversations are read and rendered in the browser: the server sends the app's
@@ -46,14 +42,6 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat")({
         queryClient.setQueryData(query.queryKey, NO_SAVED);
         return queryClient.invalidateQueries({ queryKey: query.queryKey, refetchType: "none" });
       });
-    });
-    // The sidebar's sections and their order, asked for with the lists above so that all of them
-    // are read in one call (`readChatList`) rather than once the sidebar has mounted. The page does
-    // not wait for them: the sidebar shows its sections as they land.
-    void workspaceId.then((workspaceId) => {
-      const staleTime = chatListStaleTime(cause);
-      void queryClient.prefetchQuery({ ...chatSectionsQuery(workspaceId), staleTime });
-      void queryClient.prefetchQuery({ ...chatSectionOrderQuery(workspaceId), staleTime });
     });
     // Every channel by id, closed ones included: the authority a body's channel links check. The
     // Query cache keeps it across navigations; `channel.created.v1` and `channel.updated.v1`

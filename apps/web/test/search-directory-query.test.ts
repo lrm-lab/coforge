@@ -7,14 +7,19 @@ import { QueryClient } from "@tanstack/react-query";
  * that already holds every channel's name does not read them again.
  */
 let namesRead = 0;
-const conversationFunctions = await import("#src/features/conversations/channels.functions");
-await mockModuleForFile("#src/features/conversations/channels.functions", () => ({
-  ...conversationFunctions,
-  listChannelNames: async () => {
+const chatListFunctions = await import("#src/features/conversations/chat-lists.functions");
+await mockModuleForFile("#src/features/conversations/chat-lists.functions", () => ({
+  ...chatListFunctions,
+  loadChatLists: async ({ data }: { data: { lists: string[] } }) => {
+    expect(data.lists).toEqual(["channelNames"]);
     namesRead += 1;
     return {
-      streamPositions: {},
-      names: [{ id: "c2", name: "zeta", description: "", archived: false }],
+      channelNames: {
+        value: {
+          streamPositions: {},
+          names: [{ id: "c2", name: "zeta", description: "", archived: false }],
+        },
+      },
     };
   },
 }));

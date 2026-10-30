@@ -1,67 +1,80 @@
 import { AppError } from "#src/lib/app-error";
+import { workspaceSlugFromPath } from "#src/features/workspaces/workspace-url";
 import type { ChatListRead } from "./chat-list-reads";
 import { loadChatLists } from "./chat-lists.functions";
 
 type ChatListResults = Awaited<ReturnType<typeof loadChatLists>>;
 
 /** What one list's read answers with (`readChatLists`). */
-export type ChatListValue<List extends ChatListRead> =
-  NonNullable<ChatListResults[List]> extends infer Result
-    ? Result extends { value: infer Value }
-      ? Value
-      : never
-    : never;
+export type ChatListValue<List extends ChatListRead> = Extract<
+  NonNullable<ChatListResults[List]>,
+  { value: unknown }
+>["value"];
 
-type Waiter = { resolve: (value: unknown) => void; reject: (error: unknown) => void };
+type Deferred = ReturnType<typeof Promise.withResolvers<unknown>>;
+type Batch = { workspace: string | undefined; lists: Map<ChatListRead, Deferred> };
+
+/** Runs `run` once the current task is done, as a message event: the Queries of one load start
+ * their reads a few promise turns apart, and a hidden tab holds a timer back for a second, never a
+ * message. */
+function nextTask(run: () => void) {
+  if (typeof MessageChannel === "undefined") return void setTimeout(run, 0);
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => {
+    channel.port1.close();
+    run();
+  };
+  channel.port2.postMessage(undefined);
+}
+
+/** The Workspace a call names: the server function takes it from the page's address when the
+ * call is sent (`workspaceUserMiddleware`). */
+const pageWorkspace = () =>
+  typeof window === "undefined" ? undefined : workspaceSlugFromPath(window.location.pathname);
 
 /**
  * Reads Chat lists in batches, the way DataLoader batches loads: every list asked for before the
  * scheduled read starts goes into that one call, however many Queries ask (the chat loader's,
  * a restored copy's own read, a burst of realtime re-reads). A list asked for twice is read once.
  * Each list settles with its own answer, so one that failed rejects alone, with the error its own
- * call would have thrown; a call that failed as a whole (signed out, offline) rejects them all.
+ * call would have thrown; a call that failed as a whole (signed out, offline) rejects them all, as
+ * does a batch whose page has moved to another Workspace before it was sent, which would read
+ * that Workspace's lists into these Queries.
  */
 export function createChatListReader(
   load: (lists: ChatListRead[]) => Promise<ChatListResults>,
-  // A macrotask, not a microtask: the Queries of one load start their reads a few promise turns
-  // apart (a restored copy's read waits for storage first).
-  schedule: (run: () => void) => void = (run) => void setTimeout(run, 0),
+  { schedule = nextTask, workspace = pageWorkspace } = {},
 ) {
-  let batch: Map<ChatListRead, Waiter[]> | undefined;
-  const send = async (lists: Map<ChatListRead, Waiter[]>) => {
-    let results: ChatListResults;
+  let batch: Batch | undefined;
+  const send = async ({ workspace: asked, lists }: Batch) => {
     try {
-      results = await load([...lists.keys()]);
-    } catch (error) {
-      for (const waiters of lists.values()) for (const waiter of waiters) waiter.reject(error);
-      return;
-    }
-    for (const [list, waiters] of lists) {
-      const result = results[list];
-      for (const waiter of waiters) {
-        if (result && "value" in result) waiter.resolve(result.value);
+      if (workspace() !== asked) throw new AppError("TEMPORARILY_UNAVAILABLE");
+      const results = await load([...lists.keys()]);
+      for (const [list, deferred] of lists) {
+        const result = results[list];
+        if (result && "value" in result) deferred.resolve(result.value);
         else {
           const { code, errorId } = result?.error ?? { code: "INTERNAL_ERROR" as const };
-          waiter.reject(new AppError(code, errorId ? { errorId } : {}));
+          deferred.reject(new AppError(code, errorId ? { errorId } : {}));
         }
       }
+    } catch (error) {
+      for (const deferred of lists.values()) deferred.reject(error);
     }
   };
   return function read<List extends ChatListRead>(list: List): Promise<ChatListValue<List>> {
-    if (!batch) {
-      const lists = new Map<ChatListRead, Waiter[]>();
-      batch = lists;
+    const here = workspace();
+    if (!batch || batch.workspace !== here) {
+      const next: Batch = { workspace: here, lists: new Map() };
+      batch = next;
       schedule(() => {
-        batch = undefined;
-        void send(lists);
+        if (batch === next) batch = undefined;
+        void send(next);
       });
     }
-    const lists = batch;
-    return new Promise((resolve, reject) => {
-      const waiters = lists.get(list) ?? [];
-      waiters.push({ resolve: resolve as Waiter["resolve"], reject });
-      lists.set(list, waiters);
-    });
+    let deferred = batch.lists.get(list);
+    if (!deferred) batch.lists.set(list, (deferred = Promise.withResolvers()));
+    return deferred.promise as Promise<ChatListValue<List>>;
   };
 }
 

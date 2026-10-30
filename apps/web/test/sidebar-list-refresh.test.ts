@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   applyMarked,
   closedConversationLists,
+  listsChangedIn,
   sidebarListsChangedBy,
   sidebarRefreshQueue,
   channelSignalOf,
@@ -88,13 +89,11 @@ describe("the viewer's own channel events", () => {
   test("names the one list each event makes stale, and none for a read", () => {
     const ids = { workspaceId: "workspace-a", conversationId: "channel-a" };
     expect(sidebarListsChangedBy(marked("channel-a", 0))).toEqual([]);
-    for (const type of [
-      "channel.joined.v1",
-      "channel.left.v1",
-      "channel.closed.v1",
-      "channel.opened.v1",
-    ] as const)
+    for (const type of ["channel.closed.v1", "channel.opened.v1"] as const)
       expect(sidebarListsChangedBy({ type, ...ids })).toEqual(["channels"]);
+    // A section keeps a left channel's place and lists it again once its member is back in it.
+    for (const type of ["channel.joined.v1", "channel.left.v1"] as const)
+      expect(sidebarListsChangedBy({ type, ...ids })).toEqual(["channels", "sections"]);
     // A mute is the viewer's, on a channel or on a DM.
     expect(
       sidebarListsChangedBy({ type: "pref.changed.v1", workspaceId: "workspace-a", name: "muted" }),
@@ -147,6 +146,16 @@ describe("the viewer's own DM events", () => {
     for (const type of ["dm.created.v1", "dm.opened.v1", "dm.closed.v1"] as const)
       expect(sidebarListsChangedBy({ type, ...ids })).toEqual(["dms"]);
   });
+});
+
+test("another Workspace's viewer event makes none of this Workspace's lists stale", () => {
+  const sections = {
+    type: "pref.changed.v1",
+    workspaceId: "workspace-b",
+    name: "sections",
+  } as const;
+  expect(listsChangedIn("workspace-a", sections)).toEqual([]);
+  expect(listsChangedIn("workspace-b", sections)).toEqual(["sections", "sectionOrder"]);
 });
 
 test("a save or unsave elsewhere makes only the Saved list stale", () => {
@@ -260,7 +269,7 @@ describe("rereadMissedBySubscribe", () => {
   test("a first subscribe keeps a list read where the subscription starts, or later", async () => {
     const at7 = () => ({ offset: 7, epoch: "e1" });
     expect(await reread("user", firstSubscribe(at7), channelsAt(7))).toEqual([
-      ["channelNames", "dms", "saved"],
+      ["channelNames", "dms", "saved", "sections", "sectionOrder"],
     ]);
     // What was published between the two reaches the subscription itself.
     expect(await reread("workspace", firstSubscribe(at7), channelsAt(9))).toEqual([
@@ -315,7 +324,7 @@ describe("rereadMissedBySubscribe", () => {
       position: () => ({ offset: 7, epoch: "e1" }),
     };
     expect(await reread("user", lost, channelsAt(7))).toEqual([
-      ["channels", "channelNames", "dms", "saved"],
+      ["channels", "channelNames", "dms", "saved", "sections", "sectionOrder"],
     ]);
   });
 
@@ -336,13 +345,27 @@ describe("rereadMissedBySubscribe", () => {
       };
 
     test("a quiet first subscribe re-reads nothing", async () => {
-      const positions = read({ channels: 7, channelNames: 7, dms: 7, saved: 8 });
+      const positions = read({
+        channels: 7,
+        channelNames: 7,
+        dms: 7,
+        saved: 8,
+        sections: 7,
+        sectionOrder: 7,
+      });
       expect(await reread("workspace", firstSubscribe(at7), positions)).toEqual([]);
       expect(await reread("user", firstSubscribe(at7), positions)).toEqual([]);
     });
 
     test("each list is judged by its own position: only the one the stream moved past is re-read", async () => {
-      const positions = read({ channels: 7, channelNames: 6, dms: 5, saved: 7 });
+      const positions = read({
+        channels: 7,
+        channelNames: 6,
+        dms: 5,
+        saved: 7,
+        sections: 7,
+        sectionOrder: 7,
+      });
       expect(await reread("workspace", firstSubscribe(at7), positions)).toEqual([["channelNames"]]);
       expect(await reread("user", firstSubscribe(at7), positions)).toEqual([
         ["channelNames"],
@@ -354,7 +377,7 @@ describe("rereadMissedBySubscribe", () => {
       const positions = (list: ChatList) =>
         list === "saved"
           ? Promise.resolve({ offset: 7, epoch: "e0" })
-          : read({ channels: 7, dms: 7 })(list);
+          : read({ channels: 7, dms: 7, sections: 7, sectionOrder: 7 })(list);
       expect(await reread("user", firstSubscribe(at7), positions)).toEqual([
         ["channelNames"],
         ["saved"],
@@ -362,7 +385,13 @@ describe("rereadMissedBySubscribe", () => {
     });
 
     test("a list without a position is re-read at once, ahead of the judged ones", async () => {
-      const positions = read({ channels: 6, channelNames: 7, dms: 7 });
+      const positions = read({
+        channels: 6,
+        channelNames: 7,
+        dms: 7,
+        sections: 7,
+        sectionOrder: 7,
+      });
       expect(await reread("user", firstSubscribe(at7), positions)).toEqual([
         ["saved"],
         ["channels"],

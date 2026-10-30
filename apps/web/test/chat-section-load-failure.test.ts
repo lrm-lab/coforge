@@ -6,6 +6,7 @@ import {
   chatSectionsStatus,
   type ChatSectionsApi,
 } from "#src/features/conversations/chat-sections";
+import { orderRead, sectionsRead } from "./helpers/sidebar-fake";
 
 const section = {
   id: "section-a",
@@ -24,7 +25,7 @@ const unused = async () => {
 function sectionsObserver(list: ChatSectionsApi["list"]) {
   const api: ChatSectionsApi = {
     list,
-    order: async () => ({ streamPositions: {}, order: [] }),
+    order: async () => orderRead([]),
     create: unused,
     update: unused,
     remove: unused,
@@ -43,7 +44,7 @@ describe("chatSectionsStatus", () => {
     let fail = false;
     const sections = sectionsObserver(async () => {
       if (fail) throw new Error("re-read failed");
-      return { streamPositions: {}, sections: [section] };
+      return sectionsRead([section]);
     });
     await sections.refetch();
     fail = true;
@@ -64,7 +65,7 @@ describe("chatSectionsStatus", () => {
   });
 
   test("is loading before the first read settles", () => {
-    const sections = sectionsObserver(async () => ({ streamPositions: {}, sections: [section] }));
+    const sections = sectionsObserver(async () => sectionsRead([section]));
 
     expect(chatSectionsStatus(sections.getCurrentResult())).toBe("loading");
   });

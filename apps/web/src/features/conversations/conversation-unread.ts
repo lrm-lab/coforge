@@ -209,14 +209,23 @@ export type ChatList = "channels" | "dms" | "channelNames" | "saved" | "sections
  * Which of the Chat page's lists a viewer event makes stale, for the page to re-read those alone. A
  * read carries its own count (`applyMarked`) and needs none; pins are one order across
  * channels and DMs, and a mute may be on either, so both touch both lists; a save or unsave touches
- * only the Saved list; a section change, the sections and their order.
+ * only the Saved list; a section change, the sections and their order. A join or leave also
+ * touches the sections: a section lists the chats its member is in, and keeps a left one's place.
  */
 export function sidebarListsChangedBy(event: ViewerEvent): readonly ChatList[] {
   if ("unreadCount" in event) return [];
   if (event.type.startsWith("saved.")) return ["saved"];
   if (event.type === "pref.changed.v1")
     return event.name === "sections" ? ["sections", "sectionOrder"] : ["channels", "dms"];
+  if (event.type === "channel.joined.v1" || event.type === "channel.left.v1")
+    return ["channels", "sections"];
   return event.type.startsWith("dm.") ? ["dms"] : ["channels"];
+}
+
+/** The lists of `workspaceId`'s Chat page a viewer event makes stale (`sidebarListsChangedBy`):
+ * none for another Workspace's, which the viewer's own channel carries too. */
+export function listsChangedIn(workspaceId: string | undefined, event: ViewerEvent) {
+  return event.workspaceId === workspaceId ? sidebarListsChangedBy(event) : [];
 }
 
 /** One message's activity event, or undefined for any other publication on a signal channel. */

@@ -4,7 +4,7 @@ import { isAppError, isAppErrorCode } from "#src/lib/app-error";
  * network, or the server briefly unavailable). The change stays on screen meanwhile; only when the
  * last retry fails too does it go back. A few seconds in all: while a save is pending the lists
  * take channel events by re-reading (`applyChannelSignal`). */
-export const SAVE_RETRY_DELAYS_MS: readonly number[] = [1_000, 3_000];
+const SAVE_RETRY_DELAYS_MS: readonly number[] = [1_000, 3_000];
 
 /** A failure the same save may not meet again: the request did not get an answer, or the server
  * said it was briefly unavailable. A refusal (gone, not allowed, invalid) is final. */

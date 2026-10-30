@@ -48,8 +48,10 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/sidebar-subscribe-rea
 const COUNTED = ["loadChatLists", "loadActivityNavAttention"] as const;
 type Counted = (typeof COUNTED)[number];
 type Reads = Record<Counted | ChatListRead, number>;
-const noReads = (): Reads =>
-  Object.fromEntries([...COUNTED, ...CHAT_LIST_READS].map((name) => [name, 0])) as Reads;
+const NAMES = [...COUNTED, ...CHAT_LIST_READS];
+/** Every count at `count`. */
+const readsOf = (count: number): Reads =>
+  Object.fromEntries(NAMES.map((name) => [name, count])) as Reads;
 
 /** The lists one `loadChatLists` call names: its GET payload is in the query string, where each
  * list's name is a quoted string. */
@@ -78,7 +80,7 @@ const countedIds = serverFunctionIds();
 type ProxySocket = { path: string; protocol?: string; upstream?: WebSocket; pending: unknown[] };
 
 function countingProxy() {
-  const reads = noReads();
+  const reads = readsOf(0);
   /** The watched channels the browser has sent a subscribe command naming. */
   const subscribing = new Set<string>();
   let watched: string[] = [];
@@ -165,7 +167,7 @@ function countingProxy() {
     origin: `http://127.0.0.1:${server.port}`,
     reads,
     reset() {
-      Object.assign(reads, noReads());
+      Object.assign(reads, readsOf(0));
       subscribing.clear();
     },
     /** Notes from now on when the browser subscribes to these channels. */
@@ -263,15 +265,10 @@ afterAll(async () => {
  * per-browser signal, unlike asking Centrifugo who is subscribed: the `chat` namespace keeps no
  * presence, and its API would also count another tab of the same user on the same channels.
  */
-const oneEach = (): Reads =>
-  Object.fromEntries([...COUNTED, ...CHAT_LIST_READS].map((name) => [name, 1])) as Reads;
-
 const chatIsLive = () =>
   until(
     "Chat's lists read and both signal channels subscribed",
-    () =>
-      [...COUNTED, ...CHAT_LIST_READS].every((name) => proxy.reads[name] >= 1) &&
-      proxy.subscribedToAll(),
+    () => NAMES.every((name) => proxy.reads[name] >= 1) && proxy.subscribedToAll(),
   );
 
 test("with nothing published between the reads and the subscriptions, every list is read once, in one call", async () => {
@@ -280,7 +277,7 @@ test("with nothing published between the reads and the subscriptions, every list
   await chatIsLive();
   await browser("wait", "--load", "networkidle");
   results.quiet = { ...proxy.reads };
-  expect(proxy.reads).toEqual(oneEach());
+  expect(proxy.reads).toEqual(readsOf(1));
 }, 300_000);
 
 test("a publication between the read and the subscriptions has the channel list read again", async () => {

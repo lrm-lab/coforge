@@ -19,6 +19,7 @@ import {
 import type { DirectRow } from "./sidebar-rows";
 import type { ChannelSignal } from "./channel-signals";
 import { createSaveRetries } from "./sidebar-save-retries";
+import type { ChatListValue } from "./chat-lists-reader";
 import { chatSectionOrderQuery, chatSectionsQuery, type ChatSectionsApi } from "./chat-sections";
 import { isBuiltInSection } from "./directory-section-order";
 import type { ChatSection } from "./chat-section.schemas";
@@ -328,11 +329,10 @@ export function createSidebar(
   const listOf = (target: PinRef) => [target.kind === "channel" ? channelsKey : directsKey];
   /** The order of the latest section drag, which the order query shows until the server's. */
   let newestOrder: readonly string[] | undefined;
-  type OrderRead = Awaited<ReturnType<ChatSectionsApi["order"]>>;
   const orderKey = chatSectionOrderQuery(workspaceId).queryKey;
   /** Shows `order` in the order query; only a server read changes the positions it was read at. */
   const showOrder = (order: readonly string[]) =>
-    queryClient.setQueryData<OrderRead>(orderKey, (read) => ({
+    queryClient.setQueryData<ChatListValue<"sectionOrder">>(orderKey, (read) => ({
       streamPositions: read?.streamPositions ?? {},
       order: [...order],
     }));
@@ -344,7 +344,7 @@ export function createSidebar(
       // without `revert`, which would restore the pre-read state over the order set below.
       void queryClient.cancelQueries({ queryKey: orderKey, exact: true }, { revert: false });
       // Never read (or the read failed): the sidebar showed the default order, which `[]` is.
-      const before = queryClient.getQueryData<OrderRead>(orderKey)?.order ?? [];
+      const before = queryClient.getQueryData<ChatListValue<"sectionOrder">>(orderKey)?.order ?? [];
       showOrder(order);
       newestOrder = order;
       try {

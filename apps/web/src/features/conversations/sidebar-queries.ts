@@ -173,6 +173,8 @@ export function chatListStaleTime(cause: "preload" | "enter" | "stay") {
  * The chat layout's read of the sidebar's two lists into the Query cache, which the sidebar reads
  * until its collections are ready (see `chatListStaleTime`). A first load has no DM rows to keep, so
  * each of its reads falls back on its own; a later one that fails keeps the rows the sidebar has.
+ * The sections and their order are asked for with them, so that every list is read in one call
+ * (`readChatList`) rather than once the sidebar has mounted; nothing waits for them.
  */
 export async function loadSidebarLists(
   queryClient: QueryClient,
@@ -181,6 +183,11 @@ export async function loadSidebarLists(
   api: SidebarApi = serverSidebarApi,
 ) {
   const staleTime = chatListStaleTime(cause);
+  void queryClient.prefetchQuery({ ...chatSectionsQuery(workspaceId, api.sections), staleTime });
+  void queryClient.prefetchQuery({
+    ...chatSectionOrderQuery(workspaceId, api.sections),
+    staleTime,
+  });
   const firstLoad = queryClient.getQueryData(sidebarDirectsQueryKey(workspaceId)) === undefined;
   const directs = queryClient.query({
     ...sidebarDirectsQuery(workspaceId, { tolerant: firstLoad, api }),

@@ -20,7 +20,7 @@ import {
   clearUnread,
   rereadMissedBySubscribe,
   replaceUnreadCounts,
-  sidebarListsChangedBy,
+  listsChangedIn,
   storedCursorMove,
   type ChatList,
   type UnreadChannel,
@@ -150,7 +150,7 @@ export function useChannelUnread({
         setCounts((current) => applyMarked(current, event, { openConversationId: open }));
         refs.current.onReadCursorMoved(storedCursorMove(event, open));
       }
-      const lists = sidebarListsChangedBy(event);
+      const lists = listsChangedIn(refs.current.workspaceId, event);
       if (lists.length > 0) refs.current.onSidebarListsChanged(lists);
       return;
     }
