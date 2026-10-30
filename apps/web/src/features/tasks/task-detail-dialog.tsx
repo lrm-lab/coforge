@@ -127,7 +127,7 @@ type TaskDetailDialogProps = {
   thread?: (taskSection: ReactNode) => ReactNode;
   /** Leaves the popup for a message in the conversation's chat; where absent, a Task made from
    * someone's message does not link it. */
-  onOpenSource?: (messageId: string) => void;
+  onOpenSource?: (message: { messageId: string; threadRootId?: string }) => void;
 };
 
 /**
@@ -157,12 +157,11 @@ export function TaskDetailDialog({
       members={members}
       currentMemberId={currentMemberId}
       source={
-        task.sourceMessageId && onOpenSource && conversationName
+        task.sourceMessage && onOpenSource && conversationName
           ? {
-              conversationId: task.conversationId,
-              messageId: task.sourceMessageId,
+              source: task.sourceMessage,
               channel: conversationName,
-              onOpen: () => onOpenSource(task.sourceMessageId!),
+              onOpen: () => onOpenSource(task.sourceMessage!),
             }
           : undefined
       }
