@@ -1,5 +1,9 @@
 import type { AgentTurnInterruptResult } from "@lrm/coforge-sdk/internal";
-import { openRedisClient } from "#src/server/redis-client.server";
+import {
+  openRedisClient,
+  subscribeAcrossReconnects,
+  type RedisSubscriber,
+} from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 
@@ -35,12 +39,6 @@ type RedisCommands = {
   publish(channel: string, message: string): Promise<unknown>;
 };
 
-type RedisSubscriber = {
-  subscribe(channel: string, listener: (message: string) => void): Promise<unknown>;
-  send(command: "SUBSCRIBE", args: string[]): Promise<unknown>;
-  onconnect: (() => void) | null;
-};
-
 /**
  * Result in a key with a TTL, then a notification on a channel. A waiter registers, subscribes,
  * reads the key once (a result stored before the subscription is not missed) and then waits for a
@@ -53,20 +51,7 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
   constructor(
     private readonly redis: RedisCommands,
     private readonly subscriber: RedisSubscriber,
-  ) {
-    // After a reconnect Bun keeps its listener but the new connection is not subscribed, and a
-    // notification published meanwhile is lost: subscribe the connection again (a second
-    // `subscribe()` would stack a second listener), then read the keys waiters hold. A failure is
-    // retried by the next reconnect.
-    subscriber.onconnect = () => {
-      void this.#subscribed
-        ?.then(() => subscriber.send("SUBSCRIBE", [READY_CHANNEL]))
-        .then(
-          () => this.#notify(),
-          () => {},
-        );
-    };
-  }
+  ) {}
 
   async put(scope: Scope, result: AgentTurnInterruptResult) {
     const key = this.#key(scope);
@@ -112,12 +97,16 @@ export class RedisAgentTurnInterruptResults implements AgentTurnInterruptResults
   }
 
   #subscribe() {
-    return (this.#subscribed ??= this.subscriber
-      .subscribe(READY_CHANNEL, (key) => this.#notify(key))
-      .catch((error: unknown) => {
-        this.#subscribed = undefined;
-        throw error;
-      }));
+    // After a reconnect, a notification published meanwhile is lost: read every waiter's key.
+    return (this.#subscribed ??= subscribeAcrossReconnects(
+      this.subscriber,
+      READY_CHANNEL,
+      (key) => this.#notify(key),
+      () => this.#notify(),
+    ).catch((error: unknown) => {
+      this.#subscribed = undefined;
+      throw error;
+    }));
   }
 
   /** Wakes the waiters of one key, or of every key. */

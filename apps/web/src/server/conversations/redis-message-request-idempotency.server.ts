@@ -130,7 +130,10 @@ export class RedisMessageRequestIdempotency
       await this.redis.set(key, completed, "EX", RESULT_TTL_SECONDS);
       return message;
     } catch (error) {
-      await this.redis.send("EVAL", [RELEASE_IF_OWNER, "1", key, processing]);
+      // The failure is what the caller must see; a claim a stalled Redis kept expires on its TTL.
+      await this.redis
+        .send("EVAL", [RELEASE_IF_OWNER, "1", key, processing])
+        .catch(() => undefined);
       throw error;
     } finally {
       this.timers.cancel(keepAlive);

@@ -19,6 +19,13 @@ describe("LocalAgentControlSignal", () => {
     expect(order).toEqual(["a1", "a2", "b"]);
   });
 
+  test("wakeAll wakes every waiter, so each re-reads after a lost signal", async () => {
+    const signal = new LocalAgentControlSignal();
+    const woken = Promise.all([signal.wait("a", 5_000), signal.wait("b", 5_000)]);
+    signal.wakeAll();
+    expect(await woken).toEqual([true, true]);
+  });
+
   test("the fallback timeout resolves a waiter without a signal", async () => {
     const signal = new LocalAgentControlSignal();
     const started = Date.now();

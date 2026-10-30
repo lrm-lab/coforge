@@ -1,5 +1,5 @@
 import type { RedisClient } from "bun";
-import { openRedisClient } from "#src/server/redis-client.server";
+import { openRedisClient, subscribeAcrossReconnects } from "#src/server/redis-client.server";
 
 /**
  * Wakes a control waiter when an Agent's control state changes, so `drive()`
@@ -18,6 +18,10 @@ export class LocalAgentControlSignal implements AgentControlSignal {
 
   async notify(agentId: string) {
     this.wake(agentId);
+  }
+
+  wakeAll() {
+    for (const agentId of [...this.waiters.keys()]) this.wake(agentId);
   }
 
   wake(agentId: string) {
@@ -71,14 +75,18 @@ export class RedisAgentControlSignal implements AgentControlSignal {
   }
 
   private subscribe() {
-    this.subscription ??= this.subscriber()
-      .subscribe(CHANNEL, (message) => this.local.wake(message))
-      .then(
-        () => {},
-        () => {
-          this.subscription = undefined;
-        },
-      );
+    // After a reconnect, a wake-up published meanwhile is lost: every waiter re-reads instead.
+    this.subscription ??= subscribeAcrossReconnects(
+      this.subscriber(),
+      CHANNEL,
+      (message) => this.local.wake(message),
+      () => this.local.wakeAll(),
+    ).then(
+      () => {},
+      () => {
+        this.subscription = undefined;
+      },
+    );
   }
 }
 

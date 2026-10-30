@@ -3,72 +3,16 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { databasePoolConfig } from "#src/server/db/pool-config.server";
 import { StatementPool } from "#src/server/db/statement-pool.server";
+import { freezableProxy } from "./helpers/freezable-proxy";
 
 /**
- * The database is reached through a local proxy that can freeze the connections it has open —
- * what a NAT silently dropping idle connections leaves behind (task #348) — while new ones pass.
+ * The database is reached through `freezableProxy`, which stops the connections it has open the
+ * way a NAT silently dropping idle ones does (task #348), while new ones pass.
  *
  * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL.
  */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 const LIMIT_MS = 500;
-
-type Link = { frozen: boolean; upstream?: Bun.Socket; early: Uint8Array[] };
-
-/** A TCP proxy to `target`; `freeze()` makes every connection open so far swallow traffic. */
-function freezableProxy(target: URL) {
-  const links = new Set<Link>();
-  let opened = 0;
-  const server = Bun.listen<Link>({
-    hostname: "127.0.0.1",
-    port: 0,
-    socket: {
-      open(client) {
-        opened += 1;
-        const link: Link = { frozen: false, early: [] };
-        client.data = link;
-        links.add(link);
-        void Bun.connect({
-          hostname: target.hostname,
-          port: Number(target.port || 5432),
-          socket: {
-            open(upstream) {
-              link.upstream = upstream;
-              for (const chunk of link.early.splice(0)) upstream.write(chunk);
-            },
-            data(_upstream, chunk) {
-              if (!link.frozen) client.write(chunk);
-            },
-            close() {
-              client.end();
-            },
-          },
-        });
-      },
-      data(client, chunk) {
-        const link = client.data;
-        if (link.frozen) return;
-        if (link.upstream) link.upstream.write(chunk);
-        else link.early.push(new Uint8Array(chunk));
-      },
-      close(client) {
-        client.data.upstream?.end();
-        links.delete(client.data);
-      },
-    },
-  });
-  const url = new URL(target);
-  url.hostname = "127.0.0.1";
-  url.port = String(server.port);
-  return {
-    url: url.toString(),
-    opened: () => opened,
-    freeze() {
-      for (const link of links) link.frozen = true;
-    },
-    stop: () => server.stop(true),
-  };
-}
 
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => {
