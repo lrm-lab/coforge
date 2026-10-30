@@ -41,7 +41,9 @@ test("a task with its conversation lists the messages oldest first and what to r
       "## Task #general:#7 [in_progress]",
       "",
       "Current title: Fix the flaky test",
+      "Assignee: unassigned",
       "Following: yes (manual) - its replies wake you",
+      "Current description: (none set)",
       "",
       "Discussion (latest 2, oldest first):",
       "- [msg=01a16c6c-1c04-77cc-ac0d-1ec28453613a seq=1 time=2026-10-30 10:00:00Z] @ada: On it.",
@@ -54,6 +56,33 @@ test("a task with its conversation lists the messages oldest first and what to r
       '  Stop following: coforge task unfollow "#general:#7"',
     ].join("\n"),
   );
+});
+
+test("the task's assignee, creator, source message and description head the view", () => {
+  const text = formatTaskView(
+    view({
+      task: {
+        id: "t1",
+        number: 7,
+        title: "Fix the flaky test",
+        status: "todo",
+        description: "See the CI log",
+        owner: { handle: "kiro" },
+        creator: { handle: "ada" },
+        createdAt: "2026-10-30T09:00:00.000Z",
+      },
+      sourceMessage: {
+        id: "01a16c6c-1c03-77cc-ac0d-1ec28453613a",
+        content: "the flaky\ntest again",
+        createdAt: "2026-10-30T08:00:00.000Z",
+        senderName: "bob",
+      },
+    }),
+  );
+  expect(text).toContain("Assignee: @kiro");
+  expect(text).toContain("Created by: @ada at 2026-10-30 09:00:00Z");
+  expect(text).toContain("Source: msg=01a16c6c-1c03 in #general - bob: the flaky test again");
+  expect(text).toContain("Current description: See the CI log");
 });
 
 test("older messages are counted and point the read at the oldest shown", () => {

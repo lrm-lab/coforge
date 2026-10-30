@@ -1,3 +1,4 @@
+import { isValidMentionSelectorArray } from "@lrm/coforge-sdk/internal";
 import { badRequest } from "./agent-proxy-body";
 import { defineRoute } from "./agent-proxy-route";
 import { exactPath } from "./agent-proxy-paths";
@@ -58,6 +59,10 @@ function bodyRequest(
     if (value === undefined) continue;
     if (typeof value !== "string") return badRequest();
     body[field] = value;
+  }
+  if (route === "reply" && fields.mentions !== undefined) {
+    if (!isValidMentionSelectorArray(fields.mentions)) return badRequest();
+    body.mentions = fields.mentions;
   }
   if (route === "reply" && !REPLY_STRINGS.every((field) => typeof body[field] === "string"))
     return badRequest();

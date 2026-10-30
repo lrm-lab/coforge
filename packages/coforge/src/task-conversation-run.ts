@@ -61,7 +61,7 @@ async function runReply(
   invocation: Extract<TaskConversationInvocation, { op: "reply" }>,
   readBody: () => Promise<string>,
 ): Promise<string> {
-  const { task, json } = invocation;
+  const { task, json, mentions } = invocation;
   const outputMode = json ? "json" : "text";
   const heredoc = [
     `coforge task reply "${task.ref}" <<'${HEREDOC_DELIMITER}'`,
@@ -88,11 +88,20 @@ async function runReply(
         retryable: false,
         outputMode,
       });
+    const absent = mentions?.find((mention) => !content.includes(`@${mention.name}`));
+    if (absent)
+      throw new CliError({
+        code: "MENTION_NOT_IN_CONTENT",
+        message: `Structured mention @${absent.name} is not present in the reply body.`,
+        retryable: false,
+        outputMode,
+      });
     const body = {
       channel: task.board,
       task_number: task.number,
       content,
       idempotencyKey: crypto.randomUUID(),
+      ...(mentions ? { mentions } : {}),
     };
     const reply = decoded(
       decodeAgentTaskReplyResponse,

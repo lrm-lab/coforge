@@ -1,3 +1,4 @@
+import { parseMentionSelector, type MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { invalidArgument } from "./command-help";
 import { CliError } from "./cli-error";
 import { readWindowOptions, type MessageReadOptions } from "./message-read-args";
@@ -7,7 +8,7 @@ import { resolveTaskRef, type TaskRef } from "./task-ref";
  * conversation. */
 export type TaskConversationInvocation = { command: "task-conversation" } & (
   | { op: "view"; task: TaskRef; limit?: number }
-  | { op: "reply"; task: TaskRef; json?: boolean }
+  | { op: "reply"; task: TaskRef; json?: boolean; mentions?: MentionSelectorInput[] }
   | { op: "read"; task: TaskRef; options: MessageReadOptions }
   | { op: "follow"; task: TaskRef }
   | { op: "unfollow"; task: TaskRef; reason?: string }
@@ -19,7 +20,7 @@ type TaskConversationOp = Exclude<TaskConversationInvocation["op"], "following">
 /** What each command takes besides the task: flags with a value, and flags without one. */
 const FLAGS: Record<TaskConversationOp, { values: string[]; switches: string[] }> = {
   view: { values: ["--limit"], switches: [] },
-  reply: { values: [], switches: ["--json"] },
+  reply: { values: ["--mention"], switches: ["--json"] },
   read: { values: ["--before", "--after", "--around", "--limit"], switches: ["--unread"] },
   follow: { values: [], switches: [] },
   unfollow: { values: ["--reason"], switches: [] },
@@ -36,6 +37,7 @@ function collect(op: TaskConversationOp, args: readonly string[]) {
   const command = `task ${op}`;
   const { values: valueFlags, switches } = FLAGS[op];
   const values = new Map<string, string>();
+  const mentions: string[] = [];
   const given = new Set<string>();
   let positional: string | undefined;
   for (let index = 0; index < args.length; index++) {
@@ -48,6 +50,12 @@ function collect(op: TaskConversationOp, args: readonly string[]) {
     }
     const known = ["--target", "--number", ...valueFlags, ...switches].includes(name);
     if (!known) throw invalidArgument(command, `Unknown argument "${name}".`);
+    if (name === "--mention") {
+      const mention = args[++index];
+      if (mention === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
+      mentions.push(mention);
+      continue;
+    }
     if (given.has(name)) throw invalidArgument(command, `"${name}" is given more than once.`);
     given.add(name);
     if (switches.includes(name)) continue;
@@ -55,7 +63,18 @@ function collect(op: TaskConversationOp, args: readonly string[]) {
     if (value === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
     values.set(name, value);
   }
-  return { positional, values, given };
+  return { positional, values, given, mentions };
+}
+
+function mentionSelector(value: string): MentionSelectorInput {
+  const parsed = parseMentionSelector(value);
+  if (!parsed)
+    throw new CliError({
+      code: "INVALID_MENTION_SELECTOR",
+      message: "--mention must be human:<actor-uuid>:<handle> or agent:<actor-uuid>:<handle>.",
+      retryable: false,
+    });
+  return parsed;
 }
 
 function viewLimit(raw: string | undefined): number | undefined {
@@ -84,7 +103,7 @@ export function parseTaskConversationArgs(
   const op = args[0];
   if (op === "list" && args.includes("--following")) return parseFollowing(args.slice(1));
   if (!op || !Object.hasOwn(FLAGS, op)) return undefined;
-  const { positional, values, given } = collect(op as TaskConversationOp, args.slice(1));
+  const { positional, values, given, mentions } = collect(op as TaskConversationOp, args.slice(1));
   const task = resolveTaskRef(positional, values.get("--target"), values.get("--number"));
   const invocation = { command: "task-conversation" as const, task };
   switch (op as TaskConversationOp) {
@@ -93,7 +112,12 @@ export function parseTaskConversationArgs(
       return { ...invocation, op: "view", ...(limit === undefined ? {} : { limit }) };
     }
     case "reply":
-      return { ...invocation, op: "reply", ...(given.has("--json") ? { json: true } : {}) };
+      return {
+        ...invocation,
+        op: "reply",
+        ...(given.has("--json") ? { json: true } : {}),
+        ...(mentions.length ? { mentions: mentions.map(mentionSelector) } : {}),
+      };
     case "read":
       return {
         ...invocation,

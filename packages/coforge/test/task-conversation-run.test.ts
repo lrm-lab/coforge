@@ -198,3 +198,13 @@ test("an answer of the wrong shape is INVALID_JSON_RESPONSE, and a missing trans
     "Task conversation transport is unavailable",
   );
 });
+
+test("a reply with a --mention the body does not name is refused before anything is sent", async () => {
+  const id = "11111111-2222-4333-8444-555555555555";
+  const error = await runTaskConversation(
+    transportAnswering(),
+    invoke(["reply", REF, "--mention", `agent:${id}:kiro`]),
+    async () => "hello",
+  ).catch((failure: CliError) => failure);
+  expect((error as CliError).code).toBe("MENTION_NOT_IN_CONTENT");
+});

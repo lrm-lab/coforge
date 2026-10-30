@@ -51,7 +51,6 @@ test("task reply takes a ref and --json, and nothing the server would drop", () 
   expect(refusal(["reply", "#general:#7", "--attachment-id", "a"]).message).toBe(
     'Unknown argument "--attachment-id".',
   );
-  expect(refusal(["reply", "#general:#7", "--mention", "x"]).code).toBe("INVALID_ARG");
 });
 
 test("task read takes the message read window", () => {
@@ -141,4 +140,14 @@ test("other task operations are not conversation commands", () => {
   expect(parseTaskConversationArgs(["list", "--mine"])).toBeUndefined();
   expect(parseTaskConversationArgs(["create", "--target", "#general"])).toBeUndefined();
   expect(parseTaskConversationArgs([])).toBeUndefined();
+});
+
+test("task reply takes repeated --mention selectors and refuses a malformed one", () => {
+  const id = "11111111-2222-4333-8444-555555555555";
+  expect(
+    parseTaskConversationArgs(["reply", "#general:#7", "--mention", `agent:${id}:kiro`]),
+  ).toMatchObject({ op: "reply", mentions: [{ type: "agent", id, name: "kiro" }] });
+  expect(refusal(["reply", "#general:#7", "--mention", "kiro"]).code).toBe(
+    "INVALID_MENTION_SELECTOR",
+  );
 });

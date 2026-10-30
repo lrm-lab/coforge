@@ -46,7 +46,23 @@ export type AgentTaskViewMessage = {
 /** Response for `GET /api/agent/v1/tasks/view`. */
 export type AgentTaskViewResponse = {
   taskRef: string;
-  task: { id: string; number: number; title: string; status: string };
+  task: {
+    id: string;
+    number: number;
+    title: string;
+    status: string;
+    description?: string | null;
+    owner?: { handle: string } | null;
+    creator?: { handle: string };
+    createdAt?: string;
+  };
+  /** The channel message the task was made from, when it was made from one. */
+  sourceMessage?: {
+    id: string;
+    content: string;
+    createdAt: string;
+    senderName: string | null;
+  } | null;
   following: boolean;
   followReason: string | null;
   conversation: { exists: boolean; replyCount: number };

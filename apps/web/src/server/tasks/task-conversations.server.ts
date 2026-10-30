@@ -20,7 +20,7 @@ import {
   type TaskFollowReason,
 } from "./task-discussion-store.server";
 import { resolveTaskScope } from "./task-scope.server";
-import { TASK_SCOPE_WHERE } from "./task-view.server";
+import { TASK_SCOPE_WHERE, taskSelection, taskView } from "./task-view.server";
 
 /** Names a task by the board it is on (`target`, an Agent's `#channel`, or `conversationId`, a
  * person's page) and its number. */
@@ -58,7 +58,8 @@ export class TaskConversations {
   async view(principal: TaskPrincipal, ref: TaskConversationRef, options: { limit?: number }) {
     const { task, member, boardName } = await this.resolve(principal, ref);
     const limit = Math.min(Math.max(options.limit ?? 5, 1), MAX_VIEW_MESSAGES);
-    const [follow, discussion] = await Promise.all([
+    const [full, follow, discussion] = await Promise.all([
+      this.ports.db.task.findUniqueOrThrow({ where: { id: task.id }, select: taskSelection }),
       member
         ? this.ports.db.taskFollow.findUnique({
             where: { memberId_taskId: { memberId: member.id, taskId: task.id } },
@@ -71,7 +72,8 @@ export class TaskConversations {
     ]);
     return {
       taskRef: `${boardName}:#${task.number}`,
-      task: { id: task.id, number: task.number, title: task.title, status: task.status },
+      task: taskView(full, "agent"),
+      sourceMessage: await this.sourceMessage(full),
       following: follow !== null,
       followReason: follow?.reason ?? null,
       conversation: { exists: discussion !== null, replyCount: discussion?.total ?? 0 },
@@ -347,6 +349,30 @@ export class TaskConversations {
       member: scope.member,
       boardName: boardLabel(scope.channelName, ref.target?.replace(/^@/, "")),
     };
+  }
+
+  /** The channel message a task was made from, as the reader sees it in the board. */
+  private async sourceMessage(task: { sourceMessageId: string | null; conversationId: string }) {
+    if (!task.sourceMessageId) return null;
+    const message = await this.ports.db.message.findFirst({
+      where: { id: task.sourceMessageId, conversationId: task.conversationId },
+      select: {
+        id: true,
+        body: true,
+        createdAt: true,
+        sender: {
+          select: { user: { select: { username: true } }, agent: { select: { name: true } } },
+        },
+      },
+    });
+    return message
+      ? {
+          id: message.id,
+          content: message.body,
+          createdAt: message.createdAt.toISOString(),
+          senderName: message.sender?.agent?.name ?? message.sender?.user?.username ?? null,
+        }
+      : null;
   }
 
   /** The task's conversation, made now if the task has none. */

@@ -34,6 +34,13 @@ function discussion(view: AgentTaskViewResponse): string[] {
 
 /** `coforge task view`: the task, whether its replies wake the Agent, the latest of its
  * conversation, and the commands that act on it. */
+function sourceLine({ taskRef, sourceMessage }: AgentTaskViewResponse): string {
+  const source = sourceMessage!;
+  const board = taskRef.replace(/:#\d+$/, "");
+  const preview = oneLine(source.content).slice(0, 160);
+  return `Source: msg=${shortId(source.id)} in ${board} - ${source.senderName ?? "system"}: ${preview}`;
+}
+
 export function formatTaskView(view: AgentTaskViewResponse): string {
   const ref = view.taskRef;
   const older = view.hasOlder ? ` --before ${shortId(view.recentMessages[0]!.id)}` : "";
@@ -41,7 +48,19 @@ export function formatTaskView(view: AgentTaskViewResponse): string {
     `## Task ${ref} [${view.task.status}]`,
     "",
     `Current title: ${fenceMessageBody(view.task.title)}`,
+    `Assignee: ${view.task.owner ? `@${view.task.owner.handle}` : "unassigned"}`,
+    ...(view.task.creator
+      ? [
+          `Created by: @${view.task.creator.handle}${
+            view.task.createdAt ? ` at ${formatUtcTimestamp(view.task.createdAt)}` : ""
+          }`,
+        ]
+      : []),
+    ...(view.sourceMessage ? [sourceLine(view)] : []),
     followingLine(view),
+    view.task.description
+      ? `Current description: ${fenceMessageBody(view.task.description)}`
+      : "Current description: (none set)",
     "",
     ...discussion(view),
     "",
