@@ -43,3 +43,12 @@ test("staging has task conversations on for every Workspace", async () => {
   expect(await isFeatureEnabled("task-conversations", FRANK)).toBe(true);
   expect(await isFeatureEnabled("task-conversations", OTHER)).toBe(true);
 });
+
+test("production has task conversations on for the frank Workspace only", async () => {
+  await installDeployed("production");
+  expect(await isFeatureEnabled("task-conversations", FRANK)).toBe(true);
+  expect(await isFeatureEnabled("task-conversations", OTHER)).toBe(false);
+  expect(await isFeatureEnabled("task-conversations", { workspaceId: OTHER.workspaceId })).toBe(
+    false,
+  );
+});

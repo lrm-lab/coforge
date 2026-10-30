@@ -17,9 +17,14 @@ describe("feature flags in the deployed Compose files", () => {
     expect(Object.keys(definitions.flags)).toEqual(["task-conversations"]);
   });
 
-  test("production turns no flag on", async () => {
+  test("production reads the same kind of inlined definitions, with task conversations for frank only", async () => {
     const compose = await readCompose("production");
-    expect(compose.services.web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBeUndefined();
-    expect(compose.configs).toBeUndefined();
+    const web = compose.services.web;
+    expect(web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBe(FLAGS_PATH);
+    expect(web?.configs).toContainEqual({ source: "coforge_feature_flags", target: FLAGS_PATH });
+    const definitions = JSON.parse(
+      compose.configs?.coforge_feature_flags?.content as string,
+    ) as FlagDefinitions;
+    expect(Object.keys(definitions.flags)).toEqual(["task-conversations"]);
   });
 });
