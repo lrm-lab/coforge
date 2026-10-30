@@ -115,7 +115,8 @@ export async function sidebarWith(
     pin: async (target, pinned) => void saves.push(`pin ${JSON.stringify(target)} ${pinned}`),
     setMuted: async (target, muted) => void saves.push(`mute ${JSON.stringify(target)} ${muted}`),
     markUnread: async (target) => void saves.push(`unread ${JSON.stringify(target)}`),
-    close: async (target) => void saves.push(`close ${JSON.stringify(target)}`),
+    setHidden: async (target, hidden) =>
+      void saves.push(`${hidden ? "close" : "reopen"} ${JSON.stringify(target)}`),
     arrange: async () => void saves.push("arrange"),
     ...overrides,
   };
@@ -141,7 +142,7 @@ export function serverlessApi(server: {
     pin: async () => {},
     setMuted: async () => {},
     markUnread: async () => {},
-    close: async () => {},
+    setHidden: async () => {},
     arrange: async () => {},
   };
 }

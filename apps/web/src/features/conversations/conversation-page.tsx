@@ -26,6 +26,7 @@ import {
   PeopleDirectConversationHeader,
   type PeopleDirectConversationView,
 } from "./people-direct-conversation";
+import { useReopenClosedOnOpen } from "./sidebar-lists";
 import { useStandaloneThread } from "./standalone-thread";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
@@ -47,6 +48,11 @@ export function ConversationPage({
   target,
   ...props
 }: ConversationPageProps & { target: ConversationPageTarget }) {
+  useReopenClosedOnOpen(
+    target.kind === "channel"
+      ? { kind: "channel", channelId: target.id }
+      : { kind: "direct", conversationId: target.id },
+  );
   return target.kind === "channel" ? (
     <ChannelConversationPage channelId={target.id} {...props} />
   ) : (

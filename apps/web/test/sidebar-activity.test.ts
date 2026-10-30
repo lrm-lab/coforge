@@ -76,7 +76,7 @@ async function sidebarWithChannels() {
     pin: async () => {},
     setMuted: async () => {},
     markUnread: async () => {},
-    close: async () => {},
+    setHidden: async () => {},
     arrange: async () => {},
   };
   const queryClient = new QueryClient();

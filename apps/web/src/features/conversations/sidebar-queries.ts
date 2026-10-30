@@ -52,7 +52,7 @@ export type SidebarApi = {
   pin: (target: PinRef, pinned: boolean) => Promise<unknown>;
   setMuted: (target: PinRef, muted: boolean) => Promise<unknown>;
   markUnread: (target: PinRef) => Promise<unknown>;
-  close: (target: PinRef) => Promise<unknown>;
+  setHidden: (target: PinRef, hidden: boolean) => Promise<unknown>;
   arrange: (arrangement: Arrangement) => Promise<unknown>;
 };
 
@@ -75,12 +75,10 @@ export const serverSidebarApi: SidebarApi = {
       : setDirectConversationUnread({
           data: { conversationId: target.conversationId, unread: true },
         }),
-  close: (target) =>
+  setHidden: (target, hidden) =>
     target.kind === "channel"
-      ? setPublicConversationHidden({ data: { channelId: target.channelId, hidden: true } })
-      : setDirectConversationHidden({
-          data: { conversationId: target.conversationId, hidden: true },
-        }),
+      ? setPublicConversationHidden({ data: { channelId: target.channelId, hidden } })
+      : setDirectConversationHidden({ data: { conversationId: target.conversationId, hidden } }),
   arrange: (arrangement) =>
     arrangePinnedConversations({
       data: { pins: [...arrangement.pins], unpinned: [...arrangement.unpinned] },

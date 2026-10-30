@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@tanstack/react-db";
@@ -13,6 +13,7 @@ import {
   type ChannelRow,
   type Sidebar,
 } from "./sidebar-collections";
+import type { PinRef } from "./pinned-conversations";
 import { applyChannelSignalToLists, applyConversationActivityToRow } from "./sidebar-signals";
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
@@ -93,6 +94,34 @@ export function useSidebarLists() {
     viewerId: directsCache.viewerId,
     readAt: { channels: channelsCache.fetchedAt, dms: directsCache.fetchedAt },
   };
+}
+
+/** The chat each sidebar last saw opened: a page that mounts again for it (a loader's pending
+ * state, a hosted pane's suspense) is not a new opening. */
+const lastOpened = new WeakMap<object, string>();
+
+/**
+ * A closed chat comes back to the list when the viewer opens it, whichever way they came (Slack):
+ * once per opening, so closing the open chat still closes it. Unless the list shows it open (or
+ * as a channel they are not in), the server is asked, as a closed channel is not in the list at
+ * all; for a chat that was not closed it changes nothing and tells no one. The viewer's other
+ * pages hear of a reopening as of any.
+ */
+export function useReopenClosedOnOpen(target: PinRef) {
+  const sidebar = useSidebar();
+  const id = target.kind === "channel" ? target.channelId : target.conversationId;
+  useEffect(() => {
+    if (lastOpened.get(sidebar) === id) return;
+    lastOpened.set(sidebar, id);
+    const list = target.kind === "channel" ? sidebar.channels : sidebar.directs;
+    // Decided on the synced list, so a chat opened before it arrives is not taken for a closed one.
+    void list.stateWhenReady().then(() => {
+      const row = list.get(id);
+      // Listed and open, or a channel they are not in: nothing to bring back.
+      if (row && (!row.hidden || ("joined" in row && !row.joined))) return;
+      void sidebar.actions.reopen(target).catch(() => {});
+    });
+  }, [id, sidebar, target]);
 }
 
 /**

@@ -175,16 +175,18 @@ export function createSidebar(
     },
   });
 
-  const close = createOptimisticAction<PinRef>({
-    onMutate: (target) =>
+  const setHiddenAtOnce = createOptimisticAction<{ target: PinRef; hidden: boolean }>({
+    onMutate: ({ target, hidden }) =>
       edit(target, (row) => {
-        row.hidden = true;
+        row.hidden = hidden;
       }),
-    mutationFn: async (target, { transaction }) => {
-      await api.close(target);
+    mutationFn: async ({ target, hidden }, { transaction }) => {
+      await api.setHidden(target, hidden);
       confirm(transaction);
     },
   });
+  const setHidden = (target: PinRef, hidden: boolean) =>
+    saved(setHiddenAtOnce({ target, hidden }), () => api.setHidden(target, hidden), listOf(target));
 
   const updateSection = createOptimisticAction<{
     id: string;
@@ -396,7 +398,8 @@ export function createSidebar(
       saved(setMutedAtOnce({ target, muted }), () => api.setMuted(target, muted), listOf(target)),
     markUnread: (target: PinRef) =>
       saved(markUnreadAtOnce(target), () => api.markUnread(target), listOf(target)),
-    close: (target: PinRef) => saved(close(target), () => api.close(target), listOf(target)),
+    close: (target: PinRef) => setHidden(target, true),
+    reopen: (target: PinRef) => setHidden(target, false),
     arrange: (arrangement: Arrangement) =>
       saved(arrange(arrangement), () => saveArrangement(arrangement), [channelsKey, directsKey]),
   };
