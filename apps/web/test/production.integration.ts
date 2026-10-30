@@ -108,3 +108,36 @@ test(
   },
   BUILT_SERVER_BOOT_MS + TEST_SLACK_MS,
 );
+
+// Every server function call leaves a line with its id and time (task #348): even one that names
+// no function, which fails before any runs.
+test(
+  "production server logs each server function call",
+  async () => {
+    const server = spawnBuiltServer({});
+    try {
+      expect((await waitForHealth(server))?.status).toBe(200);
+      await fetch(`http://127.0.0.1:${server.port}/_serverFn/${"a".repeat(64)}`, {
+        headers: {
+          "x-request-id": "production-log-check",
+          origin: `http://127.0.0.1:${server.port}`,
+          "sec-fetch-site": "same-origin",
+        },
+        signal: AbortSignal.timeout(5_000),
+      });
+    } finally {
+      server.process.kill();
+      await server.process.exited;
+    }
+    const line = (await server.output)
+      .split("\n")
+      .find((entry) => entry.includes('"request_id":"production-log-check"'));
+    expect(JSON.parse(line ?? "{}")).toMatchObject({
+      event: "server_fn.failed",
+      fn: "a".repeat(64),
+      method: "GET",
+      duration_ms: expect.any(Number),
+    });
+  },
+  BUILT_SERVER_BOOT_MS + TEST_SLACK_MS,
+);

@@ -3,11 +3,20 @@ import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 import { readDeadline } from "#src/lib/read-deadline";
 import { toPublicServerError } from "#src/server/errors/public-error.server";
+import {
+  recordServerFnError,
+  withServerFnLog,
+} from "#src/server/observability/server-fn-log.server";
 import { withServerTiming } from "#src/server/observability/server-timing.server";
 
 // After the CSRF check (a header comparison), so `total` times only requests that run.
 const serverTiming = createMiddleware().server(({ next, handlerType }) =>
   withServerTiming(handlerType, next),
+);
+
+// Every server function call the CSRF check lets through, timed.
+const serverFnLog = createMiddleware().server(({ next, request, handlerType }) =>
+  handlerType === "serverFn" ? withServerFnLog(request, next) : next(),
 );
 
 const csrfMiddleware = createCsrfMiddleware({
@@ -20,7 +29,10 @@ const publicServerFunctionErrors = createMiddleware({
   try {
     return await next();
   } catch (cause) {
-    throw toPublicServerError(cause);
+    const error = toPublicServerError(cause);
+    // Replaced, so unexpected: an `AppError`, a redirect or a not-found is an answer, not a fault.
+    if (error !== cause) recordServerFnError(cause);
+    throw error;
   }
 });
 
@@ -63,6 +75,6 @@ const agentRequestLogger = createMiddleware().server(async ({ next, request }) =
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [csrfMiddleware, serverTiming, agentRequestLogger],
+  requestMiddleware: [csrfMiddleware, serverFnLog, serverTiming, agentRequestLogger],
   functionMiddleware: [publicServerFunctionErrors, readDeadline()],
 }));
