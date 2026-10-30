@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import { isLaunchUnsafeAgentEnvironmentName } from "@lrm/coforge-sdk/internal";
+import { isLaunchUnsafeAgentEnvironmentName } from "@lrm/coforge-sdk/internal/agent-environment";
 import {
   codeAgentExecutableSearchPath,
   executablePathDelimiter,
