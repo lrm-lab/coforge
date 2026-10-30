@@ -75,7 +75,8 @@ export async function pendingDeliveryWhere(
       { conversation: DIRECT_CONVERSATION_WHERE },
       {
         conversation: {
-          kind: { not: "task_thread" },
+          // `kind` is null for a channel or a DM, which `not` would leave out.
+          OR: [{ kind: null }, { kind: { not: "task_thread" } }],
           members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
         },
       },
