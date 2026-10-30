@@ -4171,7 +4171,7 @@ test("a missing or entirely malformed Agent launch identity yields undefined and
       {},
       { name: 42, displayName: null, description: [] },
       { name: "s".repeat(81) },
-      { description: "d".repeat(2001) },
+      { description: "d".repeat(3001) },
       { runtimeContext: "not-an-object" },
       { runtimeContext: { workspaceId: 1, computerName: "s".repeat(201) } },
       { runtimeContext: { computerHostname: "s".repeat(201) } },
