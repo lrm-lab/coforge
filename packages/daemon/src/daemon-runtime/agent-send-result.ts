@@ -1,4 +1,7 @@
-import type { AgentMessageResponse } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentMessageContinuationOffer,
+  AgentMessageResponse,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentMessageTransportResponse } from "#src/connection/agent-message-adapters";
 import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 
@@ -9,8 +12,9 @@ export function agentSendResponse(input: {
   result: AgentMessageTransportResponse;
   contextWasWithheld: boolean;
   recentUnread?: AgentMessageRecord[];
+  continuation?: AgentMessageContinuationOffer;
 }): AgentMessageResponse {
-  const { idempotencyKey, result, contextWasWithheld, recentUnread } = input;
+  const { idempotencyKey, result, contextWasWithheld, recentUnread, continuation } = input;
   return {
     idempotencyKey,
     accepted: result.accepted,
@@ -18,6 +22,10 @@ export function agentSendResponse(input: {
     messageId: result.messageId ?? "",
     messages: contextWasWithheld ? [] : result.messages,
     summaries: [],
+    continuation,
+    // An accepted same-key send whose commit predates this request replayed the stored original:
+    // `messageId` names it, and nothing this request carried was delivered.
+    replayedOriginal: result.reason === "already_committed" || undefined,
     // The send contract, carried to the Agent unchanged.
     state: result.state,
     decision: result.decision,

@@ -24,6 +24,17 @@ export type LocalSearchPaging = {
   searchedMessages?: number;
   searchedThrough?: string;
 };
+/** `message send`/`continue` only, held: the open continuation the Agent answers with
+ * `coforge message continue <id> <a|b|c|d>`. `a` resends the held draft unchanged, `b` replaces its
+ * body (the answer's `content`), `c` discards the draft without sending, and `d` — offered only
+ * when `continueAnywaySuggested` — forces the resend anyway. */
+export type AgentMessageContinuationOffer = {
+  id: string;
+  /** The held send's canonical target, for the Agent's notice. */
+  target: string;
+  choices: readonly ("a" | "b" | "c" | "d")[];
+};
+
 export type AgentMessageResponse = LocalSearchPaging & {
   idempotencyKey: string;
   accepted: boolean;
@@ -31,6 +42,15 @@ export type AgentMessageResponse = LocalSearchPaging & {
   messages: AgentMessageRecord[];
   messageId: string;
   summaries: MessageAttentionSummary[];
+  /** `message send`/`continue` only, held: the open continuation awaiting an answer. */
+  continuation?: AgentMessageContinuationOffer;
+  /** `message send`/`continue` only: the idempotency key was already committed — `messageId` is
+   * the ORIGINAL message, and this request's body was not delivered. */
+  replayedOriginal?: boolean;
+  /** `message continue` choice `c` only: the held draft was discarded without sending. */
+  clearedDraft?: boolean;
+  /** `message continue` only: the held send's canonical target the answer ran against. */
+  continuationTarget?: string;
   /** `message send` only: the send outcome, `"sent"` or `"held"`, or `"committed"` when the
    * daemon confirmed an ambiguous send's commit by its key and has no delivery receipt for it. */
   state?: "sent" | "held" | "committed";

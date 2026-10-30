@@ -3651,9 +3651,7 @@ export class DaemonRuntime {
   #agentInbox(agentId: string): AgentInboxStateMachine {
     const existing = this.#agentInboxes.get(agentId);
     if (existing) return existing;
-    const inbox = new AgentInboxStateMachine(
-      new AgentMessageDraftStore(this.#consumedSeqs.stateDb(agentId)),
-    );
+    const inbox = AgentInboxStateMachine.open(this.#consumedSeqs.stateDb(agentId));
     this.#agentInboxes.set(agentId, inbox);
     return inbox;
   }

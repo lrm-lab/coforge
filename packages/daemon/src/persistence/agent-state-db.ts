@@ -89,6 +89,16 @@ export class AgentStateDb {
         seen_up_to_seq INTEGER,
         seen_exact_seqs TEXT
       );
+      CREATE TABLE IF NOT EXISTS continuations (
+        id TEXT PRIMARY KEY,
+        target TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        choice TEXT,
+        with_input INTEGER,
+        answered_at INTEGER,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS continuations_target ON continuations (target);
     `);
     if (version === undefined) writeMeta(db, "version", String(SCHEMA_VERSION));
     const handle = new AgentStateDb(db);

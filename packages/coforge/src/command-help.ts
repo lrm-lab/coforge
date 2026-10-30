@@ -47,6 +47,16 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     ],
     example: "coforge message send --target '#general' 'Shipped the fix.'",
   },
+  "message continue": {
+    syntax: "coforge message continue <continuation-id> <a|b|c|d>",
+    flags: [
+      "a  send the held draft unchanged",
+      "b  replace the body — reads the new body from stdin; the held draft's idempotency key is reused",
+      "c  do not send; discard the held draft",
+      "d  send the held draft anyway, despite the freshness warning (only when offered)",
+    ],
+    example: "coforge message continue 9f47ac10-… a",
+  },
   "message resolve": {
     syntax: "coforge message resolve <message-id>",
     example: "coforge message resolve 12345678",

@@ -78,26 +78,7 @@ import { attachmentCommentsRequest } from "./attachment-comments-request";
 import { attachmentViewRequest } from "./attachment-view-request";
 import { inboxCheckRequest, inboxListRequest } from "./inbox-request";
 import { mentionActionRequest, mentionDeliveryRequest } from "./mention-request";
-
-/** The local daemon proxy's JSON error contract (`AgentProxyFailureBody` in the SDK). A few proxy
- * refusals decided before a request is parsed (`unauthorized`, `not found`, `bad request`, …) are
- * bare text instead; `readProxyErrorBody` reads those as no body at all, so none is ever relayed. */
-type AgentProxyErrorBody = Partial<Omit<AgentProxyFailureBody, "proxy">> & {
-  proxy?: Partial<AgentProxyFailureBody["proxy"]>;
-};
-
-/** Reads a non-ok proxy response body once, as the JSON error contract when it is one. */
-async function readProxyErrorBody(response: Response): Promise<{ json?: AgentProxyErrorBody }> {
-  const text = await response.text().catch(() => "");
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    if (parsed && typeof parsed === "object" && ("code" in parsed || "proxy" in parsed))
-      return { json: parsed as AgentProxyErrorBody };
-  } catch {
-    // A bare-text proxy refusal (unauthorized, not found, ...): no body to relay.
-  }
-  return {};
-}
+import { readProxyErrorBody, type AgentProxyErrorBody } from "./proxy-request";
 
 /** The deadline of every local proxy call but a message send (`AGENT_SEND_LOCAL_DEADLINE_MS`). */
 const OPERATION_DEADLINE_MS = 10_000;
@@ -306,6 +287,7 @@ export function connectLocal(
       | "read"
       | "search"
       | "send"
+      | "continue"
       | "mute"
       | "unmute"
       | "thread-unfollow"
@@ -318,6 +300,8 @@ export function connectLocal(
       sendDraft?: boolean;
       expectedDraftKey?: string;
       continueAnyway?: boolean;
+      continuationId?: string;
+      continuationChoice?: "a" | "b" | "c" | "d";
       freshnessContextMode?: "withheld";
       around?: string;
       messageId?: string;
@@ -407,6 +391,8 @@ export function connectLocal(
         targetConfirmed?: boolean;
       },
     ) => call("send", target, body, options),
+    continue: (continuationId: string, choice: "a" | "b" | "c" | "d", body?: string) =>
+      call("continue", undefined, body, { continuationId, continuationChoice: choice }),
     resolve: (messageId: string) => call("resolve", undefined, undefined, { messageId }),
     react: (messageId: string, emoji: string, remove?: boolean) =>
       call(remove ? "unreact" : "react", undefined, undefined, { messageId, emoji }),

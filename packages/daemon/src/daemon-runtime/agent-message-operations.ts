@@ -3,10 +3,10 @@ import type { AgentMessageOperationsPorts } from "./agent-message-ports";
 import { agentSendResponse } from "./agent-send-result";
 import { getLogger } from "@logtape/logtape";
 import {
-  freshnessDecisionFactId,
   HELD_CONTEXT_LIMIT,
   mentionsInContent,
   threadParentTarget,
+  type AgentMessageContinuationOffer,
   type AgentMessageRecord,
   type AgentMessageResponse,
   type LocalAgentMessageRequest,
@@ -17,13 +17,10 @@ import {
   planAgentInboxFreshness,
   sendSeenExactSeqs,
 } from "./agent-inbox-freshness";
-import {
-  heldFreshnessActivity,
-  heldFreshnessDecision,
-  heldFreshnessMessageCount,
-} from "./agent-inbox-freshness-activity";
+import { reportHeldSendFreshnessDecision } from "./agent-inbox-freshness-activity";
 import { AGENT_MESSAGE_BODY_REQUIRED_MESSAGE, agentMessageBody } from "./agent-message-body";
 import { AgentPreflightError, expiredDraftError } from "./agent-preflight-error";
+import { continueHeldSend, heldSendContinuation } from "./agent-message-continue";
 import { settleAgentSend } from "./agent-send-settlement";
 import { settleHistoryRead } from "./agent-history-read";
 import { searchPage, searchFields } from "./search-page";
@@ -61,6 +58,7 @@ export class AgentMessageOperations {
     const { operation } = request;
     if (operation === "check") return this.#check(agentId, request, agentApiKey, target);
     if (operation === "send" && target) return this.#send(agentId, request, target, agentApiKey);
+    if (operation === "continue") return this.#continue(agentId, request, agentApiKey);
     return this.#forward(agentId, request, operation, target, agentApiKey);
   }
 
@@ -379,8 +377,9 @@ export class AgentMessageOperations {
     // (or kept in the draft) as reviewed.
     const contextWasWithheld =
       request.freshnessContextMode === "withheld" || result.freshnessContextMode === "withheld";
+    let continuation: AgentMessageContinuationOffer | undefined;
     if (held) {
-      await inbox.replace(target, {
+      const heldDraft = {
         content,
         attachmentIds,
         mentions,
@@ -392,7 +391,16 @@ export class AgentMessageOperations {
         // presented nothing, so the draft keeps them.
         seenExactSeqs: contextWasWithheld ? seenExactSeqs : undefined,
         idempotencyKey,
-      });
+      };
+      await inbox.replace(target, heldDraft);
+      // The held send's open question. Choice `d` is offered only when the server's rehold count
+      // says the same warning blocked this draft before (`continueAnywaySuggested`).
+      continuation = await heldSendContinuation(
+        inbox,
+        target,
+        heldDraft,
+        result.continueAnywaySuggested === true,
+      );
     } else if (result.accepted) {
       // Only the send whose key the draft holds consumes it, so an older send accepted late
       // leaves a newer draft alone (task #70).
@@ -425,52 +433,15 @@ export class AgentMessageOperations {
     // The freshness-decision activity: one working status row per held send, titled `Send held by
     // freshness check`, carrying the target, the count line and the decision line(s) as its text.
     // A held context in `withheld` mode was never presented, so no activity is reported for it.
-    if (held && !contextWasWithheld) {
-      const heldDecision = heldFreshnessDecision(result.decision);
-      if (heldDecision) {
-        const producerFactId =
-          result.producerFactId ??
-          (await freshnessDecisionFactId({
-            agentId,
-            action: "send",
-            decision: heldDecision,
-            target,
-            reason: result.reason ?? "",
-            pendingMaxSeq: result.seenUpToSeq,
-            modelSeenSeq: modelSeenSequence,
-            heldMessageCount: result.shownMessageCount ?? result.messages.length,
-            omittedMessageCount: result.omittedMessageCount,
-          }));
-        // One record per decision, so a locally decided hold is auditable next to a
-        // server-decided one.
-        logger.info("Agent inbox freshness decision", {
-          event: "agent.inbox.freshness_decision",
-          ...this.#logScope(agentId, idempotencyKey),
-          producer_fact_id: producerFactId,
-          action: "send",
-          decision: heldDecision,
-          target,
-          reason: result.reason,
-          pending_count: result.newMessageCount,
-          pending_max_seq: result.seenUpToSeq,
-          model_seen_seq: modelSeenSequence || undefined,
-          held_message_count: result.shownMessageCount ?? result.messages.length,
-          omitted_message_count: result.omittedMessageCount,
-        });
-        const activity = heldFreshnessActivity({
-          action: "send",
-          decision: heldDecision,
-          target,
-          messageCount: heldFreshnessMessageCount({
-            decision: heldDecision,
-            newMessageCount: result.newMessageCount,
-            shownMessageCount: result.shownMessageCount,
-          }),
-          producerFactId,
-        });
-        this.#ports.reportFreshnessHold(agentId, activity);
-      }
-    }
+    if (held && !contextWasWithheld)
+      await reportHeldSendFreshnessDecision({
+        agentId,
+        target,
+        result,
+        modelSeenSequence,
+        logScope: this.#logScope(agentId, idempotencyKey),
+        reportFreshnessHold: (id, activity) => this.#ports.reportFreshnessHold(id, activity),
+      });
     logger.info("Agent sent a message", {
       event: "agent.message.sent",
       ...this.#logScope(agentId, idempotencyKey),
@@ -484,14 +455,37 @@ export class AgentMessageOperations {
       duration_ms: Math.round(performance.now() - startedAt),
       outcome: result.accepted ? "ok" : "rejected",
     });
-    return agentSendResponse({ idempotencyKey, result, contextWasWithheld, recentUnread });
+    return agentSendResponse({
+      idempotencyKey,
+      result,
+      contextWasWithheld,
+      recentUnread,
+      continuation,
+    });
+  }
+
+  /** Answers a held send's continuation; the choices and their atomics live in
+   * `agent-message-continue.ts`. */
+  async #continue(
+    agentId: string,
+    request: LocalAgentMessageRequest,
+    agentApiKey: string,
+  ): Promise<AgentMessageResponse> {
+    return continueHeldSend(
+      this.#ports,
+      agentId,
+      request,
+      agentApiKey,
+      (sendRequest, sendTarget) => this.#send(agentId, sendRequest, sendTarget, agentApiKey),
+      (operation) => this.#prepareDraft(agentId, operation),
+    );
   }
 
   /** Forwards read/search/mute/unmute/unfollow unchanged; an unpaged read settles attention. */
   async #forward(
     agentId: string,
     request: LocalAgentMessageRequest,
-    operation: Exclude<LocalAgentMessageRequest["operation"], "check">,
+    operation: Exclude<LocalAgentMessageRequest["operation"], "check" | "continue">,
     target: string | undefined,
     agentApiKey: string,
   ): Promise<AgentMessageResponse> {

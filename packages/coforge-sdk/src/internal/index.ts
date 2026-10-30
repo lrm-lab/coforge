@@ -294,6 +294,7 @@ export type {
   WorkspaceCloudConnection,
   LocalAgentMessageRequest,
   AgentMessageResponse,
+  AgentMessageContinuationOffer,
   LocalInboxRequest,
   InboxResponse,
   InboxEntry,

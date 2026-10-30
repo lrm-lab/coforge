@@ -1,7 +1,14 @@
-import type {
-  AgentMessageDraftContent,
-  AgentMessageDraftLookup,
+import {
+  AgentContinuationStore,
+  type AgentContinuation,
+  type AgentContinuationAnswer,
+  type AgentContinuationLookup,
+} from "#src/persistence/agent-continuation-store";
+import type { AgentStateDb } from "#src/persistence/agent-state-db";
+import {
   AgentMessageDraftStore,
+  type AgentMessageDraftContent,
+  type AgentMessageDraftLookup,
 } from "#src/persistence/agent-message-draft-store";
 
 /** The draft while it is only in memory: the stored entry minus the file-only
@@ -21,8 +28,23 @@ export type AgentInboxDraftLookup =
  */
 export class AgentInboxStateMachine {
   readonly #drafts = new Map<string, InMemoryDraft>();
+  readonly #continuations = new Map<
+    string,
+    { continuation: AgentContinuation; answer?: AgentContinuationAnswer }
+  >();
 
-  constructor(private readonly persistence?: AgentMessageDraftStore) {}
+  constructor(
+    private readonly persistence?: AgentMessageDraftStore,
+    private readonly continuations?: AgentContinuationStore,
+  ) {}
+
+  /** The fully persisted inbox: drafts and continuations share the Agent's one state database. */
+  static open(stateDb: AgentStateDb): AgentInboxStateMachine {
+    return new AgentInboxStateMachine(
+      new AgentMessageDraftStore(stateDb),
+      new AgentContinuationStore(stateDb),
+    );
+  }
 
   async save(target: string, draft: AgentMessageDraftContent) {
     this.#drafts.set(target, { ...draft, reholdCount: 0 });
@@ -60,5 +82,38 @@ export class AgentInboxStateMachine {
   async clear(target: string) {
     this.#drafts.delete(target);
     await this.persistence?.clear(target);
+  }
+
+  /** A held send's fresh continuation; a new one supersedes its target's still-open ones. */
+  async saveContinuation(continuation: AgentContinuation, now: number): Promise<void> {
+    if (this.continuations) return this.continuations.create(continuation);
+    for (const [id, entry] of this.#continuations)
+      if (entry.continuation.target === continuation.target && !entry.answer)
+        this.#continuations.delete(id);
+    for (const [id, entry] of this.#continuations)
+      if (entry.continuation.expiresAt <= now) this.#continuations.delete(id);
+    this.#continuations.set(continuation.id, { continuation });
+  }
+
+  async continuation(id: string, now: number): Promise<AgentContinuationLookup> {
+    if (this.continuations) return this.continuations.lookup(id);
+    const entry = this.#continuations.get(id);
+    if (!entry) return { status: "missing" };
+    if (entry.answer)
+      return { status: "answered", continuation: entry.continuation, answer: entry.answer };
+    if (entry.continuation.expiresAt <= now) {
+      this.#continuations.delete(id);
+      return { status: "expired", continuation: entry.continuation };
+    }
+    return { status: "open", continuation: entry.continuation };
+  }
+
+  /** Records the answer atomically: returns false when it was already answered (or gone). */
+  async answerContinuation(id: string, answer: AgentContinuationAnswer): Promise<boolean> {
+    if (this.continuations) return this.continuations.markAnswered(id, answer);
+    const entry = this.#continuations.get(id);
+    if (!entry || entry.answer) return false;
+    entry.answer = answer;
+    return true;
   }
 }

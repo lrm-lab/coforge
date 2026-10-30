@@ -1,4 +1,9 @@
+import { getLogger } from "@logtape/logtape";
 import type { ActivityTrajectoryEntry } from "@lrm/coforge-sdk/internal";
+import { freshnessDecisionFactId } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageTransportResponse } from "#src/connection/agent-message-adapters";
+
+const logger = getLogger(["coforge", "daemon", "agent-message"]);
 
 /**
  * The Activity a held freshness decision narrates.
@@ -84,4 +89,60 @@ export function heldFreshnessDecision(
   decision: string | undefined,
 ): "local_hold" | "syncing_hold" | undefined {
   return decision === "local_hold" || decision === "syncing_hold" ? decision : undefined;
+}
+
+/** Logs the freshness decision and reports its held-send Activity — one record per decision, so a
+ * locally decided hold is auditable next to a server-decided one. */
+export async function reportHeldSendFreshnessDecision(input: {
+  agentId: string;
+  target: string;
+  result: AgentMessageTransportResponse;
+  modelSeenSequence: number;
+  logScope: Record<string, unknown>;
+  reportFreshnessHold: (agentId: string, activity: HeldFreshnessActivity) => void;
+}): Promise<void> {
+  const { agentId, target, result, modelSeenSequence, logScope, reportFreshnessHold } = input;
+  const heldDecision = heldFreshnessDecision(result.decision);
+  if (!heldDecision) return;
+  const producerFactId =
+    result.producerFactId ??
+    (await freshnessDecisionFactId({
+      agentId,
+      action: "send",
+      decision: heldDecision,
+      target,
+      reason: result.reason ?? "",
+      pendingMaxSeq: result.seenUpToSeq,
+      modelSeenSeq: modelSeenSequence,
+      heldMessageCount: result.shownMessageCount ?? result.messages.length,
+      omittedMessageCount: result.omittedMessageCount,
+    }));
+  logger.info("Agent inbox freshness decision", {
+    event: "agent.inbox.freshness_decision",
+    ...logScope,
+    producer_fact_id: producerFactId,
+    action: "send",
+    decision: heldDecision,
+    target,
+    reason: result.reason,
+    pending_count: result.newMessageCount,
+    pending_max_seq: result.seenUpToSeq,
+    model_seen_seq: modelSeenSequence || undefined,
+    held_message_count: result.shownMessageCount ?? result.messages.length,
+    omitted_message_count: result.omittedMessageCount,
+  });
+  reportFreshnessHold(
+    agentId,
+    heldFreshnessActivity({
+      action: "send",
+      decision: heldDecision,
+      target,
+      messageCount: heldFreshnessMessageCount({
+        decision: heldDecision,
+        newMessageCount: result.newMessageCount,
+        shownMessageCount: result.shownMessageCount,
+      }),
+      producerFactId,
+    }),
+  );
 }

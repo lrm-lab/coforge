@@ -2,6 +2,7 @@
  * it is issued, and the routes that answer a domain error as `{ ok: false, errorCode, error }`. */
 
 import { CliError, NO_MESSAGE_SENT_NEXT_ACTION } from "./cli-error";
+import type { AgentProxyFailureBody } from "@lrm/coforge-sdk/internal";
 
 export function operationFailedCode(operation: string): string {
   return `${operation.toUpperCase().replace(/-/g, "_")}_FAILED`;
@@ -92,4 +93,26 @@ export async function envelopeRequest<T>(
     });
   }
   return decode(rawBody);
+}
+
+/** The local daemon proxy's JSON error contract (`AgentProxyFailureBody` in the SDK). A few proxy
+ * refusals decided before a request is parsed (`unauthorized`, `not found`, `bad request`, …) are
+ * bare text instead; `readProxyErrorBody` reads those as no body at all, so none is ever relayed. */
+export type AgentProxyErrorBody = Partial<Omit<AgentProxyFailureBody, "proxy">> & {
+  proxy?: Partial<AgentProxyFailureBody["proxy"]>;
+};
+
+/** Reads a non-ok proxy response body once, as the JSON error contract when it is one. */
+export async function readProxyErrorBody(
+  response: Response,
+): Promise<{ json?: AgentProxyErrorBody }> {
+  const text = await response.text().catch(() => "");
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object" && ("code" in parsed || "proxy" in parsed))
+      return { json: parsed as AgentProxyErrorBody };
+  } catch {
+    // A bare-text proxy refusal (unauthorized, not found, ...): no body to relay.
+  }
+  return {};
 }

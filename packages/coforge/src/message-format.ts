@@ -223,6 +223,7 @@ type HeldSendResponse = {
   omittedMessageCount?: number;
   heldMessages?: AgentMessageRecord[];
   continueAnywaySuggested?: boolean;
+  continuation?: { id: string; target: string; choices: readonly string[] };
 };
 
 const HELD_PREVIEW_CHARS = 160;
@@ -263,24 +264,45 @@ export function formatHeldSend(target: string, response: HeldSendResponse): stri
   }
   lines.push(`  └ Previews are truncated. Full text: coforge message read --target "${target}"`);
 
-  const paths = [
-    "After reviewing the current state of this conversation, choose one path.",
-    "To update the draft, send revised content normally:",
-    `  coforge message send --target "${target}" <<'COFORGE_MESSAGE'`,
-    "  revised message",
-    "  COFORGE_MESSAGE",
-    // "10 minutes" mirrors the daemon's `AGENT_MESSAGE_DRAFT_TTL_MS`
-    // (`packages/daemon/src/persistence/agent-message-draft-store.ts`), which the CLI cannot import.
-    "To send the current draft unchanged (within 10 minutes; after that the draft is discarded and --send-draft reports SEND_DRAFT_EXPIRED):",
-    `  coforge message send --send-draft --target "${target}"`,
-    "  (this sends the stored copy — do not use it if you meant to change the content)",
-    "You can also choose not to send anything.",
-  ];
-  if (response.continueAnywaySuggested)
+  const continuation = response.continuation;
+  const paths: string[] = [];
+  if (continuation) {
+    // The held send's answer: one `message continue` call per offered choice.
     paths.push(
-      "If repeated updates keep blocking the same draft and this is still the right reply, you may use:",
-      `  coforge message send --send-draft --anyway --target "${target}"`,
+      "After reviewing the current state of this conversation, answer the continuation:",
+      `  coforge message continue ${continuation.id} a   send the held draft unchanged`,
+      `  coforge message continue ${continuation.id} b   replace the body (reads stdin; the same idempotency key is reused, so if the original already delivered you will be told — the new content will NOT be sent)`,
+      `  coforge message continue ${continuation.id} c   do not send; discard the held draft`,
     );
+    if (continuation.choices.includes("d"))
+      paths.push(
+        `  coforge message continue ${continuation.id} d   send the held draft anyway, despite the warning`,
+      );
+    paths.push(
+      "Scripts and JSON clients may also keep using `coforge message send --send-draft`" +
+        (continuation.choices.includes("d") ? " / `--send-draft --anyway`" : "") +
+        " directly.",
+    );
+  } else {
+    paths.push(
+      "After reviewing the current state of this conversation, choose one path.",
+      "To update the draft, send revised content normally:",
+      `  coforge message send --target "${target}" <<'COFORGE_MESSAGE'`,
+      "  revised message",
+      "  COFORGE_MESSAGE",
+      // "10 minutes" mirrors the daemon's `AGENT_MESSAGE_DRAFT_TTL_MS`
+      // (`packages/daemon/src/persistence/agent-message-draft-store.ts`), which the CLI cannot import.
+      "To send the current draft unchanged (within 10 minutes; after that the draft is discarded and --send-draft reports SEND_DRAFT_EXPIRED):",
+      `  coforge message send --send-draft --target "${target}"`,
+      "  (this sends the stored copy — do not use it if you meant to change the content)",
+      "You can also choose not to send anything.",
+    );
+    if (response.continueAnywaySuggested)
+      paths.push(
+        "If repeated updates keep blocking the same draft and this is still the right reply, you may use:",
+        `  coforge message send --send-draft --anyway --target "${target}"`,
+      );
+  }
 
   return [
     `Held — ${newMessageCount} unread ${messageNoun} in ${target}. Your message has been saved as a draft.`,

@@ -55,8 +55,12 @@ Read the [message attention and delivery rules](../../../../docs/agents/daemon-m
   context, or a malformed Agent API key through `authorizedAgent` first, so
   the Agent gets that `AgentPreflightError` code, never an unclassified 502.
 - Message sends: the per-target draft (`persistence/agent-message-draft-store.ts`)
-  is the only local send state. It carries its send's `idempotencyKey`;
-  `--send-draft` reuses it, and only that key's accepted send clears the draft.
+  and the held send's continuation (`persistence/agent-continuation-store.ts`) are
+  the only local send state. The draft carries its send's `idempotencyKey`;
+  `--send-draft` and continuation choices `a`/`d` reuse it, and only that key's
+  accepted send clears the draft. A continuation records the offered choices one
+  held send presented (`a`/`b`/`c`, plus `d` only when `continueAnywaySuggested`),
+  is answered atomically once, and shares the draft's ten-minute lifetime.
   Never authorize `--anyway` locally.
 - `agent-send-settlement.ts` settles one send: an ambiguous failure
   (pre-response or 5xx) gets one `reconcileAgentSend` and at most one same-key
