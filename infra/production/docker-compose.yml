@@ -91,6 +91,9 @@ services:
       COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS: "60000"
       OTEL_SERVICE_NAME: coforge-web
       OTEL_DEPLOYMENT_ENVIRONMENT: production
+      # Server-Timing (total and db milliseconds) on signed-in sessions' SSR documents and Server
+      # Function responses, for finding slow requests: docs/observability/server-timing.md.
+      COFORGE_SERVER_TIMING: "1"
       # Which release feed this deployment's `curl .../computer/install.sh | sh` installs
       # from. Not a secret, and deployment-specific by design:
       # docs/release/local-feed-hosting.md requires a production entry point to install the

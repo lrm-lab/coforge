@@ -15,11 +15,13 @@ test("a real Prisma query is attributed to the request that issued it, not a con
       if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL must point to local PostgreSQL");
       process.env.COFORGE_SERVER_TIMING = "1";
       const { requireDatabaseClient } = await import("#src/server/db/client.server");
-      const { withServerTiming } = await import("#src/server/observability/server-timing.server");
+      const { recordSignedInRequest, withServerTiming } =
+        await import("#src/server/observability/server-timing.server");
       const db = requireDatabaseClient();
 
       const timed = (work: () => Promise<unknown>) =>
         withServerTiming("serverFn", async () => {
+          recordSignedInRequest();
           await work();
           return { response: new Response("{}") };
         });

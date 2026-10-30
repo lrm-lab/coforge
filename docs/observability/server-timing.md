@@ -1,7 +1,7 @@
 # Server-Timing
 
-Web/backend 在 `COFORGE_SERVER_TIMING=1` 时，为 SSR 文档（`text/html` 响应）和 Server Function
-响应追加 [W3C Server Timing](https://www.w3.org/TR/server-timing/) 头：
+Web/backend 在 `COFORGE_SERVER_TIMING=1` 时，为已登录会话的 SSR 文档（`text/html` 响应）和
+Server Function 响应追加 [W3C Server Timing](https://www.w3.org/TR/server-timing/) 头：
 
 ```
 Server-Timing: total;dur=16.6, db;dur=9.5
@@ -32,9 +32,19 @@ Prisma 后这个测试失败，说明 `db` 已不可信。
 ## 安全边界
 
 头里只有两个固定指标名和数字 `dur`，没有 `desc`，不含路径、ID、查询文本或用户数据；服务端不发送
-`Timing-Allow-Origin`，所以跨源页面读不到它。但任何能发出请求的人（包括未登录访问登录页的人）都
-能在响应里看到 DB 耗时拆分，它比总响应时间更精确，可能帮助基于时延的探测。W3C 规范的隐私与安全
-一节允许服务端只向已认证用户提供这些指标。
+`Timing-Allow-Origin`，所以跨源页面读不到它。DB 耗时拆分比总响应时间更精确，如果发给未登录的请求，
+登录、找回密码这类接口上的时间差可能被用来探测账号是否存在。W3C 规范的隐私与安全一节允许服务端只向
+已认证用户提供这些指标。
 
-因此默认关闭，只有 staging 在 `infra/staging/docker-compose.yml` 中开启。生产环境是否开启、或改为
-只对已登录会话发送，须经 Frank 批准。
+因此只对“要求登录、并且通过了登录校验”的请求追加：`requireBrowserSignIn`（Server Function 的
+`authMiddleware` 走它；页面在 SSR 时经由 loader 调用的这类 Server Function 也算）校验通过时调用 `recordSignedInRequest` 标记当前请求。对未登录的人开放的
+接口（登录、找回密码、以后新增的公开接口）不经过这一步，所以无论调用者是否带着有效会话都不带这个头；
+只读取“可选登录”（`optionalBrowserSignIn`）也不算。规则落在认证这一层，不是接口名单。
+`apps/web/test/server-timing-sign-in.test.ts` 覆盖：已登录调用普通接口带；已登录调用不经过登录校验的接口（登录、找回密码这类）不带；
+没有会话、会话伪造或过期、未配置会话密钥都不带。
+
+开启后 Prisma 对所有查询都发 query 事件（包括不带头的请求和后台任务），只有响应头按上面的规则过滤；
+本地生产构建实测开与关的延迟和 CPU 差别在测量波动之内。
+
+staging 和生产都在各自的 `infra/*/docker-compose.yml` 中开启。生产开启、且只对已登录会话发送，
+由协调员 coforge-raft 在 Frank 授权下于 2026-10-31 决定（task #348）。

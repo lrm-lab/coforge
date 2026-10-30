@@ -1,10 +1,20 @@
 import { expect, test } from "bun:test";
 import {
   recordDatabaseQuery,
+  recordSignedInRequest,
   withServerTiming,
 } from "#src/server/observability/server-timing.server";
 
 const enabled = { COFORGE_SERVER_TIMING: "1" };
+
+/** `handler`, in a request that required a signed-in person and had one, as `requireBrowserSignIn`
+ * records; `server-timing-sign-in.test.ts` covers the requests that did not. */
+function signedIn<T>(handler: () => T | Promise<T>) {
+  return () => {
+    recordSignedInRequest();
+    return handler();
+  };
+}
 
 // W3C Server Timing: `metric-name *( OWS ";" OWS server-timing-param )`, comma-separated. The
 // server sends exactly two fixed names, each with only a numeric `dur` and no `desc`.
@@ -34,12 +44,12 @@ function html() {
 test("a Server Function response carries the handler's total and database time", async () => {
   const result = await withServerTiming(
     "serverFn",
-    async () => {
+    signedIn(async () => {
       recordDatabaseQuery(100, 104.25);
       recordDatabaseQuery(110, 111.5);
       await Bun.sleep(20);
       return { response: Response.json({ ok: true }) };
-    },
+    }),
     enabled,
   );
 
@@ -52,14 +62,14 @@ test("a Server Function response carries the handler's total and database time",
 test("db is the time at least one query was in flight, so overlapping queries count once", async () => {
   const result = await withServerTiming(
     "serverFn",
-    () => {
+    signedIn(() => {
       // Completion order, as Prisma reports them: [0,10] and [5,12] overlap, [20,25] stands apart.
       recordDatabaseQuery(5, 12);
       recordDatabaseQuery(0, 10);
       recordDatabaseQuery(20, 25);
       recordDatabaseQuery(21, 22);
       return { response: Response.json({}) };
-    },
+    }),
     enabled,
   );
 
@@ -67,12 +77,12 @@ test("db is the time at least one query was in flight, so overlapping queries co
 });
 
 test("an SSR document carries the header, a non-HTML server route does not", async () => {
-  const document = await withServerTiming("router", html, enabled);
+  const document = await withServerTiming("router", signedIn(html), enabled);
   expect(metrics(document.response).has("total")).toBe(true);
 
   const api = await withServerTiming(
     "router",
-    () => ({ response: Response.json({ ok: true }) }),
+    signedIn(() => ({ response: Response.json({ ok: true }) })),
     enabled,
   );
   expect(api.response.headers.has("server-timing")).toBe(false);
@@ -80,8 +90,12 @@ test("an SSR document carries the header, a non-HTML server route does not", asy
 
 test("without COFORGE_SERVER_TIMING=1 no response carries the header", async () => {
   for (const env of [{}, { COFORGE_SERVER_TIMING: "0" }]) {
-    const fn = await withServerTiming("serverFn", () => ({ response: Response.json({}) }), env);
-    const document = await withServerTiming("router", html, env);
+    const fn = await withServerTiming(
+      "serverFn",
+      signedIn(() => ({ response: Response.json({}) })),
+      env,
+    );
+    const document = await withServerTiming("router", signedIn(html), env);
     expect(fn.response.headers.has("server-timing")).toBe(false);
     expect(document.response.headers.has("server-timing")).toBe(false);
   }
@@ -93,21 +107,21 @@ test("concurrent requests each count only their own queries", async () => {
 
   const a = withServerTiming(
     "serverFn",
-    async () => {
+    signedIn(async () => {
       recordDatabaseQuery(0, 10);
       await gateA;
       recordDatabaseQuery(20, 22);
       return { response: Response.json({}) };
-    },
+    }),
     enabled,
   );
   const b = withServerTiming(
     "serverFn",
-    async () => {
+    signedIn(async () => {
       recordDatabaseQuery(0, 30);
       releaseA();
       return { response: Response.json({}) };
-    },
+    }),
     enabled,
   );
   // A query outside any request (a background sweep) is dropped, not added to one.
@@ -122,12 +136,12 @@ test("the header holds only metric names and durations, nothing from the request
   const secret = "s3cr3t-token";
   const result = await withServerTiming(
     "serverFn",
-    () => ({
+    signedIn(() => ({
       response: Response.json(
         { secret },
         { headers: { "x-request-id": secret, "set-cookie": `session=${secret}` } },
       ),
-    }),
+    })),
     enabled,
   );
 
@@ -140,7 +154,9 @@ test("the header holds only metric names and durations, nothing from the request
 test("a metric the handler already set is kept", async () => {
   const result = await withServerTiming(
     "serverFn",
-    () => ({ response: Response.json({}, { headers: { "server-timing": "cache;desc=hit" } }) }),
+    signedIn(() => ({
+      response: Response.json({}, { headers: { "server-timing": "cache;desc=hit" } }),
+    })),
     enabled,
   );
 

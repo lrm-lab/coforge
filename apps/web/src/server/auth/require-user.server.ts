@@ -4,6 +4,7 @@ import { readBrowserSignIn, type BrowserSignIn, type BrowserUser } from "./brows
 import { AuthConfigError, readSessionSecret } from "./config.server";
 import { devBrowserUser } from "./dev-skip-auth.server";
 import { safeReturnTo } from "#src/features/auth/return-to";
+import { recordSignedInRequest } from "#src/server/observability/server-timing.server";
 
 /**
  * The signed-in user, or a redirect to `/login`. `returnTo` is the page being opened; sign-in
@@ -16,10 +17,21 @@ export async function requireBrowserUser(
   return (await requireBrowserSignIn(cookieHeader, returnTo)).user;
 }
 
-/** `requireBrowserUser`, with when the person signed in. */
+/** `requireBrowserUser`, with when the person signed in. The request counts as signed in for
+ * Server-Timing (`recordSignedInRequest`); an optional read does not, since what it serves is
+ * open to anyone. */
 export async function requireBrowserSignIn(
   cookieHeader: string | undefined,
   returnTo?: string,
+): Promise<BrowserSignIn> {
+  const signIn = await readRequiredSignIn(cookieHeader, returnTo);
+  recordSignedInRequest();
+  return signIn;
+}
+
+async function readRequiredSignIn(
+  cookieHeader: string | undefined,
+  returnTo: string | undefined,
 ): Promise<BrowserSignIn> {
   const skipped = devSignIn();
   if (skipped) return skipped;
