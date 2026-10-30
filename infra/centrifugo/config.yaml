@@ -93,6 +93,16 @@ channel:
       sub_refresh_proxy_enabled: true
       publish_proxy_enabled: true
       publication_data_format: binary
+    # `agentstatus:<workspace_id>` and `agentstatus:<workspace_id>:<agent_id>`: Agent status changes,
+    # apart from `agent` so that only these few publications keep history: a page compares where
+    # its Agent list was read with where its subscription starts (task #348), and a short
+    # disconnect recovers instead of reading the list again. Activity frames stay without.
+    - name: agentstatus
+      subscribe_proxy_enabled: true
+      sub_refresh_proxy_enabled: true
+      history_size: 10
+      history_ttl: 5m
+      force_recovery: true
     # `presence:workspace:<workspace_id>`: who has a CoForge tab open in the Workspace
     # (apps/web/src/features/workspaces/presence-channel.ts). Nothing is published here.
     - name: presence

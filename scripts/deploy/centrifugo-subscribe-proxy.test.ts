@@ -19,7 +19,7 @@ type Config = {
 
 // A browser page subscribes to these without a token: each must ask the Web, or Centrifugo refuses
 // the tokenless subscription outright. A daemon's channels are subscribed server side and are not.
-const BROWSER_NAMESPACES = ["agent", "chat", "presence", "runtimeauth"];
+const BROWSER_NAMESPACES = ["agent", "agentstatus", "chat", "presence", "runtimeauth"];
 
 test("every Centrifugo asks the Web it connects through before a page holds a channel", async () => {
   for (const path of [
