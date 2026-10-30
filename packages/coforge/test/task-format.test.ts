@@ -394,3 +394,30 @@ test("A Task made from a channel message names it beside the message it sits on"
     "source=01a18ee9-cfb2",
   );
 });
+
+test("A Task with no channel message and no source breaks no formatter (an older server's board)", () => {
+  const bare = task(6, { messageId: null, requiresResourceReceipt: true });
+  const result = { tasks: [bare] } as TaskResult;
+  const own = {
+    tasks: [{ ...bare, channelRef: "#c" }],
+    coverage,
+    pagination: { mode: "complete", truncated: false },
+  } as TaskResult;
+  const printed = [
+    formatTaskBoard("#c", result, "all"),
+    formatMyTaskList(own, undefined),
+    formatTasksCreated("#c", result),
+    formatTaskConverted("#c", bare),
+    formatTaskUnclaimed(bare),
+    formatTaskAssigned(bare),
+    formatTaskStatusUpdated(bare),
+    formatTaskAmended(result),
+    formatResourceReceiptRecorded("#c", result),
+    formatClaimResults("#c", {
+      tasks: [bare],
+      claims: [{ number: 6, success: true }],
+    } as TaskResult),
+  ];
+  for (const text of printed) expect(text).not.toContain("undefined");
+  expect(printed[0]).toContain("msg=-");
+});
