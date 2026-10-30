@@ -19,6 +19,10 @@ import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { TURN_ACTIVITY_EVENT_TYPES, PHASE_EDGES } from "#src/agent-runtime/runtime-phases";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
+import {
+  observeRuntimeEvent,
+  type RuntimeEventObservationPorts,
+} from "./runtime-event-observation";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import {
@@ -493,6 +497,9 @@ export class DaemonRuntime {
     activityDraft: (agentId, detailKind, detail) =>
       this.#activity(agentId, detailKind, "info", detail),
   });
+  /** Provider-event observation: the runtime's collaborators by reference, its helpers as calls.
+   * Assigned at the constructor's end — every collaborator it names exists by then. */
+  readonly #observationPorts: RuntimeEventObservationPorts;
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #runtimeAuth: RuntimeAuthReporter;
   #runtimeAuthControl: RuntimeAuthController | undefined;
@@ -815,6 +822,31 @@ export class DaemonRuntime {
         await this.#transport.sendAgentControlResult?.(result);
       },
     });
+    this.#observationPorts = {
+      activityPublisher: this.#activityPublisher,
+      deliveryQueue: this.#deliveryQueue,
+      offlineResidency: this.#offlineResidency,
+      usageReport: this.#usageReport,
+      phaseBookkeeping: this.#phaseBookkeeping,
+      runtimeErrorHold: this.#runtimeErrorHold,
+      mentionDeliveries: this.#mentionDeliveries,
+      agentSessions: this.#agentSessions,
+      systemCleaner: this.systemCleaner,
+      collectSkillAgents: this.#collectSkillAgents,
+      fastModeWarned: this.#fastModeWarned,
+      isWorking: (agentId) => this.#isWorking(agentId),
+      activityDraft: (agentId, kind, level, detail, extra) =>
+        this.#activity(agentId, kind, level, detail, extra),
+      runtimeErrorActivity: (agentId, message) => this.#runtimeErrorActivity(agentId, message),
+      interruptedActivity: (agentId) => this.#interruptedActivity(agentId),
+      showQuietTurn: (agentId, launch, publish) => this.#showQuietTurn(agentId, launch, publish),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      rememberUsage: (snapshot) => this.#rememberUsage(snapshot),
+      releaseTurnEndHolds: (agentId) => this.#releaseTurnEndHolds(agentId),
+      drainAppInboxNotices: (agentId) => this.drainAppInboxNotices(agentId),
+      failCollectorRunningSlots: (agentId, reason) =>
+        this.#failCollectorRunningSlots(agentId, reason),
+    };
   }
 
   get agentProcessManager(): AgentProcessManager {
@@ -2311,323 +2343,17 @@ export class DaemonRuntime {
   ): void {
     // A late trajectory flush must not mutate the replacement launch's Agent state.
     if (this.#currentActivityLaunches.get(agentId) !== launch) return;
-    const publish = (id: string, source: PublishedActivityLaunch, activity: ActivityDraft) =>
-      this.#activityPublisher.publish(id, source, {
-        ...activity,
-        ...(event.conversation
-          ? {
-              conversationId: event.conversation.conversationId,
-              conversationTarget: event.conversation.target,
-            }
-          : {}),
-      });
-    // Runtime work marks busy unless the provider knows it has no live turn.
-    // "completed" supplies the turn outcome below; native-state reconciliation
-    // repairs observation and delivery gating without inventing that outcome.
-    if (
-      event.type !== "session" &&
-      event.type !== "usage" &&
-      event.type !== "completed" &&
-      runtime.session.hasLiveTurn !== false
-    )
-      this.#deliveryQueue.busy(agentId);
-    if (endsStalledTurn(event, runtime.session.hasLiveTurn)) launch.stalled?.finish(agentId);
-    else if (this.#isWorking(agentId) || runtime.session.hasLiveTurn === true)
-      launch.stalled?.observe(agentId, stalledTurnObservation(launch));
-    if (event.type === "session") {
-      if (controlled && !event.conversation)
-        void this.#agentSessions.update(agentId, launch.launchId, event.identity).catch(() => {});
-      return;
-    }
-    if (event.type === AGENT_RUNTIME_EVENT_TYPE.USAGE) {
-      if (event.snapshot.provider === config.provider) this.#rememberUsage(event.snapshot);
-      return;
-    }
-    if (event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE) {
-      this.#usageReport.contextUsage(
-        agentId,
-        launch,
-        config.provider,
-        event.usedTokens,
-        event.windowTokens,
-      );
-      return;
-    }
-    if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {
-      // Only a launch that actually asked for Fast mode has anything to report about it: a
-      // runtime volunteering a tier for an ordinary launch is not news, and the Web has no
-      // switch on for it.
-      if (config.fastMode !== true) return;
-      this.#usageReport.serviceTier(agentId, launch, config.provider, event.state);
-      // One warning per launch, on the first reading that says Fast is not actually on. A later
-      // reading cannot retract it; a following launch reports its own.
-      if (event.state !== AGENT_SERVICE_TIER_OBSERVED.ON && !this.#fastModeWarned.has(agentId)) {
-        this.#fastModeWarned.add(agentId);
-        publish(
-          agentId,
-          launch,
-          this.#activity(
-            agentId,
-            AGENT_ACTIVITY_DETAIL_KIND.FAST_MODE_UNAVAILABLE,
-            "warning",
-            fastModeUnavailableDetail(event.state, event.reason),
-          ),
-        );
-      }
-      return;
-    }
-    if (event.type === "activity" || event.type === "tool-start") {
-      // Providers report only WHAT happened (tool-start: name + raw input); the
-      // daemon core alone decides what Activity that is, via the same
-      // `toolActivity` allowlist every provider used to call for itself.
-      const activity = event.type === "activity" ? event.activity : toolStartActivity(event);
-      // Resumed output or a new tool call means a still-open compaction is done; report
-      // that first.
-      if (
-        event.type === "tool-start" ||
-        activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED ||
-        activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED
-      )
-        this.#phaseBookkeeping.inferCompactionFinished(agentId, launch, event.conversation, {
-          inferredFrom: event.type === "tool-start" ? "resumed tool use" : "resumed output",
-        });
-      const carriesEntries =
-        activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING &&
-        activity.entries?.some((entry) => entry.kind !== "tool_start");
-      // A trajectory entry carrying a subagent scope (Claude parent_tool_use_id)
-      // reports as subagent_activity regardless of its original detail kind, so
-      // the display shows one unified "Subagent working…" signal.
-      // An error stays classified as an error so it remains visible as one.
-      const subagentScoped =
-        activity.level !== "error" &&
-        activity.entries?.some((entry) => entry.subagent !== undefined);
-      publish(agentId, launch, {
-        ...this.#activity(
-          agentId,
-          subagentScoped ? AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY : activity.detailKind,
-          activity.level,
-          carriesEntries
-            ? ""
-            : safeRuntimeActivityMessage(activity.detailKind, activity.level, activity.detail),
-          { entries: activity.entries },
-        ),
-        ...(activity.runtimeError
-          ? { runtimeError: activity.runtimeError }
-          : activity.level === "error"
-            ? { runtimeError: runtimeFailureDiagnostic(activity.detail) }
-            : {}),
-      });
-      if (activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.IDLE)
-        void this.drainAppInboxNotices(agentId).catch(() => {});
-      return;
-    }
-    if (event.type === "tool-end") {
-      // Every call's end reports its outcome, a call the Web hides (send_message) included, as
-      // in the reference client: hiding a row is a display decision.
-      const toolOutcome = launch.toolCalls?.finish(event);
-      publish(
-        agentId,
-        launch,
-        this.#activity(
-          agentId,
-          AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
-          "info",
-          "Tool finished",
-          toolOutcome ? { toolOutcome } : {},
-        ),
-      );
-      return;
-    }
-    const phaseEdge = PHASE_EDGES.get(event.type);
-    if (phaseEdge) {
-      const [phase, edge] = phaseEdge;
-      if (edge === "start")
-        this.#phaseBookkeeping.start(phase, agentId, launch, event.conversation);
-      else if (edge === "finish")
-        this.#phaseBookkeeping.finish(phase, agentId, launch, event.conversation);
-      else this.#phaseBookkeeping.interrupt(phase, agentId, launch, event.conversation);
-      return;
-    }
-    if (event.type === "subagent-progress") {
-      // Counted whether or not its row is shown: a background task outlives its turn.
-      launch.backgroundTasks?.observe(event);
-      // Shown only while this launch is busy: in a turn, or after one that is waiting for its
-      // background tasks (`#showQuietTurn`). Anything later would wake an idle Agent. A
-      // repeat of the row just shown (one per subagent tool call) adds nothing.
-      const last = this.#activityPublisher.lastBusy(agentId);
-      if (last?.launch !== launch) return;
-      const detail = subagentProgressDetail(event);
-      if (
-        last.activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY ||
-        last.activity.detail !== detail
-      )
-        publish(
-          agentId,
-          launch,
-          this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY, "info", detail),
-        );
-      // After the turn, an ended task shortens the wait, and the last one ends it Idle. Runs
-      // even when the row repeated the one before, so a wait never outlives its tasks.
-      if (event.taskStatus) this.#reconcileIdleTurn(agentId, launch);
-      return;
-    }
-    if (event.type === "progress") {
-      if (this.#activityPublisher.lastBusy(agentId)?.launch !== launch)
-        publish(
-          agentId,
-          launch,
-          this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS, "info", ""),
-        );
-      return;
-    }
-    // Single conversion for every provider (agent-runtime/runtime-error-activity.ts): formatting,
-    // the 512-char cap, redaction, the `Error: …` entry, and runtimeError classification all live
-    // there, not in the provider. Remembered on the launch so a process exit that follows without
-    // an intervening `completed` can report `runtime_crashed` instead of a plain `idle` exit.
-    if (event.type === "error") {
-      launch.crashDetail = event;
-      // Classified once here: the Activity's fallback class/reason and this failure's retry
-      // decision are the same reading of the same failure.
-      const classification = classifyRuntimeError(event);
-      // A failure only a person can fix (re-auth, a model the plan does not include), an
-      // exhausted billing balance, or a sticky model-config one ends the process and takes the
-      // Agent offline — whenever in the launch it is observed.
-      if (classification.takesAgentOffline) {
-        this.#offlineResidency.takeOffline(
-          agentId,
-          launch,
-          config.provider,
-          this.#offlineResidency.buildActivity(
-            config,
-            runtimeDisplayName(config.provider),
-            event,
-            classification,
-          ),
-          {
-            event: "agent_runtime:error_requires_user_action",
-            errorClass: classification.errorClass,
-            errorReason: classification.errorReason,
-            requiredAction: classification.requiredAction,
-          },
-        );
-        return;
-      }
-      // Retry policy reads that classification, never free-form provider hints.
-      const { built, fence } = this.#runtimeErrorHold.noteRuntimeFailure(
-        agentId,
-        launch,
-        event,
-        classification,
-      );
-      // A tripped fingerprint fence is terminal residency like an action-required failure
-      // (reference `applyRuntimeErrorFingerprintFence`): end the process and report inactive.
-      if (fence) {
-        this.#offlineResidency.takeOffline(
-          agentId,
-          launch,
-          config.provider,
-          buildRuntimeErrorFenceActivity(built, fence, event),
-          {
-            event: fence.event,
-            errorClass: classification.errorClass,
-            errorReason: "runtime_error_fenced",
-            requiredAction: "none",
-          },
-        );
-        return;
-      }
-      publish(
-        agentId,
-        launch,
-        this.#activity(agentId, built.detailKind, built.level, built.detail, {
-          entries: built.entries,
-          runtimeError: built.runtimeError,
-        }),
-      );
-      return;
-    }
-    if (event.type === "reconnecting") {
-      const built = buildRuntimeReconnectingActivity(event);
-      publish(
-        agentId,
-        launch,
-        this.#activity(agentId, built.detailKind, built.level, built.detail, {
-          entries: built.entries,
-        }),
-      );
-      return;
-    }
-    if (event.type === "notice-undelivered") {
-      // A steer-mode provider accepted this notice but later learned it never reached
-      // the model (Kiro's own steering buffer discarded it, or the steer call itself was never
-      // accepted). Hold the exact text for redelivery once this Agent is next idle — no ACK
-      // bookkeeping here; whatever originally accepted this text already settled its own ACK (or
-      // never had one, for an App Inbox notice). The tracked mentions it carried were not told:
-      // that redelivery settles them, not this turn's end.
-      this.#deliveryQueue.holdFallbackNotice(agentId, {
-        text: event.text,
-        ...(event.conversation ? { conversation: event.conversation } : {}),
-        ...(event.deliveryIds?.length ? { deliveryIds: event.deliveryIds } : {}),
-      });
-      if (event.deliveryIds?.length)
-        this.#mentionDeliveries.markUndelivered(agentId, event.deliveryIds);
-      return;
-    }
-    if (event.type !== "completed") return;
-    // Capture provider error text before clearing crashDetail for Activity wording.
-    const collectorFailReason =
-      event.status === "failed"
-        ? (launch.crashDetail?.message ?? "Agent runtime failed.").slice(0, 2000)
-        : undefined;
-    this.#runtimeErrorHold.noteTurnEnd(agentId);
-    // Release whatever a queue_until_idle provider held while this turn ran, as one
-    // coalesced notice for the next turn — never blocking this turn-end Activity on it.
-    this.#releaseTurnEndHolds(agentId);
-    // Tracked mentions told during this turn end with it.
-    if (!isMemoryAgentRuntime(config) || event.conversation)
-      void this.#mentionDeliveries.settleTurnEnd(agentId, event.conversation?.conversationId);
-    // A turn ending means a still-open compaction is done; report that before the turn's own
-    // idle/failed/interrupted Activity.
-    this.#phaseBookkeeping.inferCompactionFinished(agentId, launch, event.conversation, {
-      inferredFrom: "turn end",
-    });
-    this.#phaseBookkeeping.closeSilently("review", agentId);
-    // A turn outcome (of any status) resolves any error observed mid-turn; a crash wording only
-    // applies to a process exit with no such outcome in between. A failed turn that already
-    // showed its own runtime_error Activity this turn (`crashDetail` set by the `error` event
-    // above) keeps that as the one visible reason instead of layering this generic failure
-    // notice on top of it — every provider's `error`-then-`completed(failed)` pair reports
-    // exactly once.
-    const alreadyExplained = event.status === "failed" && launch.crashDetail !== undefined;
-    launch.crashDetail = undefined;
-    if (controlled)
-      void runtime.session
-        .readSessionIdentity?.()
-        .then(async (identity) => {
-          if (identity) await this.#agentSessions.update(agentId, launch.launchId, identity);
-        })
-        .catch(() => {});
-    if (event.status === "completed") this.#showQuietTurn(agentId, launch, publish);
-    else {
-      if (!alreadyExplained)
-        publish(
-          agentId,
-          launch,
-          event.status === "failed"
-            ? {
-                ...this.#runtimeErrorActivity(agentId, "Agent runtime failed."),
-                runtimeError: runtimeFailureDiagnostic("turn failure"),
-              }
-            : this.#interruptedActivity(agentId),
-        );
-      this.systemCleaner.onAgentWorkingToIdle(agentId);
-    }
-    if (collectorFailReason && this.#collectSkillAgents.has(agentId))
-      void this.#failCollectorRunningSlots(agentId, collectorFailReason).catch(() => {});
-    void this.drainAppInboxNotices(agentId).catch(() => {});
+    observeRuntimeEvent(
+      this.#observationPorts,
+      agentId,
+      launch,
+      config,
+      runtime,
+      controlled,
+      event,
+    );
   }
 
-  /** A phase's tracker, whose watchdog publishes the phase's stale notice to a live launch. */
   /**
    * A collector turn that dies before HTTPS submit (e.g. model 405) must
    * still settle Collect Run slots — Activity alone is not a completion boundary.
