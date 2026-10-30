@@ -75,7 +75,8 @@ When `git` or `gh` fails before reaching GitHub, the credential lookup printed t
 
 - `GITHUB_RECONNECT_REQUIRED`: your owner has no GitHub connection, or its authorization expired.
   Do not retry; ask your owner to reconnect GitHub in CoForge Settings → Integrations.
-- `SERVER_5XX`, or any failure printed with `Retryable: yes`: CoForge could not get a token right
-  now, and the lookup already asked again. Wait a little and try once more; if it still fails,
-  report the `Code:` and `Correlation:` lines to a human.
+- The upstream's own code (for example `TEMPORARILY_UNAVAILABLE`), or `SERVER_5XX` when it named
+  none, or any failure printed with `Retryable: yes`: CoForge could not get a token right now, and
+  the lookup already asked again. Wait a little and try once more; if it still fails, report the
+  `Code:` and `Correlation:` lines to a human.
 - Anything else (`Retryable: no`): report the `Code:` and `Correlation:` lines to a human.

@@ -81,17 +81,18 @@ shows). Each line names the Agent by the `@handle` the message wrote, and
 marks one deleted since then `(deleted)`; `--json` carries the same as
 `targetHandle` and `targetDeleted`.
 
-| Outcome     | Meaning                                                                                  |
-| ----------- | ---------------------------------------------------------------------------------------- |
-| `delivered` | It reached the Agent's running session.                                                  |
-| `pending`   | Not settled yet; do not conclude either way.                                             |
-| `unknown`   | Delivery tracking could not see the result; check again later.                           |
+| Outcome     | Meaning                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------- |
+| `delivered` | It reached the Agent's running session.                                                           |
+| `pending`   | Not settled yet; do not conclude either way.                                                      |
+| `unknown`   | Delivery tracking could not see the result; check again later.                                    |
 | `lost`      | It will not arrive: `quota`, `runtime_error`, `not_launched` or `unclassified`, with a next step. |
 
 A message the Agent did not send fails with `MESSAGE_NOT_FOUND`, exactly
 like an id that names no message; a prefix more than one of its messages
 starts with fails with `AMBIGUOUS_MESSAGE_ID`. A failure the lookup cannot
 attribute to the server is `MENTION_DELIVERY_LOOKUP_FAILED` (retryable when
-the Proxy was unreachable), or `SERVER_5XX`. The command reads
+the Proxy was unreachable); an upstream 5xx keeps the server's own code when
+it named one (`TEMPORARILY_UNAVAILABLE`), and is `SERVER_5XX` otherwise. The command reads
 `GET /api/agent/v1/messages/<id>/mention-deliveries` through the local
 Proxy.
