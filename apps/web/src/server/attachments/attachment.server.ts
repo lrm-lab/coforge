@@ -212,9 +212,13 @@ export async function readAuthorizedAttachment(
     throw new AppError("ACCESS_DENIED");
   return {
     attachment,
-    async open(): Promise<StoredFile> {
-      const file = await (await storage()).open(attachment.objectKey);
-      if (!file) throw new AppError("NOT_FOUND");
+    async open(): Promise<StoredFile | null> {
+      const fileStorage = await storage();
+      const metadata = await fileStorage.head(attachment.objectKey);
+      if (!metadata) return null;
+      if (metadata.sizeBytes !== attachment.sizeBytes)
+        throw new Error("stored attachment size mismatch");
+      const file = await fileStorage.open(attachment.objectKey);
       return file;
     },
   };
