@@ -28,10 +28,10 @@ function resourceReceipt(task: TaskView): string {
 }
 
 /** `msg=` is the channel message the Task sits on; a Task made from a message (`create --message-id`)
- * sits on none and names that one as `source=`. */
+ * sits on none and shows only the `source=` message. */
 function messageField(task: TaskView): string {
-  const source = task.sourceMessage ? ` source=${shortId(task.sourceMessage.messageId)}` : "";
-  return `msg=${task.messageId ? shortId(task.messageId) : "-"}${source}`;
+  if (task.messageId) return `msg=${shortId(task.messageId)}`;
+  return task.sourceMessage ? `source=${shortId(task.sourceMessage.messageId)}` : "msg=-";
 }
 
 function times(task: TaskView): string {
