@@ -17,16 +17,8 @@ import { readOperatingSystem } from "#src/platform/operating-system";
 import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
-import { PhaseTracker } from "#src/agent-runtime/phase-tracker";
-import {
-  inferredCompactionFinish,
-  TURN_ACTIVITY_EVENT_TYPES,
-  PHASE_EDGES,
-  RUNTIME_PHASES,
-  type CompactionInference,
-  type PhaseActivity,
-  type RuntimePhase,
-} from "#src/agent-runtime/runtime-phases";
+import { TURN_ACTIVITY_EVENT_TYPES, PHASE_EDGES } from "#src/agent-runtime/runtime-phases";
+import { PhaseBookkeeping } from "./phase-bookkeeping";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import {
@@ -494,15 +486,13 @@ export class DaemonRuntime {
   /** Runner-hold reason while this runtime is refusing new turns; undefined when not held.
    * Deliberately in-memory only, so a restarted daemon is never born held. */
   #runnerHold: RunnerHold | undefined;
-  /** Whether each phase is open per Agent, and its stale watchdog - see
-   * agent-runtime/phase-tracker.ts. Providers only report the raw start/finish/interrupted
-   * signal; this decides what, if anything, that becomes on the wire. A compaction also ends,
-   * inferred, on resumed output, a new tool call, or the turn's end. A review does not end on
-   * output or a tool call, since it is made of both; the turn's end closes it without a row. */
-  readonly #phases: Readonly<Record<RuntimePhase, PhaseTracker>> = {
-    compaction: this.#trackPhase("compaction"),
-    review: this.#trackPhase("review"),
-  };
+  /** Each phase's open state and stale watchdog — see `phase-bookkeeping.ts`. */
+  readonly #phaseBookkeeping = new PhaseBookkeeping({
+    launchFor: (agentId) => this.#currentActivityLaunches.get(agentId),
+    publish: (agentId, launch, draft) => this.#activityPublisher.publish(agentId, launch, draft),
+    activityDraft: (agentId, detailKind, detail) =>
+      this.#activity(agentId, detailKind, "info", detail),
+  });
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #runtimeAuth: RuntimeAuthReporter;
   #runtimeAuthControl: RuntimeAuthController | undefined;
@@ -1798,7 +1788,7 @@ export class DaemonRuntime {
       });
     this.#currentActivityLaunches.set(agentId, launch);
     this.#activityPublisher.forgetBusy(agentId);
-    this.#disposePhases(agentId);
+    this.#phaseBookkeeping.dispose(agentId);
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
     // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
     this.#deliveryQueue.setProvider(agentId, config.provider);
@@ -2398,7 +2388,7 @@ export class DaemonRuntime {
         activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED ||
         activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED
       )
-        this.#inferCompactionFinished(agentId, launch, event.conversation, {
+        this.#phaseBookkeeping.inferCompactionFinished(agentId, launch, event.conversation, {
           inferredFrom: event.type === "tool-start" ? "resumed tool use" : "resumed output",
         });
       const carriesEntries =
@@ -2451,9 +2441,11 @@ export class DaemonRuntime {
     const phaseEdge = PHASE_EDGES.get(event.type);
     if (phaseEdge) {
       const [phase, edge] = phaseEdge;
-      if (edge === "start") this.#startPhase(phase, agentId, launch, event.conversation);
-      else if (edge === "finish") this.#finishPhase(phase, agentId, launch, event.conversation);
-      else this.#interruptPhase(phase, agentId, launch, event.conversation);
+      if (edge === "start")
+        this.#phaseBookkeeping.start(phase, agentId, launch, event.conversation);
+      else if (edge === "finish")
+        this.#phaseBookkeeping.finish(phase, agentId, launch, event.conversation);
+      else this.#phaseBookkeeping.interrupt(phase, agentId, launch, event.conversation);
       return;
     }
     if (event.type === "subagent-progress") {
@@ -2596,10 +2588,10 @@ export class DaemonRuntime {
       void this.#mentionDeliveries.settleTurnEnd(agentId, event.conversation?.conversationId);
     // A turn ending means a still-open compaction is done; report that before the turn's own
     // idle/failed/interrupted Activity.
-    this.#inferCompactionFinished(agentId, launch, event.conversation, {
+    this.#phaseBookkeeping.inferCompactionFinished(agentId, launch, event.conversation, {
       inferredFrom: "turn end",
     });
-    this.#phases.review.finish(agentId);
+    this.#phaseBookkeeping.closeSilently("review", agentId);
     // A turn outcome (of any status) resolves any error observed mid-turn; a crash wording only
     // applies to a process exit with no such outcome in between. A failed turn that already
     // showed its own runtime_error Activity this turn (`crashDetail` set by the `error` event
@@ -2636,91 +2628,6 @@ export class DaemonRuntime {
   }
 
   /** A phase's tracker, whose watchdog publishes the phase's stale notice to a live launch. */
-  #trackPhase(phase: RuntimePhase): PhaseTracker {
-    const {
-      staleMs,
-      stale: [detailKind, detail],
-    } = RUNTIME_PHASES[phase];
-    return new PhaseTracker((agentId) => {
-      const launch = this.#currentActivityLaunches.get(agentId);
-      if (launch)
-        this.#activityPublisher.publish(
-          agentId,
-          launch,
-          this.#activity(agentId, detailKind, "info", detail),
-        );
-    }, staleMs);
-  }
-
-  /** Opens a phase once, reporting its start; a repeated start while it is open reports nothing. */
-  #startPhase(
-    phase: RuntimePhase,
-    agentId: string,
-    launch: ActivityLaunch,
-    conversation: AgentRuntimeEvent["conversation"],
-  ): void {
-    if (this.#phases[phase].start(agentId) !== "started") return;
-    this.#publishPhase(agentId, launch, RUNTIME_PHASES[phase].started, conversation);
-  }
-
-  /** Ends an open phase once on its own finish signal. */
-  #finishPhase(
-    phase: RuntimePhase,
-    agentId: string,
-    launch: ActivityLaunch,
-    conversation: AgentRuntimeEvent["conversation"],
-  ): void {
-    if (this.#phases[phase].finish(agentId) !== "finished") return;
-    this.#publishPhase(agentId, launch, RUNTIME_PHASES[phase].finished, conversation);
-  }
-
-  /** Ends an open compaction once, before the Activity that established its completion. */
-  #inferCompactionFinished(
-    agentId: string,
-    launch: ActivityLaunch,
-    conversation: AgentRuntimeEvent["conversation"],
-    { inferredFrom }: { inferredFrom: CompactionInference },
-  ): void {
-    if (this.#phases.compaction.finish(agentId) !== "finished") return;
-    this.#publishPhase(agentId, launch, inferredCompactionFinish(inferredFrom), conversation);
-  }
-
-  /** Ends an open phase once as interrupted, for a phase that reports interruptions. */
-  #interruptPhase(
-    phase: RuntimePhase,
-    agentId: string,
-    launch: ActivityLaunch,
-    conversation: AgentRuntimeEvent["conversation"],
-  ): void {
-    const interrupted = RUNTIME_PHASES[phase].interrupted;
-    if (!interrupted || this.#phases[phase].interrupt(agentId) !== "interrupted") return;
-    this.#publishPhase(agentId, launch, interrupted, conversation);
-  }
-
-  #publishPhase(
-    agentId: string,
-    launch: ActivityLaunch,
-    [detailKind, detail]: PhaseActivity,
-    conversation: AgentRuntimeEvent["conversation"],
-  ): void {
-    this.#activityPublisher.publish(agentId, launch, {
-      ...this.#activity(agentId, detailKind, "info", detail),
-      ...(conversation
-        ? { conversationId: conversation.conversationId, conversationTarget: conversation.target }
-        : {}),
-    });
-  }
-
-  /** Forgets one Agent's open phases and stops their watchdogs. */
-  #disposePhases(agentId: string): void {
-    for (const tracker of Object.values(this.#phases)) tracker.dispose(agentId);
-  }
-
-  /** Forgets every Agent's open phases; used on full daemon shutdown. */
-  #disposeAllPhases(): void {
-    for (const tracker of Object.values(this.#phases)) tracker.disposeAll();
-  }
-
   /**
    * A collector turn that dies before HTTPS submit (e.g. model 405) must
    * still settle Collect Run slots — Activity alone is not a completion boundary.
@@ -3186,7 +3093,7 @@ export class DaemonRuntime {
   /** Forgets one ended launch's observation state without affecting another Agent. */
   #disposeLaunchObservations(agentId: string): void {
     this.#currentActivityLaunches.get(agentId)?.stalled?.dispose(agentId);
-    this.#disposePhases(agentId);
+    this.#phaseBookkeeping.dispose(agentId);
     this.#usageReport.forget(agentId);
     this.#fastModeWarned.delete(agentId);
   }
@@ -3330,7 +3237,7 @@ export class DaemonRuntime {
     // Otherwise the pending trajectory timer could publish it after Idle and rearm Busy.
     launch.trajectory?.flush();
     launch.stalled?.finish(agentId);
-    this.#disposePhases(agentId);
+    this.#phaseBookkeeping.dispose(agentId);
     if (this.#isWorking(agentId)) {
       this.#showQuietTurn(agentId, launch, (id, source, activity) =>
         this.#activityPublisher.publish(id, source, activity),
@@ -3825,7 +3732,7 @@ export class DaemonRuntime {
       launch.startup?.dispose();
       launch.stalled?.dispose(agentId);
     }
-    this.#disposeAllPhases();
+    this.#phaseBookkeeping.disposeAll();
     this.#runtimeErrorHold.disposeAll();
     this.#upgradeResults.stop();
     this.#usageReport.clear();
