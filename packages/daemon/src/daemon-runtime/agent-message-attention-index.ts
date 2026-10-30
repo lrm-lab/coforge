@@ -20,6 +20,7 @@ import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manag
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
 import { attentionFlags, latestCreatedAtField } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
+import { inboxNoticeText } from "./inbox-notice-text";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import type {
   AgentConsumedSeqEntry,
@@ -55,16 +56,6 @@ const REMEMBERED_DELIVERIES = 4096;
  * because the hold shows the newest that many and no more — and anything older is consumed by the
  * same frontier anyway. No invented slack. */
 const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
-
-/**
- * The text of one inbox notice: one line per target, each naming what waits there. Never a message
- * body and never how to read one — the standing instructions carry that, once. The Agent reads the
- * messages themselves through `check`.
- */
-export function inboxNoticeText(rows: readonly string[]): string {
-  return `[CoForge inbox notice:
-${rows.join("\n")}]`;
-}
 
 /** One unreviewed delivery plus the moment this daemon learned about it. Deliveries carry no
  * message timestamp of their own (only the server knows when a message was written), so the

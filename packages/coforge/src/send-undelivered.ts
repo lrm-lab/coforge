@@ -8,6 +8,8 @@ import {
   type PendingMentionAction,
 } from "#src/message-format";
 
+export { refuseTaskRef } from "#src/task-target-refusal";
+
 /**
  * A send whose message was queued but some of whose @mentions reached no one is a partial result:
  * the message must not be sent again, and each mention has its own recovery. In text mode what was

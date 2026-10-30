@@ -95,7 +95,7 @@ import {
   formatSendCommitted,
   type PendingMentionAction,
 } from "#src/message-format";
-import { undeliveredMentionError } from "#src/send-undelivered";
+import { refuseTaskRef, undeliveredMentionError } from "#src/send-undelivered";
 import {
   heldSendCliError,
   isCommittedSend,
@@ -536,8 +536,8 @@ export function parseArgs(
           ),
           outputMode,
         );
-      // Repeatable; duplicate values collapse to one occurrence. No client-side count cap; the
-      // server enforces the per-message limit.
+      refuseTaskRef("send", target, [], outputMode);
+      // Repeatable; duplicates collapse; the server caps the count.
       const attachmentIds = rawAttachmentIds.length ? [...new Set(rawAttachmentIds)] : undefined;
       if (attachmentIds?.some((id) => !UUID_PATTERN.test(id)))
         throw withOutputMode(

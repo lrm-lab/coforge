@@ -1,3 +1,4 @@
+import { refuseTaskRef } from "./task-target-refusal";
 import { invalidArgument } from "./command-help";
 
 /** What `message read` asks for: a history window (at most one anchor, and a page size), or the
@@ -45,6 +46,7 @@ export function parseMessageReadArgs(
       "message read",
       "--target is required, for example '#general' or '@ada'.",
     );
+  refuseTaskRef("read", target, args);
   return { target, ...options };
 }
 

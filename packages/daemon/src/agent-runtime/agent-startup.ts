@@ -1,3 +1,4 @@
+import { taskHint } from "#src/daemon-runtime/inbox-notice-text";
 import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 /** The first turn when no real Message or explicit resume prompt is available. Standing
@@ -28,7 +29,7 @@ export function agentStartupCatchupInput(rows: readonly string[], fenced = false
     ? "with no before/after/around anchor, continuing while hasNewer is true"
     : "once, retrying only a failed read";
   return `[CoForge inbox notice:
-${rows.join("\n")}
+${rows.join("\n")}${fenced ? "" : taskHint(rows)}
 Read each listed conversation with ${command} ${reading}, then end this turn. Do not call ${check} in this catch-up mode. Continue working only if you find a direct request, assignment, personal mention, review request, or task addressed to you. Otherwise do not send a reply.]`;
 }
 export const AGENT_STARTUP_TIMEOUT_MS = 120_000;
