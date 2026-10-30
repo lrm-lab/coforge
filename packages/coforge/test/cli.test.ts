@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs, resolveReminderId, run } from "../index";
+import { taskStamps } from "./task-stamps";
 import { CliError, renderCliErrorJson, renderCliErrorText } from "#src/cli-error";
 import {
   type TaskClaimResult,
@@ -545,19 +546,6 @@ test("run rejects a short --id prefix that matches no reminder or more than one"
     }),
   ).rejects.toMatchObject({ code: "AMBIGUOUS" });
 });
-
-/** The creator and timestamps every Task read carries. */
-const taskStamps = {
-  creator: {
-    memberId: "member-ada",
-    kind: "user" as const,
-    id: "user-ada",
-    name: "Ada",
-    handle: "ada",
-  },
-  createdAt: "2026-09-23T05:00:00.000Z",
-  updatedAt: "2026-09-23T06:00:00.000Z",
-};
 
 test("Task history lists each event with its payload under the Task header", async () => {
   const base = {

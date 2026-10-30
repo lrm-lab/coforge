@@ -81,8 +81,7 @@ export function useTaskOverview() {
       liveRows
         ? [...liveRows].sort(
             (left, right) =>
-              (position.get(left.id) ?? Infinity) -
-              (position.get(right.id) ?? Infinity),
+              (position.get(left.id) ?? Infinity) - (position.get(right.id) ?? Infinity),
           )
         : // Until the live query is ready (the server render, the first tick after hydration) the
           // cache holds the same rows, already in order.

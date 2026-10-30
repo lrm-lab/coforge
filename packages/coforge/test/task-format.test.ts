@@ -26,6 +26,7 @@ const person = (handle: string, fields: Partial<TaskMember> = {}): TaskMember =>
 });
 
 const task = (number: number, fields: Partial<TaskView> = {}): TaskView => ({
+  id: `${number}abcdef0-1111-2222-3333-444444444444`,
   messageId: `${number}abcdef0-1111-2222-3333-444444444444`,
   conversationId: "conversation",
   number,
@@ -316,7 +317,7 @@ test("Claim results mark each selector claimed or refused, and name the holder o
   const result: TaskResult = {
     tasks: [task(42)],
     claims: [
-      { number: 42, messageId: task(42).messageId, success: true },
+      { number: 42, messageId: task(42).messageId!, success: true },
       { number: 43, success: false, reason: "already claimed", conflict: heldBy },
       { messageId: "abcd1234", success: false, reason: "message not found" },
     ],

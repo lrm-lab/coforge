@@ -166,9 +166,9 @@ test("a created Task's title stores its references as tokens, and its own mentio
     const unchanged = await amend(readable);
     expect(unchanged.history ?? []).toEqual([]);
     expect(unchanged.tasks[0]!.title).toBe(readable);
-    expect(
-      (await db.task.findUniqueOrThrow({ where: { messageId: referencing!.id } })).title,
-    ).toBe(tokenized);
+    expect((await db.task.findUniqueOrThrow({ where: { messageId: referencing!.id } })).title).toBe(
+      tokenized,
+    );
     const renamed = await amend("A new title");
     expect(renamed.history).toEqual([
       expect.objectContaining({

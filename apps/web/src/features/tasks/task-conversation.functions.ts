@@ -7,6 +7,7 @@ import {
   mentionSelectorsSchema,
 } from "#src/features/conversations/conversation.schemas";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 
@@ -26,8 +27,16 @@ const replySchema = taskRefSchema.extend({
 const followSchema = taskRefSchema.extend({ follow: z.boolean() });
 
 function taskConversations(db: ConstructorParameters<typeof TaskConversations>[0]["db"]) {
+  const centrifugo = createCentrifugoServerApi();
   return new TaskConversations(
-    { db, reader: "people", dependencies: { publisher: createCentrifugoServerApi() } },
+    {
+      db,
+      reader: "people",
+      dependencies: {
+        publisher: centrifugo,
+        realtime: new CentrifugoConversationRealtime(centrifugo),
+      },
+    },
     getMessageRequestIdempotency(),
   );
 }
@@ -59,4 +68,12 @@ export const setTaskFollow = createServerFn({ method: "POST" })
     const principal = { workspaceId, userId: user.id };
     const conversations = taskConversations(db);
     return follow ? conversations.follow(principal, ref) : conversations.unfollow(principal, ref);
+  });
+
+export const markTaskConversationRead = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(taskRefSchema.extend({ throughSequence: z.number().int().positive() }))
+  .handler(async ({ context: { db, user, workspaceId }, data }) => {
+    const { throughSequence, ...ref } = data;
+    return taskConversations(db).markRead({ workspaceId, userId: user.id }, ref, throughSequence);
   });

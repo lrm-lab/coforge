@@ -11,6 +11,7 @@ import { lockConversation } from "#src/server/conversations/conversation-lock.se
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
+import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { postTaskMessage } from "./task-discussion-send.server";
 import {
   discussionOf,
@@ -185,6 +186,24 @@ export class TaskConversations {
       return id;
     });
     return { conversationId };
+  }
+
+  /**
+   * Moves a person's read position in the task's conversation, as `markHumanRead` does anywhere:
+   * monotone, clamped to the newest message. Nothing is announced to the sidebar; the conversation
+   * is hidden. Where it left them, or null when nothing moved or there is no conversation yet.
+   */
+  async markRead(principal: TaskPrincipal, ref: TaskConversationRef, throughSequence: number) {
+    if (!Number.isSafeInteger(throughSequence) || throughSequence < 1)
+      throw new AppError("INVALID_INPUT");
+    const { task, member } = await this.resolve(principal, ref, { member: true });
+    if (!task.discussionConversationId || !member?.userId) return null;
+    const moved = await markHumanRead(this.ports.db, {
+      conversationId: task.discussionConversationId,
+      userId: member.userId,
+      throughSequence,
+    });
+    return moved ? { unreadCount: moved.unreadCount } : null;
   }
 
   async follow(principal: TaskPrincipal, ref: TaskConversationRef) {

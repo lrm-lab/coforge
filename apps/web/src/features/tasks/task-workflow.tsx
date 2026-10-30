@@ -145,9 +145,7 @@ export function TaskWorkflow<T extends TaskView>({
     <DndContext
       id={id}
       sensors={sensors}
-      onDragStart={({ active: item }) =>
-        setActive(tasks.find((task) => task.id === item.id))
-      }
+      onDragStart={({ active: item }) => setActive(tasks.find((task) => task.id === item.id))}
       onDragCancel={() => setActive(undefined)}
       onDragEnd={(event) => void dropped(event)}
     >

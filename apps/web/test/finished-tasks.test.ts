@@ -7,10 +7,7 @@ const row = (id: string, status: string) => ({ id, status });
 test("a finished group shows the Tasks moved into it on the page first, then its read pages, each once", () => {
   const onPage = [row("moved", "done"), row("open", "todo"), row("reopened", "todo")];
   const pages = [row("older", "done"), row("moved", "done"), row("reopened", "done")];
-  expect(finishedRows("done", onPage, pages).map(({ id }) => id)).toEqual([
-    "moved",
-    "older",
-  ]);
+  expect(finishedRows("done", onPage, pages).map(({ id }) => id)).toEqual(["moved", "older"]);
 });
 
 test("a finished group's count adds the counted groups matching the owner and Project picks", () => {

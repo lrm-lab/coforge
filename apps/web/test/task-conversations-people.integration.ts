@@ -173,3 +173,29 @@ test("a deleted Agent that is mentioned does not follow the task", async () => {
   expect(await followOf(agent.memberId)).toBeNull();
   await db.agent.update({ where: { id: agent.id }, data: { deletedAt: null } });
 });
+
+test("a reply is announced to the pages open on the conversation, and reading moves the person's count", async () => {
+  const announced: Array<{ conversationId: string; sequence: number }> = [];
+  const live = new TaskConversations({
+    db,
+    reader: "people",
+    dependencies: {
+      realtime: {
+        messageAvailable: async (input: { conversationId: string; sequence: number }) => {
+          announced.push(input);
+        },
+      } as never,
+    },
+  });
+  const sent = await live.reply(as("writer"), ref(), { body: "Anyone looking at this?" });
+  const message = await db.message.findUniqueOrThrow({ where: { id: sent.messageId } });
+  expect(announced).toEqual([
+    expect.objectContaining({ conversationId: message.conversationId, sequence: message.sequence }),
+  ]);
+
+  expect(await live.markRead(as("friend"), ref(), message.sequence)).toEqual({ unreadCount: 0 });
+  expect(await live.markRead(as("friend"), ref(), message.sequence)).toBeNull();
+  await expect(live.markRead(as("friend"), ref(), 0)).rejects.toMatchObject({
+    code: "INVALID_INPUT",
+  });
+});

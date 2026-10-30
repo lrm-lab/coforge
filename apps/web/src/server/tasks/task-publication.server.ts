@@ -79,15 +79,16 @@ export async function publishDeliveries(
 }
 
 /**
- * Pushes a message of a task's own conversation to the Agents it was delivered to, each by the
- * task it names (`#channel:#N`, from that Agent's seat). A directed wake, like a Task delivery.
+ * Pushes a message of a task's own conversation to the pages open on it, and to the Agents it was
+ * delivered to, each by the task it names (`#channel:#N`, from that Agent's seat; a directed wake,
+ * like a Task delivery). The conversation is hidden: no sidebar or badge hears of it, and a page
+ * can subscribe only as far as the board lets it read (`authorizeConversationRealtime`).
  */
 export async function publishTaskConversationMessage(
   ports: TaskBoardPorts,
   messageId: string,
   requestId: string,
 ) {
-  if (!ports.dependencies.publisher) return;
   const message = await ports.db.message.findUniqueOrThrow({
     where: { id: messageId },
     include: {
@@ -97,6 +98,15 @@ export async function publishTaskConversationMessage(
       deliveries: { include: { agent: { select: { computerId: true } } } },
     },
   });
+  await ports.dependencies.realtime
+    ?.messageAvailable({
+      conversationId: message.conversationId,
+      messageId: message.id,
+      sequence: message.sequence,
+      workspaceId: message.workspaceId,
+    })
+    .catch(() => undefined);
+  if (!ports.dependencies.publisher) return;
   const sender = agentMessageSender(message.sender);
   await Promise.allSettled(
     message.deliveries.map(async (delivery) => {
