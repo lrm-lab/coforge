@@ -137,7 +137,11 @@ test("with it on, create makes a task with no message in the channel, followed b
   const task = await db.task.findUniqueOrThrow({ where: { id: view.id } });
   expect(task.messageId).toBeNull();
   expect(view.messageId).toBeNull();
-  expect(view.sourceMessage).toMatchObject({ messageId: sourceId, preview: expect.any(String) });
+  expect(view.sourceMessage).toMatchObject({
+    messageId: sourceId,
+    senderName: expect.any(String),
+    preview: expect.any(String),
+  });
   expect(view.id).toBe(task.id);
   expect(task.sourceMessageId).toBe(sourceId);
   const follows = await db.taskFollow.findMany({ where: { taskId: task.id } });

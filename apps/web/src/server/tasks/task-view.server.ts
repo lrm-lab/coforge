@@ -20,6 +20,7 @@ import {
   browserMessageMention,
   type BrowserMessageMentionRow,
 } from "#src/server/conversations/mentions.server";
+import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
@@ -84,8 +85,8 @@ export const taskSelection = {
       mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
       sender: {
         select: {
-          user: { select: { username: true } },
-          agent: { select: { name: true } },
+          user: { select: { username: true, displayName: true } },
+          agent: { select: { name: true, displayName: true } },
         },
       },
     },
@@ -244,10 +245,10 @@ export function taskView(
           ...(task.sourceMessage.threadRootId && {
             threadRootId: task.sourceMessage.threadRootId,
           }),
-          senderName:
-            task.sourceMessage.sender?.user?.username ??
-            task.sourceMessage.sender?.agent?.name ??
-            null,
+          // Named as the message stream names it, not by handle.
+          senderName: task.sourceMessage.sender
+            ? browserSenderName(task.sourceMessage.sender)
+            : null,
           preview: sourcePreview(
             readTaskText(task.sourceMessage.body, reader, task.sourceMessage.mentions),
           ),
