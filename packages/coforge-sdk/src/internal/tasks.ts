@@ -56,6 +56,8 @@ export type TaskMember = {
 };
 
 export type TaskView = {
+  /** The task's id. For a task that started as a message it is that message's id; a task made under
+   * task conversations has no message, and this is its own id. */
   messageId: string;
   conversationId: string;
   number: number;
@@ -157,6 +159,8 @@ export type TaskCommand = {
   createsResource?: boolean;
   receipt?: TaskResourceReceipt;
   freshnessContextMode?: "inline" | "withheld";
+  /** With task conversations, create a task beside someone else's live task on `messageId`. */
+  alongside?: boolean;
   attachmentId?: string;
   status?: TaskStatus | "all";
   expectedRevision?: number;

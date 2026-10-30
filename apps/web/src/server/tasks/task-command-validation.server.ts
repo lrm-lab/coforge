@@ -68,9 +68,12 @@ export function validateTaskCommand(command: TaskCommand) {
       titles.some((value) => !value.trim() || value.trim().length > 8_000)
     )
       throw new AppError("INVALID_INPUT");
-    if (command.number !== undefined || command.messageId !== undefined)
-      throw new AppError("INVALID_INPUT");
+    // `messageId` names the source message under task conversations; the board refuses it where
+    // they are off.
+    if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
+  if (command.alongside !== undefined && command.operation !== "create")
+    throw new AppError("INVALID_INPUT");
   if (command.operation === "amend") {
     if (
       command.title !== undefined &&

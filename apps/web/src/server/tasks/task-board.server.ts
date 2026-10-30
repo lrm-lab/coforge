@@ -5,6 +5,8 @@ import { AppError } from "#src/lib/app-error";
 import type { ConversationTaskSubset } from "#src/features/tasks/conversation-task-subset";
 import type { TaskCommand, TaskPrincipal, TaskResult } from "@lrm/coforge-sdk/internal";
 import { createTasks, announceSentMessageTask } from "./task-creation.server";
+import { createConversationTasks } from "./task-conversation-creation.server";
+import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { assignTask, unassignTask } from "./task-assignment.server";
 import { amendTask, deleteTask, taskHistory, updateTaskStatus } from "./task-amendments.server";
 import { claimTasks, convertOrClaim, unclaimTask } from "./task-claims.server";
@@ -24,6 +26,9 @@ import {
   type FinishedTaskScope,
   type FinishedTaskWindow,
 } from "./task-overview.server";
+
+/** The refusal of `claim --message-id` and `convert` once task conversations are on. */
+export const TASK_V2_USE_CREATE = "task_v2_use_create";
 
 /** Canonical authorization and transaction seam for message-backed Tasks. */
 export class TaskBoard {
@@ -137,8 +142,25 @@ export class TaskBoard {
       return listConversationTasks(this.ports, scope.conversationId, command);
     const member = scope.member!;
     const ports = this.ports;
-    if (command.operation === "create")
+    const conversations =
+      (command.operation === "create" ||
+        command.operation === "convert" ||
+        command.operation === "claim") &&
+      (await taskConversationsEnabled(this.db, principal));
+    if (command.operation === "create") {
+      if (conversations) return createConversationTasks(ports, scope, member, principal, command);
+      // Naming a source message needs task conversations.
+      if (command.messageId !== undefined || command.alongside !== undefined)
+        throw new AppError("INVALID_INPUT");
       return createTasks(ports, scope, member, principal, command);
+    }
+    // With task conversations a task is made by `create`, naming its source message; a message is
+    // never turned into one.
+    if (
+      conversations &&
+      (command.operation === "convert" || command.messageId || command.messageIds)
+    )
+      throw new AppError("CONFLICT", { errorId: TASK_V2_USE_CREATE });
     if (command.operation === "convert")
       return convertOrClaim(ports, scope, member, command, false);
     if (command.operation === "claim") return claimTasks(ports, scope, member, command);

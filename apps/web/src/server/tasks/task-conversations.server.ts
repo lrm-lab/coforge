@@ -358,3 +358,56 @@ function joinDiscussion(
         update: { leftAt: null },
       });
 }
+
+/**
+ * A server notice in a task's conversation (an assignment, a follower leaving): no sender, made
+ * with the conversation if the task has none yet, delivered to `deliverToAgentId` when it names
+ * one. The caller holds the board's lock.
+ */
+export async function postTaskNotice(
+  tx: Transaction,
+  scope: { conversationId: string; workspaceId: string },
+  taskId: string,
+  notice: { body: string; deliverToAgentId?: string | null },
+) {
+  const task = await tx.task.findUniqueOrThrow({
+    where: { id: taskId },
+    select: { id: true, discussionConversationId: true },
+  });
+  const conversationId =
+    task.discussionConversationId ??
+    (await (async () => {
+      const conversation = await tx.conversation.create({
+        data: { workspaceId: scope.workspaceId, kind: "task_thread" },
+        select: { id: true },
+      });
+      await tx.task.update({
+        where: { id: taskId },
+        data: { discussionConversationId: conversation.id },
+      });
+      return conversation.id;
+    })());
+  await lockConversation(tx, conversationId);
+  const sequence = await allocateSequence(tx, conversationId);
+  return tx.message.create({
+    data: {
+      workspaceId: scope.workspaceId,
+      conversationId,
+      body: notice.body,
+      sequence,
+      deliveries: notice.deliverToAgentId
+        ? {
+            create: [
+              {
+                workspaceId: scope.workspaceId,
+                conversationId,
+                agentId: notice.deliverToAgentId,
+                sequence,
+              },
+            ],
+          }
+        : undefined,
+    },
+    select: { id: true, sequence: true, conversationId: true, workspaceId: true, body: true },
+  });
+}

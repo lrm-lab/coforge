@@ -98,7 +98,12 @@ export function refuseUnclaimed(result: TaskResult): void {
   );
 }
 
-async function findMessage(tx: Transaction, conversationId: string, messageId: string) {
+/** The top-level message `messageId` names (a full id or its short anchor) in the conversation. */
+export async function findSourceMessage(
+  tx: Transaction,
+  conversationId: string,
+  messageId: string,
+) {
   // A short anchor (eight hex, or the dashed twelve-hex display form from #88) is the uuid range
   // it names, so the lookup stays an index range on the message id instead of reading every
   // top-level message in the conversation.
@@ -128,14 +133,16 @@ export async function convertOrClaim(
       : undefined;
     let message: { id: string; body: string } | undefined;
     if (!existing && command.messageId) {
-      message = await findMessage(tx, conversationId, command.messageId).catch((error: unknown) => {
-        if (!claim || !(error instanceof AppError)) throw error;
-        throw new ClaimRefused(
-          error.code === "CONFLICT"
-            ? CLAIM_REFUSAL.ambiguousMessage
-            : CLAIM_REFUSAL.messageNotFound,
-        );
-      });
+      message = await findSourceMessage(tx, conversationId, command.messageId).catch(
+        (error: unknown) => {
+          if (!claim || !(error instanceof AppError)) throw error;
+          throw new ClaimRefused(
+            error.code === "CONFLICT"
+              ? CLAIM_REFUSAL.ambiguousMessage
+              : CLAIM_REFUSAL.messageNotFound,
+          );
+        },
+      );
       existing =
         (await tx.task.findUnique({
           where: { messageId: message.id },

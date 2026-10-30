@@ -1,4 +1,5 @@
 import { hostMessageId } from "./task-view.server";
+import { postTaskNotice } from "./task-conversations.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
@@ -26,7 +27,7 @@ type NoticeInput = {
   mentions?: Assignee;
 };
 /** The Task fields a notice quotes; `messageId` is also the root of the Task's thread. */
-type NoticeSubject = { messageId: string | null; number: number; title: string };
+type NoticeSubject = { id: string; messageId: string | null; number: number; title: string };
 /**
  * Write notices under the withNotices conversation lock; signal after commit. Assignment
  * receipts are delivered/pushed separately by the caller through publishAssignmentReceipt.
@@ -90,10 +91,36 @@ export async function withNotices<T>(
       inConversation: (body, id) => postAndSignal({ body, id }),
       inThread: async (task, body) => {
         const [quoted] = await quote([task]);
-        return postAndSignal({ body: body(quoted!), threadRootId: hostMessageId(task) });
+        // A task with no message in the channel keeps its notices in its own conversation.
+        if (!task.messageId) {
+          const posted = await postTaskNotice(tx, conversation, task.id, { body: body(quoted!) });
+          return { ...posted, threadRootId: null };
+        }
+        return postAndSignal({ body: body(quoted!), threadRootId: task.messageId });
       },
       receipt: async ({ id, task, body, assignee, actor }) => {
         const [quoted] = await quote([task]);
+        // A task with no message in the channel: the receipt is its conversation's notice, and the
+        // assignee follows the task.
+        if (!task.messageId) {
+          const posted = await postTaskNotice(tx, conversation, task.id, {
+            body: body(quoted!),
+            deliverToAgentId: assignee.id === actor.id ? null : assignee.agentId,
+          });
+          await tx.taskFollow.createMany({
+            data: [
+              {
+                taskId: task.id,
+                memberId: assignee.id,
+                conversationId: conversation.conversationId,
+                workspaceId: conversation.workspaceId,
+                reason: assignee.id === actor.id ? "claimed" : "assigned",
+              },
+            ],
+            skipDuplicates: true,
+          });
+          return { ...posted, threadRootId: null };
+        }
         const notice = await post({
           id,
           body: body(quoted!),

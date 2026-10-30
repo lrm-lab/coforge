@@ -6,7 +6,8 @@ import { AppError } from "#src/lib/app-error";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { TASK_V2_USE_CREATE, TaskBoard } from "#src/server/tasks/task-board.server";
+import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
@@ -64,6 +65,7 @@ const taskRequestSchema = z
       })
       .optional(),
     freshnessContextMode: z.enum(["inline", "withheld"]).optional(),
+    alongside: z.boolean().optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
@@ -87,6 +89,23 @@ export async function handleAgentTaskPost(
     );
     return Response.json({ ...result, idempotencyKey: command.idempotencyKey });
   } catch (error) {
+    if (error instanceof SourceMessageTaken)
+      return Response.json(
+        {
+          error: `Task #${error.taskNumber} (${error.holder}) is already working on that message. Add to that task's conversation, or create yours beside it with --alongside.`,
+          code: error.code,
+        },
+        { status: 409 },
+      );
+    if (error instanceof AppError && error.errorId === TASK_V2_USE_CREATE)
+      return Response.json(
+        {
+          error:
+            "With task conversations a task is made with `coforge task create --message-id <id> --title ...`; a message is not turned into a task or claimed as one.",
+          code: TASK_V2_USE_CREATE,
+        },
+        { status: 409 },
+      );
     if (error instanceof AppError) {
       // A board refusal is a business outcome, not a malformed request: name its code and give it
       // the HTTP status that code means, so a claim of an already-claimed task is a 409 and not a
