@@ -110,6 +110,35 @@ export function formatMonthDay(
   }).format(new Date(value));
 }
 
+/** Month, day and time of day, as Raft writes a forwarded original's moment: "Oct 29, 6:06 PM" in
+ * English, "10月29日 18:06" in Chinese, in the viewer's hour cycle. A moment from another year
+ * than `now`'s writes its year too ("Oct 29, 2025, 6:06 PM", "2025.10.29 18:06"). */
+export function formatMonthDayTime(
+  value: Date | string,
+  timeZone: string | null | undefined,
+  locale: string,
+  timeFormat: TimeFormat | null = null,
+  now: Date = new Date(),
+) {
+  const zone = resolveTimeZone(timeZone, browserTimeZone());
+  const yearOf = (date: Date) =>
+    dateTimeFormat(locale, { year: "numeric", timeZone: zone }).format(date);
+  const date = new Date(value);
+  const time = dateTimeFormat(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: hour12For(timeFormat),
+    timeZone: zone,
+  }).format(date);
+  // Chinese runs the time on after the day; elsewhere a comma sets it off.
+  const separator = locale.toLowerCase().startsWith("zh") ? " " : ", ";
+  const day =
+    yearOf(date) === yearOf(now)
+      ? formatMonthDay(date, zone, locale)
+      : formatCalendarDate(date, zone, locale);
+  return `${day}${separator}${time}`;
+}
+
 /** The time of day a message was sent at, in `timeZone`; empty without a `locale`. */
 export function clockLabel(
   value: Date | string,

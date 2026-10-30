@@ -23,7 +23,7 @@ const channel: ForwardTarget = {
   canSend: true,
 };
 const forwarded: ForwardedMessageView = {
-  sourceSenderName: "Ada",
+  sourceSenderHandle: "ada",
   sourceCreatedAt: "2026-10-28T16:54:00.000Z",
   sourceBody: "hello",
   sourceConversation: { id: "channel-id", name: "design" },

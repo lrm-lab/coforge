@@ -299,7 +299,10 @@ test("deleting the original leaves the forward, its copied files and its snapsho
   const [view] = await attachForwardedAccess(db, workspaceId, alice.id, [
     mapBrowserMessage(row, workspaceId),
   ]);
-  expect(view!.forwarded).toMatchObject({ sourceSenderName: "Carol", sourceAccessible: false });
+  expect(view!.forwarded).toMatchObject({
+    sourceSenderHandle: `fwd-carol-${suffix}`,
+    sourceAccessible: false,
+  });
   expect(view!.forwarded).not.toHaveProperty("sourceMessageId");
 });
 

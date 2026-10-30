@@ -11,7 +11,7 @@ export const BROWSER_FORWARD_SELECT = {
     sourceConversationId: true,
     sourceThreadRootId: true,
     sourceConversationName: true,
-    sourceSenderName: true,
+    sourceSenderHandle: true,
     sourceCreatedAt: true,
     sourceBody: true,
   },
@@ -26,7 +26,7 @@ type BrowserForwardRow = Prisma.MessageForwardGetPayload<typeof BROWSER_FORWARD_
  */
 export function browserForwarded(row: BrowserForwardRow): ForwardedMessageView {
   return {
-    sourceSenderName: row.sourceSenderName,
+    sourceSenderHandle: row.sourceSenderHandle,
     sourceCreatedAt: row.sourceCreatedAt.toISOString(),
     sourceBody: row.sourceBody,
     sourceConversation: {

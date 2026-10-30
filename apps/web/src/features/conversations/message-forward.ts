@@ -12,7 +12,8 @@ export const FORWARD_DESTINATIONS_MAX = 10;
  * names), never a stored body. The card's attachments are the message's own `attachments`.
  */
 export type ForwardedMessageView = {
-  sourceSenderName: string;
+  /** The original sender's handle, as Raft names them on the card. */
+  sourceSenderHandle: string;
   /** ISO timestamp the original was sent. */
   sourceCreatedAt: string;
   sourceBody: string;

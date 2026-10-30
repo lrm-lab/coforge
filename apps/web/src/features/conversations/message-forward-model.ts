@@ -29,7 +29,7 @@ export function canForwardMessage(
 export function forwardedPreview(source: ForwardSource, plainBody: string): ForwardedMessageView {
   const { message } = source;
   return {
-    sourceSenderName: message.senderName,
+    sourceSenderHandle: message.senderHandle ?? message.senderName,
     sourceCreatedAt: new Date(message.createdAt).toISOString(),
     sourceBody: plainBody,
     sourceConversation: {

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatMonthDay, resolveTimeZone, startOfDay, validateTimeZone } from "#src/lib/dates";
+import {
+  formatMonthDay,
+  formatMonthDayTime,
+  resolveTimeZone,
+  startOfDay,
+  validateTimeZone,
+} from "#src/lib/dates";
 
 /**
  * The calendar-day rules the chat stream and search filters rely on, pinned in real IANA zones
@@ -45,5 +51,17 @@ describe("month and day", () => {
     expect(formatMonthDay(instant, "Asia/Shanghai", "zh-CN")).toBe("10月6日");
     expect(formatMonthDay(instant, "Asia/Shanghai", "en")).toBe("Oct 6");
     expect(formatMonthDay(instant, "UTC", "en")).toBe("Oct 5");
+  });
+
+  test("a forwarded original's moment is month, day and time, in the viewer's hour cycle", () => {
+    const instant = new Date("2026-10-29T10:06:00Z");
+    const now = new Date("2026-12-01T00:00:00Z");
+    const format = (locale: string, hours: "12h" | "24h", at = now) =>
+      formatMonthDayTime(instant, "Asia/Shanghai", locale, hours, at);
+    expect(format("zh-CN", "24h")).toBe("10月29日 18:06");
+    expect(format("en", "24h")).toBe("Oct 29, 18:06");
+    expect(format("en", "12h")).toBe("Oct 29, 6:06 PM");
+    // From another year, the year is written.
+    expect(format("en", "12h", new Date("2027-01-02T00:00:00Z"))).toBe("Oct 29, 2026, 6:06 PM");
   });
 });

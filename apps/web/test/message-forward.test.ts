@@ -119,7 +119,7 @@ function forwardRow(sourceConversationId: string, sourceMessageId: string | null
     sourceConversationId,
     sourceThreadRootId: null,
     sourceConversationName: sourceConversationId === SOURCE_CHANNEL ? "product" : null,
-    sourceSenderName: "Ada",
+    sourceSenderHandle: "ada",
     sourceCreatedAt: new Date("2026-10-30T08:00:00.000Z"),
     sourceBody: "ship it",
   };
@@ -148,7 +148,7 @@ test("a browser message carries the snapshot, unopenable until a viewer's access
     WORKSPACE_ID,
   );
   expect(view.forwarded).toEqual({
-    sourceSenderName: "Ada",
+    sourceSenderHandle: "ada",
     sourceCreatedAt: "2026-10-30T08:00:00.000Z",
     sourceBody: "ship it",
     sourceConversation: { id: SOURCE_CHANNEL, name: "product" },
