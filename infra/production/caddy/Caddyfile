@@ -5,6 +5,14 @@
 }
 
 coforge.cn {
+	log {
+		output file /data/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format json
+	}
+
 	# HSTS rides only on HTTPS responses; the port-80 redirect is a separate
 	# server and never carries it. max-age ramps toward HSTS preload
 	# (https://hstspreload.org/#deployment-recommendations): 300, then
