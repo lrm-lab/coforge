@@ -1,26 +1,21 @@
-import { memo, useCallback, useState } from "react";
+import { memo } from "react";
 import { WeeklyReportMessageCard } from "#src/features/records/weekly-report-message-card";
 
-import { useAppToast } from "#src/components/ui/toast";
 import type {
   OpenAgentProfile,
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
 import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
-import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import { MessageSenderLine } from "./message-sender-line";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
-import { useIsMessageSaved } from "./conversation-host";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-markdown";
 import { messagePlainText } from "./selection-copy";
 import { QuoteSelectionBar, useQuoteSelection } from "./message-quote-selection";
-import { copyText } from "#src/lib/clipboard";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { clockLabel } from "#src/lib/dates";
@@ -31,6 +26,7 @@ import { MessageRowFooter } from "./message-row-footer";
 import { OwnMessageTicks } from "./message-status-markers";
 import { MessageSenderGutter } from "./message-sender-gutter";
 import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
+import { useMessageRowActions } from "./message-row-actions";
 import type { MessageView } from "./message-view";
 import type { ReadState } from "./conversation-pane-layout";
 
@@ -179,8 +175,6 @@ export const MessageRow = memo(function MessageRow({
         deleted={deleted}
       />
     );
-  const toast = useAppToast();
-  const saveSaved = useIsMessageSaved(message.id);
   // Reply-to-selection (`message-quote-selection.tsx`): the body's gestures read the highlight,
   // and the bar offers quoting or copying it.
   const quoteSelection = useQuoteSelection({
@@ -188,34 +182,16 @@ export const MessageRow = memo(function MessageRow({
     author: displayName,
     time: clockLabel(message.createdAt, dateLocale, timeFormat, timeZone),
   });
-  // The mobile shell (single-pane below `lg`) has no hover to reveal the reply/reaction
-  // actions, and keeping the toolbar always visible puts two buttons on every message.
-  // Instead a tap on the row's non-interactive surface (an embed marked `data-no-row-tap`, such as a video's player, is not one) opens a
-  // bottom action sheet holding the same actions (the wide desktop shell keeps hover/focus
-  // reveal); the modal overlay
-  // owns dismissal (backdrop press, Escape). The switch follows the shell, not only the
-  // pointer: a narrow desktop window shows the mobile shell, so it gets sheet interactions
-  // too, and a large touchscreen still prefers tapping. The tap target check runs against
-  // the DOM, so it also covers portaled overlays, whose React events still bubble through
-  // this row.
-  const coarsePointer = useCoarsePointer();
-  const desktopShell = useBreakpoint("lg");
-  const sheetActions = coarsePointer || !desktopShell;
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const openActions = useCallback(
-    (event: React.MouseEvent) => {
-      if (!sheetActions || !(event.target instanceof Element)) return;
-      if (
-        event.target.closest(
-          "button, a, input, textarea, select, [role='button'], [data-message-actions-popover], " +
-            "[data-no-row-tap]",
-        )
-      )
-        return;
-      setActionsOpen(true);
-    },
-    [sheetActions],
-  );
+  const { actions, copyable, hasActions, sheetActions, actionsOpen, setActionsOpen, openActions } =
+    useMessageRowActions({
+      message,
+      conversationId,
+      channelNames,
+      readState,
+      onOpenThread,
+      onToggleReaction,
+      onToggleSave,
+    });
   // A system notice renders as one muted line, not a person talking (`SystemMessageRow`).
   if (message.senderKind === "system")
     return (
@@ -227,30 +203,6 @@ export const MessageRow = memo(function MessageRow({
         dateLocale={dateLocale}
       />
     );
-  // #544's whole-message copy (the IM-standard "Copy text", the only copy path for a collapsed,
-  // unselectable body) rides the action strip on desktop and the tap action sheet on the mobile
-  // shell; the sheet therefore also opens for a message with no thread and no reactions.
-  const copyable = Boolean(messagePlainText(message, channelNames).trim());
-  // The toolbar's and the sheet's actions, bound to this message.
-  const actions = {
-    messageId: message.id,
-    onOpenThread,
-    onToggleReaction:
-      onToggleReaction && ((emoji: string) => onToggleReaction(message.id, emoji, true)),
-    onToggleSave:
-      onToggleSave &&
-      (() =>
-        void onToggleSave(message.id, !saveSaved).catch(() => {
-          toast.error(m.conversation_save_failed());
-        })),
-    saveSaved,
-    seenBy: readState && conversationId ? { conversationId } : undefined,
-    onCopy: () =>
-      void copyText(messagePlainText(message, channelNames)).then((copied) => {
-        if (copied) toast.success(m.conversation_message_copied());
-        else toast.error(m.conversation_copy_failed());
-      }),
-  };
   const displayBody = attachmentMessageDisplayBody(message);
   // An own message's ticks follow its last word; one with no text keeps them at its bottom right.
   const textTicks =
@@ -379,23 +331,20 @@ export const MessageRow = memo(function MessageRow({
             cornerTicks={textTicks ? undefined : readState}
           />
         </div>
-        {(onOpenThread || onToggleReaction || onToggleSave || copyable || actions.seenBy) && (
-          <MessageActionToolbar {...actions} grouped={grouped} />
+        {hasActions && <MessageActionToolbar {...actions} grouped={grouped} />}
+        {sheetActions && hasActions && (
+          <MessageActionSheet
+            {...actions}
+            isOpen={actionsOpen}
+            onOpenChange={setActionsOpen}
+            avatar={avatar}
+            displayName={displayName}
+            createdAt={message.createdAt}
+            time={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+            plainText={messagePlainText(message, channelNames)}
+            copyable={copyable}
+          />
         )}
-        {sheetActions &&
-          (onOpenThread || onToggleReaction || onToggleSave || copyable || actions.seenBy) && (
-            <MessageActionSheet
-              {...actions}
-              isOpen={actionsOpen}
-              onOpenChange={setActionsOpen}
-              avatar={avatar}
-              displayName={displayName}
-              createdAt={message.createdAt}
-              time={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
-              plainText={messagePlainText(message, channelNames)}
-              copyable={copyable}
-            />
-          )}
       </div>
     </li>
   );
