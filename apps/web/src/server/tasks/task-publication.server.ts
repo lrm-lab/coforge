@@ -151,7 +151,7 @@ export async function signalTaskChange(ports: TaskBoardPorts, task: SelectedTask
       ),
       announceTasks(ports, task, async () => scopes.task, {
         tasks: [taskView(task, "people")],
-        publicationId: `${task.messageId}:task-changed:${task.revision}`,
+        publicationId: `${task.id}:task-changed:${task.revision}`,
       }),
     ]);
   } catch {

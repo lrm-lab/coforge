@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { Pool, type PoolClient } from "pg";
+import { dropScratchDatabase } from "./helpers/drop-scratch-database";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AgentSessions } from "#src/server/agents/agent-sessions.server";
@@ -28,24 +29,6 @@ async function applyMigrations(client: PoolClient, names: readonly string[]) {
       await Bun.file(new URL(`${name}/migration.sql`, migrationsDirectory)).text(),
     );
   }
-}
-
-/**
- * Drops the scratch database once its backends have exited. `DROP DATABASE ... WITH (FORCE)` kills
- * a connection that is still shutting down, and the pool's client then reports the server's
- * "terminating connection due to administrator command" as an uncaught error.
- */
-async function dropScratchDatabase(admin: Pool, database: string) {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    const { rows } = await admin.query(
-      `SELECT count(*)::int AS open FROM pg_stat_activity WHERE datname = $1`,
-      [database],
-    );
-    if (rows[0].open === 0) break;
-    await Bun.sleep(25);
-  }
-  await admin.query(`DROP DATABASE IF EXISTS "${database}"`);
 }
 
 test.skipIf(!connectionString)(

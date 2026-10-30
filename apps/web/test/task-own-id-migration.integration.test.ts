@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { Pool } from "pg";
+import { dropScratchDatabase } from "./helpers/drop-scratch-database";
 
 /**
  * The migration that gives a Task an id of its own: the committed migrations up to it, a legacy
@@ -78,16 +79,7 @@ test.skipIf(!connectionString)(
       expect((await pool.query(`SELECT 1 FROM task_history_events`)).rowCount).toBe(0);
     } finally {
       await pool.end();
-      const deadline = Date.now() + 10_000;
-      while (Date.now() < deadline) {
-        const { rows } = await admin.query(
-          `SELECT count(*)::int AS open FROM pg_stat_activity WHERE datname = $1`,
-          [database],
-        );
-        if (rows[0].open === 0) break;
-        await Bun.sleep(25);
-      }
-      await admin.query(`DROP DATABASE IF EXISTS "${database}"`);
+      await dropScratchDatabase(admin, database);
       await admin.end();
     }
   },

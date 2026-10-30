@@ -30,13 +30,13 @@ For example:
 Add a `TaskExecutionSession` record with these fields:
 
 - `id`: CoForge execution-session UUID;
-- `workspaceId`, `agentId`, and `taskMessageId`: composite ownership boundary;
+- `workspaceId`, `agentId`, and `taskId`: composite ownership boundary;
 - `nativeSessionId`: provider session ID, when the provider exposes one;
 - `status`: `starting | running | waiting | completed | failed | cancelled`;
 - `requestId` and `launchId`: idempotency and launch fencing;
 - `createdAt`, `startedAt`, `finishedAt`, and `lastError`.
 
-The record is created in the same transaction that assigns the Task. A unique constraint on `(taskMessageId, agentId)` makes retries return the existing execution session instead of starting a second worker. A Task has at most one active execution session per Agent; a future retry creates a new attempt linked to the same Task.
+The record is created in the same transaction that assigns the Task. A unique constraint on `(taskId, agentId)` makes retries return the existing execution session instead of starting a second worker. A Task has at most one active execution session per Agent; a future retry creates a new attempt linked to the same Task.
 
 The Task itself remains the source of truth for ownership and status. The execution-session record is runtime state and can be recreated after a daemon restart.
 

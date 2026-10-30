@@ -32,10 +32,11 @@ model Task {
 
   @@unique([conversationId, number])
   @@unique([messageId, conversationId])
+  @@unique([id, conversationId])
   @@unique([conversationId, creatorMemberId, requestId])
   @@index([workspaceId, conversationId, status])
-  @@index([workspaceId, status, updatedAt(sort: Desc), messageId(sort: Desc)])
-  @@index([conversationId, status, updatedAt(sort: Desc), messageId(sort: Desc)])
+  @@index([workspaceId, status, updatedAt(sort: Desc), id(sort: Desc)])
+  @@index([conversationId, status, updatedAt(sort: Desc), id(sort: Desc)])
   /// Serves an Agent's own Tasks (`task list --mine`) from its member rows, whatever else the
   /// Workspace holds.
   @@index([ownerMemberId, status])
@@ -61,7 +62,7 @@ model TaskExecutionSession {
   createdAt      DateTime  @default(now())
   startedAt      DateTime?
   finishedAt     DateTime?
-  task           Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task           Task      @relation(fields: [taskId, conversationId], references: [id, conversationId], onDelete: Cascade)
   agent          Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

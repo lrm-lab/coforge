@@ -334,7 +334,7 @@ export async function createTasks(
     const effects: Promise<unknown>[] = [
       announceTasks(ports, scope, async () => scopes.task, {
         tasks: result.tasks.map((task) => taskView(task, "people")),
-        publicationId: `${result.tasks[0]!.messageId}:task-created`,
+        publicationId: `${result.tasks[0]!.id}:task-created`,
       }),
     ];
     effects.push(
