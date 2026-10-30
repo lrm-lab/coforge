@@ -12,6 +12,7 @@ Report a finding only when the change, as written, can produce one of these:
 - **Unsafe side effects:** work done at import time; writes to a user's real Agent sessions, credentials or data outside the task's scope; a release-order assumption (Web first, then Computer) that the commit message does not state.
 - **Rule squeeze:** comments, documentation or assertions deleted, tests skipped, or `--no-verify` used to get past the size ratchet or another hard rule.
 - **Unverified claim:** the commit message reports a check, screenshot or measurement that the evidence does not support, or UI evidence taken from a different revision than the one under review.
+- **Performance regression:** one of these four kinds — a new N+1 on a hot path, an unbounded `findMany` or an over-fetch, work inside a lock or transaction that belongs outside it, or serial awaits that could run in parallel — found by applying the [perf-scan](.agents/skills/perf-scan/SKILL.md) checklist for the area the change touches to the changed code only. Other patterns on that checklist are suggestions, not failures.
 
 ## What to check, by kind of change
 
@@ -55,6 +56,7 @@ Each item is a way a CoForge change has already failed, and names the category a
 - Formatting, import order, lint-level style: oxlint, the formatter and the hard rules already enforce them.
 - Naming or structure preferences that change no behaviour.
 - Speculative problems without a concrete failing input or state.
+- Performance suggestions other than the four regression kinds above — a plausible but unmeasured win, a pre-existing pattern the change follows: they go in the task thread, not in the review.
 - Code outside the commit range, unless the change makes it newly wrong.
 - Missing unit tests where an E2E test or a screenshot artifact covers the behaviour: the repository prefers E2E tests ([AGENTS.md](AGENTS.md#testing)).
 
@@ -64,7 +66,7 @@ Generated files and lockfiles (the `linguist-generated` entries in [.gitattribut
 
 ## How to report
 
-- Every finding names `path:line` in the reviewed revision, its category from the list above, and the concrete input or state that fails.
+- Every finding names `path:line` in the reviewed revision, its category from the list above, and the concrete input or state that fails. A performance finding names the path that carries the work and the trigger (a request, an event, a message, a row count); it does not need a measurement to be reported.
 - Rank findings most severe first. Do not pad the list; zero findings is a valid result.
 - End with one summary line: `Verdict: no blocking issues` or `Verdict: N blocking issues`, followed by anything you could not verify and why.
 - Perform the review yourself; do not delegate it or spawn further reviewers.

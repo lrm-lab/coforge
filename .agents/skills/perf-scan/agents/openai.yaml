@@ -1,4 +1,4 @@
 interface:
   display_name: "CoForge Perf Scan"
-  short_description: "Find and rank a performance and refactor direction"
-  default_prompt: "Use $perf-scan to find, verify and rank a performance and refactor direction."
+  short_description: "Find or rank a performance direction, or review a diff for one"
+  default_prompt: "Use $perf-scan to find, verify and rank a performance and refactor direction, or to review a diff for performance regressions."

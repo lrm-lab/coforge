@@ -1,12 +1,16 @@
 ---
 name: perf-scan
-description: Find, verify and rank the most promising performance-optimization and refactor direction in this repository, then hand a recommendation to the owner; never implement. Use when asked to find a performance or refactor direction, scan for hotspots, work out where something is slow, or choose what to optimize next. Accepts areas (web-server, daemon, web-client, or a repository path); defaults to the three named areas.
+description: Find, verify and rank the most promising performance-optimization and refactor direction in this repository, then hand a recommendation to the owner; never implement. Also the checklist a pre-push independent review runs over its own diff. Use when asked to find a performance or refactor direction, scan for hotspots, work out where something is slow, choose what to optimize next, or review a change for performance regressions. Accepts areas (web-server, daemon, web-client, or a repository path), or a diff; defaults to the three named areas.
 ---
 
 # Perf scan
 
-Output is a ranked recommendation for the owner to choose from. This skill never
-creates a branch or writes code.
+Two uses share the checklists below:
+
+- **Scan** — the whole of an area. Output is a ranked recommendation for the owner to
+  choose from. This use never creates a branch or writes code.
+- **Review** — one change, before it is pushed (root `AGENTS.md`, Collaboration and
+  delivery). Output is the findings on that diff, split into must-fix and suggestions.
 
 ## Areas
 
@@ -19,7 +23,29 @@ creates a branch or writes code.
 
 Default: the three named areas. Several paths may be requested at once.
 
-## Procedure
+## Reviewing a diff
+
+1. **Scope the diff.** Read the change (`git diff <base>...HEAD`), pick the checklist of
+   the area each changed file belongs to — a change may need two. Read the changed code,
+   plus the files that checklist's "Read first" names: this is not a scan of the
+   surrounding module.
+2. **Check the change against that checklist.** What does the new or changed code add per
+   request, per event, per message or per row? Does it repeat a read the caller already
+   made, add a query inside a loop, fetch more than it uses, hold a lock or transaction
+   longer, or await in series what could run at once?
+3. **Split the findings.** *Must fix before pushing*: a new N+1 on a hot path, an
+   unbounded `findMany` or an over-fetch, work inside a lock or transaction that belongs
+   outside it, and serial awaits that could run in parallel. A hot path is one the
+   checklist names as such, or one that runs per request, per event, per message or per
+   row. Everything else — a plausible but unmeasured win, a pattern the change follows, a
+   refactor the change makes easier — is a suggestion for the task thread, and does not
+   block the push.
+4. **Verify before reporting.** Re-read the code behind each claim; a checklist match is a
+   candidate, not a finding. Keep a note for yourself of what was ruled out and why,
+   including a deliberate decision recorded in a comment or test: it is not a finding to
+   report.
+
+## Procedure (scan)
 
 1. **Read committed code.** Run `git fetch origin`, then
    `git worktree add --detach .worktrees/perf-scan-<date> origin/main`. Every
@@ -42,7 +68,7 @@ Default: the three named areas. Several paths may be requested at once.
    `AGENTS.md`, Decisions) and let them choose. Do not write findings into the
    repository: they go stale. Only the checklists live here.
 
-## Scanner report format
+## Scan report format
 
 Under 600 words:
 
@@ -54,7 +80,7 @@ Under 600 words:
   decision recorded in a code comment.
 - For very large files, proposed seams: name, line range, responsibility.
 
-## When the owner chooses a direction
+## When the owner chooses a direction (scan)
 
 - The first step is a reproducible baseline measurement, before any change.
 - Agree the public test seam first and work test-first
