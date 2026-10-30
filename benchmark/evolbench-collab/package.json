@@ -19,7 +19,7 @@
     "@prisma/client": "^7.10.0"
   },
   "devDependencies": {
-    "@types/bun": "1.4.0",
+    "@types/bun": "1.4.4",
     "@types/node": "26.4.0",
     "oxfmt": "0.65.0",
     "oxlint": "1.80.0",

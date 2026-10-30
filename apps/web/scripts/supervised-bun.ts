@@ -54,7 +54,10 @@ export async function runSupervisedBun(
   for (const signal of FORWARDED_SIGNALS) process.on(signal, forward);
   try {
     const exitCode = await child.exited;
-    return child.signalCode ? 128 + constants.signals[child.signalCode] : exitCode;
+    // Bun names the signal when it has a name and gives its number otherwise (a real-time signal).
+    const signal = child.signalCode;
+    if (signal === null) return exitCode;
+    return 128 + (typeof signal === "number" ? signal : constants.signals[signal]);
   } finally {
     clearTimeout(kill);
     for (const signal of FORWARDED_SIGNALS) process.off(signal, forward);

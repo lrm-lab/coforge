@@ -168,7 +168,7 @@ UI acceptance and the manual checklist are in [Validation](validation.md).
 
 ## Upstream contracts
 
-Pi Chat reuses Pi SDK 1.4.0 (MIT) and Bun 1.4.3 in the existing Computer binary.
+Pi Chat reuses Pi SDK 1.4.0 (MIT) and Bun 1.4.4 in the existing Computer binary.
 Memory and storage grow with active chats within the bounds above. Existing WSS and
 Activity contracts remain; Pi Chat has its own RPC and `pi-chat:v1` / `pi-chat-controls:v1` capabilities.
 

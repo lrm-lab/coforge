@@ -196,7 +196,10 @@ export async function runWithAppToken(run: AppTokenRun): Promise<number> {
     const exitCode = await child.exited;
     await stopGroup(child.pid);
     await Promise.all([out.done, err.done]);
-    return child.signalCode ? 128 + (constants.signals[child.signalCode] ?? 0) : exitCode;
+    // Bun names the signal when it has a name and gives its number otherwise (a real-time signal).
+    const signal = child.signalCode;
+    if (signal === null) return exitCode;
+    return 128 + (typeof signal === "number" ? signal : (constants.signals[signal] ?? 0));
   })();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const listeners: [NodeJS.Signals, () => void][] = [];

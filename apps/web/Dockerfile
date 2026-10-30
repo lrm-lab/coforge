@@ -1,4 +1,4 @@
-FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb AS build
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS build
 
 WORKDIR /app
 COPY package.json bun.lock tsconfig.base.json ./
@@ -34,12 +34,12 @@ RUN bun run --cwd packages/coforge-sdk generate \
 RUN bun run --cwd apps/web build
 
 # The migration toolchain only: the schema and migrations it applies join it in the final stage.
-FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb AS migrate
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS migrate
 WORKDIR /migrate
 COPY scripts/deploy/prisma-migrate/package.json scripts/deploy/prisma-migrate/bun.lock ./
 RUN bun install --frozen-lockfile --production
 
-FROM oven/bun:1.4.0-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a
 
 WORKDIR /app
 ENV HOST=0.0.0.0 \
