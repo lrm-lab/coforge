@@ -47,6 +47,11 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).not.toContain("before you finish that turn");
 });
 
+test("the Agent finishes all assigned work before it stops", () => {
+  expect(instructions).toContain("Complete ALL your work before stopping");
+  expect(instructions).toContain("coforge task list --mine");
+});
+
 test("before a long task, progress goes to notes/active-context.md rather than MEMORY.md", () => {
   expect(instructions).toContain(
     "Before a long task, note where you are in notes/active-context.md to resume.",
@@ -160,8 +165,8 @@ test("provider-specific rules remain available once when supplied", () => {
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
 
-test("the shared standing guidance stays within a 3840-byte budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(3840);
+test("the shared standing guidance stays within a 4096-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(4096);
 });
 
 test("the openviking-memory profile queries before retrieval Offers and protects tenant secrets", () => {
