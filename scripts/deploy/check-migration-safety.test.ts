@@ -32,18 +32,16 @@ describe("check-migration-safety", () => {
     expect(result.stderr).toContain("FAILED with 5 destructive migration violation(s)");
   });
 
-  test("allows task #343 when ALLOW_BREAKING_MIGRATION=true", async () => {
+  test("the old bypass flags are ignored: a flagged migration still fails", async () => {
     const target = join(migrationsDir, "20261030140000_task_own_id/migration.sql");
-    const result = await runSafetyCheck([target], { ALLOW_BREAKING_MIGRATION: "true" });
-    expect(result.code).toBe(0);
-    expect(result.stderr).toContain("bypassed via ALLOW_BREAKING_MIGRATION=true");
-  });
-
-  test("allows task #343 when --allow-breaking flag is passed", async () => {
-    const target = join(migrationsDir, "20261030140000_task_own_id/migration.sql");
-    const result = await runSafetyCheck(["--allow-breaking", target]);
-    expect(result.code).toBe(0);
-    expect(result.stderr).toContain("bypassed via ALLOW_BREAKING_MIGRATION=true");
+    for (const result of [
+      await runSafetyCheck([target], { ALLOW_BREAKING_MIGRATION: "true" }),
+      await runSafetyCheck(["--allow-breaking", target]),
+    ]) {
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("FAILED with 5 destructive migration violation(s)");
+      expect(result.stderr).toContain("no longer bypasses");
+    }
   });
 
   test("passes safe migration 20261030130000_user_experiments", async () => {

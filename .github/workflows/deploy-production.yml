@@ -123,6 +123,7 @@ jobs:
             infra/production/caddy/Caddyfile \
             infra/production/centrifugo/config.yaml \
             scripts/deploy/deploy-secrets.sh \
+            scripts/deploy/catalog-snapshot.sh \
             scripts/deploy/remote-deploy.sh
           ssh -i "$SSH_DIR/key" \
             -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
@@ -196,3 +197,12 @@ jobs:
               process.exit(0);
             };
           '
+
+      # The snapshot the migration safety check reads (docs/agents/git-hooks/migration-safety.md).
+      # A failure here never fails a deployment that is already healthy.
+      - name: Snapshot table sizes for the migration safety check
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: ./.github/actions/catalog-snapshot
+        with:
+          environment: production

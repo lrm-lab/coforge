@@ -61,9 +61,9 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          # A newer push to main cancels the running one, so diff from the head of CI's last
-          # successful push run rather than from the previous push: superseded, cancelled, and
-          # failed pushes stay in scope until a run passes. No successful run yet: full coverage.
+          # A newer push cancels the running one, so diff from the head of CI's last successful
+          # push run: cancelled and failed pushes stay in scope until a run passes. No successful
+          # run yet: full coverage.
           workflow="$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID" --jq .workflow_id)"
           sha="$(gh api "repos/$REPOSITORY/actions/workflows/$workflow/runs?branch=$BRANCH&event=push&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -76,6 +76,7 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           # A push's own commits, for the author rule; a PR's are all of BASE...HEAD.
           BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           files="$RUNNER_TEMP/ci-changed-files"
           if [ "$TRACK" = local ] || [ "$TRACK" = installer ]; then

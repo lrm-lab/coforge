@@ -66,6 +66,10 @@ These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith
 - Keep the Prisma schema, generated client usage, repositories, and migrations
   on the server side. UI routes and feature components call a Server Function
   or server module instead of importing Prisma.
+- A migration that locks or rewrites an existing table, or does anything the
+  migration safety check does not recognise, needs the check's annotation and a
+  session-level `SET lock_timeout`; the `migration-safety` hard rule and the
+  deploy gate enforce it ([migration safety](../../docs/agents/git-hooks/migration-safety.md)).
 - Keep `prisma`, `@prisma/client`, and the PostgreSQL driver adapter on the
   same supported major version, pinned by the workspace lockfile. Use the
   repository's Bun-compatible Prisma setup rather than adding an alternate

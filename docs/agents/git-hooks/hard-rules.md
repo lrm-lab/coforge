@@ -35,6 +35,7 @@ one `hard-rules: <message>` line, prefixed `::error::` on GitHub Actions.
 | `markdown-links` | A relative link `](path)` in a Markdown file the change adds or edits names no tracked file or directory, or a link in any Markdown file names a path the change deletes or renames away. |
 | `new-suppression` | An added line carries a lint, type-check or test suppression (list below). Existing ones are not flagged. |
 | `author-identity` | The author or the committer looks like an Agent or bot (patterns below). |
+| `migration-safety` | A migration the change adds has a high-risk statement and no valid safety annotation, a hash that no longer matches, a `rewrite` verdict, or no `lock_timeout` where one is required. See [Migration safety](migration-safety.md). |
 
 **Markdown length.** Markdown means `.md`, `.mdx`, `.mdc`, and `.markdown`. A file must have
 fewer than 200 lines: line 200 is already a violation. A final unterminated line counts, while a

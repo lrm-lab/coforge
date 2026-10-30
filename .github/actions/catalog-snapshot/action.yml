@@ -1,0 +1,41 @@
+name: Catalog snapshot
+description: >-
+  After a verified-healthy deploy, take the table-size snapshot of the deployed database on the
+  host (scripts/deploy/catalog-snapshot.sh) and upload it as catalog-snapshot-<environment>. The
+  calling job has the SSH identity (SSH_DIR, DEPLOY_SSH_*) and REMOTE_ROOT in its environment, and
+  has copied catalog-snapshot.sh and deploy-secrets.sh to the host.
+
+inputs:
+  environment:
+    description: staging or production
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Take the snapshot on the host
+      shell: bash
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        ssh -i "$SSH_DIR/key" \
+          -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+          -o BatchMode=yes \
+          -o ServerAliveInterval=15 \
+          -o ServerAliveCountMax=8 \
+          "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+          "bash '$REMOTE_ROOT/scripts/deploy/catalog-snapshot.sh' \
+            --environment '$ENVIRONMENT' \
+            --compose-file '$REMOTE_ROOT/infra/$ENVIRONMENT/docker-compose.yml' \
+            --secrets-dir '$REMOTE_ROOT/infra/$ENVIRONMENT/secrets'" \
+          > catalog-snapshot.json
+        jq -e --arg environment "$ENVIRONMENT" \
+          '.version == 1 and .environment == $environment and (.tables | type == "array")' \
+          catalog-snapshot.json >/dev/null
+
+    - name: Upload the snapshot
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: catalog-snapshot-${{ inputs.environment }}
+        path: catalog-snapshot.json
+        retention-days: 30

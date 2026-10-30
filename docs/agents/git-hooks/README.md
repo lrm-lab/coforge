@@ -26,6 +26,8 @@ reports every violation before failing.
   splitting at natural seams, the files it skips, and the git operations that do not run `pre-commit`.
 - [Hard rules](hard-rules.md): where the checker runs (pre-commit, pre-push, CI), its rules, and
   the one exemption.
+- [Migration safety](migration-safety.md): the `migration-safety` rule, the catalog snapshot it
+  reads and the deploy gate that repeats it.
 - [Limits](limits.md): what the hooks, the `mise run check` gate and CI do not catch, and where
   the exemption lists are read from.
 

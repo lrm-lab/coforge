@@ -7,3 +7,6 @@
 **/.env.*
 *.log
 target
+# The migrate image carries the migration safety runtime files, not their tests.
+scripts/migration-safety/*.test.ts
+scripts/migration-safety/*.integration.ts

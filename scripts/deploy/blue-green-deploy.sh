@@ -174,8 +174,8 @@ fi
 printf 'blue-green-deploy: running migration deploy...\n' >&2
 write_deploy_env "$image"
 if ! compose run --rm --entrypoint sh migrate \
-	-c 'cd .migrate && bun node_modules/prisma/build/index.js migrate deploy' </dev/null 1>&2; then
-	printf 'outcome=failed\nhealth_result=failed: migration deploy failed\n'
+	-c 'cd .migrate && sh migration-safety/migrate-deploy.sh' </dev/null 1>&2; then
+	printf 'outcome=failed\nhealth_result=failed: migration safety check or deploy failed\n'
 	exit 1
 fi
 

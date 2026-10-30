@@ -24,13 +24,16 @@ import {
 } from "../git-hooks/staged-file-size";
 import { commitIdentities, type IdentityMatch, stagedIdentities } from "./commit-identity";
 import { linkPath, markdownLinks } from "./markdown-links";
+import { unquote } from "./unquote";
+import { MIGRATION_SAFETY_FIX, migrationSafetyViolations } from "../migration-safety/hard-rule";
 
 type Rule =
   | "size-ratchet"
   | "markdown-lines"
   | "markdown-links"
   | "new-suppression"
-  | "author-identity";
+  | "author-identity"
+  | "migration-safety";
 type Violation = { rule: Rule; location: string; found: string };
 
 const FIX: Record<Rule, string> = {
@@ -43,6 +46,7 @@ const FIX: Record<Rule, string> = {
     "Fix the underlying code instead. A new lint, type-check or test exemption needs the user's explicit prior approval (AGENTS.md, Decision gates); this check has no inline override.",
   "author-identity":
     "Commit as the person running the Agent, never as an Agent or bot (AGENTS.md); author and committer both count: set `git config user.name` and `git config user.email` to their own identity. Rewrite a listed commit not yet on main with `git rebase --exec 'git commit --amend --no-edit --reset-author' <base>`; one already on main is rewritten only when Frank asks. A Co-authored-by trailer is not checked.",
+  "migration-safety": MIGRATION_SAFETY_FIX,
 };
 
 // Rule 11: new suppressions. The token alternatives end in a character class so that this file's
@@ -122,7 +126,7 @@ function trackedPaths(source: ChangeSource): string[] {
 }
 
 /** Files' content at a revision, or in the index when it is undefined. */
-function readFiles(revision: string | undefined, paths: string[]): Map<string, string> {
+export function readFiles(revision: string | undefined, paths: string[]): Map<string, string> {
   const contents = new Map<string, string>();
   if (paths.length === 0) return contents;
   const prefix = `${revision ?? ""}:`;
@@ -141,7 +145,7 @@ function readFiles(revision: string | undefined, paths: string[]): Map<string, s
 }
 
 /** Where the change's content is: the index (undefined) or the range head. */
-const resultRevision = (source: ChangeSource) =>
+export const resultRevision = (source: ChangeSource) =>
   source.kind === "staged" ? undefined : source.head;
 
 /** The skills skills-lock.json registers, from a file's text. */
@@ -185,23 +189,6 @@ function changedFiles(source: ChangeSource): Change[] {
     else changes.push({ status, path: fields[i++]! });
   }
   return changes;
-}
-
-function unquote(path: string): string {
-  if (!path.startsWith('"')) return path;
-  const bytes: number[] = [];
-  const escapes: Record<string, number> = { n: 10, t: 9, '"': 34, "\\": 92, a: 7, b: 8 };
-  for (let i = 1; i < path.length - 1; i++) {
-    if (path[i] !== "\\") {
-      bytes.push(...Buffer.from(path[i]!));
-    } else if (/[0-7]/.test(path[i + 1]!)) {
-      bytes.push(parseInt(path.slice(i + 1, i + 4), 8));
-      i += 3;
-    } else {
-      bytes.push(escapes[path[++i]!] ?? path.charCodeAt(i));
-    }
-  }
-  return Buffer.from(bytes).toString();
 }
 
 type Line = { path: string; line: number; text: string };
@@ -381,6 +368,7 @@ async function fileViolations(source: ChangeSource): Promise<Violation[]> {
     ...markdownLineViolations(source, exempt, changes),
     ...linkViolations(source, exempt, changes),
     ...suppressionViolations(source, exempt),
+    ...migrationSafetyViolations(source),
   ];
 }
 

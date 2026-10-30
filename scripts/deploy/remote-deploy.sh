@@ -539,8 +539,8 @@ if ! pull_web_image; then
 fi
 
 if ! compose run --rm --entrypoint sh migrate \
-	-c 'cd .migrate && bun node_modules/prisma/build/index.js migrate deploy' </dev/null 1>&2; then
-	report "$last_healthy" "failed: migration deploy failed" "failed" ""
+	-c 'cd .migrate && sh migration-safety/migrate-deploy.sh' </dev/null 1>&2; then
+	report "$last_healthy" "failed: migration safety check or deploy failed" "failed" ""
 	exit 0
 fi
 

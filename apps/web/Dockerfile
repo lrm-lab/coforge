@@ -54,6 +54,8 @@ ENV HOST=0.0.0.0 \
 COPY --from=migrate --chown=bun:bun /migrate .migrate
 COPY --chown=bun:bun apps/web/prisma .migrate/prisma
 COPY --chown=bun:bun apps/web/prisma.config.ts .migrate/prisma.config.ts
+# The deploy gate that checks the pending migrations before they run (scripts/migration-safety).
+COPY --chown=bun:bun scripts/migration-safety .migrate/migration-safety
 COPY --from=build --chown=bun:bun /app/apps/web/.output .output
 
 # Attachment bytes live on a mounted volume, not in the writable container layer.

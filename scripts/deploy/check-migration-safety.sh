@@ -15,8 +15,10 @@
 #   - ALTER COLUMN ... SET NOT NULL (without DEFAULT)
 #   - DROP CONSTRAINT ... PRIMARY KEY / altering primary key
 #
-# Bypass:
-#   Set ALLOW_BREAKING_MIGRATION=true or pass --allow-breaking.
+# No bypass: a flagged migration fails. A deliberate breaking change passes through the deploy
+# gate instead, which needs the migration to carry a valid safety annotation and checks it where
+# Bun and the migration files are, in the migrate container (docs/agents/git-hooks/migration-safety.md).
+# --allow-breaking and ALLOW_BREAKING_MIGRATION are still accepted, and ignored.
 
 set -euo pipefail
 
@@ -122,12 +124,10 @@ done
 
 if [ "$violations" -gt 0 ]; then
 	if [ "$allow_breaking" = "true" ]; then
-		printf 'check-migration-safety: %d destructive migration violation(s) found, bypassed via ALLOW_BREAKING_MIGRATION=true\n' "$violations" >&2
-		exit 0
-	else
-		printf 'check-migration-safety: FAILED with %d destructive migration violation(s). Rephrase as expand-contract (separate releases) or set ALLOW_BREAKING_MIGRATION=true if intentional.\n' "$violations" >&2
-		exit 1
+		printf 'check-migration-safety: --allow-breaking no longer bypasses this check; annotate the migration (check-migration.ts --write) and let the deploy gate judge it\n' >&2
 	fi
+	printf 'check-migration-safety: FAILED with %d destructive migration violation(s). Rephrase as expand-contract (separate releases), or annotate the migration for the deploy gate.\n' "$violations" >&2
+	exit 1
 fi
 
 printf 'check-migration-safety: PASSED (checked %d files)\n' "${#target_files[@]}"
