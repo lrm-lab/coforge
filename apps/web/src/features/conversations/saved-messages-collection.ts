@@ -3,13 +3,13 @@ import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { assertBrowserOnly } from "#src/lib/browser-only";
-import type { listSavedMessages } from "./saved-messages.functions";
+import type { ChatListValue } from "./chat-lists-reader";
 
 /** One server read of the Saved list: its entries, and where the viewer's own signal channel
  * stood in its stream when they were read (`readAfterStreamPositions`), which is what lets a
  * subscribe leave the list alone. The Query holds this whole; the collection's rows are the
  * entries. */
-export type SavedList = Awaited<ReturnType<typeof listSavedMessages>>;
+export type SavedList = ChatListValue<"saved">;
 
 /** One saved message as the Saved view renders it, keyed by `message.id`. */
 export type SavedEntry = SavedList["entries"][number];

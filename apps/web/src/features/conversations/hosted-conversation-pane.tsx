@@ -15,7 +15,7 @@ import type { ConversationPageSearch, HostedConversationTarget } from "./convers
 import { ConversationPending } from "./conversation-pending";
 import { channelNamesQuery, savedMessagesQuery } from "./conversation-queries";
 import { NO_SAVED } from "./saved-messages-collection";
-import { listSavedMessages } from "./saved-messages.functions";
+import { readChatList } from "./chat-lists-reader";
 
 /** The pane's column beside its host's content. */
 const HOSTED_CONVERSATION_PANE_CLASS =
@@ -113,7 +113,7 @@ function HostedConversation({
   // The viewer's Saved stars, as Chat shows them; a failed read leaves none, as in Chat.
   useSuspenseQuery({
     ...savedMessagesQuery(workspaceId),
-    queryFn: () => listSavedMessages().catch(() => NO_SAVED),
+    queryFn: () => readChatList("saved").catch(() => NO_SAVED),
   });
   return (
     <ConversationHostProvider channels={channels}>

@@ -6,7 +6,8 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { ForwardHost } from "./message-forward-host";
 import { savedMessagesQuery } from "./conversation-queries";
 import type { ChannelSuggestion } from "./reference-completion";
-import { listSavedMessages, saveMessage, unsaveMessage } from "./saved-messages.functions";
+import { saveMessage, unsaveMessage } from "./saved-messages.functions";
+import { readChatList } from "./chat-lists-reader";
 import {
   materializeSavedMessages,
   savedMessagesStore,
@@ -50,7 +51,7 @@ export function ConversationHostProvider({
       queryClient.getQueryData(savedMessagesQuery(workspaceId).queryKey)?.entries ?? [];
     const store = savedMessagesStore(
       materializeSavedMessages(dbClient, workspaceId, cached(), {
-        list: () => listSavedMessages(),
+        list: () => readChatList("saved"),
         save: (target) => saveMessage({ data: target }),
         unsave: (target) => unsaveMessage({ data: target }),
       }),

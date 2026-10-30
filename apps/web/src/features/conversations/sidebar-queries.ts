@@ -1,18 +1,12 @@
 import { queryOptions } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
-import {
-  listPublicChannels,
-  setPublicChannelMuted,
-  setPublicConversationPinned,
-} from "./channels.functions";
+import { setPublicChannelMuted, setPublicConversationPinned } from "./channels.functions";
 import {
   setPublicConversationHidden,
   setPublicConversationUnread,
 } from "./channel-sidebar-actions.functions";
 import {
-  loadDirectConversationBadges,
-  loadDirectConversationPreferences,
   setDirectConversationHidden,
   setDirectConversationMuted,
   setDirectConversationPinned,
@@ -31,6 +25,7 @@ import { queryStreamPosition } from "#src/features/realtime/query-stream-positio
 import { serverChatSectionsApi, type ChatSectionsApi } from "./chat-sections";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import { olderStreamPositions, type StreamPosition } from "#src/features/realtime/subscription-gap";
+import { readChatList, type ChatListValue } from "./chat-lists-reader";
 
 /**
  * The Chat sidebar's two lists as Query reads: the server calls behind them, the query options the
@@ -38,10 +33,9 @@ import { olderStreamPositions, type StreamPosition } from "#src/features/realtim
  * channel's stream. `sidebar-collections.ts` builds the collections over these same keys.
  */
 
-type ChannelList = Awaited<ReturnType<typeof listPublicChannels>>;
-/** What one read of every channel's name holds: the names and the stream position they stand at. */
-type DirectPreferences = Awaited<ReturnType<typeof loadDirectConversationPreferences>>;
-type DirectBadges = Awaited<ReturnType<typeof loadDirectConversationBadges>>;
+type ChannelList = ChatListValue<"channels">;
+type DirectPreferences = ChatListValue<"directPreferences">;
+type DirectBadges = ChatListValue<"directBadges">;
 export type Arrangement = { pins: readonly PinRef[]; unpinned: readonly PinRef[] };
 
 /** The server calls the sidebar makes; tests pass their own. */
@@ -59,9 +53,9 @@ export type SidebarApi = {
 
 export const serverSidebarApi: SidebarApi = {
   sections: serverChatSectionsApi,
-  listChannels: () => listPublicChannels(),
-  loadDirectPreferences: () => loadDirectConversationPreferences(),
-  loadDirectBadges: () => loadDirectConversationBadges(),
+  listChannels: () => readChatList("channels"),
+  loadDirectPreferences: () => readChatList("directPreferences"),
+  loadDirectBadges: () => readChatList("directBadges"),
   pin: (target, pinned) =>
     target.kind === "channel"
       ? setPublicConversationPinned({ data: { channelId: target.channelId, pinned } })

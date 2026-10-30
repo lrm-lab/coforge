@@ -30,17 +30,13 @@ import {
   loadDirectConversation,
   loadDirectConversationUpdates,
 } from "./conversations.functions";
-import {
-  listChannelNames,
-  loadPublicChannel,
-  loadPublicChannelUpdates,
-} from "./channels.functions";
+import { loadPublicChannel, loadPublicChannelUpdates } from "./channels.functions";
 import { refreshPendingActionCards } from "./action-card-refresh";
 import { loadMessageReactions } from "./message-reactions.functions";
 import { createReactionSync } from "./reaction-sync";
 import { channelMembersQueryKey, channelNamesQueryKey } from "./conversation-query-keys";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
-import { listSavedMessages } from "./saved-messages.functions";
+import { readChatList, type ChatListValue } from "./chat-lists-reader";
 import {
   applyThreadRead,
   conversationThreadsQueryKey,
@@ -92,7 +88,7 @@ export const conversationAroundQuery = (conversationId: string, messageId: strin
 export const savedMessagesQuery = (workspaceId: string) =>
   queryOptions({
     queryKey: savedMessagesQueryKey(workspaceId),
-    queryFn: () => listSavedMessages(),
+    queryFn: () => readChatList("saved"),
   });
 
 /** Every channel of the Workspace by id, closed ones included — what a body's channel links and
@@ -103,12 +99,12 @@ export const savedMessagesQuery = (workspaceId: string) =>
 export const channelNamesQuery = (workspaceId: string) =>
   queryOptions({
     queryKey: channelNamesQueryKey(workspaceId),
-    queryFn: () => listChannelNames(),
+    queryFn: () => readChatList("channelNames"),
     select: namesOfRead,
     staleTime: 60_000,
   });
 
-function namesOfRead(read: Awaited<ReturnType<typeof listChannelNames>>) {
+function namesOfRead(read: ChatListValue<"channelNames">) {
   return read.names;
 }
 

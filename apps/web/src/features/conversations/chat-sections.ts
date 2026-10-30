@@ -2,14 +2,13 @@ import type { NotifyOnChangeProps } from "@tanstack/react-query";
 
 import type { ChatSection, ChatSectionSortMode } from "./chat-section.schemas";
 import {
-  listChatSections,
   createChatSection,
   updateChatSection,
   deleteChatSection,
   moveConversationToSection,
   reorderChatSections,
-  getChatSectionOrder,
 } from "./chat-sections.functions";
+import { readChatList } from "./chat-lists-reader";
 
 export type ChatSectionsApi = {
   list: () => Promise<ChatSection[]>;
@@ -36,8 +35,8 @@ export type ChatSectionsApi = {
 };
 
 export const serverChatSectionsApi: ChatSectionsApi = {
-  list: () => listChatSections(),
-  order: () => getChatSectionOrder(),
+  list: () => readChatList("sections").then((read) => read.sections),
+  order: () => readChatList("sectionOrder").then((read) => read.order),
   create: (input) => createChatSection({ data: input }),
   update: (id, patch) => updateChatSection({ data: { id, patch } }),
   remove: (id) => deleteChatSection({ data: { id } }),

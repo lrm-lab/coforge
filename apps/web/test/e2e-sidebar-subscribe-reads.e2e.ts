@@ -9,10 +9,11 @@ import {
   userConversationChannel,
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
+import { CHAT_LIST_READS, type ChatListRead } from "#src/features/conversations/chat-list-reads";
 
 /**
  * Chat reads each of its lists once (the channel list, every channel's name, the DM list from its
- * two reads, and the Saved list) when nothing was published between that read and the moment its
+ * two reads, the Saved list, and the sections with their order), all in one call, when nothing was published between that read and the moment its
  * realtime subscriptions start, and reads a list again when something was that its subscription
  * will never deliver (`rereadMissedBySubscribe`, Centrifugo's read-the-position-first recipe:
  * https://centrifugal.dev/docs/server/history_and_recovery).
@@ -41,25 +42,19 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/sidebar-subscribe-reads");
 
-/** The server functions that read Chat's lists (the DM list is two reads). Each one takes the
- * position of the signal channel that keeps its list live before it reads. */
-const COUNTED = [
-  "listPublicChannels",
-  "listChannelNames",
-  "listSavedMessages",
-  "loadDirectConversationPreferences",
-  "loadDirectConversationBadges",
-  "loadActivityNavAttention",
-] as const;
+/** The server functions counted: the one that reads Chat's lists (`loadChatLists`, each list
+ * taking the position of the signal channel that keeps it live before it reads) and the Activity
+ * dot's. */
+const COUNTED = ["loadChatLists", "loadActivityNavAttention"] as const;
 type Counted = (typeof COUNTED)[number];
-const noReads = (): Record<Counted, number> => ({
-  listPublicChannels: 0,
-  listChannelNames: 0,
-  listSavedMessages: 0,
-  loadDirectConversationPreferences: 0,
-  loadDirectConversationBadges: 0,
-  loadActivityNavAttention: 0,
-});
+type Reads = Record<Counted | ChatListRead, number>;
+const noReads = (): Reads =>
+  Object.fromEntries([...COUNTED, ...CHAT_LIST_READS].map((name) => [name, 0])) as Reads;
+
+/** The lists one `loadChatLists` call names: its GET payload is in the query string, where each
+ * list's name is a quoted string. */
+const listsOf = (url: URL): ChatListRead[] =>
+  CHAT_LIST_READS.filter((list) => decodeURIComponent(url.search).includes(`"${list}"`));
 
 /** This build's Server Function ids by export name, as the build states them
  * (`NAME_createServerFn_handler = createServerRpc({ id: "<64 hex>" ...`). */
@@ -106,6 +101,8 @@ function countingProxy() {
       }
       const name = countedIds.get(url.pathname.split("/_serverFn/")[1] ?? "");
       if (name) reads[name] += 1;
+      const lists = name === "loadChatLists" ? listsOf(url) : [];
+      for (const list of lists) reads[list] += 1;
       const forwardHeaders = new Headers(request.headers);
       forwardHeaders.set("origin", upstream.origin);
       forwardHeaders.delete("referer");
@@ -120,7 +117,7 @@ function countingProxy() {
       const body = await response.arrayBuffer();
       // The answer, read at the server already, waits here: what is published meanwhile is newer
       // than the stream position it carries.
-      if (name === "listPublicChannels" && gate) {
+      if (lists.includes("channels") && gate) {
         heldNow += 1;
         await gate.opened;
         heldNow -= 1;
@@ -168,7 +165,7 @@ function countingProxy() {
     origin: `http://127.0.0.1:${server.port}`,
     reads,
     reset() {
-      for (const name of COUNTED) reads[name] = 0;
+      Object.assign(reads, noReads());
       subscribing.clear();
     },
     /** Notes from now on when the browser subscribes to these channels. */
@@ -195,7 +192,7 @@ function countingProxy() {
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const proxy = countingProxy();
 const session = `sidebar-subscribe-reads-${process.pid}`;
-const results: Record<string, Record<Counted, number>> = {};
+const results: Record<string, Reads> = {};
 
 async function browser(...args: string[]) {
   const child = Bun.spawn([browserPath!, "--session", session, ...args], {
@@ -266,26 +263,24 @@ afterAll(async () => {
  * per-browser signal, unlike asking Centrifugo who is subscribed: the `chat` namespace keeps no
  * presence, and its API would also count another tab of the same user on the same channels.
  */
+const oneEach = (): Reads =>
+  Object.fromEntries([...COUNTED, ...CHAT_LIST_READS].map((name) => [name, 1])) as Reads;
+
 const chatIsLive = () =>
   until(
     "Chat's lists read and both signal channels subscribed",
-    () => COUNTED.every((name) => proxy.reads[name] >= 1) && proxy.subscribedToAll(),
+    () =>
+      [...COUNTED, ...CHAT_LIST_READS].every((name) => proxy.reads[name] >= 1) &&
+      proxy.subscribedToAll(),
   );
 
-test("with nothing published between the reads and the subscriptions, every list is read once", async () => {
+test("with nothing published between the reads and the subscriptions, every list is read once, in one call", async () => {
   proxy.reset();
   await browser("open", `${proxy.origin}${workspacePath}`);
   await chatIsLive();
   await browser("wait", "--load", "networkidle");
   results.quiet = { ...proxy.reads };
-  expect(proxy.reads).toEqual({
-    listPublicChannels: 1,
-    listChannelNames: 1,
-    listSavedMessages: 1,
-    loadDirectConversationPreferences: 1,
-    loadDirectConversationBadges: 1,
-    loadActivityNavAttention: 1,
-  });
+  expect(proxy.reads).toEqual(oneEach());
 }, 300_000);
 
 test("a publication between the read and the subscriptions has the channel list read again", async () => {
@@ -298,13 +293,13 @@ test("a publication between the read and the subscriptions has the channel list 
   // channel (the Workspace layout already holds it), so they never receive it.
   await publish(workspaceConversationChannel(workspaceId), { type: "e2e.noop" });
   proxy.release();
-  await until("the channel list read again", () => proxy.reads.listPublicChannels >= 2);
+  await until("the channel list read again", () => proxy.reads.channels >= 2);
   await browser("wait", "--load", "networkidle");
   // The publication moved the Workspace channel only, so the channel list is judged stale. Every
   // count is recorded; the channel names, kept live by the same channel, are not asserted because
   // whether their own position was read before the publication depends on the parallel reads.
   results.published = { ...proxy.reads };
-  expect(proxy.reads.listPublicChannels).toBe(2);
+  expect(proxy.reads.channels).toBe(2);
 }, 300_000);
 
 /**
@@ -343,6 +338,6 @@ test("ten messages move the sidebar and the dot without a single read", async ()
 
   results["activity:before"] = before;
   results["activity:after"] = { ...proxy.reads };
-  expect(proxy.reads.listPublicChannels).toBe(0);
+  expect(proxy.reads.loadChatLists).toBe(0);
   expect(proxy.reads.loadActivityNavAttention).toBe(0);
 }, 300_000);
