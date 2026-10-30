@@ -22,6 +22,7 @@ model Message {
   pendingMentionActions PendingMentionAction[]
   savedBy        SavedMessage[]
   task           Task?
+  sourceOfTasks  Task[]                 @relation("TaskSourceMessage")
   actionCard     ActionCard?
   appAgentEvent  AppAgentEvent?
   /// Set when this message is a forward: the snapshot of the original it carries.

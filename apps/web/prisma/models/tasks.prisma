@@ -29,12 +29,21 @@ model Task {
   creator                      ConversationMember  @relation("TaskCreator", fields: [creatorMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Restrict)
   history                      TaskHistoryEvent[]
   executionSessions            TaskExecutionSession[]
+  follows                      TaskFollow[]
+  /// The channel message a task made under task conversations was made from, when it names one.
+  /// A message may have several tasks; the message is not the task's.
+  sourceMessageId              String?             @db.Uuid
+  sourceMessage                Message?            @relation("TaskSourceMessage", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  /// The task's own conversation (`Conversation.kind` "task_thread"), made by the first reply.
+  discussionConversationId     String?             @unique @db.Uuid
+  discussion                   Conversation?       @relation("TaskDiscussion", fields: [discussionConversationId], references: [id], onDelete: SetNull)
 
   @@unique([conversationId, number])
   @@unique([messageId, conversationId])
   @@unique([id, conversationId])
   @@unique([conversationId, creatorMemberId, requestId])
   @@index([workspaceId, conversationId, status])
+  @@index([sourceMessageId, status])
   @@index([workspaceId, status, updatedAt(sort: Desc), id(sort: Desc)])
   @@index([conversationId, status, updatedAt(sort: Desc), id(sort: Desc)])
   /// Serves an Agent's own Tasks (`task list --mine`) from its member rows, whatever else the
@@ -118,4 +127,23 @@ model ActionCard {
   @@unique([messageId, conversationId])
   @@index([workspaceId, state])
   @@map("action_cards")
+}
+
+/// A member following a task made under task conversations: its replies wake the member's Agent.
+/// Keyed by the task, not a message, because the conversation does not exist until the first
+/// reply while following begins when the task is made, claimed or assigned.
+model TaskFollow {
+  taskId         String             @db.Uuid
+  memberId       String             @db.Uuid
+  conversationId String             @db.Uuid
+  workspaceId    String             @db.Uuid
+  /// Why the member follows: created, claimed, assigned, replied, mentioned or manual.
+  reason         String
+  createdAt      DateTime           @default(now())
+  task           Task               @relation(fields: [taskId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
+
+  @@id([memberId, taskId])
+  @@index([taskId])
+  @@map("task_follows")
 }

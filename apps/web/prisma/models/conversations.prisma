@@ -53,6 +53,7 @@ model Conversation {
   attachmentUploadSessions AttachmentUploadSession[]
   attachmentCommentThread AttachmentCommentThread?
   tasks          Task[]
+  taskDiscussionOf Task?                @relation("TaskDiscussion")
   actionCards    ActionCard[]
   savedMessages  SavedMessage[]
   messageReads   MessageRead[]
@@ -122,6 +123,7 @@ model ConversationMember {
   pins                     ConversationPin[]
   ownedTasks               Task[]            @relation("TaskOwner")
   createdTasks             Task[]            @relation("TaskCreator")
+  taskFollows              TaskFollow[]
 
   @@unique([id, conversationId, workspaceId])
   @@unique([conversationId, userId])
