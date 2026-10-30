@@ -68,9 +68,16 @@ test.skipIf(!connectionString)(
       const receipt = await db.message.findFirstOrThrow({
         where: { conversationId: general.id, senderMemberId: null, mentions: { some: {} } },
       });
+      // The notice lands in the task's own thread, so the signal names its root.
+      expect(receipt.threadRootId).not.toBeNull();
       const receiptSignals = messages.filter((message) => message.messageId === receipt.id);
       expect(receiptSignals).toEqual([
-        { conversationId: general.id, messageId: receipt.id, sequence: receipt.sequence },
+        {
+          conversationId: general.id,
+          messageId: receipt.id,
+          sequence: receipt.sequence,
+          threadRootId: receipt.threadRootId!,
+        },
       ]);
       expect(activity).toEqual([{ workspaceId: workspace.id, userId: bob.id }]);
 

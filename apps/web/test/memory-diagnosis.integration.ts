@@ -30,6 +30,8 @@ test("Memory can diagnose an observed Task state only within its live channel an
       CREATE TABLE conversation_members (id uuid PRIMARY KEY, "conversationId" uuid, "workspaceId" uuid, "agentId" uuid, "leftAt" timestamptz);
       CREATE TABLE messages (id uuid PRIMARY KEY, "conversationId" uuid, "workspaceId" uuid, "senderMemberId" uuid, body text, sequence int, "createdAt" timestamptz DEFAULT now(), "threadRootId" uuid);
       CREATE TABLE message_mentions ("messageId" uuid, "memberId" uuid, "conversationId" uuid, "workspaceId" uuid, kind text, "actorId" uuid, handle text, PRIMARY KEY ("messageId", "memberId"));
+      CREATE TABLE attachments (id uuid PRIMARY KEY, "messageId" uuid, position int);
+      CREATE TABLE message_forwards ("messageId" uuid PRIMARY KEY, "sourceMessageId" uuid, "sourceConversationId" uuid, "sourceThreadRootId" uuid, "sourceConversationName" text, "sourceSenderName" text, "sourceSenderHandle" text, "sourceCreatedAt" timestamptz, "sourceBody" text, "createdAt" timestamptz DEFAULT now());
     `);
     await sql.query("INSERT INTO agents VALUES ($1, $2, $5), ($3, $4, $5)", [
       memory,
