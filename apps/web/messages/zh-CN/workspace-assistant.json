@@ -102,5 +102,6 @@
   "pi_chat_files_large": "文件超过 10 MB 限制。",
   "pi_chat_files_binary": "无法预览，请下载后打开。",
   "pi_chat_files_resize": "拖动或使用左右方向键调整文件栏宽度",
-  "pi_chat_files_open": "打开文件"
+  "pi_chat_files_open": "打开文件",
+  "workspace_assistant_computer_required": "通用助手需要一台 Computer 来运行，而你还没有把 Computer 接入这个工作区。添加一台后再重新发送。"
 }

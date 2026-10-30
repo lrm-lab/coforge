@@ -5,6 +5,9 @@ import { AlertCircle, Paperclip } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { localizeHref } from "#src/paraglide/runtime";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
+import { unsentGuidance } from "./unsent-guidance";
 import {
   unsentReasonAllowsEdit,
   unsentReasonAllowsRetry,
@@ -42,14 +45,22 @@ function unsentReasonText(reason: UnsentReason): string {
 
 /** The failure sentence. It announces itself to screen readers only when the failure has just
  * happened on this page (`failureNeedsAnnouncing`), once. */
-function UnsentReasonText({ localId, reason }: { localId: string; reason: UnsentReason }) {
+function UnsentReasonText({
+  localId,
+  reason,
+  text = unsentReasonText(reason),
+}: {
+  localId: string;
+  reason: UnsentReason;
+  text?: string;
+}) {
   const [announce] = useState(() => failureNeedsAnnouncing(localId));
   useEffect(() => {
     if (announce) failureAnnounced(localId);
   }, [announce, localId]);
   return (
     <span role={announce ? "alert" : undefined} className="text-error-primary">
-      {unsentReasonText(reason)}
+      {text}
     </span>
   );
 }
@@ -97,6 +108,8 @@ export function OutboxMessageRow({
 }) {
   const viewer = appRoute.useLoaderData({ select: (data) => data.user });
   const unsent = entry.state === "unsent" ? entry : undefined;
+  const { workspaceSlug } = appRoute.useParams();
+  const guidance = unsentGuidance(unsent?.errorId);
   const slow = useSlowSend(entry.state === "sending");
   const sendingLabel = slow && (
     <span className="shrink-0 text-xs text-tertiary">{m.conversation_sending()}</span>
@@ -147,7 +160,20 @@ export function OutboxMessageRow({
           {unsent && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
               <AlertCircle aria-hidden="true" className="size-4 shrink-0 text-fg-error-primary" />
-              <UnsentReasonText localId={entry.localId} reason={unsent.reason} />
+              <UnsentReasonText
+                localId={entry.localId}
+                reason={unsent.reason}
+                text={guidance?.message()}
+              />
+              {guidance && (
+                <Button
+                  color="link-color"
+                  size="sm"
+                  href={localizeHref(workspacePath(workspaceSlug, "/computers"))}
+                >
+                  {m.agent_connect_computer()}
+                </Button>
+              )}
               {unsentReasonAllowsRetry(unsent.reason) && (
                 <>
                   <span aria-hidden="true" className="text-quaternary">
