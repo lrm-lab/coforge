@@ -71,10 +71,14 @@ test("a channel send reads only the members its @handles name, however large the
         },
       },
     }) as unknown as PrismaClient;
+    // The send's own reads only: the announcement after it (`announceMessage`) reads the
+    // recipients' ids once, which is not what this counts.
     const channels = new PublicChannels(
       counted,
       new RedisMessageRequestIdempotency(redis),
       quietCentrifugo(),
+      undefined,
+      { messageAvailable: async () => {}, memberChanged: async () => {} },
     );
     const general = (await channels.list(workspace.id, sender.id))[0]!;
     const send = (body: string) =>

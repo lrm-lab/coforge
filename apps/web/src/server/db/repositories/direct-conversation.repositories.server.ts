@@ -101,6 +101,10 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     }
   }
 
+  get database(): PrismaClient {
+    return this.db;
+  }
+
   /** What the operations in the `agent-*` and `user-direct-reads` modules run on; its channel
    * lookup is this instance's, so they share the one-request cache. */
   get #ports(): DirectConversationPorts {

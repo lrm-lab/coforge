@@ -40,7 +40,7 @@ export type ChannelSendPorts = {
   realtime?: ConversationRealtime;
   publisher?: CentrifugoServerApi;
 };
-import { announceMessage } from "./conversation-activity.server";
+import { announceMessageBestEffort } from "./conversation-activity.server";
 
 export async function sendChannel(
   ctx: ChannelSendPorts,
@@ -262,22 +262,16 @@ export async function sendChannel(
     },
   });
   if (created) await ctx.notifications?.notifyMessage(message.id);
-  if (ctx.realtime) {
-    try {
-      await announceMessage(ctx.db, ctx.realtime, {
-        conversationId: channelId,
-        messageId: message.id,
-        sequence: message.sequence,
-        workspaceId,
-        threadRootId: message.threadRootId ?? undefined,
-        idempotencyKey,
-        // Only a person sends here; an Agent's channel message goes through `SendDirectMessage`.
-        senderUserId: userId,
-      });
-    } catch {
-      // PostgreSQL remains canonical; browser reconciliation repairs a missed publication.
-    }
-  }
+  await announceMessageBestEffort(ctx.db, ctx.realtime, {
+    conversationId: channelId,
+    messageId: message.id,
+    sequence: message.sequence,
+    workspaceId,
+    threadRootId: message.threadRootId ?? undefined,
+    idempotencyKey,
+    // Only a person sends here; an Agent's channel message goes through `SendDirectMessage`.
+    senderUserId: userId,
+  });
   // Every Agent's push goes out at once; a failure still rejects the send. The encoder reads the
   // stored tokens back as text for the Agent.
   const publisher = ctx.publisher ?? createCentrifugoServerApi();

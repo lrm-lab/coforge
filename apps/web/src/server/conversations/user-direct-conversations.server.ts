@@ -29,7 +29,7 @@ type UserDirectMessageInput = {
   /** Runs inside the send's transaction once the message and its uploads are written. */
   withinSend?: SentMessageHook;
 };
-import { announceMessage } from "./conversation-activity.server";
+import { announceMessageBestEffort } from "./conversation-activity.server";
 
 /** Opens the viewer's direct conversation with `peerUserId`, starting it on first open. */
 export async function openPeopleDirectConversation(
@@ -133,22 +133,18 @@ export class UserDirectConversations {
       },
       () => this.store(input, sender.id),
     );
-    try {
-      await announceMessage(this.db, this.realtime, {
-        conversationId,
-        messageId: message.id,
-        sequence: message.sequence,
-        // Every member, the sender included: the sender's other tabs and devices refresh the DM
-        // row. The message names the sender, so it never bumps the sender's own badge.
-        directUserIds: members.flatMap((member) => (member.userId ? [member.userId] : [])),
-        directPair: peopleDirectKeyPair(conversation.directKey),
-        idempotencyKey: input.idempotencyKey,
-        senderUserId,
-        ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
-      });
-    } catch {
-      // PostgreSQL remains canonical; browser reconciliation repairs a missed publication.
-    }
+    await announceMessageBestEffort(this.db, this.realtime, {
+      conversationId,
+      messageId: message.id,
+      sequence: message.sequence,
+      // Every member, the sender included: the sender's other tabs and devices refresh the DM
+      // row. The message names the sender, so it never bumps the sender's own badge.
+      directUserIds: members.flatMap((member) => (member.userId ? [member.userId] : [])),
+      directPair: peopleDirectKeyPair(conversation.directKey),
+      idempotencyKey: input.idempotencyKey,
+      senderUserId,
+      ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+    });
     return message;
   }
 

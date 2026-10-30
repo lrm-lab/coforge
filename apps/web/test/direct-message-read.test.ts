@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ReadDirectMessages } from "#src/server/conversations/direct-message.server";
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { unusedDatabase } from "./helpers/unused-database";
 
 describe("ReadDirectMessages", () => {
   test("coordinates target lookup and conversation selection before reading persisted messages", async () => {
@@ -40,6 +41,7 @@ describe("ReadDirectMessages", () => {
         calls.push(`read:${target}`);
         return messages;
       },
+      database: unusedDatabase,
     } satisfies DirectConversationRepository;
 
     await expect(

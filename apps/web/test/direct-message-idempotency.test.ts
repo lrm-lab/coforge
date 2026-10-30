@@ -4,6 +4,7 @@ import { SendDirectMessage } from "#src/server/conversations/direct-message.serv
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 import { MemoryMessageRequestIdempotency } from "./helpers/memory-message-request-idempotency";
+import { unusedDatabase } from "./helpers/unused-database";
 
 const persisted = {
   id: "message-a",
@@ -34,6 +35,7 @@ describe("SendDirectMessage request idempotency", () => {
         persistenceCalls += 1;
         return persisted;
       },
+      database: unusedDatabase,
     } satisfies DirectConversationRepository;
     const useCase = new SendDirectMessage(
       repository,
@@ -76,6 +78,7 @@ describe("SendDirectMessage request idempotency", () => {
         persistenceCalls += 1;
         return persisted;
       },
+      database: unusedDatabase,
     } satisfies DirectConversationRepository;
     const useCase = new SendDirectMessage(
       repository,
@@ -116,6 +119,7 @@ describe("SendDirectMessage request idempotency", () => {
         persistenceCalls += 1;
         return { ...persisted, id: `message-${persistenceCalls}` };
       },
+      database: unusedDatabase,
     } satisfies DirectConversationRepository;
     const useCase = new SendDirectMessage(
       repository,
@@ -166,6 +170,7 @@ describe("SendDirectMessage request idempotency", () => {
           target: "@user",
         };
       },
+      database: unusedDatabase,
     } satisfies DirectConversationRepository;
     const useCase = new SendDirectMessage(
       repository,

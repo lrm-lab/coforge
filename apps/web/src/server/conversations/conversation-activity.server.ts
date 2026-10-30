@@ -3,9 +3,10 @@ import type { ConversationActivityEvent } from "#src/features/conversations/conv
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { messagePreviewLine } from "./message-preview-line.server";
 import { browserSenderName } from "./sender-display.server";
-import type {
-  ConversationRealtime,
-  ConversationRealtimeMessage,
+import {
+  announceBestEffort,
+  type ConversationRealtime,
+  type ConversationRealtimeMessage,
 } from "./conversation-realtime.server";
 
 /**
@@ -44,17 +45,21 @@ async function activityRecipients(
  *
  * Runs after the write commits, never inside its transaction or its locks: the reads here are one
  * for the message (its body, sender and mentions, for the row's preview) and one for the
- * recipients. A failure is the caller's to swallow, as every realtime publish is: PostgreSQL stays
- * canonical and the browser's reconciliation repairs what a missed publication left.
+ * recipients. Both are required: an announcement that cannot reach the recipients' own channels
+ * leaves every other page's sidebar, unread counts and Activity dot behind (task #348: every Agent's
+ * message went out without them, its repository passing no database). A write path announces
+ * through `announceMessageBestEffort`, which logs a failure instead of failing the write.
  */
 export async function announceMessage(
-  db: PrismaClient | undefined,
-  realtime: Pick<ConversationRealtime, "messageAvailable" | "conversationActivity"> | undefined,
+  db: PrismaClient,
+  realtime: Pick<ConversationRealtime, "messageAvailable" | "conversationActivity">,
   message: ConversationRealtimeMessage,
 ): Promise<void> {
-  if (!realtime) return;
   await realtime.messageAvailable(message);
-  if (!db || !realtime.conversationActivity) return;
+  if (!realtime.conversationActivity) {
+    unannounced("port_without_activity", message);
+    return;
+  }
   const stored = await db.message.findUnique({
     where: { id: message.messageId },
     select: {
@@ -75,7 +80,10 @@ export async function announceMessage(
       forward: { select: { sourceBody: true } },
     },
   });
-  if (!stored) return;
+  if (!stored) {
+    unannounced("message_not_found", message);
+    return;
+  }
   const event: ConversationActivityEvent = {
     type: "conversation.activity.v1",
     workspaceId: stored.workspaceId,
@@ -105,4 +113,34 @@ export async function announceMessage(
   });
   if (userIds.length === 0) return;
   await realtime.conversationActivity({ userIds, event });
+}
+
+function unannounced(reason: string, message: ConversationRealtimeMessage) {
+  console.warn(
+    JSON.stringify({
+      event: "conversation_realtime:activity_unannounced",
+      reason,
+      conversation_id: message.conversationId,
+      message_id: message.messageId,
+    }),
+  );
+}
+
+/**
+ * `announceMessage` once a write has committed, through `announceBestEffort`: a write path with no
+ * port of its own announces through the production one, and a failed publish is logged as
+ * `conversation_realtime:message_failed` instead of failing the write. PostgreSQL stays canonical,
+ * and a page that missed the announcement reads again when it next subscribes.
+ */
+export function announceMessageBestEffort(
+  db: PrismaClient,
+  realtime: Pick<ConversationRealtime, "messageAvailable" | "conversationActivity"> | undefined,
+  message: ConversationRealtimeMessage,
+): Promise<void> {
+  return announceBestEffort(realtime, (port) => announceMessage(db, port, message), {
+    name: "message",
+    workspace_id: message.workspaceId ?? "",
+    conversation_id: message.conversationId,
+    message_id: message.messageId,
+  });
 }

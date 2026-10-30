@@ -17,7 +17,7 @@ import { deliveryMentionsAgent } from "./mentions.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
-import { announceMessage } from "./conversation-activity.server";
+import { announceMessageBestEffort } from "./conversation-activity.server";
 
 export class ReadDirectMessages {
   constructor(private readonly conversations: DirectConversationRepository) {}
@@ -263,22 +263,17 @@ export class SendDirectMessage {
     /** A person's send only: lets the sender's page match its pending copy. */
     idempotencyKey?: string,
   ) {
-    if (!this.realtime) return;
-    try {
-      await announceMessage(this.conversations.database, this.realtime, {
-        conversationId,
-        messageId: message.id,
-        sequence: message.sequence,
-        ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
-        ...(scope.userId ? { userId: scope.userId } : {}),
-        ...(scope.agentId ? { agentId: scope.agentId } : {}),
-        ...(scope.senderUserId ? { senderUserId: scope.senderUserId } : {}),
-        ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
-        ...(idempotencyKey ? { idempotencyKey } : {}),
-      });
-    } catch {
-      // PostgreSQL remains canonical; browser reconciliation repairs a missed publication.
-    }
+    await announceMessageBestEffort(this.conversations.database, this.realtime, {
+      conversationId,
+      messageId: message.id,
+      sequence: message.sequence,
+      ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
+      ...(scope.userId ? { userId: scope.userId } : {}),
+      ...(scope.agentId ? { agentId: scope.agentId } : {}),
+      ...(scope.senderUserId ? { senderUserId: scope.senderUserId } : {}),
+      ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+    });
   }
 
   private async publishUserMessageToAgent(

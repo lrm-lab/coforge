@@ -5,7 +5,7 @@ import type { ActionCardTarget } from "./action-card-target.server";
 import { lockConversation } from "./conversation-lock.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { messageSignalScope } from "./conversation-signal-scope.server";
-import { announceMessage } from "./conversation-activity.server";
+import { announceMessageBestEffort } from "./conversation-activity.server";
 
 /** Posts an action card in `tx`: the Agent's Message carrying `body`, and its `ActionCard` row,
  * under the conversation lock. */
@@ -56,17 +56,13 @@ export async function publishActionCardMessage(
   target: ActionCardTarget,
   message: { id: string; sequence: number },
 ) {
-  try {
-    await announceMessage(db, realtime, {
-      conversationId: target.conversationId,
-      messageId: message.id,
-      sequence: message.sequence,
-      ...(await messageSignalScope(db, target.conversationId, workspaceId)),
-      threadRootId: target.threadRootId,
-    });
-  } catch {
-    // PostgreSQL remains canonical; browser reconciliation repairs a missed publication.
-  }
+  await announceMessageBestEffort(db, realtime, {
+    conversationId: target.conversationId,
+    messageId: message.id,
+    sequence: message.sequence,
+    ...(await messageSignalScope(db, target.conversationId, workspaceId)),
+    threadRootId: target.threadRootId,
+  });
 }
 
 /** A card's state changed: browsers showing its message refresh it. */

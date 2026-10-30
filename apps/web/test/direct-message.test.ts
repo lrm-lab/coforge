@@ -6,6 +6,7 @@ import type { DirectConversationRepository } from "#src/server/db/repositories/d
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 import { MemoryMessageRequestIdempotency } from "./helpers/memory-message-request-idempotency";
+import { type RepositoryFake, withUnusedDatabase } from "./helpers/unused-database";
 
 const persisted = {
   id: "message-a",
@@ -26,11 +27,16 @@ const persisted = {
 
 /** The use case over a test repository, with request records kept in memory. */
 const sendDirectMessage = (
-  repository: DirectConversationRepository,
+  repository: RepositoryFake,
   ...rest: ConstructorParameters<typeof SendDirectMessage> extends [unknown, unknown, ...infer R]
     ? R
     : never
-) => new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), ...rest);
+) =>
+  new SendDirectMessage(
+    withUnusedDatabase(repository),
+    new MemoryMessageRequestIdempotency(),
+    ...rest,
+  );
 
 describe("SendDirectMessage", () => {
   test("publishes the full thread target while keeping the sender unchanged", async () => {
@@ -41,7 +47,7 @@ describe("SendDirectMessage", () => {
         expect(args[5]).toBe("12345678-0000-4000-8000-000000000001");
         return { ...persisted, deliveryTarget: "@ada:12345678" };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     await sendDirectMessage(
       repository,
       withPublishBatch({
@@ -90,7 +96,7 @@ describe("SendDirectMessage", () => {
           })),
         };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(repository, quietCentrifugo());
 
     const result = await useCase.execute({
@@ -127,7 +133,7 @@ describe("SendDirectMessage", () => {
         calls.push("persist");
         return persisted;
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(
       repository,
       withPublishBatch({
@@ -179,7 +185,7 @@ describe("SendDirectMessage", () => {
         calls.push("persist");
         return persisted;
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(
       repository,
       withPublishBatch({
@@ -218,7 +224,7 @@ describe("SendDirectMessage", () => {
       async sendMessage() {
         return persisted;
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(repository, quietCentrifugo(), {
       async memberChanged() {},
       async messageAvailable(input) {
@@ -260,7 +266,7 @@ describe("SendDirectMessage", () => {
         async sendMessage() {
           return { ...persisted, latestSenderKind, latestSenderHandle };
         },
-      } satisfies DirectConversationRepository;
+      } satisfies RepositoryFake;
       const useCase = sendDirectMessage(
         repository,
         withPublishBatch({
@@ -295,7 +301,7 @@ describe("SendDirectMessage", () => {
         async sendMessage() {
           throw new Error(reason);
         },
-      } satisfies DirectConversationRepository;
+      } satisfies RepositoryFake;
       const useCase = sendDirectMessage(
         repository,
         withPublishBatch({
@@ -341,7 +347,7 @@ describe("SendDirectMessage", () => {
         calls.push("persist");
         return { ...persisted, deliveryId: undefined, target: "@user" };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(
       repository,
       withPublishBatch({
@@ -407,7 +413,7 @@ describe("SendDirectMessage", () => {
       async sendAgentMessage() {
         return { ...persisted, deliveryId: undefined, target: "@user" };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(
       repository,
       quietCentrifugo(),
@@ -458,7 +464,7 @@ describe("SendDirectMessage", () => {
           target: `#general:${rootId}`,
         };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(
       repository,
       withPublishBatch({
@@ -513,7 +519,7 @@ describe("SendDirectMessage", () => {
         releaseNotifier();
         return { pendingMentionActions: [], unresolvedMentionHandles: ["nobody"] };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(repository, quietCentrifugo(), undefined, {
       async notifyMessage() {
         await Promise.race([
@@ -568,7 +574,7 @@ describe("SendDirectMessage", () => {
         calls.push({ conversationId, agentId, body, attachmentIdsArg, threadRootId, mentionsArg });
         return { ...persisted, deliveryId: undefined, target: "@frank" };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(repository, quietCentrifugo());
 
     await useCase.executeFromAgent({
@@ -614,7 +620,7 @@ describe("SendDirectMessage", () => {
       async sendAgentMessage() {
         throw new Error("persistence failed");
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(
       repository,
       withPublishBatch({
@@ -658,7 +664,7 @@ describe("SendDirectMessage", () => {
         persistedCalled = true;
         return { ...persisted, deliveryId: undefined, target: "@user" };
       },
-    } satisfies DirectConversationRepository;
+    } satisfies RepositoryFake;
     const useCase = sendDirectMessage(
       repository,
       withPublishBatch({
