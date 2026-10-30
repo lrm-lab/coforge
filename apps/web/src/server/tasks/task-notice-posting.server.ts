@@ -1,3 +1,4 @@
+import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { hostMessageId } from "./task-view.server";
 import { postTaskNotice } from "./task-conversations.server";
 import { followTask } from "./task-discussion-store.server";
@@ -199,7 +200,7 @@ export async function signalNotices(ports: TaskBoardPorts, notices: readonly Pos
   await Promise.allSettled(
     notices.map((notice) =>
       Promise.resolve().then(() =>
-        realtime.messageAvailable({
+        announceMessageBestEffort(ports.db, realtime, {
           conversationId: notice.conversationId,
           messageId: notice.id,
           sequence: notice.sequence,

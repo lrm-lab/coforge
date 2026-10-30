@@ -67,7 +67,7 @@ export async function announceMessage(
       createdAt: true,
       threadRootId: true,
       workspaceId: true,
-      conversation: { select: { channelName: true } },
+      conversation: { select: { channelName: true, kind: true } },
       sender: {
         select: {
           userId: true,
@@ -84,6 +84,9 @@ export async function announceMessage(
     unannounced("message_not_found", message);
     return;
   }
+  // A task's own conversation is hidden: no sidebar row or count to move. Its readers hear of it
+  // through their Activity (`task-publication.server.ts`).
+  if (stored.conversation.kind === "task_thread") return;
   const event: ConversationActivityEvent = {
     type: "conversation.activity.v1",
     workspaceId: stored.workspaceId,

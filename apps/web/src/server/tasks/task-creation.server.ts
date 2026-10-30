@@ -1,3 +1,4 @@
+import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { assertCanAssignOther } from "./task-assignment-authority.server";
@@ -343,7 +344,7 @@ export async function createTasks(
           ? [attempt(() => ports.dependencies.notifications?.notifyMessage(hostMessageId(task)))]
           : []),
         attempt(() =>
-          ports.dependencies.realtime?.messageAvailable({
+          announceMessageBestEffort(ports.db, ports.dependencies.realtime, {
             conversationId: scope.conversationId,
             messageId: hostMessageId(task),
             sequence: result.sequences[index]!,
