@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -217,4 +217,62 @@ describe("Antigravity CLI model catalog in the inventory", () => {
     },
     PASS_BUDGET_MS,
   );
+
+  test("invalidates the cached catalog when the account or CLI version changes", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-antigravity-catalog-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-antigravity-catalog-bin-"));
+    const home = await mkdtemp(join(tmpdir(), "coforge-antigravity-catalog-home-"));
+    const geminiDirectory = join(home, ".gemini");
+    const agyPath = join(binDirectory, "agy");
+    try {
+      await Bun.write(agyPath, "#!/bin/sh\nexit 0\n");
+      await mkdir(geminiDirectory, { recursive: true });
+      await Bun.write(join(geminiDirectory, "google_account_id"), "account-one");
+      await Bun.write(join(geminiDirectory, "oauth_creds.json"), '{"expiry_date":1}');
+      const environment = { HOME: home, PATH: "", PI_OFFLINE: "1" };
+      const options = {
+        probe: agyProbe("1.2.13\n", agyPath),
+        commands: { antigravity: [process.execPath, MODELS_FIXTURE, "models"] as const },
+        environment,
+        piModels: async () => [],
+        cacheDirectory: stateDirectory,
+      };
+      const runtime = (version: string) => [
+        { provider: "antigravity" as const, version, displayName: "Antigravity CLI" },
+      ];
+      const served = async (version = "1.2.13") =>
+        (await loadCachedCodeAgentCatalogs(runtime(version), options)).catalogs.some(
+          (catalog) => catalog.provider === "antigravity",
+        );
+
+      await discoverCodeAgentCatalogs(runtime("1.2.13"), options);
+      const cachedKey = (await Bun.file(
+        join(stateDirectory, "code-agent-inventory-cache.json"),
+      ).json()) as { antigravity?: { key?: string } };
+      expect(cachedKey.antigravity?.key).toContain("1.2.13|");
+      // Unchanged account: the key the live pass wrote is the one the cached read computes.
+      expect(await served()).toBe(true);
+
+      // A refreshed token rewrites the credential file without changing who is signed in.
+      await Bun.write(join(geminiDirectory, "oauth_creds.json"), '{"expiry_date":2}');
+      expect(await served()).toBe(true);
+
+      await Bun.write(join(geminiDirectory, "google_account_id"), "account-two");
+      expect(await served()).toBe(false);
+
+      // The upgrade that brings a different model list; the version is part of the key.
+      await discoverCodeAgentCatalogs(runtime("1.2.13"), options);
+      expect(await served()).toBe(true);
+      expect(await served("1.2.14")).toBe(false);
+
+      // Signing out removes both files.
+      await Bun.file(join(geminiDirectory, "google_account_id")).delete();
+      await Bun.file(join(geminiDirectory, "oauth_creds.json")).delete();
+      expect(await served()).toBe(false);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+      await rm(home, { recursive: true, force: true });
+    }
+  });
 });

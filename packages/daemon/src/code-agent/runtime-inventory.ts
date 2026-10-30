@@ -3,7 +3,6 @@ import { commandCodeRuntimeHost } from "#src/code-agent/command-code/host";
 import { devinRuntimeHost } from "#src/code-agent/devin/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
-import { join } from "node:path";
 import {
   RUNTIME_PROVIDER,
   type CodeAgentModelCatalog,
@@ -23,23 +22,19 @@ import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
 import { discoverGrokCatalog } from "@lrm/coforge-anvil/grok";
 import { discoverAntigravityCatalog } from "@lrm/coforge-anvil/antigravity";
 import { CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
-import {
-  discoverPiCatalog,
-  piAgentDirectory,
-  PI_CATALOG_DISCOVERY_TIMEOUT_MS,
-  type PiModelDiscovery,
-} from "@lrm/coforge-anvil/pi";
+import { discoverPiCatalog, PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil/pi";
 import { runCatalogCommand } from "./catalog-command";
+import { piRuntimeHost } from "./pi/host";
+import { catalogCacheKeyFor, piCacheKeyPaths } from "./catalog-cache-key";
+import type { CodeAgentDiscoveryOptions } from "./discovery-options";
 import {
   externalCodeAgent,
   dshCodeAgent,
   resolveExternalCodeAgentExecutable,
-  type ExternalCodeAgentProbe,
   type ExternalCodeAgentProvider,
 } from "./runtime-executable";
 import {
   CATALOG_CACHE_TTL_MS,
-  fileStatCacheKey,
   readInventoryCache,
   updateInventoryCache,
 } from "./runtime-inventory-cache";
@@ -49,7 +44,6 @@ import { claudeStaticCatalog } from "@lrm/coforge-anvil/claude-code";
 import { discoverCodexCatalog } from "@lrm/coforge-anvil/codex";
 import { codexCatalogHost } from "./codex/host";
 import { discoverCoforgeCatalog } from "./pi/catalog";
-import { piRuntimeHost } from "./pi/host";
 import { DshCatalogDiscovery } from "./dsh/catalog";
 import { agentEnvironment } from "./environment";
 import { getLogger } from "@logtape/logtape";
@@ -64,44 +58,6 @@ export type CodeAgentInventory = {
   catalogs: CodeAgentModelCatalog[];
 };
 
-type CatalogCommands = {
-  codex?: readonly string[];
-  dsh?: readonly string[];
-  kiro?: readonly string[];
-  cursor?: readonly string[];
-  opencode?: readonly string[];
-  grok?: readonly string[];
-  antigravity?: readonly string[];
-  commandCode?: readonly string[];
-  devin?: readonly string[];
-};
-
-export type CodeAgentDiscoveryOptions = {
-  /** Explicit refreshes may not substitute a provider's local cache for a failed live probe. */
-  force?: boolean;
-  /** A user-requested refresh covers only this provider's discovery. */
-  provider?: RuntimeProvider;
-  /** How external Code Agent CLIs are found and versioned; production passes `hostCodeAgentProbe`. */
-  probe: ExternalCodeAgentProbe;
-  commands?: CatalogCommands;
-  /** Pi's in-process model discovery; production passes the Pi SDK's `discoverPiModels`. */
-  piModels: PiModelDiscovery;
-  cwd?: string;
-  environment?: Readonly<Record<string, string | undefined>>;
-  platform?: NodeJS.Platform;
-  /** The daemon state directory; when set, probe results are cached there across restarts. */
-  cacheDirectory?: string;
-  /** The wait for each external runtime's generic `--version` probe (`versionProbeOutput`);
-   * `VERSION_PROBE_TIMEOUT_MS` when unset. Provider-specific probes keep their own bounds. */
-  versionProbeTimeoutMs?: number;
-  /** Each bounded wait of Codex or DSH model catalog discovery. Defaults are
-   * `CATALOG_DISCOVERY_TIMEOUT_MS` for Codex and the native ACP 120-second budget for DSH.
-   * The runtime probe's own `initialize` wait is not affected. */
-  catalogDiscoveryTimeoutMs?: number;
-  /** Pi's in-process catalog discovery; `PI_CATALOG_DISCOVERY_TIMEOUT_MS` when unset. */
-  piCatalogDiscoveryTimeoutMs?: number;
-};
-
 /** A provider whose model catalog is expensive enough (spawns a CLI) to be worth caching. */
 const CACHEABLE_CATALOG_PROVIDERS = [
   RUNTIME_PROVIDER.GROK,
@@ -114,30 +70,6 @@ const CACHEABLE_CATALOG_PROVIDERS = [
   RUNTIME_PROVIDER.COMMAND_CODE,
   RUNTIME_PROVIDER.DEVIN,
 ] as const;
-
-function piCacheKeyPaths(environment: Readonly<Record<string, string | undefined>>): string[] {
-  const agentDir = piAgentDirectory(environment, piRuntimeHost);
-  return [join(agentDir, "models.json"), join(agentDir, "auth.json")];
-}
-
-/** The file(s) whose mtime+size stand in for "has this provider's install changed?". */
-async function catalogCacheKeyPaths(
-  provider: (typeof CACHEABLE_CATALOG_PROVIDERS)[number],
-  probe: ExternalCodeAgentProbe,
-  searchPath: string | undefined,
-  environment: Readonly<Record<string, string | undefined>>,
-  platform: NodeJS.Platform,
-): Promise<string[] | undefined> {
-  if (provider === RUNTIME_PROVIDER.PI) return piCacheKeyPaths(environment);
-  const executable = await resolveExternalCodeAgentExecutable(
-    externalCodeAgent[provider],
-    probe,
-    searchPath,
-    environment,
-    platform,
-  );
-  return executable ? [executable] : undefined;
-}
 
 async function dshCatalogOptions(options: CodeAgentDiscoveryOptions) {
   const environment = options.environment ?? Bun.env;
@@ -191,7 +123,13 @@ export async function discoverCodeAgentRuntimes(
 export async function loadCachedCodeAgentCatalogs(
   runtimes: RuntimeMetadata[],
   options: CodeAgentDiscoveryOptions,
-): Promise<{ catalogs: CodeAgentModelCatalog[]; needsRefresh: boolean }> {
+): Promise<{
+  catalogs: CodeAgentModelCatalog[];
+  needsRefresh: boolean;
+  /** Providers whose cached catalog no longer matches its on-disk key, or outlived the TTL: a
+   * provider update, a sign-in or a sign-out happened since that catalog was scanned. */
+  changedProviders: RuntimeProvider[];
+}> {
   const probe = options.probe;
   const environment = options.environment ?? Bun.env;
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
@@ -204,23 +142,30 @@ export async function loadCachedCodeAgentCatalogs(
     ? await readInventoryCache(options.cacheDirectory)
     : undefined;
   let needsRefresh = false;
+  const changedProviders: RuntimeProvider[] = [];
   const providers = CACHEABLE_CATALOG_PROVIDERS.filter(
     (provider) => provider === RUNTIME_PROVIDER.PI || usable(provider),
   );
   for (const provider of providers) {
-    const keyPaths = await catalogCacheKeyPaths(
+    const version = runtimes.find((runtime) => runtime.provider === provider)?.version;
+    const key = await catalogCacheKeyFor(
       provider,
       probe,
       searchPath,
       environment,
       options.platform ?? process.platform,
+      version,
     );
-    const key = keyPaths ? await fileStatCacheKey(keyPaths) : undefined;
     const cached = key && cache ? cache[provider] : undefined;
     const fresh = key !== undefined && cached?.key === key && cached.catalog !== undefined;
+    const expired = Date.now() - (cached?.catalogProbedAt ?? 0) > CATALOG_CACHE_TTL_MS;
     if (fresh) catalogs.push(cached.catalog!);
-    if (!fresh || Date.now() - (cached?.catalogProbedAt ?? 0) > CATALOG_CACHE_TTL_MS)
-      needsRefresh = true;
+    // A catalog that existed under another key, or outlived the TTL, was read before something
+    // changed it: an update, a sign-in or a sign-out. A provider that never produced a catalog is
+    // not this: re-spawning a broken CLI on every freshness check helps nobody.
+    if (cached?.catalog !== undefined && key !== undefined && (!fresh || expired))
+      changedProviders.push(provider);
+    if (!fresh || expired) needsRefresh = true;
   }
   // The replayed Devin catalog carries the efforts its sweep knew at publish time; overlay the
   // effort cache so a restart does not hide them, and refresh while a model still lacks a read.
@@ -240,7 +185,7 @@ export async function loadCachedCodeAgentCatalogs(
     if (cached) catalogs.push(cached);
     else needsRefresh = true;
   }
-  return { catalogs, needsRefresh };
+  return { catalogs, needsRefresh, changedProviders };
 }
 
 /**
@@ -488,7 +433,15 @@ export async function discoverCodeAgentCatalogs(
       await Promise.all(
         results.map(async ({ provider, keyPaths, catalog }) => {
           if (!provider || !keyPaths || !catalog) return undefined;
-          const key = await fileStatCacheKey(keyPaths);
+          const version = runtimes.find((runtime) => runtime.provider === provider)?.version;
+          const key = await catalogCacheKeyFor(
+            provider,
+            probe,
+            searchPath,
+            environment,
+            options.platform ?? process.platform,
+            version,
+          );
           return key ? { provider, key, catalog } : undefined;
         }),
       )

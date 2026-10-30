@@ -8,7 +8,6 @@ import {
   type RuntimeMetadata,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import { readHostCommandCodeEfforts } from "#src/code-agent/command-code/effort-read";
 import type { CatalogDiscoveryFailure } from "#src/code-agent/runtime-inventory";
 import { readHostDevinEfforts, type DevinCatalogEfforts } from "#src/code-agent/devin/effort-read";
 import { discoverPiModels } from "@coforge/agent";
@@ -22,6 +21,7 @@ import { hostCodeAgentProbe } from "#src/code-agent/runtime-probe";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+import { CommandCodeEffortReads } from "./command-code-effort-reads";
 
 // Deliberately the runtime's category: these records predate this module and keep their routing.
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -33,9 +33,13 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
  */
 export type CodeAgentDiscovery = {
   runtimes(): Promise<RuntimeMetadata[]>;
-  cachedCatalogs(
-    runtimes: RuntimeMetadata[],
-  ): Promise<{ catalogs: CodeAgentModelCatalog[]; needsRefresh: boolean }>;
+  /** `changedProviders` names the catalogs whose on-disk key moved; a discovery that cannot tell
+   * leaves it out. */
+  cachedCatalogs(runtimes: RuntimeMetadata[]): Promise<{
+    catalogs: CodeAgentModelCatalog[];
+    needsRefresh: boolean;
+    changedProviders?: RuntimeProvider[];
+  }>;
   catalogs(
     runtimes: RuntimeMetadata[],
     options?: { force: boolean; provider?: RuntimeProvider },
@@ -76,8 +80,10 @@ export class CodeAgentInventorySync {
   /** Serializes on-demand model-catalog refreshes (one CLI-spawning discovery at a time). */
   #modelRefreshChain: Promise<void> = Promise.resolve();
   /** Serializes Command Code effort reads so two forms do not spawn two processes at once. */
-  #effortChain: Promise<void> = Promise.resolve();
+  readonly #efforts: CommandCodeEffortReads;
   #runtimeVersions = new Map<RuntimeMetadata["provider"], string>();
+  /** The runtimes of the last report, so a freshness check judges the same installed set. */
+  #reportedRuntimes: RuntimeMetadata[] | undefined;
   /** Devin's `thought_level` sweep; production resolves this Computer's `devin`. */
   readonly #devinEfforts: (
     stateDirectory: string | undefined,
@@ -101,6 +107,12 @@ export class CodeAgentInventorySync {
     this.#owner = owner;
     this.#isLive = isLive;
     this.#devinEfforts = devinEfforts ?? readHostDevinEfforts;
+    this.#efforts = new CommandCodeEffortReads({
+      owner,
+      stateDirectory: () => this.#discovery.stateDirectory,
+      version: () => this.#runtimeVersions.get(RUNTIME_PROVIDER.COMMAND_CODE),
+      isLive: (transport) => this.#isLive(transport),
+    });
   }
 
   /**
@@ -120,6 +132,7 @@ export class CodeAgentInventorySync {
       const { catalogs, needsRefresh } = await this.#discovery.cachedCatalogs(runtimes);
       if (!this.#isLive(transport)) return { runtimes, needsCatalogRefresh: false };
       await this.#sendInventory(transport, requestId, runtimes, catalogs);
+      this.#reportedRuntimes = runtimes;
       logger.info("Code Agent inventory reported", {
         event: "code_agent_inventory:reported",
         ...scope,
@@ -150,6 +163,25 @@ export class CodeAgentInventorySync {
         .then(() => this.#reportCatalogs(report.runtimes, transport));
   }
 
+  /**
+   * Re-discovers the catalogs that changed on disk since they were scanned: an installed CLI
+   * update, a sign-in or a sign-out changes the provider's probe-cache key without telling the
+   * daemon anything. Reading the keys costs file stats only; nothing spawns unless one moved.
+   */
+  async recheckCatalogs(transport: DaemonConnectionClient): Promise<void> {
+    const runtimes = this.#reportedRuntimes;
+    if (!runtimes || !this.#isLive(transport)) return;
+    const { changedProviders = [] } = await this.#discovery.cachedCatalogs(runtimes);
+    if (!changedProviders.length || !this.#isLive(transport)) return;
+    logger.info("Code Agent catalog changed on disk; refreshing", {
+      event: "code_agent_catalog:changed",
+      ...this.#scope(crypto.randomUUID()),
+      providers: changedProviders,
+      outcome: "started",
+    });
+    this.refreshStaleCatalogs({ runtimes, needsCatalogRefresh: true }, transport);
+  }
+
   /** Answers a server model refresh request after every refresh that arrived before it. */
   refreshModels(
     request: DaemonRuntimeProviderModelRefreshRequest,
@@ -167,75 +199,7 @@ export class CodeAgentInventorySync {
     request: DaemonRuntimeCommandCodeEffortReadRequest,
     transport: DaemonConnectionClient,
   ): Promise<void> {
-    this.#effortChain = this.#effortChain
-      .catch(() => {})
-      .then(() => this.#answerEffortRead(request, transport));
-    return this.#effortChain;
-  }
-
-  async #answerEffortRead(
-    request: DaemonRuntimeCommandCodeEffortReadRequest,
-    transport: DaemonConnectionClient,
-  ): Promise<void> {
-    const scope = {
-      request_id: request.requestId,
-      workspace_id: this.#owner.workspaceId,
-      computer_id: this.#owner.computerId,
-    };
-    const directory = this.#discovery.stateDirectory;
-    let result: Awaited<ReturnType<typeof readHostCommandCodeEfforts>>;
-    try {
-      result = directory
-        ? await readHostCommandCodeEfforts(
-            directory,
-            request.modelId,
-            this.#runtimeVersions.get(RUNTIME_PROVIDER.COMMAND_CODE),
-          )
-        : { status: "failed", code: "unavailable" };
-    } catch (error) {
-      logger.warning("Command Code effort read failed", {
-        event: "command_code_effort:read_failed",
-        ...scope,
-        error_code: diagnosticErrorCode(error),
-        outcome: "failed",
-      });
-      if (!this.#isLive(transport)) return;
-      await transport.sendCommandCodeEffortReadResult?.({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: request.requestId,
-        workspaceId: this.#owner.workspaceId,
-        computerId: this.#owner.computerId,
-        accepted: false,
-        status: "failed",
-        efforts: [],
-      });
-      return;
-    }
-    if (!this.#isLive(transport)) return;
-    if (result.status === "failed") {
-      logger.warning("Command Code effort read failed", {
-        event: "command_code_effort:read_failed",
-        ...scope,
-        error_code: result.code,
-        outcome: "failed",
-      });
-    } else {
-      logger.info("Command Code effort read completed", {
-        event: "command_code_effort:read_completed",
-        ...scope,
-        effort_count: result.efforts.length,
-        outcome: "ok",
-      });
-    }
-    await transport.sendCommandCodeEffortReadResult?.({
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: request.requestId,
-      workspaceId: this.#owner.workspaceId,
-      computerId: this.#owner.computerId,
-      accepted: result.status === "ready",
-      status: result.status,
-      efforts: result.status === "ready" ? result.efforts : [],
-    });
+    return this.#efforts.read(request, transport);
   }
 
   /**
@@ -289,6 +253,7 @@ export class CodeAgentInventorySync {
       });
       if (!this.#isLive(transport)) return;
       await this.#sendInventory(transport, requestId, reported, catalogs);
+      this.#reportedRuntimes = reported;
       const resolved =
         request.provider === RUNTIME_PROVIDER.DEVIN
           ? await this.#resolveDevinEfforts(reported, catalogs, scope)

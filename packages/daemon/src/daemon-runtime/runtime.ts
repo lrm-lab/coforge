@@ -51,15 +51,7 @@ import {
   sessionInvalidateMessage,
 } from "./session-invalidate-activity";
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
-import {
-  activityDraft,
-  idleActivityDraft,
-  interruptedActivityDraft,
-  quietTurnActivityDraft,
-  runtimeErrorActivityDraft,
-  startingActivityDraft,
-  stoppedActivityDraft,
-} from "./activity-draft";
+import { activityDraft } from "./activity-draft";
 import {
   recoveryHasContent,
   recoveryOf,
@@ -150,6 +142,8 @@ import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
+import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
+import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentInbox, appInbox, workspaceEnvelope } from "./agent-inbox-factories";
 import { agentIdForContext, contextFor } from "./agent-context";
@@ -228,6 +222,7 @@ const NOT_RUNNING = "daemon runtime is not running";
 /** A daemon-owned resident runtime for one supervised Workspace. */
 export class DaemonRuntime {
   readonly #connection: DaemonConfig;
+  readonly #drafts: ReturnType<typeof agentActivityDrafts>;
   readonly #createProvider: CodeAgentProviderFactory;
   readonly #agentProcessManager: AgentProcessManager;
   readonly #credentials: DaemonCredentialStore;
@@ -372,6 +367,11 @@ export class DaemonRuntime {
     stalled: (agentId) => this.#runtimeRelease.stalled(agentId),
     recover: (agentId, stalled) => this.#runtimeRelease.recoverStalled(agentId, stalled),
   });
+  /** Re-reads model catalogs whose on-disk key changed: an update, a sign-in or a sign-out. */
+  readonly #catalogFreshnessSweep = new CatalogFreshnessSweep({
+    transport: () => (this.#started && !this.#stopping ? this.#transport : undefined),
+    recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
+  });
   readonly #wakeRecycle = new WakeRecycle({
     provider: (provider) => this.#createProvider(provider),
     inputQueue: (agentId) => this.#inputDrain.get(agentId),
@@ -425,11 +425,7 @@ export class DaemonRuntime {
     recoverAttention: (agentId, context) => this.#launchCustody.recover(agentId, context),
     abandonLaunch: (agentId, error) => this.#abandonLaunch(agentId, error),
     publishStartupError: (agentId, launch, message) =>
-      this.#activityPublisher.publish(
-        agentId,
-        launch,
-        this.#runtimeErrorActivity(agentId, message),
-      ),
+      this.#activityPublisher.publish(agentId, launch, this.#drafts.runtimeError(agentId, message)),
     forgetIntroduced: (agentId) => this.#introducedAgents.delete(agentId),
     dropMention: (message) =>
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
@@ -572,6 +568,7 @@ export class DaemonRuntime {
       reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
     });
     this.#connection = connection;
+    this.#drafts = agentActivityDrafts(connection.workspaceId);
     this.#createProvider = createProvider;
     this.#agentProcessManager = new AgentProcessManager(
       createProvider,
@@ -847,8 +844,8 @@ export class DaemonRuntime {
       isWorking: (agentId) => this.#isWorking(agentId),
       activityDraft: (agentId, kind, level, detail, extra) =>
         this.#activity(agentId, kind, level, detail, extra),
-      runtimeErrorActivity: (agentId, message) => this.#runtimeErrorActivity(agentId, message),
-      interruptedActivity: (agentId) => this.#interruptedActivity(agentId),
+      runtimeErrorActivity: (agentId, message) => this.#drafts.runtimeError(agentId, message),
+      interruptedActivity: (agentId) => this.#drafts.interrupted(agentId),
       showQuietTurn: (agentId, launch, publish) => this.#showQuietTurn(agentId, launch, publish),
       reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
       rememberUsage: (snapshot) => this.#rememberUsage(snapshot),
@@ -1248,6 +1245,7 @@ export class DaemonRuntime {
       this.#activityPublisher.enable();
       this.#coldIdleSweep.start();
       this.#stalledRecoverySweep.start();
+      this.#catalogFreshnessSweep.start();
       // Kick off optional inventory before flushing buffered publications so immediate probes can
       // make progress while the first Agent inputs are delivered.
       const codeAgentReport = this.#codeAgentInventory.reportRuntimes(transport);
@@ -1766,7 +1764,7 @@ export class DaemonRuntime {
       }
       this.#sendAgentStatus(agentId, "active");
       this.#activityPublisher.publish(agentId, launch, {
-        ...this.#startingActivity(agentId),
+        ...this.#drafts.starting(agentId),
         requestId,
       });
       launch.startup = new AgentStartup(() => this.#scheduleStartupFailure(agentId, launch));
@@ -1895,7 +1893,7 @@ export class DaemonRuntime {
                 entries: crashed.entries,
                 runtimeError: crashed.runtimeError,
               })
-            : this.#stoppedActivity(agentId),
+            : this.#drafts.stopped(agentId),
         );
         if (this.#currentActivityLaunches.get(agentId) === launch)
           this.#currentActivityLaunches.delete(agentId);
@@ -1980,7 +1978,7 @@ export class DaemonRuntime {
       timeout_ms: AGENT_STARTUP_TIMEOUT_MS,
       outcome: "failed",
     });
-    this.#activityPublisher.publish(agentId, launch, this.#runtimeErrorActivity(agentId, detail));
+    this.#activityPublisher.publish(agentId, launch, this.#drafts.runtimeError(agentId, detail));
     const outcome = await this.#abandonLaunch(agentId, error);
     if (outcome !== error) throw outcome;
     await this.#agentControl.stopped(agentId, launch.launchId);
@@ -2168,7 +2166,7 @@ export class DaemonRuntime {
                   "info",
                   "Stopping this turn: restarting the runtime",
                 )
-              : this.#interruptedActivity(agentId),
+              : this.#drafts.interrupted(agentId),
           ),
         report: this.#transport.sendAgentTurnInterruptResult?.bind(this.#transport),
       },
@@ -2229,7 +2227,7 @@ export class DaemonRuntime {
     const remembered = this.#activityPublisher.lastBusy(probe.agentId);
     if (launch.startup?.waiting) {
       this.#activityPublisher.publish(probe.agentId, launch, {
-        ...this.#startingActivity(probe.agentId),
+        ...this.#drafts.starting(probe.agentId),
         probeId: probe.probeId,
       });
       return;
@@ -2244,7 +2242,7 @@ export class DaemonRuntime {
       return;
     }
     this.#activityPublisher.publish(probe.agentId, launch, {
-      ...this.#idleActivity(probe.agentId),
+      ...this.#drafts.idle(probe.agentId),
       probeId: probe.probeId,
     });
   }
@@ -2441,7 +2439,7 @@ export class DaemonRuntime {
           this.#activityPublisher.publish(
             agentId,
             activityLaunch,
-            this.#runtimeErrorActivity(
+            this.#drafts.runtimeError(
               agentId,
               stopFailureMessage(this.#cleanupUnconfirmed(agentId, error)),
             ),
@@ -2469,7 +2467,7 @@ export class DaemonRuntime {
     await this.#agentProcessManager.stop(agentId);
     if (inputDrain) await Promise.allSettled([inputDrain]);
     if (activityLaunch)
-      this.#activityPublisher.publish(agentId, activityLaunch, this.#stoppedActivity(agentId));
+      this.#activityPublisher.publish(agentId, activityLaunch, this.#drafts.stopped(agentId));
     this.#currentActivityLaunches.delete(agentId);
   }
 
@@ -2578,14 +2576,6 @@ export class DaemonRuntime {
     });
   }
 
-  #runtimeErrorActivity(
-    agentId: string,
-    detail: string,
-    runtimeError?: ActivityDraft["runtimeError"],
-  ): ActivityDraft {
-    return runtimeErrorActivityDraft(this.#connection.workspaceId, agentId, detail, runtimeError);
-  }
-
   /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
    * coalesced notice — never blocking the caller on it. Shared by ordinary turn-end draining and
    * the runtime-error delivery backoff. */
@@ -2601,30 +2591,13 @@ export class DaemonRuntime {
     });
   }
 
-  #startingActivity(agentId: string): ActivityDraft {
-    return startingActivityDraft(this.#connection.workspaceId, agentId);
-  }
-
-  #idleActivity(agentId: string): ActivityDraft {
-    return idleActivityDraft(this.#connection.workspaceId, agentId);
-  }
-
-  #stoppedActivity(agentId: string): ActivityDraft {
-    return stoppedActivityDraft(this.#connection.workspaceId, agentId);
-  }
-
-  /** A running turn was cut by a requested stop/restart. */
-  #interruptedActivity(agentId: string): ActivityDraft {
-    return interruptedActivityDraft(this.#connection.workspaceId, agentId);
-  }
-
   /** Reports runtime_interrupted when a requested stop/restart cuts a busy turn.
    * Must run before `forgetBusy`, which erases the busy evidence. */
   #interruptIfBusy(agentId: string, activityLaunch: ActivityLaunch | undefined): void {
     if (!activityLaunch) return;
     const busy = this.#activityPublisher.lastBusy(agentId);
     if (busy && busy.launch === activityLaunch)
-      this.#activityPublisher.publish(agentId, activityLaunch, this.#interruptedActivity(agentId));
+      this.#activityPublisher.publish(agentId, activityLaunch, this.#drafts.interrupted(agentId));
   }
 
   /**
@@ -2638,11 +2611,7 @@ export class DaemonRuntime {
     publish: (agentId: string, launch: ActivityLaunch, activity: ActivityDraft) => void,
   ): void {
     const waiting = launch.backgroundTasks?.quietDetail();
-    publish(
-      agentId,
-      launch,
-      quietTurnActivityDraft(this.#connection.workspaceId, agentId, waiting),
-    );
+    publish(agentId, launch, this.#drafts.quietTurn(agentId, waiting));
     if (!waiting) this.systemCleaner.onAgentWorkingToIdle(agentId);
   }
 
@@ -2728,7 +2697,7 @@ export class DaemonRuntime {
     error: unknown,
   ): ActivityDraft {
     const draft = launchFailureDraft(provider, error, this.#cleanupUnconfirmed(agentId, error));
-    return this.#runtimeErrorActivity(agentId, draft.detail, draft.runtimeError);
+    return this.#drafts.runtimeError(agentId, draft.detail, draft.runtimeError);
   }
 
   async #revokeAgentApiKey(agentId: string, agentApiKey: string | undefined): Promise<void> {
@@ -3157,6 +3126,7 @@ export class DaemonRuntime {
     this.#started = false;
     this.#coldIdleSweep.stop();
     this.#stalledRecoverySweep.stop();
+    this.#catalogFreshnessSweep.stop();
     this.#activityPublisher.disable();
     for (const [agentId, launch] of this.#currentActivityLaunches) {
       launch.startup?.dispose();

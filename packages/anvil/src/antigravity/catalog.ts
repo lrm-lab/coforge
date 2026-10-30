@@ -39,9 +39,10 @@ export function parseAntigravityModelList(output: string): CodeAgentModelMetadat
 }
 
 /** How long `agy models` may run. It fetches the model list over the network each time
- * ("Fetching available models..."), which took 4.3-4.9 s on agy 1.2.13, too close to the usual
- * 5 s catalog wait. */
-export const ANTIGRAVITY_MODELS_TIMEOUT_MS = 15_000;
+ * ("Fetching available models..."), which took 4.1-7.8 s on agy 1.4.11 on a signed-in account;
+ * the daemon probes every provider at once, so a 15 s budget timed out and left the Computer
+ * without an Antigravity catalog at all. Kept under the server's 45 s refresh deadline. */
+export const ANTIGRAVITY_MODELS_TIMEOUT_MS = 30_000;
 
 /** Runs `agy models` and parses its catalog. A non-zero exit, a timeout, or
  * an empty parsed list all mean no catalog - never a thrown error, matching how every other
