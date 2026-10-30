@@ -87,6 +87,10 @@ export async function checkPendingMessages(
     duration_ms: Math.round(performance.now() - startedAt),
     outcome: "ok",
   });
+  // The App Inbox is read only to say so when a check found no message. Before the messages are
+  // elided: a read that throws after that would leave their claims with nothing to give them back.
+  const appItemsPending =
+    messages.length === 0 ? await ports.appItemsPending?.(agentId) : undefined;
   return {
     idempotencyKey: request.idempotencyKey,
     accepted: true,
@@ -95,7 +99,6 @@ export async function checkPendingMessages(
     messages: elideForAgent(ports.contexts, agentId, messages, "check"),
     messageId: "",
     hasMore,
-    // The App Inbox is read only to say so when a check found no message.
-    appItemsPending: messages.length === 0 ? await ports.appItemsPending?.(agentId) : undefined,
+    appItemsPending,
   };
 }
