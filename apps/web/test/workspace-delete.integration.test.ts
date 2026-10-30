@@ -312,6 +312,7 @@ test.skipIf(!connectionString)(
         // The Task's key on the Workspace row: a delete holding that row would deadlock here.
         await tx.task.create({
           data: {
+            id: message.id,
             messageId: message.id,
             conversationId: team.id,
             workspaceId: workspace.id,

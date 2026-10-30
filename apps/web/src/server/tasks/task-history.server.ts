@@ -100,13 +100,13 @@ export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHist
 
 /** History rows for one Task, numbered after `latestSeq`. */
 export function historyRows(
-  taskMessageId: string,
+  taskId: string,
   actor: HistoryActor,
   changes: TaskHistoryChange[],
   latestSeq: number,
 ): Prisma.TaskHistoryEventCreateManyInput[] {
   return changes.map((change, index) => ({
-    taskMessageId,
+    taskId,
     seq: latestSeq + index + 1,
     eventType: change.eventType,
     actorType: actor.agentId ? "agent" : "user",

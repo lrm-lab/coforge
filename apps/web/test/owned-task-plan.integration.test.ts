@@ -119,9 +119,9 @@ test.skipIf(!connectionString)(
           FROM generate_series(1, 4004) AS n
           RETURNING id, sequence
         )
-        INSERT INTO tasks ("messageId", "conversationId", "workspaceId", number, title, status,
+        INSERT INTO tasks (id, "messageId", "conversationId", "workspaceId", number, title, status,
           "ownerMemberId", "creatorMemberId", "updatedAt")
-        SELECT id, ${channel.id}::uuid, ${workspace.id}::uuid, sequence, 'task',
+        SELECT id, id, ${channel.id}::uuid, ${workspace.id}::uuid, sequence, 'task',
           CASE WHEN sequence > 4000 OR sequence % 2 = 0 THEN 'in_progress' ELSE 'done' END,
           CASE WHEN sequence > 4000 THEN ${mine.id}::uuid
             ELSE (${theirs}::uuid[])[1 + sequence % ${theirs.length}] END,

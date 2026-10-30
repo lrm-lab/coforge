@@ -94,6 +94,7 @@ export async function privateChannelFixture(url: string) {
     });
     await db.task.create({
       data: {
+        id: message.id,
         messageId: message.id,
         conversationId: created.id,
         workspaceId: ws,
@@ -114,6 +115,7 @@ export async function privateChannelFixture(url: string) {
     });
     await db.task.create({
       data: {
+        id: finished.id,
         messageId: finished.id,
         conversationId: created.id,
         workspaceId: ws,

@@ -15,6 +15,7 @@ import { assigneeMention, noticeActor, noticeText } from "./task-notices.server"
 import { DUPLICATE_TASK_WINDOW_MS, normalizeTaskTitle } from "./task-command-validation.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import {
+  hostMessageId,
   taskSelection,
   taskView,
   UNFINISHED_TASK_STATUSES,
@@ -216,8 +217,11 @@ export async function createTasks(
             ? agentId === coordinator.coordinatorAgentId
             : !scope.channel || !channelMuted),
       );
+      // The Task's id is its message's, as for every Task that started as a message.
+      const messageId = Bun.randomUUIDv7();
       const message = await tx.message.create({
         data: {
+          id: messageId,
           conversationId: scope.conversationId,
           workspaceId: scope.workspaceId,
           senderMemberId: member.id,
@@ -244,6 +248,7 @@ export async function createTasks(
           },
           task: {
             create: {
+              id: messageId,
               workspaceId: scope.workspaceId,
               number: firstTaskNumber + index,
               // The Task's title is its message's stored body, as a converted Task's is; `view`
@@ -272,7 +277,7 @@ export async function createTasks(
         await ensureTaskExecutionSession(tx, message.task!, assignee.agentId);
         tasks.push(
           await tx.task.findUniqueOrThrow({
-            where: { messageId: message.task!.messageId },
+            where: { id: message.task!.id },
             select: taskSelection,
           }),
         );
@@ -280,7 +285,7 @@ export async function createTasks(
       sequences.push(sequence);
     }
     await tx.taskHistoryEvent.createMany({
-      data: tasks.flatMap((task) => historyRows(task.messageId, member, creationChanges(task), 0)),
+      data: tasks.flatMap((task) => historyRows(task.id, member, creationChanges(task), 0)),
     });
     const quoted = await notices.quote(tasks);
     await notices.inConversation(noticeText.created(quoted));
@@ -335,12 +340,12 @@ export async function createTasks(
     effects.push(
       ...result.tasks.flatMap((task, index) => [
         ...(member.userId
-          ? [attempt(() => ports.dependencies.notifications?.notifyMessage(task.messageId))]
+          ? [attempt(() => ports.dependencies.notifications?.notifyMessage(hostMessageId(task)))]
           : []),
         attempt(() =>
           ports.dependencies.realtime?.messageAvailable({
             conversationId: scope.conversationId,
-            messageId: task.messageId,
+            messageId: hostMessageId(task),
             sequence: result.sequences[index]!,
             ...signalScope,
             ...(member.userId ? { senderUserId: member.userId } : {}),
@@ -350,7 +355,7 @@ export async function createTasks(
     );
     if (member.userId && ports.dependencies.publisher) {
       const messages = await ports.db.message.findMany({
-        where: { id: { in: result.tasks.map((task) => task.messageId) } },
+        where: { id: { in: result.tasks.map((task) => hostMessageId(task)) } },
         include: {
           sender: MESSAGE_SENDER_SELECT,
           mentions: MESSAGE_MENTIONS_SELECT,

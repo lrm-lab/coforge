@@ -10,7 +10,7 @@ import {
 import { AppError } from "#src/lib/app-error";
 import { daemonControlChannel } from "#src/server/centrifugo/server-api.server";
 import { MAX_ACTIVE_REMINDERS } from "#src/server/reminders/reminders.server";
-import { taskView } from "./task-view.server";
+import { hostMessageId, taskView } from "./task-view.server";
 import type { TaskBoardPorts, Member } from "./task-board-ports.server";
 import { commitTaskChange } from "./task-change.server";
 import { signalTaskChange } from "./task-publication.server";
@@ -110,8 +110,8 @@ export async function recordResourceReceipt(
         ownerAgentId: teardownOwner.id,
         computerId: teardownOwner.computerId,
         title: `Expire resource from task #${task.number}: ${receipt.object}`,
-        target: `${baseTarget}:${task.messageId}`,
-        messageId: task.messageId,
+        target: `${baseTarget}:${hostMessageId(task)}`,
+        messageId: hostMessageId(task),
         fireAt,
         events: {
           create: {

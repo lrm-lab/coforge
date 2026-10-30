@@ -293,7 +293,7 @@ export async function deleteChannel(
       where: { conversationId: channel.id, agentId: { not: null }, ...ACTIVE_MEMBER_WHERE },
       select: { agentId: true },
     }),
-    db.task.findMany({ where: { conversationId: channel.id }, select: { messageId: true } }),
+    db.task.findMany({ where: { conversationId: channel.id }, select: { id: true } }),
     attachmentKeys(db, { conversationId: channel.id }),
   ]);
   await Promise.all(
@@ -320,7 +320,7 @@ export async function deleteChannel(
     announceChannelTasksDeleted(realtime, {
       workspaceId,
       conversationId: channel.id,
-      deleted: tasks.map(({ messageId }) => messageId),
+      deleted: tasks.map(({ id }) => id),
     }),
   ]);
   await removeAttachmentFiles(objectKeys, storage);

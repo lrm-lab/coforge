@@ -160,7 +160,7 @@ export async function convertOrClaim(
       if (member.agentId && !existing.executionSessions[0]) {
         await ensureTaskExecutionSession(tx, existing, member.agentId);
         return tx.task.findUniqueOrThrow({
-          where: { messageId: existing.messageId },
+          where: { id: existing.id },
           select: taskSelection,
         });
       }

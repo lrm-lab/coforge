@@ -1,3 +1,4 @@
+import { hostMessageId } from "./task-view.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
@@ -25,7 +26,7 @@ type NoticeInput = {
   mentions?: Assignee;
 };
 /** The Task fields a notice quotes; `messageId` is also the root of the Task's thread. */
-type NoticeSubject = { messageId: string; number: number; title: string };
+type NoticeSubject = { messageId: string | null; number: number; title: string };
 /**
  * Write notices under the withNotices conversation lock; signal after commit. Assignment
  * receipts are delivered/pushed separately by the caller through publishAssignmentReceipt.
@@ -72,7 +73,9 @@ export async function withNotices<T>(
     };
     const quote = async (tasks: readonly NoticeSubject[]) => {
       const mentions = await tx.messageMention.findMany({
-        where: { messageId: { in: tasks.map((task) => task.messageId) } },
+        where: {
+          messageId: { in: tasks.flatMap((task) => (task.messageId ? [task.messageId] : [])) },
+        },
         select: { messageId: true, kind: true, actorId: true, handle: true },
       });
       return tasks.map((task) =>
@@ -87,27 +90,27 @@ export async function withNotices<T>(
       inConversation: (body, id) => postAndSignal({ body, id }),
       inThread: async (task, body) => {
         const [quoted] = await quote([task]);
-        return postAndSignal({ body: body(quoted!), threadRootId: task.messageId });
+        return postAndSignal({ body: body(quoted!), threadRootId: hostMessageId(task) });
       },
       receipt: async ({ id, task, body, assignee, actor }) => {
         const [quoted] = await quote([task]);
         const notice = await post({
           id,
           body: body(quoted!),
-          threadRootId: task.messageId,
+          threadRootId: hostMessageId(task),
           deliverTo: assignee.id === actor.id ? null : assignee.agentId,
           mentions: assignee,
         });
         // The receipt is the thread's first reply when it starts the thread, so it enrolls as a
         // reply does: the assignee, and the root's author while nobody follows yet.
         const root = await tx.message.findUniqueOrThrow({
-          where: { id: task.messageId },
+          where: { id: hostMessageId(task) },
           select: { senderMemberId: true },
         });
         await enrollThreadReplyFollowers(tx, {
           workspaceId: conversation.workspaceId,
           conversationId: conversation.conversationId,
-          root: { id: task.messageId, senderMemberId: root.senderMemberId },
+          root: { id: hostMessageId(task), senderMemberId: root.senderMemberId },
           participantMemberIds: [assignee.id],
         });
         return notice;

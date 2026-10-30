@@ -137,15 +137,17 @@ export async function signalTaskChange(ports: TaskBoardPorts, task: SelectedTask
   try {
     const scopes = await conversationSignalScopes(ports.db, task.conversationId, task.workspaceId);
     await Promise.allSettled([
+      // A Task's metadata change is a top-level message signal; one with no message has none.
       Promise.resolve().then(() =>
-        realtime.messageAvailable({
-          conversationId: task.conversationId,
-          messageId: task.messageId,
-          sequence: task.message.sequence,
-          // Task metadata changes are always top-level messages, never thread replies.
-          ...scopes.message,
-          publicationId: `${task.messageId}:task:${task.revision}`,
-        }),
+        task.messageId && task.message
+          ? realtime.messageAvailable({
+              conversationId: task.conversationId,
+              messageId: task.messageId,
+              sequence: task.message.sequence,
+              ...scopes.message,
+              publicationId: `${task.messageId}:task:${task.revision}`,
+            })
+          : undefined,
       ),
       announceTasks(ports, task, async () => scopes.task, {
         tasks: [taskView(task, "people")],

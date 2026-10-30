@@ -43,18 +43,18 @@ export async function commitTaskChange(
   data: Prisma.TaskUncheckedUpdateManyInput,
 ) {
   const changed = await tx.task.updateMany({
-    where: { messageId: before.messageId, revision: before.revision, ...guard },
+    where: { id: before.id, revision: before.revision, ...guard },
     data: { ...data, revision: { increment: 1 } },
   });
   if (changed.count !== 1) throw new AppError("CONFLICT");
   let task = await tx.task.findUniqueOrThrow({
-    where: { messageId: before.messageId },
+    where: { id: before.id },
     select: taskSelection,
   });
   if (before.owner?.agentId && before.ownerMemberId !== task.ownerMemberId) {
     await tx.taskExecutionSession.updateMany({
       where: {
-        taskMessageId: task.messageId,
+        taskId: task.id,
         agentId: before.owner.agentId,
         status: { in: ["starting", "running", "waiting"] },
       },
@@ -64,7 +64,7 @@ export async function commitTaskChange(
   if (task.status === "done" || task.status === "closed") {
     await tx.taskExecutionSession.updateMany({
       where: {
-        taskMessageId: task.messageId,
+        taskId: task.id,
         status: { in: ["starting", "running", "waiting"] },
       },
       data: { status: "completed", finishedAt: new Date() },
@@ -75,19 +75,19 @@ export async function commitTaskChange(
     // Read the row again so the result names the session every later read of this Task shows
     // (a restarted session keeps its older createdAt, so patching it in could disagree).
     task = await tx.task.findUniqueOrThrow({
-      where: { messageId: before.messageId },
+      where: { id: before.id },
       select: taskSelection,
     });
   }
   const changes = taskChanges(before, task);
   if (!changes.length) return { task, events: [] };
   const latest = await tx.taskHistoryEvent.findFirst({
-    where: { taskMessageId: task.messageId },
+    where: { taskId: task.id },
     orderBy: { seq: "desc" },
     select: { seq: true },
   });
   const events = await tx.taskHistoryEvent.createManyAndReturn({
-    data: historyRows(task.messageId, actor, changes, latest?.seq ?? 0),
+    data: historyRows(task.id, actor, changes, latest?.seq ?? 0),
   });
   return { task, events };
 }
@@ -102,7 +102,7 @@ export async function ensureTaskExecutionSession(
   agentId: string,
 ) {
   const existing = await tx.taskExecutionSession.findUnique({
-    where: { taskMessageId_agentId: { taskMessageId: task.messageId, agentId } },
+    where: { taskId_agentId: { taskId: task.id, agentId } },
     select: { id: true, status: true },
   });
   const session = existing
@@ -123,7 +123,7 @@ export async function ensureTaskExecutionSession(
       })
     : await tx.taskExecutionSession.create({
         data: {
-          taskMessageId: task.messageId,
+          taskId: task.id,
           conversationId: task.conversationId,
           workspaceId: task.workspaceId,
           agentId,
@@ -132,9 +132,11 @@ export async function ensureTaskExecutionSession(
         },
         select: { id: true },
       });
-  await tx.agentMessageDelivery.updateMany({
-    where: { messageId: task.messageId, agentId },
-    data: { taskExecutionSessionId: session.id },
-  });
+  // A task without a message in the channel has no delivery of that message to point at the session.
+  if (task.messageId)
+    await tx.agentMessageDelivery.updateMany({
+      where: { messageId: task.messageId, agentId },
+      data: { taskExecutionSessionId: session.id },
+    });
   return session;
 }

@@ -138,6 +138,7 @@ for (const width of [1440, 390]) {
             data: {
               workspaceId,
               conversationId: channel.id,
+              id: message.id,
               messageId: message.id,
               number: n - 80,
               title: `Task entry ${n}`,

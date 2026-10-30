@@ -178,6 +178,7 @@ test("a followed task thread whose owner Agent was deleted marks the owner delet
     const root = await post(general.conversation.id, general.aliceMember.id, "Ship the login page");
     await db.task.create({
       data: {
+        id: root.id,
         messageId: root.id,
         conversationId: general.conversation.id,
         workspaceId: workspace.id,

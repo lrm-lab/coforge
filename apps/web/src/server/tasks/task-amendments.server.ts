@@ -8,7 +8,7 @@ import { AppError } from "#src/lib/app-error";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-realtime.server";
 import { noticeActor, noticeText } from "./task-notices.server";
 import { historyEventView } from "./task-history.server";
-import { storedTaskStatus, readTaskText, taskView } from "./task-view.server";
+import { storedTaskStatus, readTaskText, taskMentions, taskView } from "./task-view.server";
 import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
 import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./task-change.server";
 import { withNotices } from "./task-notice-posting.server";
@@ -74,8 +74,7 @@ export async function amendTask(
     // stored, tokens included.
     const title = command.title?.trim();
     const retitled =
-      title !== undefined &&
-      title !== readTaskText(task.title, ports.reader, task.message.mentions);
+      title !== undefined && title !== readTaskText(task.title, ports.reader, taskMentions(task));
     return commitTaskChange(
       tx,
       member,
@@ -91,7 +90,7 @@ export async function amendTask(
   return {
     tasks: [taskView(result.task, ports.reader)],
     history: result.events.map((event) =>
-      historyEventView(event, ports.reader, result.task.message.mentions),
+      historyEventView(event, ports.reader, taskMentions(result.task)),
     ),
   };
 }
@@ -113,9 +112,7 @@ export async function taskHistory(
   if (!task) throw new AppError("NOT_FOUND");
   return {
     tasks: [taskView(task, ports.reader)],
-    history: task.history.map((event) =>
-      historyEventView(event, ports.reader, task.message.mentions),
-    ),
+    history: task.history.map((event) => historyEventView(event, ports.reader, taskMentions(task))),
   };
 }
 
@@ -130,16 +127,16 @@ export async function deleteTask(
     where: {
       conversationId_number: { conversationId, number: command.number! },
     },
-    select: { messageId: true, creatorMemberId: true },
+    select: { id: true, creatorMemberId: true },
   });
   if (!task) throw new AppError("NOT_FOUND");
   if (task.creatorMemberId !== member.id) await requireManager(ports.db, workspaceId, member);
-  await ports.db.task.delete({ where: { messageId: task.messageId } });
+  await ports.db.task.delete({ where: { id: task.id } });
   await announceTasks(
     ports,
     { conversationId, workspaceId },
     async () => (await conversationSignalScopes(ports.db, conversationId, workspaceId)).task,
-    { deleted: [task.messageId], publicationId: `${task.messageId}:task-deleted` },
+    { deleted: [task.id], publicationId: `${task.id}:task-deleted` },
   );
   return { tasks: [] };
 }

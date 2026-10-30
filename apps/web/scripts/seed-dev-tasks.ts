@@ -52,6 +52,7 @@ export function seedTasks(deps: {
       await db.task.upsert({
         where: { messageId: opts.messageId },
         create: {
+          id: opts.messageId,
           messageId: opts.messageId,
           conversationId: opts.conversationId,
           workspaceId,

@@ -63,16 +63,16 @@ function finishedWindowStart(window: FinishedTaskWindow): Date | undefined {
 }
 
 /** A page boundary: the last row's update time (stored to the millisecond) and its id. */
-function finishedCursor(updatedAt: Date, messageId: string) {
-  return `${updatedAt.toISOString()}_${messageId}`;
+function finishedCursor(updatedAt: Date, id: string) {
+  return `${updatedAt.toISOString()}_${id}`;
 }
 
 function parseFinishedCursor(cursor: string) {
-  const [at, messageId] = cursor.split("_");
+  const [at, id] = cursor.split("_");
   const updatedAt = new Date(at ?? "");
-  if (Number.isNaN(updatedAt.getTime()) || !messageId || !/^[0-9a-f-]{36}$/.test(messageId))
+  if (Number.isNaN(updatedAt.getTime()) || !id || !/^[0-9a-f-]{36}$/.test(id))
     throw new AppError("INVALID_INPUT");
-  return { updatedAt, messageId };
+  return { updatedAt, id };
 }
 
 /**
@@ -194,7 +194,7 @@ export class TaskOverviewReads {
         conversation: overviewConversationWhere(workspaceId, userId),
       },
       // Newest first: a group renders its first cards, and new work is what gets looked at.
-      orderBy: [{ createdAt: "desc" }, { messageId: "asc" }],
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       select: overviewSelection(userId),
     });
     return { tasks: tasks.map((task) => overviewRow(task, userId)) };
@@ -253,7 +253,9 @@ export class TaskOverviewReads {
       orderBy: { number: "asc" },
       select: taskSelection,
     });
-    return { tasks: tasks.map((task) => ({ ...taskView(task), sequence: task.message.sequence })) };
+    return {
+      tasks: tasks.map((task) => ({ ...taskView(task), sequence: task.message?.sequence ?? 0 })),
+    };
   }
 
   /**
@@ -287,14 +289,14 @@ export class TaskOverviewReads {
                 {
                   OR: [
                     { updatedAt: { lt: after.updatedAt } },
-                    { updatedAt: after.updatedAt, messageId: { lt: after.messageId } },
+                    { updatedAt: after.updatedAt, id: { lt: after.id } },
                   ],
                 },
               ]
             : []),
         ],
       },
-      orderBy: [{ updatedAt: "desc" }, { messageId: "desc" }],
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       select: { ...overviewSelection(userId), updatedAt: true },
     });
@@ -302,8 +304,7 @@ export class TaskOverviewReads {
     const last = rows.at(-1);
     return {
       tasks: rows.map((task) => overviewRow(task, userId)),
-      nextCursor:
-        tasks.length > limit && last ? finishedCursor(last.updatedAt, last.messageId) : null,
+      nextCursor: tasks.length > limit && last ? finishedCursor(last.updatedAt, last.id) : null,
     };
   }
 

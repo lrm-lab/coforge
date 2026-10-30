@@ -70,6 +70,8 @@ export class PrismaWorkspaceMemoryCatalog implements WorkspaceMemoryCatalog {
             where: {
               workspaceId,
               status: "done",
+              // Memory reads a finished task through its message; one without a message has none.
+              messageId: { not: null },
               conversationId: { in: conversationIds },
               ...updatedAfter,
             },
@@ -85,7 +87,9 @@ export class PrismaWorkspaceMemoryCatalog implements WorkspaceMemoryCatalog {
     return {
       conversations,
       messages: messages.map(toAdmissionMessage),
-      tasks,
+      tasks: tasks.flatMap((task) =>
+        task.messageId ? [{ ...task, messageId: task.messageId }] : [],
+      ),
     };
   }
 

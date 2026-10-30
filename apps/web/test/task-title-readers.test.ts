@@ -58,7 +58,7 @@ describe("a title change in a Task's history", () => {
     const [change] = taskChanges(task(converted), task(`${converted} today`, 2));
     return {
       id: "event-1",
-      taskMessageId: "message-1",
+      taskId: "message-1",
       seq: 1,
       actorType: "user",
       actorName: "ada-9d3",

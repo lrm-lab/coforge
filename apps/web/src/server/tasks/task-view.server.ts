@@ -44,6 +44,7 @@ export const TASK_MEMBER_SELECT = {
 } satisfies Prisma.ConversationMemberSelect;
 
 export const taskSelection = {
+  id: true,
   messageId: true,
   conversationId: true,
   workspaceId: true,
@@ -75,6 +76,18 @@ export const taskSelection = {
 } satisfies Prisma.TaskSelect;
 
 export type SelectedTask = Prisma.TaskGetPayload<{ select: typeof taskSelection }>;
+
+/** The message a Task started as, in its channel. Every Task made so far has one; a Task made under
+ * task conversations posts none, and the code that works from the message does not take it. */
+export function hostMessageId(task: { messageId: string | null }): string {
+  if (!task.messageId) throw new AppError("INTERNAL_ERROR");
+  return task.messageId;
+}
+
+/** The mention rows of the message a Task's title was written in; none without a message. */
+export function taskMentions(task: Pick<SelectedTask, "message">) {
+  return task.message?.mentions ?? [];
+}
 
 /** The statuses a Task finishes in. The board counts and pages them apart from the work in flight. */
 export const FINISHED_TASK_STATUSES = ["done", "closed"] as const;
@@ -159,12 +172,12 @@ export function readTaskText(
 export function taskView(task: SelectedTask, reader: TaskReader = "people"): TaskView {
   const resourceReceipt = task.resourceReceipt;
   return {
-    messageId: task.messageId,
+    messageId: task.id,
     conversationId: task.conversationId,
     number: task.number,
     // A title converted from a message keeps that message's stored tokens; they read back as text
     // for whoever reads the Task.
-    title: readTaskText(task.title, reader, task.message.mentions),
+    title: readTaskText(task.title, reader, taskMentions(task)),
     description: task.description,
     status: storedTaskStatus(task.status),
     revision: task.revision,

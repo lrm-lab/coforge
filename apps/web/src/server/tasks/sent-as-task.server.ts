@@ -28,6 +28,7 @@ export async function createMessageTask(
   if (allocated[0]?.number === undefined) throw new AppError("NOT_FOUND");
   const task = await tx.task.create({
     data: {
+      id: message.id,
       messageId: message.id,
       conversationId: message.conversationId,
       workspaceId: message.workspaceId,
@@ -38,7 +39,7 @@ export async function createMessageTask(
     select: taskSelection,
   });
   await tx.taskHistoryEvent.createMany({
-    data: historyRows(task.messageId, creator, creationChanges(task), 0),
+    data: historyRows(task.id, creator, creationChanges(task), 0),
   });
   return task;
 }
