@@ -26,6 +26,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `phase-bookkeeping.ts` holds each phase's open state and stale watchdog per Agent: providers report raw signals, it decides the wire Activity and closes a review silently at a turn's end.
 - `runtime-event-observation.ts` translates one coalesced provider event into cloud Activity, Session and usage updates; `runtime.ts` supplies the collaborators it reads by reference.
 - `agent-input-drain.ts` owns each Agent's serialized input queue: enqueue is admission, one drain loop is the only consumer, and a closed queue settles its live drain. `agent-launch-custody.ts` owns what the daemon owes a launch at its boundary: delivery custody acknowledgment, the recovery pass that reconciles held state, and turn-open bookkeeping.
+- `agent-rebind.ts` is `AgentControl.start()`'s one seam for rebinding an already-running process to a newer control scope: launch and session references are re-pointed in place and the Session and `agent:status` are re-reported; nothing is spawned or stopped.
 - `agent-environment-activity.ts` names the Agent environment variables a launch had to skip (`code-agent/environment.ts`), so a stored value the rule refuses is reported rather than deleted.
 - A start that fails stops its transport before replacing it, so a connection
   that came up never keeps reporting the Computer online for a Workspace that
