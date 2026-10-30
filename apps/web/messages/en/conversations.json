@@ -50,6 +50,7 @@
   "conversation_system_group_separator": ", ",
   "messages_title": "Messages",
   "messages_agents_action": "Direct Messages",
+  "conversation_new": "New",
   "conversation_start_direct": "New Direct Message",
   "conversation_opening_direct": "Opening conversation…",
   "messages_empty_title": "Choose a conversation",

@@ -22,9 +22,11 @@ import {
 } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 
 export type WorkspaceRecord = { id: string; slug: string; name: string; iconUrl: string | null };
+/** A Workspace the User belongs to, with their role in it. */
+export type MemberWorkspaceRecord = WorkspaceRecord & { role: string };
 
 export type WorkspaceCatalogStore = {
-  listForUser(userId: string): Promise<WorkspaceRecord[]>;
+  listForUser(userId: string): Promise<MemberWorkspaceRecord[]>;
   createForUser(input: { slug: string; name: string; userId: string }): Promise<WorkspaceRecord>;
   rename(workspaceId: string, name: string): Promise<WorkspaceRecord>;
   /** Moves the Workspace to `slug` and keeps its current slug as a former one, which goes on
@@ -55,11 +57,14 @@ function acceptableSlug(slug: string): string {
 export class WorkspaceCatalog {
   constructor(private readonly store: WorkspaceCatalogStore) {}
 
-  listForUser(userId: string): Promise<WorkspaceRecord[]> {
+  listForUser(userId: string): Promise<MemberWorkspaceRecord[]> {
     return this.store.listForUser(userId);
   }
 
-  async selectForUser(userId: string, preferredSlug?: string): Promise<WorkspaceRecord | null> {
+  async selectForUser(
+    userId: string,
+    preferredSlug?: string,
+  ): Promise<MemberWorkspaceRecord | null> {
     return pickWorkspace(await this.store.listForUser(userId), preferredSlug);
   }
 
@@ -130,12 +135,12 @@ export class PrismaWorkspaceCatalogStore implements WorkspaceCatalogStore {
   constructor(private readonly db: PrismaClient) {}
 
   async listForUser(userId: string) {
-    const rows = await this.db.workspace.findMany({
-      where: { members: { some: { userId } } },
-      select: workspaceSelect,
-      orderBy: { createdAt: "asc" },
+    const memberships = await this.db.workspaceMembership.findMany({
+      where: { userId },
+      select: { role: true, workspace: { select: workspaceSelect } },
+      orderBy: { workspace: { createdAt: "asc" } },
     });
-    return rows.map(workspaceRecord);
+    return memberships.map(({ role, workspace }) => ({ ...workspaceRecord(workspace), role }));
   }
 
   async createForUser(input: { slug: string; name: string; userId: string }) {

@@ -17,7 +17,7 @@ export const HIDE_EMPTY_SIDEBAR_SECTIONS_BOOT = bootFragment({
  * in full so Tailwind finds it; the class it names is `HIDE_CLASS`. */
 export const EMPTY_SECTION_HIDDEN_CLASS = "[.sidebar-hide-empty_&]:hidden";
 
-/** Per-device preference: hide empty sections without creation actions (Pinned). Off
+/** Per-device preference: hide empty sections other than Channels and Direct messages. Off
  *  unless this device stored the hidden value; applied as a class on <html> (also by the boot
  *  script). The setting is named after hiding, while the shared flag stores "shown" as its absence
  *  of a hidden value, so the two invert here rather than in storage: a device that stored either

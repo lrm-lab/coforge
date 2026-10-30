@@ -47,6 +47,7 @@
   "conversation_system_group_separator": "、",
   "messages_title": "消息",
   "messages_agents_action": "私聊",
+  "conversation_new": "新建",
   "conversation_start_direct": "新建私聊",
   "conversation_opening_direct": "正在打开会话…",
   "messages_empty_title": "选择一个会话",

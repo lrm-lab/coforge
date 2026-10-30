@@ -16,10 +16,9 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   and a group move saves one conversation's destination and the next conversation there; unseen rows survive. Channels and Direct messages keep their natural order.
 - `directory-drag.tsx` owns row/group sensors, overlays and drop targets; `pinned-conversations.ts` owns the layout rules. Drag conversations by the row and groups by the heading, without separate handles or tooltips. Custom groups and their rows have saved orders.
 - Direct messages list the viewer's existing DM conversations only, with Agents and members mixed in the order they started: a conversation starts
-  from a "Message" affordance (`useOpenDirectConversation`, which opens or starts it and goes to `dm/<conversationId>`). The Direct messages "+" opens
-  a searchable Agent and Human picker in Chat, using that same seam. Link to a DM by its conversation id; only a "start" affordance knows just an Agent or
+  from a "Message" affordance (`useOpenDirectConversation`, which opens or starts it and goes to `dm/<conversationId>`). The Chat header's one "+" menu
+  (`new-conversation-menu.tsx`) creates a channel, a DM (an Agent and Human picker using that seam) or, if the role allows, a cloud Agent. Link to a DM by its conversation id; only a "start" affordance knows just an Agent or
   a member. Every DM row, its pin, menu actions, unread badge and read-cursor key go by conversation id (`dm:<conversationId>` for the cursor).
-  Headers with creation actions stay visible even when their lists are empty.
 - The sidebar's channel and DM lists live in `sidebar-collections.ts` (collections and changes, tested without React) and `sidebar-lists.ts` (hooks). The chat layout's (`_chat`) loader fetches
   them, in the browser, into the TanStack Query cache (a later page load restores the browser's copy first, `../cache-persistence/`); the same keys back TanStack DB
   collections. Every channel's name (`channelNamesQuery`, for body channel links

@@ -31,6 +31,7 @@ import {
 } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { CreateChannelDialog } from "./create-channel-dialog";
+import { NewConversationMenu } from "./new-conversation-menu";
 import {
   channelNamesQuery,
   directConversationQuery,
@@ -265,6 +266,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                     />
                   </>
                 }
+                actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
               />
               {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
                   row and the bookmark path is inset another 0.125rem, so the rule
@@ -278,7 +280,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   selectedChannelId={channel?.channelId}
                   selectedDmId={openDm?.dmId}
                   selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
-                  onCreateChannel={() => setCreating(true)}
                 />
               </div>
               <ConversationListResizeHandle />

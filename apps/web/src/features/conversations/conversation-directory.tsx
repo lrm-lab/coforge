@@ -1,10 +1,9 @@
-import { Bookmark, Hash01 as Hash, Pin01, Plus } from "@untitledui/icons";
+import { Bookmark, Hash01 as Hash, Pin01 } from "@untitledui/icons";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
 import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
@@ -14,7 +13,6 @@ import { ConversationRow } from "./conversation-row";
 import { DirectAgentAvatar } from "./direct-agent-avatar";
 import { useChannelUnreadCounts } from "./conversation-navigation";
 import { DIRECTORY_INSET, DirectoryEmptyNote, DirectorySection } from "./directory-section-group";
-import { StartDirectMessagePopover } from "./start-direct-message-popover";
 import { useSavedEntries } from "./conversation-host";
 import { ConversationRowMenu } from "./conversation-row-menu";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
@@ -93,7 +91,6 @@ export function ConversationDirectory({
   selectedChannelId,
   selectedDmId,
   selectedSaved,
-  onCreateChannel,
 }: {
   channels: DirectoryChannel[];
   agents: LiveAgent[];
@@ -107,8 +104,6 @@ export function ConversationDirectory({
   selectedDmId?: string;
   /** The Saved view is open — its sidebar entry renders as the current row. */
   selectedSaved?: boolean;
-  /** Opens the create-channel flow from the "+" next to the CHANNELS caption. */
-  onCreateChannel?: () => void;
 }) {
   const unreadCounts = useChannelUnreadCounts();
   const savedCount = useSavedEntries()?.length;
@@ -533,19 +528,6 @@ export function ConversationDirectory({
                     headingProps={headingProps}
                     expanded={!drag.sortingSections && !collapsed.includes("channels")}
                     onToggle={() => toggle("channels")}
-                    action={
-                      onCreateChannel ? (
-                        <ButtonUtility
-                          icon={Plus}
-                          size="xs"
-                          color="tertiary"
-                          tooltip={m.channel_create()}
-                          aria-label={m.channel_create()}
-                          onClick={onCreateChannel}
-                          className="shrink-0 hover:bg-transparent!"
-                        />
-                      ) : null
-                    }
                   >
                     <div className={DIRECTORY_INSET}>
                       <DirectoryDropList
@@ -580,7 +562,6 @@ export function ConversationDirectory({
                     headingProps={headingProps}
                     expanded={!drag.sortingSections && !collapsed.includes("agents")}
                     onToggle={() => toggle("agents")}
-                    action={<StartDirectMessagePopover />}
                   >
                     <div className={DIRECTORY_INSET}>
                       <DirectoryDropList

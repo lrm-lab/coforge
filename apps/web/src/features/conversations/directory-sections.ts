@@ -42,7 +42,7 @@ export function writeCollapsedSections(ids: CollapsibleSectionId[]) {
  * no rows. While a row is dragged, a section that takes drops (Pinned) comes back so the row can
  * be dropped into it. Counts come from the lists as they were when the drag started, so a
  * section the row was dragged out of stays until it is dropped. The setting itself is a class on
- * <html> (`features/settings/hide-empty-sidebar-sections.ts`); sections with creation actions stay
+ * <html> (`features/settings/hide-empty-sidebar-sections.ts`); Channels and Direct messages stay
  * visible.
  */
 export function directorySectionHideable({

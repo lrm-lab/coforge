@@ -19,8 +19,8 @@ test("lists the User's Workspaces in creation order", async () => {
     slug: "grace",
   });
   expect(await catalog.listForUser(ada)).toEqual([
-    { id: "workspace-ada", slug: "ada", name: "Ada's Workspace", iconUrl: null },
-    { id: "workspace-research", slug: "research", name: "Research", iconUrl: null },
+    { id: "workspace-ada", slug: "ada", name: "Ada's Workspace", iconUrl: null, role: "owner" },
+    { id: "workspace-research", slug: "research", name: "Research", iconUrl: null, role: "owner" },
   ]);
 });
 
@@ -33,6 +33,7 @@ test("selects the preferred Workspace when the User is a member", async () => {
     slug: "research",
     name: "Research",
     iconUrl: null,
+    role: "owner",
   });
 });
 
@@ -45,12 +46,14 @@ test("falls back to the earliest Workspace when the preference is missing", asyn
     slug: "ada",
     name: "Ada's Workspace",
     iconUrl: null,
+    role: "owner",
   });
   expect(await catalog.selectForUser(ada)).toEqual({
     id: "workspace-ada",
     slug: "ada",
     name: "Ada's Workspace",
     iconUrl: null,
+    role: "owner",
   });
 });
 
@@ -101,7 +104,7 @@ test("an owner or admin renames the Workspace to the trimmed name", async () => 
   });
   await catalog.rename(workspace.id, "admin", "Grace's Lab");
   expect(await catalog.listForUser(ada)).toEqual([
-    { id: "workspace-ada", slug: "ada", name: "Grace's Lab", iconUrl: null },
+    { id: "workspace-ada", slug: "ada", name: "Grace's Lab", iconUrl: null, role: "owner" },
   ]);
 });
 
@@ -146,7 +149,7 @@ test("only the owner changes the Workspace URL, and the old one keeps naming it"
     iconUrl: null,
   });
   expect(await catalog.listForUser(ada)).toEqual([
-    { id: workspace.id, slug: "ada", name: "Ada's Workspace", iconUrl: null },
+    { id: workspace.id, slug: "ada", name: "Ada's Workspace", iconUrl: null, role: "owner" },
   ]);
 });
 
@@ -215,7 +218,7 @@ function memoryStore(): WorkspaceCatalogStore {
       return ids
         .map((id) => workspaces.find((workspace) => workspace.id === id))
         .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace))
-        .map((workspace) => ({ ...workspace }));
+        .map((workspace) => ({ ...workspace, role: "owner" }));
     },
     async createForUser(input) {
       if (taken(input.slug)) throw unique();

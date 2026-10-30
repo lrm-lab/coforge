@@ -1,4 +1,5 @@
 import { recoverWorkspaceResourcesOnOpen } from "#src/server/workspaces/resource-recovery.server";
+import { canCreateAgents } from "#src/server/workspaces/member-role.server";
 import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
@@ -68,7 +69,7 @@ export const loadWorkspaceSwitcher = createServerFn({ method: "GET" })
     const current = workspaces.find((workspace) => workspace.id === workspaceId)!;
     if (preferredWorkspaceSlugFromRequest() !== current.slug)
       writePreferredWorkspaceSlug(current.slug);
-    return { workspaces, current };
+    return { workspaces, current, canCreateAgents: canCreateAgents(current.role) };
   });
 
 export const loadMemberDirectorySummary = createServerFn({ method: "GET" })

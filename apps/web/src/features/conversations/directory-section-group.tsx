@@ -32,7 +32,6 @@ export function DirectorySection({
   icon: Icon,
   expanded,
   onToggle,
-  action,
   headingProps,
   wrapTitle,
   children,
@@ -50,9 +49,6 @@ export function DirectorySection({
   /** Absent on a section that cannot collapse: its rows are always shown, and its title row is
    * not a control at all, so it draws no chevron and takes no hover highlight. */
   onToggle?: () => void;
-  /** Optional trailing control on the header row, e.g. a "+" that creates a channel. It sits
-   * outside the toggle button so it is its own click target, not part of collapsing. */
-  action?: ReactNode;
   /** The title row's drag activation, when the section can be dragged to a new place. */
   headingProps?: DirectoryDragActivation;
   /** Wraps the title's toggle, e.g. in the section's context menu (`ChatSectionMenu`). */
@@ -128,7 +124,6 @@ export function DirectorySection({
               {title}
             </span>
           )}
-          {action}
         </div>
       </div>
       {/* Kept mounted but hidden: collapsing must not throw away the rows' realtime state. A

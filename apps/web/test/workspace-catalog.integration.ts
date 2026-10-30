@@ -58,7 +58,7 @@ test("renaming a Workspace stores the new name for every member and keeps its sl
     };
     expect(renamed).toEqual(expected);
     const listed = await store.listForUser(member!.id);
-    expect(listed.find((row) => row.id === workspace!.id)).toEqual(expected);
+    expect(listed.find((row) => row.id === workspace!.id)).toEqual({ ...expected, role: "member" });
     expect(listed.find((row) => row.id === other!.id)?.name).toBe("untouched");
   } finally {
     // Setup may have stopped part way, so clean up by the run's suffix rather than by created rows.

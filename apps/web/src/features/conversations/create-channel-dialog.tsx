@@ -1,6 +1,4 @@
 import { useId, useMemo, useRef, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import { XClose } from "@untitledui/icons";
 import { Checkbox as AriaCheckbox, Heading, Text } from "react-aria-components";
@@ -11,8 +9,6 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox, CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { loadWorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
@@ -31,6 +27,7 @@ import {
   type CreatedChannel,
   type CreateChannelOutcome,
 } from "./create-channel-outcome";
+import { useWorkspaceDirectory } from "./workspace-directory-query";
 
 /** The `user:<id>` / `agent:<id>` keys an Agent-prepared card preselects. */
 function initialKeys(initialMembers: CreateChannelDialogProps["initialMembers"]) {
@@ -81,13 +78,7 @@ export function CreateChannelDialog({
   memberPicker = false,
   minMembers = 0,
 }: CreateChannelDialogProps) {
-  const workspaceId = useCurrentWorkspaceId();
-  const load = useServerFn(loadWorkspaceDirectory);
-  const directory = useQuery({
-    queryKey: ["direct-message-directory", workspaceId],
-    queryFn: () => load(),
-    enabled: memberPicker && open && !!workspaceId,
-  });
+  const directory = useWorkspaceDirectory({ enabled: memberPicker && open });
   const candidates = useMemo(
     () => (directory.data ? buildGroupChatCandidates(directory.data) : []),
     [directory.data],
