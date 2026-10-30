@@ -1,5 +1,9 @@
 import type { TaskPrincipal } from "@lrm/coforge-sdk/internal";
 
+import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
+import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
+import type { AgentMessagesPage } from "#src/server/agents/agent-messages.server";
+
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
@@ -171,6 +175,53 @@ export class TaskConversations {
     });
   }
 
+  /**
+   * The conversation as an Agent reads it: the same pages, anchors and read position as a message
+   * read, over the task's own conversation. An Agent that follows the task takes a bookkeeping seat
+   * there, as for attachment comments; the seat is never authority, the board's channel is.
+   */
+  async read(principal: TaskPrincipal, ref: TaskConversationRef, page: AgentMessagesPage) {
+    if (!principal.agentId) throw new AppError("ACCESS_DENIED");
+    const agentId = principal.agentId;
+    const { task, boardName } = await this.resolve(principal, ref, { member: true });
+    if (!task.discussionConversationId)
+      return { messages: [], hasOlder: false, hasNewer: false, modelSeenUpToSeq: null };
+    const conversationId = task.discussionConversationId;
+    const db = this.ports.db;
+    await db.conversationMember.upsert({
+      where: { conversationId_agentId: { conversationId, agentId } },
+      create: { workspaceId: principal.workspaceId, conversationId, agentId },
+      update: {},
+    });
+    const result = await readAgentMessagePage(db, {
+      workspaceId: principal.workspaceId,
+      agentId,
+      conversationId,
+      threadRootId: null,
+      canonicalTarget: `${boardName}:#${task.number}`,
+      isChannel: false,
+      isUserAgentDirectConversation: false,
+      page,
+      resolveAnchor: async (value) => {
+        const rows = await db.message.findMany({
+          where: { conversationId, id: messageAnchorWhere(value) },
+          take: 2,
+          select: { id: true, sequence: true, threadRootId: true },
+        });
+        if (rows.length > 1) throw new AppError("INVALID_INPUT");
+        if (!rows[0]) throw new AppError("NOT_FOUND");
+        return rows[0];
+      },
+    });
+    return {
+      ...result,
+      messages: result.messages.map((message) => ({
+        ...message,
+        createdAt: message.createdAt.toISOString(),
+      })),
+    };
+  }
+
   async follow(principal: TaskPrincipal, ref: TaskConversationRef) {
     const { task, member, scope, boardName } = await this.resolve(principal, ref, { member: true });
     const created = await this.ports.db.taskFollow.createMany({
@@ -220,6 +271,7 @@ export class TaskConversations {
             number: true,
             title: true,
             status: true,
+            discussionConversationId: true,
             conversation: {
               select: {
                 channelName: true,
@@ -234,14 +286,33 @@ export class TaskConversations {
         },
       },
     });
-    return rows.map((row) => ({
-      taskRef: `${boardLabel(row.task.conversation.channelName, row.task.conversation.members[0]?.user?.username)}:#${row.task.number}`,
-      taskNumber: row.task.number,
-      title: row.task.title,
-      status: row.task.status,
-      followedAt: row.createdAt.toISOString(),
-      reason: row.reason as TaskFollowReason,
-    }));
+    return Promise.all(
+      rows.map(async (row) => ({
+        taskRef: `${boardLabel(row.task.conversation.channelName, row.task.conversation.members[0]?.user?.username)}:#${row.task.number}`,
+        taskNumber: row.task.number,
+        title: row.task.title,
+        status: row.task.status,
+        unread: await this.unread(row.task.discussionConversationId, principal),
+        followedAt: row.createdAt.toISOString(),
+        reason: row.reason as TaskFollowReason,
+      })),
+    );
+  }
+
+  /** What others wrote in the task's conversation past this Agent's read position. */
+  private async unread(conversationId: string | null, principal: TaskPrincipal) {
+    if (!conversationId || !principal.agentId) return 0;
+    const seat = await this.ports.db.conversationMember.findUnique({
+      where: { conversationId_agentId: { conversationId, agentId: principal.agentId } },
+      select: { id: true, agentReadThroughSequence: true },
+    });
+    return this.ports.db.message.count({
+      where: {
+        conversationId,
+        sequence: { gt: seat?.agentReadThroughSequence ?? 0 },
+        ...(seat ? { OR: [{ senderMemberId: null }, { senderMemberId: { not: seat.id } }] } : {}),
+      },
+    });
   }
 
   private async resolve(

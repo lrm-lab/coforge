@@ -195,3 +195,43 @@ test("a member who left the board can no longer reply", async () => {
     data: { leftAt: null },
   });
 });
+
+test("a follower reads the conversation, and reading moves what is unread", async () => {
+  // Earlier tests left `peer` following with messages from `worker`; start from a fresh count.
+  const before = (await conversations.following(as("peer")))[0]!;
+  expect(before.unread).toBeGreaterThan(0);
+
+  const page = await conversations.read(as("peer"), ref, { unread: true });
+  expect(page.messages.length).toBe(before.unread);
+  expect(page.messages.every((message) => message.target === `#${channelName}:#1`)).toBe(true);
+  // What peer wrote itself is consumed without being listed.
+  expect(page.messages.every((message) => message.senderHandle !== agents.peer.name)).toBe(true);
+
+  const after = (await conversations.following(as("peer")))[0]!;
+  expect(after.unread).toBe(0);
+  const empty = await conversations.read(as("peer"), ref, { unread: true });
+  expect(empty.messages).toEqual([]);
+
+  await conversations.reply(as("worker"), ref, { body: "one more" });
+  expect((await conversations.following(as("peer")))[0]!.unread).toBe(1);
+});
+
+test("a task nobody has replied to reads as empty, and an outsider cannot read", async () => {
+  const quiet = await db.task.create({
+    data: {
+      conversationId: channelId,
+      workspaceId,
+      number: 2,
+      title: "Quiet",
+      creatorMemberId: agents.worker.memberId,
+    },
+  });
+  expect(await conversations.read(as("worker"), { ...ref, number: 2 }, {})).toMatchObject({
+    messages: [],
+    hasOlder: false,
+  });
+  await expect(conversations.read(as("outsider"), ref, {})).rejects.toMatchObject({
+    code: "NOT_FOUND",
+  });
+  await db.task.delete({ where: { id: quiet.id } });
+});

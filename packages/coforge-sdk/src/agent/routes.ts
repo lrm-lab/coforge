@@ -31,6 +31,7 @@ const INBOX_LIST_ROUTE = {
  * routes under `proxy`, `local` and `cloud`. */
 const TASK_CONVERSATION_ROUTES = {
   view: { method: "GET", path: "/api/agent/v1/tasks/view" },
+  read: { method: "GET", path: "/api/agent/v1/tasks/read" },
   following: { method: "GET", path: "/api/agent/v1/tasks/following" },
   reply: { method: "POST", path: "/api/agent/v1/tasks/reply" },
   follow: { method: "POST", path: "/api/agent/v1/tasks/follow" },

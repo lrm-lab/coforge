@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { AppError } from "#src/lib/app-error";
 import {
   handleTaskFollowingGet,
+  handleTaskReadGet,
   handleTaskFollowPost,
   handleTaskReplyPost,
   handleTaskUnfollowPost,
@@ -19,6 +20,7 @@ const record =
   };
 const service = {
   view: record("view", { taskRef: "#c:#7" }),
+  read: record("read", { messages: [] }),
   reply: record("reply", { messageId: "m" }),
   follow: record("follow", { following: true, changed: true }),
   unfollow: record("unfollow", { following: false, changed: true }),
@@ -174,4 +176,27 @@ test("with the experiment off every route answers 404 and names the setting", as
     expect(body.error).toContain("Settings → Experiments");
   }
   expect(calls.length).toBe(before);
+});
+
+test("read passes the page window and the unread flag, and bounds the limit", async () => {
+  const response = await handleTaskReadGet(
+    new Request("http://x/?channel=%23c&task_number=7&unread=true&limit=10&before=abc12345"),
+    principal,
+    service as never,
+    on,
+  );
+  expect(await response.json()).toEqual({ messages: [] });
+  expect(calls.at(-1)).toEqual([
+    "read",
+    principal,
+    { target: "#c", number: 7 },
+    { before: "abc12345", limit: 10, unread: true },
+  ]);
+  const tooMany = await handleTaskReadGet(
+    new Request("http://x/?channel=%23c&task_number=7&limit=101"),
+    principal,
+    service as never,
+    on,
+  );
+  expect(tooMany.status).toBe(400);
 });

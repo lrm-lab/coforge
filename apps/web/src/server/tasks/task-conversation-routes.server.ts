@@ -18,7 +18,10 @@ export type TaskConversationsGate = () => Promise<boolean>;
 
 const OFF_MESSAGE =
   "Task conversations are not turned on for this Agent's owner. Turn on Task conversations in Settings → Experiments to use this command.";
-type Service = Pick<TaskConversations, "view" | "reply" | "follow" | "unfollow" | "following">;
+type Service = Pick<
+  TaskConversations,
+  "view" | "read" | "reply" | "follow" | "unfollow" | "following"
+>;
 
 const refSchema = z.object({
   channel: z.string().min(1),
@@ -74,6 +77,40 @@ export async function handleTaskViewGet(
     const ref = queryRef(request);
     const limit = limitSchema.parse(new URL(request.url).searchParams.get("limit") ?? undefined);
     return Response.json(await service.view(principal, asRef(ref), { limit }));
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+const readQuerySchema = z.object({
+  before: z.string().min(1).optional(),
+  after: z.string().min(1).optional(),
+  around: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  unread: z.enum(["true", "false"]).optional(),
+});
+
+export async function handleTaskReadGet(
+  request: Request,
+  principal: Principal,
+  service: Service,
+  gate: TaskConversationsGate,
+) {
+  try {
+    await requireOn(gate);
+    const ref = queryRef(request);
+    const query = new URL(request.url).searchParams;
+    const page = readQuerySchema.parse(
+      Object.fromEntries(
+        ["before", "after", "around", "limit", "unread"].flatMap((name) =>
+          query.has(name) ? [[name, query.get(name)]] : [],
+        ),
+      ),
+    );
+    const { unread, ...range } = page;
+    return Response.json(
+      await service.read(principal, asRef(ref), { ...range, ...(unread === "true" && { unread: true }) }),
+    );
   } catch (error) {
     return failure(error);
   }
