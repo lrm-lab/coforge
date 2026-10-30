@@ -29,9 +29,6 @@ test("an unread read of one message names its seq and moves the read position", 
     "Unread window: 1 returned, seq 6, oldest to newest, starting after your read position (seq 3).",
   );
   expect(lines[1]).toStartWith("Coverage: top-level messages");
-  expect(output).toContain(
-    `Read position: seq 3 → 6. To re-read these: coforge message read --target "#general" --after 3`,
-  );
   expect(output.endsWith("No more unread in this target.")).toBe(true);
 });
 
@@ -157,13 +154,13 @@ test("a plain read prints no cursor line when the read position did not advance"
   expect(output).not.toContain("Read position");
 });
 
-test("a plain latest read reports when it advanced the server read position", () => {
+test("a plain latest read reports no cursor line, even when the position advanced", () => {
   const output = formatReadWindow(
     "#general",
     { messages: [message(4)], unreadCursorBefore: 1, readPositionAfter: 4 },
     {},
   );
-  expect(output).toContain("Read position: seq 1 → 4.");
+  expect(output).not.toContain("Read position");
   expect(output).not.toContain("unread cursor");
 });
 

@@ -19,6 +19,10 @@ export const AGENT_LAUNCH_APPS_MAX_COUNT = 20;
 export const AGENT_LAUNCH_APP_NAME_MAX_LENGTH = 80;
 export const AGENT_LAUNCH_APP_DESCRIPTION_MAX_LENGTH = 200;
 export const AGENT_LAUNCH_APP_WHEN_TO_USE_MAX_LENGTH = 160;
+
+/** The Agent profile description's cap: `profile update` refuses over it at the entry, and the
+ * launch identity parses with the same bound so nothing the entry accepted is dropped at launch. */
+export const AGENT_PROFILE_DESCRIPTION_MAX_LENGTH = 3000;
 /** The standing prompt's whole Apps section stays within this many UTF-8 bytes; the apps that do
  * not fit are counted on one line instead. */
 export const AGENT_LAUNCH_APPS_SECTION_MAX_BYTES = 4096;

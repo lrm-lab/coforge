@@ -12,7 +12,7 @@ import { AGENT_VISIBILITY, AGENT_VISIBILITY_VALUES } from "./agent-visibility";
 
 /** The Agent self-description cap, shared by the edit-form schema and the server's
  * self-service profile check so the two never disagree. */
-export const AGENT_PROFILE_DESCRIPTION_MAX_LENGTH = 3000;
+export { AGENT_PROFILE_DESCRIPTION_MAX_LENGTH } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 
 export const KEYED_MODEL_PROVIDERS = new Set([
   "deepseek",

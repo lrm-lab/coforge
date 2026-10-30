@@ -55,16 +55,9 @@ function foldedLine(target: string, response: ReadWindowResponse): string | unde
   return `${line} To see ${count === 1 ? "it" : "them"} again: coforge message read --target "${target}" --after ${response.unreadCursorBefore ?? 0}`;
 }
 
-/** The unread read's footer: where the read position moved (only when messages were shown and it
- * did), and whether more remain. */
-function unreadFooter(target: string, response: ReadWindowResponse, shown: boolean): string[] {
-  const before = response.unreadCursorBefore ?? 0;
-  const lines =
-    shown && readPositionMoved(response)
-      ? [
-          `Read position: seq ${before} → ${response.readPositionAfter}. To re-read these: coforge message read --target "${target}" --after ${before}`,
-        ]
-      : [];
+/** The unread read's footer: whether more remain past the last shown message. */
+function unreadFooter(target: string, response: ReadWindowResponse): string[] {
+  const lines: string[] = [];
   lines.push(
     response.moreUnread
       ? `More unread remain. Next: coforge message read --target "${target}" --unread`
@@ -107,12 +100,12 @@ export function formatReadWindow(
         response.moreUnread
           ? `No unread messages from others in ${target} up to seq ${through}.`
           : `No unread messages in ${target}. You have read through seq ${through}.`,
-        ...(response.moreUnread ? unreadFooter(target, response, false) : []),
+        ...(response.moreUnread ? unreadFooter(target, response) : []),
       ].join("\n");
     }
     return [
       `No new unread messages in ${target}. ${folded}`,
-      ...unreadFooter(target, response, false),
+      ...unreadFooter(target, response),
     ].join("\n");
   }
 
@@ -127,15 +120,6 @@ export function formatReadWindow(
       `Around: ${options.around}. Your read position did not move. To read new messages and mark them read, use --unread.`,
     );
   if (folded) lines.push(folded);
-  if (!options.unread && response.unreadCursorBefore !== undefined) {
-    const advanced =
-      response.readPositionAfter !== undefined &&
-      response.readPositionAfter > response.unreadCursorBefore;
-    if (advanced)
-      lines.push(
-        `Read position: seq ${response.unreadCursorBefore} → ${response.readPositionAfter}.`,
-      );
-  }
   const taskHint = formatTaskWorkflowHint(messages);
   if (taskHint) lines.push(taskHint);
   lines.push("");
@@ -154,6 +138,6 @@ export function formatReadWindow(
   lines.push(`End of window: ${messages.length}/${messages.length} shown.`);
   const dmHint = formatAgentDmHint(messages);
   if (dmHint) lines.push(dmHint);
-  if (options.unread) lines.push(...unreadFooter(target, response, true));
+  if (options.unread) lines.push(...unreadFooter(target, response));
   return lines.join("\n");
 }

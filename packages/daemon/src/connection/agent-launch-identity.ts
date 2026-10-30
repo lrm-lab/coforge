@@ -1,11 +1,12 @@
 import {
   normalizeAgentLaunchApps,
+  AGENT_PROFILE_DESCRIPTION_MAX_LENGTH,
   type AgentLaunchApp,
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
 
 const IDENTITY_NAME_MAX_LENGTH = 80;
-const IDENTITY_DESCRIPTION_MAX_LENGTH = 2000;
+const IDENTITY_DESCRIPTION_MAX_LENGTH = AGENT_PROFILE_DESCRIPTION_MAX_LENGTH;
 const IDENTITY_OTHER_MAX_LENGTH = 200;
 
 /** A trimmed, length-capped wire string, or `undefined` for anything else (wrong type, empty

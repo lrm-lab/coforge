@@ -73,12 +73,8 @@ test("the re-read command an unread read prints parses and asks the transport fo
     },
   } as unknown as MessageTransport;
   const unread = String(await run(["message", "read", "--target", "@ada", "--unread"], transport));
-  const hint = unread.split("\n").find((line) => line.includes("To re-read these:"));
-  const command = hint?.split("To re-read these: ")[1];
-  expect(command).toBeDefined();
-  // Run the printed command word for word, as an Agent would.
-  const argv = [...command!.matchAll(/"([^"]*)"|(\S+)/g)].map((match) => match[1] ?? match[2]!);
-  expect(argv[0]).toBe("coforge");
-  await run(argv.slice(1), transport);
-  expect(reads[1]).toEqual(["@ada", { command: "read", target: "@ada", after: "4" }]);
+  // 1.0.53 dropped the "Read position: seq A -> B. To re-read these: ..." line: an Agent re-reads
+  // with the same --unread command or an explicit --after, no printed command to replay.
+  expect(unread).not.toContain("To re-read these:");
+  expect(unread).not.toContain("Read position:");
 });
