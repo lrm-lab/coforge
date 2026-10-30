@@ -13,11 +13,12 @@ import { handleAttachmentDownload } from "#src/routes/api/attachments.$attachmen
 
 function fakeStorage(
   open?: () => Promise<{ body: Blob; contentType: string | null; sizeBytes: number }>,
+  head: () => Promise<{ sizeBytes: number; contentType: string | null } | null> = async () => null,
 ) {
   return async () => ({
     put: async () => {},
     remove: async () => {},
-    head: async () => null,
+    head,
     open:
       open ??
       (async () => {
