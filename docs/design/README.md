@@ -19,6 +19,6 @@
 - [11. 颜色、状态、排版与深色模式](color-status-typography.md): 颜色、品牌紫的使用位置、按钮与危险操作、状态徽章、排版与深色模式。
 - [12. 尺寸单位：rem 与 px](sizing-units.md): 尺寸单位：影响排版和阅读的尺寸用 rem，细线用 px；例外范围与存量清单。
 - [13. 反馈：toast 还是内联](toast-vs-inline.md): 反馈用 toast 还是内联：主流设计系统的共识与 CoForge 的应用。
-- [14. 字体与字号](typography.md): 字体（Inter / Noto Sans SC / JetBrains Mono）、八档字号与行高、使用场景，以及系统现状审查。
+- [14. 字体与字号](typography.md): 字体（Inter / 系统中文字体 / JetBrains Mono）、八档字号与行高、使用场景，以及系统现状审查。
 - [15. 色板](color-palette.md): 设计稿色板（黑灰、主色调、功能色）、与代码 token 的对照和未决差异。
 - [参考](references.md): 外部参考链接及各自的参考用途。

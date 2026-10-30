@@ -53,16 +53,17 @@
   width: min(var(--list-column-width, 23.75rem), 50%);
 }
 
-/* Inter has no CJK glyphs: Noto Sans SC is the Chinese UI font, with the installed
-   Microsoft YaHei / Noto Sans CJK SC as fallbacks (docs/design/typography.md).
-   Fonts are self-hosted via @fontsource so the app has no external font requests. */
+/* Inter has no CJK glyphs: Chinese uses the system's UI font (PingFang SC, Microsoft YaHei,
+   Noto Sans CJK SC), so it downloads nothing (docs/design/typography.md). PingFang SC is named
+   because macOS's own fallback can pick a Japanese font for Chinese on an English page.
+   Inter and JetBrains Mono are self-hosted via @fontsource, so there are no external font
+   requests. */
 @import "@fontsource-variable/inter";
-@import "@fontsource-variable/noto-sans-sc"; /* unicode-range slices, fetched on demand */
 @import "@fontsource-variable/jetbrains-mono"; /* --font-mono */
 
 @theme {
   --font-body:
-    "Inter Variable", "Noto Sans SC Variable", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Inter Variable", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans", Arial, sans-serif, "Apple Color Emoji",
     "Segoe UI Emoji", "Noto Color Emoji";
   --font-display: var(--font-body);

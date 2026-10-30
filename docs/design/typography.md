@@ -7,13 +7,13 @@
 | 用途 | 字体 | 回退 |
 | --- | --- | --- |
 | 英文 / 数字 | Inter | 系统无衬线 |
-| 中文 | Noto Sans SC（思源黑体简体中文） | Windows 回退微软雅黑；Linux 回退 Noto Sans CJK SC |
+| 中文 | 系统中文字体 | 见下方字体栈 |
 | 代码 | JetBrains Mono | 系统等宽 |
 
-- 字体栈：`Inter Variable` → `Noto Sans SC Variable` → 微软雅黑 → Noto Sans CJK SC。Inter 和 Noto Sans SC 都由 `@fontsource-variable` 自托管；Noto Sans SC 按 unicode-range 切成约 100 个 woff2，浏览器只下载页面用到的字，不要对它做 preload。
+- 字体栈：`Inter Variable` → 苹方 → 微软雅黑 → Noto Sans CJK SC。Inter 由 `@fontsource-variable` 自托管；中文不下载网页字体，用系统 UI 字体，消息流里汉字再多也不产生字体流量。苹方要写明：英文页面上 macOS 自己的回退可能给中文挑日文字形的字体。各平台中文字形不同（Mac 苹方、Windows 微软雅黑）是产品决定，不是偏差；微软雅黑只有常规和粗体，中文的 500 显示为常规、600 显示为粗体。
 - 定义在 `apps/web/src/styles.css`（`--font-body`、`--font-display`、`--font-mono`），不要在组件里写 `font-family`；代码和标识符用 `font-mono`，另外 Activity 行的相对时间按 Raft 设计稿也用 `font-mono`。`theme.css` 里的同名变量被它覆盖，不手改。
 - 落地页同样用这套栈（`font-display`）；仓库里没有 Geist，也没有单独的展示字体。
-- 字体许可是 OFL-1.1，随 npm 包分发；不要把字体文件拷进仓库。
+- Inter 和 JetBrains Mono 的许可是 OFL-1.1，随 npm 包分发；不要把字体文件拷进仓库。
 
 ## 字号与行高
 
@@ -46,6 +46,6 @@
 - **消息时间戳**：`message-row.tsx` 里悬停显示的时间用 `text-[length:0.75rem]` 加 `leading-[var(--text-md--line-height)]`，固定 12px，行高跟消息行一致，不随消息字号缩放。
 - **官方组件**：`components/base` 里 `avatar-count.tsx` 的 `text-[10px]` 保持上游原样；产品里没有任何地方给 `Avatar` 传 `count`，它不会出现在界面上。
 - **落地页**：`features/landing` 按冻结视觉保留，其中终端文字用 `text-xs`。
-- **沙箱 iframe**：报告编辑器里的 Mermaid 图在 `sandbox` iframe 里，加载不了应用的网页字体，只在 `srcDoc` 里列出本机同名字体（Inter、Noto Sans SC、微软雅黑、Noto Sans CJK SC）的精简栈，本机装有这些字体时才生效；HTML 预览 iframe 是用户自己的 HTML，不注入字体。
+- **沙箱 iframe**：报告编辑器里的 Mermaid 图在 `sandbox` iframe 里，加载不了应用的网页字体，只在 `srcDoc` 里列出本机同名字体（Inter、苹方、微软雅黑、Noto Sans CJK SC）的精简栈，本机装有这些字体时才生效；HTML 预览 iframe 是用户自己的 HTML，不注入字体。
 - **导出的周报 HTML**：独立文档，字体栈和字号档位按本节，但不加载字体文件，只依赖读者本机字体。
 - **编辑器字号选项**：14 / 16 / 18 / 20 / 24px，都在规范内，存成 px 的 mark。

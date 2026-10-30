@@ -205,7 +205,7 @@ function writeCachedLayout(chart: string, layout: MermaidLayout): void {
 
 // The sandboxed iframe has an opaque origin, so it cannot load the app's web fonts; this lists the
 // same stack so a machine that has Inter or a Chinese UI font installed still matches the app.
-const MERMAID_FONT_FAMILY = `"Inter", "Noto Sans SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif`;
+const MERMAID_FONT_FAMILY = `"Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif`;
 
 function buildSandboxedMermaidDocument(svg: string, host: HTMLElement | null): string {
   const cssVariables = getSandboxCssVariables(host);

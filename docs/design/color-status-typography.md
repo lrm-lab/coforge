@@ -35,7 +35,7 @@
 
 ## 排版
 
-- 字体与字号以[第 14 节](typography.md)为准：UI 字体 Inter，中文 Noto Sans SC，代码、终端、标识符用 JetBrains Mono。
+- 字体与字号以[第 14 节](typography.md)为准：UI 字体 Inter，中文用系统字体（苹方 / 微软雅黑 / Noto Sans CJK SC），代码、终端、标识符用 JetBrains Mono。
 - 时间戳和计数加 `tabular-nums`。
 
 ## 深色模式

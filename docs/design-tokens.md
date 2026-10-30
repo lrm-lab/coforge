@@ -102,8 +102,8 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 
 字体与字号规范见 [design §14](design/typography.md)。
 
-- `--font-body` / `--font-display`：Inter Variable（`@fontsource-variable/inter`）→ Noto Sans SC Variable
-  （`@fontsource-variable/noto-sans-sc`）→ `"Microsoft YaHei"`、`"Noto Sans CJK SC"`。
+- `--font-body` / `--font-display`：Inter Variable（`@fontsource-variable/inter`）→ 系统中文字体
+  `"PingFang SC"`、`"Microsoft YaHei"`、`"Noto Sans CJK SC"`（不下载中文网页字体）。
 - `--font-mono`：JetBrains Mono Variable（`@fontsource-variable/jetbrains-mono`）。
   落地页用的也是这套栈（`font-display`），不再单独加载展示字体。
 
