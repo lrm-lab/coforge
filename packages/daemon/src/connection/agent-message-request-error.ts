@@ -13,11 +13,16 @@ export class AgentMessageRequestError extends Error {
   /**
    * A known-safe validation message (400) becomes an `AgentMessageRequestError`, unchanged. Any
    * other non-2xx status is a genuine upstream HTTP failure and becomes a typed
-   * `AgentTransportError` so `agent-proxy-failure.ts` can classify it instead of parsing text.
+   * `AgentTransportError` so `agent-proxy-failure.ts` can classify it instead of parsing text; a
+   * 5xx whose body named its reason carries that reason along.
    */
-  static fromRpc(code: number, message: string): AgentMessageRequestError | AgentTransportError {
+  static fromRpc(
+    code: number,
+    message: string,
+    explained?: { error: string; code?: string; retryable?: boolean },
+  ): AgentMessageRequestError | AgentTransportError {
     return code === 400 && PUBLIC_AGENT_MESSAGE_ERRORS.has(message)
       ? new AgentMessageRequestError(message)
-      : AgentTransportError.upstreamHttpResponse("server agent request", code);
+      : AgentTransportError.upstreamHttpResponse("server agent request", code, explained);
   }
 }

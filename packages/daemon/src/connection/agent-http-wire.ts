@@ -99,10 +99,42 @@ export async function assertAgentResponseOk(response: Response, what: string): P
       upstream_body_snippet: body.length > 0 ? body.slice(0, 2000) : "<empty>",
     });
   }
+  // A 5xx whose body is exactly the Agent API's refusal shape named its own reason; the caller
+  // gets that reason and code instead of a generic proxy failure. Any other 5xx body (a stack
+  // trace, a gateway page) stays opaque.
   throw (
     AgentExplainedRefusalError.fromResponse(response.status, body) ??
-    AgentMessageRequestError.fromRpc(response.status, body)
+    AgentMessageRequestError.fromRpc(response.status, body, decodeServerRefusal(body))
   );
+}
+
+/** A stable UPPER_SNAKE code: what a caller's own `code` field may hold. */
+const STABLE_UPSTREAM_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+/**
+ * The `{ error, code?, retryable? }` a 5xx body names, or undefined. Unlike a 4xx refusal this
+ * tolerates other fields (a 5xx body may carry diagnostics beside the reason) but keeps each field
+ * to the same strict shape, so arbitrary text never becomes the caller's code.
+ */
+function decodeServerRefusal(
+  body: string,
+): { error: string; code?: string; retryable?: boolean } | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+  const fields = parsed as Record<string, unknown>;
+  if (typeof fields.error !== "string" || !fields.error.trim()) return undefined;
+  return {
+    error: fields.error,
+    ...(typeof fields.code === "string" && STABLE_UPSTREAM_CODE.test(fields.code)
+      ? { code: fields.code }
+      : {}),
+    ...(typeof fields.retryable === "boolean" ? { retryable: fields.retryable } : {}),
+  };
 }
 
 /**

@@ -1696,55 +1696,6 @@ test("a GitHub credential refused because GitHub needs reconnecting says who mus
   expect(error.suggestedNextAction).toContain("then retry the push");
 });
 
-/** The daemon's answer for an upstream 5xx: the cloud's named code (`causeCode`), or its own
- * `agent_proxy_failed` when the cloud named none. */
-const upstream5xx = (code: string, causeCode: string) =>
-  Response.json(
-    {
-      error:
-        code === "agent_proxy_failed"
-          ? "upstream HTTP response failed"
-          : "the server is temporarily unavailable; retry",
-      code,
-      proxy: {
-        correlation_id: "corr-unavailable",
-        route_family: "agent-api/github-credentials",
-        failure_class: "upstream_http_response",
-        cause_code: causeCode,
-        upstream_status: 503,
-        response_started: true,
-        response_complete: true,
-      },
-    },
-    { status: 503 },
-  );
-
-test("a GitHub credential the cloud cannot issue right now is retryable: the lookup changes nothing", async () => {
-  spyOn(globalThis, "fetch").mockResolvedValue(
-    upstream5xx("TEMPORARILY_UNAVAILABLE", "TEMPORARILY_UNAVAILABLE"),
-  );
-
-  const error = await githubCredentialFailure();
-  const text = renderCliErrorText(error);
-
-  expect(error).toMatchObject({
-    code: "SERVER_5XX",
-    message: "the server is temporarily unavailable; retry",
-    retryable: true,
-    correlationId: "corr-unavailable",
-    proxy: { upstreamStatus: 503 },
-  });
-  expect(text).toContain("Code: SERVER_5XX");
-  expect(text).toContain("Retryable: yes");
-  expect(text).toContain("Correlation: corr-unavailable");
-});
-
-test("a GitHub credential lookup that failed with a bare upstream 5xx is retryable", async () => {
-  spyOn(globalThis, "fetch").mockResolvedValue(upstream5xx("agent_proxy_failed", "HTTP_503"));
-
-  expect(await githubCredentialFailure()).toMatchObject({ code: "SERVER_5XX", retryable: true });
-});
-
 test("a GitHub credential lookup that never reached the proxy is retryable", async () => {
   spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
 

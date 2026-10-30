@@ -1165,9 +1165,8 @@ test("a GitHub credential the cloud refuses reaches the CLI with the cloud's sta
 });
 
 // A credential lookup is a read, so the cloud's named 5xx reaches the CLI as that status with the
-// code's public line (not a send's transport failure). The CLI names any upstream 5xx `SERVER_5XX`
-// and, the envelope's `retryable` not being relayed, marks this idempotent lookup's 5xx retryable
-// when it builds the error (`local-client.ts`).
+// server's own code and public line (not a generic proxy failure); the envelope's `retryable`
+// lets the CLI mark this idempotent lookup retryable (`local-client.ts`).
 test("a GitHub credential the cloud cannot issue right now reaches the CLI as the cloud's 503", async () => {
   const { error, logged, events } = await githubCredentialFailure(() =>
     Response.json(
@@ -1180,7 +1179,7 @@ test("a GitHub credential the cloud cannot issue right now reaches the CLI as th
     ),
   );
   expect(error).toMatchObject({
-    code: "SERVER_5XX",
+    code: "TEMPORARILY_UNAVAILABLE",
     message: "the server is temporarily unavailable; retry",
     retryable: true,
     proxy: {

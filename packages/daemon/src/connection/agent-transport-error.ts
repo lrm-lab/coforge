@@ -22,6 +22,12 @@ export type AgentTransportUpstreamLayer =
 export interface AgentTransportErrorDetails {
   failureClass: AgentTransportFailureClass;
   causeCode: string;
+  /** The server's own words for a 5xx whose body is the Agent API's refusal shape. */
+  upstreamError?: string;
+  /** The server's own stable code for that 5xx, which the local proxy relays as the caller's code. */
+  upstreamCode?: string;
+  /** Whether the server said the same request could succeed later. */
+  upstreamRetryable?: boolean;
   /** Log-only native transport code; never part of the Agent response or send verdict. */
   transportCode?: string;
   upstreamLayer?: AgentTransportUpstreamLayer;
@@ -33,6 +39,9 @@ export interface AgentTransportErrorDetails {
 export class AgentTransportError extends Error implements AgentTransportErrorDetails {
   readonly failureClass: AgentTransportFailureClass;
   readonly causeCode: string;
+  readonly upstreamError?: string;
+  readonly upstreamCode?: string;
+  readonly upstreamRetryable?: boolean;
   readonly transportCode?: string;
   readonly upstreamLayer?: AgentTransportUpstreamLayer;
   readonly upstreamStatus?: number;
@@ -44,6 +53,9 @@ export class AgentTransportError extends Error implements AgentTransportErrorDet
     this.name = "AgentTransportError";
     this.failureClass = details.failureClass;
     this.causeCode = details.causeCode;
+    this.upstreamError = details.upstreamError;
+    this.upstreamCode = details.upstreamCode;
+    this.upstreamRetryable = details.upstreamRetryable;
     this.transportCode = details.transportCode;
     this.upstreamLayer = details.upstreamLayer;
     this.upstreamStatus = details.upstreamStatus;
@@ -62,11 +74,20 @@ export class AgentTransportError extends Error implements AgentTransportErrorDet
     });
   }
 
-  /** The upstream server answered with a non-2xx HTTP status. */
-  static upstreamHttpResponse(what: string, status: number): AgentTransportError {
+  /** The upstream server answered with a non-2xx HTTP status. A 5xx that named its own reason
+   * (the Agent API's `{ error, code?, retryable? }`) carries it, so the local proxy can relay the
+   * server's answer instead of a generic "upstream HTTP response failed". */
+  static upstreamHttpResponse(
+    what: string,
+    status: number,
+    explained?: { error: string; code?: string; retryable?: boolean },
+  ): AgentTransportError {
     return new AgentTransportError(`${what} failed (${status})`, {
       failureClass: "upstream_http_response",
       causeCode: `HTTP_${status}`,
+      ...(explained ? { upstreamError: explained.error } : {}),
+      ...(explained?.code ? { upstreamCode: explained.code } : {}),
+      ...(explained?.retryable !== undefined ? { upstreamRetryable: explained.retryable } : {}),
       upstreamLayer: "http_status",
       upstreamStatus: status,
       responseStarted: true,

@@ -67,6 +67,7 @@ import {
 import type { MessageSearchOptions } from "./message-search-args";
 import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
+import { proxyFailureCode } from "./proxy-failure-code";
 import {
   envelopeRequest,
   operationFailedCode,
@@ -124,7 +125,7 @@ function proxyHttpFailure(
   // refusing (e.g. --target-confirmed) says so explicitly via `draft_saved`; honour it when present.
   const draftSaved = proxy?.draft_saved !== undefined ? proxy.draft_saved : !isLocalPrecondition;
   const message = body.json?.error || `HTTP ${status}`;
-  const code = failureCode(operation, status, body.json);
+  const code = proxyFailureCode(operation, status, body.json);
   // Any upstream 5xx, including one the daemon relayed with the server's named code.
   const transient =
     code === "SERVER_5XX" ||
@@ -162,33 +163,6 @@ function proxyHttpFailure(
         : undefined),
     ...(body.json?.details ? { details: body.json.details } : {}),
   });
-}
-
-/**
- * The typed code an Agent decides on. It follows the proxy's `failure_class`, not the proxy's own
- * HTTP status: a decode failure after an upstream 200 is `INVALID_JSON_RESPONSE`, never
- * `SERVER_5XX`, which is reserved for an upstream that really answered 5xx.
- */
-function failureCode(operation: string, status: number, json: AgentProxyErrorBody | undefined) {
-  const proxy = json?.proxy;
-  switch (proxy?.failure_class) {
-    case "local_precondition":
-      return json?.code ?? operationFailedCode(operation);
-    case "protocol_mismatch":
-      return "INVALID_JSON_RESPONSE";
-    // The server's own stable code when its refusal named one (`DM_PEER_NOT_IN_WORKSPACE`).
-    case "upstream_refusal":
-      return json?.code ?? operationFailedCode(operation);
-    case "upstream_http_response":
-      return (proxy?.upstream_status ?? status) >= 500
-        ? "SERVER_5XX"
-        : operationFailedCode(operation);
-    case "pre_response_transport":
-    case "mid_response_transport":
-      return operationFailedCode(operation);
-    default:
-      return status >= 500 ? "SERVER_5XX" : operationFailedCode(operation);
-  }
 }
 
 /** A failure reaching the local daemon proxy itself (network/timeout): treated conservatively as

@@ -39,6 +39,12 @@ const TRANSPORT_PUBLIC_ERRORS: Record<AgentTransportFailureClass, string> = {
   protocol_mismatch: "upstream response could not be decoded",
 };
 
+/** The server's answer when this Computer's runtime is too old for it (`CLIENT_UPGRADE_REQUIRED`). */
+const UPGRADE_REQUIRED_STATUS = 426;
+const UPGRADE_REQUIRED_CODE = "CLIENT_UPGRADE_REQUIRED";
+const UPGRADE_REQUIRED_PUBLIC_ERROR =
+  "this Computer's CoForge is older than the server accepts; upgrade it, then retry";
+
 /** The upstream statuses a business refusal may carry; anything else stays an opaque 502. */
 const UPSTREAM_REFUSAL_STATUSES: ReadonlySet<number> = new Set([400, 403, 404, 409, 503]);
 
@@ -186,8 +192,18 @@ function classifyFailure(
       error.failureClass === "upstream_http_response" && error.upstreamStatus !== undefined
         ? error.upstreamStatus
         : 502;
+    // A 5xx that named its own reason travels as that reason: the caller learns the server's
+    // words and code instead of "upstream HTTP response failed".
+    const named =
+      error.failureClass === "upstream_http_response" && error.upstreamError !== undefined;
     return build(status, error.failureClass, error.causeCode, {
-      publicError: TRANSPORT_PUBLIC_ERRORS[error.failureClass],
+      publicError: named
+        ? boundedDetail(error.upstreamError!)
+        : TRANSPORT_PUBLIC_ERRORS[error.failureClass],
+      ...(named ? { topLevelCode: error.upstreamCode ?? null } : {}),
+      ...(named && error.upstreamRetryable !== undefined
+        ? { retryable: error.upstreamRetryable }
+        : {}),
       detail: boundedDetail(error.message),
       upstreamLayer: error.upstreamLayer,
       upstreamStatus: error.upstreamStatus,
@@ -220,17 +236,22 @@ function classifyFailure(
   // The server refused with a reason written for the Agent (`DM_PEER_NOT_IN_WORKSPACE`, "target is
   // not accessible"): the caller gets the real status, that reason, and the code when it named
   // one, bounded and credential-free like any detail.
-  if (error instanceof AgentExplainedRefusalError)
+  if (error instanceof AgentExplainedRefusalError) {
+    // The server turned a request away because this Computer's runtime is older than it accepts:
+    // repeating the same request cannot help, and the one fix is an upgrade.
+    const upgradeRequired =
+      error.status === UPGRADE_REQUIRED_STATUS || error.code === UPGRADE_REQUIRED_CODE;
     return build(error.status, "upstream_refusal", error.code ?? `HTTP_${error.status}`, {
-      publicError: boundedDetail(error.message),
+      publicError: upgradeRequired ? UPGRADE_REQUIRED_PUBLIC_ERROR : boundedDetail(error.message),
       topLevelCode: error.code ?? null,
-      retryable: error.retryable,
+      retryable: upgradeRequired ? false : error.retryable,
       upstreamLayer: "http_status",
       upstreamStatus: error.status,
       responseStarted: true,
       responseComplete: true,
       upstreamCode: error.code,
     });
+  }
 
   // A refusal the upstream named with a business code (a 403 "this agent is not allowed", a 409
   // "the task changed since you saw it") is not a transport failure: the caller gets the real

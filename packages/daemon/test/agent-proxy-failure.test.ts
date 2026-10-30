@@ -401,3 +401,50 @@ test("safe message-validation refusals retain their exact reason in daemon diagn
   );
   expect(isolated.logFields.detail).toBeUndefined();
 });
+
+test("a 5xx that named its own reason reaches the caller as that reason and code", () => {
+  const error = AgentTransportError.upstreamHttpResponse("agent send", 500, {
+    error: "the repository is read-only right now",
+    code: "DATABASE_READ_ONLY",
+    retryable: false,
+  });
+  const classified = classifyAgentProxyFailure(error, context);
+  expect(classified.status).toBe(500);
+  expect(classified.body).toMatchObject({
+    error: "the repository is read-only right now",
+    code: "DATABASE_READ_ONLY",
+    retryable: false,
+    proxy: { failure_class: "upstream_http_response", upstream_status: 500 },
+  });
+  expect(classified.logFields.upstream_status).toBe(500);
+  // The proxy's own generic marker is replaced by the server's code, never both.
+  expect(classified.body.code).not.toBe("agent_proxy_failed");
+});
+
+test("an unnamed 5xx keeps the generic proxy answer", () => {
+  const classified = classifyAgentProxyFailure(
+    AgentTransportError.upstreamHttpResponse("agent send", 502),
+    context,
+  );
+  expect(classified.body).toMatchObject({
+    error: "upstream HTTP response failed",
+    code: "agent_proxy_failed",
+    proxy: { upstream_status: 502 },
+  });
+  expect(classified.body).not.toHaveProperty("retryable");
+});
+
+test("a 426 asking for an upgrade is terminal and says so", () => {
+  const refusal = AgentExplainedRefusalError.fromResponse(
+    426,
+    JSON.stringify({ error: "this client is too old", code: "CLIENT_UPGRADE_REQUIRED" }),
+  );
+  const classified = classifyAgentProxyFailure(refusal, context);
+  expect(classified.status).toBe(426);
+  expect(classified.body).toMatchObject({
+    code: "CLIENT_UPGRADE_REQUIRED",
+    retryable: false,
+    proxy: { failure_class: "upstream_refusal", upstream_status: 426 },
+  });
+  expect(classified.body.error).toContain("upgrade");
+});
