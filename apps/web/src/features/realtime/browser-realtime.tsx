@@ -15,6 +15,7 @@ import {
   type StreamPosition,
   type SubscribedRecovery,
 } from "./subscription-gap";
+import { createConnectionJournal } from "./connection-journal";
 import { watchRealtimeWake } from "./realtime-wake";
 
 /** The one realtime subscription type for the shared Workspace connection. */
@@ -40,9 +41,14 @@ export function BrowserRealtimeProvider({
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     // The token last fetched, so a wake can tell whether it expired meanwhile.
     let token: string | undefined;
+    const journal = createConnectionJournal({ now: Date.now, log: console });
     const next = new Centrifuge(`${protocol}//${location.host}/connection/websocket`, {
-      getToken: async () => (token = await getConnectionToken()),
+      getToken: journal.timeToken(async () => (token = await getConnectionToken())),
     });
+    next.on("connecting", journal.connecting);
+    next.on("connected", journal.connected);
+    next.on("disconnected", journal.disconnected);
+    next.on("error", journal.error);
     const stopWake = watchRealtimeWake(next, () => token);
     setClient(next);
     next.connect();

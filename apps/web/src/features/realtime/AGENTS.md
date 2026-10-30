@@ -8,6 +8,10 @@ These rules apply to `src/features/realtime/`.
 - React consumers subscribe through `useRealtimeSubscription`; imperative conversation readers use `subscribeToSharedRealtime` from `browser-realtime.tsx`. Both use its one ref-counted pool. It
   owns the client type. A channel with a narrower server-issued grant supplies
   its own subscription token to the hook.
+- The connection's state changes, the client's errors and slow token fetches go to the
+  console through `connection-journal.ts`, wired once in `BrowserRealtimeProvider`. Centrifugo
+  logs only rejected commands, so this is the only record of a connection that never hears back
+  (task #322). Keep it free of tokens and message content.
 - Subscription hooks must run below `BrowserRealtimeProvider`. Do not call one
   in the component that renders the provider; `useBrowserRealtime` throws there
   so the mistake fails at first render instead of silently never subscribing.
