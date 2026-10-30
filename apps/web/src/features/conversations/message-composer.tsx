@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
@@ -7,17 +7,12 @@ import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import {
-  dragCarriesFiles,
-  filesFromDrop,
-  filesFromPaste,
-  localId,
-  composerPlaceholder,
-} from "./composer-behavior";
+import { filesFromPaste, localId, composerPlaceholder } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { useComposerAttachments } from "./use-composer-attachments";
+import { useFileDrop } from "./use-file-drop";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
@@ -235,12 +230,8 @@ export function MessageComposer({
     // with the quote in it.
     requestAnimationFrame(focusComposer);
   }, [quotedDraft]);
-  // Counts nested dragenter/dragleave pairs across the form's descendants, so the drop
-  // affordance does not flicker as the pointer crosses child element boundaries.
-  const dragDepthRef = useRef(0);
-  const [draggingFile, setDraggingFile] = useState(false);
   const composerDisabled = !hydrated;
-  const dropDisabled = composerDisabled || uploading;
+  const drop = useFileDrop(composerDisabled || uploading, (files) => void addFiles(files));
   const taskMode = !inThread && Boolean(canSendAsTask);
   const sendDisabled =
     composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
@@ -347,57 +338,16 @@ export function MessageComposer({
     void addFiles(ready);
   }
 
-  /**
-   * Drag a file over the composer to upload it through the same path as paste and the
-   * paperclip button. Only a native file drag (`dragCarriesFiles`) is intercepted; a text or
-   * URL drag is left untouched so the browser's own drop-to-insert behaviour still reaches the
-   * textarea. Always calling `preventDefault` for a file drag (even while disabled) also keeps
-   * the browser from navigating away to open the dropped file.
-   */
-  function dragEnter(event: DragEvent<HTMLFormElement>) {
-    if (!dragCarriesFiles(event.dataTransfer.types)) return;
-    event.preventDefault();
-    if (dropDisabled) return;
-    dragDepthRef.current += 1;
-    setDraggingFile(true);
-  }
-
-  function dragOver(event: DragEvent<HTMLFormElement>) {
-    if (!dragCarriesFiles(event.dataTransfer.types)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = dropDisabled ? "none" : "copy";
-  }
-
-  function dragLeave(event: DragEvent<HTMLFormElement>) {
-    if (!dragCarriesFiles(event.dataTransfer.types)) return;
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setDraggingFile(false);
-  }
-
-  function drop(event: DragEvent<HTMLFormElement>) {
-    if (!dragCarriesFiles(event.dataTransfer.types)) return;
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    setDraggingFile(false);
-    if (dropDisabled) return;
-    const files = filesFromDrop(event.dataTransfer);
-    if (files.length > 0) void addFiles(files);
-  }
-
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
-      onDragEnter={dragEnter}
-      onDragOver={dragOver}
-      onDragLeave={dragLeave}
-      onDrop={drop}
+      {...drop.handlers}
       className={`${COMPOSER_FOCUS_CLASS} ${COMPOSER_FRAME_CLASS}`}
     >
-      {draggingFile && (
+      {drop.dragging && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-secondary text-sm font-medium text-secondary">
           <UploadCloud02 aria-hidden="true" className="size-5 text-fg-quaternary" />
           {m.conversation_drop_to_upload()}
