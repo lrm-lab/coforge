@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import {
   activityInboxPageSchema,
@@ -16,7 +15,7 @@ export const loadActivityInbox = createServerFn({ method: "GET" })
   .validator(activityInboxPageSchema)
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
-    return new ActivityInbox(db).list(workspaceId, user.id, data);
+    return browserActivityInbox(db).list(workspaceId, user.id, data);
   });
 
 /** Marks one item Done (and read) through the newest message the viewer saw in it. */
@@ -45,7 +44,7 @@ export const loadActivityNavAttention = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const { db, workspaceId, user } = context;
-    return new ActivityInbox(db).navAttention(workspaceId, user.id);
+    return browserActivityInbox(db).navAttention(workspaceId, user.id);
   });
 
 /** Reads or unreads a mention the viewer was notified of; it stays listed until Done. */
@@ -54,5 +53,10 @@ export const setActivityMentionRead = createServerFn({ method: "POST" })
   .validator(activityMentionReadSchema)
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
-    await new ActivityInbox(db).setMentionRead(workspaceId, user.id, data.resolutionId, data.read);
+    await browserActivityInbox(db).setMentionRead(
+      workspaceId,
+      user.id,
+      data.resolutionId,
+      data.read,
+    );
   });

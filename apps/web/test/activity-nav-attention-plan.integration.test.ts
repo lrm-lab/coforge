@@ -95,7 +95,7 @@ async function navFixture(name: string) {
     async readDot() {
       await db.$executeRaw`ANALYZE messages, thread_follows, thread_reads, conversation_members`;
       recording = true;
-      const attention = await new ActivityInbox(db).navAttention(workspace.id, viewer.id);
+      const attention = await new ActivityInbox(db, {}).navAttention(workspace.id, viewer.id);
       recording = false;
       expect(reads).toHaveLength(1);
       let touched = 0;

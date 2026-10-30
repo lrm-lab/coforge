@@ -128,7 +128,7 @@ test.skipIf(!connectionString)(
           },
         });
       await notify(closed.id, closed.message.id);
-      const inbox = new ActivityInbox(db);
+      const inbox = new ActivityInbox(db, {});
       const mentions = async () =>
         (await inbox.list(ws, people.outsider, { filter: "mentions" })).items.length;
       const attention = async () => (await inbox.navAttention(ws, people.outsider)).hasUnread;

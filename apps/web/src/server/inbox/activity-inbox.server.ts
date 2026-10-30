@@ -93,7 +93,9 @@ export type ActivityInboxItem = Awaited<ReturnType<ActivityInbox["list"]>>["item
 export class ActivityInbox {
   constructor(
     private readonly db: PrismaClient,
-    private readonly realtime?: ActivityInboxRealtime,
+    /** Required: a write that cannot announce leaves the person's other tabs showing what it
+     * cleared. A caller with nothing to tell passes `{}`. */
+    private readonly realtime: ActivityInboxRealtime,
   ) {}
 
   /** One page of a view, newest activity first, with the Unread and Mentions counts. */
@@ -189,6 +191,7 @@ export class ActivityInbox {
       where: { id: resolutionId, workspaceId, targetUserId: userId, notifiedAt: { not: null } },
       data: { targetReadAt: read ? new Date() : null },
     });
+    await this.realtime.activityChanged?.({ workspaceId, userId });
   }
 
   /**

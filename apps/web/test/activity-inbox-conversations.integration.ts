@@ -65,7 +65,7 @@ test("a thread counts only the unread replies past its read cursor, on any page"
       threadRootId: newer.id,
     });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const firstPage = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1 });
     expect(firstPage.items.map((item) => item.thread?.root.body)).toEqual(["newer"]);
     const secondPage = await inbox.list(workspace.id, alice.id, {
@@ -116,7 +116,7 @@ test("direct messages and their threads are listed with the Agent they belong to
       root.id,
     );
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     let page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(
       page.items.map((item) => [
@@ -194,7 +194,7 @@ test("direct messages between members, and a member's with themself, are listed 
     });
     await post(bobsDm.conversationId, bobsDm.senderMemberId, "bob to his Agent");
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     // Neither uploaded an avatar; each still has their stable cartoon default.
     const peopleAt = (
@@ -290,7 +290,11 @@ test("a person notified of a mention outside their channels finds it in Activity
       idempotencyKey: crypto.randomUUID(),
       body: `@mb-${suffix} can you look at this`,
     });
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {
+      activityChanged: async (input) => {
+        announced.push(input);
+      },
+    });
     const mentionsOf = async () =>
       (await inbox.list(workspace.id, bob.id, { filter: "mentions" })).items;
     const countsOf = async () => {
@@ -327,7 +331,10 @@ test("a person notified of a mention outside their channels finds it in Activity
     ).toBe(false);
 
     // Read and unread like any item: it stays listed either way.
+    announced.length = 0;
     await inbox.setMentionRead(workspace.id, bob.id, resolutionId, true);
+    // Reading it in one tab clears the dot in the person's others.
+    expect(announced).toEqual([{ workspaceId: workspace.id, userId: bob.id }]);
     expect((await mentionsOf()).map((entry) => entry.unreadCount)).toEqual([0]);
     expect((await inbox.navAttention(workspace.id, bob.id)).hasUnread).toBe(false);
     expect(await countsOf()).toEqual({ unreadItemCount: 0, unreadMentionItemCount: 0 });

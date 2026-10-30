@@ -24,7 +24,7 @@ test("Done removes an item until newer activity arrives, and reads it", async ()
       threadRootId: root.id,
     });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const channelRef = { kind: "conversation" as const, conversationId: general.conversation.id };
     // A Done that saw an older message leaves the newer one listed.
     await inbox.markDone(workspace.id, alice.id, { ...channelRef, throughSequence: 1 });
@@ -80,7 +80,7 @@ test("a pinned conversation is listed under Pinned even when Done, and not again
     const latest = await post(quiet.conversation.id, quiet.bobMember.id, "newest");
     await pin(quiet.aliceMember, 0);
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     await inbox.markDone(workspace.id, alice.id, {
       kind: "conversation",
       conversationId: quiet.conversation.id,
@@ -138,7 +138,7 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     });
     await post(left.conversation.id, left.bobMember.id, "said after alice left");
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const before = await inbox.list(workspace.id, alice.id, { filter: "all" });
 
     await pin(general.aliceMember, 2);
@@ -222,7 +222,7 @@ test("Mark all read clears unread and keeps every item listed", async () => {
       data: { unreadFromSequence: 1 },
     });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     expect((await inbox.list(workspace.id, alice.id, { filter: "all" })).unreadItemCount).toBe(2);
     const shown = new Date();
     // Sent after the page the viewer looked at: Mark all read must not read it.
@@ -281,7 +281,7 @@ test("a thread counts only mentions in its own replies past its Done boundary", 
       threadRootId: quiet.id,
     });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const mentionState = async () =>
       Object.fromEntries(
         (await inbox.list(workspace.id, alice.id, { filter: "all" })).items.map((item) => [
@@ -345,7 +345,7 @@ test("an item opens at its first mention past Done, read or not", async () => {
       threadRootId: root.id,
     });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     await inbox.markAllRead(workspace.id, alice.id, { before: new Date(Date.UTC(2027, 0, 1)) });
     const firstMentions = async () =>
       Object.fromEntries(

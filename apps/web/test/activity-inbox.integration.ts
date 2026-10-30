@@ -47,7 +47,7 @@ test("lists joined conversations and followed threads with activity, newest firs
       threadRootId: otherRoot.id,
     });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
 
     expect(
@@ -135,7 +135,7 @@ test("the Unread and Mentions counts are items with unread and unread mentions, 
       data: { readThroughSequence: own.sequence },
     });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const [all, unread, mentions] = await Promise.all(
       (["all", "unread", "mentions"] as const).map((filter) =>
         inbox.list(workspace.id, alice.id, { filter }),
@@ -200,7 +200,7 @@ test("a followed task thread whose owner Agent was deleted marks the owner delet
     await post(general.conversation.id, general.bobMember.id, "any update?", {
       threadRootId: root.id,
     });
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     const taskOf = async () =>
       (await inbox.list(workspace.id, alice.id, { filter: "all" })).items.find(
         (item) => item.thread?.root.id === root.id,
@@ -279,7 +279,7 @@ test("a channel's items carry the members its group avatar shows, as the Chat si
     await post(pinned.conversation.id, pinned.bobMember.id, "pinned news");
     await pin(pinned.aliceMember, 0);
 
-    const page = await new ActivityInbox(db).list(workspace.id, alice.id, { filter: "all" });
+    const page = await new ActivityInbox(db, {}).list(workspace.id, alice.id, { filter: "all" });
     const membersOf = (item: ActivityInboxItem | undefined) =>
       item?.place.kind === "channel" ? item.place.members : undefined;
     const generalMembers: ChannelListMember[] = [
@@ -396,7 +396,7 @@ test("the nav dot lights exactly while the inbox lists unread replies and messag
     for (const body of ["step 1", "step 2"])
       await post(direct.conversationId, agentMember.id, body, { threadRootId: question.id });
 
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     await inbox.markDone(workspace.id, alice.id, {
       kind: "thread",
       conversationId: general.conversation.id,
@@ -426,7 +426,7 @@ test("a person can only read and change their own inbox in their own Workspace",
     const outsider = await db.user.create({
       data: { username: `inbox-outsider-${suffix}`, displayName: "outsider" },
     });
-    const inbox = new ActivityInbox(db);
+    const inbox = new ActivityInbox(db, {});
     await expect(inbox.list(workspace.id, outsider.id, { filter: "all" })).rejects.toMatchObject({
       code: "ACCESS_DENIED",
     });
