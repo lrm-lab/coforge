@@ -77,3 +77,10 @@ export const markTaskConversationRead = createServerFn({ method: "POST" })
     const { throughSequence, ...ref } = data;
     return taskConversations(db).markRead({ workspaceId, userId: user.id }, ref, throughSequence);
   });
+
+export const getTaskFollow = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(taskRefSchema)
+  .handler(async ({ context: { db, user, workspaceId }, data }) =>
+    taskConversations(db).followState({ workspaceId, userId: user.id }, data),
+  );

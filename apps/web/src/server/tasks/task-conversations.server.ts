@@ -42,6 +42,19 @@ export class TaskConversations {
     private readonly idempotency?: MessageRequestIdempotency,
   ) {}
 
+  /** Whether the reader follows the task: false for a task with no conversation yet, or for one
+   * the reader is not a member of the board of. */
+  async followState(principal: TaskPrincipal, ref: TaskConversationRef) {
+    const { task, member } = await this.resolve(principal, ref);
+    const follow = member
+      ? await this.ports.db.taskFollow.findUnique({
+          where: { memberId_taskId: { memberId: member.id, taskId: task.id } },
+          select: { reason: true },
+        })
+      : null;
+    return { following: follow !== null };
+  }
+
   async view(principal: TaskPrincipal, ref: TaskConversationRef, options: { limit?: number }) {
     const { task, member, boardName } = await this.resolve(principal, ref);
     const limit = Math.min(Math.max(options.limit ?? 5, 1), MAX_VIEW_MESSAGES);

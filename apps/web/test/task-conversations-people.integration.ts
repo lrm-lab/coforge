@@ -199,3 +199,20 @@ test("a reply is announced to the pages open on the conversation, and reading mo
     code: "INVALID_INPUT",
   });
 });
+
+test("whether a person follows a task reads before there is any conversation", async () => {
+  const quiet = await db.task.create({
+    data: {
+      conversationId: boardId,
+      workspaceId,
+      number: 9,
+      title: "Quiet",
+      creatorMemberId: people.writer.memberId,
+    },
+  });
+  const quietRef = { conversationId: boardId, number: 9 };
+  expect(await conversations.followState(as("friend"), quietRef)).toEqual({ following: false });
+  await conversations.follow(as("friend"), quietRef);
+  expect(await conversations.followState(as("friend"), quietRef)).toEqual({ following: true });
+  await db.task.delete({ where: { id: quiet.id } });
+});
