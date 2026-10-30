@@ -149,6 +149,7 @@ export function agentMigrationRequests(db: PrismaClient) {
         { workspaceId, userId: agent.ownerId },
         computerId,
         storedRuntimeSelection(config),
+        { requireModel: false },
       );
     },
     runtimeDetecting: (workspaceId, computerId) =>

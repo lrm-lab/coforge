@@ -34,13 +34,12 @@ const READINESS_REFUSALS = {
 } as const;
 
 /** Why the target cannot run the Agent, as the dialog names it; one Computer page fixes each. */
-const RUNTIME_REFUSALS: Record<AgentRuntimeSelectionRefusal, string> = {
+const RUNTIME_REFUSALS: Record<Exclude<AgentRuntimeSelectionRefusal, "model_missing">, string> = {
   not_connected: "agent-migration-target-unavailable",
   runtime_unconfirmed: "agent-migration-runtime-unconfirmed",
   runtime_missing: "agent-migration-runtime-missing",
   runtime_unusable: "agent-migration-runtime-unusable",
   runtime_not_shared: "agent-migration-runtime-not-shared",
-  model_missing: "agent-migration-model-missing",
   fast_mode_unsupported: "agent-migration-fast-mode-unsupported",
 };
 
@@ -153,7 +152,10 @@ export class AgentMigrationRequests {
       input.agentId,
       input.targetComputerId,
     );
-    if (runtimeRefusal) {
+    // Raft checks only whether the target can run the selected runtime. A stale or incomplete
+    // model catalog must not stop a move; the target daemon reports a real model failure when the
+    // Agent starts there.
+    if (runtimeRefusal && runtimeRefusal !== "model_missing") {
       // A runtime not reported yet may be what a rescan in flight is about to report.
       const detecting =
         (runtimeRefusal === "runtime_unconfirmed" || runtimeRefusal === "runtime_missing") &&

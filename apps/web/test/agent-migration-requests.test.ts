@@ -167,7 +167,6 @@ test("a Computer that cannot run the Agent's runtime is refused before anything 
     ["runtime_unconfirmed", "agent-migration-runtime-unconfirmed"],
     ["runtime_missing", "agent-migration-runtime-missing"],
     ["runtime_not_shared", "agent-migration-runtime-not-shared"],
-    ["model_missing", "agent-migration-model-missing"],
     ["not_connected", "agent-migration-target-unavailable"],
   ];
   for (const [runtimeRefusal, errorId] of cases) {
@@ -183,9 +182,8 @@ test("a target still detecting its runtimes says so, instead of lacking the Agen
   const cases: [AgentRuntimeSelectionRefusal, string][] = [
     ["runtime_unconfirmed", "agent-migration-runtime-detecting"],
     ["runtime_missing", "agent-migration-runtime-detecting"],
-    // A rescan cannot share a runtime or add a model, so those refusals stand.
+    // A rescan cannot share a runtime, so this refusal stands.
     ["runtime_not_shared", "agent-migration-runtime-not-shared"],
-    ["model_missing", "agent-migration-model-missing"],
   ];
   for (const [runtimeRefusal, errorId] of cases) {
     const { requests, requested } = setup({ runtimeRefusal, runtimeDetecting: true });
@@ -194,6 +192,12 @@ test("a target still detecting its runtimes says so, instead of lacking the Agen
     ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId });
     expect(requested).toEqual([]);
   }
+});
+
+test("a stale model catalog does not block a move when the target runtime is usable", async () => {
+  const { requests, requested } = setup({ runtimeRefusal: "model_missing" });
+  await requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" });
+  expect(requested).toEqual(["computer-b"]);
 });
 
 test("a move checks the target against the Agent's stored selection, key included", () => {

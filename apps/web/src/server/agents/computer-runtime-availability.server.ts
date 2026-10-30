@@ -33,6 +33,7 @@ export async function computerRuntimeRefusal(
   { workspaceId, userId }: { workspaceId: string; userId: string },
   computerId: string,
   config: AgentRuntimeSelection,
+  options: { requireModel?: boolean } = {},
 ): Promise<AgentRuntimeSelectionRefusal | null> {
   const runtimeVisibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
   const connection = await db.workspaceComputer.findFirst({
@@ -69,7 +70,7 @@ export async function computerRuntimeRefusal(
   const models = connection?.computer.modelCatalogs.flatMap((catalog) =>
     Array.isArray(catalog.models) ? catalog.models : [],
   );
-  return agentRuntimeSelectionRefusal(config, {
+  const refusal = agentRuntimeSelectionRefusal(config, {
     connected: Boolean(connection),
     reported: new Set(
       connection?.computer.runtimes.map(({ provider }) => provider as RuntimeProvider),
@@ -84,6 +85,7 @@ export async function computerRuntimeRefusal(
     providers,
     models: models ?? [],
   });
+  return options.requireModel === false && refusal === "model_missing" ? null : refusal;
 }
 
 /** An Agent's stored runtime configuration, as the selection `computerCanRunAgent` checks. */
