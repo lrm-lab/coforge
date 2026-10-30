@@ -11,6 +11,9 @@ export type ListColumn = {
   max: number;
   /** The resize handle's accessible name. */
   label: () => string;
+  /** The edge the handle sits on: a column on the page's right is dragged by its left edge, so it
+   * grows leftward. */
+  edge?: "left" | "right";
 };
 
 /** The Chat page's conversation list beside the open conversation, from `lg`. */
@@ -34,6 +37,17 @@ export const LIST_COLUMN: ListColumn = {
   label: m.list_column_resize,
 };
 
+/** A file's Comments panel beside its preview, from `lg`. */
+export const ATTACHMENT_COMMENTS_COLUMN: ListColumn = {
+  key: "coforge-attachment-comments-width",
+  property: "--attachment-comments-width",
+  defaultWidth: 320,
+  min: 280,
+  max: 560,
+  label: m.attachment_comments_resize,
+  edge: "left",
+};
+
 const KEY_STEP = 16;
 const KEY_STEP_LARGE = 64;
 
@@ -53,7 +67,9 @@ function bootScript({ key, property, min, max }: ListColumn): string {
 }
 
 export const CONVERSATION_LIST_BOOT =
-  bootScript(CONVERSATION_LIST_COLUMN) + bootScript(LIST_COLUMN);
+  bootScript(CONVERSATION_LIST_COLUMN) +
+  bootScript(LIST_COLUMN) +
+  bootScript(ATTACHMENT_COMMENTS_COLUMN);
 
 export function clampListWidth(column: ListColumn, width: number): number {
   return Math.min(column.max, Math.max(column.min, width));
@@ -73,7 +89,8 @@ export function dragListWidth(
   startX: number,
   x: number,
 ): number {
-  return clampListWidth(column, startWidth + (x - startX));
+  const moved = column.edge === "left" ? startX - x : x - startX;
+  return clampListWidth(column, startWidth + moved);
 }
 
 type KeyboardLike = {
@@ -93,11 +110,13 @@ export function keyListWidth(
 ): number | undefined {
   if (event.metaKey || event.ctrlKey || event.altKey) return undefined;
   const step = event.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
+  // An arrow moves the handle, so it widens the column toward the side the handle is on.
+  const toward = column.edge === "left" ? -1 : 1;
   switch (event.key) {
     case "ArrowRight":
-      return clampListWidth(column, width + step);
+      return clampListWidth(column, width + step * toward);
     case "ArrowLeft":
-      return clampListWidth(column, width - step);
+      return clampListWidth(column, width - step * toward);
     case "Home":
       return column.min;
     case "End":

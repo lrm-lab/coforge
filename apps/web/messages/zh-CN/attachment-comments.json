@@ -35,5 +35,7 @@
   "image_lightbox_previous": "上一张",
   "image_lightbox_next": "下一张",
   "image_lightbox_position": "第 {index} 张，共 {count} 张",
-  "attachment_comments_add_timestamp": "添加时间戳 {time}"
+  "attachment_comments_add_timestamp": "添加时间戳 {time}",
+  "attachment_comments_placeholder": "添加评论…",
+  "attachment_comments_resize": "调整评论栏宽度"
 }

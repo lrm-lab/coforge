@@ -17,15 +17,17 @@ import {
 
 /** The width the column shows, measured on the handle's parent (the column): less than the kept
  * one when the page caps it (Activity and Search give the conversation at least half the page), so
- * a drag or a key starts from what is seen. */
+ * a drag or a key starts from what is seen. Its layout width, so a dialog still scaling in does
+ * not skew it. */
 function shownWidth(column: ListColumn, handle: HTMLElement): number {
-  return handle.parentElement?.getBoundingClientRect().width || getListWidth(column);
+  return handle.parentElement?.offsetWidth || getListWidth(column);
 }
 
 /**
- * The drag handle on a list column's right edge, from where the list stands beside the pane. A
- * drag shows its width live and keeps it on release. The drag follows the pointer on the window as
- * well as by capture, so it keeps going when the pointer leaves the handle.
+ * The drag handle on a list column's edge (its right one unless the column says left), from where
+ * the list stands beside the pane. A drag shows its width live and keeps it on release. The drag
+ * follows the pointer on the window as well as by capture, so it keeps going when the pointer leaves
+ * the handle.
  */
 export function ConversationListResizeHandle({
   column = CONVERSATION_LIST_COLUMN,
@@ -119,10 +121,11 @@ export function ConversationListResizeHandle({
       onDoubleClick={() => setListWidth(column, column.defaultWidth)}
       onKeyDown={onKeyDown}
       className={cx(
-        "absolute inset-y-0 right-0 z-10 w-3 cursor-col-resize touch-none outline-hidden pointer-coarse:w-6",
+        "absolute inset-y-0 z-10 w-3 cursor-col-resize touch-none outline-hidden pointer-coarse:w-6",
         LIST_BESIDE_CLASSES[visibleFrom].list,
-        // The line shows only while it is being used.
-        "after:absolute after:inset-y-0 after:right-0 after:w-0.5 hover:after:bg-brand-solid focus-visible:after:bg-brand-solid data-dragging:after:bg-brand-solid",
+        // The line shows only while it is being used, on the column's own edge.
+        "after:absolute after:inset-y-0 after:w-0.5 hover:after:bg-brand-solid focus-visible:after:bg-brand-solid data-dragging:after:bg-brand-solid",
+        column.edge === "left" ? "left-0 after:left-0" : "right-0 after:right-0",
       )}
     />
   );

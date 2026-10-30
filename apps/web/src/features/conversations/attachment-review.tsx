@@ -10,6 +10,8 @@ import { m } from "#src/paraglide/messages";
 import type { AnchorSurface, Anchoring } from "./attachment-anchoring";
 import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { AttachmentCommentsPane } from "./attachment-comments";
+import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
+import { ATTACHMENT_COMMENTS_COLUMN } from "./conversation-list-width";
 import { AttachmentPreview } from "./attachment-preview";
 import type { VideoHandoff, VideoPlace, VideoStart } from "./video-handoff";
 import {
@@ -228,12 +230,15 @@ export function AttachmentReviewDialog({
                   {commentable && (
                     <div
                       className={cn(
-                        "min-h-0 min-w-0 flex-1",
-                        "lg:w-80 lg:flex-none lg:border-l lg:border-secondary",
+                        "relative min-h-0 min-w-0 flex-1",
+                        // Kept width, set on <html> by the boot script and the handle; never more
+                        // than half the dialog, so the preview keeps the other half.
+                        "lg:w-(--attachment-comments-width,20rem) lg:max-w-1/2 lg:flex-none lg:border-l lg:border-secondary",
                         commentsExpanded ? "lg:block" : "lg:hidden",
                         commentsOnPhone ? "block" : "hidden",
                       )}
                     >
+                      <ConversationListResizeHandle column={ATTACHMENT_COMMENTS_COLUMN} />
                       <AttachmentCommentsPane
                         attachmentId={file.id}
                         fileName={file.fileName}

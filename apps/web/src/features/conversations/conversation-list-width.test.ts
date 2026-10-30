@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  ATTACHMENT_COMMENTS_COLUMN as COMMENTS,
   CONVERSATION_LIST_BOOT,
   CONVERSATION_LIST_COLUMN as CHAT,
   LIST_COLUMN as LIST,
@@ -80,5 +81,18 @@ describe("list column width", () => {
     });
     expect(run({ "coforge-list-column-width": "100" })).toEqual({ "--list-column-width": "240px" });
     expect(run({})).toEqual({});
+  });
+
+  test("a column dragged by its left edge widens leftward, by pointer and by arrow key", () => {
+    expect(dragListWidth(COMMENTS, 320, 1000, 940)).toBe(380);
+    expect(dragListWidth(COMMENTS, 320, 1000, 1040)).toBe(280);
+    expect(keyListWidth(COMMENTS, key("ArrowLeft"), 320)).toBe(336);
+    expect(keyListWidth(COMMENTS, key("ArrowRight"), 320)).toBe(304);
+    expect(dragListWidth(CHAT, 288, 100, 140)).toBe(328);
+  });
+
+  test("the boot script restores the comments panel's kept width", () => {
+    expect(CONVERSATION_LIST_BOOT).toContain(COMMENTS.key);
+    expect(CONVERSATION_LIST_BOOT).toContain(COMMENTS.property);
   });
 });

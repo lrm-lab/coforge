@@ -143,8 +143,14 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     // A preview opens on the file alone; its comments are one icon away, as on Raft's page.
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea', { timeout: 8000 });
-    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Comment on " + name + "…" && document.body.innerText.includes("No comments yet") && document.body.innerText.includes("Comments here relate only to " + name), ${JSON.stringify(filename)});
-    if (!(await page.evaluate(() => document.querySelector('[role="dialog"] section header').innerText)).includes(${JSON.stringify(filename)})) throw new Error("Missing filename under the comments title");
+    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Add a comment…" && document.body.innerText.includes("No comments yet") && document.body.innerText.includes("Comments here relate only to " + name), ${JSON.stringify(filename)});
+    // The panel is dragged by its left edge; a left arrow widens it, and the width is kept.
+    // Widths are layout widths: the dialog may still be scaling in, which skews rendered ones.
+    const separator = '[role="dialog"] [role="separator"][aria-label="Resize comments"]';
+    const before = await page.evaluate((selector) => document.querySelector(selector).parentElement.offsetWidth, separator);
+    await page.focus(separator);
+    await page.keyboard.press("ArrowLeft");
+    await page.waitForFunction(([selector, wider]) => document.querySelector(selector).parentElement.offsetWidth === wider && localStorage.getItem("coforge-attachment-comments-width") === String(wider), [separator, before + 16]);
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length === 0);
     await page.click('[role="dialog"] button[aria-label="Comments"]');
@@ -155,7 +161,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.waitForSelector(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
     await page.click(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
     await page.click('[role="dialog"] button[aria-label="评论"]');
-    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "评论 " + name + "…" && document.body.innerText.includes("还没有评论") && document.body.innerText.includes("这里的评论仅关联 " + name), ${JSON.stringify(filename)});
+    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "添加评论…" && document.body.innerText.includes("还没有评论") && document.body.innerText.includes("这里的评论仅关联 " + name), ${JSON.stringify(filename)});
     await page.click('[role="dialog"] button[aria-label="评论"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length === 0);
     await page.click('[role="dialog"] button[aria-label="评论"]');

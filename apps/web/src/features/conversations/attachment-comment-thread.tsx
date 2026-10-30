@@ -96,15 +96,16 @@ export function CommentRow({
   const timeZone = useTimeZone();
   const timeFormat = useTimeFormat();
   return (
+    // The message row's shape at the panel's width: its avatar, sender line, body type and hover.
     <article
       className={cn(
-        "-mx-2 flex min-w-0 gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-secondary",
-        highlighted && "bg-secondary",
+        "flex min-w-0 gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-message-hover",
+        highlighted && "bg-tertiary",
       )}
     >
-      <IdentityAvatar src={comment.senderAvatarUrl} name={comment.senderName} size="xs" />
-      <div className="min-w-0 flex-1">
-        <p className="flex min-w-0 items-baseline gap-1.5">
+      <IdentityAvatar src={comment.senderAvatarUrl} name={comment.senderName} size="sm" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="flex min-h-5 min-w-0 items-baseline gap-2">
           <span className="truncate text-sm font-semibold text-primary">{comment.senderName}</span>
           <time
             dateTime={comment.createdAt}
@@ -114,7 +115,7 @@ export function CommentRow({
           </time>
         </p>
         {place}
-        <div className="message-text mt-1 text-secondary">
+        <div className="message-text min-w-0 text-md text-primary [overflow-wrap:anywhere]">
           <MessageBody body={comment.body} />
         </div>
       </div>

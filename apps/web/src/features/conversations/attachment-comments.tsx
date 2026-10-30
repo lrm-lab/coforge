@@ -210,11 +210,11 @@ export function AttachmentCommentsPane({
       aria-label={m.attachment_comments_title()}
       className="flex h-full min-h-0 min-w-0 flex-col bg-primary"
     >
-      <header className="shrink-0 border-b border-secondary px-4 py-3">
+      {/* The dialog's top bar names the file; space, not a rule, sets the list off. */}
+      <header className="shrink-0 px-4 pt-4 pb-2">
         <h2 className="text-sm font-semibold text-primary">{m.attachment_comments_title()}</h2>
-        <p className="truncate text-xs text-tertiary">{fileName}</p>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-live="polite">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-live="polite">
         {query.isPending ? (
           <p className="text-sm text-tertiary">{m.attachment_comments_loading()}</p>
         ) : query.isError ? (
@@ -241,7 +241,7 @@ export function AttachmentCommentsPane({
             </EmptyDescription>
           </Empty>
         ) : (
-          <div className="space-y-2">
+          <div className="flex flex-col">
             {query.hasNextPage && (
               <Button
                 size="sm"
@@ -258,7 +258,7 @@ export function AttachmentCommentsPane({
         )}
       </div>
       <form
-        className="shrink-0 space-y-2 border-t border-secondary p-3"
+        className="shrink-0 space-y-2 px-4 pt-1 pb-4"
         onSubmit={(event) => {
           event.preventDefault();
           void draft.submit();
@@ -290,7 +290,7 @@ export function AttachmentCommentsPane({
             value={draft.body}
             onValueChange={draft.setBody}
             label={m.attachment_comments_input({ name: fileName })}
-            placeholder={m.attachment_comments_input({ name: fileName })}
+            placeholder={m.attachment_comments_placeholder()}
             onSubmit={() => void draft.submit()}
             sendDisabled={!canComment || !draft.body.trim() || draft.sending}
             isDisabled={!canComment}

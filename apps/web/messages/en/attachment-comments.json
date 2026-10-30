@@ -35,5 +35,7 @@
   "image_lightbox_previous": "Previous Image",
   "image_lightbox_next": "Next Image",
   "image_lightbox_position": "Image {index} of {count}",
-  "attachment_comments_add_timestamp": "Add Timestamp {time}"
+  "attachment_comments_add_timestamp": "Add Timestamp {time}",
+  "attachment_comments_placeholder": "Add a comment…",
+  "attachment_comments_resize": "Resize comments"
 }
