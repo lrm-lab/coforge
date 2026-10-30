@@ -1,5 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { Bookmark, BookmarkCheck, Copy01, DotsHorizontal, FlipForward } from "@untitledui/icons";
+import {
+  Bookmark,
+  BookmarkCheck,
+  CheckSquare,
+  Copy01,
+  DotsHorizontal,
+  FlipForward,
+} from "@untitledui/icons";
 import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -21,6 +28,8 @@ type MessageActions = {
   saveSaved: boolean;
   /** Opens the Forward dialog; absent for a message that cannot be forwarded. */
   onForward?: () => void;
+  /** Makes a Task from the message; absent where task conversations are off. */
+  onMakeTask?: () => void;
   onCopy: () => void;
   /** An own message's "N seen" (`message-seen-by.tsx`), read from its conversation. */
   seenBy?: { conversationId: string };
@@ -47,6 +56,7 @@ export function MessageActionToolbar({
   onToggleSave,
   saveSaved,
   onForward,
+  onMakeTask,
   onCopy,
   seenBy,
 }: MessageActions & { grouped: boolean }) {
@@ -70,10 +80,11 @@ export function MessageActionToolbar({
         onClick={onCopy}
         className="p-1 *:data-icon:size-3.5"
       />
-      {(onForward || onToggleSave || seenBy) && (
+      {(onForward || onToggleSave || onMakeTask || seenBy) && (
         <MessageMoreMenu
           messageId={messageId}
           onForward={onForward}
+          onMakeTask={onMakeTask}
           onToggleSave={onToggleSave}
           saveSaved={saveSaved}
           seenBy={seenBy}
@@ -83,14 +94,18 @@ export function MessageActionToolbar({
   );
 }
 
-/** The hover toolbar's "…": forward and save, then on an own message "N seen". */
+/** The hover toolbar's "…": forward, save and make a Task, then on an own message "N seen". */
 function MessageMoreMenu({
   messageId,
   onForward,
+  onMakeTask,
   onToggleSave,
   saveSaved,
   seenBy,
-}: Pick<MessageActions, "messageId" | "onForward" | "onToggleSave" | "saveSaved" | "seenBy">) {
+}: Pick<
+  MessageActions,
+  "messageId" | "onForward" | "onMakeTask" | "onToggleSave" | "saveSaved" | "seenBy"
+>) {
   const [open, setOpen] = useState(false);
   return (
     <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
@@ -119,7 +134,10 @@ function MessageMoreMenu({
               onAction={onToggleSave}
             />
           )}
-          {(onForward || onToggleSave) && seenBy && <Dropdown.Separator />}
+          {onMakeTask && (
+            <Dropdown.Item icon={CheckSquare} label={m.message_make_task()} onAction={onMakeTask} />
+          )}
+          {(onForward || onToggleSave || onMakeTask) && seenBy && <Dropdown.Separator />}
           {seenBy && (
             <MessageSeenByMenuEntry
               conversationId={seenBy.conversationId}
@@ -157,6 +175,7 @@ export function MessageActionSheet({
   onToggleSave,
   saveSaved,
   onForward,
+  onMakeTask,
   onCopy,
   seenBy,
 }: MessageActions & {
@@ -269,7 +288,7 @@ export function MessageActionSheet({
                 {m.conversation_message_copy_text()}
               </Button>
             )}
-            {(onOpenThread || copyable) && (onForward || onToggleSave) && (
+            {(onOpenThread || copyable) && (onForward || onToggleSave || onMakeTask) && (
               <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
             )}
             {onForward && (
@@ -302,9 +321,24 @@ export function MessageActionSheet({
                 {saveSaved ? m.conversation_unsave() : m.conversation_save()}
               </Button>
             )}
+            {onMakeTask && (
+              <Button
+                color="tertiary"
+                size="md"
+                noTextPadding
+                iconLeading={CheckSquare}
+                onPress={() => {
+                  onOpenChange(false);
+                  onMakeTask();
+                }}
+                className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
+              >
+                {m.message_make_task()}
+              </Button>
+            )}
             {seenBy && (
               <>
-                {(onOpenThread || copyable || onForward || onToggleSave) && (
+                {(onOpenThread || copyable || onForward || onToggleSave || onMakeTask) && (
                   <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
                 )}
                 <MessageSeenBySheetEntry

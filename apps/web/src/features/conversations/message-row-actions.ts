@@ -7,6 +7,7 @@ import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { useIsMessageSaved } from "./conversation-host";
 import { useOpenForward } from "./message-forward-host";
+import { useMakeTaskFromMessage } from "./message-task-host";
 import { canForwardMessage } from "./message-forward-model";
 import type { ReadState } from "./conversation-pane-layout";
 import type { MessageView } from "./message-view";
@@ -37,6 +38,7 @@ export function useMessageRowActions({
   const toast = useAppToast();
   const saveSaved = useIsMessageSaved(message.id);
   const openForward = useOpenForward();
+  const makeTask = useMakeTaskFromMessage();
   // The mobile shell (single-pane below `lg`) has no hover to reveal the reply/reaction
   // actions, and keeping the toolbar always visible puts two buttons on every message.
   // Instead a tap on the row's non-interactive surface (an embed marked `data-no-row-tap`, such as a video's player, is not one) opens a
@@ -91,6 +93,12 @@ export function useMessageRowActions({
               plainBody: messagePlainText(message, channelNames),
             })
         : undefined,
+    // What can be forwarded is someone's own words, which is also what a Task can come from; a
+    // Task's source is a message of the conversation itself, never a thread reply.
+    onMakeTask:
+      makeTask && conversationId && canForwardMessage(message) && !message.threadRootId
+        ? () => makeTask({ conversationId, messageId: message.id })
+        : undefined,
     seenBy: readState && conversationId ? { conversationId } : undefined,
     onCopy: () =>
       void copyText(messagePlainText(message, channelNames)).then((copied) => {
@@ -103,6 +111,7 @@ export function useMessageRowActions({
     onToggleReaction ||
     onToggleSave ||
     actions.onForward ||
+    actions.onMakeTask ||
     copyable ||
     actions.seenBy,
   );
