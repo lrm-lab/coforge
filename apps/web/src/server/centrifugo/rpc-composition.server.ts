@@ -116,6 +116,7 @@ import { agentReadingMethods } from "./agent-reading-methods";
 import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
 import { Reminders } from "#src/server/reminders/reminders.server";
 import { createAgentAppConfigs } from "#src/server/agent-app-configs/agent-app-configs-composition.server";
+import { fromCentrifugoProxy } from "./proxy-secret.server";
 import { daemonControlChannel } from "./server-api.server";
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
@@ -211,9 +212,7 @@ async function requireAuthenticatedCentrifugoUser(
 }
 
 function authorizeCentrifugoProxy(request: Request): void {
-  const secret = process.env.COFORGE_CENTRIFUGO_PROXY_SECRET;
-  if (!secret || request.headers.get("x-coforge-centrifugo-proxy-secret") !== secret)
-    throw new Error("proxy authorization failed");
+  if (!fromCentrifugoProxy(request)) throw new Error("proxy authorization failed");
 }
 
 /**

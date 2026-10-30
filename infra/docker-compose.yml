@@ -55,6 +55,8 @@ services:
         export CENTRIFUGO_CLIENT_PROXY_CONNECT_ENDPOINT="$${COFORGE_CONNECT_PROXY_ENDPOINT:-http://host.docker.internal:8789/api/internal/centrifugo-connect}";
         export CENTRIFUGO_RPC_PROXY_ENDPOINT="$${COFORGE_RPC_PROXY_ENDPOINT:-http://host.docker.internal:8789/api/internal/centrifugo}";
         export CENTRIFUGO_CHANNEL_PROXY_PUBLISH_ENDPOINT="$${COFORGE_ACTIVITY_PROXY_ENDPOINT:-http://host.docker.internal:8789/api/internal/centrifugo-agent-activity}";
+        export CENTRIFUGO_CHANNEL_PROXY_SUBSCRIBE_ENDPOINT="$${COFORGE_SUBSCRIBE_PROXY_ENDPOINT:-http://host.docker.internal:8789/api/internal/centrifugo-subscribe}";
+        export CENTRIFUGO_CHANNEL_PROXY_SUB_REFRESH_ENDPOINT="$${COFORGE_SUB_REFRESH_PROXY_ENDPOINT:-http://host.docker.internal:8789/api/internal/centrifugo-sub-refresh}";
         export CENTRIFUGO_VAR_RPC_PROXY_SECRET="$$(cat /run/secrets/centrifugo_proxy_secret)";
         export CENTRIFUGO_ENGINE_REDIS_ADDRESS="redis://:$$(cat /run/secrets/redis_password)@redis:6379";
         exec centrifugo -c /centrifugo/config.yaml

@@ -8,6 +8,7 @@ import {
   issueConversationRealtimeToken,
   issueRuntimeAuthSubscriptionToken,
   issueBrowserRealtimeToken,
+  BROWSER_PAGE_META,
 } from "#src/server/auth/browser-realtime-token.server";
 
 async function signingFixture() {
@@ -37,6 +38,8 @@ test("connection token carries no channel grants of its own", async () => {
   expect(payload.sub).toBe("user-1");
   expect(payload.channels).toBeUndefined();
   expect(payload.channel).toBeUndefined();
+  // The subscribe proxy answers only a page's connection.
+  expect(payload.meta).toEqual(BROWSER_PAGE_META);
 });
 
 test("subscription token authorizes one User for the Workspace Activity channel", async () => {

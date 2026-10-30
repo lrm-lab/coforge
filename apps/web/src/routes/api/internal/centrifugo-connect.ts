@@ -4,14 +4,14 @@ import {
   authenticateCentrifugoConnect,
   centrifugoConnectDependencies,
 } from "#src/server/centrifugo/connect-proxy.server";
+import { fromCentrifugoProxy } from "#src/server/centrifugo/proxy-secret.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 
 export const Route = createFileRoute("/api/internal/centrifugo-connect")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.COFORGE_CENTRIFUGO_PROXY_SECRET;
-        if (!secret || request.headers.get("x-coforge-centrifugo-proxy-secret") !== secret)
+        if (!fromCentrifugoProxy(request))
           return Response.json(
             { error: { code: 403, message: "proxy authorization failed" } },
             { status: 403 },

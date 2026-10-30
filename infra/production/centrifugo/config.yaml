@@ -55,6 +55,25 @@ channel:
       http:
         static_headers:
           X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}
+    # A browser page subscribes to the namespaces below without a token of its own: Centrifugo asks
+    # the Web whether the connection's user may hold the channel, and asks again when the grant it
+    # was given runs out (apps/web/src/server/centrifugo/subscribe-proxy.server.ts). A subscription
+    # that still carries a token is not proxied. The connection meta tells a page's connection from a
+    # daemon's, which is refused.
+    subscribe:
+      endpoint: http://web:3000/api/internal/centrifugo-subscribe
+      timeout: 2s
+      include_connection_meta: true
+      http:
+        static_headers:
+          X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}
+    sub_refresh:
+      endpoint: http://web:3000/api/internal/centrifugo-sub-refresh
+      timeout: 2s
+      include_connection_meta: true
+      http:
+        static_headers:
+          X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}
   namespaces:
     - name: workspace
     # `daemon:<workspace_id>:<computer_id>`: one Computer's control channel, subscribed server side
@@ -63,18 +82,26 @@ channel:
     - name: daemon
       presence: true
     - name: chat
+      subscribe_proxy_enabled: true
+      sub_refresh_proxy_enabled: true
       history_size: 200
       history_ttl: 5m
       force_recovery: true
     # `runtimeauth:user:<user_id>`: one person's runtime sign-in progress (authorization link, device
     # code, result). No history: nothing in it may be kept after it is delivered.
     - name: runtimeauth
+      subscribe_proxy_enabled: true
+      sub_refresh_proxy_enabled: true
     - name: agent
+      subscribe_proxy_enabled: true
+      sub_refresh_proxy_enabled: true
       publish_proxy_enabled: true
       publication_data_format: binary
     # `presence:workspace:<workspace_id>`: who has a CoForge tab open in the Workspace
     # (apps/web/src/features/workspaces/presence-channel.ts). Nothing is published here.
     - name: presence
+      subscribe_proxy_enabled: true
+      sub_refresh_proxy_enabled: true
       presence: true
       join_leave: true
       force_push_join_leave: true

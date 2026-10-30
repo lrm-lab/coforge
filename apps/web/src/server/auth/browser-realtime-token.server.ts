@@ -16,6 +16,10 @@ import {
 import { runtimeAuthChannel } from "#src/features/computers/runtime-auth-realtime";
 import { workspacePresenceChannel } from "#src/features/workspaces/presence-channel";
 
+/** The connection meta of a browser page's connection, never of a daemon's (whose meta the connect
+ * proxy sets). Centrifugo keeps it server side and hands it to the subscribe proxy. */
+export const BROWSER_PAGE_META = { page: true } as const;
+
 async function browserRealtimeSigner(
   environment: Record<string, string | undefined>,
   claims: Record<string, unknown>,
@@ -40,10 +44,11 @@ export async function issueBrowserRealtimeToken(
   environment: Record<string, string | undefined> = process.env,
 ): Promise<string> {
   // The connection token grants no channels of its own: every channel on the
-  // shared Workspace connection is subscribed client-side with its own
+  // shared Workspace connection is subscribed client-side, with its own
   // narrower, server-issued subscription token (see the `issue*SubscriptionToken`
-  // functions below).
-  return browserRealtimeSigner(environment, {}, input.userId);
+  // functions below) or none, when the subscribe proxy checks it. Its meta marks
+  // the connection as a page's, which that proxy requires.
+  return browserRealtimeSigner(environment, { meta: BROWSER_PAGE_META }, input.userId);
 }
 
 export async function issueAgentActivitySubscriptionToken(
