@@ -27,6 +27,16 @@ const INBOX_LIST_ROUTE = {
   method: "GET",
   path: "/api/agent/v1/inbox/conversations",
 } as const;
+/** `coforge task view|reply|follow|unfollow|list --following`: a task's own conversation. Same
+ * routes under `proxy`, `local` and `cloud`. */
+const TASK_CONVERSATION_ROUTES = {
+  view: { method: "GET", path: "/api/agent/v1/tasks/view" },
+  following: { method: "GET", path: "/api/agent/v1/tasks/following" },
+  reply: { method: "POST", path: "/api/agent/v1/tasks/reply" },
+  follow: { method: "POST", path: "/api/agent/v1/tasks/follow" },
+  unfollow: { method: "POST", path: "/api/agent/v1/tasks/unfollow" },
+} as const;
+
 const THREAD_LIST_ROUTE = { method: "GET", path: "/api/agent/v1/threads" } as const;
 
 /** `coforge mention pending|execute`. Same routes under `proxy`, `local` and `cloud`. */
@@ -161,6 +171,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
+    taskConversations: TASK_CONVERSATION_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
@@ -202,6 +213,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
+    taskConversations: TASK_CONVERSATION_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
@@ -318,6 +330,7 @@ export const agentApiRoutes = {
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
+    taskConversations: TASK_CONVERSATION_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
