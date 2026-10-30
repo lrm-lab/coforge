@@ -21,7 +21,9 @@ Rules for durable local state in `src/persistence/`. They extend
   held-send draft, and the held send's continuation — and the one-time import of the legacy JSON
   stores. Writes commit when they
   happen (WAL, `synchronous=NORMAL`, `busy_timeout`); there is no write delay, batching, or
-  stop-time flush.
+  stop-time flush. When the Agent is deleted or moved to another Computer,
+  `DaemonRuntime.#forgetLocalAgent` calls `AgentConsumedSeqStore.remove`, which closes the handle
+  and deletes the directory: an Agent that moves back starts a fresh cursor, never the old one.
 - The cursor is written row by row, and the database keeps it monotonic: a snapshot that arrives
   late never lowers a frontier, a review boundary or a read order (a target that moved to another
   conversation resets instead). `meta` holds the schema version — a database a newer build wrote

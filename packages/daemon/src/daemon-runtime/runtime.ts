@@ -172,6 +172,8 @@ import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runt
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { deleteAgentWorkspaceFiles } from "#src/agent-runtime/agent-workspace-files";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+import { forgetLocalAgent } from "./agent-forget";
+import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import { RuntimeRelease } from "./runtime-release";
@@ -3320,9 +3322,14 @@ export class DaemonRuntime {
 
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
   #forgetLocalAgent(agentId: string): void {
-    this.systemCleaner.replaceOwnerSnapshot(agentId, null);
-    this.#offlineResidency.forget(agentId);
-    this.#agentInboxes.delete(agentId);
+    forgetLocalAgent(agentId, {
+      systemCleaner: this.systemCleaner,
+      offlineResidency: this.#offlineResidency,
+      agentInboxes: this.#agentInboxes,
+      messageAttention: this.#messageAttention,
+      consumedSeqs: this.#consumedSeqs,
+      appInboxes: this.#appInboxes,
+    });
   }
 
   /** Presents what was kept across an exit or a runtime's end, as at idle. */
@@ -3390,18 +3397,8 @@ export class DaemonRuntime {
     return "Agent runtime could not be stopped.";
   }
 
-  /**
-   * Revokes the key of an Agent process that is gone: it exited, its Stop was requested, or its
-   * launch failed after the key was minted. One request, exactly then, and never again:
-   * a key still in use by a running Agent is never revoked by the daemon, and
-   * a revoke that fails is logged and left to the server, which invalidates every earlier key
-   * of the Agent when it mints the next one.
-   */
   async #revokeAgentApiKey(agentId: string, agentApiKey: string | undefined): Promise<void> {
-    if (!agentApiKey) return;
-    if (!this.#transport.revokeAgentApiKey) return;
-    if (this.#agentApiKeys.get(agentId) === agentApiKey) this.#agentApiKeys.delete(agentId);
-    await this.#transport.revokeAgentApiKey(agentApiKey);
+    await revokeAgentApiKey(this.#transport, this.#agentApiKeys, agentId, agentApiKey);
   }
 
   async agentMessage(
