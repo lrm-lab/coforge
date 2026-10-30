@@ -1,4 +1,5 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { capturePiChatLogs } from "./fixtures/log-capture";
 import { PiChatSessions, type PiChatRuntime, type PiChatStore } from "#src/pi-chat/sessions";
 import type { PiChatMessage, PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 
@@ -219,71 +220,65 @@ for (const mutation of ["rename", "send", "delete"] as const) {
 
 for (const failure of ["throw", "reject"] as const) {
   test(`Pi chat checkpoint ${failure} is logged without preventing later sends or replaying a completed turn`, async () => {
-    const f = fixture();
-    const secret = "private prompt must not enter cleanup logs";
-    const errors: unknown[][] = [];
-    const stderr = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
-      errors.push(args);
-    });
-    const store: PiChatStore = {
-      ...f.store,
-      clearCheckpoint: () => {
-        if (failure === "throw") throw new Error(secret);
-        return Promise.reject(new Error(secret));
-      },
-    };
-    let creations = 0;
-    const factory = async (id?: string) => {
-      creations++;
-      return f.factory(id);
-    };
-    let settled = Promise.withResolvers<void>();
-    const sessions = new PiChatSessions(store, factory, (update) => {
-      if (update.session?.status === "idle") settled.resolve();
-    });
-    let restored: PiChatSessions | undefined;
-    try {
-      const requestId = crypto.randomUUID();
-      const started = await sessions.start({ requestId, message: secret });
-      f.finish();
-      await settled.promise;
-      expect((await sessions.read(started.id)).session.status).toBe("idle");
-      expect(errors).toHaveLength(1);
-      expect(JSON.parse(String(errors[0]![0]))).toEqual({
-        event: "pi_chat.checkpoint_cleanup_failed",
-        session_id: started.id,
-        error_type: "Error",
+    await capturePiChatLogs(async (records) => {
+      const f = fixture();
+      const secret = "private prompt must not enter cleanup logs";
+      const store: PiChatStore = {
+        ...f.store,
+        clearCheckpoint: () => {
+          if (failure === "throw") throw new Error(secret);
+          return Promise.reject(new Error(secret));
+        },
+      };
+      let creations = 0;
+      const factory = async (id?: string) => {
+        creations++;
+        return f.factory(id);
+      };
+      let settled = Promise.withResolvers<void>();
+      const sessions = new PiChatSessions(store, factory, (update) => {
+        if (update.session?.status === "idle") settled.resolve();
       });
-      expect(JSON.stringify(errors)).not.toContain(secret);
-      expect((await store.checkpoint(started.id))?.requestId).toBe(requestId);
-      settled = Promise.withResolvers<void>();
-      const nextId = crypto.randomUUID();
-      expect(
-        (await sessions.start({ sessionId: started.id, requestId: nextId, message: "next" }))
-          .status,
-      ).toBe("running");
-      f.finish();
-      await settled.promise;
-      expect(f.calls()).toBe(2);
-      expect((await store.checkpoint(started.id))?.requestId).toBe(nextId);
-      await sessions.dispose();
-      restored = new PiChatSessions(store, factory);
-      expect((await restored.list())[0]!.status).toBe("idle");
-      expect(creations).toBe(2);
-      expect(
-        (await restored.start({ sessionId: started.id, requestId: nextId, message: "duplicate" }))
-          .id,
-      ).toBe(started.id);
-      expect(f.calls()).toBe(2);
-    } finally {
-      f.finish();
-      await sessions.dispose().finally(async () => {
-        try {
-          await restored?.dispose();
-        } finally {
-          stderr.mockRestore();
-        }
-      });
-    }
+      let restored: PiChatSessions | undefined;
+      try {
+        const requestId = crypto.randomUUID();
+        const started = await sessions.start({ requestId, message: secret });
+        f.finish();
+        await settled.promise;
+        expect((await sessions.read(started.id)).session.status).toBe("idle");
+        expect(records).toHaveLength(1);
+        expect(records[0]!.level).toBe("warning");
+        expect(records[0]!.category).toEqual(["coforge", "pi-chat"]);
+        expect(records[0]!.properties).toEqual({
+          event: "pi_chat.checkpoint_cleanup_failed",
+          session_id: started.id,
+          error_type: "Error",
+        });
+        expect(JSON.stringify(records)).not.toContain(secret);
+        expect((await store.checkpoint(started.id))?.requestId).toBe(requestId);
+        settled = Promise.withResolvers<void>();
+        const nextId = crypto.randomUUID();
+        expect(
+          (await sessions.start({ sessionId: started.id, requestId: nextId, message: "next" }))
+            .status,
+        ).toBe("running");
+        f.finish();
+        await settled.promise;
+        expect(f.calls()).toBe(2);
+        expect((await store.checkpoint(started.id))?.requestId).toBe(nextId);
+        await sessions.dispose();
+        restored = new PiChatSessions(store, factory);
+        expect((await restored.list())[0]!.status).toBe("idle");
+        expect(creations).toBe(2);
+        expect(
+          (await restored.start({ sessionId: started.id, requestId: nextId, message: "duplicate" }))
+            .id,
+        ).toBe(started.id);
+        expect(f.calls()).toBe(2);
+      } finally {
+        f.finish();
+        await sessions.dispose().finally(() => restored?.dispose());
+      }
+    });
   });
 }

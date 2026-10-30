@@ -17,7 +17,10 @@ if (Bun.argv[2] === "__pi-chat") {
   const { homedir } = await import("node:os");
   const { join } = await import("node:path");
   const { resolveComputerStateDirectory } = await import("./paths");
-  const { runPiChatWorker } = await import("@coforge/agent");
+  const { configurePiChatLogging, runPiChatWorker } = await import("@coforge/agent");
+  // Logs go to stderr through LogTape; stdout stays the JSONL protocol channel. The worker's own
+  // logging is best effort and must never take the worker down with it.
+  await configurePiChatLogging().catch(() => {});
   const state = resolveComputerStateDirectory({
     platform: process.platform,
     homeDirectory: homedir(),

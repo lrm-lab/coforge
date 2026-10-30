@@ -1,7 +1,10 @@
+import { getLogger } from "@logtape/logtape";
 import type { PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 import type { PiChatRuntime, PiChatStore } from "./sessions";
 import { PiChatRecoveryUncertain } from "./checkpoint";
 import type { PiChatQueue } from "@lrm/coforge-sdk/internal/pi-chat";
+
+const logger = getLogger(["coforge", "pi-chat"]);
 
 /** One admitted turn, including its durable settlement and shutdown intent. */
 export class PiChatTurn {
@@ -96,13 +99,11 @@ export class PiChatTurn {
           if (status !== "interrupted") await store.clearCheckpoint(row.id);
         } catch (error) {
           // Terminal metadata is durable; recovery ignores a completed turn's stale checkpoint.
-          console.error(
-            JSON.stringify({
-              event: "pi_chat.checkpoint_cleanup_failed",
-              session_id: row.id,
-              error_type: error instanceof Error ? error.name : typeof error,
-            }),
-          );
+          logger.warning("a finished turn's checkpoint could not be removed", {
+            event: "pi_chat.checkpoint_cleanup_failed",
+            session_id: row.id,
+            error_type: error instanceof Error ? error.name : typeof error,
+          });
         } finally {
           // Publish readiness only when cleanup has settled, immediately before releasing active.
           Object.assign(row, next);

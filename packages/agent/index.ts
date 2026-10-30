@@ -25,6 +25,7 @@ export const PI_SDK_VERSION = agentPackage.dependencies["@earendil-works/pi-codi
 export { COFORGE_PROVIDER_MODELS_GENERATED } from "#src/coforge-provider-models.generated";
 export { supportedReasoningEfforts } from "#src/reasoning-levels";
 export { runPiChatWorker } from "#src/pi-chat/worker";
+export { configurePiChatLogging } from "#src/pi-chat/logging";
 export {
   COFORGE_RUNTIME_STORAGE_DIRS,
   PI_SESSION_DIR,
