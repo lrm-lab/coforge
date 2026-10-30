@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ReadyRouteImport } from './routes/ready'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known.oauth-authorization-server'
 import { Route as ApiAgentApiKeysRouteImport } from './routes/api/agent-api-keys'
@@ -180,6 +181,11 @@ const HealthRoute = HealthRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReadyRoute = ReadyRouteImport.update({
+  id: '/ready',
+  path: '/ready',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -1045,6 +1051,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
+  '/ready': typeof ReadyRoute
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
@@ -1202,6 +1209,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
+  '/ready': typeof ReadyRoute
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
@@ -1358,6 +1366,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/login': typeof LoginRoute
+  '/ready': typeof ReadyRoute
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
@@ -1519,6 +1528,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/login'
+    | '/ready'
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
     | '/api/agent-api-keys'
@@ -1676,6 +1686,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/login'
+    | '/ready'
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
     | '/api/agent-api-keys'
@@ -1831,6 +1842,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/login'
+    | '/ready'
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
     | '/api/agent-api-keys'
@@ -1991,6 +2003,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
   LoginRoute: typeof LoginRoute
+  ReadyRoute: typeof ReadyRoute
   WelcomeRoute: typeof WelcomeRoute
   DotwellKnownOauthAuthorizationServerRoute: typeof DotwellKnownOauthAuthorizationServerRoute
   ApiAgentApiKeysRoute: typeof ApiAgentApiKeysRoute
@@ -2128,6 +2141,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ready': {
+      id: '/ready'
+      path: '/ready'
+      fullPath: '/ready'
+      preLoaderRoute: typeof ReadyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/welcome': {
@@ -3422,6 +3442,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
   LoginRoute: LoginRoute,
+  ReadyRoute: ReadyRoute,
   WelcomeRoute: WelcomeRoute,
   DotwellKnownOauthAuthorizationServerRoute:
     DotwellKnownOauthAuthorizationServerRoute,
@@ -3581,3 +3602,4 @@ declare module '@tanstack/react-start' {
     config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }
+
