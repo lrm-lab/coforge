@@ -1,4 +1,6 @@
-import { VISIBLE_CONVERSATION_WHERE } from "#src/server/conversations/active-member.server";
+import type { ChannelActor } from "#src/server/conversations/channel-actor.server";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
+import { agentChannelReader } from "./workspace-assistant-authority.server";
 import type {
   AgentUserInfo,
   AgentUserInfoMembership,
@@ -204,21 +206,19 @@ export async function findWorkspaceUser(
   };
 }
 
-/** Every channel the target currently belongs to (`leftAt: null`), as the reference client lists
- * them. CoForge has no private channel: every Conversation with a `channelName` is public to the
- * Workspace, so the target's channel list leaks nothing the caller cannot already see. Keep the
- * visibility filter: a future private channel stays out unless the caller may see it. */
+/** Every channel the target currently belongs to (`leftAt: null`) that the caller's `reader` may
+ * read too (`visibleChannelWhere`), as the reference client lists them: a private channel the
+ * caller is not in stays out. */
 async function targetChannelMemberships(
   db: PrismaClient,
   workspaceId: string,
+  reader: ChannelActor,
   target: { kind: "human" | "agent"; id: string },
 ): Promise<AgentUserInfoMembership[]> {
   const conversations = await db.conversation.findMany({
     where: {
-      workspaceId,
-      channelName: { not: null },
+      ...visibleChannelWhere(workspaceId, reader),
       archivedAt: null,
-      ...VISIBLE_CONVERSATION_WHERE,
       members: {
         some:
           target.kind === "agent"
@@ -256,9 +256,10 @@ export async function resolveAgentUserInfo(
   principal: { workspaceId: string; agentId: string },
   name: string,
 ): Promise<AgentUserInfoOutcome> {
-  const viewer = await agentVisibilityViewerForActor(db, principal.workspaceId, {
-    agentId: principal.agentId,
-  });
+  const [viewer, reader] = await Promise.all([
+    agentVisibilityViewerForActor(db, principal.workspaceId, { agentId: principal.agentId }),
+    agentChannelReader(db, principal.workspaceId, principal.agentId),
+  ]);
   const target = await findWorkspaceUser(db, principal.workspaceId, name, viewer);
   if (target === AGENT_NOT_VISIBLE)
     return {
@@ -278,7 +279,7 @@ export async function resolveAgentUserInfo(
         error: `User not found or not visible: @${name}`,
       },
     };
-  const memberships = await targetChannelMemberships(db, principal.workspaceId, {
+  const memberships = await targetChannelMemberships(db, principal.workspaceId, reader, {
     kind: target.kind,
     id: target.id,
   });

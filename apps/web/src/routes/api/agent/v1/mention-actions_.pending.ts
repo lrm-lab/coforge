@@ -1,4 +1,4 @@
-import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
+import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   MENTION_PENDING_DEFAULT_LIMIT,
@@ -61,14 +61,12 @@ export const Route = createFileRoute("/api/agent/v1/mention-actions_/pending")({
     handlers: {
       GET: ({ request, context: { principal, db } }) =>
         handleAgentMentionPendingGet(request, principal, {
-          pendingMentionActions: async (workspaceId, agentId) => {
-            const user = await workspaceAssistantUser(db, workspaceId, agentId);
-            return pendingMentionActionsForActor(
+          pendingMentionActions: async (workspaceId, agentId) =>
+            pendingMentionActionsForActor(
               db,
               workspaceId,
-              user ? { userId: user.userId } : { agentId },
-            );
-          },
+              await agentChannelReader(db, workspaceId, agentId),
+            ),
         }),
     },
   },

@@ -110,9 +110,9 @@ function channelLastPost(channel: WorkspaceInfoChannel, now: number): string | u
   return `last post ${minuteStamp(at)} (${agoLabel(at, now)})`;
 }
 
-/** Every CoForge channel is visible to the whole Workspace, so the visibility is always `public`. */
+/** An older server sends no visibility; every channel it has is public. */
 function channelStatus(channel: WorkspaceInfoChannel, now: number, withArchived: boolean): string {
-  const parts = ["public", channel.joined ? "joined" : "not joined"];
+  const parts = [channel.visibility ?? "public", channel.joined ? "joined" : "not joined"];
   if (channel.channelRole) parts.push(`channel role=${channel.channelRole}`);
   if (channel.channelAdminBasis) parts.push(`admin via=${channel.channelAdminBasis}`);
   parts.push(channel.muted ? "muted" : "not muted");
@@ -250,7 +250,7 @@ function section(
     return render(
       "Workspace Channels",
       [
-        "All channels in the Workspace are public. Do not disclose private conversations outside their channel.",
+        "You see the public channels and the private ones you are in. Do not disclose what a private channel or a private conversation says outside it.",
       ],
       rows,
       (channel) => channelRow(channel, now, true),
@@ -272,7 +272,7 @@ function full(result: WorkspaceInfoResult, now: number): string {
     ...(runtime ? [runtime, ""] : []),
     ...(result.serverRole ? ["### Current Agent", `- Role: ${result.serverRole}`, ""] : []),
     "### Channels",
-    "Every channel in the Workspace appears, joined or not. Use channel attention commands (`coforge channel join`, `leave`, `mute`, `unmute`; `coforge thread unfollow`) for your own delivery state. Channel management commands (`coforge channel create`, `update`, `archive`, `unarchive`, `add-member`, `remove-member`) work when your server role allows them, or, for update, archive, unarchive and remove-member, your channel-admin role in that channel; the server checks on each call, and a refusal says what is missing. There is no Agent command for changing channel roles. Run any subcommand with `--help` for syntax.",
+    "Every channel you can read appears, joined or not: all public ones, and the private ones you are in. Use channel attention commands (`coforge channel join`, `leave`, `mute`, `unmute`; `coforge thread unfollow`) for your own delivery state. Channel management commands (`coforge channel create`, `update`, `archive`, `unarchive`, `add-member`, `remove-member`) work when your server role allows them, or, for update, archive, unarchive and remove-member, your channel-admin role in that channel; the server checks on each call, and a refusal says what is missing. There is no Agent command for changing channel roles. Run any subcommand with `--help` for syntax.",
     "Mute state is shown when the server provides it; otherwise it is omitted.",
     ...list(result.channels ?? [], (channel) => channelRow(channel, now, false)),
     "",

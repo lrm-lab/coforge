@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
+import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import {
   ACTIVE_MEMBER_WHERE,
   DIRECT_CONVERSATION_WHERE,
@@ -89,7 +90,12 @@ export async function pendingDeliveryWhere(
           },
         },
       },
-      { message: { pendingMentionActions: { some: NOTIFIED_AGENT_WHERE(agentId) } } },
+      // A message it was notified of from outside the channel, while the channel stays one it may
+      // read: never a private one it is not in.
+      {
+        conversation: visibleChannelWhere(workspaceId, { agentId }),
+        message: { pendingMentionActions: { some: NOTIFIED_AGENT_WHERE(agentId) } },
+      },
     ],
   };
 }
@@ -317,12 +323,14 @@ export function unreadAgentMessagesFragment(
         AND dam."leftAt" IS NULL AND dm."sequence" > COALESCE(dtr."readThroughSequence", 0)
       UNION ALL
       -- A channel message the Agent was notified of without being a member: unread until it is
-      -- read once. A member reads it through its channel branch above instead.
+      -- read once. A member reads it through its channel branch above instead; a private channel
+      -- opens to members only, so here, never a member, only a public channel's notification counts.
       SELECT nm."id", nm."sequence", nm."body", nm."conversationId", nm."threadRootId",
         nm."senderMemberId", nm."createdAt"
       FROM "pending_mention_actions" pma
       JOIN "messages" nm ON nm."id" = pma."messageId"
-      JOIN "conversations" nc ON nc."id" = nm."conversationId" AND nc."hiddenFromWorkspaceAt" IS NULL AND nc."channelName" IS NOT NULL
+      JOIN "conversations" nc ON nc."id" = nm."conversationId" AND nc."hiddenFromWorkspaceAt" IS NULL
+        AND nc."channelName" IS NOT NULL AND nc."visibility" = ${CHANNEL_VISIBILITY.PUBLIC}
       WHERE pma."workspaceId" = ${workspaceId}::uuid AND pma."targetAgentId" = ${agentId}::uuid
         AND pma."notifiedAt" IS NOT NULL AND pma."targetReadAt" IS NULL
         AND NOT EXISTS (

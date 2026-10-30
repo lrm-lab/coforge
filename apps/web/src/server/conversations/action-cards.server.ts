@@ -354,6 +354,7 @@ export class ActionCards {
     }
     const channelId = await this.handles.resolveChannel(
       workspaceId,
+      agentId,
       action.channel,
       "action.channel",
     );

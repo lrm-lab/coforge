@@ -5,6 +5,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { buildAgentRuntimeContext } from "#src/server/agents/agent-runtime-context.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
 import { resolveActorServerRole } from "#src/server/conversations/channel-authority.server";
 import {
   listAgentWorkspaceChannels,
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
         const viewer = await agentVisibilityViewerForActor(db, principal.workspaceId, {
           agentId: principal.agentId,
         });
-        const [workspace, humans, agents, projects, self, serverRole] = await Promise.all([
+        const [workspace, humans, agents, projects, self, serverRole, reader] = await Promise.all([
           db.workspace.findUnique({
             where: { id: principal.workspaceId },
             select: { id: true, name: true, slug: true },
@@ -87,12 +88,13 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
             },
           }),
           resolveActorServerRole(db, principal.workspaceId, { agentId: principal.agentId }),
+          agentChannelReader(db, principal.workspaceId, principal.agentId),
         ]);
         if (!workspace) return Response.json({ error: "workspace not found" }, { status: 404 });
         // Same online/offline source the Agents list and `coforge user info` read; one read for
         // the whole list rather than one per Agent, and never a failure of the whole response.
         const [channels, computers] = await Promise.all([
-          listAgentWorkspaceChannels(db, principal.workspaceId, principal.agentId, serverRole),
+          listAgentWorkspaceChannels(db, principal.workspaceId, reader, serverRole),
           listWorkspaceComputers(db, principal.workspaceId),
         ]);
         const resolvedAgentStatuses = await resolveAgentStatuses(principal.workspaceId, agents);

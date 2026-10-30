@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { canJoinChannel } from "./mention-target-availability.server";
 import {
+  notifyReachesOutside,
   pendingMentionActionsForActor,
   targetMembership,
   type MentionActor,
@@ -29,7 +30,8 @@ export type MentionActionResult = {
     | "channel_archived"
     | "could_not_apply"
     | "add_requires_human_member_authority"
-    | "already_queued";
+    | "already_queued"
+    | "private_channel";
   targetType?: "user" | "agent";
   targetId?: string;
   /** The `@handle` the sender wrote, without the `@`. */
@@ -69,7 +71,12 @@ async function loadActionRows(
       resolvedAt: true,
       notifiedAt: true,
       sender: { select: { leftAt: true } },
-      message: { select: { sequence: true, conversation: { select: { archivedAt: true } } } },
+      message: {
+        select: {
+          sequence: true,
+          conversation: { select: { archivedAt: true, visibility: true } },
+        },
+      },
       targetAgent: { select: { visibility: true, deletedAt: true } },
       targetUser: { select: { memberships: { where: { workspaceId }, select: { userId: true } } } },
     },
@@ -105,6 +112,15 @@ function actionRefusal(
   if (!canJoinChannel(row)) return { status: "stale", reason: "target_unavailable" };
   if (membership.has(row.conversationId, actionTarget(row).targetId))
     return { status: "stale", reason: "target_already_member" };
+  return undefined;
+}
+
+/** Why Notify, unlike Add, is refused on a row `actionRefusal` lets through: a private channel's
+ * message reaches only its members (`notifyReachesOutside`), so a target outside it is added or
+ * not told at all. */
+function notifyRefusal(row: ActionRow): Pick<MentionActionResult, "status" | "reason"> | undefined {
+  if (!notifyReachesOutside(row.message.conversation))
+    return { status: "no_permission", reason: "private_channel" };
   return undefined;
 }
 
@@ -151,8 +167,9 @@ export async function claimMentionActions(
 
 /**
  * Notify a target of this message only, without channel access: Agents get a non-member
- * delivery, humans an Activity item. Keep the action pending for later add; repeat notify
- * is queued/already_queued. Return ordered results and deliveries for publication.
+ * delivery, humans an Activity item; never in a private channel (`notifyRefusal`). Keep the
+ * action pending for later add; repeat notify is queued/already_queued. Return ordered results
+ * and deliveries for publication.
  */
 export async function notifyMentionTargets(
   db: Pick<PrismaClient, "pendingMentionAction" | "conversationMember" | "agentMessageDelivery">,
@@ -178,7 +195,7 @@ export async function notifyMentionTargets(
       continue;
     }
     const target = actionTarget(row);
-    const refusal = actionRefusal(row, membership, now);
+    const refusal = actionRefusal(row, membership, now) ?? notifyRefusal(row);
     if (refusal) {
       results.push({ resolutionId: id, ...refusal, ...target });
       continue;

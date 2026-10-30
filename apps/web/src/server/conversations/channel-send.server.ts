@@ -317,7 +317,7 @@ export async function sendChannel(
         senderMemberId: member.id,
         body: message.body,
       },
-      { archived: channel.archivedAt !== null, name: channel.channelName! },
+      channel,
     ),
   ]);
   return { ...message, unresolvedMentionHandles: unresolved, pendingMentionActions };

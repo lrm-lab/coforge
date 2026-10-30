@@ -32,7 +32,8 @@ wrap the @handle in inline or fenced code.
 **Sender-side mention actions** — `coforge mention pending`, `coforge mention notify
 <resolutionIds...>`, `coforge mention add <resolutionIds...>`. These act on mentions you sent
 whose targets were not reached. A pending mention action lasts 7 days. `notify` exits nonzero
-unless the target queue accepts the delivery.
+unless the target queue accepts the delivery; in a private channel it is refused, and only `add`
+(a person's decision) lets the target read the message.
 
 ## Formatting — mentions and references
 

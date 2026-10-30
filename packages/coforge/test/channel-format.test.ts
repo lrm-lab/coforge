@@ -413,3 +413,20 @@ test("formatChannelRemoveMember renders the remove-member confirmation and its n
     "@alice was not in #engineering.",
   );
 });
+
+test("formatChannelInfo names a private channel's visibility", () => {
+  const text = formatChannelInfo({
+    channel: {
+      id: "id",
+      name: "#secret",
+      description: "",
+      visibility: "private",
+      archived: false,
+      joined: true,
+      muted: false,
+      memberCounts: { agents: 1, humans: 1 },
+      channelCapabilities: NO_CAPABILITIES,
+    },
+  });
+  expect(text.split("\n")).toContain("Visibility: private");
+});

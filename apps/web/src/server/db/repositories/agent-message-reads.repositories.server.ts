@@ -189,6 +189,7 @@ export async function agentMentionReport(
     select: {
       channelName: true,
       archivedAt: true,
+      visibility: true,
       members: { where: { agentId }, select: { id: true } },
     },
   });
@@ -199,7 +200,7 @@ export async function agentMentionReport(
     pendingMentionActionsForMessage(
       ports.db,
       { ...message, workspaceId, senderMemberId },
-      { archived: conversation.archivedAt !== null, name: conversation.channelName! },
+      conversation,
     ),
     unresolvedMentionHandles(ports.db, workspaceId, { agentId }, message.body),
   ]);

@@ -91,7 +91,11 @@ describe("PrismaDirectConversationRepository recovery", () => {
         // Not already read while the Agent was notified from outside the channel.
         "agent-1",
       ]).flat(),
-      ...Array.from({ length: 3 }, () => ["workspace-1", "agent-1"]).flat(),
+      ...Array.from({ length: 2 }, () => ["workspace-1", "agent-1"]).flat(),
+      // The notified-non-member branch, on public channels only.
+      "public",
+      "workspace-1",
+      "agent-1",
       "agent-1",
       "workspace-1",
       "agent-1",

@@ -1,4 +1,4 @@
-import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
+import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -20,6 +20,8 @@ import { announceJoinedOrLeft } from "./channel-membership-signals.server";
 import { assertCallerNotPrivate, createAgentChannel } from "./agent-channel-create.server";
 
 import { hasChannelAdminAuthority } from "./channel-authority.server";
+import type { ChannelActor } from "./channel-actor.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 import type { AgentDisplay } from "#src/server/agents/agent-display.server";
 import {
   agentChannelInfo,
@@ -77,19 +79,17 @@ export class AgentChannelManagement {
   }
 
   async info(workspaceId: string, agentId: string, target: string): Promise<AgentChannelInfo> {
-    const { channel } = await this.targetChannel(workspaceId, target);
-    return agentChannelInfo(this.db, workspaceId, channel, await this.actor(workspaceId, agentId));
+    const actor = await agentChannelReader(this.db, workspaceId, agentId);
+    const { channel } = await this.targetChannel(workspaceId, actor, target);
+    return agentChannelInfo(this.db, workspaceId, channel, actor);
   }
 
   async members(workspaceId: string, agentId: string, target: string): Promise<AgentChannelRoster> {
     const parentTarget = target.split(":")[0] ?? "";
     if (parentTarget.startsWith("#")) {
-      const { channel } = await this.targetChannel(workspaceId, parentTarget);
-      const raw = await this.channels.members(
-        workspaceId,
-        await this.actor(workspaceId, agentId),
-        channel.id,
-      );
+      const actor = await agentChannelReader(this.db, workspaceId, agentId);
+      const { channel } = await this.targetChannel(workspaceId, actor, parentTarget);
+      const raw = await this.channels.members(workspaceId, actor, channel.id);
       return shapeAgentRoster(this.display, workspaceId, agentId, `#${channel.channelName}`, raw);
     }
     if (!USER_TARGET.test(parentTarget))
@@ -112,15 +112,10 @@ export class AgentChannelManagement {
     );
   }
 
-  private async actor(workspaceId: string, agentId: string) {
-    const user = await workspaceAssistantUser(this.db, workspaceId, agentId);
-    return user ? { userId: user.userId } : { agentId };
-  }
-
   async join(workspaceId: string, agentId: string, target: string) {
-    const { channel } = await this.targetChannel(workspaceId, target);
+    const actor = await agentChannelReader(this.db, workspaceId, agentId);
+    const { channel } = await this.targetChannel(workspaceId, actor, target);
     if (channel.archivedAt) throw new AgentChannelManagementError(409, "channel is archived");
-    const actor = await this.actor(workspaceId, agentId);
     if ("userId" in actor) {
       const before = await this.db.conversationMember.findFirst({
         where: { conversationId: channel.id, userId: actor.userId, leftAt: null },
@@ -138,10 +133,10 @@ export class AgentChannelManagement {
 
   async leave(workspaceId: string, agentId: string, target: string) {
     // Looked up first: a #general hidden from the Workspace is an unknown channel, not a refusal.
-    const { channelName, channel } = await this.targetChannel(workspaceId, target);
+    const actor = await agentChannelReader(this.db, workspaceId, agentId);
+    const { channelName, channel } = await this.targetChannel(workspaceId, actor, target);
     if (channelName === "general")
       throw new AgentChannelManagementError(400, "cannot leave #general");
-    const actor = await this.actor(workspaceId, agentId);
     if ("userId" in actor) {
       const before = await this.db.conversationMember.findFirst({
         where: { conversationId: channel.id, userId: actor.userId, leftAt: null },
@@ -186,16 +181,10 @@ export class AgentChannelManagement {
   ): Promise<AgentChannelInfo> {
     if (patch.name === undefined && patch.description === undefined)
       throw new AgentChannelManagementError(400, "update requires --name or --description");
-    const { channelName, channel } = await this.targetChannel(workspaceId, target);
+    const actor = await agentChannelReader(this.db, workspaceId, agentId);
+    const { channelName, channel } = await this.targetChannel(workspaceId, actor, target);
     // Authority before the input is judged, so an Agent without it learns nothing else.
-    if (
-      !(await hasChannelAdminAuthority(
-        this.db,
-        workspaceId,
-        await this.actor(workspaceId, agentId),
-        channel,
-      ))
-    )
+    if (!(await hasChannelAdminAuthority(this.db, workspaceId, actor, channel)))
       throw channelAuthorityDeniedError("update");
     if (channel.archivedAt) throw new AgentChannelManagementError(409, "channel is archived");
     let nextName: string | undefined;
@@ -207,15 +196,10 @@ export class AgentChannelManagement {
     }
     // Shared with the human settings panel, which applies the same authority and archive rules.
     try {
-      await this.channels.updateInfo(
-        workspaceId,
-        await this.actor(workspaceId, agentId),
-        channel.id,
-        {
-          name: nextName,
-          description: patch.description,
-        },
-      );
+      await this.channels.updateInfo(workspaceId, actor, channel.id, {
+        name: nextName,
+        description: patch.description,
+      });
     } catch (error) {
       if (isAppErrorCode(error, "ACCESS_DENIED")) throw channelAuthorityDeniedError("update");
       if (isAppErrorCode(error, "CONFLICT"))
@@ -225,23 +209,19 @@ export class AgentChannelManagement {
     return agentChannelInfo(
       this.db,
       workspaceId,
-      await this.findChannel(workspaceId, nextName ?? channelName),
-      await this.actor(workspaceId, agentId),
+      await this.findChannel(workspaceId, actor, nextName ?? channelName),
+      actor,
     );
   }
 
   async setArchived(workspaceId: string, agentId: string, target: string, archived: boolean) {
     const operation = archived ? "archive" : "unarchive";
-    const { channelName, channel } = await this.targetChannel(workspaceId, target);
+    const actor = await agentChannelReader(this.db, workspaceId, agentId);
+    const { channelName, channel } = await this.targetChannel(workspaceId, actor, target);
     if (channelName === "general")
       throw new AgentChannelManagementError(400, `cannot ${operation} #general`);
     try {
-      await this.channels.setArchived(
-        workspaceId,
-        await this.actor(workspaceId, agentId),
-        channel.id,
-        archived,
-      );
+      await this.channels.setArchived(workspaceId, actor, channel.id, archived);
     } catch (error) {
       if (isAppErrorCode(error, "ACCESS_DENIED")) throw channelAuthorityDeniedError(operation);
       throw error;
@@ -261,7 +241,8 @@ export class AgentChannelManagement {
   ) {
     const channelName = parseChannelTarget(target);
     const { kind, handle } = parseMemberInput(input);
-    const channel = await this.findChannel(workspaceId, channelName);
+    const actor = await agentChannelReader(this.db, workspaceId, callingAgentId);
+    const channel = await this.findChannel(workspaceId, actor, channelName);
     let userId: string | undefined;
     let resolvedAgentId: string | undefined;
     if (kind === "user") {
@@ -298,15 +279,10 @@ export class AgentChannelManagement {
     }
     let alreadyMember = false;
     try {
-      const result = await this.channels.addMembers(
-        workspaceId,
-        await this.actor(workspaceId, callingAgentId),
-        channel.id,
-        {
-          userIds: userId ? [userId] : [],
-          agentIds: resolvedAgentId ? [resolvedAgentId] : [],
-        },
-      );
+      const result = await this.channels.addMembers(workspaceId, actor, channel.id, {
+        userIds: userId ? [userId] : [],
+        agentIds: resolvedAgentId ? [resolvedAgentId] : [],
+      });
       alreadyMember = userId
         ? result.alreadyMemberUserIds.includes(userId)
         : result.alreadyMemberAgentIds.includes(resolvedAgentId!);
@@ -337,7 +313,8 @@ export class AgentChannelManagement {
   ) {
     const channelName = parseChannelTarget(target);
     const { kind, handle } = parseMemberInput(input);
-    const channel = await this.findChannel(workspaceId, channelName);
+    const actor = await agentChannelReader(this.db, workspaceId, callingAgentId);
+    const channel = await this.findChannel(workspaceId, actor, channelName);
     if (channelName === "general")
       throw new AgentChannelManagementError(400, "cannot remove a member from #general");
     let wasMember: boolean;
@@ -345,14 +322,7 @@ export class AgentChannelManagement {
     let removedUserIds: string[] = [];
     // Removing anyone but itself takes the calling Agent's channel-admin authority.
     const assertMayRemoveOthers = async () => {
-      if (
-        !(await hasChannelAdminAuthority(
-          this.db,
-          workspaceId,
-          await this.actor(workspaceId, callingAgentId),
-          channel,
-        ))
-      )
+      if (!(await hasChannelAdminAuthority(this.db, workspaceId, actor, channel)))
         throw channelAuthorityDeniedError("remove-member");
     };
     if (kind === "agent") {
@@ -399,19 +369,24 @@ export class AgentChannelManagement {
     return softLeaveMember(this.db, workspaceId, conversationId, member);
   }
 
-  /** A `#channel` target and the visible channel it names (400 if malformed, 404 if unknown). */
-  private async targetChannel(workspaceId: string, target: string) {
+  /** A `#channel` target and the channel it names that `reader` may read (400 if malformed, 404
+   * if unknown). */
+  private async targetChannel(workspaceId: string, reader: ChannelActor, target: string) {
     const channelName = parseChannelTarget(target);
-    return { channelName, channel: await this.findChannel(workspaceId, channelName) };
+    return { channelName, channel: await this.findChannel(workspaceId, reader, channelName) };
   }
 
-  private async findChannel(workspaceId: string, channelName: string): Promise<Conversation> {
-    const channel = await this.db.conversation.findUnique({
-      where: { workspaceId_channelName: { workspaceId, channelName } },
+  /** The channel named `channelName` that `reader` may read; a channel hidden from the Workspace,
+   * or a private one `reader` is not in, is an unknown channel (`visibleChannelWhere`). */
+  private async findChannel(
+    workspaceId: string,
+    reader: ChannelActor,
+    channelName: string,
+  ): Promise<Conversation> {
+    const channel = await this.db.conversation.findFirst({
+      where: { ...visibleChannelWhere(workspaceId, reader), channelName },
     });
-    // A channel hidden from the Workspace is an unknown channel to an Agent.
-    if (!channel || channel.hiddenFromWorkspaceAt)
-      throw new AgentChannelManagementError(404, "channel not found");
+    if (!channel) throw new AgentChannelManagementError(404, "channel not found");
     return channel;
   }
 }

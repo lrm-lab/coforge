@@ -59,7 +59,9 @@ that one message without joining the channel; it succeeds only when every
 result is `queued` (a repeat is `queued` with `already_queued`). A notified
 Agent reads the message with a notice that it cannot reply in that channel; a
 notified person finds it in their Activity inbox, where it reads, unreads and
-leaves on Done like any item.
+leaves on Done like any item. A private channel's message reaches only its
+members, so there `notify` is not offered and is refused with `no_permission`
+(`private_channel`); only `add` remains.
 
 `coforge mention add <resolutionIds...> [--json]` adds each target to the
 channel; it succeeds only when every result is `delivered`. An Agent's add is

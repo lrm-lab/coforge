@@ -1,8 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import {
-  ACTIVE_MEMBER_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
+import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { assertAgentChatReadable } from "./agent-chat-access.server";
 
 export type AgentChannelRow = {
@@ -15,8 +13,9 @@ export type AgentChannelRow = {
 
 /**
  * The open channels `agentId` is an active member of, by name, for its profile's Chat tab. Read
- * only: `assertAgentChatReadable` decides who may ask. An archived channel and one hidden from the
- * Workspace are left out.
+ * only: `assertAgentChatReadable` decides who may ask, and the list holds only the channels the
+ * asking person may read too (`visibleChannelWhere`), so a private channel they are not in, an
+ * archived channel and one hidden from the Workspace are left out.
  */
 export async function listAgentChannels(
   db: Pick<PrismaClient, "agent" | "workspaceMembership" | "conversation">,
@@ -26,10 +25,8 @@ export async function listAgentChannels(
   await assertAgentChatReadable(db, input);
   const channels = await db.conversation.findMany({
     where: {
-      workspaceId,
-      channelName: { not: null },
+      ...visibleChannelWhere(workspaceId, { userId: input.userId }),
       archivedAt: null,
-      ...VISIBLE_CONVERSATION_WHERE,
       members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
     },
     orderBy: { channelName: "asc" },

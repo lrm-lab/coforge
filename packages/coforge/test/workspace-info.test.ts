@@ -181,7 +181,7 @@ test("lists channels with membership, authority, mute, archive and last post", (
     [
       "## Workspace Channels",
       "",
-      "All channels in the Workspace are public. Do not disclose private conversations outside their channel.",
+      "You see the public channels and the private ones you are in. Do not disclose what a private channel or a private conversation says outside it.",
       "#general [public, joined, channel role=admin, admin via=channel_role, not muted, not archived, last post 2026-09-07 11:30Z (30m ago)] — Everyone.",
       "#old [public, not joined, muted, archived, no posts yet]",
       "#ops [public, not joined, not muted, not archived, no posts yet]",
@@ -190,6 +190,21 @@ test("lists channels with membership, authority, mute, archive and last post", (
     ].join("\n"),
   );
   expect(info(["--channels", "--joined"])).toContain("Showing 1-1 of 1.");
+});
+
+test("a private channel's line says so; one from an older server reads as public", () => {
+  const result = {
+    ...BASE,
+    channels: [
+      channel("#secret", { visibility: "private", joined: true }),
+      channel("#ops", { visibility: "public" }),
+      channel("#old"),
+    ],
+  };
+  const text = info(["--channels"], result);
+  expect(text).toContain("#secret [private, joined, not muted, not archived, no posts yet]");
+  expect(text).toContain("#ops [public, not joined, not muted, not archived, no posts yet]");
+  expect(text).toContain("#old [public, not joined, not muted, not archived, no posts yet]");
 });
 
 test("lists agents and humans with role labels, status and descriptions", () => {
@@ -225,7 +240,7 @@ test("pages with --limit and --offset and prints the command for the next page",
     [
       "## Workspace Channels",
       "",
-      "All channels in the Workspace are public. Do not disclose private conversations outside their channel.",
+      "You see the public channels and the private ones you are in. Do not disclose what a private channel or a private conversation says outside it.",
       "#c [public, joined, not muted, not archived, no posts yet]",
       "#d [public, joined, not muted, not archived, no posts yet]",
       "Showing 3-4 of 5.",

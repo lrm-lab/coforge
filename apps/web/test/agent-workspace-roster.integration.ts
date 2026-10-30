@@ -93,7 +93,12 @@ test("lists hundreds of channels with membership, mute, archive and last post in
     batch = [];
 
     const started = performance.now();
-    const channels = await listAgentWorkspaceChannels(db, workspace.id, agent.id, "member");
+    const channels = await listAgentWorkspaceChannels(
+      db,
+      workspace.id,
+      { agentId: agent.id },
+      "member",
+    );
     const elapsedMs = performance.now() - started;
     console.log(
       `listAgentWorkspaceChannels: ${channelCount} channels in ${elapsedMs.toFixed(1)} ms`,
@@ -122,7 +127,12 @@ test("lists hundreds of channels with membership, mute, archive and last post in
     expect(named("#c004").channelAdminBasis).toBeUndefined();
     expect(channels.filter((channel) => channel.joined)).toHaveLength(channelCount / 2);
     // An owner administers every channel by server role, whether or not it has joined.
-    const asOwner = await listAgentWorkspaceChannels(db, workspace.id, agent.id, "owner");
+    const asOwner = await listAgentWorkspaceChannels(
+      db,
+      workspace.id,
+      { agentId: agent.id },
+      "owner",
+    );
     expect(asOwner.every((channel) => channel.channelAdminBasis !== undefined)).toBe(true);
     expect(asOwner.find((channel) => channel.name === "#c002")?.channelAdminBasis).toBe(
       "server_role",

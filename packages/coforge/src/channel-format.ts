@@ -19,6 +19,7 @@ export type ChannelInfoLike = {
   id: string;
   name: string;
   description: string;
+  visibility?: "public" | "private";
   archived: boolean;
   joined: boolean;
   muted: boolean;
@@ -101,7 +102,8 @@ export function formatChannelInfo(response: { channel: ChannelInfoLike }): strin
     "",
     `Channel: ${channel.name}`,
     `ID: ${channel.id}`,
-    "Visibility: public",
+    // An older server sends no visibility; every channel it has is public.
+    `Visibility: ${channel.visibility ?? "public"}`,
     `Joined: ${yesNo(channel.joined)}`,
   ];
   // Same "hide the uninformative default" convention as `channelMemberRoleDetail`.

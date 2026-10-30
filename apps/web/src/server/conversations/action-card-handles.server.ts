@@ -7,7 +7,8 @@ import {
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 import { ActionCardError } from "./action-card-error.server";
 
 const UUID_PATTERN = UUID_LIKE_PATTERN;
@@ -113,16 +114,19 @@ export class ActionCardHandles {
     return agent.id;
   }
 
-  async resolveChannel(workspaceId: string, value: string, field: string): Promise<string> {
+  /** `agentId` is the Agent preparing the card: a private channel it cannot read is unknown. */
+  async resolveChannel(
+    workspaceId: string,
+    agentId: string,
+    value: string,
+    field: string,
+  ): Promise<string> {
     const bare = bareHandle(value);
+    const reader = await agentChannelReader(this.db, workspaceId, agentId);
     const channel = await this.db.conversation.findFirst({
       where: {
-        // By id it must still be a channel; by name `channelName` says so itself.
-        ...(UUID_PATTERN.test(bare)
-          ? { id: bare, channelName: { not: null } }
-          : { channelName: bare }),
-        workspaceId,
-        ...VISIBLE_CONVERSATION_WHERE,
+        ...visibleChannelWhere(workspaceId, reader),
+        ...(UUID_PATTERN.test(bare) ? { id: bare } : { channelName: bare }),
       },
       select: { id: true },
     });

@@ -21,10 +21,8 @@ import {
 } from "#src/server/conversations/agent-message-validation-error.server";
 import { messageAnchorWhere, messageIdMatchesAnchor } from "#src/server/db/message-anchor.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
-import {
-  ACTIVE_MEMBER_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
+import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
 import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { NOTIFIED_AGENT_WHERE } from "#src/server/db/repositories/agent-attention.repositories.server";
@@ -135,7 +133,11 @@ export async function drainScope(
         ...NOTIFIED_AGENT_WHERE(agentId),
         targetReadAt: null,
         message: {
-          conversation: { ...VISIBLE_CONVERSATION_WHERE, channelName: parent.slice(1) },
+          // Only a channel it could read: a private one it is not in stays closed to it.
+          conversation: {
+            ...visibleChannelWhere(workspaceId, { agentId }),
+            channelName: parent.slice(1),
+          },
           threadRootId: anchor ? { not: null } : null,
         },
       },

@@ -10,6 +10,7 @@ function fakeDb(options: { publicAgent?: boolean; appBot?: boolean; archived?: b
         id: "channel-general",
         channelName: "general",
         archivedAt: options.archived ? new Date() : null,
+        visibility: "public",
         members: [],
       }),
     },

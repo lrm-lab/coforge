@@ -9,3 +9,11 @@ export const CHANNEL_VISIBILITY = {
   PRIVATE: "private",
 } as const;
 export type ChannelVisibility = (typeof CHANNEL_VISIBILITY)[keyof typeof CHANNEL_VISIBILITY];
+
+/** A stored `Conversation.visibility` as its type. The column's CHECK allows only the two; anything
+ * else would read as the narrower `"private"`. */
+export function channelVisibilityOf(channel: { visibility: string }): ChannelVisibility {
+  return channel.visibility === CHANNEL_VISIBILITY.PUBLIC
+    ? CHANNEL_VISIBILITY.PUBLIC
+    : CHANNEL_VISIBILITY.PRIVATE;
+}

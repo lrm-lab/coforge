@@ -2,11 +2,16 @@ import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
 import { resolveAgentChannelStatuses } from "#src/server/agents/agent-channel-status.server";
 import { getAgentDisplay, type AgentDisplay } from "#src/server/agents/agent-display.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import type { ChannelActor } from "./channel-actor.server";
 import {
   resolveChannelAuthority,
   type ChannelAdminBasis,
   type ChannelCapabilities,
 } from "./channel-authority.server";
+import {
+  channelVisibilityOf,
+  type ChannelVisibility,
+} from "#src/features/conversations/channel-visibility";
 
 // What an Agent reads about a channel or a direct message through `AgentChannelManagement`: its
 // info and its roster with each Agent's live status.
@@ -17,6 +22,8 @@ export type AgentChannelInfo = {
   id: string;
   name: string;
   description: string;
+  /** Who may read it (`CHANNEL_VISIBILITY`). */
+  visibility: ChannelVisibility;
   archived: boolean;
   joined: boolean;
   muted: boolean;
@@ -70,8 +77,11 @@ export type AgentChannelRoster = {
 export async function agentChannelInfo(
   db: PrismaClient,
   workspaceId: string,
-  channel: Pick<Conversation, "id" | "channelName" | "description" | "archivedAt" | "projectId">,
-  actor: { userId: string } | { agentId: string },
+  channel: Pick<
+    Conversation,
+    "id" | "channelName" | "description" | "archivedAt" | "projectId" | "visibility"
+  >,
+  actor: ChannelActor,
 ): Promise<AgentChannelInfo> {
   const [member, memberCounts, authority, project] = await Promise.all([
     db.conversationMember.findFirst({
@@ -86,6 +96,7 @@ export async function agentChannelInfo(
     id: channel.id,
     name: `#${channel.channelName}`,
     description: channel.description,
+    visibility: channelVisibilityOf(channel),
     archived: channel.archivedAt !== null,
     joined: Boolean(member),
     muted: member?.channelMuted ?? false,

@@ -9,7 +9,11 @@ import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
 import type { ChannelActor } from "./channel-actor.server";
-import { channelByIdWhere, requireReadableChannel } from "./channel-read-access.server";
+import {
+  channelByIdWhere,
+  requireReadableChannel,
+  visibleChannelWhere,
+} from "./channel-read-access.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 
 /** What `PublicChannels` hands each of its channel modules: the database, and the publishers a
@@ -42,7 +46,7 @@ export async function getAgentChannel(
 
 /**
  * `getAgentChannel` for the send path: the Agent's channel, or one it could join anyway on the
- * way to posting — visible (as above), unarchived, and the Agent public (a private Agent can
+ * way to posting — visible (as above), public, unarchived, and the Agent public (a private Agent can
  * never be a channel member). `needsJoin` marks the latter; the membership itself is written by
  * the send's transaction, so a failed send leaves none. An app's bot is refused: it posts only
  * where it was added. Anything else is the same `ACCESS_DENIED` a non-member's send has always
@@ -55,8 +59,10 @@ export async function getAgentSendChannel(
   target: string,
 ) {
   if (!/^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target)) throw new AppError("INVALID_INPUT");
+  // Only a channel it may read (`visibleChannelWhere`): a private one it is not in is never joined
+  // on the way.
   const channel = await db.conversation.findFirst({
-    where: { workspaceId, channelName: target.slice(1), ...VISIBLE_CONVERSATION_WHERE },
+    where: { ...visibleChannelWhere(workspaceId, { agentId }), channelName: target.slice(1) },
     select: {
       id: true,
       channelName: true,

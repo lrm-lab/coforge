@@ -89,7 +89,7 @@ test("PublicChannels.members never offers a private Agent as an add-candidate (m
 function agentChannelManagementFixture(callerVisibility: string | undefined) {
   const db = {
     conversation: {
-      findUnique: async () => ({
+      findFirst: async () => ({
         id: "channel-1",
         channelName: "general",
         archivedAt: null,
@@ -154,7 +154,7 @@ function agentChannelManagementAddMemberFixture(options: {
 }) {
   const db = {
     conversation: {
-      findUnique: async () => ({ id: "channel-1", channelName: "general", archivedAt: null }),
+      findFirst: async () => ({ id: "channel-1", channelName: "general", archivedAt: null }),
     },
     agent: {
       findFirst: async ({ where }: { where: { id?: string; name?: string } }) =>

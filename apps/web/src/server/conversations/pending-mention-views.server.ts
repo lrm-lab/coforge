@@ -3,11 +3,21 @@ import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { humanLabel } from "#src/lib/human-label";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { canReadChannel } from "./channel-read-access.server";
 import { canJoinChannel } from "./mention-target-availability.server";
 import { leftoverMentionHandles } from "./unresolved-mentions.server";
 
 /* The pending mentions of a sent message as its sender sees them, with what each still allows;
  * acting on them is `pending-mention-actions.server.ts`. */
+
+/** The channel a mention was sent in, as far as deciding what it still allows needs it. */
+type MentionChannel = { archivedAt: Date | null; channelName: string | null; visibility: string };
+
+/** Whether Notify may let a target outside the channel read the message: only a public channel's
+ * message reaches a non-member. The view offers it and `notifyMentionTargets` refuses it alike. */
+export function notifyReachesOutside(channel: { visibility: string }) {
+  return canReadChannel(channel, false);
+}
 
 /** What the sender can still do about one pending mention. */
 export type MentionActionKind = "notify" | "add";
@@ -30,7 +40,8 @@ export type PendingMentionActionView = {
 /**
  * The sender's still-pending mention actions of one message, in the order the body names them:
  * not yet acted on and not expired. What each still allows is read now: Add while the channel is
- * open and the target can join it and is not already a member, and Notify until it was notified.
+ * open and the target can join it and is not already a member, and Notify until it was notified,
+ * never in a private channel (`notifyMentionTargets` refuses it there).
  */
 export async function pendingMentionActionsForMessage(
   db: Pick<PrismaClient, "pendingMentionAction" | "conversationMember">,
@@ -41,7 +52,7 @@ export async function pendingMentionActionsForMessage(
     senderMemberId: string;
     body: string;
   },
-  channel: { archived: boolean; name: string },
+  channel: MentionChannel,
   now: Date = new Date(),
 ): Promise<PendingMentionActionView[]> {
   const order = leftoverMentionHandles(message.body);
@@ -104,7 +115,7 @@ type PendingMentionActionRow = Prisma.PendingMentionActionGetPayload<{
 function pendingMentionActionView(
   row: PendingMentionActionRow,
   workspaceId: string,
-  channel: { archived: boolean; name: string },
+  channel: MentionChannel,
   memberIds: ReadonlySet<string | null>,
 ): PendingMentionActionView {
   const targetId = (row.targetAgentId ?? row.targetUserId)!;
@@ -129,12 +140,12 @@ function pendingMentionActionView(
     targetAvatarUrl: agent
       ? agentAvatarUrl(targetId, agent.avatarMascot)
       : workspaceUserAvatarUrl(workspaceId, targetId, row.targetUser?.avatarObjectKey ?? null),
-    channelName: channel.name,
+    channelName: channel.channelName ?? "",
     // Notify once, add any time: a notified target can still be added. Whether the sender may add
     // is decided when they try.
     availableActions:
-      !channel.archived && canJoin && !memberIds.has(targetId)
-        ? row.notifiedAt
+      channel.archivedAt === null && canJoin && !memberIds.has(targetId)
+        ? row.notifiedAt || !notifyReachesOutside(channel)
           ? ["add"]
           : ["notify", "add"]
         : [],
@@ -202,7 +213,10 @@ export async function pendingMentionActionsForActor(
       conversationId: true,
       createdAt: true,
       message: {
-        select: { body: true, conversation: { select: { channelName: true, archivedAt: true } } },
+        select: {
+          body: true,
+          conversation: { select: { channelName: true, archivedAt: true, visibility: true } },
+        },
       },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -220,10 +234,7 @@ export async function pendingMentionActionsForActor(
       pendingMentionActionView(
         row,
         workspaceId,
-        {
-          archived: row.message.conversation.archivedAt !== null,
-          name: row.message.conversation.channelName ?? "",
-        },
+        row.message.conversation,
         new Set(
           [row.targetUserId ?? row.targetAgentId].filter((targetId) =>
             membership.has(row.conversationId, targetId),

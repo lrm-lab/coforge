@@ -65,6 +65,9 @@ export type WorkspaceInfoChannel = {
   /** `#name`. */
   name: string;
   description: string;
+  /** Who may read it; a private channel is listed only to its members. Absent on an older
+   * server, where every channel is public. */
+  visibility?: "public" | "private";
   joined: boolean;
   muted: boolean;
   archived: boolean;

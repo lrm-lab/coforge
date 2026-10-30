@@ -253,6 +253,7 @@ test("workspace info lists the channels and Computers with the calling Agent's r
           id: "channel-1",
           channelName: "general",
           description: "Everyone.",
+          visibility: "public",
           archivedAt: null,
           members: [{ channelRole: "member", channelMuted: true }],
         },
@@ -260,6 +261,7 @@ test("workspace info lists the channels and Computers with the calling Agent's r
           id: "channel-2",
           channelName: "old",
           description: "",
+          visibility: "public",
           archivedAt: new Date("2026-01-01T00:00:00Z"),
           members: [],
         },
@@ -292,6 +294,7 @@ test("workspace info lists the channels and Computers with the calling Agent's r
     {
       name: "#general",
       description: "Everyone.",
+      visibility: "public",
       joined: true,
       muted: true,
       archived: false,
@@ -301,6 +304,7 @@ test("workspace info lists the channels and Computers with the calling Agent's r
     {
       name: "#old",
       description: "",
+      visibility: "public",
       joined: false,
       muted: false,
       archived: true,

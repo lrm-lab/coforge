@@ -22,6 +22,9 @@ export type AgentChannelInfo = {
   id: string;
   name: string;
   description: string;
+  /** Who may read the channel: every Workspace member, or only its members. Absent on an older
+   * server, where every channel is public. */
+  visibility?: "public" | "private";
   archived: boolean;
   joined: boolean;
   muted: boolean;
