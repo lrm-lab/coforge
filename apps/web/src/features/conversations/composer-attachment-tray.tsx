@@ -1,13 +1,7 @@
-import type { Dispatch, SetStateAction } from "react";
-
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { AttachmentTile, type PendingAttachment } from "./composer-attachments";
-import { retryableUploadFailure } from "./upload-failure";
-
-/** A file the next send cannot carry, and no retry would change that. */
-const cannotAttach = (item: PendingAttachment) =>
-  item.failure !== undefined && !retryableUploadFailure(item.failure);
+import { cannotAttach } from "./upload-failure";
 
 /**
  * The files chosen for the next send, under the composer's text. As in Raft's composer, a file
@@ -15,13 +9,14 @@ const cannotAttach = (item: PendingAttachment) =>
  */
 export function ComposerAttachmentTray({
   attachments,
-  setAttachments,
-  onRetry,
+  retry,
+  remove,
 }: {
   attachments: PendingAttachment[];
-  setAttachments: Dispatch<SetStateAction<PendingAttachment[]>>;
-  onRetry: (item: PendingAttachment) => void;
+  retry: (item: PendingAttachment) => Promise<void>;
+  remove: (localIds: readonly string[]) => void;
 }) {
+  const unattachable = attachments.filter((item) => cannotAttach(item.failure));
   return (
     <div className="col-span-full row-start-2 flex flex-col items-start gap-1">
       <ul
@@ -32,19 +27,17 @@ export function ComposerAttachmentTray({
           <AttachmentTile
             key={item.localId}
             attachment={item}
-            onRemove={() =>
-              setAttachments((current) => current.filter((other) => other.localId !== item.localId))
-            }
-            onRetry={() => onRetry(item)}
+            onRemove={() => remove([item.localId])}
+            onRetry={() => void retry(item)}
           />
         ))}
       </ul>
-      {attachments.some(cannotAttach) && (
+      {unattachable.length > 0 && (
         <Button
           color="link-gray"
           size="sm"
           className="mx-3 mb-1"
-          onPress={() => setAttachments((current) => current.filter((item) => !cannotAttach(item)))}
+          onPress={() => remove(unattachable.map((item) => item.localId))}
         >
           {m.conversation_attachment_remove_not_attached()}
         </Button>

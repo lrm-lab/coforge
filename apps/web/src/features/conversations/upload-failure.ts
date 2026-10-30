@@ -25,9 +25,10 @@ export type UploadFailure =
 export const retryableUploadFailure = (failure: UploadFailure) =>
   failure === "offline" || failure === "failed";
 
-/** A failure found when the file was picked: the file was never sent, and is not attached. */
-export const notAttachedFailure = (failure: UploadFailure | undefined) =>
-  failure === "empty" || failure === "too_large" || failure === "too_many";
+/** A file the next send cannot carry, and no retry would change that: it takes none of the
+ * `MAX_ATTACHMENTS` places, and "Remove files that can't be attached" clears it. */
+export const cannotAttach = (failure: UploadFailure | undefined) =>
+  failure !== undefined && !retryableUploadFailure(failure);
 
 /**
  * What each picked file becomes, in order, given `room` attachments still free: an empty file and

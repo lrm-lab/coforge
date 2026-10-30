@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 
 import {
-  notAttachedFailure,
+  cannotAttach,
   pickedFileFailures,
   refusedUploadFailure,
   retryableUploadFailure,
@@ -27,11 +27,11 @@ test("an empty file is refused, and files past the room are too many, as Raft so
   expect(pickedFileFailures([{ size: 1 }], -1)).toEqual(["too_many"]);
 });
 
-test("a file refused when picked is not attached; one that failed on the way is", () => {
-  for (const failure of ["empty", "too_large", "too_many"] as const)
-    expect(notAttachedFailure(failure)).toBe(true);
-  for (const failure of ["signed_out", "forbidden", "offline", "failed", undefined] as const)
-    expect(notAttachedFailure(failure)).toBe(false);
+test("a file no retry can attach takes no place; one a retry may still attach does", () => {
+  for (const failure of ["empty", "too_large", "too_many", "signed_out", "forbidden"] as const)
+    expect(cannotAttach(failure)).toBe(true);
+  for (const failure of ["offline", "failed", undefined] as const)
+    expect(cannotAttach(failure)).toBe(false);
 });
 
 test("a refused upload names its reason from the answer's status", () => {

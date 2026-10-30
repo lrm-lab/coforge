@@ -65,10 +65,13 @@ export function uploadFailureDetail(failure: UploadFailure, file: Pick<File, "si
     case "empty":
       return m.conversation_attachment_empty_detail();
     case "too_large":
-      return m.conversation_attachment_too_large_detail({
-        size: getReadableFileSize(file.size),
-        limit: getReadableFileSize(ATTACHMENT_MAX_BYTES),
-      });
+      // A file under the limit was refused by the server, or a proxy in front of it (a 413).
+      return file.size > ATTACHMENT_MAX_BYTES
+        ? m.conversation_attachment_too_large_detail({
+            size: getReadableFileSize(file.size),
+            limit: getReadableFileSize(ATTACHMENT_MAX_BYTES),
+          })
+        : m.conversation_attachment_too_large_refused();
     case "too_many":
       return m.conversation_attachment_too_many_detail({ max: MAX_ATTACHMENTS });
     case "signed_out":
@@ -82,11 +85,13 @@ export function uploadFailureDetail(failure: UploadFailure, file: Pick<File, "si
   }
 }
 
-/** Upload a composer attachment, reporting progress, and resolve with its id. */
+/** Upload a composer attachment, reporting progress, and resolve with its id. Aborting `signal`
+ * cancels the request and rejects with an `AbortError`. */
 export function uploadAttachment(
   conversationId: string,
   file: File,
   onProgress: (percent: number) => void,
+  signal?: AbortSignal,
 ) {
   return new Promise<string>((resolve, reject) => {
     const form = new FormData();
@@ -107,6 +112,15 @@ export function uploadAttachment(
       } else reject(new UploadRefused(refusedUploadFailure(request.status)));
     };
     request.onerror = () => reject(new UploadRefused("offline"));
+    // Settled on the signal itself: a request aborted before it went out fires no abort event.
+    signal?.addEventListener(
+      "abort",
+      () => {
+        request.abort();
+        reject(new DOMException("upload aborted", "AbortError"));
+      },
+      { once: true },
+    );
     request.send(form);
   });
 }
@@ -150,9 +164,11 @@ export function AttachmentTile({
   const [previewOpen, setPreviewOpen] = useState(false);
   return (
     <li ref={tileRef} className="relative">
-      <Tooltip title={failureDetail} isDisabled={!failure} placement="top start">
+      <Tooltip title={failureDetail} isDisabled={!failure || previewOpen} placement="top start">
         <Button
           onPress={() => setPreviewOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={previewOpen}
           color="tertiary"
           size="sm"
           noTextPadding

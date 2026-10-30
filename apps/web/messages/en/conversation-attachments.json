@@ -17,6 +17,7 @@
   "conversation_attachment_offline": "No connection",
   "conversation_attachment_failed_detail": "Retry, or remove the file.",
   "conversation_attachment_too_large_detail": "This file is {size}. Each file can be up to {limit}.",
+  "conversation_attachment_too_large_refused": "The server refused this file as too large.",
   "conversation_attachment_too_many": "Too many",
   "conversation_attachment_too_many_detail": "A message can have up to {max} attachments.",
   "conversation_attachment_empty": "Empty",

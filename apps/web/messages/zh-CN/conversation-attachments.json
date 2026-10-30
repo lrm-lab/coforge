@@ -17,6 +17,7 @@
   "conversation_attachment_offline": "网络断开",
   "conversation_attachment_failed_detail": "可以重试，或者移除这个文件。",
   "conversation_attachment_too_large_detail": "这个文件 {size}，每个文件最大 {limit}。",
+  "conversation_attachment_too_large_refused": "服务器认为这个文件太大，没有接收。",
   "conversation_attachment_too_many": "超出数量",
   "conversation_attachment_too_many_detail": "一条消息最多 {max} 个附件。",
   "conversation_attachment_empty": "空文件",

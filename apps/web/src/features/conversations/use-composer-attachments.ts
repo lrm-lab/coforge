@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { uploadAttachment, type PendingAttachment } from "./composer-attachments";
 import {
+  cannotAttach,
   MAX_ATTACHMENTS,
-  notAttachedFailure,
   pickedFileFailures,
   stillUploading,
   UploadRefused,
@@ -16,8 +16,17 @@ import { localId } from "./composer-behavior";
  */
 export function useComposerAttachments(conversationId: string) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  /** The uploads in flight, so removing a tile cancels its request, and the tiles removed, so one
+   * still waiting its turn is never sent. */
+  const inFlight = useRef(new Map<string, AbortController>());
+  const removed = useRef(new Set<string>());
   const uploading = attachments.some(stillUploading);
-  const anyFailed = attachments.some((item) => item.failure);
+  /** The places a file that can be attached takes; one that cannot takes none. */
+  const attached = attachments.filter((item) => !cannotAttach(item.failure)).length;
+  const room = Math.max(0, MAX_ATTACHMENTS - attached);
+  // A send waits on every failure, as Raft's does ("Remove or retry failed attachments before
+  // sending"), and on more than `MAX_ATTACHMENTS`, which an edit's chips can bring.
+  const anyFailed = attachments.some((item) => item.failure) || attached > MAX_ATTACHMENTS;
 
   /** Uploads one already-added pending attachment, tracking it by `localId` regardless of
    * later reordering or removal of the others in `attachments`. */
@@ -28,11 +37,19 @@ export function useComposerAttachments(conversationId: string) {
         item.localId === pending.localId ? { ...item, failure: undefined, progress: 0 } : item,
       ),
     );
+    const controller = new AbortController();
+    inFlight.current.set(pending.localId, controller);
     try {
-      const id = await uploadAttachment(conversationId, pending.file, (progress) =>
-        setAttachments((current) =>
-          current.map((item) => (item.localId === pending.localId ? { ...item, progress } : item)),
-        ),
+      const id = await uploadAttachment(
+        conversationId,
+        pending.file,
+        (progress) =>
+          setAttachments((current) =>
+            current.map((item) =>
+              item.localId === pending.localId ? { ...item, progress } : item,
+            ),
+          ),
+        controller.signal,
       );
       setAttachments((current) =>
         current.map((item) =>
@@ -40,10 +57,14 @@ export function useComposerAttachments(conversationId: string) {
         ),
       );
     } catch (error) {
+      // A removed tile's upload was cancelled; there is nothing left to mark.
+      if (controller.signal.aborted) return;
       const failure = error instanceof UploadRefused ? error.failure : "failed";
       setAttachments((current) =>
         current.map((item) => (item.localId === pending.localId ? { ...item, failure } : item)),
       );
+    } finally {
+      inFlight.current.delete(pending.localId);
     }
   }
 
@@ -53,8 +74,7 @@ export function useComposerAttachments(conversationId: string) {
    * and is never sent. */
   async function addFiles(files: File[]) {
     if (files.length === 0) return;
-    const attached = attachments.filter((item) => !notAttachedFailure(item.failure)).length;
-    const failures = pickedFileFailures(files, MAX_ATTACHMENTS - attached);
+    const failures = pickedFileFailures(files, room);
     const pendingItems: PendingAttachment[] = files.map((file, index) => ({
       localId: localId(),
       file,
@@ -63,9 +83,26 @@ export function useComposerAttachments(conversationId: string) {
     }));
     setAttachments((current) => [...current, ...pendingItems]);
     for (const pending of pendingItems) {
-      if (!pending.failure) await uploadOne(pending);
+      if (!pending.failure && !removed.current.has(pending.localId)) await uploadOne(pending);
     }
   }
 
-  return { attachments, setAttachments, uploading, anyFailed, uploadOne, addFiles };
+  /** Takes tiles out of the tray, cancelling any upload still on its way. */
+  function remove(localIds: readonly string[]) {
+    for (const id of localIds) {
+      removed.current.add(id);
+      inFlight.current.get(id)?.abort();
+    }
+    setAttachments((current) => current.filter((item) => !localIds.includes(item.localId)));
+  }
+
+  return {
+    attachments,
+    setAttachments,
+    uploading,
+    anyFailed,
+    room,
+    addFiles,
+    tray: { attachments, retry: uploadOne, remove },
+  };
 }

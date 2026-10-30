@@ -17,7 +17,6 @@ import {
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
-import { MAX_ATTACHMENTS } from "./upload-failure";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
@@ -213,7 +212,7 @@ export function MessageComposer({
       );
     },
   });
-  const { attachments, setAttachments, uploading, anyFailed, uploadOne, addFiles } =
+  const { attachments, setAttachments, uploading, anyFailed, room, addFiles, tray } =
     useComposerAttachments(conversationId);
   // Set only by editing an unsent Task back into the composer: Send then sends it as a Task again.
   const [asTask, setAsTask] = useState(false);
@@ -336,7 +335,7 @@ export function MessageComposer({
     const inlineReady = await Promise.all(files.map((file) => ensureInlineImage(file)));
     const fetched: File[] = [];
     for (const url of urls) {
-      if (fetched.length + inlineReady.length + attachments.length >= MAX_ATTACHMENTS) break;
+      if (fetched.length + inlineReady.length >= room) break;
       const file = await imageFileFromUrl(url);
       if (file) fetched.push(await ensureInlineImage(file));
     }
@@ -487,15 +486,7 @@ export function MessageComposer({
         asTask={asTask}
         attachmentCount={attachments.length}
         onPaste={paste}
-        below={
-          attachments.length > 0 && (
-            <ComposerAttachmentTray
-              attachments={attachments}
-              setAttachments={setAttachments}
-              onRetry={(item) => void uploadOne(item)}
-            />
-          )
-        }
+        below={attachments.length > 0 && <ComposerAttachmentTray {...tray} />}
         leading={(className) => (
           <FileTrigger
             allowsMultiple
