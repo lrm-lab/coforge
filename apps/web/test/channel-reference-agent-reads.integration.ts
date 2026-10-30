@@ -9,7 +9,7 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { recordingDeliveries } from "./helpers/fake-centrifugo";
 
 const CHANNEL_MEMBER_CONTEXT = "[CoForge current channel role: member; coordinator=none]\n";
 function channelMessageContent(body: string | undefined) {
@@ -54,14 +54,7 @@ test("a #channel reference is stored as a channel token on every send path, and 
     });
     await enrollGeneral(db, workspace.id);
     // Every body published to a daemon, decoded as the daemon reads it.
-    const published: ReturnType<typeof decodeAgentMessageDelivery>[] = [];
-    const centrifugo = {
-      publish: async (_channel: string, payload: Uint8Array) => {
-        published.push(decodeAgentMessageDelivery(payload));
-      },
-      publishJson: async () => {},
-      broadcast: async () => {},
-    };
+    const { publisher: centrifugo, delivered: published } = recordingDeliveries();
     const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), centrifugo);
     const general = (await channels.list(workspace.id, user.id))[0]!;
     // Every #general message below must reach the Agent, which joined #general muted.
@@ -283,14 +276,7 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
       },
     });
     await enrollGeneral(db, workspace.id);
-    const published: ReturnType<typeof decodeAgentMessageDelivery>[] = [];
-    const centrifugo = {
-      publish: async (_channel: string, payload: Uint8Array) => {
-        published.push(decodeAgentMessageDelivery(payload));
-      },
-      publishJson: async () => {},
-      broadcast: async () => {},
-    };
+    const { publisher: centrifugo, delivered: published } = recordingDeliveries();
     const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), centrifugo);
     const general = (await channels.list(workspace.id, user.id))[0]!;
     const product = await channels.create(workspace.id, user.id, "product");

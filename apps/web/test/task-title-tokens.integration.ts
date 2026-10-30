@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { recordingDeliveries } from "./helpers/fake-centrifugo";
 
 /** A Task's title keeps its reference tokens, and the mention rows it stores decide which Agent a
  * muted channel wakes; and a message is found by its eight-character id, never ambiguously.
@@ -60,14 +60,8 @@ test("a created Task's title stores its references as tokens, and its own mentio
         },
       },
     });
-    const published: ReturnType<typeof decodeAgentMessageDelivery>[] = [];
-    const board = new TaskBoard(db, {
-      publisher: {
-        async publish(_channel, payload) {
-          published.push(decodeAgentMessageDelivery(payload));
-        },
-      },
-    });
+    const { publisher, delivered: published } = recordingDeliveries();
+    const board = new TaskBoard(db, { publisher });
     const principal = { workspaceId: workspace.id, userId: human.id };
     const existing = (
       await board.execute(principal, {

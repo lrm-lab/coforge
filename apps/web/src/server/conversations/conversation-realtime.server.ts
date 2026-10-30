@@ -267,10 +267,10 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
       deleted: announced.deleted,
     };
     if (directUserIds) {
-      await Promise.all(
-        directUserIds.map((memberId) =>
-          this.centrifugo.publishJson(userConversationChannel(memberId), event, publicationId),
-        ),
+      await this.centrifugo.broadcast(
+        directUserIds.map(userConversationChannel),
+        event,
+        publicationId,
       );
       return;
     }

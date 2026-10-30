@@ -6,6 +6,7 @@ import {
   type TaskChangedSignal,
 } from "#src/server/conversations/conversation-realtime.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { withPublishBatch } from "./helpers/fake-centrifugo";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString)
@@ -145,13 +146,13 @@ test("a Task write's announcement and its message signal never share a publicati
   });
   // Centrifugo drops a second publication with the same key on the same channel.
   const published: string[] = [];
-  const centrifugo = {
+  const centrifugo = withPublishBatch({
     async publish() {},
     async broadcast() {},
     async publishJson(channel: string, _data: unknown, key?: string) {
       published.push(`${channel} ${key}`);
     },
-  };
+  });
   const board = new TaskBoard(db, { realtime: new CentrifugoConversationRealtime(centrifugo) });
   const run = (command: Record<string, unknown>) =>
     board.execute({ workspaceId, userId: alice.id }, {

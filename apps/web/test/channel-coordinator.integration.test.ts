@@ -11,6 +11,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { pendingOpStore } from "./helpers/agent-control-store";
 import { coordinatorChangeNotice } from "#src/server/conversations/channel-coordination.server";
+import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 
 test("a coordinator notice is one sentence naming who changed it", () => {
   expect(coordinatorChangeNotice("team", "Frank An", undefined, "lead")).toBe(
@@ -56,7 +57,7 @@ async function fixture() {
   const channels = new PublicChannels(
     db,
     { execute: async (_scope, persist) => persist() },
-    { publish: async () => {}, publishJson: async () => {}, broadcast: async () => {} },
+    quietCentrifugo(),
     undefined,
     { messageAvailable: async () => {}, memberChanged: async () => {} },
   );
@@ -354,14 +355,18 @@ test.skipIf(!connectionString)(
       });
       await f.db.agent.update({ where: { id: f.lead.id }, data: { computerId: computer.id } });
       let attempts = 0;
-      const channels = new PublicChannels(f.db, undefined, {
-        async publish() {
-          attempts++;
-          throw new Error("offline");
-        },
-        publishJson: async () => {},
-        broadcast: async () => {},
-      });
+      const channels = new PublicChannels(
+        f.db,
+        undefined,
+        withPublishBatch({
+          async publish() {
+            attempts++;
+            throw new Error("offline");
+          },
+          publishJson: async () => {},
+          broadcast: async () => {},
+        }),
+      );
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
       expect(attempts).toBe(1);
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
@@ -411,15 +416,19 @@ test.skipIf(!connectionString)(
       // each recipient's own channel (`broadcast`), as of task #285.
       const events: unknown[] = [];
       const broadcasts: unknown[] = [];
-      const channels = new PublicChannels(f.db, undefined, {
-        publish: async () => {},
-        async publishJson(_channel, event) {
-          events.push(event);
-        },
-        async broadcast(_channels, event) {
-          broadcasts.push(event);
-        },
-      });
+      const channels = new PublicChannels(
+        f.db,
+        undefined,
+        withPublishBatch({
+          publish: async () => {},
+          async publishJson(_channel: string, event: unknown) {
+            events.push(event);
+          },
+          async broadcast(_channels: string[], event: unknown) {
+            broadcasts.push(event);
+          },
+        }),
+      );
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
       expect(events).toEqual([
         expect.objectContaining({ type: "message.available.v1", conversationId: f.team.id }),

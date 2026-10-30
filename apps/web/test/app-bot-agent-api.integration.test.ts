@@ -19,8 +19,8 @@ import type {
   MessageRequestRecords,
 } from "#src/server/conversations/message-request-idempotency.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
-import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { botFixture, type BotFixture } from "./app-bots-fixture";
+import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 
 /**
  * An app's bot on the Agent API against local PostgreSQL: its key alone opens the four
@@ -69,12 +69,12 @@ async function bot() {
 
 /** Every Centrifugo publication of a test, by channel. */
 const published: string[] = [];
-const publisher = {
+const publisher = withPublishBatch({
+  ...quietCentrifugo(),
   async publish(channel: string) {
     published.push(channel);
   },
-  async publishJson() {},
-} as unknown as CentrifugoServerApi;
+});
 const requestRecords: MessageRequestRecords = { find: async () => undefined };
 
 /** What the send route runs on, with request records that remember nothing and a recording
@@ -239,12 +239,12 @@ describe.skipIf(!runnable)("a bot's messages", () => {
   test("a message to the bot launches nothing and pushes nothing to a daemon; its app reads it from the inbox", async () => {
     const b = await bot();
     const published: string[] = [];
-    const publisher = {
+    const publisher = withPublishBatch({
+      ...quietCentrifugo(),
       async publish(channel: string) {
         published.push(channel);
       },
-      async publishJson() {},
-    } as unknown as CentrifugoServerApi;
+    });
     const conversations = new PrismaDirectConversationRepository(db!);
     const member = b.f.people.member;
     const conversation = await conversations.getOrCreateUserAgent(

@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 
-import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
@@ -16,6 +15,7 @@ import {
 } from "./helpers/app-notification-emitter-cases";
 import { agentIn, channelOf, personIn, unique } from "./helpers/app-notification-emitter-domain";
 import { emitterDatabaseUrl, type EmitterEnvironment } from "./helpers/app-notification-emitters";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * The channel and thread events apps are notified of, against local PostgreSQL: each is recorded by
@@ -24,10 +24,7 @@ import { emitterDatabaseUrl, type EmitterEnvironment } from "./helpers/app-notif
  */
 
 const channels = (env: EmitterEnvironment, idempotency?: MessageRequestIdempotency) =>
-  new PublicChannels(env.db, idempotency, {
-    publish: async () => [],
-    publishJson: async () => [],
-  } as unknown as CentrifugoServerApi);
+  new PublicChannels(env.db, idempotency, quietCentrifugo());
 
 /** The Agent CLI's channel commands, with no daemon to tell about a purge. */
 const agentChannels = (env: EmitterEnvironment) =>
@@ -177,7 +174,7 @@ const environment = defineEmitterCases([
       new SendDirectMessage(
         new PrismaDirectConversationRepository(env.db),
         { execute: async (_scope, persist) => persist() },
-        { publish: async () => [] } as never,
+        quietCentrifugo(),
       ).executeFromAgent({
         idempotencyKey: crypto.randomUUID(),
         workspaceId: fixture.workspace.id,

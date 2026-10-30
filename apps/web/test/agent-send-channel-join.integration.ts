@@ -4,6 +4,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { executeAgentSendMessageWithPolicy } from "#src/server/agents/agent-messages.server";
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * An Agent sending to a channel it is not in joins it in the send's own transaction when the
@@ -86,11 +87,7 @@ async function withChannel(
 
 function send(fixture: Fixture, input: { content?: string; attachmentIds?: string[] } = {}) {
   const repo = new PrismaDirectConversationRepository(db);
-  const sender = new SendDirectMessage(
-    repo,
-    idempotency as never,
-    { publish: async () => [] } as never,
-  );
+  const sender = new SendDirectMessage(repo, idempotency as never, quietCentrifugo());
   return executeAgentSendMessageWithPolicy(
     { repository: repo, sender },
     {

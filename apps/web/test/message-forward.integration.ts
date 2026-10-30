@@ -22,6 +22,7 @@ import {
   toAgentMessage,
 } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * Forwarding a message: the snapshot, the copied uploads, who is notified, per-destination
@@ -35,11 +36,7 @@ if (!redisUrl) throw new Error("CHANNEL_TEST_REDIS_URL must point to local Redis
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const redis = new RedisClient(redisUrl);
 const suffix = crypto.randomUUID().slice(0, 8);
-const publisher = {
-  publish: async () => {},
-  publishJson: async () => {},
-  broadcast: async () => {},
-};
+const publisher = quietCentrifugo();
 let storageRoot: string;
 let storage: LocalFileStorage;
 let forwards: MessageForwards;

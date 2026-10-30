@@ -6,6 +6,7 @@ import { DirectConversations } from "#src/server/conversations/direct-conversati
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { attachmentCommentsFixture } from "./helpers/attachment-comments-fixture";
+import { withPublishBatch } from "./helpers/fake-centrifugo";
 
 for (const operation of ["send", "reaction", "task-create", "task-convert"] as const) {
   test(`ordinary ${operation} refuses a comment seat exactly like a nonexistent destination`, async () => {
@@ -34,11 +35,11 @@ for (const operation of ["send", "reaction", "task-create", "task-convert"] as c
                     throw new Error("Unauthorized send reached idempotency");
                   },
                 },
-                centrifugo: {
+                centrifugo: withPublishBatch({
                   publish: async () => {
                     throw new Error("Unauthorized send reached transport");
                   },
-                },
+                }),
               },
             ),
           ).rejects.toEqual(new AppError("NOT_FOUND"));

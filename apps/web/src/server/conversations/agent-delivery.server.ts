@@ -53,15 +53,21 @@ export type AgentDeliveryPush = Omit<
   "workspaceId" | "mentionDelivery"
 > & { computerId: string | null };
 
+/** One push to a running Agent: its publication, or the encoder's refusal of it. */
+type PushEntry =
+  | { publication: { channel: string; data: Uint8Array }; refused?: never }
+  | { publication?: never; refused: PromiseRejectedResult };
+
 /**
  * Pushes committed deliveries to their Agents' daemons. The deliveries that personally mention
  * their Agent are issued as tracked mentions first, and a push to a running Agent carries its
  * envelope; a mention that could not be issued goes out untracked (`MentionDeliveryIssuer` logs
- * it). Every push is attempted; the caller decides what a failed one means.
+ * it). Every push is attempted, all in one Centrifugo batch; the caller decides what a failed one
+ * means.
  */
 export class AgentDeliveryPublisher {
   constructor(
-    private readonly api: Pick<CentrifugoServerApi, "publish">,
+    private readonly api: Pick<CentrifugoServerApi, "publishBatch">,
     private readonly mentions?: Pick<MentionDeliveryIssuer, "issue">,
   ) {}
 
@@ -78,25 +84,25 @@ export class AgentDeliveryPublisher {
         mentionsAgent: push.mentionsAgent === true,
       })),
     );
-    return Promise.allSettled(
-      pushes.flatMap(({ computerId, ...push }) =>
-        computerId
-          ? [
-              // Deferred so a synchronous publisher failure settles like an async one.
-              Promise.resolve().then(() =>
-                this.api.publish(
-                  daemonControlChannel(workspaceId, computerId),
-                  encodeAgentDelivery({
-                    ...push,
-                    workspaceId,
-                    mentionDelivery: envelopes?.get(push.deliveryId),
-                  }),
-                ),
-              ),
-            ]
-          : [],
-      ),
-    );
+    // Each push to a running Agent gets one result, in push order. A push its encoder refuses
+    // fails alone; the rest go to Centrifugo in one batch.
+    const entries = pushes.flatMap(({ computerId, ...push }): PushEntry[] => {
+      if (!computerId) return [];
+      try {
+        const data = encodeAgentDelivery({
+          ...push,
+          workspaceId,
+          mentionDelivery: envelopes?.get(push.deliveryId),
+        });
+        return [{ publication: { channel: daemonControlChannel(workspaceId, computerId), data } }];
+      } catch (reason) {
+        return [{ refused: { status: "rejected", reason } }];
+      }
+    });
+    const settled = (
+      await this.api.publishBatch(entries.flatMap((entry) => entry.publication ?? []))
+    ).values();
+    return entries.map((entry) => entry.refused ?? settled.next().value!);
   }
 }
 

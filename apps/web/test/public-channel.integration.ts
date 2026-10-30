@@ -38,6 +38,7 @@ import {
   refuseAgentMentionAdds,
   pendingMentionActionsForAgent,
 } from "#src/server/conversations/pending-mention-actions.server";
+import { quietCentrifugo, recordingDeliveries, withPublishBatch } from "./helpers/fake-centrifugo";
 
 const CHANNEL_MEMBER_CONTEXT = "[CoForge current channel role: member; coordinator=none]\n";
 
@@ -450,17 +451,21 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     await enrollGeneral(db, workspace.id);
     const published: ReturnType<typeof decodeAgentMessageDelivery>[] = [];
     let rejectNextPublish = false;
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async (_channel, payload) => {
-        if (rejectNextPublish) {
-          rejectNextPublish = false;
-          throw new Error("controlled publish outage");
-        }
-        published.push(decodeAgentMessageDelivery(payload));
-      },
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      withPublishBatch({
+        publish: async (_channel, payload) => {
+          if (rejectNextPublish) {
+            rejectNextPublish = false;
+            throw new Error("controlled publish outage");
+          }
+          published.push(decodeAgentMessageDelivery(payload));
+        },
+        publishJson: async () => {},
+        broadcast: async () => {},
+      }),
+    );
     const general = (await channels.list(workspace.id, user.id))[0]!;
     await db.userPreference.create({
       data: { userId: user.id, browserNotificationsEnabled: true },
@@ -554,7 +559,7 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
       ),
     ).toEqual([mentioned.id, ordinary.id]);
     const scope = { workspaceId: workspace.id, agentId: agent.id };
-    const failingCentrifugo: CentrifugoServerApi = {
+    const failingCentrifugo: CentrifugoServerApi = withPublishBatch({
       publish: async () => {
         throw new Error("Agent reply must not publish");
       },
@@ -564,7 +569,7 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
       broadcast: async () => {
         throw new Error("Agent reply must not publish");
       },
-    };
+    });
     const agentSender = new SendDirectMessage(
       repo,
       new RedisMessageRequestIdempotency(redis),
@@ -757,16 +762,18 @@ test("a channel @mention persists as a token and wakes only the mentioned Agent,
       },
     });
     await enrollGeneral(db, workspace.id);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const general = (await channels.list(workspace.id, user.id))[0]!;
     const repo = new PrismaDirectConversationRepository(db);
-    const agentSender = new SendDirectMessage(repo, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-    });
+    const agentSender = new SendDirectMessage(
+      repo,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
 
     const humanMention = await channels.send({
       workspaceId: workspace.id,
@@ -885,11 +892,11 @@ test("an Agent's channel message reaches other Agents without an @mention: unmut
     // Muted in #general like every Agent joining it, so it never hears the unaddressed chatter.
     await agent("quiet");
     await enrollGeneral(db, workspace.id);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const general = (await channels.list(workspace.id, user.id))[0]!;
     await channels.setAgentMuted(workspace.id, helper.id, "#general", false);
     await channels.setAgentMuted(workspace.id, scout.id, "#general", false);
@@ -987,11 +994,11 @@ test("a channel send reads only the members its @handles name, however large the
         },
       },
     }) as unknown as PrismaClient;
-    const channels = new PublicChannels(counted, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      counted,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const general = (await channels.list(workspace.id, sender.id))[0]!;
     const send = (body: string) =>
       channels.send({
@@ -1206,11 +1213,11 @@ test("a channel send reports the @handles that name nobody the sender can see, a
         runtimeConfig: {},
       },
     });
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const triage = await channels.create(workspace.id, alice.id, `triage-${suffix}`);
     const send = {
       workspaceId: workspace.id,
@@ -1275,11 +1282,11 @@ test("a channel send names a member by id beside the @handles in its body, and a
       },
     });
     await enrollGeneral(db, workspace.id);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const general = (await channels.list(workspace.id, alice.id))[0]!;
     const send = (
       channelId: string,
@@ -1376,11 +1383,11 @@ test("a channel @mention of someone outside the channel becomes the sender's pen
         runtimeConfig: {},
       },
     });
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const triage = await channels.create(workspace.id, alice.id, `pending-${suffix}`);
     await channels.addMembers(workspace.id, { userId: alice.id }, triage.id, {
       userIds: [carol.id],
@@ -1464,20 +1471,22 @@ test("an Agent's channel @mention of someone outside the channel becomes that Ag
       });
     const scout = await agent("scout");
     const helper = await agent("helper");
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const triage = await channels.create(workspace.id, alice.id, `agentsend-${suffix}`);
     await channels.addMembers(workspace.id, { userId: alice.id }, triage.id, {
       userIds: [],
       agentIds: [scout.id],
     });
     const repo = new PrismaDirectConversationRepository(db);
-    const sender = new SendDirectMessage(repo, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-    });
+    const sender = new SendDirectMessage(
+      repo,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const send = {
       idempotencyKey: crypto.randomUUID(),
       workspaceId: workspace.id,
@@ -1600,13 +1609,16 @@ test("the sender notifies a mentioned outsider once: an Agent gets the message a
       },
     });
     const published: { channel: string; data: unknown }[] = [];
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async (channel: string, data: unknown) => {
-        published.push({ channel, data });
-      },
-      publishJson: async () => {},
-      broadcast: async () => {},
-    } as unknown as ConstructorParameters<typeof PublicChannels>[2]);
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      withPublishBatch({
+        ...quietCentrifugo(),
+        publish: async (channel: string, data: Uint8Array) => {
+          published.push({ channel, data });
+        },
+      }),
+    );
     const triage = await channels.create(workspace.id, alice.id, `notify-${suffix}`);
     const send = {
       workspaceId: workspace.id,
@@ -1739,7 +1751,7 @@ test("the sender adds a mentioned outsider to the channel once; another member's
     const channels = new PublicChannels(
       db,
       new RedisMessageRequestIdempotency(redis),
-      { publish: async () => {}, publishJson: async () => {}, broadcast: async () => {} },
+      quietCentrifugo(),
       undefined,
       {
         messageAvailable: async () => {},
@@ -1957,11 +1969,11 @@ test("a body's thread references are read in one query per channel, and only the
   });
   try {
     await enrollGeneral(db, workspace.id);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const general = (await channels.list(workspace.id, user.id))[0]!;
     const product = await channels.create(workspace.id, user.id, "product");
     const random = await channels.create(workspace.id, user.id, "random");
@@ -2104,14 +2116,8 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
     });
     await enrollGeneral(db, workspace.id);
     await enrollGeneral(db, foreignWorkspace.id);
-    const published: ReturnType<typeof decodeAgentMessageDelivery>[] = [];
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async (_channel, payload) => {
-        published.push(decodeAgentMessageDelivery(payload));
-      },
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const { publisher, delivered: published } = recordingDeliveries();
+    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), publisher);
     const general = await channels.create(workspace.id, alice.id, "threads");
     await db.conversationMember.create({
       data: { workspaceId: workspace.id, conversationId: general.id, agentId: agent.id },
@@ -2589,11 +2595,11 @@ test("Channel roles: creator is channel admin, a plain member cannot archive, pr
     },
   });
   try {
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     await enrollGeneral(db, workspace.id);
 
     // The creator is the channel's own admin: `channelRole` "admin", basis
@@ -2878,11 +2884,11 @@ test("channel unread: list counts other-authored top-level messages past the cur
   try {
     await enrollGeneral(db, workspace.id);
     const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const engineering = await channels.create(workspace.id, alice.id, "unread-eng");
 
     // Joining seeds the cursor at the channel's current end: no backlog badge.
@@ -2988,11 +2994,11 @@ test("channel unread: marking unread counts from the newest message someone else
   try {
     await enrollGeneral(db, workspace.id);
     const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const channel = await channels.create(workspace.id, alice.id, "unread-marker");
     await channels.join(workspace.id, alice.id, channel.id);
     await channels.join(workspace.id, bob.id, channel.id);
@@ -3076,11 +3082,11 @@ test("a thread's root author starts following that thread, so later replies reac
     },
   });
   try {
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const channel = await channels.create(workspace.id, alice.id, "rootfollow");
     await channels.join(workspace.id, bob.id, channel.id);
 
@@ -3172,11 +3178,11 @@ test("an Agent's thread reply enrolls exactly the members its stored mention row
       },
     });
     await enrollGeneral(db, workspace.id);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const repo = new PrismaDirectConversationRepository(db);
     const general = (await channels.list(workspace.id, alice.id))[0]!;
     const root = await channels.send({
@@ -3266,11 +3272,11 @@ test("a thread reply from a person or an Agent enrolls its sender, the members i
     const helper = await agent("helper");
     const scout = await agent("scout");
     await enrollGeneral(db, workspace.id);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const repo = new PrismaDirectConversationRepository(db);
     const general = (await channels.list(workspace.id, alice.id))[0]!;
     const followers = async (rootMessageId: string) =>
@@ -3395,11 +3401,11 @@ test("a channel member can list and unfollow Agents following a thread; a privat
       },
     });
     await enrollGeneral(db, workspace.id);
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const general = (await channels.list(workspace.id, alice.id))[0]!;
     // The membership rule, pinned directly, so the absences below have one named cause:
     // #general enrolls every public Agent and no private one.
@@ -3509,11 +3515,11 @@ test("a mention pierces a muted member's push only through the message's stored 
     },
   });
   try {
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const room = await channels.create(workspace.id, alice.id, "mute-pierce");
     await channels.join(workspace.id, bob.id, room.id);
     await channels.setUserMuted(workspace.id, bob.id, room.id, true);
@@ -3886,11 +3892,11 @@ test("@-completion scores count only the viewer's own mentions in the channel, t
     await enrollGeneral(db, workspace.id);
     // Dana joins the Workspace after enrollment: she can read #general without a member row.
     await db.workspaceMembership.create({ data: { workspaceId: workspace.id, userId: dana!.id } });
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const general = (await channels.list(workspace.id, alice!.id))[0]!;
     const send = (userId: string, body: string, threadRootId?: string) =>
       channels.send({

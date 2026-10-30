@@ -5,6 +5,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
+import { withPublishBatch } from "./helpers/fake-centrifugo";
 
 test("assignment receipts survive mute and disconnect without waking unrelated Agents", async () => {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL;
@@ -66,12 +67,12 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
         signaled.push(event.messageId);
       },
     },
-    publisher: {
+    publisher: withPublishBatch({
       async publish(_channel, payload) {
         published.push(decodeAgentMessageDelivery(payload));
         throw new Error("connection lost");
       },
-    },
+    }),
   });
   try {
     const command = {

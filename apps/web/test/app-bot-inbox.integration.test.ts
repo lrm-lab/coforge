@@ -4,9 +4,9 @@ import { handleAppBotEventsGet } from "#src/server/app-bots/app-bot-agent-api.se
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
-import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { db, granted, useBotHarness } from "./app-bots-harness";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * The bot's inbox over `GET /api/agent/v1/events` against local PostgreSQL: a pull takes nothing,
@@ -18,10 +18,7 @@ import { db, granted, useBotHarness } from "./app-bots-harness";
 useBotHarness();
 
 const passThrough: MessageRequestIdempotency = { execute: (_scope, persist) => persist() };
-const quiet = {
-  async publish() {},
-  async publishJson() {},
-} as unknown as CentrifugoServerApi;
+const quiet = quietCentrifugo();
 
 async function inbox() {
   const f = await granted();

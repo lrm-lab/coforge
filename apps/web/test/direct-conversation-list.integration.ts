@@ -6,6 +6,7 @@ import { DirectConversations } from "#src/server/conversations/direct-conversati
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { arrangeConversationPins } from "#src/server/conversations/conversation-pins.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * The Chat sidebar's Direct messages against real PostgreSQL: the viewer's DMs with Agents and
@@ -15,7 +16,7 @@ import { arrangeConversationPins } from "#src/server/conversations/conversation-
 
 const sending = {
   idempotency: { execute: (_scope, persist) => persist() } satisfies MessageRequestIdempotency,
-  centrifugo: { publish: async () => {} },
+  centrifugo: quietCentrifugo(),
 };
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;

@@ -9,6 +9,7 @@ import {
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // The limits that stop two Agents answering each other without end: a chain budget per
 // conversation with a quiet window, a per-Agent hourly budget, and a notice told once.
@@ -21,7 +22,7 @@ const username = `apl-ada-${suffix}`;
 const sending = new SendDirectMessage(
   new PrismaDirectConversationRepository(db),
   { execute: (_scope, persist) => persist() } satisfies MessageRequestIdempotency,
-  { publish: async () => {} },
+  quietCentrifugo(),
 );
 
 let workspaceId: string;

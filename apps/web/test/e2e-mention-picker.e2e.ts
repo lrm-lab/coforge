@@ -6,6 +6,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * Mentioning people by the name they are shown by, in a real browser: the composer's `@` list finds a
@@ -95,11 +96,7 @@ test("people are mentioned by the name they are shown by: picked, kept across a 
   });
   const summary: Record<string, unknown> = {};
   try {
-    const channels = new PublicChannels(db, undefined, {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(db, undefined, quietCentrifugo());
     const channel = await channels.create(workspace.id, DEV_BROWSER_USER.id, `mention-${suffix}`);
     for (const member of [zhang, wangA, wangB, li]) {
       await db.workspaceMembership.create({

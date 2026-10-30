@@ -5,6 +5,7 @@ import { RedisClient } from "bun";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 test("a channel member without a browser push subscription is still a notificationForMessage recipient", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -33,11 +34,11 @@ test("a channel member without a browser push subscription is still a notificati
     },
   });
   try {
-    const channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
     const room = await channels.create(workspace.id, alice.id, "no-subscription");
     await channels.join(workspace.id, carol.id, room.id);
     const message = await channels.send({

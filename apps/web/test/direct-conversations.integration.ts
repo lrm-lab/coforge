@@ -7,12 +7,13 @@ import { PrismaWorkspaceMemberDirectoryStore } from "#src/server/workspaces/memb
 import { WorkspaceMemberDirectory } from "#src/server/workspaces/member-directory.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // Every send goes through request idempotency; these tests store each request once, and no
 // transport is running.
 const sending = {
   idempotency: { execute: (_scope, persist) => persist() } satisfies MessageRequestIdempotency,
-  centrifugo: { publish: async () => {} },
+  centrifugo: quietCentrifugo(),
 };
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;

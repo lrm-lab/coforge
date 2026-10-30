@@ -10,6 +10,7 @@ import { openPeopleDirectConversation } from "#src/server/conversations/user-dir
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { sentMessageBecomesTask } from "#src/server/tasks/sent-as-task.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * "Send as task" from the composer sends the message, as Raft's composer does (`/v2/messages` with
@@ -32,11 +33,7 @@ test("a message sent as a task is one message that is a Task and keeps all its u
   try {
     await db.$transaction((tx) => enrollGeneralChannel(tx, workspace.id));
     const idempotency = new RedisMessageRequestIdempotency(redis);
-    const publisher = {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    };
+    const publisher = quietCentrifugo();
     const channels = new PublicChannels(db, idempotency, publisher);
     const general = (await channels.list(workspace.id, user.id))[0]!;
     const upload = (conversationId: string, name: string) =>
@@ -177,7 +174,7 @@ test("a message sent as a task in an Agent's DM is a Task with all its uploads",
       },
       {
         idempotency: new RedisMessageRequestIdempotency(redis),
-        centrifugo: { publish: async () => {} },
+        centrifugo: quietCentrifugo(),
       },
     );
     expect(
@@ -256,7 +253,7 @@ test("a message sent as a task in a DM between people is a Task with all its upl
       },
       {
         idempotency: new RedisMessageRequestIdempotency(redis),
-        centrifugo: { publish: async () => {} },
+        centrifugo: quietCentrifugo(),
       },
     );
     expect(

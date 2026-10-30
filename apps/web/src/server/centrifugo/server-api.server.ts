@@ -16,6 +16,13 @@ export type CentrifugoServerApi = {
    * calls (https://centrifugal.dev/docs/server/server_api#broadcast). A no-op when `channels` is
    * empty. `idempotencyKey` acts per channel, matching `publishJson`'s per-channel semantics. */
   broadcast(channels: string[], data: unknown, idempotencyKey?: string): Promise<void>;
+  /** Many binary publications, each to its own channel, in one Centrifugo `batch` call
+   * (https://centrifugal.dev/docs/server/server_api#batch). Each settles on its own reply, in
+   * order: one failed publication leaves the rest published. A batch Centrifugo did not answer
+   * (one deadline covers the whole batch) fails them all. */
+  publishBatch(
+    publications: readonly { channel: string; data: Uint8Array }[],
+  ): Promise<PromiseSettledResult<void>[]>;
 };
 
 /** Centrifugo's server API for where channel streams stand. */
@@ -76,29 +83,38 @@ export function createCentrifugoServerApi(
         presence?: Record<string, { client?: unknown; user?: unknown }>;
       };
     };
-    if (result.error)
-      throw new Error(
-        `Centrifugo ${method} failed (${typeof result.error.code === "number" ? result.error.code : "command error"})`,
-      );
+    if (result.error) throw failure(method, result.error);
     const failed = result.result?.responses?.find((response) => response.error);
-    if (failed)
-      throw new Error(
-        `Centrifugo ${method} failed (${typeof failed.error?.code === "number" ? failed.error.code : "command error"})`,
-      );
+    if (failed) throw failure(method, failed.error);
     return result.result;
+  }
+  /** `batch` exists only as a method in the URL path (`/api/batch`), not in the `{ method,
+   * params }` body `call` sends; it answers `replies` at the top level, one per command, in
+   * order, each with its own `error` if that command failed. Commands run in parallel, so two
+   * publications to one channel keep no order between them. */
+  async function batch(commands: Record<string, unknown>[]) {
+    const response = await fetch(`${serverApiUrl}/batch`, {
+      method: "POST",
+      headers: { "x-api-key": serverApiKey, "content-type": "application/json" },
+      body: JSON.stringify({ parallel: true, commands }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) throw new Error(`Centrifugo batch failed (${response.status})`);
+    const { error, replies } = (await response.json()) as {
+      error?: { code?: unknown };
+      replies?: Array<{
+        error?: { code?: unknown };
+        history?: { offset?: unknown; epoch?: unknown };
+      }>;
+    };
+    if (error) throw failure("batch", error);
+    return replies ?? [];
   }
   return {
     async publish(channel, data, options) {
-      // `btoa` wants a binary string; building it chunk-wise (32 KiB of bytes per
-      // `String.fromCharCode` call) keeps the spread under the engine's argument limit and avoids
-      // the per-byte string append the former loop paid on every publish.
-      const CHUNK = 0x8000;
-      let binary = "";
-      for (let index = 0; index < data.length; index += CHUNK)
-        binary += String.fromCharCode(...data.subarray(index, index + CHUNK));
       await call("publish", {
         channel,
-        b64data: btoa(binary),
+        b64data: base64(data),
         ...(options?.skipHistory ? { skip_history: true } : {}),
       });
     },
@@ -117,26 +133,31 @@ export function createCentrifugoServerApi(
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
       });
     },
+    async publishBatch(publications) {
+      if (publications.length === 0) return [];
+      let replies: Awaited<ReturnType<typeof batch>>;
+      try {
+        replies = await batch(
+          publications.map(({ channel, data }) => ({
+            publish: { channel, b64data: base64(data) },
+          })),
+        );
+      } catch (error) {
+        return publications.map(() => ({ status: "rejected", reason: error }));
+      }
+      return publications.map((_, index) => {
+        const reply = replies[index];
+        return reply && !reply.error
+          ? { status: "fulfilled", value: undefined }
+          : { status: "rejected", reason: failure("publish", reply?.error) };
+      });
+    },
     async streamPositions(channels) {
       if (channels.length === 0) return {};
-      // `batch` exists only as a method in the URL path (`/api/batch`), not in the `{ method,
-      // params }` body `call` sends; it answers `replies` at the top level, one per command.
-      const response = await fetch(`${serverApiUrl}/batch`, {
-        method: "POST",
-        headers: { "x-api-key": serverApiKey, "content-type": "application/json" },
-        body: JSON.stringify({
-          parallel: true,
-          commands: channels.map((channel) => ({ history: { channel } })),
-        }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!response.ok) throw new Error(`Centrifugo batch failed (${response.status})`);
-      const { replies } = (await response.json()) as {
-        replies?: Array<{ history?: { offset?: unknown; epoch?: unknown } }>;
-      };
+      const replies = await batch(channels.map((channel) => ({ history: { channel } })));
       const positions: Record<string, StreamPosition> = {};
       channels.forEach((channel, index) => {
-        const { offset = 0, epoch } = replies?.[index]?.history ?? {};
+        const { offset = 0, epoch } = replies[index]?.history ?? {};
         if (typeof epoch === "string" && epoch !== "" && typeof offset === "number")
           positions[channel] = { offset, epoch };
       });
@@ -152,6 +173,24 @@ export function createCentrifugoServerApi(
       await call("disconnect", { user, client, disconnect });
     },
   };
+}
+
+/** A Centrifugo command error as one message, its numeric code when it has one. */
+function failure(method: string, error?: { code?: unknown }): Error {
+  return new Error(
+    `Centrifugo ${method} failed (${typeof error?.code === "number" ? error.code : "command error"})`,
+  );
+}
+
+/** Centrifugo's `b64data`. `btoa` wants a binary string; building it chunk-wise (32 KiB of bytes
+ * per `String.fromCharCode` call) keeps the spread under the engine's argument limit and avoids a
+ * per-byte string append. */
+function base64(data: Uint8Array): string {
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let index = 0; index < data.length; index += CHUNK)
+    binary += String.fromCharCode(...data.subarray(index, index + CHUNK));
+  return btoa(binary);
 }
 
 /** A private control channel for one authenticated Workspace–Computer connection. */

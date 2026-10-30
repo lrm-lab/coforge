@@ -30,6 +30,7 @@ import { handleAttachmentUploadSessionCreate } from "#src/routes/api/agent/v1/at
 import { handleAgentActionPrepare } from "#src/routes/api/agent/v1/actions/prepare";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { teardown } from "./helpers/workspace-teardown";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 type Person = { id: string; username: string };
 
@@ -43,6 +44,16 @@ type Person = { id: string; username: string };
  */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 const redisUrl = Bun.env.CHANNEL_TEST_REDIS_URL;
+
+/** What the Agent message route needs to send a direct message, with realtime ignored. */
+const agentMessageDependencies = (
+  repository: PrismaDirectConversationRepository,
+  requestRecords: RedisMessageRequestIdempotency,
+) => ({
+  repository,
+  requestRecords,
+  sender: new SendDirectMessage(repository, requestRecords, quietCentrifugo()),
+});
 
 // Every send goes through request idempotency; these tests store each request once.
 const passThrough: MessageRequestIdempotency = { execute: (_scope, persist) => persist() };
@@ -441,11 +452,7 @@ test.skipIf(!connectionString || !redisUrl)(
       await directory.leave({ workspaceId: workspace.id, userId: bob.id });
 
       const records = new RedisMessageRequestIdempotency(redis);
-      const dependencies = {
-        repository: repo,
-        requestRecords: records,
-        sender: new SendDirectMessage(repo, records, { publish: async () => {} }),
-      };
+      const dependencies = agentMessageDependencies(repo, records);
       const send = {
         target: `@${bob.username}`,
         content: "on it",
@@ -557,11 +564,7 @@ test.skipIf(!connectionString || !redisUrl)(
         bob,
       );
       const records = new RedisMessageRequestIdempotency(redis);
-      const dependencies = {
-        repository: repo,
-        requestRecords: records,
-        sender: new SendDirectMessage(repo, records, { publish: async () => {} }),
-      };
+      const dependencies = agentMessageDependencies(repo, records);
       const idempotencyKey = crypto.randomUUID();
       const send = () =>
         handleAgentMessagesPost(
@@ -619,11 +622,7 @@ test.skipIf(!connectionString || !redisUrl)(
       });
       const repo = new PrismaDirectConversationRepository(db);
       const records = new RedisMessageRequestIdempotency(redis);
-      const dependencies = {
-        repository: repo,
-        requestRecords: records,
-        sender: new SendDirectMessage(repo, records, { publish: async () => {} }),
-      };
+      const dependencies = agentMessageDependencies(repo, records);
       const idempotencyKey = crypto.randomUUID();
       const ghost = `ghost-${helper.id.slice(0, 8)}`;
       // Bob is in the Workspace but not in the channel; the ghost is nobody.
@@ -722,11 +721,7 @@ test.skipIf(!connectionString || !redisUrl)(
                 }),
               }),
               principal,
-              {
-                repository: repo,
-                requestRecords: records,
-                sender: new SendDirectMessage(repo, records, { publish: async () => {} }),
-              },
+              agentMessageDependencies(repo, records),
             ),
           ),
           upload: await outcome(() =>

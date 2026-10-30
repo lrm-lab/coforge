@@ -21,7 +21,7 @@ export type NonMemberDelivery = { deliveryId: string; agentId: string; messageId
  */
 export async function publishNonMemberDeliveries(
   db: MentionDeliveryDb,
-  publisher: Pick<CentrifugoServerApi, "publish">,
+  publisher: Pick<CentrifugoServerApi, "publishBatch">,
   workspaceId: string,
   deliveries: readonly NonMemberDelivery[],
 ): Promise<void> {

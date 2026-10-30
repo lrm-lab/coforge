@@ -6,6 +6,7 @@ import type {
   MessageRequestScope,
 } from "#src/server/conversations/message-request-idempotency.server";
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 
 const persisted = {
   id: "message-a",
@@ -53,7 +54,7 @@ describe("SendDirectMessage request idempotency", () => {
     const useCase = new SendDirectMessage(
       repository,
       new MemoryMessageRequestIdempotency(),
-      { async publish() {} },
+      quietCentrifugo(),
       {
         async memberChanged() {},
         async messageAvailable() {
@@ -92,13 +93,17 @@ describe("SendDirectMessage request idempotency", () => {
         return persisted;
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      async publish(_channel, data) {
-        publicationCalls += 1;
-        deliveries.push(decodeAgentMessageDelivery(data).deliveryId);
-        if (publicationCalls === 1) throw new Error("publication failed");
-      },
-    });
+    const useCase = new SendDirectMessage(
+      repository,
+      new MemoryMessageRequestIdempotency(),
+      withPublishBatch({
+        async publish(_channel, data) {
+          publicationCalls += 1;
+          deliveries.push(decodeAgentMessageDelivery(data).deliveryId);
+          if (publicationCalls === 1) throw new Error("publication failed");
+        },
+      }),
+    );
     const input = {
       idempotencyKey: "request-a",
       workspaceId: "workspace-a",
@@ -128,9 +133,11 @@ describe("SendDirectMessage request idempotency", () => {
         return { ...persisted, id: `message-${persistenceCalls}` };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      async publish() {},
-    });
+    const useCase = new SendDirectMessage(
+      repository,
+      new MemoryMessageRequestIdempotency(),
+      quietCentrifugo(),
+    );
     const input = {
       workspaceId: "workspace-a",
       conversationId: "conversation-a",
@@ -176,9 +183,11 @@ describe("SendDirectMessage request idempotency", () => {
         };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      async publish() {},
-    });
+    const useCase = new SendDirectMessage(
+      repository,
+      new MemoryMessageRequestIdempotency(),
+      quietCentrifugo(),
+    );
 
     await useCase.execute({
       idempotencyKey: "same-request",

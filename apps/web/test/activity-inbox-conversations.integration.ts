@@ -7,6 +7,7 @@ import { PublicChannels } from "#src/server/conversations/public-channels.server
 import { openPeopleDirectConversation } from "#src/server/conversations/user-direct-conversations.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { database, kindOf, seed, cleanup } from "./helpers/activity-inbox-fixture";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /** Activity inbox against PostgreSQL; shared fixtures control exact sequences and cleanup. */
 test("a thread counts only the unread replies past its read cursor, on any page", async () => {
@@ -274,19 +275,13 @@ test("a person notified of a mention outside their channels finds it in Activity
   });
   try {
     const announced: { workspaceId: string; userId: string }[] = [];
-    const channels = new PublicChannels(
-      db,
-      undefined,
-      { publish: async () => {}, publishJson: async () => {}, broadcast: async () => {} },
-      undefined,
-      {
-        messageAvailable: async () => {},
-        memberChanged: async () => {},
-        activityChanged: async (input) => {
-          announced.push(input);
-        },
+    const channels = new PublicChannels(db, undefined, quietCentrifugo(), undefined, {
+      messageAvailable: async () => {},
+      memberChanged: async () => {},
+      activityChanged: async (input) => {
+        announced.push(input);
       },
-    );
+    });
     const triage = await channels.create(workspace.id, alice.id, `triage-${suffix}`);
     const sent = await channels.send({
       workspaceId: workspace.id,

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WeeklyReportWorkflow } from "#src/server/records/weekly-report-workflow.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // Run explicitly against a disposable PostgreSQL database, never production.
 const connectionString = Bun.env.WEEKLY_REPORT_TEST_DATABASE_URL;
@@ -330,7 +331,7 @@ test("assignment invitations persist once in each recipient's own private assist
     const sender = new SendDirectMessage(
       new PrismaDirectConversationRepository(db),
       { execute: (_scope, persist) => persist() },
-      { publish: async () => {} },
+      quietCentrifugo(),
       { messageAvailable: async () => {}, memberChanged: async () => {} },
     );
     const notifier = weeklyReportNotifier(db, sender);

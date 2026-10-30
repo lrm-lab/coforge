@@ -7,6 +7,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { MessageForwards } from "#src/server/conversations/message-forwards.server";
 import { publishNonMemberDeliveries } from "#src/server/conversations/non-member-deliveries.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 
 /**
  * A forward pushed to an Agent the note notifies from outside the channel (a confirmed Notify)
@@ -22,11 +23,10 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const redis = new RedisClient(redisUrl);
 const suffix = crypto.randomUUID().slice(0, 8);
 const pushed: Uint8Array[] = [];
-const publisher = {
+const publisher = withPublishBatch({
+  ...quietCentrifugo(),
   publish: async (_channel: string, data: Uint8Array) => void pushed.push(data),
-  publishJson: async () => {},
-  broadcast: async () => {},
-};
+});
 
 let workspaceId: string;
 let alice: { id: string };

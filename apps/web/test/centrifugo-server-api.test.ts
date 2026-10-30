@@ -372,3 +372,102 @@ test("a channel whose position could not be read is left out", async () => {
 
   expect(positions).toEqual({});
 });
+
+test("publishes many binary payloads in one parallel batch, settling each on its own reply", async () => {
+  const requests: Request[] = [];
+  globalThis.fetch = Object.assign(
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      requests.push(new Request(input, init));
+      return Promise.resolve(
+        Response.json({
+          replies: [
+            { publish: {} },
+            // https://centrifugal.dev/docs/server/server_api#batch: each reply carries its own error.
+            { error: { code: 102, message: "unknown channel" } },
+            { publish: {} },
+          ],
+        }),
+      );
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+
+  const results = await createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: "http://centrifugo.test/api",
+    COFORGE_CENTRIFUGO_API_KEY: "test-api-key",
+  }).publishBatch([
+    { channel: "daemon:w:c1", data: Uint8Array.of(0, 255, 42) },
+    { channel: "daemon:w:c2", data: Uint8Array.of(1) },
+    { channel: "daemon:w:c1", data: Uint8Array.of(2) },
+  ]);
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]?.url).toBe("http://centrifugo.test/api/batch");
+  expect(requests[0]?.headers.get("x-api-key")).toBe("test-api-key");
+  expect(await requests[0]?.json()).toEqual({
+    parallel: true,
+    commands: [
+      { publish: { channel: "daemon:w:c1", b64data: "AP8q" } },
+      { publish: { channel: "daemon:w:c2", b64data: "AQ==" } },
+      { publish: { channel: "daemon:w:c1", b64data: "Ag==" } },
+    ],
+  });
+  expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
+  expect((results[1] as PromiseRejectedResult).reason).toEqual(
+    new Error("Centrifugo publish failed (102)"),
+  );
+});
+
+test("a batch Centrifugo did not answer fails every publication in it", async () => {
+  globalThis.fetch = Object.assign(() => Promise.resolve(new Response(null, { status: 503 })), {
+    preconnect: originalFetch.preconnect,
+  });
+
+  const results = await createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: "http://centrifugo.test/api",
+    COFORGE_CENTRIFUGO_API_KEY: "test-api-key",
+  }).publishBatch([
+    { channel: "daemon:w:c1", data: Uint8Array.of(1) },
+    { channel: "daemon:w:c2", data: Uint8Array.of(2) },
+  ]);
+
+  expect(results).toEqual([
+    { status: "rejected", reason: new Error("Centrifugo batch failed (503)") },
+    { status: "rejected", reason: new Error("Centrifugo batch failed (503)") },
+  ]);
+});
+
+test("an empty batch makes no Centrifugo call", async () => {
+  let called = false;
+  globalThis.fetch = Object.assign(
+    () => {
+      called = true;
+      return Promise.resolve(Response.json({ replies: [] }));
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+
+  const results = await createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: "http://centrifugo.test/api",
+    COFORGE_CENTRIFUGO_API_KEY: "test-api-key",
+  }).publishBatch([]);
+
+  expect(results).toEqual([]);
+  expect(called).toBe(false);
+});
+
+test("a batch Centrifugo refused as a whole fails each publication with its error", async () => {
+  globalThis.fetch = Object.assign(
+    () => Promise.resolve(Response.json({ error: { code: 103, message: "permission denied" } })),
+    { preconnect: originalFetch.preconnect },
+  );
+
+  const results = await createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: "http://centrifugo.test/api",
+    COFORGE_CENTRIFUGO_API_KEY: "test-api-key",
+  }).publishBatch([{ channel: "daemon:w:c1", data: Uint8Array.of(1) }]);
+
+  expect(results).toEqual([
+    { status: "rejected", reason: new Error("Centrifugo batch failed (103)") },
+  ]);
+});

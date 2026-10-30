@@ -33,7 +33,7 @@ export type DirectConversationTarget =
 /** What a send needs besides the database: request idempotency and the transports it tells. */
 export type DirectMessageSending = {
   idempotency: MessageRequestIdempotency;
-  centrifugo: Pick<CentrifugoServerApi, "publish">;
+  centrifugo: Pick<CentrifugoServerApi, "publishBatch">;
   realtime?: ConversationRealtime;
 };
 

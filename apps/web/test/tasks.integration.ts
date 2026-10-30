@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { recordingDeliveries, withPublishBatch } from "./helpers/fake-centrifugo";
 
 test("TaskBoard atomically creates, converts, claims and revision-checks message Tasks", async () => {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -103,14 +103,8 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
         sizeBytes: 4,
       },
     });
-    const delivered: ReturnType<typeof decodeAgentMessageDelivery>[] = [];
-    const directBoard = new TaskBoard(db, {
-      publisher: {
-        async publish(_channel, payload) {
-          delivered.push(decodeAgentMessageDelivery(payload));
-        },
-      },
-    });
+    const { publisher, delivered } = recordingDeliveries();
+    const directBoard = new TaskBoard(db, { publisher });
     const directTask = await directBoard.execute(
       { workspaceId: workspace.id, userId: alice.id },
       {
@@ -365,11 +359,11 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
           throw new Error("offline");
         },
       },
-      publisher: {
+      publisher: withPublishBatch({
         async publish() {
           throw new Error("offline");
         },
-      },
+      }),
     });
     const committed = await failingSideEffects.execute(
       { workspaceId: workspace.id, userId: alice.id },

@@ -6,7 +6,7 @@ import type { ConversationRealtimeMessage } from "#src/server/conversations/conv
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -212,9 +212,10 @@ test("a Task written in it is announced to its members, never to the Workspace",
   );
   const channels: string[] = [];
   const centrifugo = {
+    ...quietCentrifugo(),
     publishJson: async (channel: string) => void channels.push(channel),
-    publish: async () => {},
-  } as unknown as CentrifugoServerApi;
+    broadcast: async (to: string[]) => void channels.push(...to),
+  };
   const board = new TaskBoard(db, { realtime: new CentrifugoConversationRealtime(centrifugo) });
   await board.execute({ workspaceId: workspace.id, userId: ada.id }, {
     operation: "create",

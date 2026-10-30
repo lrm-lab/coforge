@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   AGENT_MESSAGE_ACK_METHOD,
-  decodeAgentMessageDelivery,
   decodeAgentStartIntent,
   encodeAgentMentionDeliveryTerminalError,
   encodeAgentMentionDeliveryTransition,
@@ -24,7 +23,6 @@ import {
   createMentionDeliveryTransitionMethod,
   type CentrifugoRpcMethod,
 } from "#src/server/centrifugo/rpc-handler.server";
-import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import {
   MentionDeliveryIssuer,
@@ -40,6 +38,7 @@ import { PrismaAgentRepository } from "#src/server/db/repositories/agent.reposit
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
+import { quietCentrifugo, recordingDeliveries, withPublishBatch } from "./helpers/fake-centrifugo";
 
 /**
  * Tracked @mention delivery on the cloud side: a channel message that @mentions an Agent records a
@@ -125,13 +124,7 @@ async function setup() {
   await launch(bob.id, "launch-bob-1", "native-bob-1");
   await launch(carol.id, "launch-carol-1", "native-carol-1");
 
-  const published: AgentMessageDelivery[] = [];
-  const publisher = {
-    async publish(_channel: string, bytes: Uint8Array) {
-      published.push(decodeAgentMessageDelivery(bytes));
-    },
-    async publishJson() {},
-  } as unknown as CentrifugoServerApi;
+  const { publisher, delivered: published } = recordingDeliveries();
   const channels = new PublicChannels(db, passThrough, publisher, undefined, {
     async messageAvailable() {},
     async memberChanged() {},
@@ -1168,11 +1161,12 @@ test.skipIf(!connectionString)(
     try {
       const failed = await t.send(`@bob-${t.suffix} publish fails`);
       await t.launch(t.bob.id, "launch-bob-2", "native-bob-2");
-      const unavailable = {
+      const unavailable = withPublishBatch({
+        ...quietCentrifugo(),
         async publish() {
           throw new Error("centrifugo unavailable");
         },
-      } as unknown as CentrifugoServerApi;
+      });
       await new MentionDeliveryReports(
         t.repository,
         unavailable,
@@ -1267,12 +1261,7 @@ test.skipIf(!connectionString)(
   async () => {
     const t = await setup();
     try {
-      const published: AgentMessageDelivery[] = [];
-      const publisher = {
-        async publish(_channel: string, bytes: Uint8Array) {
-          published.push(decodeAgentMessageDelivery(bytes));
-        },
-      } as unknown as CentrifugoServerApi;
+      const { publisher, delivered: published } = recordingDeliveries();
       const sender = new SendDirectMessage(
         new PrismaDirectConversationRepository(t.db),
         passThrough,

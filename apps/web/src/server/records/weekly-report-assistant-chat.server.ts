@@ -103,7 +103,7 @@ export class WeeklyReportAssistantChat {
     private readonly db: PrismaClient,
     private readonly conversations: PrismaDirectConversationRepository,
     private readonly idempotency: MessageRequestIdempotency,
-    private readonly centrifugo: Pick<CentrifugoServerApi, "publish">,
+    private readonly centrifugo: Pick<CentrifugoServerApi, "publishBatch">,
     private readonly realtime?: ConversationRealtime,
     private readonly alignSubject: boolean = false,
   ) {}

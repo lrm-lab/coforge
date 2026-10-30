@@ -7,7 +7,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { recordComputerObservation } from "#src/server/computers/computer-metadata.server";
-import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
@@ -16,6 +15,7 @@ import {
   workspaceMemberDirectory,
 } from "#src/server/workspaces/member-directory-store.server";
 import { emitterDatabaseUrl } from "./helpers/app-notification-emitters";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * What a deployment that does not use app notifications pays for them: nothing. With the flag file
@@ -112,10 +112,11 @@ testWithDatabase(
   async () => {
     const f = await workspaceWithOwner();
     try {
-      const channels = new PublicChannels(db!, { execute: (_scope, persist) => persist() }, {
-        publish: async () => [],
-        publishJson: async () => [],
-      } as unknown as CentrifugoServerApi);
+      const channels = new PublicChannels(
+        db!,
+        { execute: (_scope, persist) => persist() },
+        quietCentrifugo(),
+      );
       const created = await statementsOf(async () => {
         const channel = await channels.create(f.workspace.id, f.owner.id, "ops");
         Object.assign(f, { channel });

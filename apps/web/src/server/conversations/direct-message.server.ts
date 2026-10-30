@@ -41,7 +41,7 @@ export class SendDirectMessage {
   constructor(
     private readonly conversations: DirectConversationRepository,
     private readonly idempotency: MessageRequestIdempotency,
-    private readonly centrifugo: Pick<CentrifugoServerApi, "publish">,
+    private readonly centrifugo: Pick<CentrifugoServerApi, "publishBatch">,
     private readonly realtime?: ConversationRealtime,
     private readonly notifications?: MessageNotifier,
     /** Tracks the @mentions an Agent's message delivers; untracked without it. */

@@ -6,6 +6,7 @@ import { SendDirectMessage } from "#src/server/conversations/direct-message.serv
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { agentPeerDirectKey, isPeopleDirectKey } from "#src/features/conversations/direct-key";
+import { withPublishBatch } from "./helpers/fake-centrifugo";
 
 // Agent-to-Agent direct conversations: addressing, permission, the wake, and a target that is
 // always the other side's from the reader's seat. The person-and-Agent DM keeps its own tests.
@@ -21,7 +22,7 @@ const published: { channel: string; data: unknown }[] = [];
 const sending = new SendDirectMessage(
   repository,
   { execute: (_scope, persist) => persist() } satisfies MessageRequestIdempotency,
-  { publish: async (channel, data) => void published.push({ channel, data }) },
+  withPublishBatch({ publish: async (channel, data) => void published.push({ channel, data }) }),
 );
 
 let ada: { id: string };

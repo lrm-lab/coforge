@@ -21,6 +21,7 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { readAuthorizedAttachment } from "#src/server/attachments/attachment.server";
 import { backfillWorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -216,7 +217,7 @@ test("assistant commands read and post as the questioner without sharing the ass
   const commands = new WorkspaceAssistantCommands(
     db,
     { execute: (_scope, persist) => persist() },
-    { publish: async () => {}, publishJson: async () => {}, broadcast: async () => {} },
+    quietCentrifugo(),
   );
   const principal = { workspaceId: workspace.id, agentId: a.agentId };
   const channelSent = await commands.send(principal, {
@@ -352,7 +353,7 @@ test("external event drains advance independently for each member and survive re
   const commands = new WorkspaceAssistantCommands(
     db,
     { execute: (_scope, persist) => persist() },
-    { publish: async () => {}, publishJson: async () => {}, broadcast: async () => {} },
+    quietCentrifugo(),
   );
   const pa = { workspaceId: workspace.id, agentId: a!.agentId };
   const pb = { workspaceId: workspace.id, agentId: b!.agentId };
@@ -418,7 +419,7 @@ test("assistant uploads can accompany delegated messages, while another member's
   const commands = new WorkspaceAssistantCommands(
     db,
     { execute: (_scope, persist) => persist() },
-    { publish: async () => {}, publishJson: async () => {}, broadcast: async () => {} },
+    quietCentrifugo(),
   );
   const principal = { workspaceId: workspace.id, agentId: a!.agentId };
   const scope = await commands.target(principal, target);

@@ -94,6 +94,31 @@ test("a direct conversation between people signals only its members, never the W
   expect(activityTo(published)).toEqual(["chat:user:ada", "chat:user:grace"]);
 });
 
+test("a Tasks change in a direct conversation between people reaches its members in one broadcast", async () => {
+  const calls: { method: string; channels: string[]; idempotencyKey?: string }[] = [];
+  const centrifugo = {
+    publishJson: async (channel: string, _data: unknown, idempotencyKey?: string) => {
+      calls.push({ method: "publishJson", channels: [channel], idempotencyKey });
+    },
+    broadcast: async (channels: string[], _data: unknown, idempotencyKey?: string) => {
+      calls.push({ method: "broadcast", channels, idempotencyKey });
+    },
+  } as unknown as CentrifugoServerApi;
+
+  await new CentrifugoConversationRealtime(centrifugo).taskChanged({
+    workspaceId: "workspace-1",
+    conversationId: "conversation-1",
+    tasks: [],
+    deleted: [],
+    publicationId: "p1",
+    directUserIds: ["ada", "grace"],
+  });
+
+  expect(calls).toEqual([
+    { method: "broadcast", channels: ["chat:user:ada", "chat:user:grace"], idempotencyKey: "p1" },
+  ]);
+});
+
 test("a member's conversation with themself signals only them", async () => {
   const scopes = await conversationSignalScopes(
     directConversation("user:ada|user:ada", [{ userId: "ada", agentId: null }]),

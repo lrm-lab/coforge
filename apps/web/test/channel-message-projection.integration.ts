@@ -6,6 +6,7 @@ import { ConversationHistory } from "#src/server/conversations/conversation-hist
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // Pins the browser-facing shape of a channel message as `PublicChannels.open`, `updates` and
 // `send` return it: every field, for a person, a since-deleted Agent, a thread reply and a
@@ -47,7 +48,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
     const channels = new PublicChannels(
       db,
       new RedisMessageRequestIdempotency(redis),
-      { publish: async () => {}, publishJson: async () => {} } as never,
+      quietCentrifugo(),
       undefined,
       { async memberChanged() {}, async messageAvailable() {} },
     );

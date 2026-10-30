@@ -8,6 +8,7 @@ import type {
 } from "#src/server/conversations/message-request-idempotency.server";
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
+import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 
 const persisted = {
   id: "message-a",
@@ -39,6 +40,14 @@ class MemoryMessageRequestIdempotency implements MessageRequestIdempotency {
   }
 }
 
+/** The use case over a test repository, with request records kept in memory. */
+const sendDirectMessage = (
+  repository: DirectConversationRepository,
+  ...rest: ConstructorParameters<typeof SendDirectMessage> extends [unknown, unknown, ...infer R]
+    ? R
+    : never
+) => new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), ...rest);
+
 describe("SendDirectMessage", () => {
   test("publishes the full thread target while keeping the sender unchanged", async () => {
     let publication: Uint8Array | undefined;
@@ -49,11 +58,14 @@ describe("SendDirectMessage", () => {
         return { ...persisted, deliveryTarget: "@ada:12345678" };
       },
     } satisfies DirectConversationRepository;
-    await new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      publish: async (_channel, data) => {
-        publication = data;
-      },
-    }).execute({
+    await sendDirectMessage(
+      repository,
+      withPublishBatch({
+        publish: async (_channel, data) => {
+          publication = data;
+        },
+      }),
+    ).execute({
       idempotencyKey: "thread-request",
       workspaceId: "workspace-a",
       conversationId: "conversation-a",
@@ -95,9 +107,7 @@ describe("SendDirectMessage", () => {
         };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      async publish() {},
-    });
+    const useCase = sendDirectMessage(repository, quietCentrifugo());
 
     const result = await useCase.execute({
       idempotencyKey: "multi-attachment-request",
@@ -134,12 +144,15 @@ describe("SendDirectMessage", () => {
         return persisted;
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      async publish(channel, data) {
-        calls.push("publish");
-        publication = { channel, data };
-      },
-    });
+    const useCase = sendDirectMessage(
+      repository,
+      withPublishBatch({
+        async publish(channel, data) {
+          calls.push("publish");
+          publication = { channel, data };
+        },
+      }),
+    );
 
     await useCase.execute({
       idempotencyKey: "request-a",
@@ -183,14 +196,13 @@ describe("SendDirectMessage", () => {
         return persisted;
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(
+    const useCase = sendDirectMessage(
       repository,
-      new MemoryMessageRequestIdempotency(),
-      {
+      withPublishBatch({
         async publish() {
           calls.push("daemon");
         },
-      },
+      }),
       {
         async memberChanged() {},
         async messageAvailable(input) {
@@ -223,17 +235,12 @@ describe("SendDirectMessage", () => {
         return persisted;
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(
-      repository,
-      new MemoryMessageRequestIdempotency(),
-      { async publish() {} },
-      {
-        async memberChanged() {},
-        async messageAvailable(input) {
-          signals.push(input);
-        },
+    const useCase = sendDirectMessage(repository, quietCentrifugo(), {
+      async memberChanged() {},
+      async messageAvailable(input) {
+        signals.push(input);
       },
-    );
+    });
 
     await useCase.execute({
       idempotencyKey: "request-a",
@@ -270,11 +277,14 @@ describe("SendDirectMessage", () => {
           return { ...persisted, latestSenderKind, latestSenderHandle };
         },
       } satisfies DirectConversationRepository;
-      const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-        async publish() {
-          published = true;
-        },
-      });
+      const useCase = sendDirectMessage(
+        repository,
+        withPublishBatch({
+          async publish() {
+            published = true;
+          },
+        }),
+      );
 
       await expect(
         useCase.execute({
@@ -302,11 +312,14 @@ describe("SendDirectMessage", () => {
           throw new Error(reason);
         },
       } satisfies DirectConversationRepository;
-      const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-        async publish() {
-          published = true;
-        },
-      });
+      const useCase = sendDirectMessage(
+        repository,
+        withPublishBatch({
+          async publish() {
+            published = true;
+          },
+        }),
+      );
       await expect(
         useCase.execute({
           idempotencyKey: "request-a",
@@ -345,14 +358,13 @@ describe("SendDirectMessage", () => {
         return { ...persisted, deliveryId: undefined, target: "@user" };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(
+    const useCase = sendDirectMessage(
       repository,
-      new MemoryMessageRequestIdempotency(),
-      {
+      withPublishBatch({
         async publish() {
           throw new Error("must not publish an Agent reply to a Daemon channel");
         },
-      },
+      }),
       {
         async memberChanged() {},
         async messageAvailable({ conversationId, messageId, sequence }) {
@@ -412,10 +424,9 @@ describe("SendDirectMessage", () => {
         return { ...persisted, deliveryId: undefined, target: "@user" };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(
+    const useCase = sendDirectMessage(
       repository,
-      new MemoryMessageRequestIdempotency(),
-      { async publish() {} },
+      quietCentrifugo(),
       { async messageAvailable() {}, async memberChanged() {} },
       bestEffortMessageNotifier({} as PrismaClient, async () => ({
         notifyMessage: () => new Promise(() => {}),
@@ -464,14 +475,13 @@ describe("SendDirectMessage", () => {
         };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(
+    const useCase = sendDirectMessage(
       repository,
-      new MemoryMessageRequestIdempotency(),
-      {
+      withPublishBatch({
         async publish() {
           throw new Error("must not publish an Agent reply to a Daemon channel");
         },
-      },
+      }),
       undefined,
       {
         async notifyMessage(messageId) {
@@ -520,23 +530,17 @@ describe("SendDirectMessage", () => {
         return { pendingMentionActions: [], unresolvedMentionHandles: ["nobody"] };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(
-      repository,
-      new MemoryMessageRequestIdempotency(),
-      { async publish() {} },
-      undefined,
-      {
-        async notifyMessage() {
-          await Promise.race([
-            reportRead,
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("the report waited for the publications")), 500),
-            ),
-          ]);
-          notified = true;
-        },
+    const useCase = sendDirectMessage(repository, quietCentrifugo(), undefined, {
+      async notifyMessage() {
+        await Promise.race([
+          reportRead,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("the report waited for the publications")), 500),
+          ),
+        ]);
+        notified = true;
       },
-    );
+    });
 
     const sent = await useCase.executeFromAgent({
       idempotencyKey: "channel-request",
@@ -581,9 +585,7 @@ describe("SendDirectMessage", () => {
         return { ...persisted, deliveryId: undefined, target: "@frank" };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      async publish() {},
-    });
+    const useCase = sendDirectMessage(repository, quietCentrifugo());
 
     await useCase.executeFromAgent({
       idempotencyKey: "attachment-mention-request",
@@ -629,11 +631,14 @@ describe("SendDirectMessage", () => {
         throw new Error("persistence failed");
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(repository, new MemoryMessageRequestIdempotency(), {
-      async publish() {
-        published = true;
-      },
-    });
+    const useCase = sendDirectMessage(
+      repository,
+      withPublishBatch({
+        async publish() {
+          published = true;
+        },
+      }),
+    );
     await expect(
       useCase.executeFromAgent({
         idempotencyKey: "request-a",
@@ -670,14 +675,13 @@ describe("SendDirectMessage", () => {
         return { ...persisted, deliveryId: undefined, target: "@user" };
       },
     } satisfies DirectConversationRepository;
-    const useCase = new SendDirectMessage(
+    const useCase = sendDirectMessage(
       repository,
-      new MemoryMessageRequestIdempotency(),
-      {
+      withPublishBatch({
         async publish() {
           throw new Error("should not be called");
         },
-      },
+      }),
       {
         async memberChanged() {},
         async messageAvailable({ messageId }) {

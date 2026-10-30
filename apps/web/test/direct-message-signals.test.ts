@@ -8,6 +8,7 @@ import type {
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * What a person's direct-message send tells the browser: the open conversation reconciles from its
@@ -73,7 +74,7 @@ test("signals the sender's own channel with the sender named, so their other tab
   const useCase = new SendDirectMessage(
     repository,
     new MemoryMessageRequestIdempotency(),
-    { async publish() {} },
+    quietCentrifugo(),
     new CentrifugoConversationRealtime({
       publishJson: async (channel: string, data: Record<string, unknown>) => {
         published.push({ channel, data });

@@ -5,6 +5,7 @@ import { PublicChannels } from "#src/server/conversations/public-channels.server
 import { channelAgentRecipients } from "#src/server/conversations/channel-agent-recipients.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { unreadAgentMessagesFragment } from "#src/server/db/repositories/agent-attention.repositories.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 test("Memory observes undirected and Task-directed updates and reads the full increment once", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -67,11 +68,7 @@ test("Memory observes undirected and Task-directed updates and reads the full in
         },
       ],
     });
-    const channels = new PublicChannels(db, undefined, {
-      publish: async () => {},
-      publishJson: async () => {},
-      broadcast: async () => {},
-    });
+    const channels = new PublicChannels(db, undefined, quietCentrifugo());
     const send = (body: string) =>
       channels.send({
         workspaceId: workspace.id,

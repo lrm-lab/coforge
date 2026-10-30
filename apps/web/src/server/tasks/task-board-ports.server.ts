@@ -11,7 +11,7 @@ export type TaskBoardDependencies = {
   reader?: TaskReader;
   realtime?: ConversationRealtime;
   notifications?: MessageNotifier;
-  publisher?: Pick<CentrifugoServerApi, "publish">;
+  publisher?: Pick<CentrifugoServerApi, "publish" | "publishBatch">;
 };
 
 export type Transaction = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];

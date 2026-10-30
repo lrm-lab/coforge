@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import type {
   ConversationRealtime,
@@ -9,6 +8,7 @@ import type {
 } from "#src/server/conversations/conversation-realtime.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
+import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /**
  * A person's channel message names them on its signal (Slack's `message.user`), so their own
@@ -44,10 +44,7 @@ test.skipIf(!connectionString)("a person's channel message names its sender", as
       async memberChanged() {},
     };
     // No Agent is in the channel, so nothing is pushed to a daemon.
-    const publisher = {
-      async publish() {},
-      async publishJson() {},
-    } as unknown as CentrifugoServerApi;
+    const publisher = quietCentrifugo();
     // Each send is stored once without Redis.
     const idempotency: MessageRequestIdempotency = { execute: (_scope, persist) => persist() };
     const channels = new PublicChannels(db, idempotency, publisher, undefined, realtime);
