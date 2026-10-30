@@ -15,7 +15,7 @@ import {
 import {
   agentStatusChannel,
   agentStatusChannelForAgent,
-} from "#src/features/agents/agent-status-realtime";
+} from "#src/features/agents/agent-status-channel";
 import { runtimeAuthChannel } from "#src/features/computers/runtime-auth-realtime";
 import {
   conversationRealtimeChannel,

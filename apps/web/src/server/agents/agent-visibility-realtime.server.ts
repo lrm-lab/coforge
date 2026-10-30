@@ -2,7 +2,7 @@ import {
   createCentrifugoServerApi,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
-import { agentStatusChannel } from "#src/features/agents/agent-status-realtime";
+import { agentStatusChannel } from "#src/features/agents/agent-status-channel";
 
 export type AgentDirectoryChange = "created" | "updated" | "deleted";
 

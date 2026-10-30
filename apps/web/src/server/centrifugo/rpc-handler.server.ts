@@ -46,7 +46,7 @@ import {
   agentStatusChannel,
   agentStatusChannelForAgent,
   encodeAgentStatusEvent,
-} from "#src/features/agents/agent-status-realtime";
+} from "#src/features/agents/agent-status-channel";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { CentrifugoServerApi } from "./server-api.server";
 import type { AgentDisplay } from "#src/server/agents/agent-display.server";

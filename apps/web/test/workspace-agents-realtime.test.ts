@@ -4,11 +4,11 @@ import { mergeAgentStatusSnapshot } from "#src/features/agents/agent-status-real
 import { AGENT_MASCOTS } from "#src/features/agents/agent-mascot";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { ExtraAgent } from "#src/features/agents/extra-agent";
+import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import {
   createAgentDirectoryInvalidator,
   refreshedAgents,
-  type LiveAgent,
-} from "#src/features/agents/workspace-agents-realtime";
+} from "#src/features/agents/workspace-agents-refresh";
 
 const live = (id: string): LiveAgent => ({
   id,

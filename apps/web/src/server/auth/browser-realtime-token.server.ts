@@ -3,7 +3,7 @@ import { importJWK, SignJWT, type JWK } from "jose";
 import {
   agentStatusChannel,
   agentStatusChannelForAgent,
-} from "#src/features/agents/agent-status-realtime";
+} from "#src/features/agents/agent-status-channel";
 import {
   agentActivityChannel,
   agentActivityChannelForAgent,

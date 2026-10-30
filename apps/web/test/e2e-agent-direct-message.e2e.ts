@@ -17,7 +17,7 @@ import {
   agentStatusChannel,
   decodeAgentStatusEvent,
   type AgentStatusEvent,
-} from "#src/features/agents/agent-status-realtime";
+} from "#src/features/agents/agent-status-channel";
 import { RedisAgentStatusCache } from "#src/server/agents/agent-status.server";
 import { verifyDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";

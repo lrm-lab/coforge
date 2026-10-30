@@ -13,7 +13,7 @@ import { daemonControlChannel } from "#src/server/centrifugo/server-api.server";
 import {
   agentStatusChannel,
   agentStatusChannelForAgent,
-} from "#src/features/agents/agent-status-realtime";
+} from "#src/features/agents/agent-status-channel";
 
 const redisServer = Bun.which("redis-server");
 const port = 20_000 + Math.floor(Math.random() * 20_000);

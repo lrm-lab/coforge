@@ -13,7 +13,7 @@ import { activityKindForObservation } from "./agent-activity-kind";
 import { getAgentDisplay, type AgentDisplay } from "./agent-display.server";
 import { ensureAgentActivitySweep } from "./agent-activity-sweep.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { agentStatusChannelFor } from "#src/features/agents/agent-status-realtime";
+import { agentStatusChannelFor } from "#src/features/agents/agent-status-channel";
 import { agentActivityChannel, isRunStartMarker } from "#src/features/agents/agent-activity";
 import { normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import {

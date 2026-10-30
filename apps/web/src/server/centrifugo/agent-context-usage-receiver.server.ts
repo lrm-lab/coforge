@@ -5,7 +5,7 @@ import type { CentrifugoServerApi } from "./server-api.server";
 import {
   agentStatusChannel,
   agentStatusChannelForAgent,
-} from "#src/features/agents/agent-status-realtime";
+} from "#src/features/agents/agent-status-channel";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";

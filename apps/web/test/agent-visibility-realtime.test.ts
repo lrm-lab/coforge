@@ -4,7 +4,7 @@ import {
   createAgentDirectoryChangedPublisher,
   createAgentVisibilityChangedPublisher,
 } from "#src/server/agents/agent-visibility-realtime.server";
-import { agentStatusChannel } from "#src/features/agents/agent-status-realtime";
+import { agentStatusChannel } from "#src/features/agents/agent-status-channel";
 
 // After a visibility change commits, every already-connected browser learns about it through the
 // existing shared status channel. The status event also invalidates the mention directory in the

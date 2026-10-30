@@ -1,21 +1,24 @@
 import { expect, test } from "bun:test";
 
 const {
-  agentStatusChannel,
-  agentStatusChannelForAgent,
   applyAgentDisplaySnapshot,
   applyAgentStatusEvent,
-  decodeAgentStatusEvent,
   expireAgentStatuses,
-  isAgentDirectoryChangedEvent,
-  isAgentVisibilityChangedEvent,
   mergeAgentStatusSnapshot,
   mergeExtraAgents,
   nextDisplayRefreshDelayMs,
   shouldRefreshAgentDirectoryOnGap,
 } = await import("#src/features/agents/agent-status-realtime");
+const {
+  agentStatusChannel,
+  agentStatusChannelForAgent,
+  decodeAgentStatusEvent,
+  isAgentDirectoryChangedEvent,
+  isAgentVisibilityChangedEvent,
+} = await import("#src/features/agents/agent-status-channel");
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "#src/features/agents/activity-probe-timeout";
-import type { AgentStatusEvent, AgentStatusView } from "#src/features/agents/agent-status-realtime";
+import type { AgentStatusView } from "#src/features/agents/agent-status-realtime";
+import type { AgentStatusEvent } from "#src/features/agents/agent-status-channel";
 import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 test("agentStatusChannelForAgent names the per-Agent re-routing destination", () => {

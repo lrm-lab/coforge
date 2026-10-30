@@ -11,7 +11,7 @@ import {
   type ActivityEntry,
 } from "#src/features/agents/agent-activity";
 import { presentActivityRows } from "#src/features/agents/agent-activity-presentation";
-import { agentStatusChannelFor } from "#src/features/agents/agent-status-realtime";
+import { agentStatusChannelFor } from "#src/features/agents/agent-status-channel";
 
 test("agentActivityChannelForAgent names the per-Agent re-routing destination", () => {
   expect(agentActivityChannelForAgent("workspace-1", "agent-1")).toBe(

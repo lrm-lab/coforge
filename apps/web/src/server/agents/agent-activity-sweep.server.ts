@@ -2,7 +2,7 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { encodeAgentActivityProbe } from "@lrm/coforge-sdk/internal";
 
-import { agentStatusChannelFor } from "#src/features/agents/agent-status-realtime";
+import { agentStatusChannelFor } from "#src/features/agents/agent-status-channel";
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "#src/features/agents/activity-probe-timeout";
 import {
   createCentrifugoServerApi,
