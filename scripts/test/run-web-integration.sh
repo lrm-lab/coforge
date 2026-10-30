@@ -56,6 +56,8 @@ for name in \
   WEEKLY_REPORT_TEST_DATABASE_URL; do
   export "$name=$database"
 done
+# The migration safety suites create and drop their own scratch databases on this server.
+export MIGRATION_SAFETY_ADMIN_URL="${database%/*}/postgres"
 export CHANNEL_TEST_REDIS_URL="$redis"
 export SKILLS_TEST_REDIS_URL="$redis"
 export MODEL_CATALOG_TEST_REDIS_URL="$redis"
@@ -88,4 +90,5 @@ for file in "$root"/apps/web/test/*.integration*.ts; do
   }
   files+=("$file")
 done
+files+=("$root"/scripts/migration-safety/*.integration.ts)
 bun test "${files[@]}"

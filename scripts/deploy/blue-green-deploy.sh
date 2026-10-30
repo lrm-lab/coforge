@@ -173,9 +173,8 @@ fi
 # 3. Execute database migration deploy
 printf 'blue-green-deploy: running migration deploy...\n' >&2
 write_deploy_env "$image"
-if ! compose run --rm --entrypoint sh migrate \
-	-c 'cd .migrate && sh migration-safety/migrate-deploy.sh' </dev/null 1>&2; then
-	printf 'outcome=failed\nhealth_result=failed: migration safety check or deploy failed\n'
+if ! run_migrations; then
+	printf 'outcome=failed\nhealth_result=failed: %s\n' "$migration_failure"
 	exit 1
 fi
 

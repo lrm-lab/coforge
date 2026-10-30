@@ -64,7 +64,7 @@ describe("the deploy scripts", () => {
     "%s runs migrations only through the gate",
     (script) => {
       const text = readFileSync(join(import.meta.dir, script), "utf8");
-      expect(text).toContain("sh migration-safety/migrate-deploy.sh");
+      expect(text).toContain("run_migrations");
       expect(text).not.toContain("migrate deploy' </dev/null");
     },
   );
@@ -153,5 +153,32 @@ describe("catalog-snapshot.sh", () => {
     const { result } = host(false);
     expect(result.exitCode).toBe(1);
     expect(result.stderr.toString()).toContain("nothing has been deployed here yet");
+  });
+});
+
+describe("run_migrations", () => {
+  // `compose` is replaced by a function that runs the container command against a fake .migrate.
+  const run = (withEntry: boolean) => {
+    const dir = mkdtempSync(join(root, "migrate-"));
+    mkdirSync(join(dir, ".migrate/migration-safety"), { recursive: true });
+    if (withEntry)
+      writeFileSync(join(dir, ".migrate/migration-safety/migrate-deploy.sh"), "exit 0\n");
+    const script = `
+      source ${join(import.meta.dir, "deploy-secrets.sh")}
+      compose() { local cmd="\${@: -1}"; (cd "${dir}" && sh -c "\$cmd"); }
+      if run_migrations; then echo ok; else echo "failed: \$migration_failure"; fi`;
+    const out = Bun.spawnSync(["bash", "-c", script]);
+    rmSync(dir, { recursive: true, force: true });
+    return out.stdout.toString().trim();
+  };
+
+  test("runs the entry when the image has it", () => {
+    expect(run(true)).toBe("ok");
+  });
+
+  test("names the cause when the image predates the migration safety check", () => {
+    expect(run(false)).toBe(
+      "failed: the image predates the migration safety check; deploy a newer image first",
+    );
   });
 });

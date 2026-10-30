@@ -28,6 +28,21 @@ load_compose_secrets() {
 	done
 }
 
+# The migrations, through the gate (scripts/migration-safety/migrate-deploy.sh in the migrate image).
+# An image built before the gate has no such file: that is its own reason, not a gate failure.
+# Sets migration_failure (read by the sourcing script) when it returns non-zero.
+# shellcheck disable=SC2034
+run_migrations() {
+	local status=0
+	compose run --rm --entrypoint sh migrate \
+		-c 'cd .migrate && { [ -f migration-safety/migrate-deploy.sh ] || exit 78; }; sh migration-safety/migrate-deploy.sh' \
+		</dev/null 1>&2 || status=$?
+	[ "$status" -eq 0 ] && return 0
+	migration_failure="migration safety check or deploy failed"
+	[ "$status" -eq 78 ] && migration_failure="the image predates the migration safety check; deploy a newer image first"
+	return 1
+}
+
 compose() {
 	AUTHING_APP_ID="$AUTHING_APP_ID" \
 		AUTHING_APP_SECRET="$AUTHING_APP_SECRET" \

@@ -538,9 +538,8 @@ if ! pull_web_image; then
 	exit 0
 fi
 
-if ! compose run --rm --entrypoint sh migrate \
-	-c 'cd .migrate && sh migration-safety/migrate-deploy.sh' </dev/null 1>&2; then
-	report "$last_healthy" "failed: migration safety check or deploy failed" "failed" ""
+if ! run_migrations; then
+	report "$last_healthy" "failed: $migration_failure" "failed" ""
 	exit 0
 fi
 
