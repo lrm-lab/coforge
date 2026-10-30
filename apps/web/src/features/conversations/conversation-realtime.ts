@@ -10,8 +10,8 @@ export const conversationRealtimeChannel = (conversationId: string) => `chat:${c
  * versioned `message.available.v1` payloads as `chat:<conversationId>`, but
  * one subscription per open Workspace keeps the sidebar unread counts live
  * without holding a per-conversation subscription for every channel in the
- * list. It also carries `channel.created.v1` and `channel.updated.v1`, so the sidebar lists a
- * created, renamed, deleted or archived channel from the event, and `task.changed.v1` (`features/tasks/task-realtime.ts`), so an open
+ * list. It also carries a public channel's `channel.created.v1` and `channel.updated.v1`, so the
+ * sidebar lists a created, renamed, deleted or archived channel from the event, and `task.changed.v1` (`features/tasks/task-realtime.ts`), so an open
  * Tasks page updates the rows a Task write changed, and `workspace.deleted.v1`
  * (`features/workspaces/workspace-realtime.ts`), so every open page leaves a deleted Workspace. Authorization mirrors the status/activity workspace channels: the
  * subscription token is issued only to Workspace members.
@@ -24,7 +24,9 @@ export const workspaceConversationChannel = (workspaceId: string) =>
  * conversation channel) instead of the workspace channel, so direct-message metadata never
  * reaches every Workspace member; each publication names who is on the other side, which is how
  * the sidebar tells a DM's event from a channel's. It also carries the viewer's own
- * `ViewerEvent`s (their reads, joins, closes, mutes, pins and saves, wherever they made them).
+ * `ViewerEvent`s (their reads, joins, closes, mutes, pins and saves, wherever they made them), and
+ * the channel events and Task changes of the private channels they are in, which never reach the
+ * Workspace channel.
  */
 export const userConversationChannel = (userId: string) => `chat:user:${userId}`;
 
@@ -223,8 +225,8 @@ const channelUpdatedEvent = z.object({
 
 /**
  * A channel's own facts changed: its name, description or archived state, or it is gone. Published
- * on the Workspace channel, so every member's sidebar applies it, and on the channel's own
- * conversation channel, so a page showing it refetches its header and composer state. An event
+ * on the Workspace channel, so every member's sidebar applies it (a private channel's on its
+ * members' own channels instead), and on the channel's own conversation channel, so a page showing it refetches its header and composer state. An event
  * with neither `channel` nor `gone` (from an older server) has the sidebar re-read its lists.
  */
 export type ChannelUpdatedEvent = z.infer<typeof channelUpdatedEvent>;
@@ -313,7 +315,8 @@ const channelCreatedEvent = z.object({
 /**
  * A channel was created in the Workspace, by a person, an Agent or an action card (Slack's
  * `channel_created`). Published on the Workspace channel with the channel's info, so every
- * member's sidebar lists it from the event alone.
+ * member's sidebar lists it from the event alone; a private channel's goes to its members' own
+ * channels instead.
  */
 export type ChannelCreatedEvent = z.infer<typeof channelCreatedEvent>;
 

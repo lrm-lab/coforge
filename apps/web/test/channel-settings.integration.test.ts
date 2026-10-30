@@ -316,6 +316,8 @@ test.skipIf(!connectionString)(
         workspaceId: workspace.id,
         conversationId: team.id,
         channel: { name: `renamed-${suffix}`, ...channel },
+        // A public channel's: the whole Workspace hears of it.
+        memberUserIds: undefined,
       });
       await channels.updateInfo(workspace.id, { userId: creator.id }, team.id, {
         name: `renamed-${suffix}`,
@@ -438,7 +440,12 @@ test.skipIf(!connectionString)(
       // Setup's own channel was announced when it was made.
       const info = (name: string) => ({ name, description: "", archived: false });
       expect(created).toEqual([
-        { workspaceId: workspace.id, conversationId: team.id, channel: info(`team-${suffix}`) },
+        {
+          workspaceId: workspace.id,
+          conversationId: team.id,
+          channel: info(`team-${suffix}`),
+          memberUserIds: undefined,
+        },
       ]);
       created.length = 0;
 
@@ -465,11 +472,17 @@ test.skipIf(!connectionString)(
         undefined,
       );
       expect(created).toEqual([
-        { workspaceId: workspace.id, conversationId: byPerson.id, channel: info(`lab-${suffix}`) },
+        {
+          workspaceId: workspace.id,
+          conversationId: byPerson.id,
+          channel: info(`lab-${suffix}`),
+          memberUserIds: undefined,
+        },
         {
           workspaceId: workspace.id,
           conversationId: byAgent.channel.id,
           channel: info(`ops-${suffix}`),
+          memberUserIds: undefined,
         },
       ]);
 

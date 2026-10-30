@@ -1,3 +1,7 @@
+import {
+  publicationDataOrUndefined,
+  publicationType,
+} from "#src/features/realtime/publication-data";
 import type { ChannelSignal } from "./channel-signals";
 import {
   streamMovedSince,
@@ -221,9 +225,12 @@ export function decodeActivitySignal(data: unknown): UnreadEventInput | undefine
 /**
  * A channel created or changed anywhere in the Workspace (`channel.created.v1`,
  * `channel.updated.v1`), for the page to apply to its lists; undefined for anything else on the
- * Workspace channel (a message signal).
+ * Workspace channel or the viewer's own.
  */
-export function channelSignalOf(data: unknown): ChannelSignal | undefined {
+export function channelSignalOf(value: unknown): ChannelSignal | undefined {
+  const data = publicationDataOrUndefined(value);
+  const type = publicationType(data);
+  if (type !== "channel.created.v1" && type !== "channel.updated.v1") return undefined;
   const created = decodeChannelCreatedEvent(data);
   if (created) return created;
   try {
@@ -238,15 +245,17 @@ export function channelSignalOf(data: unknown): ChannelSignal | undefined {
  * subscribed, as `subscriptionGap` reads the event: nothing when the subscribe replayed every
  * missed publication; otherwise (a first subscribe, which follows the page's own reads, or a
  * resubscribe that lost publications) every list that channel keeps live. The Workspace channel
- * carries channel messages and channel events; the viewer's own channel carries DM messages and
- * their `ViewerEvent`s.
+ * carries public channels' events; the viewer's own channel carries message activity, their
+ * `ViewerEvent`s and their private channels' events.
  */
 export function listsMissedBySubscribe(
   channel: "workspace" | "user",
   recovery: SubscribedRecovery,
 ): readonly ChatList[] {
   if (subscriptionGap(recovery) === "none") return [];
-  return channel === "workspace" ? ["channels", "channelNames"] : ["channels", "dms", "saved"];
+  return channel === "workspace"
+    ? ["channels", "channelNames"]
+    : ["channels", "channelNames", "dms", "saved"];
 }
 
 /**

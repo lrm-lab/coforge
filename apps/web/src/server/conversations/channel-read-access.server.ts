@@ -88,6 +88,38 @@ export function canReadChannel(channel: { visibility: string }, isActiveMember: 
   return channel.visibility === CHANNEL_VISIBILITY.PUBLIC || isActiveMember;
 }
 
+/**
+ * Whether a person reads one conversation, for a gate that has only its id (a realtime
+ * subscription, a file download): a DM they are an active member of, or a channel of a Workspace
+ * they belong to that `canReadChannel` lets them read; never a hidden one. `"private"` is a
+ * private channel they are not in, which a caller that keeps such a channel unknown reports as
+ * missing; `undefined` is none of these. `where` narrows which conversation is meant.
+ */
+export async function personConversationAccess(
+  db: Pick<PrismaClient, "conversation">,
+  userId: string,
+  where: Prisma.ConversationWhereInput,
+): Promise<"read" | "private" | undefined> {
+  const conversation = await db.conversation.findFirst({
+    where: {
+      AND: [where],
+      ...VISIBLE_CONVERSATION_WHERE,
+      OR: [
+        { ...DIRECT_CONVERSATION_WHERE, members: { some: { userId, ...ACTIVE_MEMBER_WHERE } } },
+        { channelName: { not: null }, workspace: { members: { some: { userId } } } },
+      ],
+    },
+    select: {
+      channelName: true,
+      visibility: true,
+      members: { where: { userId, ...ACTIVE_MEMBER_WHERE }, select: { id: true } },
+    },
+  });
+  if (!conversation) return undefined;
+  if (conversation.channelName === null) return "read";
+  return canReadChannel(conversation, conversation.members.length > 0) ? "read" : "private";
+}
+
 /** The conversations a person acts on a message in (save, react, download a file): a channel by
  * `visibleChannelWhere`, or a DM, which the caller still checks is theirs by their member row. */
 export function readableConversationWhere(workspaceId: string, reader: { userId: string }) {

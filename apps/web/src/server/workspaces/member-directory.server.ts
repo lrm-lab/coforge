@@ -7,6 +7,7 @@ import {
   type WorkspaceMemberRole,
 } from "./member-role.server";
 import {
+  announceConversationsRevoked,
   announceMemberChanged,
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
@@ -69,7 +70,7 @@ const centrifugoMemberDaemons: WorkspaceMemberDaemons = {
 export class WorkspaceMemberDirectory {
   constructor(
     private readonly store: WorkspaceMemberDirectoryStore,
-    private readonly realtime?: Pick<ConversationRealtime, "memberChanged">,
+    private readonly realtime?: Pick<ConversationRealtime, "memberChanged" | "revokeConversations">,
     private readonly daemons: WorkspaceMemberDaemons = centrifugoMemberDaemons,
   ) {}
 
@@ -107,12 +108,18 @@ export class WorkspaceMemberDirectory {
     await this.removeFromWorkspace(input.workspaceId, input.userId);
   }
 
-  /** Removes the person, then tells the channels they were in that their member lists changed
-   * and their Computers' daemons to reconnect. Both are best effort: the removal has committed. */
+  /** Removes the person, then tells the channels they were in that their member lists changed,
+   * ends their subscriptions to those channels (they read none of them now) and tells their
+   * Computers' daemons to reconnect. All best effort: the removal has committed. */
   private async removeFromWorkspace(workspaceId: string, userId: string) {
     const { leftChannelIds, computerIds } = await this.store.removeMember(workspaceId, userId);
     await Promise.all([
       announceMemberChanged(this.realtime, { workspaceId, conversationIds: leftChannelIds }),
+      announceConversationsRevoked(this.realtime, {
+        workspaceId,
+        userIds: [userId],
+        conversationIds: leftChannelIds,
+      }),
       this.reconnectDaemons(workspaceId, computerIds),
     ]);
   }

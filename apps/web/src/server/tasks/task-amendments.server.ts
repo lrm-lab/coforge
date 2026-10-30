@@ -5,7 +5,7 @@ import {
   type TaskResult,
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
-import { conversationSignalScopes } from "#src/server/conversations/conversation-realtime.server";
+import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { noticeActor, noticeText } from "./task-notices.server";
 import { historyEventView } from "./task-history.server";
 import { storedTaskStatus, readTaskText, taskMentions, taskView } from "./task-view.server";

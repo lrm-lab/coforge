@@ -56,7 +56,11 @@ beforeAll(async () => {
   );
 });
 
-async function boardFor(conversation: { channelName?: string; directKey?: string }) {
+async function boardFor(conversation: {
+  channelName?: string;
+  directKey?: string;
+  visibility?: "private";
+}) {
   const created = await db.conversation.create({
     data: {
       workspaceId,
@@ -127,6 +131,21 @@ test("a channel's Task writes announce each changed Task to the Workspace, once 
 
   await run({ operation: "delete", number: second!.number });
   expect(drain()).toEqual([{ tasks: [], deleted: [second!.messageId], userId: undefined }]);
+});
+
+test("a private channel's Task writes are announced only to its people, never the Workspace", async () => {
+  const { run, announced } = await boardFor({
+    channelName: `realtime-private-${handle}`,
+    visibility: "private",
+  });
+  const [task] = (await run({ operation: "create", titles: ["Secret"] })).tasks;
+  await run({ operation: "claim", number: task!.number });
+  await run({ operation: "amend", number: task!.number, title: "Still secret" });
+  await run({ operation: "update", number: task!.number, status: "in_review" });
+  await run({ operation: "delete", number: task!.number });
+  expect(announced.length).toBeGreaterThanOrEqual(5);
+  for (const signal of announced)
+    expect(signal).toMatchObject({ workspaceId, memberUserIds: [alice.id] });
 });
 
 test("a direct message's Task writes are announced only to its human viewer", async () => {

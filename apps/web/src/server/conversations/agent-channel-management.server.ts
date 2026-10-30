@@ -3,6 +3,7 @@ import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import {
   agentVisibilityViewerForActor,
   canSeeAgent,
@@ -24,6 +25,7 @@ import {
   announceJoinedOrLeft,
   type ConversationRealtime,
 } from "./conversation-realtime.server";
+import { channelAudience } from "./conversation-signal-scope.server";
 import { hasChannelAdminAuthority } from "./channel-authority.server";
 import type { AgentDisplay } from "#src/server/agents/agent-display.server";
 import {
@@ -205,6 +207,7 @@ export class AgentChannelManagement {
       channelName: string | null;
       description: string;
       archivedAt: Date | null;
+      visibility: string;
     };
     try {
       channel = await createChannel(this.db, {
@@ -229,6 +232,7 @@ export class AgentChannelManagement {
       workspaceId,
       conversationId: channel.id,
       channel: channelInfoOf(channel),
+      ...(await channelAudience(this.db, channel)),
     });
     return {
       target: `#${channel.channelName}`,
@@ -439,6 +443,7 @@ export class AgentChannelManagement {
         conversationId: channel.id,
         change: "left",
         userIds: removedUserIds,
+        private: channel.visibility === CHANNEL_VISIBILITY.PRIVATE,
       });
     if (removedAgentId)
       await this.inboxPurge.purge({

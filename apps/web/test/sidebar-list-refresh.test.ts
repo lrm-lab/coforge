@@ -212,8 +212,14 @@ describe("listsMissedBySubscribe", () => {
       { wasRecovering: true, recovered: false },
     ]) {
       expect(listsMissedBySubscribe("workspace", recovery)).toEqual(["channels", "channelNames"]);
-      // The viewer's own channel carries DM messages and their ViewerEvents (channels, DMs, saves).
-      expect(listsMissedBySubscribe("user", recovery)).toEqual(["channels", "dms", "saved"]);
+      // The viewer's own channel carries message activity, their ViewerEvents and their private
+      // channels' events (channels, channel names, DMs, saves).
+      expect(listsMissedBySubscribe("user", recovery)).toEqual([
+        "channels",
+        "channelNames",
+        "dms",
+        "saved",
+      ]);
     }
   });
 });
@@ -242,7 +248,9 @@ describe("rereadMissedBySubscribe", () => {
 
   test("a first subscribe keeps a list read where the subscription starts, or later", async () => {
     const at7 = () => ({ offset: 7, epoch: "e1" });
-    expect(await reread("user", firstSubscribe(at7), channelsAt(7))).toEqual([["dms", "saved"]]);
+    expect(await reread("user", firstSubscribe(at7), channelsAt(7))).toEqual([
+      ["channelNames", "dms", "saved"],
+    ]);
     // What was published between the two reaches the subscription itself.
     expect(await reread("workspace", firstSubscribe(at7), channelsAt(9))).toEqual([
       ["channelNames"],
@@ -295,7 +303,9 @@ describe("rereadMissedBySubscribe", () => {
       recovered: false,
       position: () => ({ offset: 7, epoch: "e1" }),
     };
-    expect(await reread("user", lost, channelsAt(7))).toEqual([["channels", "dms", "saved"]]);
+    expect(await reread("user", lost, channelsAt(7))).toEqual([
+      ["channels", "channelNames", "dms", "saved"],
+    ]);
   });
 
   test("a resubscribe that replayed everything re-reads nothing", async () => {
@@ -323,7 +333,10 @@ describe("rereadMissedBySubscribe", () => {
     test("each list is judged by its own position: only the one the stream moved past is re-read", async () => {
       const positions = read({ channels: 7, channelNames: 6, dms: 5, saved: 7 });
       expect(await reread("workspace", firstSubscribe(at7), positions)).toEqual([["channelNames"]]);
-      expect(await reread("user", firstSubscribe(at7), positions)).toEqual([["dms"]]);
+      expect(await reread("user", firstSubscribe(at7), positions)).toEqual([
+        ["channelNames"],
+        ["dms"],
+      ]);
     });
 
     test("a list read in another epoch is re-read, the others are not", async () => {
@@ -331,7 +344,10 @@ describe("rereadMissedBySubscribe", () => {
         list === "saved"
           ? Promise.resolve({ offset: 7, epoch: "e0" })
           : read({ channels: 7, dms: 7 })(list);
-      expect(await reread("user", firstSubscribe(at7), positions)).toEqual([["saved"]]);
+      expect(await reread("user", firstSubscribe(at7), positions)).toEqual([
+        ["channelNames"],
+        ["saved"],
+      ]);
     });
 
     test("a list without a position is re-read at once, ahead of the judged ones", async () => {

@@ -1,9 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import {
-  CentrifugoConversationRealtime,
-  conversationSignalScopes,
-} from "#src/server/conversations/conversation-realtime.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { UserDirectConversations } from "#src/server/conversations/user-direct-conversations.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";

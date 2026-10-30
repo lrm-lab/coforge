@@ -5,7 +5,7 @@ import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/men
 import {
   conversationSignalScopes,
   type MessageSignalScope,
-} from "#src/server/conversations/conversation-realtime.server";
+} from "#src/server/conversations/conversation-signal-scope.server";
 import {
   MESSAGE_MENTIONS_SELECT,
   type MessageMentionRef,
@@ -220,15 +220,13 @@ export async function announceTasks(
   try {
     const scope = await route();
     if (!scope) return;
+    // The whole scope, so a new way of routing reaches the port without another field copied here.
     await taskChanged({
+      ...scope,
       workspaceId: conversation.workspaceId,
       conversationId: conversation.conversationId,
       tasks: change.tasks ?? [],
       deleted: change.deleted ?? [],
-      userId: scope.userId,
-      agentId: scope.agentId,
-      directUserIds: scope.directUserIds,
-      directPair: scope.directPair,
       publicationId: change.publicationId,
     });
   } catch {

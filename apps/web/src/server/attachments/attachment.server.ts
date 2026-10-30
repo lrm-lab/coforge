@@ -13,7 +13,7 @@ import {
   VISIBLE_CONVERSATION_WHERE,
   TARGETABLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
-import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
+import { personConversationAccess } from "#src/server/conversations/channel-read-access.server";
 
 import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 
@@ -153,29 +153,14 @@ export async function storeAgentAttachment(
 }
 
 /**
- * Whether a person may download from a conversation: a DM they are in, or a channel they may read.
- * A private channel they are not in is a missing one (`NOT_FOUND`), its files too.
+ * Whether a person may download from a conversation: a DM they are in, or a channel they may read
+ * (`personConversationAccess`). A private channel they are not in is a missing one (`NOT_FOUND`),
+ * its files too.
  */
 async function personMayReadAttachment(db: PrismaClient, conversationId: string, userId: string) {
-  const conversation = await db.conversation.findFirst({
-    where: {
-      id: conversationId,
-      // A channel hidden from the Workspace keeps its files from everyone until restored.
-      ...VISIBLE_CONVERSATION_WHERE,
-      OR: [
-        { ...DIRECT_CONVERSATION_WHERE, members: { some: { userId, ...ACTIVE_MEMBER_WHERE } } },
-        { channelName: { not: null }, workspace: { members: { some: { userId } } } },
-      ],
-    },
-    select: {
-      channelName: true,
-      visibility: true,
-      members: { where: { userId, ...ACTIVE_MEMBER_WHERE }, select: { id: true } },
-    },
-  });
-  if (conversation?.channelName && !canReadChannel(conversation, conversation.members.length > 0))
-    throw new AppError("NOT_FOUND");
-  return Boolean(conversation);
+  const access = await personConversationAccess(db, userId, { id: conversationId });
+  if (access === "private") throw new AppError("NOT_FOUND");
+  return access === "read";
 }
 
 /**

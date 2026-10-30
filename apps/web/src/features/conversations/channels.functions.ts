@@ -58,14 +58,15 @@ export const listPublicChannels = createServerFn({ method: "GET" })
   });
 
 /** Every channel's id and current name, closed ones included: what a body's channel references
- * link by, read with the Workspace channel's stream position, the one channel that keeps it live
- * (`channel.created.v1` and `channel.updated.v1`). */
+ * link by, read with the stream positions of the channels that keep it live with
+ * `channel.created.v1` and `channel.updated.v1`: the Workspace's for public channels, the
+ * viewer's own for their private ones. */
 export const listChannelNames = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const { channels, workspaceId, userId } = channelScope(context);
     const { streamPositions, data } = await readAfterStreamPositions(
-      [workspaceConversationChannel(workspaceId)],
+      [workspaceConversationChannel(workspaceId), userConversationChannel(userId)],
       () => channels.names(workspaceId, userId),
     );
     return { streamPositions, names: data };

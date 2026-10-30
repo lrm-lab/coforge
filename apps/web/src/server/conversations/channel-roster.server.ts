@@ -1,6 +1,7 @@
 import { AppError, isAppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -96,6 +97,7 @@ export async function leaveChannel(
     conversationId: channel.id,
     change: "left",
     userIds: [userId],
+    private: channel.visibility === CHANNEL_VISIBILITY.PRIVATE,
   });
   return { left: true };
 }
@@ -134,6 +136,7 @@ export async function removeChannelMember(
       conversationId: channel.id,
       change: "left",
       userIds: "userId" in target ? [target.userId] : [],
+      private: channel.visibility === CHANNEL_VISIBILITY.PRIVATE,
     });
   if (wasMember && "agentId" in target)
     await inboxPurge.purge({

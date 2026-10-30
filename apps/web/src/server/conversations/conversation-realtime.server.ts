@@ -1,4 +1,3 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   conversationRealtimeChannel,
   userConversationChannel,
@@ -14,13 +13,12 @@ import {
 } from "#src/features/conversations/conversation-realtime";
 import { type ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import type { TaskChangedEvent } from "#src/features/tasks/task-realtime";
-import { isPeopleDirectKey, peopleDirectKeyPair } from "#src/features/conversations/direct-key";
 import {
   createCentrifugoServerApi,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
-import { readConversationSignalParticipants } from "#src/server/db/repositories/conversation-signal.repositories.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import type { ChannelAudience, MessageSignalScope } from "./conversation-signal-scope.server";
 import {
   publishConversationReadChanged,
   type ConversationReadChangedInput,
@@ -52,85 +50,32 @@ export type ConversationRealtimeMessage = {
   senderUserId?: string;
 };
 
-/**
- * The realtime fan-out scope for one conversation's messages. A channel message goes
- * to the Workspace signal channel; a direct message goes only to its people's own channels — a
- * User–Agent one to its human viewer, naming the Agent, one between people to each member —
- * so DM metadata never reaches the Workspace. A direct conversation that is neither (unreachable
- * through the supported create paths) falls back to the Workspace channel rather than silently
- * publishing nowhere.
- */
-export type MessageSignalScope = {
-  workspaceId?: string;
-  userId?: string;
-  agentId?: string;
-  directUserIds?: readonly string[];
-  directPair?: readonly [string, string];
-};
-
-export async function messageSignalScope(
-  db: PrismaClient,
-  conversationId: string,
-  workspaceId: string,
-): Promise<MessageSignalScope> {
-  return (await conversationSignalScopes(db, conversationId, workspaceId)).message;
-}
-
-/**
- * Where a conversation's signals go, read once: `message` as `messageSignalScope` says, and `task`
- * for its Task announcements, which carry Task content and so never take the Workspace fallback:
- * a direct conversation that is neither User–Agent nor between people announces its Tasks nowhere.
- */
-export async function conversationSignalScopes(
-  db: PrismaClient,
-  conversationId: string,
-  workspaceId: string,
-): Promise<{ message: MessageSignalScope; task?: MessageSignalScope }> {
-  const conversation = await readConversationSignalParticipants(db, conversationId);
-  if (!conversation) return { message: { workspaceId } };
-  if (conversation.channelName !== null) return { message: { workspaceId }, task: { workspaceId } };
-  // The key says what kind of direct conversation it is (`user:<a>|user:<b>` between people);
-  // its remaining member rows say who still gets its signals.
-  if (conversation.directKey && isPeopleDirectKey(conversation.directKey)) {
-    const directUserIds = conversation.members.flatMap((member) =>
-      member.userId ? [member.userId] : [],
-    );
-    const directPair = peopleDirectKeyPair(conversation.directKey);
-    return directUserIds.length
-      ? {
-          message: { directUserIds, directPair },
-          task: { workspaceId, directUserIds, directPair },
-        }
-      : { message: {} };
-  }
-  const userId = conversation.members.find((member) => member.userId)?.userId;
-  const agentId = conversation.members.find((member) => member.agentId)?.agentId;
-  return userId && agentId
-    ? { message: { userId, agentId }, task: { workspaceId, userId, agentId } }
-    : { message: { workspaceId } };
-}
-
 /** A Task write's announcement (`TaskChangedEvent`) with where it goes, from
  * `conversationSignalScopes`: a User–Agent direct message's to its human viewer (`userId` and
- * `agentId`), one between people's to each member (`directUserIds`), a channel's to the
- * Workspace. `publicationId` makes a retried write's announcement a duplicate. */
-export type TaskChangedSignal = Omit<TaskChangedEvent, "type"> &
-  Pick<MessageSignalScope, "userId" | "agentId" | "directUserIds" | "directPair"> & {
+ * `agentId`), one between people's to each member (`directUserIds`), a private channel's to each
+ * of its people (`memberUserIds`), a public channel's to the Workspace. `publicationId` makes a
+ * retried write's announcement a duplicate. */
+export type TaskChangedSignal = Omit<TaskChangedEvent, "type" | "privateChannel"> &
+  Pick<
+    MessageSignalScope,
+    "userId" | "agentId" | "directUserIds" | "directPair" | "memberUserIds"
+  > & {
     publicationId: string;
   };
 
 /** A channel's change as announced: its info after the change, or that it was deleted or hidden
  * from the whole Workspace. */
-export type ChannelUpdatedSignal = { workspaceId: string; conversationId: string } & (
-  | { channel: ChannelInfo; gone?: undefined }
-  | { gone: true; channel?: undefined }
-);
+export type ChannelUpdatedSignal = {
+  workspaceId: string;
+  conversationId: string;
+} & ChannelAudience &
+  ({ channel: ChannelInfo; gone?: undefined } | { gone: true; channel?: undefined });
 
 export type ChannelCreatedSignal = {
   workspaceId: string;
   conversationId: string;
   channel: ChannelInfo;
-};
+} & ChannelAudience;
 
 /** A channel row's info as every member sees it: `PublicChannels.names` and the channel events
  * both build it here, so an event never disagrees with a read. */
@@ -145,6 +90,11 @@ export function channelInfoOf(channel: {
     archived: channel.archivedAt !== null,
   };
 }
+
+export type RevokedConversations = {
+  conversationIds: readonly string[];
+  userIds: readonly string[];
+};
 
 export type ReactionSignal = Omit<MessageReactionEvent, "type">;
 
@@ -166,6 +116,10 @@ export type ConversationRealtime = {
   /** A push telling the Workspace's sidebars that a channel was created, with its info. Optional:
    * a port without it announces nothing. */
   channelCreated?(input: ChannelCreatedSignal): Promise<void>;
+  /** Ends these people's subscriptions to conversations they no longer read (they left a private
+   * channel, or the Workspace), now rather than at their next token refresh. Optional: a port
+   * without it ends none. */
+  revokeConversations?(input: RevokedConversations): Promise<void>;
   /** A push telling open Tasks pages the new copies of the Tasks a write changed. Optional: a
    * port without it announces nothing. */
   taskChanged?(input: TaskChangedSignal): Promise<void>;
@@ -181,8 +135,27 @@ export type ConversationRealtime = {
   conversationReadChanged?(input: ConversationReadChangedInput): Promise<void>;
 };
 
+/** Where a channel's sidebar signal goes: a private channel's people's own channels, or the
+ * Workspace's. */
+function sidebarChannels(workspaceId: string, memberUserIds: readonly string[] | undefined) {
+  return memberUserIds
+    ? memberUserIds.map(userConversationChannel)
+    : [workspaceConversationChannel(workspaceId)];
+}
+
 export class CentrifugoConversationRealtime implements ConversationRealtime {
   constructor(private readonly centrifugo: CentrifugoServerApi) {}
+
+  async revokeConversations(input: RevokedConversations) {
+    await this.centrifugo.unsubscribe(
+      input.conversationIds.flatMap((conversationId) =>
+        input.userIds.map((user) => ({
+          user,
+          channel: conversationRealtimeChannel(conversationId),
+        })),
+      ),
+    );
+  }
 
   async memberChanged(input: { workspaceId: string; conversationIds: readonly string[] }) {
     // One publication per channel: each event names its own conversation, which the page checks.
@@ -202,27 +175,22 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     );
   }
 
-  async channelUpdated(input: ChannelUpdatedSignal) {
+  async channelUpdated({ memberUserIds, ...input }: ChannelUpdatedSignal) {
     const event: ChannelUpdatedEvent = { type: "channel.updated.v1", ...input };
-    const idempotencyKey = crypto.randomUUID();
-    await Promise.all([
-      this.centrifugo.publishJson(
-        workspaceConversationChannel(input.workspaceId),
-        event,
-        idempotencyKey,
-      ),
-      this.centrifugo.publishJson(
+    await this.centrifugo.broadcast(
+      [
+        ...sidebarChannels(input.workspaceId, memberUserIds),
         conversationRealtimeChannel(input.conversationId),
-        event,
-        idempotencyKey,
-      ),
-    ]);
+      ],
+      event,
+      crypto.randomUUID(),
+    );
   }
 
-  async channelCreated(input: ChannelCreatedSignal) {
+  async channelCreated({ memberUserIds, ...input }: ChannelCreatedSignal) {
     const event: ChannelCreatedEvent = { type: "channel.created.v1", ...input };
-    await this.centrifugo.publishJson(
-      workspaceConversationChannel(input.workspaceId),
+    await this.centrifugo.broadcast(
+      sidebarChannels(input.workspaceId, memberUserIds),
       event,
       crypto.randomUUID(),
     );
@@ -258,20 +226,18 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
   }
 
   async taskChanged(signal: TaskChangedSignal) {
-    const { publicationId, userId, agentId, directUserIds, ...announced } = signal;
+    const { publicationId, userId, agentId, directUserIds, memberUserIds, ...announced } = signal;
     const event: TaskChangedEvent = {
       type: "task.changed.v1",
       workspaceId: announced.workspaceId,
       conversationId: announced.conversationId,
       tasks: announced.tasks,
       deleted: announced.deleted,
+      ...(memberUserIds ? { privateChannel: true as const } : {}),
     };
-    if (directUserIds) {
-      await this.centrifugo.broadcast(
-        directUserIds.map(userConversationChannel),
-        event,
-        publicationId,
-      );
+    const people = directUserIds ?? memberUserIds;
+    if (people) {
+      await this.centrifugo.broadcast(people.map(userConversationChannel), event, publicationId);
       return;
     }
     await this.centrifugo.publishJson(
@@ -372,22 +338,49 @@ export async function announceMemberChanged(
  * `channel_joined`. An Agent-only change names nobody.
  */
 export async function announceJoinedOrLeft(
-  realtime: Pick<ConversationRealtime, "memberChanged" | "viewerChanged"> | undefined,
+  realtime:
+    | Pick<ConversationRealtime, "memberChanged" | "viewerChanged" | "revokeConversations">
+    | undefined,
   input: {
     workspaceId: string;
     conversationId: string;
     change: "joined" | "left";
     userIds: readonly string[];
+    /** Whether the channel is private, so those who left no longer read it and their open
+     * pages' subscriptions to it end (`announceConversationsRevoked`). */
+    private?: boolean;
   },
 ): Promise<void> {
-  const { workspaceId, conversationId } = input;
+  const { workspaceId, conversationId, userIds } = input;
   await Promise.all([
     announceMemberChanged(realtime, { workspaceId, conversationIds: [conversationId] }),
     announceViewerEvent(realtime, {
-      userIds: input.userIds,
+      userIds,
       event: { type: `channel.${input.change}.v1`, workspaceId, conversationId },
     }),
+    input.change === "left" && input.private
+      ? announceConversationsRevoked(realtime, {
+          workspaceId,
+          userIds,
+          conversationIds: [conversationId],
+        })
+      : undefined,
   ]);
+}
+
+/** Ends these people's subscriptions to conversations they no longer read (`revokeConversations`),
+ * once the write has committed. Best effort like `announceMemberChanged`: a subscription it misses
+ * ends when its token next renews, which the read rule refuses. */
+export async function announceConversationsRevoked(
+  realtime: Pick<ConversationRealtime, "revokeConversations"> | undefined,
+  input: { workspaceId: string } & RevokedConversations,
+): Promise<void> {
+  const { workspaceId, ...revoked } = input;
+  if (revoked.userIds.length === 0 || revoked.conversationIds.length === 0) return;
+  await announceBestEffort(realtime, (port) => port.revokeConversations?.(revoked), {
+    name: "conversation_revoked",
+    workspace_id: workspaceId,
+  });
 }
 
 /**
@@ -461,7 +454,7 @@ export async function announceViewerEvent(
  */
 export async function announceChannelTasksDeleted(
   realtime: Pick<ConversationRealtime, "taskChanged"> | undefined,
-  input: { workspaceId: string; conversationId: string; deleted: string[] },
+  input: { workspaceId: string; conversationId: string; deleted: string[] } & ChannelAudience,
 ): Promise<void> {
   if (input.deleted.length === 0) return;
   await announceBestEffort(

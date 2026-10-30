@@ -1,13 +1,17 @@
 import { TASK_STATUSES, type TaskView } from "@lrm/coforge-sdk/internal";
-import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
+import {
+  publicationDataOrUndefined,
+  publicationType,
+} from "#src/features/realtime/publication-data";
 import { z } from "zod";
 
 /**
  * A Task write's announcement: the new copy of each Task it changed and the ids of those it
  * deleted, so an open Tasks page updates those rows without reading its list again. It rides the
- * conversation signal channels: a channel's Tasks on the Workspace channel (every member sees
- * them on the Tasks page), a direct message's only on its people's own channels (a User–Agent
- * one's human viewer, or each member of one between people).
+ * conversation signal channels: a public channel's Tasks on the Workspace channel (every member
+ * sees them on the Tasks page), a private channel's and a direct message's only on their people's
+ * own channels (a private channel's active members, a User–Agent one's human viewer, or each
+ * member of one between people).
  */
 export type TaskChangedEvent = {
   type: "task.changed.v1";
@@ -16,6 +20,9 @@ export type TaskChangedEvent = {
   tasks: TaskView[];
   /** Message ids of the Tasks the write deleted. */
   deleted: string[];
+  /** Set for a private channel's Tasks, which share the people's own channels with their direct
+   * messages', so the Tasks page, which lists channel Tasks only, can tell them apart. */
+  privateChannel?: true;
 };
 
 const member = z.object({
@@ -54,14 +61,13 @@ const taskChangedEvent = z.object({
   conversationId: z.string().min(1),
   tasks: z.array(taskView),
   deleted: z.array(z.string().min(1)),
+  privateChannel: z.literal(true).optional(),
 });
 
 /** The event, or undefined for any other publication on the channel (most are messages). */
 export function decodeTaskChangedEvent(value: unknown): TaskChangedEvent | undefined {
   const data = publicationDataOrUndefined(value);
-  // The channels carry every message signal: anything else leaves before the full parse.
-  if (!data || typeof data !== "object" || Reflect.get(data, "type") !== "task.changed.v1")
-    return undefined;
+  if (publicationType(data) !== "task.changed.v1") return undefined;
   const parsed = taskChangedEvent.safeParse(data);
   return parsed.success ? (parsed.data as TaskChangedEvent) : undefined;
 }

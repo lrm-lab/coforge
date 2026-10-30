@@ -9,7 +9,7 @@ import { ensureTaskExecutionSession } from "./task-change.server";
 import { findSourceMessage } from "./task-claims.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import { announceTasks } from "./task-publication.server";
-import { conversationSignalScopes } from "#src/server/conversations/conversation-realtime.server";
+import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { postTaskNotice } from "./task-conversations.server";

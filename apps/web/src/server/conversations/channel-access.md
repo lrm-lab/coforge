@@ -20,6 +20,13 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
 - `readableConversationWhere` is the same for a person acting on a message in a
   channel or DM (save, react, download a file). `channel-actor.server.ts` holds
   `ChannelActor` and `channelActorMemberWhere`, which the rule and the roster share.
+- `personConversationAccess` answers one conversation by id for a gate with
+  nothing else (a realtime subscription, a file download): a DM they are in, or
+  a channel `canReadChannel` lets them read. Realtime follows the rule too: a
+  private channel's `channel.created.v1`, `channel.updated.v1` and Task changes
+  go to its active people's own channels (`channelAudience`,
+  `conversationSignalScopes`), never the Workspace channel, and leaving it ends
+  the leaver's subscriptions to it (`announceConversationsRevoked`).
 - A person who cannot read a channel gets the `NOT_FOUND` a missing one gets, and
   reading comes before authority: `viewerChannel`, `memberChannel` and
   `findChannelById` read through the rule, so an owner or admin outside a private

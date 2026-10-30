@@ -4,7 +4,7 @@ import { assertCanAssignOther } from "./task-assignment-authority.server";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AppError } from "#src/lib/app-error";
-import { conversationSignalScopes } from "#src/server/conversations/conversation-realtime.server";
+import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import { storeMessageBody } from "#src/server/conversations/message-references.server";
 import {

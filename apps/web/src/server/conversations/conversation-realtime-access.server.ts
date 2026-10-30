@@ -1,36 +1,17 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import {
-  ACTIVE_MEMBER_WHERE,
-  DIRECT_CONVERSATION_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-  TARGETABLE_CONVERSATION_WHERE,
-} from "./active-member.server";
+import { personConversationAccess } from "./channel-read-access.server";
 
-/** Generic subscriptions require a channel/DM destination as well as the current viewer grant. */
+/** Generic subscriptions require a channel or DM the viewer reads (`personConversationAccess`); a
+ * private channel they are not in is refused like any other. */
 export async function authorizeConversationRealtime(
   db: PrismaClient,
   input: { workspaceId: string; userId: string; conversationId: string },
 ) {
-  const conversation = await db.conversation.findFirst({
-    where: {
-      id: input.conversationId,
-      workspaceId: input.workspaceId,
-      AND: [TARGETABLE_CONVERSATION_WHERE],
-      OR: [
-        {
-          ...DIRECT_CONVERSATION_WHERE,
-          members: { some: { userId: input.userId, ...ACTIVE_MEMBER_WHERE } },
-        },
-        {
-          channelName: { not: null },
-          ...VISIBLE_CONVERSATION_WHERE,
-          workspace: { members: { some: { userId: input.userId } } },
-        },
-      ],
-    },
-    select: { id: true },
+  const access = await personConversationAccess(db, input.userId, {
+    id: input.conversationId,
+    workspaceId: input.workspaceId,
   });
-  if (!conversation) throw new AppError("ACCESS_DENIED");
-  return conversation.id;
+  if (access !== "read") throw new AppError("ACCESS_DENIED");
+  return input.conversationId;
 }

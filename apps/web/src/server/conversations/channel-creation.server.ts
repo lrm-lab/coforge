@@ -31,7 +31,7 @@ export function createChannel(
       // The creator becomes the channel's first admin.
       members: { create: { ...input.creator, channelRole: "admin" } },
     },
-    select: { id: true, channelName: true, description: true, archivedAt: true },
+    select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
   };
   if (!appNotificationsPossible()) return db.conversation.create(args);
   return db.$transaction(async (tx) => {

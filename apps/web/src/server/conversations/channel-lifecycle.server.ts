@@ -28,6 +28,7 @@ import {
   announceViewerEvent,
   channelInfoOf,
 } from "./conversation-realtime.server";
+import { channelAudience } from "./conversation-signal-scope.server";
 
 /** A channel's life as a whole: creating it, its name, description and member roles, archiving
  * it, hiding `#general` from the Workspace, and deleting a channel for good. */
@@ -56,6 +57,7 @@ export async function createUserChannel(
     channelName: string | null;
     description: string;
     archivedAt: Date | null;
+    visibility: string;
   };
   try {
     created = await createChannel(db, {
@@ -81,6 +83,7 @@ export async function createUserChannel(
       workspaceId,
       conversationId: created.id,
       channel: channelInfoOf(created),
+      ...(await channelAudience(db, created)),
     }),
     announceViewerEvent(realtime, {
       userIds: [userId],
@@ -203,6 +206,7 @@ export async function changeChannelInfo(
       workspaceId,
       conversationId: channel.id,
       channel: channelInfoOf(updated),
+      ...(await channelAudience(db, channel)),
     });
     return { id: updated.id, name: updated.channelName!, description: updated.description };
   } catch (error) {
@@ -247,8 +251,14 @@ export async function setGeneralHidden(
   await announceChannelUpdated(
     realtime,
     hidden
-      ? { workspaceId, conversationId: general.id, gone: true }
-      : { workspaceId, conversationId: general.id, channel: channelInfoOf(restored) },
+      ? { workspaceId, conversationId: general.id, gone: true, memberUserIds: undefined }
+      : {
+          workspaceId,
+          conversationId: general.id,
+          channel: channelInfoOf(restored),
+          // `#general` is never private: the whole Workspace hears of it.
+          memberUserIds: undefined,
+        },
   );
   return { id: general.id, hidden };
 }
@@ -288,13 +298,15 @@ export async function deleteChannel(
   const name = channel.channelName!;
   if (name === "general") throw new AppError("CONFLICT");
   if (!canDeleteChannel(name, serverRole)) throw new AppError("ACCESS_DENIED");
-  const [agentMembers, tasks, objectKeys] = await Promise.all([
+  // Who hears of the delete is read before the rows that say so are gone.
+  const [agentMembers, tasks, objectKeys, audience] = await Promise.all([
     db.conversationMember.findMany({
       where: { conversationId: channel.id, agentId: { not: null }, ...ACTIVE_MEMBER_WHERE },
       select: { agentId: true },
     }),
     db.task.findMany({ where: { conversationId: channel.id }, select: { id: true } }),
     attachmentKeys(db, { conversationId: channel.id }),
+    channelAudience(db, channel),
   ]);
   await Promise.all(
     agentMembers.map(({ agentId }) =>
@@ -316,11 +328,13 @@ export async function deleteChannel(
       workspaceId,
       conversationId: channel.id,
       gone: true,
+      ...audience,
     }),
     announceChannelTasksDeleted(realtime, {
       workspaceId,
       conversationId: channel.id,
       deleted: tasks.map(({ id }) => id),
+      ...audience,
     }),
   ]);
   await removeAttachmentFiles(objectKeys, storage);
@@ -351,6 +365,7 @@ export async function changeChannelArchived(
     workspaceId,
     conversationId: channel.id,
     channel: channelInfoOf(changed),
+    ...(await channelAudience(db, channel)),
   });
   return { id: channel.id, archived };
 }

@@ -58,7 +58,7 @@ test("owner cannot leave; admin can leave and be removed", async () => {
   expect(store.members.has(`${workspaceId}:${adminId}`)).toBe(false);
 });
 
-test("leaving or being removed tells each of the person's channels that its member list changed", async () => {
+test("leaving or being removed tells each of the person's channels that its member list changed, and ends their subscriptions to them", async () => {
   const store = memoryStore();
   store.seedMember({ workspaceId, userId: ownerId, role: "owner", username: "ada" });
   store.seedMember({
@@ -76,9 +76,13 @@ test("leaving or being removed tells each of the person's channels that its memb
     channelIds: ["channel-1", "channel-2"],
   });
   const announced: Array<{ workspaceId: string; conversationIds: readonly string[] }> = [];
+  const revoked: Array<{ conversationIds: readonly string[]; userIds: readonly string[] }> = [];
   const directory = new WorkspaceMemberDirectory(store, {
     memberChanged: async (input) => {
       announced.push(input);
+    },
+    revokeConversations: async (input) => {
+      revoked.push(input);
     },
   });
 
@@ -88,6 +92,11 @@ test("leaving or being removed tells each of the person's channels that its memb
   expect(announced).toEqual([
     { workspaceId, conversationIds: ["channel-1"] },
     { workspaceId, conversationIds: ["channel-1", "channel-2"] },
+  ]);
+  // Out of the Workspace they read none of its channels, public or private.
+  expect(revoked).toEqual([
+    { conversationIds: ["channel-1"], userIds: [adminId] },
+    { conversationIds: ["channel-1", "channel-2"], userIds: [memberId] },
   ]);
 });
 

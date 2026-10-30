@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { conversationSignalScopes } from "#src/server/conversations/conversation-realtime.server";
+import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 
 /**
  * Where a conversation's signals go is read on every Task write and action card. A channel's go to
@@ -34,7 +34,7 @@ function rowsTouched(node: PlanNode) {
 }
 
 test.skipIf(!connectionString)(
-  "a channel's signal scope is read without its member roster; a DM's names its human and Agent",
+  "a public channel's signal scope is read without its member roster; a private channel's and a DM's name their people",
   async () => {
     const db = new PrismaClient({
       adapter: new PrismaPg({ connectionString: connectionString! }),
@@ -111,6 +111,40 @@ test.skipIf(!connectionString)(
       }
       // None of the channel's 2,002 member rows.
       expect(touched).toBeLessThan(10);
+
+      // A private channel's Tasks go to its active people only: not its Agent, not one who left.
+      const left = await db.user.create({
+        data: {
+          displayName: `signal-scope-${handle}-left`,
+          username: `signal-scope-${handle}-left`,
+        },
+      });
+      const secret = await db.conversation.create({
+        data: {
+          workspaceId: workspace.id,
+          channelName: `secret-${handle}`,
+          visibility: "private",
+          members: {
+            create: [
+              { userId: user.id },
+              { agentId: agent.id },
+              { userId: left.id, leftAt: new Date() },
+            ],
+          },
+        },
+      });
+      expect(await conversationSignalScopes(db, secret.id, workspace.id)).toEqual({
+        message: { workspaceId: workspace.id },
+        task: { workspaceId: workspace.id, memberUserIds: [user.id] },
+      });
+      await db.conversationMember.updateMany({
+        where: { conversationId: secret.id, userId: user.id },
+        data: { leftAt: new Date() },
+      });
+      // With nobody left in it, its Tasks are announced nowhere, never to the Workspace.
+      expect(await conversationSignalScopes(db, secret.id, workspace.id)).toEqual({
+        message: { workspaceId: workspace.id },
+      });
 
       expect(await conversationSignalScopes(db, direct.id, workspace.id)).toEqual({
         message: { userId: user.id, agentId: agent.id },

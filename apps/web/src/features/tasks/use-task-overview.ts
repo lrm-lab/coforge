@@ -1,14 +1,25 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { useHydrated } from "@tanstack/react-router";
+import { getRouteApi, useHydrated } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@tanstack/react-db";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
+import {
+  decodeViewerEvent,
+  userConversationChannel,
+  workspaceConversationChannel,
+} from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getWorkspaceConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
+import {
+  publicationDataOrUndefined,
+  publicationType,
+} from "#src/features/realtime/publication-data";
+import {
+  getUserConversationSubscriptionToken,
+  getWorkspaceConversationSubscriptionToken,
+} from "#src/features/realtime/realtime.functions";
 import {
   createTaskOverview,
   taskOverviewQuery,
@@ -17,6 +28,8 @@ import {
 } from "./task-overview-collection";
 import { decodeTaskChangedEvent, type TaskChangedEvent } from "./task-realtime";
 import { finishedTasksKey } from "./use-finished-tasks";
+
+const appRoute = getRouteApi("/w/$workspaceSlug");
 
 const selectOrder = (overview: { tasks: readonly { messageId: string }[] }) =>
   overview.tasks.map((task) => task.messageId);
@@ -93,18 +106,21 @@ export function useTaskOverview() {
 const APPLY_DELAY_MS = 100;
 
 /**
- * Keeps the rows live: listens for `task.changed.v1` on the Workspace channel, where channel
- * Tasks are announced (a direct message's go to its viewer's own channel, which this page does
- * not list), the subscription the nav rail already holds, and applies each burst in one write.
- * Every other publication (every chat message) is dropped before any parsing beyond its type. Only a Task the page does not list yet reads the
- * list again, once per burst.
+ * Keeps the rows live: listens for `task.changed.v1` on the Workspace channel, where public
+ * channels' Tasks are announced, and on the viewer's own channel for a private channel's
+ * (`privateChannel`; a direct message's go there too, and this page does not list them), the
+ * subscriptions the nav rail already holds, and applies each burst in one write. Every other
+ * publication (every chat message) is dropped before any parsing beyond its type. Only a Task the
+ * page does not list yet reads the list again, once per burst.
  */
 function useTaskOverviewRealtime(
   overview: TaskOverviewCollection | undefined,
   workspaceId: string,
 ) {
   const queryClient = useQueryClient();
+  const userId = appRoute.useLoaderData({ select: (data) => data.user.id });
   const getWorkspaceToken = useServerFn(getWorkspaceConversationSubscriptionToken);
+  const getUserToken = useServerFn(getUserConversationSubscriptionToken);
   // One buffer per overview: a Workspace switch drops what the old one had not applied yet.
   const burst = useMemo(
     () => ({
@@ -115,9 +131,8 @@ function useTaskOverviewRealtime(
   );
   useEffect(() => () => clearTimeout(burst.timer), [burst]);
 
-  const onPublication = useCallback(
-    (publication: { data: unknown }) => {
-      const event = decodeTaskChangedEvent(publication.data);
+  const apply = useCallback(
+    (event: TaskChangedEvent | undefined) => {
       if (!event || !overview || event.workspaceId !== workspaceId) return;
       burst.pending.push(event);
       if (burst.timer !== undefined) return;
@@ -141,10 +156,39 @@ function useTaskOverviewRealtime(
     },
     [overview, workspaceId, queryClient, burst],
   );
+  const onWorkspacePublication = useCallback(
+    (publication: { data: unknown }) => apply(decodeTaskChangedEvent(publication.data)),
+    [apply],
+  );
+  const onUserPublication = useCallback(
+    (publication: { data: unknown }) => {
+      // Every message's activity rides this channel too: it leaves on its type, parsed once.
+      const data = publicationDataOrUndefined(publication.data);
+      const type = publicationType(data);
+      if (type === "task.changed.v1") {
+        const event = decodeTaskChangedEvent(data);
+        if (event?.privateChannel) apply(event);
+        return;
+      }
+      // The viewer joined or left a channel: a private one's Tasks come or go with it, which only
+      // a read of the list says.
+      if (
+        (type === "channel.joined.v1" || type === "channel.left.v1") &&
+        decodeViewerEvent(data)?.workspaceId === workspaceId
+      )
+        void queryClient.invalidateQueries({ queryKey: taskOverviewQuery(workspaceId).queryKey });
+    },
+    [apply, queryClient, workspaceId],
+  );
 
   useRealtimeSubscription({
     channel: overview && workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
     getToken: getWorkspaceToken,
-    onPublication,
+    onPublication: onWorkspacePublication,
+  });
+  useRealtimeSubscription({
+    channel: overview ? userConversationChannel(userId) : undefined,
+    getToken: getUserToken,
+    onPublication: onUserPublication,
   });
 }

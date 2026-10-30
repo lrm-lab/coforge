@@ -13,12 +13,14 @@ export function quietCentrifugo(): CentrifugoServerApi {
 /**
  * Gives a fake Centrifugo the `publishBatch` its `publish` implies: each publication goes through
  * the fake's own `publish` and settles on its own, as Centrifugo's batch replies do. A test that
- * records or fails `publish` sees batched pushes exactly as it saw one-by-one ones.
+ * records or fails `publish` sees batched pushes exactly as it saw one-by-one ones. Its
+ * `unsubscribe`, unless the fake has one, ends nothing.
  */
 export function withPublishBatch<T extends Pick<CentrifugoServerApi, "publish">>(
   api: T,
-): NoInfer<T> & Pick<CentrifugoServerApi, "publishBatch"> {
+): NoInfer<T> & Pick<CentrifugoServerApi, "publishBatch" | "unsubscribe"> {
   return Object.assign(api, {
+    unsubscribe: (api as Partial<CentrifugoServerApi>).unsubscribe ?? (async () => {}),
     publishBatch: (publications: Parameters<CentrifugoServerApi["publishBatch"]>[0]) =>
       Promise.allSettled(publications.map(async ({ channel, data }) => api.publish(channel, data))),
   });

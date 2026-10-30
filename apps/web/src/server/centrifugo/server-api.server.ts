@@ -23,6 +23,10 @@ export type CentrifugoServerApi = {
   publishBatch(
     publications: readonly { channel: string; data: Uint8Array }[],
   ): Promise<PromiseSettledResult<void>[]>;
+  /** Ends every subscription each user's clients hold to the paired channel, for people who can
+   * no longer read it (https://centrifugal.dev/docs/server/server_api#unsubscribe), in one `batch`
+   * call. A no-op when the list is empty; any refused pair fails the call. */
+  unsubscribe(subscriptions: readonly { user: string; channel: string }[]): Promise<void>;
 };
 
 /** Centrifugo's server API for where channel streams stand. */
@@ -171,6 +175,12 @@ export function createCentrifugoServerApi(
     },
     async disconnect({ user, client, disconnect }) {
       await call("disconnect", { user, client, disconnect });
+    },
+    async unsubscribe(subscriptions) {
+      if (subscriptions.length === 0) return;
+      const replies = await batch(subscriptions.map((unsubscribe) => ({ unsubscribe })));
+      const refused = replies.find((reply) => reply.error);
+      if (refused) throw failure("unsubscribe", refused.error);
     },
   };
 }

@@ -1,4 +1,7 @@
-import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
+import {
+  publicationDataOrUndefined,
+  publicationType,
+} from "#src/features/realtime/publication-data";
 import { z } from "zod";
 
 /**
@@ -16,9 +19,7 @@ const workspaceDeletedEvent = z.object({
 /** The event, or undefined for any other publication on the channel (most are messages). */
 export function decodeWorkspaceDeletedEvent(value: unknown): WorkspaceDeletedEvent | undefined {
   const data = publicationDataOrUndefined(value);
-  // The channel carries every message signal: anything else leaves before the full parse.
-  if (!data || typeof data !== "object" || Reflect.get(data, "type") !== "workspace.deleted.v1")
-    return undefined;
+  if (publicationType(data) !== "workspace.deleted.v1") return undefined;
   const parsed = workspaceDeletedEvent.safeParse(data);
   return parsed.success ? parsed.data : undefined;
 }

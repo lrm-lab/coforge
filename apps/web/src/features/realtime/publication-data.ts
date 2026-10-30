@@ -17,3 +17,9 @@ export function publicationDataOrUndefined(value: unknown): unknown {
     return undefined;
   }
 }
+
+/** A publication's `type`, read without decoding the rest: a decoder checks it first, so every
+ * other publication on its channel (most are messages) leaves before the full parse. */
+export function publicationType(data: unknown): unknown {
+  return data && typeof data === "object" ? Reflect.get(data, "type") : undefined;
+}

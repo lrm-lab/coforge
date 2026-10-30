@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
+import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 import type { StreamPosition, SubscribedRecovery } from "#src/features/realtime/subscription-gap";
 import {
   getUserConversationSubscriptionToken,
@@ -93,6 +94,7 @@ export function useChannelUnread({
   const getWorkspaceToken = useServerFn(getWorkspaceConversationSubscriptionToken);
   const getUserToken = useServerFn(getUserConversationSubscriptionToken);
   const refs = useRef({
+    workspaceId,
     userId,
     channels,
     openConversationId,
@@ -105,6 +107,7 @@ export function useChannelUnread({
     onConversationActivity,
   });
   refs.current = {
+    workspaceId,
     userId,
     channels,
     openConversationId,
@@ -146,7 +149,9 @@ export function useChannelUnread({
   // The viewer's own channel carries their `ViewerEvent`s and every message they may read: their
   // channels' and their direct conversations' alike.
   const onUserPublication = useCallback((publication: { data: unknown }) => {
-    const event = decodeViewerEvent(publication.data);
+    // Parsed once for the decoders below, each of which takes it as it is.
+    const data = publicationDataOrUndefined(publication.data);
+    const event = decodeViewerEvent(data);
     if (event) {
       if ("unreadCount" in event) {
         const open = refs.current.openConversationId;
@@ -157,7 +162,14 @@ export function useChannelUnread({
       if (lists.length > 0) refs.current.onSidebarListsChanged(lists);
       return;
     }
-    const activity = decodeConversationActivityEvent(publication.data);
+    // A private channel's events come here instead of the Workspace channel. This channel is the
+    // viewer's in every Workspace, so another Workspace's are dropped.
+    const signal = channelSignalOf(data);
+    if (signal) {
+      if (signal.workspaceId === refs.current.workspaceId) refs.current.onChannelSignal(signal);
+      return;
+    }
+    const activity = decodeConversationActivityEvent(data);
     if (!activity) return;
     // The badge rule needs only the shape below; the row writer gets the whole event, whose
     // preview and sender are what the row shows.

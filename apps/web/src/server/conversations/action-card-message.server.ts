@@ -3,7 +3,8 @@ import type { ActionCardKind, ResolvedActionCardPayload } from "@lrm/coforge-sdk
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { ActionCardTarget } from "./action-card-target.server";
 import { lockConversation } from "./conversation-lock.server";
-import { messageSignalScope, type ConversationRealtime } from "./conversation-realtime.server";
+import type { ConversationRealtime } from "./conversation-realtime.server";
+import { messageSignalScope } from "./conversation-signal-scope.server";
 import { announceMessage } from "./conversation-activity.server";
 
 /** Posts an action card in `tx`: the Agent's Message carrying `body`, and its `ActionCard` row,
