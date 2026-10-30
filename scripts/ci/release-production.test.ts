@@ -103,6 +103,15 @@ test("only the production environment's jobs hold an OIDC token, and they assume
       expect(job.environment === "production" || readerCandidate, `${name}.${jobName}`).toBe(
         reachesBucket,
       );
+      if (readerCandidate && reachesBucket) {
+        // The candidate's only credential is the read-only reader role's ARN - never the
+        // publisher's, and never a stored secret.
+        const candidateSteps = JSON.stringify(job.steps);
+        expect(candidateSteps, name).toContain("vars.COFORGE_FEED_READER_ROLE_ARN");
+        expect(candidateSteps, name).not.toContain("role/coforge-release-publisher");
+        expect(candidateSteps, name).not.toContain("secrets.");
+        continue;
+      }
       if (!reachesBucket || readerCandidate) continue;
       signedIn += 1;
       const publish = job.steps!.find((step) => /publish(-installer)?\.ts/.test(step.run ?? ""))!;
@@ -158,12 +167,15 @@ test("publication waits for the staging evidence of the same commit and builds e
   }
 });
 
-test("a Computer candidate is checked, without credentials, against production's latest", () => {
+test("a Computer candidate reads production's latest only through the reader role", () => {
   const verify = computer.jobs.candidate!.steps!.find((step) =>
     step.run?.includes("production-candidate.ts"),
   )!;
   expect(verify.run).toContain(`--production-feed-url=${PRODUCTION_FEED}`);
   expect(verify.env?.INPUT_STAGING_VERSION).toBe("${{ inputs.staging_version }}");
+  // The step assumes the repo's read-only reader role, never the publisher's and never a secret.
+  expect(verify.env?.ALIBABA_CLOUD_ROLE_ARN).toBe("${{ vars.COFORGE_FEED_READER_ROLE_ARN }}");
+  expect(JSON.stringify(computer.jobs.candidate)).not.toContain("secrets.");
   expect(computer.jobs.candidate!.permissions).toEqual({
     contents: "read",
     "id-token": "write",
