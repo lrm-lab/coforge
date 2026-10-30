@@ -210,5 +210,13 @@
   "preferences_appearance_description": "Use light or dark colors, or follow your system.",
   "preferences_message_full_width_description": "Let messages and the composer use the whole width of the conversation instead of leaving room on both sides.",
   "settings_breadcrumb": "Breadcrumb",
-  "settings_applications": "Applications"
+  "settings_applications": "Applications",
+  "settings_experiments": "Experiments",
+  "experiments_loading": "Loading experiments…",
+  "experiments_load_error": "Couldn't load experiments.",
+  "experiments_save_error": "Couldn't save. Try again.",
+  "experiments_reload": "Reload to apply",
+  "experiments_task_conversations": "Task conversations",
+  "experiments_task_conversations_description": "Each task is its own conversation that people can follow and reply to. Applies to the whole Workspace, Agents included.",
+  "settings_administration": "Administration"
 }

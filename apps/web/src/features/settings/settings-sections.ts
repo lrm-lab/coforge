@@ -3,6 +3,7 @@ import {
   Building07,
   Link03,
   Server01,
+  Settings01,
   Share01,
   Sliders01,
   Translate01,
@@ -34,6 +35,8 @@ export const SETTINGS_SECTION_GROUPS = [
       { id: "workspace-profile", label: () => m.settings_workspace_profile(), icon: Building07 },
       { id: "members", label: () => m.settings_members(), icon: Users01 },
       { id: "applications", label: () => m.settings_applications(), icon: Link03 },
+      // Owner and admin only: the navigation leaves it out for everyone else.
+      { id: "administration", label: () => m.settings_administration(), icon: Settings01 },
     ],
   },
   {

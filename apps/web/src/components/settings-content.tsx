@@ -15,6 +15,11 @@ import { GitHubSettings } from "#src/features/integrations/github-settings";
 import type { GitHubCallbackFailure } from "#src/features/integrations/github-callback";
 import { AppsSettings } from "#src/features/apps/apps-settings";
 import { ServerConnectionSettings } from "#src/features/settings/server-connection-settings";
+import {
+  ExperimentsSettings,
+  hasExperiments,
+  useWorkspaceExperiments,
+} from "#src/features/settings/experiments-settings";
 import { SettingsNavigationGroup } from "#src/features/settings/settings-navigation-group";
 import {
   SETTINGS_SECTION_GROUPS,
@@ -99,7 +104,14 @@ export interface SettingsContentProps {
 
 export function SettingsContent(props: SettingsContentProps) {
   const [internalSection, setInternalSection] = useState<SettingsSection>("account");
-  const section = props.section ?? internalSection;
+  const canAdminister = canManageWorkspaceSettings(props.members.actorRole);
+  const experiments = useWorkspaceExperiments(canAdminister);
+  // Administration appears once there is something to manage; asking for it otherwise, or as
+  // anyone but an owner or admin, gets the account.
+  const administration = canAdminister && hasExperiments(experiments);
+  const requested = props.section ?? internalSection;
+  const section =
+    requested === "administration" && administration === false ? "account" : requested;
   const [showList, setShowList] = useState(props.section !== "integrations");
   const current = settingsSection(section);
   const sectionLabel = current.label();
@@ -123,15 +135,17 @@ export function SettingsContent(props: SettingsContentProps) {
         <div className="space-y-5 overflow-y-auto p-3">
           {SETTINGS_SECTION_GROUPS.map((group) => (
             <SettingsNavigationGroup key={group.label()} label={group.label()}>
-              {group.sections.map((item) => (
-                <SettingsNavigationButton
-                  key={item.id}
-                  active={section === item.id}
-                  icon={item.icon}
-                  label={item.label()}
-                  onClick={() => selectSection(item.id)}
-                />
-              ))}
+              {group.sections
+                .filter((item) => item.id !== "administration" || administration === true)
+                .map((item) => (
+                  <SettingsNavigationButton
+                    key={item.id}
+                    active={section === item.id}
+                    icon={item.icon}
+                    label={item.label()}
+                    onClick={() => selectSection(item.id)}
+                  />
+                ))}
             </SettingsNavigationGroup>
           ))}
         </div>
@@ -225,6 +239,8 @@ export function SettingsContent(props: SettingsContentProps) {
               <ServerConnectionSettings />
             ) : section === "integrations" ? (
               <GitHubSettings callbackFailure={props.githubCallbackFailure} />
+            ) : section === "administration" ? (
+              <ExperimentsSettings experiments={experiments} />
             ) : (
               <NotificationSettings {...props} />
             )}
