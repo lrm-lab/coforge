@@ -4,7 +4,12 @@ import { Button } from "#src/components/base/buttons/button";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import type { Anchoring } from "./attachment-anchoring";
-import { videoTimeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
+import {
+  commentTime,
+  offersTime,
+  videoTimeLabel,
+  type AttachmentCommentAnchor,
+} from "./attachment-comment-anchors";
 import { joinExclusivePlayback } from "./inline-video-exclusive";
 import { resumeAt, type VideoPlace, type VideoStart } from "./video-handoff";
 
@@ -13,8 +18,8 @@ const PLAYBACK_EVENTS = ["loadedmetadata", "timeupdate", "pause", "play", "seeke
 
 /** Comments on a time in a video or an audio file (`video-timestamp`, the one anchor type Raft has
  * for it; an audio file shares it). Pausing with the comments beside it (or seeking while paused)
- * puts the time on the next comment; once that time is removed, a paused player offers it back as
- * a button. On a phone the comments cover the player, so nothing is put on a comment unasked: the
+ * puts the time on the next comment; a paused player whose time is not the comment's (removed, or
+ * one from before it played on) offers it as a button. On a phone the comments cover the player, so nothing is put on a comment unasked: the
  * button is offered whenever the player is paused, and opens the comments with the time on. A
  * comment's time seeks the player there. `track` is the player's ref callback. */
 function useTimeComments<E extends HTMLMediaElement>({
@@ -38,8 +43,8 @@ function useTimeComments<E extends HTMLMediaElement>({
   const attach = useCallback(() => {
     const element = player.current;
     if (!element || !anchoring) return;
-    // To the millisecond, as Raft stores it; the very start is the whole file.
-    const time = Math.round(element.currentTime * 1000) / 1000;
+    // The very start is the whole file.
+    const time = commentTime(element.currentTime);
     if (time > 0) anchoring.onComment({ type: "video-timestamp", data: { time } });
   }, [anchoring]);
   // Read when the element arrives and as it plays, not again on each render.
@@ -87,8 +92,7 @@ function useTimeComments<E extends HTMLMediaElement>({
     Boolean(anchoring) &&
     (commenting || !beside) &&
     playback.paused &&
-    playback.time > 0 &&
-    pendingAnchor?.type !== "video-timestamp";
+    offersTime(playback.time, pendingAnchor);
   const offer = offered ? { time: playback.time, attach } : null;
   return { track, offer };
 }

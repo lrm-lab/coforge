@@ -225,6 +225,20 @@ export function rangeLocator(texts: readonly string[]) {
   };
 }
 
+/** A player's time as a comment keeps it: to the millisecond, as Raft stores it. */
+export const commentTime = (seconds: number) => Math.round(seconds * 1000) / 1000;
+
+/**
+ * Whether a paused player offers its time for the next comment: not at the very start (that is the
+ * whole file), and not when the comment already holds this time. A different time on the comment is
+ * offered over: on a phone the comments are closed while the player plays again, so a time put on
+ * earlier would otherwise stay on, stale, with nothing to replace it.
+ */
+export function offersTime(time: number, pending: AttachmentCommentAnchor | null | undefined) {
+  const at = commentTime(time);
+  return at > 0 && !(pending?.type === "video-timestamp" && pending.data.time === at);
+}
+
 /** A time in a video as players show it: `m:ss`, or `h:mm:ss` from an hour on. */
 export function videoTimeLabel(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));

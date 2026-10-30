@@ -4,6 +4,7 @@ import {
   anchorTypeForPreview,
   headingIds,
   headingSlug,
+  offersTime,
   rangeLocator,
   sectionLocator,
   parseAttachmentCommentAnchor,
@@ -221,4 +222,15 @@ test("a video time reads as m:ss, and h:mm:ss from an hour on", () => {
   expect(videoTimeLabel(3_599)).toBe("59:59");
   expect(videoTimeLabel(3_725)).toBe("1:02:05");
   expect(anchorRangeLabel({ type: "video-timestamp", data: { time: 83.4 } })).toBe("1:23");
+});
+
+test("a paused player offers its time unless the comment already holds that time", () => {
+  const at = (time: number) => ({ type: "video-timestamp" as const, data: { time } });
+  expect(offersTime(0, null)).toBe(false);
+  expect(offersTime(0.0004, null)).toBe(false);
+  expect(offersTime(2.97, null)).toBe(true);
+  expect(offersTime(2.97, at(2.97))).toBe(false);
+  expect(offersTime(2.9701, at(2.97))).toBe(false);
+  // A time put on before the player played on (a phone closes the comments to play) is replaced.
+  expect(offersTime(7.2, at(2.97))).toBe(true);
 });
