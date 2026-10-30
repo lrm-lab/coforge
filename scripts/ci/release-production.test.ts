@@ -96,8 +96,14 @@ test("only the production environment's jobs hold an OIDC token, and they assume
     let signedIn = 0;
     for (const [jobName, job] of Object.entries(workflow.jobs)) {
       const reachesBucket = job.permissions?.["id-token"] === "write";
-      expect(job.environment === "production", `${name}.${jobName}`).toBe(reachesBucket);
-      if (!reachesBucket) continue;
+      // The Computer candidate verifies production's latest over the read-only reader role
+      // before the approval gate, so it mints a token without an environment; every other
+      // OIDC job stays behind `environment: production` and its publisher role.
+      const readerCandidate = name === "computer" && jobName === "candidate";
+      expect(job.environment === "production" || readerCandidate, `${name}.${jobName}`).toBe(
+        reachesBucket,
+      );
+      if (!reachesBucket || readerCandidate) continue;
       signedIn += 1;
       const publish = job.steps!.find((step) => /publish(-installer)?\.ts/.test(step.run ?? ""))!;
       expect(roleOf(workflow, job, publish), `${name}.${jobName}`).toBe(PRODUCTION_ROLE);
@@ -134,7 +140,9 @@ test("publication waits for the staging evidence of the same commit and builds e
       step.run?.includes("scripts/release/production-candidate.ts"),
     );
     expect(verify, name).toBeDefined();
-    expect(workflow.jobs.candidate!.permissions, name).toEqual({ contents: "read" });
+    expect(workflow.jobs.candidate!.permissions, name).toEqual(
+      name === "computer" ? { contents: "read", "id-token": "write" } : { contents: "read" },
+    );
     expect(workflow.jobs.candidate!.if, name).toContain("github.ref == 'refs/heads/main'");
     expect(verify!.run, name).toContain('git merge-base --is-ancestor "$INPUT_COMMIT" HEAD');
     for (const { name: jobName, step } of steps(workflow)) {
@@ -156,7 +164,10 @@ test("a Computer candidate is checked, without credentials, against production's
   )!;
   expect(verify.run).toContain(`--production-feed-url=${PRODUCTION_FEED}`);
   expect(verify.env?.INPUT_STAGING_VERSION).toBe("${{ inputs.staging_version }}");
-  expect(computer.jobs.candidate!.permissions).toEqual({ contents: "read" });
+  expect(computer.jobs.candidate!.permissions).toEqual({
+    contents: "read",
+    "id-token": "write",
+  });
   // The installer is not ordered against the Computer's production latest.
   const installerVerify = installer.jobs.candidate!.steps!.find((step) =>
     step.run?.includes("production-candidate.ts"),
