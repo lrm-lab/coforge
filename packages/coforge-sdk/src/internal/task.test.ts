@@ -67,3 +67,23 @@ test("validateTaskRequest keeps agent commands off the browser's conversationId 
     "invalid Task target",
   );
 });
+
+test("validateTaskRequest accepts a create from a source message, alongside another task, with a description", () => {
+  const create = { ...base, operation: "create" as const, title: "Fix it" };
+  expect(() =>
+    validateTaskRequest({ ...create, messageId: "01a16c6c-1c04", description: "details" }),
+  ).not.toThrow();
+  expect(() =>
+    validateTaskRequest({ ...create, messageId: "01a16c6c-1c04", alongside: true }),
+  ).not.toThrow();
+  expect(() => validateTaskRequest({ ...create, messageId: " " })).toThrow("invalid Task message");
+  expect(() => validateTaskRequest({ ...create, messageId: "a", messageIds: ["b"] })).toThrow(
+    "missing Task operation argument",
+  );
+  expect(() => validateTaskRequest({ ...create, alongside: "yes" as never })).toThrow(
+    "invalid Task request",
+  );
+  expect(() => validateTaskRequest({ ...base, operation: "list", alongside: true })).toThrow(
+    "invalid Task request",
+  );
+});

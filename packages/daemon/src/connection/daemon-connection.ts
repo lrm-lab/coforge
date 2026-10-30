@@ -34,7 +34,7 @@ import { DaemonNoticePublications } from "./daemon-notice-publications";
 import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
 import { DaemonQueries } from "./daemon-queries";
-import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
+import { agentApiRoutes, taskConversationHttpRequest } from "@lrm/coforge-sdk/agent";
 import type {
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
@@ -47,6 +47,7 @@ import type {
   AgentProfileUpdateRequest,
   AgentAppConfigGetRequest,
   AgentAppRequest,
+  AgentTaskConversationRequest,
   AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
   AgentMentionPendingRequest,
@@ -1410,12 +1411,9 @@ export class DaemonConnection implements DaemonConnectionClient {
   }
 
   async agentAttachment(attachmentId: string, agentApiKey: string): Promise<Response> {
-    this.#assertConnected();
-    return fetch(
-      this.#serverEndpoint("Agent attachment", agentApiRoutes.cloud.attachments.path(attachmentId)),
-      // The local proxy forwards these bytes and their encoding/length headers unchanged.
-      { headers: agentHeaders(this.#agentKeys(agentApiKey)), decompress: false },
-    );
+    // The local proxy forwards these bytes and their encoding/length headers unchanged.
+    const path = agentApiRoutes.cloud.attachments.path(attachmentId);
+    return this.#forwardAgentRequest("Agent attachment", { path }, agentApiKey);
   }
 
   /**
@@ -1447,78 +1445,61 @@ export class DaemonConnection implements DaemonConnectionClient {
    * Agent-scoped headers `agentAttachment`/`agentAttachmentUpload` already add.
    */
   async agentAttachmentUploadSessionCreate(body: unknown, agentApiKey: string): Promise<Response> {
-    this.#assertConnected();
-    return fetch(
-      this.#serverEndpoint(
-        "Agent attachment upload session create",
-        agentApiRoutes.cloud.attachmentUploadSessions.create.path,
-      ),
-      {
-        decompress: false,
-        method: agentApiRoutes.cloud.attachmentUploadSessions.create.method,
-        headers: agentHeaders(this.#agentKeys(agentApiKey), true),
-        body: JSON.stringify(body),
-      },
-    );
+    const { create } = agentApiRoutes.cloud.attachmentUploadSessions;
+    const request = { method: create.method, path: create.path, body: JSON.stringify(body) };
+    return this.#forwardAgentRequest("Agent upload session create", request, agentApiKey);
   }
 
   async agentAttachmentUploadSessionComplete(
     uploadId: string,
     agentApiKey: string,
   ): Promise<Response> {
-    this.#assertConnected();
-    return fetch(
-      this.#serverEndpoint(
-        "Agent attachment upload session complete",
-        agentApiRoutes.cloud.attachmentUploadSessions.complete.path(uploadId),
-      ),
-      {
-        decompress: false,
-        method: agentApiRoutes.cloud.attachmentUploadSessions.complete.method,
-        headers: agentHeaders(this.#agentKeys(agentApiKey)),
-      },
-    );
+    const { complete } = agentApiRoutes.cloud.attachmentUploadSessions;
+    const request = { method: complete.method, path: complete.path(uploadId) };
+    return this.#forwardAgentRequest("Agent upload session complete", request, agentApiKey);
   }
 
   async agentAttachmentUploadSessionCancel(
     uploadId: string,
     agentApiKey: string,
   ): Promise<Response> {
-    this.#assertConnected();
-    return fetch(
-      this.#serverEndpoint(
-        "Agent attachment upload session cancel",
-        agentApiRoutes.cloud.attachmentUploadSessions.cancel.path(uploadId),
-      ),
-      {
-        decompress: false,
-        method: agentApiRoutes.cloud.attachmentUploadSessions.cancel.method,
-        headers: agentHeaders(this.#agentKeys(agentApiKey)),
-      },
-    );
+    const { cancel } = agentApiRoutes.cloud.attachmentUploadSessions;
+    const request = { method: cancel.method, path: cancel.path(uploadId) };
+    return this.#forwardAgentRequest("Agent upload session cancel", request, agentApiKey);
   }
 
   async agentAttachmentUploadSessionGet(uploadId: string, agentApiKey: string): Promise<Response> {
-    this.#assertConnected();
-    return fetch(
-      this.#serverEndpoint(
-        "Agent attachment upload session get",
-        agentApiRoutes.cloud.attachmentUploadSessions.get.path(uploadId),
-      ),
-      { headers: agentHeaders(this.#agentKeys(agentApiKey)), decompress: false },
-    );
+    const { get } = agentApiRoutes.cloud.attachmentUploadSessions;
+    const request = { path: get.path(uploadId) };
+    return this.#forwardAgentRequest("Agent upload session get", request, agentApiKey);
   }
 
-  /** `coforge app list|token`, sent on as it is; the cloud's response is the Agent's answer. */
-  async agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
+  /** One cloud request for an Agent, sent on as it is; the cloud's response is the Agent's answer. */
+  #forwardAgentRequest(
+    what: string,
+    { method, path, body }: { method?: string; path: string; body?: string },
+    agentApiKey: string,
+  ): Promise<Response> {
     this.#assertConnected();
-    const { method, path, body } = agentAppCloudRequest(request);
-    return fetch(this.#serverEndpoint(`Agent app ${request.operation}`, path), {
+    return fetch(this.#serverEndpoint(what, path), {
       decompress: false,
       method,
       headers: agentHeaders(this.#agentKeys(agentApiKey), body !== undefined),
       ...(body === undefined ? {} : { body }),
     });
+  }
+
+  async agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
+    const cloud = agentAppCloudRequest(request);
+    return this.#forwardAgentRequest(`Agent app ${request.operation}`, cloud, agentApiKey);
+  }
+
+  async agentTaskConversation(
+    request: AgentTaskConversationRequest,
+    agentApiKey: string,
+  ): Promise<Response> {
+    const cloud = taskConversationHttpRequest(agentApiRoutes.cloud.taskConversations, request);
+    return this.#forwardAgentRequest(`Agent task ${request.route}`, cloud, agentApiKey);
   }
 
   /** One request against the Agent API key endpoint; `what` names the caller in errors. */

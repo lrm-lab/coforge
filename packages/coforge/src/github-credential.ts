@@ -1,4 +1,8 @@
-import type { GitHubCredentialResponse } from "@lrm/coforge-sdk/agent";
+import {
+  agentApiRoutes,
+  decodeGitHubCommitTrailersResponse,
+  type GitHubCredentialResponse,
+} from "@lrm/coforge-sdk/agent";
 import { delimiter, dirname, resolve } from "node:path";
 import { CliError } from "./cli-error";
 
@@ -83,4 +87,24 @@ export async function runGitHubCli(
     stderr: "inherit",
   });
   return process.exited;
+}
+
+/** The commit trailers the Agent's commits carry for `repository`, from the local Proxy. */
+export async function githubCommitTrailersRequest(
+  proxyEndpoint: (path: string) => URL,
+  context: string,
+  proxyUrl: string,
+  repository: string | null,
+): Promise<string[]> {
+  if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    throw new Error("coforge agent context is invalid");
+  if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
+  const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.githubCommitTrailers.path), {
+    method: agentApiRoutes.proxy.githubCommitTrailers.method,
+    headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
+    body: JSON.stringify({ repository }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`GitHub commit trailers request failed (${response.status})`);
+  return decodeGitHubCommitTrailersResponse(await response.json()).trailers;
 }

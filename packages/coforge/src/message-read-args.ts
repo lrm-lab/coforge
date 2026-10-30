@@ -39,17 +39,33 @@ export function parseMessageReadArgs(
     values.set(name, value);
   }
   const target = values.get("--target");
+  const options = readWindowOptions("message read", values, booleans.has("--unread"));
+  if (!target)
+    throw invalidArgument(
+      "message read",
+      "--target is required, for example '#general' or '@ada'.",
+    );
+  return { target, ...options };
+}
+
+/** The window a read asks for, from its `--before|--after|--around|--limit` values and `--unread`;
+ * `command` names the command in a refusal. */
+export function readWindowOptions(
+  command: string,
+  values: ReadonlyMap<string, string>,
+  unread: boolean,
+): MessageReadOptions {
   const limit = values.get("--limit");
   if (limit !== undefined) {
     const parsed = Number(limit);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > MESSAGE_READ_MAX_LIMIT)
       throw invalidArgument(
-        "message read",
+        command,
         `--limit must be a whole number from 1 to ${MESSAGE_READ_MAX_LIMIT}; "${limit}" is not.`,
       );
   }
   const options: MessageReadOptions = {
-    ...(booleans.has("--unread") ? { unread: true } : {}),
+    ...(unread ? { unread: true } : {}),
     ...(limit !== undefined ? { limit: Number(limit) } : {}),
     ...(values.has("--before") ? { before: values.get("--before")! } : {}),
     ...(values.has("--after") ? { after: values.get("--after")! } : {}),
@@ -58,15 +74,10 @@ export function parseMessageReadArgs(
   const anchors = [options.before, options.after, options.around].filter(Boolean);
   if (options.unread && anchors.length)
     throw invalidArgument(
-      "message read",
+      command,
       "--unread reads forward from your read position; it cannot combine with --before, --after or --around.",
     );
   if (anchors.length > 1)
-    throw invalidArgument("message read", "Give at most one of --before, --after and --around.");
-  if (!target)
-    throw invalidArgument(
-      "message read",
-      "--target is required, for example '#general' or '@ada'.",
-    );
-  return { target, ...options };
+    throw invalidArgument(command, "Give at most one of --before, --after and --around.");
+  return options;
 }

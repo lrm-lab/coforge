@@ -10,6 +10,7 @@ import type {
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
   AgentAppRequest,
+  AgentTaskConversationRequest,
   AgentSendReconciliationResponse,
 } from "@lrm/coforge-sdk/agent";
 import type { OpenVikingAgentProxyCommand } from "#src/openviking-read-proxy";
@@ -241,6 +242,10 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   agentAttachmentUploadSessionCancel?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentAttachmentUploadSessionGet?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentApp?(request: AgentAppRequest, agentApiKey: string): Promise<Response>;
+  agentTaskConversation?(
+    request: AgentTaskConversationRequest,
+    agentApiKey: string,
+  ): Promise<Response>;
   requestAgentApiKey?(input: { agentId: string; workspaceId: string }): Promise<string>;
   requestAgentLaunchConfig?(input: {
     agentId: string;

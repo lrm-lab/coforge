@@ -48,6 +48,7 @@ import { validateWeeklyReportMemoryCommand } from "#src/connection/weekly-report
 import { getLogger } from "@logtape/logtape";
 import { admitOpenVikingControl, admitOpenVikingRead } from "./openviking-read-proxy";
 import { parseMessageRequest } from "./agent-proxy-message-request";
+import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
 
 export type AgentProxy = {
   url: string;
@@ -57,6 +58,12 @@ export type AgentProxy = {
 };
 
 import type { AgentProxyRuntime } from "./agent-proxy-runtime";
+import {
+  defineRoute,
+  type JsonObject,
+  type ProxyRoute,
+  type TokenBinding,
+} from "./agent-proxy-route";
 
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
 const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
@@ -91,66 +98,6 @@ const LOCAL_APP_CONFIG_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.appConfig.get
  * same number as that character cap — see `internal/weekly-report-limits.ts`. */
 const WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES = 512 * 1024;
 const logger = getLogger(["coforge", "daemon", "agent-proxy"]);
-
-/** What a Local Proxy token stands for: the Agent, its runtime context and its Agent API key. */
-type TokenBinding = {
-  agentId: string;
-  context: string;
-  agentApiKey: string;
-  memoryFence?: string;
-};
-type JsonObject = Record<string, unknown>;
-
-/**
- * How the dispatcher reads the request body before `parse` runs.
- * - `none`: no body read (GET/DELETE, and the multipart upload, which streams `request` through).
- * - `json`: size-limited JSON of any shape, no content-type requirement (upload-session create).
- * - `json-object`: requires `content-type: application/json` (else 415) and a plain object (else
- *   400); `freshnessContextMode: "withheld"` on it turns on reviewer redaction.
- */
-type BodyRead = "none" | "json" | "json-object";
-
-/** The runtime methods a route can dispatch to; each takes `(context, request, agentApiKey)`. */
-type HandlerName = Exclude<keyof AgentProxyRuntime, "issueAgentContext" | "memoryFence">;
-type RuntimeHandler<K extends HandlerName> = NonNullable<AgentProxyRuntime[K]>;
-type RequestOf<K extends HandlerName> = Parameters<RuntimeHandler<K>>[1];
-type ResultOf<K extends HandlerName> = Awaited<ReturnType<RuntimeHandler<K>>>;
-
-type ProxyRoute<K extends HandlerName = HandlerName> = {
-  /** `route_family` on a classified failure; a function when it depends on `operation`. */
-  family: string | ((fields: JsonObject) => string);
-  method: string;
-  /** The path param (or `""` when the route has none) if the pathname belongs to this route. Must
-   * not throw: a param that needs decoding is decoded in `parse`. */
-  match(pathname: string): string | undefined;
-  body: BodyRead;
-  /** Override the default JSON body size cap (Collect packs need a larger limit). */
-  maxBodyBytes?: number;
-  /** The runtime method this route calls. The dispatcher looks it up, answers 404 when the runtime
-   * lacks it, and always calls it with the token-bound context and Agent API key. */
-  handler: K;
-  /** Validates and builds the runtime request. Return a Response to reject (400/413). May throw
-   * validator errors — those are classified by the dispatcher like any other failure. */
-  parse(input: {
-    request: Request;
-    url: URL;
-    param: string;
-    /** The parsed body of a `json` route. */
-    payload: unknown;
-    /** The parsed body of a `json-object` route; empty otherwise. */
-    fields: JsonObject;
-    binding: TokenBinding;
-  }): RequestOf<K> | Response;
-  /** Defaults to `Response.json(result)`. */
-  respond?(result: ResultOf<K>): Response;
-  /** A domain error this route answers itself instead of the classified proxy failure. */
-  domainFailure?(error: unknown): Response | undefined;
-};
-
-/** Type-checks one route entry against its own runtime method while keeping the table homogeneous. */
-function defineRoute<K extends HandlerName>(route: ProxyRoute<K>): ProxyRoute {
-  return route as unknown as ProxyRoute;
-}
 
 /** A family that names the payload's `operation`, e.g. `agent-api/channel-info`. */
 function operationFamily(prefix: string, fallback: string) {
@@ -547,6 +494,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     handler: "agentMessage",
     parse: ({ fields, binding }) => parseMessageRequest(fields, binding),
   }),
+  ...TASK_CONVERSATION_PROXY_ROUTES,
 ];
 
 /** The first route whose method and pathname match, along with the path param `match` found. */

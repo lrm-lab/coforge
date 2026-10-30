@@ -10,6 +10,7 @@ import { startAgentProxy } from "#src/agent-proxy";
 import type { AgentProxyRuntime } from "#src/agent-proxy-runtime";
 import { attachmentRuntime } from "#src/agent-proxy-attachment-runtime";
 import { mentionRuntime } from "#src/agent-proxy-mention-runtime";
+import { conversationRuntime } from "#src/agent-proxy-conversation-runtime";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import {
   DaemonRuntime,
@@ -256,6 +257,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           agentMessage: async (...args) => requireRuntime().agentMessage(...args),
           ...attachmentRuntime(agentApi),
           ...mentionRuntime(agentApi),
+          ...conversationRuntime(agentApi),
           inbox: async (...args) => requireRuntime().inbox(...args),
           reminder: async (...args) => requireRuntime().reminder(...args),
           agentTask: async (...args) => requireRuntime().agentTask(...args),
@@ -281,8 +283,6 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           appConfigGet: async (...args) => agentApi().appConfigGet(...args),
           appConfigUpdate: async (...args) => agentApi().appConfigUpdate(...args),
           agentApp: async (...args) => agentApi().agentApp(...args),
-          threadList: async (...args) => agentApi().threadList(...args),
-          inboxList: async (...args) => agentApi().inboxList(...args),
           issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),
           // Every proxy route must reach the runtime here: an unwired handler is a 404 for the
           // Agent's CLI, so a new `AgentProxyRuntime` member fails to compile until it is added.

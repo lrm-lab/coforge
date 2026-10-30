@@ -127,17 +127,64 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   task: {
     syntax:
-      "coforge task list|create|claim|assign|unassign|convert|unclaim|update|amend|history|delete|receipt ...",
+      "coforge task list|view|reply|read|follow|unfollow|create|claim|assign|unassign|convert|unclaim|update|amend|history|delete|receipt ...",
     example: "coforge task list --target '#general'",
   },
   "task list": {
     syntax:
-      "coforge task list (--target <target> | --mine) [--status all|todo|in_progress|in_review|done|closed] [--json]",
+      "coforge task list (--target <target> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--json]",
+    flags: [
+      "--following  the task conversations you follow, with their unread counts (no other flag combines with it)",
+    ],
     example: "coforge task list --mine",
+  },
+  "task view": {
+    syntax: "coforge task view [<ref>] [--target <board> --number <n>] [--limit <n>]",
+    flags: [
+      "<ref>  the task: '#channel:#7', or 'dm:@peer:#7' for a task in a DM; quote it, an unquoted # starts a shell comment",
+      "--target, --number  the board ('#channel' or 'dm:@peer') and the task's number, instead of the ref",
+      "--limit  how many of the latest messages to show (default 5, at most 20)",
+    ],
+    guidance:
+      "Shows the task, whether its replies wake you, and the latest messages of its own conversation.",
+    example: "coforge task view '#general:#7'",
+  },
+  "task reply": {
+    syntax: "coforge task reply [<ref>] [--target <board> --number <n>] [--json]",
+    guidance:
+      "The reply body is read from stdin. The reply posts in the task's own conversation, which its first reply creates, and makes you follow the task.",
+    example: "coforge task reply '#general:#7' <<'COFORGE_MESSAGE'\nOn it.\nCOFORGE_MESSAGE",
+  },
+  "task read": {
+    syntax:
+      "coforge task read [<ref>] [--target <board> --number <n>] [--unread | --before|--after|--around <id>] [--limit <n>]",
+    flags: [
+      "--unread  messages after your read position, moving it forward (no anchor combines with it)",
+      "--before | --after | --around  one history window, by message id",
+      "--limit  page size, 1-100",
+    ],
+    example: "coforge task read '#general:#7' --unread",
+  },
+  "task follow": {
+    syntax: "coforge task follow [<ref>] [--target <board> --number <n>]",
+    guidance: "Following makes the task's replies wake you.",
+    example: "coforge task follow '#general:#7'",
+  },
+  "task unfollow": {
+    syntax: "coforge task unfollow [<ref>] [--target <board> --number <n>] [--reason <text>]",
+    flags: ["--reason  why you stop, shown in the conversation (at most 200 characters)"],
+    guidance:
+      "Stops ordinary replies waking you. A later @mention, being assigned the task or claiming it follows it again; replying in it does too.",
+    example: "coforge task unfollow '#general:#7'",
   },
   "task create": {
     syntax:
-      "coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] [--json]",
+      "coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--json]",
+    flags: [
+      "--description  details for the task; only with a single --title",
+      "--message-id  the channel message the task is made from (full id or its short form); applies to every --title",
+      "--alongside  with --message-id, create beside someone else's live task on that message",
+    ],
     guidance: [
       "Atomic assignment:",
       "  --assignee applies to every --title. Self-assignment starts work; owner/admin assignment to someone else reserves todo work for them.",

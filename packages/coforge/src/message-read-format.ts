@@ -30,6 +30,12 @@ const COVERAGE_THREAD = "Coverage: this thread target only.";
 const COVERAGE_TOP_LEVEL =
   "Coverage: top-level messages in this target only; thread replies are excluded and must be read from their thread targets.";
 
+const COVERAGE_TASK = "Coverage: this task conversation only.";
+
+/** The command that reads `target` again: a task's ref is read with `task read`. */
+const readCommand = (target: string, task: boolean) =>
+  task ? `coforge task read "${target}"` : `coforge message read --target "${target}"`;
+
 const sequenceRange = (from?: number, through?: number) =>
   from === through ? `seq ${from}` : `seq ${from}-${through}`;
 
@@ -44,7 +50,11 @@ const readPositionMoved = (response: ReadWindowResponse) =>
 
 /** One line for the messages an unread read left out because the Agent was already shown them;
  * when the read position did not move, it also says how to see them again. */
-function foldedLine(target: string, response: ReadWindowResponse): string | undefined {
+function foldedLine(
+  target: string,
+  response: ReadWindowResponse,
+  task: boolean,
+): string | undefined {
   const count = response.foldedMessageCount ?? 0;
   if (count === 0) return undefined;
   const range = sequenceRange(response.foldedFromSequence, response.foldedThroughSequence);
@@ -53,15 +63,15 @@ function foldedLine(target: string, response: ReadWindowResponse): string | unde
       ? `1 message you were already shown (${range}) is not repeated.`
       : `${count} messages you were already shown (${range}) are not repeated.`;
   if (readPositionMoved(response)) return line;
-  return `${line} To see ${count === 1 ? "it" : "them"} again: coforge message read --target "${target}" --after ${response.unreadCursorBefore ?? 0}`;
+  return `${line} To see ${count === 1 ? "it" : "them"} again: ${readCommand(target, task)} --after ${response.unreadCursorBefore ?? 0}`;
 }
 
 /** The unread read's footer: whether more remain past the last shown message. */
-function unreadFooter(target: string, response: ReadWindowResponse): string[] {
+function unreadFooter(target: string, response: ReadWindowResponse, task: boolean): string[] {
   const lines: string[] = [];
   lines.push(
     response.moreUnread
-      ? `More unread remain. Next: coforge message read --target "${target}" --unread`
+      ? `More unread remain. Next: ${readCommand(target, task)} --unread`
       : "No more unread in this target.",
   );
   return lines;
@@ -72,12 +82,13 @@ function readWindowHeader(
   target: string,
   response: ReadWindowResponse,
   messages: readonly AgentMessageRecord[],
+  task: boolean,
 ): string {
   const older = response.hasOlder
-    ? `Older exist: coforge message read --target "${target}" --before ${shortId(messages[0]!.id)}.`
+    ? `Older exist: ${readCommand(target, task)} --before ${shortId(messages[0]!.id)}.`
     : "No older.";
   const newer = response.hasNewer
-    ? `Newer exist: coforge message read --target "${target}" --after ${shortId(messages.at(-1)!.id)}.`
+    ? `Newer exist: ${readCommand(target, task)} --after ${shortId(messages.at(-1)!.id)}.`
     : "No newer.";
   const range = sequenceRange(messages[0]!.sequence, messages.at(-1)!.sequence);
   return `Read window: ${messages.length} returned, ${range}, oldest to newest. ${older} ${newer}`;
@@ -86,11 +97,16 @@ function readWindowHeader(
 export function formatReadWindow(
   target: string,
   response: ReadWindowResponse,
-  options: { around?: string; unread?: boolean } = {},
+  options: { around?: string; unread?: boolean; task?: boolean } = {},
 ): string {
   const messages = response.messages ?? [];
-  const coverage = isThreadTarget(target) ? COVERAGE_THREAD : COVERAGE_TOP_LEVEL;
-  const folded = options.unread ? foldedLine(target, response) : undefined;
+  const task = options.task === true;
+  const coverage = task
+    ? COVERAGE_TASK
+    : isThreadTarget(target)
+      ? COVERAGE_THREAD
+      : COVERAGE_TOP_LEVEL;
+  const folded = options.unread ? foldedLine(target, response, task) : undefined;
   if (messages.length === 0) {
     if (!options.unread) return `No messages in ${target}.`;
     if (!folded) {
@@ -101,19 +117,19 @@ export function formatReadWindow(
         response.moreUnread
           ? `No unread messages from others in ${target} up to seq ${through}.`
           : `No unread messages in ${target}. You have read through seq ${through}.`,
-        ...(response.moreUnread ? unreadFooter(target, response) : []),
+        ...(response.moreUnread ? unreadFooter(target, response, task) : []),
       ].join("\n");
     }
     return [
       `No new unread messages in ${target}. ${folded}`,
-      ...unreadFooter(target, response),
+      ...unreadFooter(target, response, task),
     ].join("\n");
   }
 
   const lines = [
     options.unread
       ? unreadHeader(messages, response.unreadCursorBefore ?? 0)
-      : readWindowHeader(target, response, messages),
+      : readWindowHeader(target, response, messages, task),
     coverage,
   ];
   if (options.around)
@@ -127,7 +143,7 @@ export function formatReadWindow(
 
   // An attachment takes top-level comments only, so naming a reply target there would point an
   // Agent at a send that is refused.
-  const includeReplyTarget = !isThreadTarget(target) && !target.startsWith("attachment:");
+  const includeReplyTarget = !task && !isThreadTarget(target) && !target.startsWith("attachment:");
   messages.forEach((message, index) => {
     const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
     lines.push(
@@ -139,6 +155,6 @@ export function formatReadWindow(
   lines.push(`End of window: ${messages.length}/${messages.length} shown.`);
   const dmHint = formatAgentDmHint(messages);
   if (dmHint) lines.push(dmHint);
-  if (options.unread) lines.push(...unreadFooter(target, response));
+  if (options.unread) lines.push(...unreadFooter(target, response, task));
   return lines.join("\n");
 }

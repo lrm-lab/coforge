@@ -127,6 +127,11 @@ export function validateTaskRequest(value: TaskRequest): void {
     throw new Error("invalid Task mode");
   if (value.createsResource !== undefined && typeof value.createsResource !== "boolean")
     throw new Error("invalid Task request");
+  if (
+    value.alongside !== undefined &&
+    (typeof value.alongside !== "boolean" || !["create", "convert"].includes(value.operation))
+  )
+    throw new Error("invalid Task request");
   if (value.receipt !== undefined && !validReceipt(value.receipt))
     throw new Error("invalid Task receipt");
   if (
@@ -147,7 +152,7 @@ export function validateTaskRequest(value: TaskRequest): void {
     (value.operation === "create" &&
       (value.title !== undefined) !== (value.titles !== undefined) &&
       !numeric &&
-      !messages) ||
+      value.messageIds === undefined) ||
     (value.operation === "convert" &&
       value.messageId !== undefined &&
       value.messageIds === undefined &&

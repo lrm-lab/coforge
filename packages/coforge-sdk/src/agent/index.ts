@@ -17,6 +17,7 @@ export * from "./mention-actions";
 export * from "./attachment-comments";
 export * from "./inbox-list";
 export * from "./thread-list";
+export * from "./task-conversations";
 export * from "./mention-delivery";
 export * from "./refusal";
 export * from "./memory-disposition";
