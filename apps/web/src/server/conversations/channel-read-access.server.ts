@@ -1,4 +1,5 @@
-import { Prisma } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { AppError } from "#src/lib/app-error";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import {
   ACTIVE_MEMBER_WHERE,
@@ -8,9 +9,9 @@ import {
 import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
 
 /**
- * The one rule for reading a channel, as a query, as raw SQL and in memory; every channel read
- * applies one of the three, and `channel-read-access.integration.test.ts` holds them to the same
- * answer.
+ * The one rule for reading a channel, as a query, as raw SQL, in memory and by id; every channel
+ * read applies one of the four, and `channel-read-access.integration.test.ts` holds them to the
+ * same answer.
  *
  * A public channel is readable by every Workspace member and every Agent of the Workspace; a
  * private one only by its active members (`ACTIVE_MEMBER_WHERE`). A Workspace role grants nothing
@@ -23,9 +24,7 @@ import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.serv
  */
 export function visibleChannelWhere(workspaceId: string, reader: ChannelActor) {
   return {
-    workspaceId,
-    channelName: { not: null },
-    ...VISIBLE_CONVERSATION_WHERE,
+    ...channelWhere(workspaceId),
     AND: [
       {
         OR: [
@@ -39,6 +38,48 @@ export function visibleChannelWhere(workspaceId: string, reader: ChannelActor) {
       },
     ],
   } satisfies Prisma.ConversationWhereInput;
+}
+
+/** Every channel of the Workspace a read may ever reach: not a DM, not hidden. */
+function channelWhere(workspaceId: string) {
+  return {
+    workspaceId,
+    channelName: { not: null },
+    ...VISIBLE_CONVERSATION_WHERE,
+  } satisfies Prisma.ConversationWhereInput;
+}
+
+/**
+ * The by-id form, for a single-channel read on a hot path: `channelByIdWhere` reads the channel
+ * without `visibleChannelWhere`'s member probe, and `requireReadableChannel` then applies the
+ * rule, probing the reader's member row only for a private channel. The read must select
+ * `visibility` and go through `requireReadableChannel`.
+ */
+export function channelByIdWhere(workspaceId: string, channelId: string) {
+  return { id: channelId, ...channelWhere(workspaceId) } satisfies Prisma.ConversationWhereInput;
+}
+
+/** A channel read through `channelByIdWhere`, or `NOT_FOUND`: a missing channel and one the
+ * reader cannot read answer alike. */
+export async function requireReadableChannel<Channel extends { id: string; visibility: string }>(
+  db: Pick<PrismaClient, "conversationMember">,
+  workspaceId: string,
+  reader: ChannelActor,
+  channel: Channel | null,
+): Promise<Channel> {
+  if (!channel) throw new AppError("NOT_FOUND");
+  if (canReadChannel(channel, false)) return channel;
+  const member = await db.conversationMember.findFirst({
+    where: {
+      conversationId: channel.id,
+      workspaceId,
+      ...channelActorMemberWhere(reader),
+      ...ACTIVE_MEMBER_WHERE,
+    },
+    select: { id: true },
+  });
+  if (!canReadChannel(channel, member !== null)) throw new AppError("NOT_FOUND");
+  return channel;
 }
 
 /** `visibleChannelWhere` for a channel already read: `isActiveMember` is whether the reader has

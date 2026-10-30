@@ -12,16 +12,18 @@ import {
 } from "#src/server/conversations/channel-actor.server";
 import {
   canReadChannel,
+  channelByIdWhere,
   readableChannelSql,
+  requireReadableChannel,
   readableConversationWhere,
   visibleChannelWhere,
 } from "#src/server/conversations/channel-read-access.server";
 import { teardown } from "./helpers/workspace-teardown";
 
 /**
- * The read rule for channels (task #302), as a query, as raw SQL and in memory, over every kind of
- * reader: a public channel is everyone's; a private one only its active members', the Workspace
- * owner included. All three forms give the same answer for every channel and reader; a hidden channel and a
+ * The read rule for channels (task #302), as a query, as raw SQL, in memory and by id, over every
+ * kind of reader: a public channel is everyone's; a private one only its active members', the
+ * Workspace owner included. All four forms give the same answer for every channel and reader; a hidden channel and a
  * DM are never a channel read; a caller's own `OR` cannot widen the rule; the database refuses a
  * private DM.
  *
@@ -113,6 +115,19 @@ test.skipIf(!connectionString)(
                 WHERE c."id" = ${id}::uuid AND ${readableChannelSql("c", workspaceId, reader)}`,
             )
           ).length === 1;
+        const readsById = async (id: string) =>
+          requireReadableChannel(
+            db,
+            workspace.id,
+            reader,
+            await db.conversation.findFirst({
+              where: channelByIdWhere(workspace.id, id),
+              select: { id: true, visibility: true },
+            }),
+          ).then(
+            () => true,
+            () => false,
+          );
         const activeMember = async (id: string) =>
           (await db.conversationMember.count({
             where: {
@@ -133,12 +148,13 @@ test.skipIf(!connectionString)(
           });
           expect(canReadChannel(channel, await activeMember(channel.id))).toBe(byQuery);
           expect(await readsBySql(channel.id)).toBe(byQuery);
+          expect(await readsById(channel.id)).toBe(byQuery);
         }
         expect({
           name,
-          hidden: [await reads(hidden.id), await readsBySql(hidden.id)],
-          direct: [await reads(direct.id), await readsBySql(direct.id)],
-        }).toEqual({ name, hidden: [false, false], direct: [false, false] });
+          hidden: [await reads(hidden.id), await readsBySql(hidden.id), await readsById(hidden.id)],
+          direct: [await reads(direct.id), await readsBySql(direct.id), await readsById(direct.id)],
+        }).toEqual({ name, hidden: [false, false, false], direct: [false, false, false] });
         // Another Workspace's reads never reach it, in SQL either.
         expect(await readsBySql(open.id, crypto.randomUUID())).toBe(false);
       }

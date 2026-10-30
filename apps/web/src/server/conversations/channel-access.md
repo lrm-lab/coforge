@@ -9,12 +9,14 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   new channel read must too. Enrollment keeps running, so a restore is whole.
 - A private channel (`Conversation.visibility`, task #302) is read only by its
   active members; a Workspace role grants nothing. The rule is
-  `channel-read-access.server.ts`, in three forms held to one answer by
+  `channel-read-access.server.ts`, in four forms held to one answer by
   `channel-read-access.integration.test.ts`: `visibleChannelWhere(workspaceId, reader)`
   for a query (the channels the reader may read: not a DM, not hidden, public or
   the reader is an active member), `readableChannelSql(alias, workspaceId, reader)`
-  for raw SQL, and `canReadChannel` for a channel already read. A channel read takes
-  one of them, never its own version; there is no reader-less channel filter.
+  for raw SQL, `canReadChannel` for a channel already read, and `channelByIdWhere`
+  with `requireReadableChannel` for one channel by id on a hot path (a public
+  channel costs no member probe). A channel read takes one of them, never its own
+  version; there is no reader-less channel filter.
 - `readableConversationWhere` is the same for a person acting on a message in a
   channel or DM (save, react, download a file). `channel-actor.server.ts` holds
   `ChannelActor` and `channelActorMemberWhere`, which the rule and the roster share.

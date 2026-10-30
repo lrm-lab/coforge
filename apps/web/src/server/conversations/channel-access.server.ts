@@ -9,7 +9,7 @@ import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
 import type { ChannelActor } from "./channel-actor.server";
-import { visibleChannelWhere } from "./channel-read-access.server";
+import { channelByIdWhere, requireReadableChannel } from "./channel-read-access.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 
 /** What `PublicChannels` hands each of its channel modules: the database, and the publishers a
@@ -127,11 +127,10 @@ export async function findChannelById(
   channelId: string,
 ) {
   const channel = await db.conversation.findFirst({
-    where: { id: channelId, ...visibleChannelWhere(workspaceId, reader) },
-    select: { id: true, channelName: true, description: true, archivedAt: true },
+    where: channelByIdWhere(workspaceId, channelId),
+    select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
   });
-  if (!channel) throw new AppError("NOT_FOUND");
-  return channel;
+  return requireReadableChannel(db, workspaceId, reader, channel);
 }
 
 /** A Workspace member's view of one channel, with the viewer's Workspace role. The membership and
@@ -149,7 +148,7 @@ export async function viewerChannel(
       select: { role: true },
     }),
     db.conversation.findFirst({
-      where: { id: channelId, ...visibleChannelWhere(workspaceId, { userId }) },
+      where: channelByIdWhere(workspaceId, channelId),
       include: {
         project: {
           select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },
@@ -159,8 +158,10 @@ export async function viewerChannel(
     }),
   ]);
   if (!membership) throw new AppError("ACCESS_DENIED");
-  if (!channel) throw new AppError("NOT_FOUND");
-  return { channel, serverRole: membership.role };
+  return {
+    channel: await requireReadableChannel(db, workspaceId, { userId }, channel),
+    serverRole: membership.role,
+  };
 }
 
 /** `viewerChannel` without the role: the channel a Workspace member asked for. */
