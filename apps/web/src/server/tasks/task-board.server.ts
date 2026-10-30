@@ -5,6 +5,7 @@ import { AppError } from "#src/lib/app-error";
 import type { ConversationTaskSubset } from "#src/features/tasks/conversation-task-subset";
 import type { TaskCommand, TaskPrincipal, TaskResult } from "@lrm/coforge-sdk/internal";
 import { createTasks, announceSentMessageTask } from "./task-creation.server";
+import { announceSpawnedTask } from "./sent-as-conversation-task.server";
 import { createConversationTasks } from "./task-conversation-creation.server";
 import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { assignTask, unassignTask } from "./task-assignment.server";
@@ -139,12 +140,13 @@ export class TaskBoard {
     if (!scope.member && !scope.channel) throw new AppError("ACCESS_DENIED");
 
     if (command.operation === "list")
-      return listConversationTasks(this.ports, scope.conversationId, command);
+      return listConversationTasks(this.ports, scope.workspaceId, scope.conversationId, command);
     const member = scope.member!;
     const ports = this.ports;
+    // The Workspace's task-conversations experiment decides for everyone in it: a person or an
+    // Agent makes a task with `create` (naming its source message), never by turning a message
+    // into one.
     const conversations =
-      // The browser keeps the message-based flow until its pages offer the new one.
-      principal.agentId !== undefined &&
       (command.operation === "create" ||
         command.operation === "convert" ||
         command.operation === "claim") &&
@@ -156,13 +158,13 @@ export class TaskBoard {
         throw new AppError("INVALID_INPUT");
       return createTasks(ports, scope, member, principal, command);
     }
-    // With task conversations a task is made by `create`, naming its source message; a message is
-    // never turned into one.
-    if (
-      conversations &&
-      (command.operation === "convert" || command.messageId || command.messageIds)
-    )
-      throw new AppError("CONFLICT", { errorId: TASK_V2_USE_CREATE });
+    if (conversations) {
+      // A person's "make this message a task" creates one beside it; an Agent is told to `create`.
+      if (command.operation === "convert" && principal.userId)
+        return createConversationTasks(ports, scope, member, principal, command);
+      if (command.operation === "convert" || command.messageId || command.messageIds)
+        throw new AppError("CONFLICT", { errorId: TASK_V2_USE_CREATE });
+    } else if (command.alongside !== undefined) throw new AppError("INVALID_INPUT");
     if (command.operation === "convert")
       return convertOrClaim(ports, scope, member, command, false);
     if (command.operation === "claim") return claimTasks(ports, scope, member, command);
@@ -185,6 +187,7 @@ export class TaskBoard {
    * makes retries idempotent.
    */
   async announceSentTask(conversation: ConversationRef, messageId: string) {
+    if (await announceSpawnedTask(this.ports, conversation, messageId)) return;
     return announceSentMessageTask(this.ports, conversation, messageId);
   }
 }

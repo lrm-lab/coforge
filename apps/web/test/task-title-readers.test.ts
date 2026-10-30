@@ -39,7 +39,8 @@ function task(title: string, revision = 1): SelectedTask {
     owner: null,
     creator,
     executionSessions: [],
-    message: { sequence: 1, mentions: [graceMention] },
+    message: { sequence: 1, mentions: [graceMention], _count: { replies: 0 } },
+    discussion: null,
   } as unknown as SelectedTask;
 }
 

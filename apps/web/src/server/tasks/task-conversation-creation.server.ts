@@ -8,6 +8,8 @@ import type { Member, Transaction, TaskBoardPorts } from "./task-board-ports.ser
 import { ensureTaskExecutionSession } from "./task-change.server";
 import { findSourceMessage } from "./task-claims.server";
 import { creationChanges, historyRows } from "./task-history.server";
+import { postSourceNotice, signalNotices, type PostedNotice } from "./task-notice-posting.server";
+import { noticeActor } from "./task-notices.server";
 import { announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
@@ -16,6 +18,7 @@ import {
   taskSelection,
   taskView,
   UNFINISHED_TASK_STATUSES,
+  readTaskText,
   type SelectedTask,
 } from "./task-view.server";
 
@@ -35,6 +38,8 @@ export class SourceMessageTaken extends AppError {
  * Creates tasks under task conversations: no message is posted in the channel. Each task gets its
  * own id, may name the channel message it was made from, and is followed by its creator (and, for
  * an assignee, by them). The assignee is told in the task's own conversation, which this makes.
+ * `convert` is the person's "make this message a task": the same, with the message's text as the
+ * title and the message as its source.
  */
 export async function createConversationTasks(
   ports: TaskBoardPorts,
@@ -43,12 +48,14 @@ export async function createConversationTasks(
   _principal: TaskPrincipal,
   command: TaskCommand,
 ) {
-  const titles = (command.titles ?? [command.title!]).map((title) => title.trim());
+  const convert = command.operation === "convert";
+  if (convert && (!command.messageId || command.messageIds || command.title || command.titles))
+    throw new AppError("INVALID_INPUT");
+  const titles = convert ? [""] : (command.titles ?? [command.title!]).map((title) => title.trim());
   if (command.description != null && titles.length !== 1) throw new AppError("INVALID_INPUT");
   // A resource task records its receipt against a message, which this task does not have yet.
   if (command.attachmentId || command.createsResource) throw new AppError("INVALID_INPUT");
   if (command.alongside && !command.messageId) throw new AppError("INVALID_INPUT");
-  if (command.messageId && !scope.channel) throw new AppError("INVALID_INPUT");
   const requestIds = await Promise.all(
     titles.map((_, index) => indexedRequestId(command.idempotencyKey, index)),
   );
@@ -65,7 +72,7 @@ export async function createConversationTasks(
     });
     if (retried.length) {
       if (retried.length !== titles.length) throw new AppError("CONFLICT");
-      return { tasks: retried, created: false };
+      return { tasks: retried, created: false, notices: [] };
     }
     const source = command.messageId
       ? await findSourceMessage(tx, scope.conversationId, command.messageId)
@@ -77,56 +84,29 @@ export async function createConversationTasks(
     if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
-    const started = assignee?.id === member.id;
-    const [allocated] = await tx.$queryRaw<Array<{ first: number }>>`
-      UPDATE "conversations"
-      SET "nextTaskNumber" = "nextTaskNumber" + ${titles.length}
-      WHERE "id" = ${scope.conversationId}::uuid
-      RETURNING "nextTaskNumber" - ${titles.length} AS "first"`;
-    if (!allocated) throw new AppError("NOT_FOUND");
+    const written = convert ? [sourceTitle(source!)] : titles;
+    if (written.some((title) => !title || title.length > 8_000))
+      throw new AppError("INVALID_INPUT");
+    const first = await allocateTaskNumbers(tx, scope.conversationId, written.length);
     const tasks: SelectedTask[] = [];
-    for (const [index, title] of titles.entries()) {
-      const task = await tx.task.create({
-        data: {
-          id: Bun.randomUUIDv7(),
-          conversationId: scope.conversationId,
-          workspaceId: scope.workspaceId,
-          number: allocated.first + index,
-          title,
-          description: command.description,
-          createsResource: command.createsResource ?? false,
-          ownerMemberId: assignee?.id,
-          status: started ? "in_progress" : "todo",
-          claimedAt: started ? new Date() : null,
-          creatorMemberId: member.id,
-          requestId: requestIds[index],
-          sourceMessageId: source?.id,
-        },
-        select: taskSelection,
+    const notices: PostedNotice[] = [];
+    for (const [index, title] of written.entries()) {
+      const { task, notice } = await insertConversationTask(tx, scope, member, {
+        number: first + index,
+        title,
+        description: command.description,
+        createsResource: command.createsResource ?? false,
+        assignee,
+        requestId: requestIds[index]!,
+        source,
       });
-      await tx.taskHistoryEvent.createMany({
-        data: historyRows(task.id, member, creationChanges(task), 0),
-      });
-      await tx.taskFollow.createMany({
-        data: [
-          follow(task.id, member.id, scope, "created"),
-          ...(assignee && assignee.id !== member.id
-            ? [follow(task.id, assignee.id, scope, "assigned")]
-            : []),
-        ],
-        skipDuplicates: true,
-      });
-      if (assignee?.agentId) await ensureTaskExecutionSession(tx, task, assignee.agentId);
-      if (assignee && assignee.id !== member.id)
-        await postTaskNotice(tx, scope, task.id, {
-          body: `${actorHandle(member)} assigned you task #${task.number}: ${title}`,
-          deliverToAgentId: assignee.agentId,
-        });
       tasks.push(task);
+      if (notice) notices.push(notice);
     }
-    return { tasks, created: true };
+    return { tasks, created: true, notices };
   });
   if (result.created) {
+    await signalNotices(ports, result.notices);
     const scopes = await conversationSignalScopes(
       ports.db,
       scope.conversationId,
@@ -138,6 +118,102 @@ export async function createConversationTasks(
     }).catch(() => undefined);
   }
   return { tasks: result.tasks.map((task) => taskView(task, ports.reader)) };
+}
+
+/** The numbers a conversation's next `count` tasks take; the caller holds its lock. */
+export async function allocateTaskNumbers(tx: Transaction, conversationId: string, count: number) {
+  const [allocated] = await tx.$queryRaw<Array<{ first: number }>>`
+    UPDATE "conversations"
+    SET "nextTaskNumber" = "nextTaskNumber" + ${count}
+    WHERE "id" = ${conversationId}::uuid
+    RETURNING "nextTaskNumber" - ${count} AS "first"`;
+  if (!allocated) throw new AppError("NOT_FOUND");
+  return allocated.first;
+}
+
+type SourceMessage = Awaited<ReturnType<typeof findSourceMessage>>;
+
+/** A task's title made from a message: its text as people read it (mentions as names). */
+export function sourceTitle(source: Pick<SourceMessage, "body" | "mentions">) {
+  return readTaskText(source.body, "people", source.mentions).trim().slice(0, 8_000);
+}
+
+/**
+ * Writes one task under task conversations with its history and follows, in the caller's
+ * transaction (which holds the conversation's lock). A source message someone else wrote gets a
+ * line in its thread, so its author learns it became a task: that notice is returned to signal
+ * once the transaction commits.
+ */
+export async function insertConversationTask(
+  tx: Transaction,
+  scope: { conversationId: string; workspaceId: string },
+  member: Member,
+  input: {
+    number: number;
+    title: string;
+    description?: string | null;
+    createsResource?: boolean;
+    assignee: Awaited<ReturnType<typeof assigneeMember>>;
+    requestId: string;
+    source: SourceMessage | null;
+  },
+) {
+  const { assignee, source } = input;
+  const started = assignee?.id === member.id;
+  const task = await tx.task.create({
+    data: {
+      id: Bun.randomUUIDv7(),
+      conversationId: scope.conversationId,
+      workspaceId: scope.workspaceId,
+      number: input.number,
+      title: input.title,
+      description: input.description,
+      createsResource: input.createsResource ?? false,
+      ownerMemberId: assignee?.id,
+      status: started ? "in_progress" : "todo",
+      claimedAt: started ? new Date() : null,
+      creatorMemberId: member.id,
+      requestId: input.requestId,
+      sourceMessageId: source?.id,
+    },
+    select: taskSelection,
+  });
+  await tx.taskHistoryEvent.createMany({
+    data: historyRows(task.id, member, creationChanges(task), 0),
+  });
+  await tx.taskFollow.createMany({
+    data: [
+      follow(task.id, member.id, scope, "created"),
+      ...(assignee && assignee.id !== member.id
+        ? [follow(task.id, assignee.id, scope, "assigned")]
+        : []),
+    ],
+    skipDuplicates: true,
+  });
+  if (assignee?.agentId) await ensureTaskExecutionSession(tx, task, assignee.agentId);
+  // The assignee's notice makes the task's conversation, so the task is read again to carry it.
+  const assigned = assignee && assignee.id !== member.id;
+  if (assigned)
+    await postTaskNotice(tx, scope, task.id, {
+      body: `${actorHandle(member)} assigned you task #${task.number}: ${input.title}`,
+      deliverToAgentId: assignee.agentId,
+    });
+  const notice =
+    source && source.senderMemberId !== member.id
+      ? await postSourceNotice(
+          tx,
+          scope,
+          source.id,
+          { number: task.number, title: input.title },
+          noticeActor(member),
+        )
+      : undefined;
+  return {
+    task: assigned
+      ? await tx.task.findUniqueOrThrow({ where: { id: task.id }, select: taskSelection })
+      : task,
+    notice,
+  };
 }
 
 const follow = (

@@ -72,7 +72,11 @@ export function validateTaskCommand(command: TaskCommand) {
     // they are off.
     if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
-  if (command.alongside !== undefined && command.operation !== "create")
+  if (
+    command.alongside !== undefined &&
+    command.operation !== "create" &&
+    command.operation !== "convert"
+  )
     throw new AppError("INVALID_INPUT");
   if (command.operation === "amend") {
     if (

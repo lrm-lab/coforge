@@ -60,6 +60,8 @@ export const taskSelection = {
   createdAt: true,
   updatedAt: true,
   ownerMemberId: true,
+  sourceMessageId: true,
+  discussionConversationId: true,
   owner: { select: TASK_MEMBER_SELECT },
   creator: { select: TASK_MEMBER_SELECT },
   executionSessions: {
@@ -169,7 +171,15 @@ export function readTaskText(
     : peopleReadableBody(text, mentions.map(browserMessageMention));
 }
 
-export function taskView(task: SelectedTask, reader: TaskReader = "people"): TaskView {
+/** What counting a task's discussions adds to its view (`discussionCounts`); a reader that did not
+ * count leaves both out, and a page keeps what it had. */
+export type DiscussionCounts = { replyCount: number; earlierReplies: number };
+
+export function taskView(
+  task: SelectedTask,
+  reader: TaskReader = "people",
+  counts?: DiscussionCounts,
+): TaskView {
   const resourceReceipt = task.resourceReceipt;
   return {
     messageId: task.id,
@@ -198,6 +208,14 @@ export function taskView(task: SelectedTask, reader: TaskReader = "people"): Tas
     }),
     owner: task.owner && taskMember(task.workspaceId, task.owner),
     creator: taskMember(task.workspaceId, task.creator),
+    ...(task.discussionConversationId && {
+      discussionConversationId: task.discussionConversationId,
+      ...(counts && { replyCount: counts.replyCount }),
+    }),
+    ...(counts?.earlierReplies && {
+      earlierDiscussion: { threadRootId: task.messageId!, replyCount: counts.earlierReplies },
+    }),
+    ...(task.sourceMessageId && { sourceMessageId: task.sourceMessageId }),
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };

@@ -1,3 +1,4 @@
+import { BROWSER_MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import { TASK_CLAIM_BLOCKED_ACTIONS } from "@lrm/coforge-sdk/internal";
 import {
   MESSAGE_ANCHOR_SOURCE,
@@ -113,7 +114,12 @@ export async function findSourceMessage(
       ? channelThreadRootWhere(conversationId, anchor)
       : { conversationId, threadRootId: null, id: messageId },
     take: 2,
-    select: { id: true, body: true },
+    select: {
+      id: true,
+      body: true,
+      senderMemberId: true,
+      mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+    },
   });
   if (messages.length !== 1) throw new AppError(messages.length ? "CONFLICT" : "NOT_FOUND");
   return messages[0]!;

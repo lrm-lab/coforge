@@ -25,7 +25,7 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { userConversationChannel, workspaceConversationChannel } from "./conversation-realtime";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { sentMessageBecomesTask } from "#src/server/tasks/sent-as-task.server";
+import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
 import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { browserMessageMention } from "#src/server/conversations/mentions.server";
@@ -371,7 +371,7 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       ...input,
       workspaceId,
       userId,
-      withinSend: asTask ? sentMessageBecomesTask : undefined,
+      withinSend: asTask ? await sentAsTaskHook(db, workspaceId) : undefined,
     });
     if (asTask)
       await announceSentTask(db, { conversationId: data.channelId, workspaceId }, message.id);

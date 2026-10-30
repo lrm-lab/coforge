@@ -1,4 +1,5 @@
 import type { Prisma } from "#src/generated/prisma/client";
+import { viewsWithCounts } from "./task-discussion-counts.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
@@ -87,8 +88,8 @@ export async function listOwnTasks(
     },
   });
   return {
-    tasks: tasks.map((task) => ({
-      ...taskView(task, ports.reader),
+    tasks: await viewsWithCounts(ports.db, principal.workspaceId, tasks, (task, counts) => ({
+      ...taskView(task, ports.reader, counts),
       channelRef: task.conversation.channelName
         ? `#${task.conversation.channelName}`
         : `@${task.conversation.members[0]!.user!.username}`,
@@ -101,6 +102,7 @@ export async function listOwnTasks(
 /** One conversation's Tasks, optionally of one status. */
 export async function listConversationTasks(
   ports: TaskBoardPorts,
+  workspaceId: string,
   conversationId: string,
   command: TaskCommand,
 ): Promise<TaskResult> {
@@ -112,5 +114,9 @@ export async function listConversationTasks(
     orderBy: { number: "asc" },
     select: taskSelection,
   });
-  return { tasks: tasks.map((task) => taskView(task, ports.reader)) };
+  return {
+    tasks: await viewsWithCounts(ports.db, workspaceId, tasks, (task, counts) =>
+      taskView(task, ports.reader, counts),
+    ),
+  };
 }

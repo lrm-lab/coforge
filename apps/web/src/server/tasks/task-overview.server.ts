@@ -15,9 +15,11 @@ import {
   taskSelection,
   taskView,
   UNFINISHED_TASK_STATUSES,
+  type DiscussionCounts,
   type FinishedTaskStatus,
 } from "./task-view.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
+import { viewsWithCounts } from "./task-discussion-counts.server";
 
 export type TaskOverview = {
   tasks: Array<
@@ -146,6 +148,7 @@ function overviewSelection(userId: string) {
 function overviewRow(
   task: Prisma.TaskGetPayload<{ select: ReturnType<typeof overviewSelection> }>,
   userId: string,
+  counts?: DiscussionCounts,
 ): TaskOverview["tasks"][number] {
   const channelName = task.conversation.channelName;
   const agent = task.conversation.members.find((member) => member.agent !== null)?.agent ?? null;
@@ -153,7 +156,7 @@ function overviewRow(
     task.conversation.members.find((member) => member.userId === userId)?.id ?? null;
   if (channelName === null && agent === null) throw new AppError("INTERNAL_ERROR");
   return {
-    ...taskView(task),
+    ...taskView(task, "people", counts),
     currentMemberId,
     source: channelName
       ? { channelName, agentId: null, label: `#${channelName}` }
@@ -219,7 +222,9 @@ export class TaskOverviewReads {
       },
       select: overviewSelection(userId),
     });
-    return task && overviewRow(task, userId);
+    if (!task) return null;
+    const [counts] = await viewsWithCounts(this.db, workspaceId, [task], (_, counted) => counted);
+    return overviewRow(task, userId, counts);
   }
 
   /**
@@ -254,7 +259,10 @@ export class TaskOverviewReads {
       select: taskSelection,
     });
     return {
-      tasks: tasks.map((task) => ({ ...taskView(task), sequence: task.message?.sequence ?? 0 })),
+      tasks: await viewsWithCounts(this.db, viewer.workspaceId, tasks, (task, counts) => ({
+        ...taskView(task, "people", counts),
+        sequence: task.message?.sequence ?? 0,
+      })),
     };
   }
 

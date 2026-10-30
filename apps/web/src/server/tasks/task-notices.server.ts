@@ -104,6 +104,8 @@ export const noticeText = {
     `📋 ${tasks.length} new ${plural(tasks, "task")} created: ${references(tasks)}`,
   converted: (actor: DisplayName, task: QuotedTask) =>
     `📋 ${actor} converted a message to task ${reference(task)}`,
+  fromMessage: (actor: DisplayName, task: QuotedTask) =>
+    `📋 ${actor} made task ${reference(task)} from this message`,
   assigned: (actor: DisplayName, task: QuotedTask, assignee: AssigneeMention) =>
     `📌 ${actor} assigned ${reference(task)} to ${assignee}`,
   claimed: (claimer: Handle, task: QuotedTask) => `📌 ${claimer} claimed ${reference(task)}`,

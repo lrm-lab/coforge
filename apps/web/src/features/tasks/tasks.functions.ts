@@ -38,6 +38,7 @@ const taskCommand = z
     assignee: z.string().nullable().optional(),
     description: z.string().max(50_000).nullable().optional(),
     createsResource: z.boolean().optional(),
+    alongside: z.boolean().optional(),
     freshnessContextMode: z.enum(["inline", "withheld"]).optional(),
     receipt: z
       .object({

@@ -77,6 +77,15 @@ export type TaskView = {
   claimedAt?: string | null;
   /** The current or most recent isolated runtime attempt for an Agent-owned Task. */
   executionSessionId?: string | null;
+  /** The task's own conversation, once someone has spoken in it (task conversations). */
+  discussionConversationId?: string | null;
+  /** The messages in that conversation. */
+  replyCount?: number;
+  /** The thread under the message the task started as, from before the task had a conversation of
+   * its own; new replies go to the task's conversation, not here. */
+  earlierDiscussion?: { threadRootId: string; replyCount: number };
+  /** The channel message the task was made from (`create --message-id`). */
+  sourceMessageId?: string | null;
 };
 
 export type TaskResourceReceipt = {

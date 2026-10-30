@@ -16,7 +16,7 @@ import {
 } from "./conversation.schemas";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { sentMessageBecomesTask } from "#src/server/tasks/sent-as-task.server";
+import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
 import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { userConversationChannel } from "./conversation-realtime";
@@ -252,6 +252,7 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
       { "coforge.conversation_id": data.conversationId },
       async (sendTrace) => {
         const centrifugo = createCentrifugoServerApi();
+        const withinSend = data.asTask ? await sentAsTaskHook(db, workspaceId) : undefined;
         // The echo's sender profile does not depend on the send.
         const [message, profile] = await Promise.all([
           sendTrace.measure("message.persist_and_publish", () =>
@@ -264,7 +265,7 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
                 body: data.body,
                 attachmentIds: data.attachmentIds,
                 threadRootId: data.threadRootId,
-                withinSend: data.asTask ? sentMessageBecomesTask : undefined,
+                withinSend,
               },
               {
                 idempotency: getMessageRequestIdempotency(),

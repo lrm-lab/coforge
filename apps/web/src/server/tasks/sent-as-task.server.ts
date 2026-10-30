@@ -1,6 +1,8 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
+import { sentMessageSpawnsTask } from "./sent-as-conversation-task.server";
+import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import { taskSelection } from "./task-view.server";
 
@@ -63,3 +65,14 @@ export const sentMessageBecomesTask: SentMessageHook = async (tx, message) => {
   });
   await createMessageTask(tx, message, creator);
 };
+
+/** The hook a person's "send as task" runs: the message becomes the task, or, where the Workspace
+ * has task conversations, is the source of a task made beside it. */
+export async function sentAsTaskHook(
+  db: Parameters<typeof taskConversationsEnabled>[0],
+  workspaceId: string,
+): Promise<SentMessageHook> {
+  return (await taskConversationsEnabled(db, { workspaceId }))
+    ? sentMessageSpawnsTask
+    : sentMessageBecomesTask;
+}

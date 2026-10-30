@@ -3,7 +3,7 @@ import { postTaskNotice } from "./task-conversations.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
-import { quotedTask, type QuotedTask } from "./task-notices.server";
+import { noticeText, quotedTask, type NoticeActor, type QuotedTask } from "./task-notices.server";
 import type {
   Transaction,
   TaskBoardPorts,
@@ -12,7 +12,7 @@ import type {
   ConversationRef,
 } from "./task-board-ports.server";
 
-type PostedNotice = ConversationRef & {
+export type PostedNotice = ConversationRef & {
   id: string;
   sequence: number;
   threadRootId: string | null;
@@ -197,7 +197,7 @@ async function writeNotice(
  * Signal committed notices only to this conversation; they count no unread, change no
  * sidebar badge and wake/push nobody.
  */
-async function signalNotices(ports: TaskBoardPorts, notices: readonly PostedNotice[]) {
+export async function signalNotices(ports: TaskBoardPorts, notices: readonly PostedNotice[]) {
   const realtime = ports.dependencies.realtime;
   if (!realtime) return;
   await Promise.allSettled(
@@ -212,4 +212,21 @@ async function signalNotices(ports: TaskBoardPorts, notices: readonly PostedNoti
       ),
     ),
   );
+}
+
+/**
+ * A server notice in the thread of a message a task was made from, so its author learns of it. It
+ * counts no unread and wakes nobody (`signalNotices`).
+ */
+export function postSourceNotice(
+  tx: Transaction,
+  conversation: ConversationRef,
+  rootId: string,
+  task: { number: number; title: string },
+  actor: NoticeActor,
+) {
+  return writeNotice(tx, conversation, {
+    threadRootId: rootId,
+    body: noticeText.fromMessage(actor.displayName, quotedTask(task, [])),
+  });
 }
