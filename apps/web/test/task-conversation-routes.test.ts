@@ -200,3 +200,24 @@ test("read passes the page window and the unread flag, and bounds the limit", as
   );
   expect(tooMany.status).toBe(400);
 });
+
+test("every route acts as the Agent alone: the owner the API key carries is not passed on", async () => {
+  // What the Agent API authenticates is the Agent and, beside it, the user who owns it; the task
+  // board refuses a principal that names both, so only the Agent may reach it.
+  const authenticated = { workspaceId: "w", agentId: "a", userId: "owner" };
+  calls.length = 0;
+  const ref = "channel=%23c&task_number=7";
+  await handleTaskViewGet(new Request(`http://x/?${ref}`), authenticated, service as never, on);
+  await handleTaskReadGet(new Request(`http://x/?${ref}`), authenticated, service as never, on);
+  await handleTaskFollowingGet(authenticated, service as never, on);
+  const body = { channel: "#c", task_number: 7 };
+  await handleTaskReplyPost(
+    post({ ...body, content: "hi", idempotencyKey: "k" }),
+    authenticated,
+    service as never,
+    on,
+  );
+  await handleTaskFollowPost(post(body), authenticated, service as never, on);
+  await handleTaskUnfollowPost(post(body), authenticated, service as never, on);
+  expect(calls.map((call) => call[1])).toEqual(Array(6).fill({ workspaceId: "w", agentId: "a" }));
+});

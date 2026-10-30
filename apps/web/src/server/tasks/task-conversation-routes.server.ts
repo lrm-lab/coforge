@@ -18,6 +18,12 @@ import type { TaskConversations } from "./task-conversations.server";
  */
 type Principal = { workspaceId: string; agentId: string };
 
+/**
+ * The Agent alone. The Agent API authenticates an Agent and, beside it, the user who owns it
+ * (`userId`); the task board refuses a principal that names both, and an Agent acts as itself.
+ */
+const asAgent = ({ workspaceId, agentId }: Principal): Principal => ({ workspaceId, agentId });
+
 /** Whether the Workspace has task conversations on (the `taskConversations` experiment). */
 export type TaskConversationsGate = () => Promise<boolean>;
 
@@ -83,7 +89,7 @@ export async function handleTaskViewGet(
     await requireOn(gate);
     const ref = queryRef(request);
     const limit = limitSchema.parse(new URL(request.url).searchParams.get("limit") ?? undefined);
-    return Response.json(await service.view(principal, asRef(ref), { limit }));
+    return Response.json(await service.view(asAgent(principal), asRef(ref), { limit }));
   } catch (error) {
     return failure(error);
   }
@@ -116,7 +122,7 @@ export async function handleTaskReadGet(
     );
     const { unread, ...range } = page;
     return Response.json(
-      await service.read(principal, asRef(ref), {
+      await service.read(asAgent(principal), asRef(ref), {
         ...range,
         ...(unread === "true" && { unread: true }),
       }),
@@ -133,7 +139,7 @@ export async function handleTaskFollowingGet(
 ) {
   try {
     await requireOn(gate);
-    return Response.json({ tasks: await service.following(principal) });
+    return Response.json({ tasks: await service.following(asAgent(principal)) });
   } catch (error) {
     return failure(error);
   }
@@ -149,7 +155,7 @@ export async function handleTaskReplyPost(
     await requireOn(gate);
     const body = replySchema.parse(await readAgentJsonBody(request));
     return Response.json({
-      ...(await service.reply(principal, asRef(body), {
+      ...(await service.reply(asAgent(principal), asRef(body), {
         body: body.content,
         idempotencyKey: body.idempotencyKey,
         mentions: body.mentions,
@@ -171,7 +177,7 @@ export async function handleTaskFollowPost(
   try {
     await requireOn(gate);
     const body = refSchema.parse(await readAgentJsonBody(request));
-    return Response.json({ ok: true, ...(await service.follow(principal, asRef(body))) });
+    return Response.json({ ok: true, ...(await service.follow(asAgent(principal), asRef(body))) });
   } catch (error) {
     return failure(error);
   }
@@ -188,7 +194,7 @@ export async function handleTaskUnfollowPost(
     const body = unfollowSchema.parse(await readAgentJsonBody(request));
     return Response.json({
       ok: true,
-      ...(await service.unfollow(principal, asRef(body), body.reason)),
+      ...(await service.unfollow(asAgent(principal), asRef(body), body.reason)),
     });
   } catch (error) {
     return failure(error);

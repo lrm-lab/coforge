@@ -18,7 +18,9 @@ export async function resolveTaskAttachmentTarget(
   const match = TASK_TARGET.exec(target);
   if (!match) return null;
   if (!(await taskConversationsGate(db, principal)())) return null;
-  return new TaskConversations({ db, reader: "agent", dependencies: {} }).open(principal, {
+  // The Agent alone: the principal it authenticated with also names its owner, which the board refuses.
+  const agent = { workspaceId: principal.workspaceId, agentId: principal.agentId };
+  return new TaskConversations({ db, reader: "agent", dependencies: {} }).open(agent, {
     target: match[1]!.replace(/^dm:/, ""),
     number: Number(match[2]),
   });

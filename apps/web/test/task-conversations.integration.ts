@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -289,4 +290,16 @@ test("stopping to follow leaves a notice with the reason in the conversation, on
   });
   expect(posted[0]!.deliveries).toEqual([]);
   await conversations.follow(as("peer"), ref);
+});
+
+test("the route answers an Agent authenticated with its owner beside it", async () => {
+  // The Agent API's principal names the Agent and the user who owns it; the board refuses both.
+  const response = await handleTaskViewGet(
+    new Request(`http://x/?channel=${encodeURIComponent(ref.target)}&task_number=1`),
+    { ...as("worker"), userId: crypto.randomUUID() } as never,
+    conversations,
+    async () => true,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ taskRef: `#${channelName}:#1` });
 });
