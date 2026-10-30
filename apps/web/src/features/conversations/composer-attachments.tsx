@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Download01, Trash01, XClose } from "@untitledui/icons";
+import { Download01, RefreshCcw01, Trash01, XClose } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
 
-import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Dialog } from "#src/components/application/modals/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -12,7 +11,7 @@ import {
   ProgressBarBase,
 } from "#src/components/base/progress-indicators/progress-indicators";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
-import { fileTypeLabel } from "#src/features/files/file-meta";
+import { fileTypeLabel, formatFileSize } from "#src/features/files/file-meta";
 import { cx } from "#src/utils/cx";
 import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 import {
@@ -68,8 +67,8 @@ export function uploadFailureDetail(failure: UploadFailure, file: Pick<File, "si
       // A file under the limit was refused by the server, or a proxy in front of it (a 413).
       return file.size > ATTACHMENT_MAX_BYTES
         ? m.conversation_attachment_too_large_detail({
-            size: getReadableFileSize(file.size),
-            limit: getReadableFileSize(ATTACHMENT_MAX_BYTES),
+            size: formatFileSize(file.size),
+            limit: formatFileSize(ATTACHMENT_MAX_BYTES),
           })
         : m.conversation_attachment_too_large_refused();
     case "too_many":
@@ -126,12 +125,13 @@ export function uploadAttachment(
 }
 
 /**
- * One chosen file in the tray under the text, as Slack shows them: an image is a 4rem thumbnail,
- * any other file a card with its type icon, name and size, so a chosen file is visible at a glance.
- * While it uploads it is dimmed with a progress bar along its foot. A file that failed is drawn as
- * Raft's composer draws it: ringed red and faded, one short word across it ("Too large"), the
- * reason on hover, and a retry right on the tile when one may help. Every tile has a remove button
- * at its corner; clicking the tile opens the preview with the file's details and download.
+ * One chosen file in the row under the text, as Slack's composer shows them: an image is a 3.5rem
+ * thumbnail, any other file a compact card with its type icon, name, and type and size, so a chosen
+ * file is visible at a glance. While it uploads it is dimmed with a progress bar along its foot. A
+ * file that failed is a card ringed red whose second line says why in a word ("Too large"), in
+ * place of its type and size, never over them; the reason in full shows on hover and in its
+ * preview, and a retry sits on the card when one may help. Every tile has a remove button at its
+ * corner; clicking the tile opens the preview with the file's details and download.
  */
 export function AttachmentTile({
   attachment,
@@ -144,7 +144,9 @@ export function AttachmentTile({
 }) {
   const { file, failure } = attachment;
   const uploading = stillUploading(attachment);
-  const isImage = file.type.startsWith("image/");
+  // A failed image is a card too: its thumbnail has no room to say why.
+  const thumbnail = file.type.startsWith("image/") && !failure;
+  const retryable = failure !== undefined && retryableUploadFailure(failure);
   const [previewUrl, setPreviewUrl] = useState<string>();
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -152,18 +154,20 @@ export function AttachmentTile({
     return () => URL.revokeObjectURL(url);
   }, [file]);
   const typeLabel = fileTypeLabel(file.name, file.type);
-  const typeAndSize = `${typeLabel ? `${typeLabel} · ` : ""}${getReadableFileSize(file.size)}`;
+  const typeAndSize = `${typeLabel ? `${typeLabel} · ` : ""}${formatFileSize(file.size)}`;
   const failureLabel = failure && uploadFailureLabel(failure);
   const failureDetail = failure && uploadFailureDetail(failure, file);
-  const status = uploading
-    ? m.conversation_attachment_uploading({ progress: attachment.progress })
-    : typeAndSize;
+  const status = failureLabel
+    ? failureLabel
+    : uploading
+      ? m.conversation_attachment_uploading({ progress: attachment.progress })
+      : typeAndSize;
   // The preview is anchored to the tile and opened by it directly: a dialog trigger between the
   // tooltip and the tile would take the tooltip's hover from it.
   const tileRef = useRef<HTMLLIElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   return (
-    <li ref={tileRef} className="relative">
+    <li ref={tileRef} className="relative shrink-0">
       <Tooltip title={failureDetail} isDisabled={!failure || previewOpen} placement="top start">
         <Button
           onPress={() => setPreviewOpen(true)}
@@ -175,39 +179,45 @@ export function AttachmentTile({
           aria-label={`${file.name} · ${failure ? `${failureLabel}. ${failureDetail}` : status}`}
           className={cx(
             "overflow-hidden rounded-lg border border-primary bg-primary p-0 shadow-xs hover:bg-primary_hover",
-            isImage ? "size-16" : "h-16 w-[13rem] justify-start px-3",
+            thumbnail ? "size-14" : "h-14 w-52 justify-start px-2.5",
+            retryable && "pr-10",
             failure && "border-error",
           )}
         >
-          <span className={cx("contents", failure && "*:opacity-20")}>
-            {isImage ? (
-              previewUrl ? (
-                <LoadingImage
-                  src={previewUrl}
-                  alt=""
-                  className="size-full"
-                  imgClassName={cx("size-full object-cover", uploading && "opacity-60")}
-                  failed={
-                    <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
-                  }
-                />
-              ) : (
-                <span className="flex size-full items-center justify-center bg-secondary">
-                  <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
-                </span>
-              )
+          {thumbnail ? (
+            previewUrl ? (
+              <LoadingImage
+                src={previewUrl}
+                alt=""
+                className="size-full"
+                imgClassName={cx("size-full object-cover", uploading && "opacity-60")}
+                failed={
+                  <FileTypeIcon fileName={file.name} contentType={file.type} className="size-7" />
+                }
+              />
             ) : (
-              <span className="flex min-w-0 items-center gap-2.5 text-left">
-                <span className="flex size-9 shrink-0 items-center justify-center">
-                  <FileTypeIcon fileName={file.name} contentType={file.type} className="size-9" />
-                </span>
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
-                  <span className="truncate text-xs text-tertiary">{status}</span>
+              <span className="flex size-full items-center justify-center bg-secondary">
+                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-7" />
+              </span>
+            )
+          ) : (
+            <span className="flex min-w-0 items-center gap-2 text-left">
+              <span className="flex size-8 shrink-0 items-center justify-center">
+                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
+                <span
+                  className={cx(
+                    "truncate text-xs",
+                    failure ? "font-medium text-error-primary" : "text-tertiary",
+                  )}
+                >
+                  {status}
                 </span>
               </span>
-            )}
-          </span>
+            </span>
+          )}
         </Button>
       </Tooltip>
       <AriaPopover
@@ -221,7 +231,7 @@ export function AttachmentTile({
         <Dialog className="flex flex-col outline-none">
           {({ close }) => (
             <>
-              {isImage && previewUrl && (
+              {file.type.startsWith("image/") && previewUrl && (
                 <div className="flex justify-center rounded-t-xl bg-secondary p-3">
                   <LoadingImage
                     src={previewUrl}
@@ -232,7 +242,7 @@ export function AttachmentTile({
                 </div>
               )}
               <div className="flex items-center gap-3 p-3">
-                {!isImage && (
+                {!file.type.startsWith("image/") && (
                   <span className="flex size-10 shrink-0 items-center justify-center">
                     <FileTypeIcon
                       fileName={file.name}
@@ -245,7 +255,7 @@ export function AttachmentTile({
                   <p className="truncate text-sm font-medium text-primary">{file.name}</p>
                   <p className="truncate text-sm text-tertiary">
                     {uploading
-                      ? `${attachment.progress}% · ${getReadableFileSize(file.size)}`
+                      ? `${attachment.progress}% · ${formatFileSize(file.size)}`
                       : typeAndSize}
                   </p>
                   {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
@@ -282,22 +292,15 @@ export function AttachmentTile({
           className="pointer-events-none absolute inset-x-2 bottom-1.5 h-1 w-auto"
         />
       )}
-      {failure && (
-        // Across the faded tile, not inside its button, so the retry is a button of its own.
-        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-center">
-          <span className="text-xs font-semibold text-error-primary">{failureLabel}</span>
-          {retryableUploadFailure(failure) && (
-            <Button
-              color="link-color"
-              size="sm"
-              className="pointer-events-auto text-xs"
-              onPress={onRetry}
-              aria-label={`${m.controls_retry()} · ${file.name}`}
-            >
-              {m.controls_retry()}
-            </Button>
-          )}
-        </span>
+      {retryable && (
+        <ButtonUtility
+          icon={RefreshCcw01}
+          size="xs"
+          color="tertiary"
+          tooltip={`${m.controls_retry()} · ${file.name}`}
+          onClick={onRetry}
+          className="absolute top-1/2 right-2 -translate-y-1/2"
+        />
       )}
       <ButtonUtility
         icon={XClose}
