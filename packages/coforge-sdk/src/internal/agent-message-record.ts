@@ -21,6 +21,9 @@ export type AgentMessageRecord = {
   senderDescription: string;
   target: string;
   body: string;
+  /** The channel's current coordinator line (`[CoForge current channel role: …]`) when the message
+   * is read in a channel; never part of `body`. The reader shows it once per context. */
+  channelCoordination?: string;
   createdAt: string;
   /** Always present, possibly empty; order matches send/upload order. */
   attachments: LocalAttachment[];

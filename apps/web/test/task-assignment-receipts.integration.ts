@@ -157,7 +157,8 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     });
     expect(page.messages.find((message) => message.id === receipt.messageId)).toMatchObject({
       senderKind: "system",
-      body: `[CoForge current channel role: member; coordinator=none]\n${receipt.content}`,
+      channelCoordination: "[CoForge current channel role: member; coordinator=none]",
+      body: receipt.content,
     });
     const browser = await new ConversationHistory(db).loadThread(
       workspace.id,
@@ -227,7 +228,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
         latestSenderKind: "agent",
         latestSenderHandle: assigned!.name,
         target,
-        body: `[CoForge current channel role: member; coordinator=none]\n@${unrelated!.name} directed Agent handoff`,
+        body: `@${unrelated!.name} directed Agent handoff`,
       }),
     );
 

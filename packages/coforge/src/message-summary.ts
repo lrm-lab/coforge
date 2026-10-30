@@ -13,10 +13,9 @@ function isPlainChannelTarget(target: string): boolean {
 export function channelSummaryBody(message: AgentMessageRecord): string {
   if (!isPlainChannelTarget(message.target) || message.mentionsAgent || message.nonMemberMention)
     return message.body;
-  const context = /^\[CoForge current channel role: [^\n]*\]\n/.exec(message.body)?.[0] ?? "";
-  const points = Array.from(message.body.slice(context.length));
+  const points = Array.from(message.body);
   if (points.length <= CHANNEL_SUMMARY_CHARS) return message.body;
   const shown = points.slice(0, CHANNEL_SUMMARY_CHARS).join("");
   const hidden = points.length - CHANNEL_SUMMARY_CHARS;
-  return `${context}${shown}…(+${hidden} chars, read: coforge message read --target "${message.target}" --around ${shortId(message.id)})`;
+  return `${shown}…(+${hidden} chars, read: coforge message read --target "${message.target}" --around ${shortId(message.id)})`;
 }

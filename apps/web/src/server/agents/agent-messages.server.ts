@@ -342,6 +342,7 @@ export type AgentMessageRecord = {
   senderDescription: string;
   target: string;
   body: string;
+  channelCoordination?: string;
   createdAt: Date;
   /** Always present, possibly empty; order matches send/upload order. */
   attachments: { id: string; fileName: string; contentType: string; sizeBytes: number }[];

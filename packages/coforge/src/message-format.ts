@@ -119,9 +119,14 @@ export function formatMessageResolve(result: unknown, messageId = ""): string {
   return hint ? `${line}\n${hint}` : line;
 }
 
+/** The channel role line that precedes a message line, with its newline; empty outside a channel. */
+export function coordinationLine(message: AgentMessageRecord): string {
+  return message.channelCoordination ? `${message.channelCoordination}\n` : "";
+}
+
 function messageLine(message: AgentMessageRecord, body: string): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
-  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${forwardedSuffix(message)}${notice}`;
+  return `${coordinationLine(message)}[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${forwardedSuffix(message)}${notice}`;
 }
 
 export const NON_MEMBER_MENTION_NOTICE =

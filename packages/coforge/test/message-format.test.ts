@@ -123,10 +123,13 @@ test("formatMessageLine renders the shared bracket line with attachment and task
   );
 });
 
-test("channel role context does not consume the message summary budget", () => {
-  const context = "[CoForge current channel role: member; coordinator=none]\n";
-  const rendered = formatMessageLine(message({ body: context + "x".repeat(201) }));
-  expect(rendered).toContain(context + "  │ " + "x".repeat(200) + "…(+1 chars,");
+test("channel role context precedes the line and does not consume the summary budget", () => {
+  const context = "[CoForge current channel role: member; coordinator=none]";
+  const rendered = formatMessageLine(
+    message({ channelCoordination: context, body: "x".repeat(201) }),
+  );
+  expect(rendered.startsWith(`${context}\n[target=`)).toBe(true);
+  expect(rendered).toContain("x".repeat(200) + "…(+1 chars,");
 });
 
 test("formatMessageLine summarizes a long plain-channel body and keeps DM/thread text intact", () => {

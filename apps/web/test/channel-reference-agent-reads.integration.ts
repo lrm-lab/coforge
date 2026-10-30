@@ -11,11 +11,6 @@ import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { recordingDeliveries } from "./helpers/fake-centrifugo";
 
-const CHANNEL_MEMBER_CONTEXT = "[CoForge current channel role: member; coordinator=none]\n";
-function channelMessageContent(body: string | undefined) {
-  expect(body).toStartWith(CHANNEL_MEMBER_CONTEXT);
-  return body!.slice(CHANNEL_MEMBER_CONTEXT.length);
-}
 function enrollGeneral(db: PrismaClient, workspaceId: string) {
   return db.$transaction((tx) => enrollGeneralChannel(tx, workspaceId));
 }
@@ -87,9 +82,7 @@ test("a #channel reference is stored as a channel token on every send path, and 
     // Every body that reaches the daemon or the Agent's CLI reads `#product`, never the token.
     expect(publishedBody(human.id)).toBe(readable);
     const bodyOf = (messages: readonly { id?: string; messageId?: string; body: string }[]) =>
-      channelMessageContent(
-        messages.find((message) => (message.id ?? message.messageId) === human.id)?.body,
-      );
+      messages.find((message) => (message.id ?? message.messageId) === human.id)?.body;
     // The unread readers first: draining the events advances the Agent's read boundary.
     expect(bodyOf(await repo.readPendingAgentDeliveries(workspace.id, helper.id))).toBe(readable);
     expect(
@@ -109,7 +102,7 @@ test("a #channel reference is stored as a channel token on every send path, and 
       bodyOf((await repo.searchMessages(workspace.id, helper.id, { query: "product" })).messages),
     ).toBe(readable);
     expect<string>((await repo.resolveAgentMessage(workspace.id, helper.id, human.id)).body).toBe(
-      CHANNEL_MEMBER_CONTEXT + readable,
+      readable,
     );
 
     // A quote that spans lines keeps its references, and its mention wakes the Agent as before.
@@ -345,9 +338,7 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
     // Every body that reaches the daemon or the Agent's CLI reads `#product:xxxxxxxx-xxxx`.
     expect(publishedBody(human.id)).toBe(readable);
     const bodyOf = (messages: readonly { id?: string; messageId?: string; body: string }[]) =>
-      channelMessageContent(
-        messages.find((message) => (message.id ?? message.messageId) === human.id)?.body,
-      );
+      messages.find((message) => (message.id ?? message.messageId) === human.id)?.body;
     expect(bodyOf(await repo.readPendingAgentDeliveries(workspace.id, helper.id))).toBe(readable);
     expect(
       bodyOf((await repo.readAgentRecoveryContext(workspace.id, helper.id)).resumeMessages),
@@ -365,7 +356,7 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
       bodyOf((await repo.searchMessages(workspace.id, helper.id, { query: "product" })).messages),
     ).toBe(readable);
     expect<string>((await repo.resolveAgentMessage(workspace.id, helper.id, human.id)).body).toBe(
-      CHANNEL_MEMBER_CONTEXT + readable,
+      readable,
     );
 
     // An Agent writes one the same way, and can reply to the thread by the target it read.
@@ -408,7 +399,7 @@ test("a #name:shortid naming a channel thread is stored as a thread token, and e
     await db.conversation.update({ where: { id: product.id }, data: { channelName: "launch" } });
     expect<string>(
       (await repo.resolveAgentMessage(workspace.id, helper.id, fromAgent.id)).body,
-    ).toBe(CHANNEL_MEMBER_CONTEXT + `details in ${target}`);
+    ).toBe(`details in ${target}`);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.computer.deleteMany({ where: { ownerId: user.id } });

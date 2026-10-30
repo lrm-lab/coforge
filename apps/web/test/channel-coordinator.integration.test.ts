@@ -120,7 +120,7 @@ test.skipIf(!connectionString)(
       expect(notice.body).toEndWith(
         "Coordinator test removed @coforge-lead as coordinator of #team",
       );
-      expect(notice.body).toStartWith("[CoForge current channel role: member; coordinator=none]");
+      expect(notice.body).not.toContain("CoForge current channel role");
       expect(recovery.unreadSummary["#team"]).toBe(1);
       expect(
         (await f.db.agent.findUniqueOrThrow({ where: { id: f.lead.id } })).stoppedAt,
@@ -155,19 +155,19 @@ test.skipIf(!connectionString)(
       const worker = await f.repo.drainAgentEvents(f.workspace.id, f.worker.id);
       expect(lead.messages).toHaveLength(2);
       for (const message of lead.messages)
-        expect(message.body).toStartWith(
+        expect(message.channelCoordination).toBe(
           "[CoForge current channel role: member; coordinator=@worker]",
         );
       expect(worker.messages).toHaveLength(1);
-      expect(worker.messages[0]!.body).toStartWith(
+      expect(worker.messages[0]!.channelCoordination).toBe(
         "[CoForge current channel role: coordinator; coordinator=@worker]",
       );
       const history = await f.repo.readMessagesPage(f.workspace.id, f.lead.id, "#team", {
         around: original.id,
       });
-      expect(history.messages.find((message) => message.id === original.id)?.body).toStartWith(
-        "[CoForge current channel role: member; coordinator=@worker]",
-      );
+      expect(
+        history.messages.find((message) => message.id === original.id)?.channelCoordination,
+      ).toBe("[CoForge current channel role: member; coordinator=@worker]");
       const root = await f.send("Please investigate this");
       const reply = await f.channels.send({
         workspaceId: f.workspace.id,
@@ -178,7 +178,7 @@ test.skipIf(!connectionString)(
         body: "A detail in the thread",
       });
       const thread = await f.repo.readMessagesPage(f.workspace.id, f.lead.id, `#team:${root.id}`);
-      expect(thread.messages.find((message) => message.id === reply.id)?.body).toStartWith(
+      expect(thread.messages.find((message) => message.id === reply.id)?.channelCoordination).toBe(
         "[CoForge current channel role: member; coordinator=@worker]",
       );
       expect((await f.db.message.findUniqueOrThrow({ where: { id: original.id } })).body).toBe(
@@ -201,19 +201,17 @@ test.skipIf(!connectionString)(
       await f.set(null);
       const fresh = new PrismaDirectConversationRepository(f.db);
       const recovery = await fresh.readAgentRecoveryContext(f.workspace.id, f.lead.id);
-      expect(recovery.resumeMessages[0]?.body).toStartWith(
-        "[CoForge current channel role: member; coordinator=none]",
-      );
+      expect(recovery.resumeMessages[0]?.body).not.toContain("CoForge current channel role");
       await fresh.drainAgentEvents(f.workspace.id, f.lead.id);
       const post = await f.send("Another ordinary message");
       const otherPost = await f.send("Another channel", f.other.id);
       const events = await fresh.drainAgentEvents(f.workspace.id, f.lead.id);
-      expect(events.messages.find((message) => message.id === post.id)?.body).toStartWith(
+      expect(events.messages.find((message) => message.id === post.id)?.channelCoordination).toBe(
         "[CoForge current channel role: member; coordinator=none]",
       );
-      expect(events.messages.find((message) => message.id === otherPost.id)?.body).toStartWith(
-        "[CoForge current channel role: coordinator; coordinator=@coforge-lead]",
-      );
+      expect(
+        events.messages.find((message) => message.id === otherPost.id)?.channelCoordination,
+      ).toBe("[CoForge current channel role: coordinator; coordinator=@coforge-lead]");
       expect((await f.db.message.findUniqueOrThrow({ where: { id: post.id } })).body).toBe(
         "Another ordinary message",
       );
@@ -230,7 +228,7 @@ test.skipIf(!connectionString)(
     try {
       const post = await f.send("Work after a legacy revocation");
       const read = await f.repo.readMessagesPage(f.workspace.id, f.lead.id, "#team");
-      expect(read.messages.find((message) => message.id === post.id)?.body).toStartWith(
+      expect(read.messages.find((message) => message.id === post.id)?.channelCoordination).toBe(
         "[CoForge current channel role: member; coordinator=none]",
       );
       expect(
@@ -326,9 +324,7 @@ for (const action of ["start", "restart", "reset-session", "full-reset"] as cons
           confirmed: true,
         });
         expect(starts).toHaveLength(1);
-        expect(starts[0]!.resumeMessages?.[0]?.body).toStartWith(
-          "[CoForge current channel role: member; coordinator=none]",
-        );
+        expect(starts[0]!.resumeMessages?.[0]?.body).not.toContain("CoForge current channel role");
         expect(starts[0]!.resumeMessages?.[0]?.body).toEndWith(
           "Coordinator test removed @coforge-lead as coordinator of #team",
         );
@@ -375,9 +371,7 @@ test.skipIf(!connectionString)(
       const recovery = await f.repo.readAgentRecoveryContext(f.workspace.id, f.lead.id);
       expect(pending).toHaveLength(1);
       expect(pending[0]!.messageId).toBe(recovery.resumeMessages[0]!.messageId);
-      expect(pending[0]!.body).toStartWith(
-        "[CoForge current channel role: coordinator; coordinator=@coforge-lead]",
-      );
+      expect(pending[0]!.body).not.toContain("CoForge current channel role");
     } finally {
       await f.cleanup();
     }
@@ -395,7 +389,7 @@ test.skipIf(!connectionString)(
         data: { leftAt: new Date() },
       });
       const history = await f.repo.readMessagesPage(f.workspace.id, f.worker.id, "#team");
-      expect(history.messages[0]!.body).toStartWith(
+      expect(history.messages[0]!.channelCoordination).toBe(
         "[CoForge current channel role: member; coordinator=none]",
       );
       const count = await f.db.message.count({ where: { conversationId: f.team.id } });

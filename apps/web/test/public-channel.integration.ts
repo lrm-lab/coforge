@@ -40,12 +40,7 @@ import {
 } from "#src/server/conversations/pending-mention-actions.server";
 import { quietCentrifugo, recordingDeliveries, withPublishBatch } from "./helpers/fake-centrifugo";
 
-const CHANNEL_MEMBER_CONTEXT = "[CoForge current channel role: member; coordinator=none]\n";
-
-function channelMessageContent(body: string | undefined) {
-  expect(body).toStartWith(CHANNEL_MEMBER_CONTEXT);
-  return body!.slice(CHANNEL_MEMBER_CONTEXT.length);
-}
+const CHANNEL_MEMBER_CONTEXT = "[CoForge current channel role: member; coordinator=none]";
 
 /** Flattens every recipient's browser subscriptions, matching the earlier assertions this
  * suite made directly against `notificationForMessage`'s old flat `subscriptions` field. */
@@ -498,10 +493,18 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     expect(
       (await repo.readMessages(workspace.id, agent.id, "#general")).map((m) => [
         m.senderHandle,
-        channelMessageContent(m.body),
+        m.channelCoordination,
+        m.body,
         m.target,
       ]),
-    ).toEqual([[user.username, "Ordinary conversation, no Agent requested.", "#general"]]);
+    ).toEqual([
+      [
+        user.username,
+        CHANNEL_MEMBER_CONTEXT,
+        "Ordinary conversation, no Agent requested.",
+        "#general",
+      ],
+    ]);
     const mentioned = await channels.send({
       workspaceId: workspace.id,
       userId: user.id,
@@ -550,7 +553,7 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
       expect.objectContaining({
         id: ordinary.id,
         target: "#general",
-        body: CHANNEL_MEMBER_CONTEXT + "New ordinary conversation after unmute.",
+        body: "New ordinary conversation after unmute.",
       }),
     ]);
     expect(
@@ -579,7 +582,7 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     await muteAgentChannel(repo, scope, "#general", true);
     expect(
       (await readAgentMessages(repo, scope, "#general", {})).messages.map((m) => m.body),
-    ).toContain(CHANNEL_MEMBER_CONTEXT + "New ordinary conversation after unmute.");
+    ).toContain("New ordinary conversation after unmute.");
     const beforeReply = published.length;
     await channels.setUserMuted(workspace.id, user.id, general.id, true);
     const reply = await executeAgentSendMessageWithPolicy(
@@ -800,7 +803,7 @@ test("a channel @mention persists as a token and wakes only the mentioned Agent,
       (await repo.readMessages(workspace.id, helper.id, "#general")).find(
         (message) => message.id === humanMention.id,
       )?.body,
-    ).toBe(CHANNEL_MEMBER_CONTEXT + "@helper please triage this.");
+    ).toBe("@helper please triage this.");
 
     const handoff = await agentSender.executeFromAgent({
       idempotencyKey: crypto.randomUUID(),
@@ -844,7 +847,7 @@ test("a channel @mention persists as a token and wakes only the mentioned Agent,
       (await repo.readMessages(workspace.id, scout.id, "#general")).find(
         (message) => message.id === handoff.id,
       )?.body,
-    ).toBe(CHANNEL_MEMBER_CONTEXT + "@scout please take the follow-up.");
+    ).toBe("@scout please take the follow-up.");
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.computer.deleteMany({ where: { ownerId: user.id } });

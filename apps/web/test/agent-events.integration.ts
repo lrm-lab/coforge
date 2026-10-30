@@ -7,11 +7,17 @@ import { PublicChannels } from "#src/server/conversations/public-channels.server
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 
 /** Check the new server context separately so the attention tests keep asserting exact content. */
-function messageContent(message: { target: string; body: string }): string {
-  if (!message.target.startsWith("#")) return message.body;
-  const context = "[CoForge current channel role: member; coordinator=none]\n";
-  expect(message.body).toStartWith(context);
-  return message.body.slice(context.length);
+function messageContent(message: {
+  target: string;
+  body: string;
+  channelCoordination?: string;
+}): string {
+  expect(message.channelCoordination).toBe(
+    message.target.startsWith("#")
+      ? "[CoForge current channel role: member; coordinator=none]"
+      : undefined,
+  );
+  return message.body;
 }
 
 test("events drain and recovery keep the unread rule across channels, direct messages, and their threads", async () => {

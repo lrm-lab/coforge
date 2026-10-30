@@ -18,7 +18,6 @@ import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
-import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
 import {
   NOTIFIED_AGENT_WHERE,
   pendingDeliveryWhere,
@@ -92,14 +91,6 @@ export async function readPendingAgentDeliveries(
       })
     ).map((member) => member.conversationId),
   );
-  const coordination = await readChannelCoordination(
-    ports.db,
-    workspaceId,
-    agentId,
-    deliveries
-      .filter((delivery) => delivery.conversation.channelName !== null)
-      .map((delivery) => delivery.conversationId),
-  );
   const targetOf = await directTargets(
     ports.db,
     workspaceId,
@@ -124,7 +115,7 @@ export async function readPendingAgentDeliveries(
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
-      ...agentDeliveryView(delivery.message, agentId, coordination.get(delivery.conversationId)),
+      ...agentDeliveryView(delivery.message, agentId),
       ...(delivery.message.memoryHint?.deliveredAt &&
       delivery.message.memoryHint.targetAgentId === agentId
         ? {
@@ -179,12 +170,6 @@ export async function readAgentRecoveryContext(
     agentId,
     rows,
   );
-  const coordination = await readChannelCoordination(
-    ports.db,
-    workspaceId,
-    agentId,
-    rows.filter((row) => row.channelName !== null).map((row) => row.conversationId),
-  );
   const directRefOf = await recoveryRefs(ports.db, workspaceId, agentId, rows);
   for (const row of rows) {
     if (!row.channelName && !row.otherUsername)
@@ -232,7 +217,6 @@ export async function readAgentRecoveryContext(
           attachments: forwardsByMessage.get(row.id)?.message.attachments,
         },
         agentId,
-        coordination.get(row.conversationId),
       ),
       ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
       ...(hintsByMessage.has(row.id)

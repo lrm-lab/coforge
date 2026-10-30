@@ -75,14 +75,16 @@ export function agentMessageView(
   message: StoredAgentMessage,
   readerAgentId?: string,
   channelCoordination?: string,
-): { body: AgentReadableBody; mentionsAgent?: true; forwarded?: ForwardedMessage } {
-  const { text, mentionsAgent, forwarded } = projectMessage(
-    message,
-    readerAgentId,
-    channelCoordination,
-  );
+): {
+  body: AgentReadableBody;
+  channelCoordination?: string;
+  mentionsAgent?: true;
+  forwarded?: ForwardedMessage;
+} {
+  const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId);
   return {
     body: text as AgentReadableBody,
+    ...(channelCoordination ? { channelCoordination } : {}),
     ...(mentionsAgent ? { mentionsAgent } : {}),
     ...(forwarded ? { forwarded } : {}),
   };
@@ -97,13 +99,8 @@ export function agentMessageView(
 export function agentDeliveryView(
   message: StoredAgentMessage,
   readerAgentId?: string,
-  channelCoordination?: string,
 ): { body: AgentReadableBody; mentionsAgent?: true } {
-  const { text, mentionsAgent, forwarded } = projectMessage(
-    message,
-    readerAgentId,
-    channelCoordination,
-  );
+  const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId);
   return {
     body: (forwarded ? withForwarded(text, forwarded) : text) as AgentReadableBody,
     ...(mentionsAgent ? { mentionsAgent } : {}),
@@ -113,12 +110,10 @@ export function agentDeliveryView(
 function projectMessage(
   message: StoredAgentMessage,
   readerAgentId?: string,
-  channelCoordination?: string,
 ): { text: string; mentionsAgent?: true; forwarded?: ForwardedMessage } {
   const readable = agentReadableBody(message.body, message.mentions);
-  const content = channelCoordination ? `${channelCoordination}\n${readable}` : readable;
   return {
-    text: message.actionCard ? `${content} [action card: ${message.actionCard.state}]` : content,
+    text: message.actionCard ? `${readable} [action card: ${message.actionCard.state}]` : readable,
     ...(readerAgentId && deliveryMentionsAgent(message.mentions, readerAgentId)
       ? { mentionsAgent: true as const }
       : {}),
