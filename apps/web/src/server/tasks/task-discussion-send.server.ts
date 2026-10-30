@@ -76,8 +76,18 @@ export async function postTaskMessage(
     },
   );
   await followTask(tx, scope, taskId, member.id, "replied");
-  for (const mention of stored.mentions)
-    await followTask(tx, scope, taskId, mention.key, "mentioned");
+  // A mention row belongs to a member of the message's own conversation, so each person or Agent
+  // named takes a seat in the task's conversation (as the sender did) and follows the task. The
+  // seat only keeps their read position; the board is what lets them read.
+  const mentionedMembers = await tx.conversationMember.findMany({
+    where: { id: { in: stored.mentions.map((mention) => mention.key) } },
+    select: { id: true, userId: true, agentId: true },
+  });
+  const seatOf = new Map<string, string>();
+  for (const named of mentionedMembers) {
+    seatOf.set(named.id, (await joinDiscussion(tx, workspaceId, conversationId, named)).id);
+    await followTask(tx, scope, taskId, named.id, "mentioned");
+  }
 
   const [followers, mentionedAgents] = await Promise.all([
     tx.taskFollow.findMany({
@@ -115,7 +125,7 @@ export async function postTaskMessage(
       mentions: stored.mentions.length
         ? {
             create: stored.mentions.map((mention) => ({
-              memberId: mention.key,
+              memberId: seatOf.get(mention.key)!,
               workspaceId,
               kind: mention.type,
               actorId: mention.id,

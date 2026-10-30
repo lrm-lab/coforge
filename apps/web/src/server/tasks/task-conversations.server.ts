@@ -12,7 +12,12 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
 import { postTaskMessage } from "./task-discussion-send.server";
-import { followTask, type TaskFollowReason } from "./task-discussion-store.server";
+import {
+  discussionOf,
+  followTask,
+  joinDiscussion,
+  type TaskFollowReason,
+} from "./task-discussion-store.server";
 import { resolveTaskScope } from "./task-scope.server";
 import { TASK_SCOPE_WHERE } from "./task-view.server";
 
@@ -163,6 +168,23 @@ export class TaskConversations {
         createdAt: message.createdAt.toISOString(),
       })),
     };
+  }
+
+  /**
+   * The task's conversation, made if nobody has spoken in it yet, and the caller's seat in it: what
+   * a composer needs before it can upload a file to a conversation that does not exist. Making it
+   * is not a message, and follows nothing.
+   */
+  async open(principal: TaskPrincipal, ref: TaskConversationRef) {
+    const { task, member, scope } = await this.resolve(principal, ref, { member: true });
+    const conversationId = await this.ports.db.$transaction(async (tx) => {
+      await lockConversation(tx, scope.conversationId);
+      const id = await discussionOf(tx, task, scope.workspaceId);
+      await lockConversation(tx, id);
+      await joinDiscussion(tx, scope.workspaceId, id, member!);
+      return id;
+    });
+    return { conversationId };
   }
 
   async follow(principal: TaskPrincipal, ref: TaskConversationRef) {
