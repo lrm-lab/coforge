@@ -201,7 +201,8 @@ export function markThreadDoneSql(
 /**
  * Reads every conversation one person belongs to through its newest top-level message posted at
  * or before `before`, consuming mark-as-unread markers at or below that point. Touches only the
- * rows that move, and returns each one's conversation and whether it is a channel.
+ * rows that move, and returns each one's conversation, whether it is a channel and whether it is a task's own
+ * conversation (hidden: no badge to move).
  */
 export function markConversationsReadSql(workspaceId: string, userId: string, before: Date) {
   return Prisma.sql`
@@ -223,7 +224,8 @@ export function markConversationsReadSql(workspaceId: string, userId: string, be
       AND cm."leftAt" IS NULL
       AND (cm."readThroughSequence" < latest."sequence"
         OR cm."unreadFromSequence" <= latest."sequence")
-    RETURNING cm."conversationId" AS "conversationId", c."channelName" IS NOT NULL AS "channel"`;
+    RETURNING cm."conversationId" AS "conversationId", c."channelName" IS NOT NULL AS "channel",
+      c."kind" = 'task_thread' AS "task"`;
 }
 
 /**

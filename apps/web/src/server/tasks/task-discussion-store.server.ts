@@ -71,11 +71,14 @@ export function joinDiscussion(
   workspaceId: string,
   conversationId: string,
   member: { userId: string | null; agentId: string | null },
+  /** Where a new seat starts reading: a person who follows a conversation already under way has
+   * not missed what was said before. */
+  readThroughSequence = 0,
 ) {
   return member.userId
     ? tx.conversationMember.upsert({
         where: { conversationId_userId: { conversationId, userId: member.userId } },
-        create: { workspaceId, conversationId, userId: member.userId },
+        create: { workspaceId, conversationId, userId: member.userId, readThroughSequence },
         update: { leftAt: null },
       })
     : tx.conversationMember.upsert({

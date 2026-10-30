@@ -25,6 +25,7 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
+import { taskCandidatesSql, taskHasUnreadSql } from "./activity-inbox-task-items.server";
 import {
   conversationCandidatesSql,
   navHasUnreadSql,
@@ -75,14 +76,19 @@ type ActivityCandidate = {
   pastDone: boolean;
   /** A conversation's own item the viewer pinned: its place among their pins. Null otherwise. */
   pin: { order: number; at: Date } | null;
+  /** A task conversation's item: its channel board, which is where the item lives, and the task. */
+  task?: { boardId: string; number: number; title: string };
 };
 
 type PinnedCandidate = ActivityCandidate & { pin: NonNullable<ActivityCandidate["pin"]> };
 
 /** A candidate as the grouped statements return it, with the pin as its two columns. */
-type ActivityCandidateRow = Omit<ActivityCandidate, "pin"> & {
+type ActivityCandidateRow = Omit<ActivityCandidate, "pin" | "task"> & {
   pinOrder: number | null;
   pinnedAt: Date | null;
+  taskBoardId?: string;
+  taskNumber?: number;
+  taskTitle?: string;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -179,7 +185,7 @@ export class ActivityInbox {
   async navAttention(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
     const [{ hasUnread }] = await this.db.$queryRaw<[{ hasUnread: boolean }]>(
-      navHasUnreadSql(workspaceId, userId),
+      navHasUnreadSql(workspaceId, userId, taskHasUnreadSql(workspaceId, userId)),
     );
     return { hasUnread };
   }
@@ -213,15 +219,16 @@ export class ActivityInbox {
    * `messages(conversationId, threadRootId, sequence)` rather than a Workspace-wide scan.
    */
   private async candidates(workspaceId: string, userId: string): Promise<ActivityCandidate[]> {
-    // Three independent reads: a list is built from top-level items, thread items and mention
-    // items, and none of them depends on the others. Starting them together means the page waits
+    // Four independent reads: a list is built from top-level items, thread items, task items and
+    // mention items, and none of them depends on the others. Starting them together means the page waits
     // for the slowest instead of for two waves.
-    const [conversations, threads, mentions] = await Promise.all([
+    const [conversations, threads, tasks, mentions] = await Promise.all([
       this.db.$queryRaw<ActivityCandidateRow[]>(conversationCandidatesSql(workspaceId, userId)),
       this.db.$queryRaw<ActivityCandidateRow[]>(threadCandidatesSql(workspaceId, userId)),
+      this.db.$queryRaw<ActivityCandidateRow[]>(taskCandidatesSql(workspaceId, userId)),
       this.mentionCandidates(workspaceId, userId),
     ]);
-    return [...conversations, ...threads].map(activityCandidate).concat(mentions);
+    return [...conversations, ...threads, ...tasks].map(activityCandidate).concat(mentions);
   }
 
   /**
@@ -287,7 +294,8 @@ export class ActivityInbox {
     const channelIds = new Set<string>();
     for (const candidate of page) {
       messageIds.add(candidate.latestMessageId);
-      if (candidate.kind === "channel") channelIds.add(candidate.conversationId);
+      if (candidate.kind === "channel")
+        channelIds.add(candidate.task?.boardId ?? candidate.conversationId);
       if (candidate.rootMessageId) {
         messageIds.add(candidate.rootMessageId);
         rootIds.push(candidate.rootMessageId);
@@ -372,9 +380,11 @@ export class ActivityInbox {
         candidate.kind === "channel"
           ? {
               kind: "channel" as const,
-              conversationId: candidate.conversationId,
+              // A task conversation's place is its board; the item's own conversation is the task's.
+              conversationId: candidate.task?.boardId ?? candidate.conversationId,
               channelName: candidate.channelName ?? "",
-              members: channelMembers.get(candidate.conversationId) ?? [],
+              members:
+                channelMembers.get(candidate.task?.boardId ?? candidate.conversationId) ?? [],
             }
           : peer
             ? { kind: "direct" as const, conversationId: candidate.conversationId, peer }
@@ -389,6 +399,11 @@ export class ActivityInbox {
           // A channel thread is listed because the viewer follows it; a direct-message thread
           // has no follow switch.
           thread: root ? { root, task: taskByRoot.get(root.id) ?? null } : null,
+          // A task conversation: its number and title on the board, and the conversation Done and
+          // reads name (`conversationId`, in the `conversation` kind of item).
+          task: candidate.task
+            ? { ...candidate.task, conversationId: candidate.conversationId }
+            : null,
           latest,
           latestSequence: candidate.latestSequence,
           unreadCount: candidate.unreadCount,
@@ -408,11 +423,17 @@ export class ActivityInbox {
 function activityCandidate({
   pinOrder,
   pinnedAt,
+  taskBoardId,
+  taskNumber,
+  taskTitle,
   ...row
 }: ActivityCandidateRow): ActivityCandidate {
   return {
     ...row,
     pin: pinOrder !== null && pinnedAt !== null ? { order: pinOrder, at: pinnedAt } : null,
+    ...(taskBoardId && {
+      task: { boardId: taskBoardId, number: taskNumber!, title: taskTitle! },
+    }),
   };
 }
 
@@ -422,5 +443,7 @@ function activityItemKey(candidate: ActivityCandidate) {
     ? `mention:${candidate.mentionAction.resolutionId}`
     : candidate.rootMessageId
       ? `thread:${candidate.rootMessageId}`
-      : `conversation:${candidate.conversationId}`;
+      : candidate.task
+        ? `task:${candidate.conversationId}`
+        : `conversation:${candidate.conversationId}`;
 }

@@ -22,7 +22,7 @@ const unreadReplySql = humanUnreadReplySql(
 
 /** A top-level message unread for the viewer of a joined conversation (`cm`). The list counts these
  * and the nav dot probes for one, so the two share this definition. */
-const conversationUnreadMessageSql = Prisma.sql`m."conversationId" = cm."conversationId"
+export const conversationUnreadMessageSql = Prisma.sql`m."conversationId" = cm."conversationId"
     AND m."threadRootId" IS NULL
     AND ${HUMAN_UNREAD_MESSAGE_SQL}`;
 
@@ -36,14 +36,14 @@ const threadUnreadReplySql = Prisma.sql`m."conversationId" = threads."conversati
  * The per-candidate unread and mention laterals. Each names the aliases its `FROM` provides (`cm`
  * for conversations, `threads`/`tr` for threads).
  */
-const conversationUnreadLateral = Prisma.sql`CROSS JOIN LATERAL (
+export const conversationUnreadLateral = Prisma.sql`CROSS JOIN LATERAL (
   SELECT COUNT(*)::int AS "count",
     (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
   FROM "messages" m
   WHERE ${conversationUnreadMessageSql}
 ) unread`;
 
-const conversationMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
+export const conversationMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
   SELECT COALESCE(BOOL_OR(${HUMAN_UNREAD_MESSAGE_SQL}), FALSE) AS "unread",
     (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
   FROM "message_mentions" mm
@@ -110,7 +110,7 @@ function conversationItemVisibleSql(userId: string) {
 }
 
 /** A joined conversation's newest top-level message is past the viewer's Done boundary. */
-const conversationPastDoneSql = Prisma.sql`(latest."sequence" > COALESCE(cm."doneThroughSequence", 0))`;
+export const conversationPastDoneSql = Prisma.sql`(latest."sequence" > COALESCE(cm."doneThroughSequence", 0))`;
 
 /** A joined conversation is listed when the inbox can list it and it has activity past Done. */
 function conversationItemListedSql(userId: string) {
@@ -157,13 +157,14 @@ function threadItemListedSql(userId: string) {
 
 /**
  * The nav rail's Activity statement: whether the viewer has any unread activity, over the same three
- * terms the inbox lists — joined conversations, followed threads and notified mentions — each from
+ * terms the inbox lists — joined conversations, followed threads, notified mentions and (`taskTerm`,
+ * from `activity-inbox-task-items.server.ts`) task conversations — each from
  * the item's own read boundary up. The dot needs no count, so each term is an `EXISTS` that stops at
  * the first unread row. Conversations and threads probe through a lateral keyed on their row, ordered
  * by `sequence` so the read cursor's index range is the plan: a plain join, or a bare `LIMIT 1`,
  * let the planner expect an early stop and scan all of `messages` when nothing is unread.
  */
-export function navHasUnreadSql(workspaceId: string, userId: string) {
+export function navHasUnreadSql(workspaceId: string, userId: string, taskTerm: Prisma.Sql) {
   return Prisma.sql`
     SELECT (EXISTS (
       -- A notified mention is unread until the viewer reads it; the cheapest term goes first.
@@ -180,6 +181,8 @@ export function navHasUnreadSql(workspaceId: string, userId: string) {
         ORDER BY m."sequence" LIMIT 1
       ) message
       WHERE ${conversationItemListedSql(userId)}
+    ) OR EXISTS (
+      ${taskTerm}
     ) OR EXISTS (
       SELECT 1 FROM ${threadItemsSql(workspaceId, userId)}
       CROSS JOIN LATERAL (

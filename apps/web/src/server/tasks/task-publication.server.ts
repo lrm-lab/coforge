@@ -21,6 +21,7 @@ import {
   deliveryTarget,
   TARGET_CONVERSATION_SELECT,
 } from "#src/server/db/repositories/direct-conversation-agent-message.server";
+import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { taskView, type SelectedTask } from "./task-view.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 
@@ -106,6 +107,7 @@ export async function publishTaskConversationMessage(
       workspaceId: message.workspaceId,
     })
     .catch(() => undefined);
+  await announceToPeople(ports, message).catch(() => undefined);
   if (!ports.dependencies.publisher) return;
   const sender = agentMessageSender(message.sender);
   await Promise.allSettled(
@@ -121,6 +123,49 @@ export async function publishTaskConversationMessage(
         sender,
       );
     }),
+  );
+}
+
+/**
+ * Tells the people who follow the task, or are named in the message, that their Activity changed:
+ * the conversation is hidden, so no sidebar hears of it, and the Activity inbox lists it by the
+ * same follow or mention. The author is not told of their own message.
+ */
+async function announceToPeople(
+  ports: TaskBoardPorts,
+  message: {
+    workspaceId: string;
+    conversationId: string;
+    senderMemberId: string | null;
+    mentions: readonly MessageMentionRef[];
+  },
+) {
+  const activityChanged = ports.dependencies.realtime?.activityChanged;
+  if (!activityChanged) return;
+  const [followers, author] = await Promise.all([
+    ports.db.taskFollow.findMany({
+      where: {
+        task: { discussionConversationId: message.conversationId },
+        member: { userId: { not: null }, ...ACTIVE_MEMBER_WHERE },
+      },
+      select: { member: { select: { userId: true } } },
+    }),
+    message.senderMemberId
+      ? ports.db.conversationMember.findUnique({
+          where: { id: message.senderMemberId },
+          select: { userId: true },
+        })
+      : null,
+  ]);
+  const people = new Set([
+    ...followers.map((follower) => follower.member.userId!),
+    ...message.mentions.flatMap((mention) => (mention.kind === "user" ? [mention.actorId] : [])),
+  ]);
+  if (author?.userId) people.delete(author.userId);
+  await Promise.allSettled(
+    [...people].map((userId) =>
+      ports.dependencies.realtime!.activityChanged!({ workspaceId: message.workspaceId, userId }),
+    ),
   );
 }
 

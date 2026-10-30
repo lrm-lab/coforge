@@ -90,6 +90,14 @@ export async function postTaskMessage(
     if (!named.agent?.deletedAt) await followTask(tx, scope, taskId, named.id, "mentioned");
   }
 
+  // The people who follow the task hear of it in their Activity, which lists their seat.
+  const people = await tx.taskFollow.findMany({
+    where: { taskId, member: { userId: { not: null }, ...ACTIVE_MEMBER_WHERE } },
+    select: { member: { select: { userId: true, agentId: true } } },
+  });
+  for (const follower of people)
+    await joinDiscussion(tx, workspaceId, conversationId, follower.member);
+
   const [followers, mentionedAgents] = await Promise.all([
     tx.taskFollow.findMany({
       where: {

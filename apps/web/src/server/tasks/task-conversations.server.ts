@@ -209,6 +209,22 @@ export class TaskConversations {
   async follow(principal: TaskPrincipal, ref: TaskConversationRef) {
     const { task, member, scope, boardName } = await this.resolve(principal, ref, { member: true });
     const created = await followTask(this.ports.db, scope, task.id, member!.id, "manual");
+    // A person's seat is what their Activity lists: a conversation already under way is read
+    // from here on, not from its first message.
+    if (member!.userId && task.discussionConversationId) {
+      const latest = await this.ports.db.message.findFirst({
+        where: { conversationId: task.discussionConversationId },
+        orderBy: { sequence: "desc" },
+        select: { sequence: true },
+      });
+      await joinDiscussion(
+        this.ports.db,
+        scope.workspaceId,
+        task.discussionConversationId,
+        member!,
+        latest?.sequence ?? 0,
+      );
+    }
     return { taskRef: `${boardName}:#${task.number}`, following: true, changed: created };
   }
 

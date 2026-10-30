@@ -54,7 +54,7 @@ export async function markActivityDone(
       id: true,
       readThroughSequence: true,
       unreadFromSequence: true,
-      conversation: { select: { channelName: true } },
+      conversation: { select: { channelName: true, kind: true } },
     },
   });
   if (!member) throw new AppError("ACCESS_DENIED");
@@ -84,7 +84,8 @@ export async function markActivityDone(
   const readMoved =
     member.readThroughSequence < boundary ||
     (member.unreadFromSequence !== null && member.unreadFromSequence <= boundary);
-  if (!rootMessageId && readMoved)
+  // A task's own conversation is hidden: it has no badge to move.
+  if (!rootMessageId && readMoved && member.conversation.kind !== "task_thread")
     await announceMarked(db, realtime, workspaceId, userId, [
       { conversationId: item.conversationId, channel: member.conversation.channelName !== null },
     ]);
@@ -136,7 +137,7 @@ export async function markActivityAllRead(
   await requireWorkspaceMember(db, workspaceId, userId);
   const { before } = options;
   const [moved] = await db.$transaction([
-    db.$queryRaw<{ conversationId: string; channel: boolean }[]>(
+    db.$queryRaw<{ conversationId: string; channel: boolean; task: boolean }[]>(
       markConversationsReadSql(workspaceId, userId, before),
     ),
     db.pendingMentionAction.updateMany({
@@ -153,7 +154,13 @@ export async function markActivityAllRead(
     ),
     db.$executeRaw(markThreadsReadSql(workspaceId, directThreadsSql(workspaceId, userId), before)),
   ]);
-  await announceMarked(db, realtime, workspaceId, userId, moved);
+  await announceMarked(
+    db,
+    realtime,
+    workspaceId,
+    userId,
+    moved.filter((row) => !row.task),
+  );
   await announceActivityChanged(realtime, workspaceId, userId);
 }
 
