@@ -19,6 +19,10 @@ These rules apply to `src/features/realtime/`.
   client, so several features may share a channel (for example
   `chat:user:<user_id>`). Never call `newSubscription` directly; Centrifuge
   rejects a second subscription to the same channel.
+- No handler may throw into the Centrifuge client: it handles every frame on one promise chain,
+  and a throw leaves that chain unsettled until the page reloads (task #326). The shared pool runs
+  each handler through `dispatch`; a decoder for a shared channel such as `chat:user:` returns
+  undefined for what is not its own, binary publications included.
 - Presence and join/leave for "who is online" exist only in the `presence`
   Centrifugo namespace; do not enable them on another namespace for that. The
   `daemon` namespace keeps presence (no join/leave) only so the server can

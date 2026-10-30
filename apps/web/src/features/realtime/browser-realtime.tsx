@@ -196,6 +196,26 @@ const sharedSubscriptions = new WeakMap<
   Map<string, SharedSubscriptionEntry>
 >();
 
+/**
+ * Runs one of a channel's handlers without letting it throw into the Centrifuge client. The client
+ * handles every incoming frame on one promise chain, and a handler that throws leaves that chain
+ * unsettled for the client's lifetime: no publication, ping or connect reply is handled again, so
+ * the page looks connected while it hears nothing, then cannot reconnect, until it reloads (task
+ * #326). A failing handler is logged and skipped.
+ */
+function runHandler<T>(channel: string, handler: (value: T) => void, value: T) {
+  try {
+    handler(value);
+  } catch (error) {
+    console.error(`realtime handler failed on ${channel}`, error);
+  }
+}
+
+/** `runHandler` for each handler: one that fails leaves the others to run. */
+function dispatch<T>(channel: string, handlers: Iterable<(value: T) => void>, value: T) {
+  for (const handler of handlers) runHandler(channel, handler, value);
+}
+
 function acquireSharedSubscription(
   client: SharedRealtimeClient,
   channel: string,
@@ -241,20 +261,20 @@ function acquireSharedSubscription(
         recovered: context.recovered,
         position: () => created.position,
       };
-      for (const handler of subscribedHandlers) handler(recovery);
+      dispatch(channel, subscribedHandlers, recovery);
     });
     subscription.on("publication", (publication) => {
       const position = created.position;
       if (position && publication.offset !== undefined && publication.offset > position.offset)
         created.position = { epoch: position.epoch, offset: publication.offset };
-      for (const handler of publicationHandlers) handler(publication);
+      dispatch(channel, publicationHandlers, publication);
     });
     // Delivered only on a channel whose namespace pushes join/leave (`force_push_join_leave`).
     subscription.on("join", ({ info }) => {
-      for (const handler of joinHandlers) handler(info);
+      dispatch(channel, joinHandlers, info);
     });
     subscription.on("leave", ({ info }) => {
-      for (const handler of leaveHandlers) handler(info);
+      dispatch(channel, leaveHandlers, info);
     });
     // A rejected or dropped subscription (e.g. Centrifugo's 103: permission
     // denied when no valid subscription token is presented) otherwise fails
@@ -265,16 +285,18 @@ function acquireSharedSubscription(
         return;
       }
       console.warn(`realtime subscription error on ${channel}`, event.error);
-      for (const handler of errorHandlers)
-        handler({ channel, code: event.error.code, message: event.error.message });
+      dispatch(channel, errorHandlers, {
+        channel,
+        code: event.error.code,
+        message: event.error.message,
+      });
     });
     subscription.on("unsubscribed", (event) => {
       // Codes 0 and 2 are this client's own cleanup (unsubscribe called, client
       // closed); anything else is the server or a token failure dropping us.
       if (event.code === 0 || event.code === 2) return;
       console.warn(`realtime subscription unsubscribed from ${channel}`, event.code, event.reason);
-      for (const handler of errorHandlers)
-        handler({ channel, code: event.code, message: event.reason });
+      dispatch(channel, errorHandlers, { channel, code: event.code, message: event.reason });
     });
     byChannel.set(channel, created);
     entry = created;
@@ -444,7 +466,7 @@ export function useRealtimeSubscriptions({
         getToken: () => tokenGetters.current.get(channel)!(),
       });
       subscription.on("publication", (publication) =>
-        onPublicationRef.current(channel, publication),
+        runHandler(channel, (value) => onPublicationRef.current(channel, value), publication),
       );
       const errors = subscriptionErrorReporter();
       subscription.on("subscribed", errors.subscribed);

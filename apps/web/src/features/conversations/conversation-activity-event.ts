@@ -1,4 +1,4 @@
-import { publicationData } from "#src/features/realtime/publication-data";
+import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 
 /**
  * One message, to each person it concerns, on their own channel (`chat:user:<id>`): the data the
@@ -33,10 +33,12 @@ export type ConversationActivityEvent = {
   threadRootId?: string;
 };
 
+/** Undefined for anything else on the channel, binary publications included: `chat:user:` also
+ * carries an Agent's reply intent in a direct conversation and Pi chat frames. */
 export function decodeConversationActivityEvent(
   input: unknown,
 ): ConversationActivityEvent | undefined {
-  const value = publicationData(input);
+  const value = publicationDataOrUndefined(input);
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const type = Reflect.get(value, "type");
   const workspaceId = Reflect.get(value, "workspaceId");
