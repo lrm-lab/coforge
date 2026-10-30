@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { databasePoolConfig } from "#src/server/db/client.server";
+import { databasePoolConfig } from "#src/server/db/pool-config.server";
 
 /**
  * The Web database pool keeps an idle connection past `pg`'s 10 s default, so a request after a
@@ -42,6 +42,24 @@ test.skipIf(!connectionString)("the pool's sessions plan without JIT", async () 
     });
     expect(plan["QUERY PLAN"][0]).not.toHaveProperty("JIT");
     expect((await db.$queryRaw<[{ jit: string }]>`SHOW jit`)[0].jit).toBe("off");
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+/**
+ * PostgreSQL probes the pool's idle connections itself (task #348), so a connection a NAT dropped
+ * silently is found and its session ended within a minute rather than the operating system's two
+ * hours.
+ */
+test.skipIf(!connectionString)("the pool's sessions are probed while idle", async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg(databasePoolConfig(connectionString!)) });
+  try {
+    const [settings] = await db.$queryRaw<[Record<string, string>]>`
+      SELECT current_setting('tcp_keepalives_idle') AS idle,
+        current_setting('tcp_keepalives_interval') AS interval,
+        current_setting('tcp_keepalives_count') AS count`;
+    expect(settings).toEqual({ idle: "30", interval: "10", count: "3" });
   } finally {
     await db.$disconnect();
   }

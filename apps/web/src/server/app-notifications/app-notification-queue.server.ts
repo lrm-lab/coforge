@@ -1,11 +1,8 @@
 import { PgBoss } from "pg-boss";
 
 import { AppError } from "#src/lib/app-error";
-import {
-  configuredDatabaseUrl,
-  databasePoolConfig,
-  getDatabaseClient,
-} from "#src/server/db/client.server";
+import { configuredDatabaseUrl, getDatabaseClient } from "#src/server/db/client.server";
+import { databasePoolConfig } from "#src/server/db/pool-config.server";
 import { PrismaAppNotificationQueueSchema } from "#src/server/db/repositories/app-notification-queue-schema.repositories.server";
 import type { DatabaseScope } from "#src/server/db/transaction.server";
 import {

@@ -3,6 +3,10 @@
 These rules apply to `src/server/db/`.
 
 - `conversation-signal.repositories.server.ts` reads real DM participants for signal destinations; `reminder-anchor.repositories.server.ts` resolves reminder anchors through actual channel/DM authority.
+- The web pool is `StatementPool` (`statement-pool.server.ts`, task #348): a statement run
+  outside a transaction waits at most 10 s, and only a plain `SELECT` is run again on a fresh
+  connection. A read with side effects (a lock, `nextval`) belongs in a transaction; a statement
+  that legitimately runs longer does too, under the transaction's own `timeout`.
 - Use parameterized Prisma queries. Use `$queryRaw`/`$executeRaw` only for a
   reviewed PostgreSQL-specific requirement, and keep that SQL in a server-only
   repository or migration.
