@@ -24,7 +24,7 @@ const unused = async () => {
 function sectionsObserver(list: ChatSectionsApi["list"]) {
   const api: ChatSectionsApi = {
     list,
-    order: async () => [],
+    order: async () => ({ streamPositions: {}, order: [] }),
     create: unused,
     update: unused,
     remove: unused,
@@ -36,21 +36,21 @@ function sectionsObserver(list: ChatSectionsApi["list"]) {
 
 /**
  * When the sidebar says its sections did not load: only when it has none to show. A re-read that
- * fails keeps the sections already shown, and the next one brings them up to date.
+ * fails keeps the sections already shown, and the next change announced reads them again.
  */
 describe("chatSectionsStatus", () => {
   test("stays ready when a re-read fails after the sections loaded", async () => {
     let fail = false;
     const sections = sectionsObserver(async () => {
       if (fail) throw new Error("re-read failed");
-      return [section];
+      return { streamPositions: {}, sections: [section] };
     });
     await sections.refetch();
     fail = true;
     await sections.refetch();
 
     expect(sections.getCurrentResult().isError).toBe(true);
-    expect(sections.getCurrentResult().data).toEqual([section]);
+    expect(sections.getCurrentResult().data?.sections).toEqual([section]);
     expect(chatSectionsStatus(sections.getCurrentResult())).toBe("ready");
   });
 
@@ -64,7 +64,7 @@ describe("chatSectionsStatus", () => {
   });
 
   test("is loading before the first read settles", () => {
-    const sections = sectionsObserver(async () => [section]);
+    const sections = sectionsObserver(async () => ({ streamPositions: {}, sections: [section] }));
 
     expect(chatSectionsStatus(sections.getCurrentResult())).toBe("loading");
   });

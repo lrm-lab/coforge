@@ -18,7 +18,7 @@ const unused = async () => {
 function sidebarOrder(reads: Array<() => Promise<string[]>>) {
   const api: ChatSectionsApi = {
     list: unused,
-    order: () => reads.shift()!(),
+    order: () => reads.shift()!().then((order) => ({ streamPositions: {}, order })),
     create: unused,
     update: unused,
     remove: unused,

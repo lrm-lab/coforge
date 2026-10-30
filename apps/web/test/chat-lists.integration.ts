@@ -102,7 +102,7 @@ test("every list answers as its own read did, after one read of the positions it
       },
       directBadges: { value: { viewerId: user.id, unread: {}, streamPositions: own } },
       sections: { value: { streamPositions: own, sections: await sections.list() } },
-      sectionOrder: { value: { order: await sections.order() } },
+      sectionOrder: { value: { streamPositions: own, order: await sections.order() } },
     });
   }));
 
@@ -132,5 +132,5 @@ test("a list that fails answers with its own error, and the others still answer"
     const failure = broken.directPreferences;
     expect(failure && "error" in failure && failure.error.code).toBe("INTERNAL_ERROR");
     expect(failure && "error" in failure && typeof failure.error.errorId).toBe("string");
-    expect(broken.sectionOrder).toEqual({ value: { order: [] } });
+    expect(broken.sectionOrder).toEqual({ value: { streamPositions: {}, order: [] } });
   }));

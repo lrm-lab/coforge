@@ -8,12 +8,14 @@ import {
   moveConversationToSection,
   reorderChatSections,
 } from "./chat-sections.functions";
-import { readChatList } from "./chat-lists-reader";
+import { readChatList, type ChatListValue } from "./chat-lists-reader";
 
 export type ChatSectionsApi = {
-  list: () => Promise<ChatSection[]>;
-  /** The sidebar's saved section order (`ChatSections.order`). */
-  order: () => Promise<string[]>;
+  /** The sections, with the stream position of the viewer's own signal channel, which announces
+   * their changes (`pref.changed.v1`, `sections`). */
+  list: () => Promise<ChatListValue<"sections">>;
+  /** The sidebar's saved section order (`ChatSections.order`), with that position too. */
+  order: () => Promise<ChatListValue<"sectionOrder">>;
   create: (input: { name: string; emoji: string | null }) => Promise<ChatSection>;
   update: (
     id: string,
@@ -35,8 +37,8 @@ export type ChatSectionsApi = {
 };
 
 export const serverChatSectionsApi: ChatSectionsApi = {
-  list: () => readChatList("sections").then((read) => read.sections),
-  order: () => readChatList("sectionOrder").then((read) => read.order),
+  list: () => readChatList("sections"),
+  order: () => readChatList("sectionOrder"),
   create: (input) => createChatSection({ data: input }),
   update: (id, patch) => updateChatSection({ data: { id, patch } }),
   remove: (id) => deleteChatSection({ data: { id } }),
@@ -46,28 +48,28 @@ export const serverChatSectionsApi: ChatSectionsApi = {
 };
 
 /** Like other personal lists, the QueryClient belongs to one signed-in viewer and is cleared
- * on sign-out. Refetch on focus and every 30s in a visible tab keeps other devices current. */
+ * on sign-out. Kept live like the Chat lists: a change made on any page or device is announced on
+ * the viewer's own signal channel and read again (`sidebarListsChangedBy`), and one a subscribe
+ * may have missed is too (`listsMissedBySubscribe`); a returning tab does not read them. */
 export const chatSectionsQuery = (workspaceId: string, api = serverChatSectionsApi) => ({
   queryKey: ["conversation", "sidebar", workspaceId, "sections"] as const,
   queryFn: api.list,
-  refetchOnWindowFocus: "always" as const,
-  refetchInterval: 30_000,
+  refetchOnWindowFocus: false,
 });
 
 /** The sidebar's section order, saved per member; read with the sections. */
 export const chatSectionOrderQuery = (workspaceId: string, api = serverChatSectionsApi) => ({
   queryKey: ["conversation", "sidebar", workspaceId, "section-order"] as const,
   queryFn: api.order,
-  refetchOnWindowFocus: "always" as const,
-  refetchInterval: 30_000,
+  refetchOnWindowFocus: false,
   // `chatSectionOrderReady` reads the invalidation flag, which is not on the result: a read starts
   // whenever the query is invalidated, so a view of it renders again when one starts or ends.
   notifyOnChangeProps: ["data", "status", "fetchStatus"] satisfies NotifyOnChangeProps,
 });
 
 /** Whether the sidebar has its sections to show. A re-read that fails keeps the sections already
- * shown (`ready`): the next scheduled one brings them up to date, so it is not a failure to tell
- * anyone about. Only a first read that failed is (`failed`). */
+ * shown (`ready`), as a failed re-read of a Chat list keeps its rows: the next change announced
+ * reads them again, so it is not a failure to tell anyone about. Only a first read that failed is (`failed`). */
 export function chatSectionsStatus(sections: {
   data: unknown;
   isLoadingError: boolean;

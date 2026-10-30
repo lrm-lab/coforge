@@ -250,7 +250,8 @@ export function decodeChannelUpdatedEvent(value: unknown): ChannelUpdatedEvent {
  * - `channel.marked.v1`: the read cursor moved (read, marked unread, marked Done).
  * - `channel.joined.v1` / `channel.left.v1`: the viewer joined, was added, created, left or was removed.
  * - `channel.closed.v1` / `channel.opened.v1`: the viewer closed the chat in their list, or brought it back.
- * - `pref.changed.v1`: the viewer's `muted` state of a channel, or their `pins` (pin, unpin, order).
+ * - `pref.changed.v1`: the viewer's `muted` state of a channel, their `pins` (pin, unpin, order), or
+ *   their `sections` (one made, changed or removed, the sections' order, a chat moved into one).
  * - `dm.marked.v1`, `dm.opened.v1`, `dm.closed.v1`: the same for one of the viewer's DMs (Slack's
  *   `im_marked`, `im_open`, `im_close`); `dm.created.v1`: a DM with them was started (`im_created`).
  * - `saved.added.v1` / `saved.removed.v1`: the viewer saved or unsaved a message (Slack's
@@ -285,7 +286,7 @@ const viewerEvent = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("pref.changed.v1"),
     workspaceId: z.string().min(1),
-    name: z.enum(["muted", "pins"]),
+    name: z.enum(["muted", "pins", "sections"]),
   }),
 ]);
 

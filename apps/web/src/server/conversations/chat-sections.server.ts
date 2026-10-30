@@ -34,6 +34,15 @@ export class ChatSections {
     return { workspaceId: this.workspaceId, userId: this.userId };
   }
 
+  /** Tells the member's pages, this one's included, that their sections changed
+   * (`pref.changed.v1`, `sections`), once the change is saved: each reads them again. */
+  private announceChanged() {
+    return announceViewerEvent(this.realtime, {
+      userIds: [this.userId],
+      event: { type: "pref.changed.v1", workspaceId: this.workspaceId, name: "sections" },
+    });
+  }
+
   private async authorize() {
     const membership = await this.db.workspaceMembership.findUnique({
       where: { workspaceId_userId: this.scope },
@@ -83,6 +92,7 @@ export class ChatSections {
         select: { id: true, name: true, emoji: true, collapsed: true, sortOrder: true },
       });
     });
+    await this.announceChanged();
     return { ...section, sortMode: "manual" as const, conversationIds: [] as string[] };
   }
 
@@ -103,6 +113,7 @@ export class ChatSections {
       data: parsed.data,
     });
     if (changed.count === 0) throw new AppError("NOT_FOUND");
+    await this.announceChanged();
   }
 
   async remove(id: string) {
@@ -113,6 +124,7 @@ export class ChatSections {
       const removed = await tx.chatSection.deleteMany({ where: { ...this.scope, id } });
       if (removed.count === 0) throw new AppError("NOT_FOUND");
     });
+    await this.announceChanged();
   }
 
   /** The sidebar's saved section order (built-in keys and custom ids); empty when never dragged. */
@@ -158,6 +170,7 @@ export class ChatSections {
           update: { chatSectionOrder: [...order] },
         });
     });
+    await this.announceChanged();
   }
 
   async move(
@@ -222,6 +235,7 @@ export class ChatSections {
       }
       return setConversationPin(tx, { ...this.scope, conversationId, memberId: member.id }, false);
     });
+    await this.announceChanged();
     if (unpinned)
       await announceViewerEvent(this.realtime, {
         userIds: [this.userId],

@@ -98,6 +98,7 @@ export function createSidebar(
       queryFn: api.sections.list,
       queryClient,
       getKey: (section: ChatSection) => section.id,
+      select: (read) => read.sections,
     }),
   );
 
@@ -327,17 +328,24 @@ export function createSidebar(
   const listOf = (target: PinRef) => [target.kind === "channel" ? channelsKey : directsKey];
   /** The order of the latest section drag, which the order query shows until the server's. */
   let newestOrder: readonly string[] | undefined;
+  type OrderRead = Awaited<ReturnType<ChatSectionsApi["order"]>>;
+  const orderKey = chatSectionOrderQuery(workspaceId).queryKey;
+  /** Shows `order` in the order query; only a server read changes the positions it was read at. */
+  const showOrder = (order: readonly string[]) =>
+    queryClient.setQueryData<OrderRead>(orderKey, (read) => ({
+      streamPositions: read?.streamPositions ?? {},
+      order: [...order],
+    }));
   const actions = {
     /** `order` is the whole sidebar (built-in keys and custom ids): the custom sections move in
      * the synced list, the built-in ones in the order query, which a failed save puts back. */
     reorderSections: async (order: readonly string[]) => {
-      const orderKey = chatSectionOrderQuery(workspaceId).queryKey;
       // A read already in flight would land after this and put the old order back. Cancelled
       // without `revert`, which would restore the pre-read state over the order set below.
       void queryClient.cancelQueries({ queryKey: orderKey, exact: true }, { revert: false });
       // Never read (or the read failed): the sidebar showed the default order, which `[]` is.
-      const before = queryClient.getQueryData<string[]>(orderKey) ?? [];
-      queryClient.setQueryData(orderKey, [...order]);
+      const before = queryClient.getQueryData<OrderRead>(orderKey)?.order ?? [];
+      showOrder(order);
       newestOrder = order;
       try {
         await saved(reorderSections(order), () => sectionSaves.reorder(order), [
@@ -345,9 +353,9 @@ export function createSidebar(
         ]);
         // A read that started during the save may have brought the old order back meanwhile. A
         // newer drag's order stands over this one's, whichever settles first.
-        if (newestOrder === order) queryClient.setQueryData(orderKey, [...order]);
+        if (newestOrder === order) showOrder(order);
       } catch (cause) {
-        if (newestOrder === order) queryClient.setQueryData(orderKey, before);
+        if (newestOrder === order) showOrder(before);
         throw cause;
       } finally {
         // Either way the server now holds the truth; read it rather than trust this tab's copy.

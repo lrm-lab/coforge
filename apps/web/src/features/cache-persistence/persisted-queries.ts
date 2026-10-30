@@ -25,7 +25,7 @@ import { CONVERSATION_WINDOW_PAGE_SIZE } from "#src/lib/conversation-window";
  * the network. `test/query-cache-stored-shape.test.ts` fails on a change to a kept kind's shape
  * until this is bumped and the new shape pinned there.
  */
-export const STORED_SHAPE_VERSION = 10;
+export const STORED_SHAPE_VERSION = 11;
 export const storedShapeBuster = String(STORED_SHAPE_VERSION);
 
 export const STORED_KINDS = [
@@ -246,8 +246,9 @@ export function isStoredData(queryKey: QueryKey, data: unknown): boolean {
     case "agent-workspace-scan":
       return isAgentWorkspaceScan(data);
     case "chat-sections":
+      return hasList(data, "sections");
     case "chat-section-order":
-      return Array.isArray(data);
+      return hasList(data, "order");
     case undefined:
       return false;
   }

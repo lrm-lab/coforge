@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 
+import type { ChatSection } from "#src/features/conversations/chat-section.schemas";
 import {
   createSidebar,
   sidebarChannelsQuery,
@@ -26,19 +27,24 @@ const channel = (id: string, fields: Partial<Channel> = {}): Channel => ({
   ...fields,
 });
 
+/** The section reads as the server answers them, at no stream position. */
+export const sectionsRead = (sections: ChatSection[]) => ({ streamPositions: {}, sections });
+export const orderRead = (order: string[]) => ({ streamPositions: {}, order });
+
 export const sectionApi = {
-  list: async () => [
-    {
-      id: "section-a",
-      name: "Project",
-      emoji: null,
-      collapsed: false,
-      sortOrder: 0,
-      sortMode: "manual" as const,
-      conversationIds: [] as string[],
-    },
-  ],
-  order: async () => [],
+  list: async () =>
+    sectionsRead([
+      {
+        id: "section-a",
+        name: "Project",
+        emoji: null,
+        collapsed: false,
+        sortOrder: 0,
+        sortMode: "manual" as const,
+        conversationIds: [] as string[],
+      },
+    ]),
+  order: async () => orderRead([]),
   create: async () => ({
     id: "section-new",
     name: "New",

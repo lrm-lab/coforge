@@ -51,7 +51,10 @@ function listReaders({ db, workspaceId, user }: WorkspaceUserContext, positions:
       streamPositions: positions.of(["user"]),
       sections: await sections().list(),
     }),
-    sectionOrder: async () => ({ order: await sections().order() }),
+    sectionOrder: async () => ({
+      streamPositions: positions.of(["user"]),
+      order: await sections().order(),
+    }),
   };
 }
 

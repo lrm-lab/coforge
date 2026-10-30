@@ -103,6 +103,15 @@ describe("the viewer's own channel events", () => {
     expect(
       sidebarListsChangedBy({ type: "pref.changed.v1", workspaceId: "workspace-a", name: "pins" }),
     ).toEqual(["channels", "dms"]);
+    // A section made, changed, removed or reordered, or a chat moved into one, on any page or
+    // device: the sections and their order, which is how another device's sidebar follows.
+    expect(
+      sidebarListsChangedBy({
+        type: "pref.changed.v1",
+        workspaceId: "workspace-a",
+        name: "sections",
+      }),
+    ).toEqual(["sections", "sectionOrder"]);
   });
 });
 
@@ -213,12 +222,14 @@ describe("listsMissedBySubscribe", () => {
     ]) {
       expect(listsMissedBySubscribe("workspace", recovery)).toEqual(["channels", "channelNames"]);
       // The viewer's own channel carries message activity, their ViewerEvents and their private
-      // channels' events (channels, channel names, DMs, saves).
+      // channels' events (channels, channel names, DMs, saves, sections and their order).
       expect(listsMissedBySubscribe("user", recovery)).toEqual([
         "channels",
         "channelNames",
         "dms",
         "saved",
+        "sections",
+        "sectionOrder",
       ]);
     }
   });

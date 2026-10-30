@@ -213,8 +213,8 @@ export function useChatSections() {
         .orderBy(({ section }) => section.id, "asc"),
   });
   return {
-    sections: live.isReady ? live.data : (query.data ?? []),
-    order: order.data ?? EMPTY_ORDER,
+    sections: live.isReady ? live.data : (query.data?.sections ?? []),
+    order: order.data?.order ?? EMPTY_ORDER,
     /** Sections may be dragged only once their saved order is read: a drag from the default
      * order, or from a restored copy, would overwrite it. */
     orderReady: chatSectionOrderReady({

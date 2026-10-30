@@ -22,7 +22,12 @@ import type { PinRef } from "./pinned-conversations";
 import { directRowsOf } from "./sidebar-rows";
 import type { ChatList } from "./conversation-unread";
 import { queryStreamPosition } from "#src/features/realtime/query-stream-position";
-import { serverChatSectionsApi, type ChatSectionsApi } from "./chat-sections";
+import {
+  chatSectionOrderQuery,
+  chatSectionsQuery,
+  serverChatSectionsApi,
+  type ChatSectionsApi,
+} from "./chat-sections";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import { olderStreamPositions, type StreamPosition } from "#src/features/realtime/subscription-gap";
 import { readChatList, type ChatListValue } from "./chat-lists-reader";
@@ -211,6 +216,8 @@ export const chatListQueryKey: Record<ChatList, (workspaceId: string) => readonl
   dms: sidebarDirectsQueryKey,
   channelNames: channelNamesQueryKey,
   saved: savedMessagesQueryKey,
+  sections: (workspaceId) => chatSectionsQuery(workspaceId).queryKey,
+  sectionOrder: (workspaceId) => chatSectionOrderQuery(workspaceId).queryKey,
 };
 
 /**

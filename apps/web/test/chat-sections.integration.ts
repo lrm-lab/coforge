@@ -290,3 +290,25 @@ test("moving a closed pinned channel into a section keeps it visible and removes
     await db.$disconnect();
   }
 });
+
+test("every saved section change tells the member's pages, and only theirs, to read the sections again", () =>
+  withMember(async (_sections, db, { workspaceId, userId }) => {
+    const told: { userIds: readonly string[]; event: unknown }[] = [];
+    const sections = new ChatSections(db, workspaceId, userId, {
+      viewerChanged: async (input) => void told.push(input),
+    });
+    const channel = await db.conversation.create({
+      data: { workspaceId, channelName: "release", members: { create: { userId } } },
+    });
+    const section = await sections.create({ name: "Focus", emoji: null });
+    await sections.update(section.id, { collapsed: true });
+    await sections.reorder(["channels", section.id]);
+    await sections.move(channel.id, section.id);
+    await sections.remove(section.id);
+
+    const changed = { type: "pref.changed.v1", workspaceId, name: "sections" };
+    expect(told).toEqual(Array.from({ length: 5 }, () => ({ userIds: [userId], event: changed })));
+    // A refused change is not announced.
+    await expect(sections.update(section.id, { collapsed: false })).rejects.toThrow("NOT_FOUND");
+    expect(told).toHaveLength(5);
+  }));

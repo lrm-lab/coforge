@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { chatSectionOrderQuery } from "#src/features/conversations/chat-sections";
 import { AppError } from "#src/lib/app-error";
-import { sectionApi, sidebarWith } from "./helpers/sidebar-fake";
+import { orderRead, sectionApi, sectionsRead, sidebarWith } from "./helpers/sidebar-fake";
 
 /** The sidebar's sections and the changes made to them, against fake server calls: each change
  * shows at once, is saved, and stays as shown, is retried, or goes back. */
@@ -32,26 +32,27 @@ test("a section reorder and an insertion before another conversation show immedi
   const { sidebar } = await sidebarWith({
     sections: {
       ...sectionApi,
-      list: async () => [
-        {
-          id: "section-a",
-          name: "First",
-          emoji: null,
-          collapsed: false,
-          sortOrder: 0,
-          sortMode: "manual" as const,
-          conversationIds: ["general"],
-        },
-        {
-          id: "section-b",
-          name: "Second",
-          emoji: null,
-          collapsed: false,
-          sortOrder: 1,
-          sortMode: "manual" as const,
-          conversationIds: [],
-        },
-      ],
+      list: async () =>
+        sectionsRead([
+          {
+            id: "section-a",
+            name: "First",
+            emoji: null,
+            collapsed: false,
+            sortOrder: 0,
+            sortMode: "manual" as const,
+            conversationIds: ["general"],
+          },
+          {
+            id: "section-b",
+            name: "Second",
+            emoji: null,
+            collapsed: false,
+            sortOrder: 1,
+            sortMode: "manual" as const,
+            conversationIds: [],
+          },
+        ]),
     },
   });
   await sidebar.sections.preload();
@@ -84,9 +85,9 @@ test("a failed section drag puts the default order back when the saved order was
   });
   await sidebar.sections.preload();
   const orderKey = chatSectionOrderQuery("w").queryKey;
-  expect(queryClient.getQueryData<string[]>(orderKey)).toBeUndefined();
+  expect(queryClient.getQueryData<{ order: string[] }>(orderKey)?.order).toBeUndefined();
   const ordering = sidebar.actions.reorderSections(["agents", "channels", "pinned", "section-a"]);
-  expect(queryClient.getQueryData<string[]>(orderKey)).toEqual([
+  expect(queryClient.getQueryData<{ order: string[] }>(orderKey)?.order).toEqual([
     "agents",
     "channels",
     "pinned",
@@ -94,7 +95,7 @@ test("a failed section drag puts the default order back when the saved order was
   ]);
   await expect(ordering).rejects.toThrow("offline");
   // `[]` is the default order the sidebar showed before the drag.
-  expect(queryClient.getQueryData<string[]>(orderKey)).toEqual([]);
+  expect(queryClient.getQueryData<{ order: string[] }>(orderKey)?.order).toEqual([]);
 });
 
 test("an order read in flight when a section is dropped does not put the old order back", async () => {
@@ -104,14 +105,24 @@ test("an order read in flight when a section is dropped does not put the old ord
   const orderKey = chatSectionOrderQuery("w").queryKey;
   // The old order, still on its way from the server when the drop happens.
   const reading = queryClient
-    .fetchQuery(chatSectionOrderQuery("w", { ...sectionApi, order: () => read.promise }))
+    .fetchQuery(
+      chatSectionOrderQuery("w", { ...sectionApi, order: () => read.promise.then(orderRead) }),
+    )
     .catch(() => undefined);
   const ordering = sidebar.actions.reorderSections(["channels", "pinned", "section-a"]);
   read.resolve(["pinned", "section-a", "channels"]);
   await reading;
-  expect(queryClient.getQueryData<string[]>(orderKey)).toEqual(["channels", "pinned", "section-a"]);
+  expect(queryClient.getQueryData<{ order: string[] }>(orderKey)?.order).toEqual([
+    "channels",
+    "pinned",
+    "section-a",
+  ]);
   await ordering;
-  expect(queryClient.getQueryData<string[]>(orderKey)).toEqual(["channels", "pinned", "section-a"]);
+  expect(queryClient.getQueryData<{ order: string[] }>(orderKey)?.order).toEqual([
+    "channels",
+    "pinned",
+    "section-a",
+  ]);
 });
 
 test("an order read that answers during the save does not outlive it", async () => {
@@ -124,11 +135,18 @@ test("an order read that answers during the save does not outlive it", async () 
   const ordering = sidebar.actions.reorderSections(["channels", "pinned", "section-a"]);
   // A refetch sent after the drop reaches the server before the save does.
   await queryClient.fetchQuery(
-    chatSectionOrderQuery("w", { ...sectionApi, order: async () => ["pinned", "channels"] }),
+    chatSectionOrderQuery("w", {
+      ...sectionApi,
+      order: async () => orderRead(["pinned", "channels"]),
+    }),
   );
   save.resolve();
   await ordering;
-  expect(queryClient.getQueryData<string[]>(orderKey)).toEqual(["channels", "pinned", "section-a"]);
+  expect(queryClient.getQueryData<{ order: string[] }>(orderKey)?.order).toEqual([
+    "channels",
+    "pinned",
+    "section-a",
+  ]);
 });
 
 describe("a section change whose save fails", () => {
@@ -199,10 +217,13 @@ describe("a section change whose save fails", () => {
       {
         sections: {
           ...sectionApi,
-          list: async () => [
-            { ...(await sectionApi.list())[0]!, id: "section-a" },
-            { ...(await sectionApi.list())[0]!, id: "section-b", sortOrder: 1 },
-          ],
+          list: async () => {
+            const [section] = (await sectionApi.list()).sections;
+            return sectionsRead([
+              { ...section!, id: "section-a" },
+              { ...section!, id: "section-b", sortOrder: 1 },
+            ]);
+          },
           move: async (_conversationId, sectionId) => {
             moves.push(sectionId);
             if (sectionId === "section-a") throw new Error("offline");

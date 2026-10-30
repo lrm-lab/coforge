@@ -201,18 +201,21 @@ export function applyMarked(
 }
 
 /** A list the Chat page keeps: the sidebar's channel rows or DM rows, every channel's name
- * (what a body's channel links and the composer's `#` list read), or the viewer's Saved list. */
-export type ChatList = "channels" | "dms" | "channelNames" | "saved";
+ * (what a body's channel links and the composer's `#` list read), the viewer's Saved list, or
+ * their sidebar sections and the sections' order. */
+export type ChatList = "channels" | "dms" | "channelNames" | "saved" | "sections" | "sectionOrder";
 
 /**
  * Which of the Chat page's lists a viewer event makes stale, for the page to re-read those alone. A
  * read carries its own count (`applyMarked`) and needs none; pins are one order across
- * channels and DMs, and a mute may be on either, so both touch both lists; a save or unsave touches only the Saved list.
+ * channels and DMs, and a mute may be on either, so both touch both lists; a save or unsave touches
+ * only the Saved list; a section change, the sections and their order.
  */
 export function sidebarListsChangedBy(event: ViewerEvent): readonly ChatList[] {
   if ("unreadCount" in event) return [];
   if (event.type.startsWith("saved.")) return ["saved"];
-  if (event.type === "pref.changed.v1") return ["channels", "dms"];
+  if (event.type === "pref.changed.v1")
+    return event.name === "sections" ? ["sections", "sectionOrder"] : ["channels", "dms"];
   return event.type.startsWith("dm.") ? ["dms"] : ["channels"];
 }
 
@@ -255,7 +258,7 @@ export function listsMissedBySubscribe(
   if (subscriptionGap(recovery) === "none") return [];
   return channel === "workspace"
     ? ["channels", "channelNames"]
-    : ["channels", "channelNames", "dms", "saved"];
+    : ["channels", "channelNames", "dms", "saved", "sections", "sectionOrder"];
 }
 
 /**

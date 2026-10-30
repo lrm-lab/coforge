@@ -259,18 +259,24 @@ const fixtures = [
       },
     ],
   }),
-  fixture("chat sections", chatSectionsQuery("w1"), [
-    {
-      id: "section-1",
-      name: "Project",
-      emoji: null,
-      collapsed: false,
-      sortOrder: 0,
-      sortMode: "manual",
-      conversationIds: ["c1", "d1"],
-    },
-  ]),
-  fixture("chat section order", chatSectionOrderQuery("w1"), ["pinned", "section-1", "channels"]),
+  fixture("chat sections", chatSectionsQuery("w1"), {
+    streamPositions: { "chat:user:u1": { offset: 3, epoch: "e1" } },
+    sections: [
+      {
+        id: "section-1",
+        name: "Project",
+        emoji: null,
+        collapsed: false,
+        sortOrder: 0,
+        sortMode: "manual",
+        conversationIds: ["c1", "d1"],
+      },
+    ],
+  }),
+  fixture("chat section order", chatSectionOrderQuery("w1"), {
+    streamPositions: { "chat:user:u1": { offset: 3, epoch: "e1" } },
+    order: ["pinned", "section-1", "channels"],
+  }),
   fixture("agent workspace scan", agentWorkspaceScanQuery("w1", "computer-1"), {
     scannedAt: 1_790_000_000_000,
     workspaces: [
@@ -433,6 +439,20 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "agent workspace scan": "d45d053aa4368e73",
     "chat sections": "4c7716ab24622fdc",
     "chat section order": "89829726781b01aa",
+  },
+  // A member's sections and their order carry the stream position of their own signal channel,
+  // which announces their changes: the sections beside it as `sections`, the order as `order`.
+  11: {
+    "channel window": "bee52e3753bc63fa",
+    "direct window with an Agent": "cfb56f0008e53e3a",
+    "direct window with a person": "8ffc1a72c5a7dfd6",
+    "sidebar channels": "91afa2f21eb4ec87",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "331d221481674004",
+    "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
+    "chat sections": "b49b26a074dbffb9",
+    "chat section order": "fc37a20be1db425d",
   },
 };
 

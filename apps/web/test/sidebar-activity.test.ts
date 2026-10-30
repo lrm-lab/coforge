@@ -32,8 +32,8 @@ const channel = (id: string, fields: Record<string, unknown> = {}) => ({
 });
 
 const sectionApi = {
-  list: async () => [],
-  order: async () => [],
+  list: async () => ({ streamPositions: {}, sections: [] }),
+  order: async () => ({ streamPositions: {}, order: [] }),
   create: async () => ({
     id: "s",
     name: "S",
