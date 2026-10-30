@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
-import { acpToolOutput } from "#src/acp-tool-output";
+import { acpToolOutput, acpToolUpdateEnded } from "#src/acp-tool-output";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { DevinRuntimeHost } from "./host";
 
@@ -80,11 +80,11 @@ export class DevinTurnEvents {
           if (output.text) events.push({ type: "tool-output", id, text: output.text });
           this.#output.set(id, output.full);
         }
-        if (update.status === "completed" || update.status === "failed") {
+        if (acpToolUpdateEnded(update.status)) {
           this.#ended.add(id);
           this.#output.delete(id);
           this.#scanner.complete(id);
-          events.push({ type: "tool-end", id, isError: update.status === "failed" });
+          events.push({ type: "tool-end", id, isError: update.status !== "completed" });
         }
         return events.length ? events : [{ type: "progress", source: "devin_tool_call_update" }];
       }

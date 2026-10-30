@@ -1,3 +1,4 @@
+import { acpToolUpdateEnded } from "#src/acp-tool-output";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import type { SessionNotification, ToolKind } from "@agentclientprotocol/sdk";
 
@@ -45,11 +46,11 @@ export function kiroUpdateEvents(update: SessionNotification["update"]): AgentRu
         if (item.type === "content" && item.content.type === "text" && item.content.text)
           events.push({ type: "tool-output", id: update.toolCallId, text: item.content.text });
       }
-      if (update.status === "completed" || update.status === "failed")
+      if (acpToolUpdateEnded(update.status))
         events.push({
           type: "tool-end",
           id: update.toolCallId,
-          isError: update.status === "failed",
+          isError: update.status !== "completed",
         });
       // A still-running tool with no new content this notification: content-free liveness.
       if (update.status === "in_progress" && !update.content?.length)

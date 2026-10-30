@@ -21,3 +21,13 @@ export function acpToolOutput(
   const text = full.startsWith(previous) ? full.slice(previous.length) || undefined : full;
   return { full, ...(text ? { text } : {}) };
 }
+
+/** Whether a `tool_call_update` status ends the call. ACP's terminal statuses are `completed`,
+ * `failed` and `stopped` (a cancelled call); `cancelled` costs nothing to accept and is what some
+ * providers spell instead. A call whose end is missed reads open forever, and stalled recovery
+ * never restarts over it. */
+export function acpToolUpdateEnded(status: unknown): boolean {
+  return (
+    status === "completed" || status === "failed" || status === "stopped" || status === "cancelled"
+  );
+}

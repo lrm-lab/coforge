@@ -89,11 +89,7 @@ import {
   validUsageWindow,
 } from "./runtime-activity-text";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
-import {
-  AgentAuthorizationError,
-  launchFailureActivity,
-  launchFailureLogFields,
-} from "#src/agent-runtime/launch-failure";
+import { AgentAuthorizationError, launchFailureLogFields } from "#src/agent-runtime/launch-failure";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import {
   AgentStartup,
@@ -176,6 +172,14 @@ import { forgetLocalAgent } from "./agent-forget";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
+import { StalledRecoverySweep } from "./stalled-recovery-sweep";
+import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
+import { agentInbox, appInbox, workspaceEnvelope } from "./agent-inbox-factories";
+import {
+  cleanupUnconfirmed,
+  launchFailureDraft,
+  stopFailureMessage,
+} from "./agent-failure-presentation";
 import { RuntimeRelease } from "./runtime-release";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
@@ -243,8 +247,6 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
 
 const NOT_RUNNING = "daemon runtime is not running";
-const CLEANUP_UNCONFIRMED =
-  "Agent process cleanup could not be confirmed. Replacement launch is blocked.";
 
 function generateRuntimeInstanceId(): string {
   return crypto.randomUUID();
@@ -387,6 +389,15 @@ export class DaemonRuntime {
     provider: (provider) => this.#createProvider(provider),
     stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
   });
+  readonly #stalledRecoverySweep = new StalledRecoverySweep<ActivityLaunch>({
+    agentIds: () => this.#agentProcessManager.runningAgentIds(),
+    hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
+    runnerHold: () => this.#runnerHold !== undefined,
+    isStopping: (agentId) => this.#stoppingAgents.has(agentId),
+    isRecovering: (agentId) => this.#runtimeRelease.isRecovering(agentId),
+    stalled: (agentId) => this.#runtimeRelease.stalled(agentId),
+    recover: (agentId, stalled) => this.#runtimeRelease.recoverStalled(agentId, stalled),
+  });
   readonly #wakeRecycle = new WakeRecycle({
     provider: (provider) => this.#createProvider(provider),
     inputQueue: (agentId) => this.#agentInputQueues.get(agentId),
@@ -449,6 +460,14 @@ export class DaemonRuntime {
     sendAgentActivity: (activity) => this.#transport.sendAgentActivity?.(activity),
     stopProcess: (agentId) => this.#agentProcessManager.stop(agentId),
   });
+  readonly #statusReportPorts: AgentStatusReportPorts = {
+    agentStatusSequences: this.#agentStatusSequences,
+    offlineResidency: this.#offlineResidency,
+    transport: () => this.#transport,
+    envelope: () => this.#envelope(),
+    runtimeInstanceId: this.#runtimeInstanceId,
+    startedAtMs: this.#startedAt,
+  };
   readonly #observedUsage = new Map<RuntimeProvider, UsageSnapshot>();
   /** Per-launch context-usage and service-tier readings (`agent-usage-report.ts`). */
   readonly #usageReport = new AgentUsageReport({
@@ -1185,6 +1204,7 @@ export class DaemonRuntime {
       this.#started = true;
       this.#activityPublisher.enable();
       this.#coldIdleSweep.start();
+      this.#stalledRecoverySweep.start();
       // Kick off optional inventory before flushing buffered publications so immediate probes can
       // make progress while the first Agent inputs are delivered.
       const codeAgentReport = this.#codeAgentInventory.reportRuntimes(transport);
@@ -1616,12 +1636,7 @@ export class DaemonRuntime {
   /** The fields every daemon -> server report opens with: this protocol, a fresh request id, and
    * this runtime's own Workspace and Computer. */
   #envelope() {
-    return {
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      computerId: this.#connection.computerId,
-    };
+    return workspaceEnvelope(this.#connection.workspaceId, this.#connection.computerId);
   }
 
   /**
@@ -3106,7 +3121,7 @@ export class DaemonRuntime {
           this.#activityPublisher.publish(
             agentId,
             activityLaunch,
-            this.#runtimeErrorActivity(agentId, this.#stopFailureMessage(agentId, error)),
+            this.#runtimeErrorActivity(agentId, stopFailureMessage(this.#cleanupUnconfirmed(agentId, error))),
           );
         throw error;
       })
@@ -3356,23 +3371,11 @@ export class DaemonRuntime {
   }
 
   #sendAgentStatus(agentId: string, status: "active" | "inactive"): void {
-    const clientSeq = (this.#agentStatusSequences.get(agentId) ?? 0) + 1;
-    this.#agentStatusSequences.set(agentId, clientSeq);
-    if (status === "active") this.#offlineResidency.forget(agentId);
-    this.#transport.sendAgentStatus?.({
-      ...this.#envelope(),
-      agentId,
-      status,
-      daemonInstanceId: this.#runtimeInstanceId,
-      clientSeq,
-      observedAtMs: this.#startedAt,
-    });
+    sendAgentStatus(this.#statusReportPorts, agentId, status);
   }
 
   #cleanupUnconfirmed(agentId: string, error: unknown): boolean {
-    return (
-      error instanceof AgentProcessCleanupError || this.#agentProcessManager.isStopping(agentId)
-    );
+    return cleanupUnconfirmed(agentId, error, (id) => this.#agentProcessManager.isStopping(id));
   }
 
   /** The error Activity for a launch that did not start: its typed reason rides `runtimeError`
@@ -3382,19 +3385,8 @@ export class DaemonRuntime {
     provider: RuntimeProvider,
     error: unknown,
   ): ActivityDraft {
-    if (this.#cleanupUnconfirmed(agentId, error))
-      return this.#runtimeErrorActivity(agentId, CLEANUP_UNCONFIRMED);
-    const { detail, runtimeError } = launchFailureActivity(error, runtimeDisplayName(provider));
-    return this.#runtimeErrorActivity(agentId, detail, runtimeError);
-  }
-
-  /**
-   * Reachable only for a genuine local Stop failure (the process did not exit); a revoke failure
-   * no longer reaches this path (see `#releaseAgentRuntime`).
-   */
-  #stopFailureMessage(agentId: string, error: unknown): string {
-    if (this.#cleanupUnconfirmed(agentId, error)) return CLEANUP_UNCONFIRMED;
-    return "Agent runtime could not be stopped.";
+    const draft = launchFailureDraft(provider, error, this.#cleanupUnconfirmed(agentId, error));
+    return this.#runtimeErrorActivity(agentId, draft.detail, draft.runtimeError);
   }
 
   async #revokeAgentApiKey(agentId: string, agentApiKey: string | undefined): Promise<void> {
@@ -3625,19 +3617,11 @@ export class DaemonRuntime {
   }
 
   #appInbox(agentId: string): Promise<AgentAppInbox> {
-    const existing = this.#appInboxes.get(agentId);
-    if (existing) return existing;
-    const opened = AgentAppInbox.open(this.stateDirectory, this.#connection.workspaceId, agentId);
-    this.#appInboxes.set(agentId, opened);
-    return opened;
+    return appInbox(this.#appInboxes, this.stateDirectory, this.#connection.workspaceId, agentId);
   }
 
   #agentInbox(agentId: string): AgentInboxStateMachine {
-    const existing = this.#agentInboxes.get(agentId);
-    if (existing) return existing;
-    const inbox = AgentInboxStateMachine.open(this.#consumedSeqs.stateDb(agentId));
-    this.#agentInboxes.set(agentId, inbox);
-    return inbox;
+    return agentInbox(this.#agentInboxes, (id) => this.#consumedSeqs.stateDb(id), agentId);
   }
 
   async #notifyAppItem(
@@ -3835,6 +3819,7 @@ export class DaemonRuntime {
     this.#runtimeAuthControl = undefined;
     this.#started = false;
     this.#coldIdleSweep.stop();
+    this.#stalledRecoverySweep.stop();
     this.#activityPublisher.disable();
     for (const [agentId, launch] of this.#currentActivityLaunches) {
       launch.startup?.dispose();
