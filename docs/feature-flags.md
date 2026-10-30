@@ -97,6 +97,16 @@ those keys.
 - [flagd provider for JavaScript][flagd-provider] (in-process resolver, `offlineFlagSourcePath`)
 - [flagd flag definitions][flag-definitions], including targeting rules
 
+## Experiments
+
+An experiment is a flag a person switches on for themselves in Settings. The flag still decides
+which Workspaces offer it; the user's own switch (`user_preferences.experiments`, a sparse
+key → boolean map, off by default) decides whether it applies to them and to the Agents they own.
+`apps/web/src/server/experiments/` holds the registry (`EXPERIMENTS`: key, flag, and whether a change
+needs a reload) and `Experiments.enabled(key, userId, workspace)`, the one question server code
+asks. When an experiment graduates, delete its registry entry and its flag together; a stored
+choice for an unlisted key is ignored, so nothing else needs migrating.
+
 [openfeature]: https://openfeature.dev/docs/reference/technologies/server/javascript/
 [flagd-provider]: https://github.com/open-feature/js-sdk-contrib/tree/main/libs/providers/flagd
 [flag-definitions]: https://flagd.dev/reference/flag-definitions/

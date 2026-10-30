@@ -23,6 +23,8 @@ export const FEATURE_FLAGS = {
     "Applications phase 2: the page an app is set up on after installation, and its status",
   "app-notifications":
     "Applications phase 2: notifying the apps installed in a Workspace of what happens in it",
+  "task-conversations":
+    "Task conversations: a task has its own conversation, as an experiment each user switches on",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;
