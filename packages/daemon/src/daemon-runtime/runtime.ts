@@ -319,7 +319,6 @@ export class DaemonRuntime {
     keep: (m) => this.#exitedDelivery.keepForNextLaunch(m.agentId, m),
     restart: (agentId) => this.#runtimeRelease.restartForFreshConfig(agentId),
   });
-  /** Ends a live process without a stopped/crashed Activity (restart, cold idle stop). */
   readonly #runtimeRelease = new RuntimeRelease<ActivityLaunch>({
     launch: (agentId) => this.#currentActivityLaunches.get(agentId),
     runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
@@ -2638,6 +2637,7 @@ export class DaemonRuntime {
       messageAttention: this.#messageAttention,
       consumedSeqs: this.#consumedSeqs,
       appInboxes: this.#appInboxes,
+      featureSync: this.#sync,
     });
   }
 
