@@ -10,7 +10,7 @@ import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentTargetFreshness } from "./agent-target-freshness.server";
 import { planAgentSend } from "./agent-send-plan.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
-import type { PendingMentionActionView } from "#src/server/conversations/pending-mention-actions.server";
+import type { PendingMentionActionView } from "#src/server/conversations/pending-mention-views.server";
 import {
   MessageRequestInProgressError,
   type MessageRequestRecords,

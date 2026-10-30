@@ -23,7 +23,7 @@ import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { deliveryMentionsAgent } from "./mentions.server";
 import { channelMentionTargets, storeMessageBody } from "./message-references.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
-import { pendingMentionActionsForMessage } from "./pending-mention-actions.server";
+import { pendingMentionActionsForMessage } from "./pending-mention-views.server";
 import {
   recordPendingMentionActions,
   unboundMentionTargets,

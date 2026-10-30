@@ -9,7 +9,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import {
   pendingMentionActionsForActor,
   type PendingMentionActionView,
-} from "#src/server/conversations/pending-mention-actions.server";
+} from "#src/server/conversations/pending-mention-views.server";
 
 /** `GET /api/agent/v1/mention-actions/pending[?limit=<n>]` — `coforge mention pending`: the
  * calling Agent's mentions that reached no one because the target was outside the channel at send

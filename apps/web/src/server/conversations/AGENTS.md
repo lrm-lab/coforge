@@ -53,8 +53,8 @@ These rules apply to `src/server/conversations/`.
   stored body, so a replay reads the same `@handle`s.
 - `pending-mention-actions.server.ts` owns a sent message's mentions of people
   outside its channel (Workspace humans, public Agents): the row written in the
-  send's transaction, what the sender may still do about it (7 days), and the
-  claim that lets an action run once. `notify` has the target read that one
+  send's transaction, what the sender may still do about it (7 days, read in
+  `pending-mention-views.server.ts`), and the claim that lets an action run once. `notify` has the target read that one
   message: a non-member Agent through its own delivery and unread source (never
   channel membership); a person through an Activity item with its own read and
   Done state on the row (`server/inbox/activity-inbox.server.ts`).

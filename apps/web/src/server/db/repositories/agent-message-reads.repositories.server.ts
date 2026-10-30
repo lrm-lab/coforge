@@ -13,7 +13,7 @@ import {
   type StoredAgentForward,
 } from "#src/server/conversations/agent-message-view.server";
 import { AGENT_FORWARD_SELECT } from "./direct-conversation-agent-message.server";
-import { pendingMentionActionsForMessage } from "#src/server/conversations/pending-mention-actions.server";
+import { pendingMentionActionsForMessage } from "#src/server/conversations/pending-mention-views.server";
 import { unresolvedMentionHandles } from "#src/server/conversations/unresolved-mentions.server";
 import {
   agentMessageSender,

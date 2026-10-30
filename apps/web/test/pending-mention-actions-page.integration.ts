@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { handleAgentMentionPendingGet } from "#src/routes/api/agent/v1/mention-actions_.pending";
-import { pendingMentionActionsForActor } from "#src/server/conversations/pending-mention-actions.server";
+import { pendingMentionActionsForActor } from "#src/server/conversations/pending-mention-views.server";
 
 /**
  * `mention pending` fills its page with the pending actions that still allow one, oldest first:

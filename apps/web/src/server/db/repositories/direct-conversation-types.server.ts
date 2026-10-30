@@ -2,7 +2,7 @@ import type { MessageSenderKind, MessageTaskMetadata } from "@lrm/coforge-sdk/in
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 import type { noteAgentDmLimit } from "#src/server/conversations/agent-dm-limits.server";
-import type { PendingMentionActionView } from "#src/server/conversations/pending-mention-actions.server";
+import type { PendingMentionActionView } from "#src/server/conversations/pending-mention-views.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import type {
   AgentMessageSearchOptions,
