@@ -34,7 +34,7 @@ import {
   stalledTurnSilenceMs,
 } from "./stalled-turn-indicator";
 import { interruptAgentTurn } from "./turn-interrupt";
-import { heldTaskResult } from "./held-task-result";
+import { taskWriteWithFreshness } from "./task-write-freshness";
 import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
 import { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
 import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-activity";
@@ -2799,20 +2799,20 @@ export class DaemonRuntime {
     const agentId = this.#agentIdForContext(context);
     if (!this.#transport.agentTask) throw new Error("daemon connection is not connected");
     if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    const freshnessAction = command.operation === "claim" || command.operation === "update";
-    if (freshnessAction && command.target) {
-      const held = await heldTaskResult(
+    if (command.target) {
+      const result = await taskWriteWithFreshness(
         {
           messageAttention: this.#messageAttention,
           agentMessage: this.#transport.agentMessage?.bind(this.#transport),
           workspaceId: this.#connection.workspaceId,
+          agentTask: this.#transport.agentTask.bind(this.#transport),
         },
         agentId,
         command,
         command.target,
         agentApiKey,
       );
-      if (held) return held;
+      if (result) return result;
     }
     return this.#transport.agentTask({ ...command }, agentApiKey);
   }

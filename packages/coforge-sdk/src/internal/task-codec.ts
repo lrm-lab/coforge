@@ -45,6 +45,8 @@ const isPgPositive = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) > 0 && Number(value) <= PG_INTEGER_MAX;
 const isPgNonnegative = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) >= 0 && Number(value) <= PG_INTEGER_MAX;
+const isSequence = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Number(value) >= 0;
 const isIsoDate = (value: unknown): value is string =>
   typeof value === "string" &&
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value) &&
@@ -94,6 +96,15 @@ export function validateTaskRequest(value: TaskRequest): void {
     throw new Error("invalid Task number");
   if (value.expectedRevision !== undefined && !isPgNonnegative(value.expectedRevision))
     throw new Error("invalid Task revision");
+  if (value.seenUpToSeq !== undefined && !isSequence(value.seenUpToSeq))
+    throw new Error("invalid Task seen boundary");
+  if (
+    value.seenExactSeqs !== undefined &&
+    (!Array.isArray(value.seenExactSeqs) ||
+      value.seenExactSeqs.length > 2_500 ||
+      !value.seenExactSeqs.every((seq) => isSequence(seq) && seq > 0))
+  )
+    throw new Error("invalid Task exact seen sequences");
   if (value.messageId !== undefined && !isNonblank(value.messageId))
     throw new Error("invalid Task message");
   if (

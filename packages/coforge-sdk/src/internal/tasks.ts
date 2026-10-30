@@ -159,6 +159,10 @@ export type TaskCommand = {
   attachmentId?: string;
   status?: TaskStatus | "all";
   expectedRevision?: number;
+  /** The model-visible boundary for the task board, carried to the server's freshness gate. */
+  seenUpToSeq?: number;
+  /** Exact messages shown above `seenUpToSeq`, for sparse context reads. */
+  seenExactSeqs?: number[];
 };
 
 /** The conversation kinds an Agent's own Task list reads: channels and direct messages. */
@@ -209,6 +213,8 @@ export type TaskResult = {
   withheldMessageCount?: number;
   heldMessages?: AgentMessageRecord[];
   newMessageCount?: number;
+  /** Context attached to a task mutation that was allowed to proceed. */
+  recentUnread?: AgentMessageRecord[];
 };
 
 /** What another member's hold on a Task stops: the only action a refused claim blocks. */

@@ -1,4 +1,4 @@
-import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageRecord, TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 
@@ -8,33 +8,41 @@ export type HeldTaskResultDeps = Readonly<{
   workspaceId: string;
 }>;
 
-/** Applies the attention preflight to a Task claim/update; returns the held result, if any. */
-export async function heldTaskResult(
+export type TaskFreshnessContext = Readonly<{
+  messages: AgentMessageRecord[];
+  messageCount: number;
+  withheld: boolean;
+  seenUpToSeq?: number;
+}>;
+
+/** Reads the exact target context the daemon can prove is newer than the model boundary. */
+export async function taskFreshnessContext(
   deps: HeldTaskResultDeps,
   agentId: string,
   command: TaskCommand,
   target: string,
   agentApiKey: string,
-): Promise<TaskResult | undefined> {
+  { allowFirstTouch = true }: { allowFirstTouch?: boolean } = {},
+): Promise<TaskFreshnessContext | undefined> {
   const { messageAttention } = deps;
   const attention = messageAttention.check(agentId).find((item) => item.target === target);
   if (command.freshnessContextMode === "withheld")
     return attention
       ? {
-          tasks: [],
-          state: "held",
-          freshnessContextMode: "withheld",
-          withheldMessageCount: attention.pendingCount,
+          messages: [],
+          messageCount: attention.pendingCount,
+          withheld: true,
         }
       : undefined;
-  // Nothing pending and the Agent has seen this target (to a frontier, or one by one from a
-  // check): there is no context to present.
+  // A target the Agent has already seen has no first-touch context to fetch. This also keeps
+  // allowed task writes from turning a previously reviewed target into a synthetic hold.
   if (
     !attention &&
     (messageAttention.modelSeenSequence(agentId, target) !== 0 ||
       messageAttention.hasExactSeen(agentId, target))
   )
     return undefined;
+  if (!attention && !allowFirstTouch) return undefined;
   const context = await deps.agentMessage?.(
     {
       idempotencyKey: crypto.randomUUID(),
@@ -52,32 +60,55 @@ export async function heldTaskResult(
     },
     agentApiKey,
   );
-  const heldMessages = (context?.accepted ? context.messages : [])
+  const messages = (context?.accepted ? context.messages : [])
     .filter(
       (message) =>
         message.target === target && !messageAttention.hasSeen(agentId, target, message.sequence),
     )
     .slice(-3);
-  if (heldMessages.length > 0) {
-    messageAttention.recordModelSeen(
-      agentId,
-      target,
-      Math.max(...heldMessages.map(({ sequence }) => sequence)),
-    );
+  if (messages.length > 0) {
+    const seenUpToSeq = Math.max(...messages.map(({ sequence }) => sequence));
+    messageAttention.recordModelSeen(agentId, target, seenUpToSeq);
     return {
-      tasks: [],
-      state: "held",
-      freshnessContextMode: "inline",
-      heldMessages,
-      newMessageCount: attention?.pendingCount ?? heldMessages.length,
+      messages,
+      messageCount: attention?.pendingCount ?? messages.length,
+      withheld: false,
+      seenUpToSeq,
     };
   }
   if (!attention) return undefined;
   return {
-    tasks: [],
-    state: "held",
-    freshnessContextMode: "inline",
-    heldMessages: [],
-    newMessageCount: attention.pendingCount,
+    messages: [],
+    messageCount: attention.pendingCount,
+    withheld: false,
   };
+}
+
+/** Applies the attention preflight to a Task claim/update; returns the held result, if any. */
+export async function heldTaskResult(
+  deps: HeldTaskResultDeps,
+  agentId: string,
+  command: TaskCommand,
+  target: string,
+  agentApiKey: string,
+): Promise<TaskResult | undefined> {
+  const context = await taskFreshnessContext(deps, agentId, command, target, agentApiKey);
+  if (context) {
+    if (context.withheld)
+      return {
+        tasks: [],
+        state: "held",
+        freshnessContextMode: "withheld",
+        withheldMessageCount: context.messageCount,
+      };
+    if (context.messageCount > 0)
+      return {
+        tasks: [],
+        state: "held",
+        freshnessContextMode: "inline",
+        heldMessages: context.messages,
+        newMessageCount: context.messageCount,
+      };
+  }
+  return undefined;
 }

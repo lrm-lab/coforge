@@ -163,6 +163,8 @@ export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
 import {
   claimRefusal,
   formatClaimResults,
+  appendTaskRecentContext,
+  formatHeldTaskRequest,
   formatMyTaskList,
   formatResourceReceiptRecorded,
   formatTaskAmended,
@@ -964,7 +966,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     try {
       const result = await transport.task(command);
       if (result.state === "held")
-        return formatHeldTaskRequest(result, command.freshnessContextMode === "withheld");
+        return formatHeldTaskRequest(result, command.freshnessContextMode === "withheld", command);
       return formatTaskResult(command, result);
     } catch (error) {
       // Deleting is irreversible and a refusal is an authority fact, not a race: name who may.
@@ -1991,16 +1993,6 @@ function validateTaskListScope(target: string | undefined, mine: boolean, status
   if (!mine && !target) throw invalidTaskArg("--target is required (or pass --mine)");
 }
 
-/** A write the server held until the Agent has seen the conversation's newer messages. */
-function formatHeldTaskRequest(result: TaskResult, reviewerIsolation: boolean): string {
-  if (reviewerIsolation || result.freshnessContextMode === "withheld") {
-    const count = result.newMessageCount ?? result.withheldMessageCount ?? 0;
-    return `Reviewer-isolation freshness hold: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
-  }
-  const messages = result.heldMessages?.map(formatMessageLine).join("\n");
-  return `Task request held.${messages ? ` Review newer messages:\n${messages}` : ""}`;
-}
-
 /** What a `task` subcommand prints for the server's answer. */
 function formatTaskResult(command: TaskCommand, result: TaskResult): string {
   const target = command.target!;
@@ -2019,7 +2011,7 @@ function formatTaskResult(command: TaskCommand, result: TaskResult): string {
     case "receipt":
       return formatResourceReceiptRecorded(target, result);
     case "amend":
-      return formatTaskAmended(result);
+      return appendTaskRecentContext(command, result, formatTaskAmended(result));
     case "claim": {
       const refusal = claimRefusal(target, result);
       if (refusal) throw refusal;
@@ -2031,12 +2023,12 @@ function formatTaskResult(command: TaskCommand, result: TaskResult): string {
     case "convert":
       return formatTaskConverted(target, task);
     case "unclaim":
-      return formatTaskUnclaimed(task);
+      return appendTaskRecentContext(command, result, formatTaskUnclaimed(task));
     case "assign":
     case "unassign":
       return formatTaskAssigned(task);
     case "update":
-      return formatTaskStatusUpdated(task);
+      return appendTaskRecentContext(command, result, formatTaskStatusUpdated(task));
     default:
       throw new Error(`no output is defined for task ${command.operation}`);
   }

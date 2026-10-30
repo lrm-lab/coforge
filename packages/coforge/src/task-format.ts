@@ -8,7 +8,7 @@ import {
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
-import { formatUtcTimestamp } from "#src/message-format";
+import { formatMessageLine, formatUtcTimestamp } from "#src/message-format";
 import { shortId } from "#src/short-id";
 import { fenceMessageBody } from "#src/message-body-format";
 
@@ -166,6 +166,51 @@ export function formatTaskAmended(result: TaskResult): string {
     `#${task.number} amended — revision ${task.revision}${event ? `, event seq ${event.seq}.` : "; no change recorded."}`,
     `title: ${fenceMessageBody(task.title)}`,
     details,
+  ].join("\n");
+}
+
+/** A write the server held until the Agent has seen the conversation's newer messages. */
+export function formatHeldTaskRequest(
+  result: TaskResult,
+  reviewerIsolation: boolean,
+  command: import("@lrm/coforge-sdk/internal").TaskCommand,
+): string {
+  if (reviewerIsolation || result.freshnessContextMode === "withheld") {
+    const count = result.newMessageCount ?? result.withheldMessageCount ?? 0;
+    return `Reviewer-isolation freshness hold: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
+  }
+  const messages = result.heldMessages?.map(formatMessageLine).join("\n");
+  const count = result.newMessageCount ?? result.heldMessages?.length ?? 0;
+  const action =
+    command.operation === "create"
+      ? "creation"
+      : command.operation === "assign"
+        ? "assignment"
+        : command.operation;
+  return [
+    `Held — ${count} unread ${count === 1 ? "message" : "messages"} in ${command.target ?? "the task's target"}.`,
+    `Your task ${action} was not applied.`,
+    "Task request held.",
+    ...(messages ? [`Review newer messages:\n${messages}`] : []),
+  ].join("\n");
+}
+
+export function appendTaskRecentContext(
+  command: import("@lrm/coforge-sdk/internal").TaskCommand,
+  result: TaskResult,
+  rendered: string,
+): string {
+  if (!["unclaim", "update", "amend"].includes(command.operation)) return rendered;
+  if (result.freshnessContextMode === "withheld") {
+    const count = result.withheldMessageCount ?? result.newMessageCount ?? 0;
+    return `${rendered}\n\nReviewer-isolation: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
+  }
+  if (!result.recentUnread?.length) return rendered;
+  return [
+    rendered,
+    "",
+    "--- New messages you may have missed ---",
+    ...result.recentUnread.map(formatMessageLine),
   ].join("\n");
 }
 

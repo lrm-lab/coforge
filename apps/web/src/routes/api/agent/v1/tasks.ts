@@ -64,6 +64,8 @@ const taskRequestSchema = z
       })
       .optional(),
     freshnessContextMode: z.enum(["inline", "withheld"]).optional(),
+    seenUpToSeq: z.number().int().nonnegative().optional(),
+    seenExactSeqs: z.array(z.number().int().positive()).max(2500).optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
