@@ -136,7 +136,8 @@ function MessageMoreMenu({
 /**
  * The mobile-shell counterpart of the hover toolbar: a bottom action sheet in the
  * Slack/Discord mobile layout — the quoted message card, a quick-reaction row,
- * then full-width actions (thread row, whole-message copy last) — opened by a tap
+ * then full-width actions, the frequent ones (thread, whole-message copy) before the
+ * rarer ones (forward, save), as the hover bar keeps them — opened by a tap
  * on the message. Dismissal (backdrop press, Escape) and focus containment come
  * from the modal overlay. The overlay carries `data-message-actions-popover` so
  * its backdrop press doesn't bubble back into the row's tap-to-open handler.
@@ -244,6 +245,33 @@ export function MessageActionSheet({
             </div>
           )}
           <div className="flex flex-col px-3 pt-1 pb-3">
+            {onOpenThread && (
+              <ThreadSheetEntry
+                rootId={messageId}
+                onOpen={(rootId) => {
+                  onOpenChange(false);
+                  onOpenThread(rootId);
+                }}
+              />
+            )}
+            {copyable && (
+              <Button
+                color="tertiary"
+                size="md"
+                noTextPadding
+                iconLeading={Copy01}
+                onPress={() => {
+                  onOpenChange(false);
+                  onCopy();
+                }}
+                className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
+              >
+                {m.conversation_message_copy_text()}
+              </Button>
+            )}
+            {(onOpenThread || copyable) && (onForward || onToggleSave) && (
+              <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
+            )}
             {onForward && (
               <Button
                 color="tertiary"
@@ -274,39 +302,9 @@ export function MessageActionSheet({
                 {saveSaved ? m.conversation_unsave() : m.conversation_save()}
               </Button>
             )}
-            {(onToggleReaction || onToggleSave || onForward) && (copyable || onOpenThread) && (
-              <div aria-hidden="true" className="mx-1 mt-1 mb-1 h-px bg-secondary" />
-            )}
-            {onOpenThread && (
-              <ThreadSheetEntry
-                rootId={messageId}
-                onOpen={(rootId) => {
-                  onOpenChange(false);
-                  onOpenThread(rootId);
-                }}
-              />
-            )}
-            {copyable && onOpenThread && (
-              <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
-            )}
-            {copyable && (
-              <Button
-                color="tertiary"
-                size="md"
-                noTextPadding
-                iconLeading={Copy01}
-                onPress={() => {
-                  onOpenChange(false);
-                  onCopy();
-                }}
-                className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
-              >
-                {m.conversation_message_copy_text()}
-              </Button>
-            )}
             {seenBy && (
               <>
-                {(onToggleReaction || onToggleSave || onOpenThread || copyable) && (
+                {(onOpenThread || copyable || onForward || onToggleSave) && (
                   <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
                 )}
                 <MessageSeenBySheetEntry

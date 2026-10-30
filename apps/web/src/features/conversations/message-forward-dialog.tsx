@@ -35,9 +35,9 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 type ForwardChannel = Extract<ForwardTarget, { kind: "channel" }>;
 
-/** What the last press of send leaves on screen: a join to confirm, or a failure; `retry` offers
- * "Try Again" where trying the same request again can help. */
-type Notice = { kind: "join" | "error"; text: string; retry?: boolean };
+/** A failure the last press of send leaves on screen; `retry` offers "Try Again" where trying the
+ * same request again can help. */
+type Notice = { text: string; retry?: boolean };
 
 /**
  * The Forward dialog for one message (task #237): pick up to ten destinations, optionally add a
@@ -90,8 +90,14 @@ export function MessageForwardDialog({
   });
 
   const picked = [...selected.values()];
-  const label =
-    source.conversationName === null ? m.message_forward_dm() : `#${source.conversationName}`;
+  // A public channel the viewer has not joined is joined on send; the button says so, so nothing
+  // joins silently.
+  const unjoined = picked.filter(
+    (target): target is ForwardChannel =>
+      target.kind === "channel" &&
+      isUnjoinedChannel(target) &&
+      !joinedIds.current.has(target.conversationId),
+  );
   const placeholder =
     picked.length === 0
       ? m.message_forward_note_placeholder_none()
@@ -106,8 +112,6 @@ export function MessageForwardDialog({
       else next.delete(forwardTargetKey(target));
       return next;
     });
-    // The join confirmation named the channels picked then; a changed pick asks again.
-    setNotice((current) => (current?.kind === "join" ? null : current));
   }
 
   /** The conversation a target forwards into: a person or Agent without a DM gets one opened. */
@@ -125,22 +129,6 @@ export function MessageForwardDialog({
 
   async function send() {
     if (picked.length === 0 || sending) return;
-    const unjoined = picked.filter(
-      (target): target is ForwardChannel =>
-        target.kind === "channel" &&
-        isUnjoinedChannel(target) &&
-        !joinedIds.current.has(target.conversationId),
-    );
-    // Nothing joins silently: the first press says so, the second is the confirmation.
-    if (unjoined.length > 0 && notice?.kind !== "join") {
-      setNotice({
-        kind: "join",
-        text: m.message_forward_join_warning({
-          channel: unjoined.map(forwardTargetLabel).join(", "),
-        }),
-      });
-      return;
-    }
     setSending(true);
     setNotice(null);
     try {
@@ -154,7 +142,6 @@ export function MessageForwardDialog({
       });
       if (notJoined.length > 0) {
         setNotice({
-          kind: "error",
           text: m.message_forward_join_failed({
             target: notJoined.map(forwardTargetLabel).join(", "),
           }),
@@ -185,7 +172,6 @@ export function MessageForwardDialog({
         ),
       );
       setNotice({
-        kind: "error",
         // An archived, read-only or inaccessible destination refuses again; Try Again is only
         // for one that may take it on another attempt.
         retry: [...outcome.failed.values()].some(isRetryableForwardFailure),
@@ -197,10 +183,10 @@ export function MessageForwardDialog({
     } catch (error) {
       setNotice(
         isAppError(error) && error.errorId === "forward-not-forwardable"
-          ? { kind: "error", text: m.message_forward_not_forwardable() }
+          ? { text: m.message_forward_not_forwardable() }
           : isAppErrorCode(error, "NOT_FOUND")
-            ? { kind: "error", text: m.message_forward_source_gone() }
-            : { kind: "error", retry: true, text: m.message_forward_uncertain() },
+            ? { text: m.message_forward_source_gone() }
+            : { retry: true, text: m.message_forward_uncertain() },
       );
     } finally {
       setSending(false);
@@ -230,12 +216,7 @@ export function MessageForwardDialog({
 
   const noticeView = notice && (
     <div className="flex items-start justify-between gap-3">
-      <p
-        role={notice.kind === "error" ? "alert" : "status"}
-        className={
-          notice.kind === "error" ? "text-sm text-error-primary" : "text-sm text-warning-primary"
-        }
-      >
+      <p role="alert" className="text-sm text-error-primary">
         {notice.text}
       </p>
       {notice.retry && (
@@ -266,7 +247,6 @@ export function MessageForwardDialog({
           {desktop || step === "destinations" ? (
             <DialogHeader
               title={m.message_forward_action()}
-              description={m.message_forward_selected_from({ source: label })}
               onClose={sending ? undefined : onClose}
               className="px-4 pt-4 pb-3 lg:px-6 lg:pt-6"
             />
@@ -280,7 +260,7 @@ export function MessageForwardDialog({
                 onClick={() => setStep("destinations")}
               />
               <Heading slot="title" className="text-lg font-semibold text-primary">
-                {m.message_forward_add_note()}
+                {m.message_forward_action()}
               </Heading>
             </div>
           )}
@@ -312,10 +292,14 @@ export function MessageForwardDialog({
               <ForwardNotePane
                 forwarded={forwardedPreview(source, plainBody)}
                 attachments={source.message.attachments}
+                picked={picked}
+                onRemove={(target) => toggle(target, false)}
                 note={note}
                 onNoteChange={setNote}
                 placeholder={placeholder}
-                canSend={picked.length > 0}
+                sendLabel={
+                  unjoined.length > 0 ? m.message_forward_join_and_send() : m.message_forward_send()
+                }
                 sending={sending}
                 onSend={() => void send()}
                 notice={noticeView}
@@ -324,8 +308,8 @@ export function MessageForwardDialog({
           </div>
           {!desktop && step === "destinations" && (
             <div className="flex shrink-0 justify-end border-t border-secondary px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              <Button isDisabled={picked.length === 0} onPress={() => setStep("note")}>
-                {m.message_forward_add_note()}
+              <Button size="md" isDisabled={picked.length === 0} onPress={() => setStep("note")}>
+                {m.message_forward_next()}
               </Button>
             </div>
           )}

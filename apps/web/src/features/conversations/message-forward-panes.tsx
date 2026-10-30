@@ -1,9 +1,11 @@
-import { Checkbox as AriaCheckbox } from "react-aria-components";
-import { Hash01, Send01, SearchLg } from "@untitledui/icons";
+import type { ReactNode } from "react";
+import { Checkbox as AriaCheckbox, Tag, TagGroup, TagList } from "react-aria-components";
+import { Hash01, SearchLg } from "@untitledui/icons";
 
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Button } from "#src/components/base/buttons/button";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
+import { TagCloseX } from "#src/components/base/tags/base-components/tag-close-x";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { cn } from "#src/lib/utils";
@@ -94,7 +96,7 @@ function TargetRow({
   );
 }
 
-/** The left pane: search, how many are picked, and the people, Agents and channels to pick from. */
+/** The left pane: search, and the people, Agents and channels to pick from. */
 export function ForwardTargetPane({
   query,
   onQueryChange,
@@ -124,9 +126,6 @@ export function ForwardTargetPane({
         value={query}
         onChange={onQueryChange}
       />
-      <p className="px-1 text-xs text-tertiary">
-        {m.message_forward_selected_count({ count: selected.size })}
-      </p>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
           <p role="alert" className="py-4 text-center text-sm text-error-primary">
@@ -157,58 +156,109 @@ export function ForwardTargetPane({
   );
 }
 
-/** The right pane: the card as it will arrive, then the optional note and its send button. */
+/** Who the forward goes to, as removable chips: the pick stays in view while the list is filtered
+ * or, on a phone, a step behind. */
+function Recipients({
+  picked,
+  onRemove,
+}: {
+  picked: readonly ForwardTarget[];
+  onRemove: (target: ForwardTarget) => void;
+}) {
+  if (picked.length === 0) return null;
+  return (
+    <TagGroup
+      aria-label={m.message_forward_recipients()}
+      onRemove={(keys) => {
+        for (const target of picked) if (keys.has(forwardTargetKey(target))) onRemove(target);
+      }}
+      className="flex items-start gap-2"
+    >
+      <span aria-hidden="true" className="shrink-0 py-1 text-sm text-tertiary">
+        {m.message_forward_to()}
+      </span>
+      <TagList className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {picked.map((target) => (
+          <Tag
+            key={forwardTargetKey(target)}
+            id={forwardTargetKey(target)}
+            textValue={forwardTargetLabel(target)}
+            className="inline-flex h-7 max-w-[16rem] cursor-default items-center gap-1 rounded-md border border-secondary pr-1.5 pl-2 text-sm text-secondary outline-focus-ring focus-visible:outline-2"
+          >
+            <span className="truncate">{forwardTargetLabel(target)}</span>
+            {/* React Aria names it "<this label> <the chip>". */}
+            <TagCloseX size="md" aria-label={m.message_forward_remove_target()} />
+          </Tag>
+        ))}
+      </TagList>
+    </TagGroup>
+  );
+}
+
+/** The right pane: the card as it will arrive, then who it goes to, the optional note, and the
+ * send button, which says when sending joins a channel first. ⌘/Ctrl+Enter in the note sends. */
 export function ForwardNotePane({
   forwarded,
   attachments,
+  picked,
+  onRemove,
   note,
   onNoteChange,
   placeholder,
-  canSend,
+  sendLabel,
   sending,
   onSend,
   notice,
 }: {
   forwarded: ForwardedMessageView;
   attachments: MessageView["attachments"];
+  picked: readonly ForwardTarget[];
+  onRemove: (target: ForwardTarget) => void;
   note: string;
   onNoteChange: (note: string) => void;
   placeholder: string;
-  canSend: boolean;
+  sendLabel: string;
   sending: boolean;
   onSend: () => void;
-  /** What the last press of send left to say: the join confirmation or a failure, with its retry. */
-  notice: React.ReactNode;
+  /** What the last press of send left to say: a failure, with its retry. */
+  notice: ReactNode;
 }) {
+  const canSend = picked.length > 0 && !sending;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <ForwardedMessageCard forwarded={forwarded} attachments={attachments} />
       </div>
-      <div className="flex shrink-0 flex-col gap-2 border-t border-secondary p-4">
+      <div className="flex shrink-0 flex-col gap-3 border-t border-secondary p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {notice}
-        <div className="relative">
-          <TextArea
-            size="sm"
-            label={m.message_forward_note_label()}
-            placeholder={placeholder}
-            rows={3}
-            maxLength={FORWARD_NOTE_MAX_LENGTH}
-            value={note}
-            onChange={onNoteChange}
-            isDisabled={sending}
-            textAreaClassName="pr-12"
-          />
-          <ButtonUtility
-            size="sm"
-            color="secondary"
-            icon={Send01}
-            tooltip={m.message_forward_send()}
-            aria-label={m.message_forward_send()}
-            isDisabled={!canSend || sending}
-            onClick={onSend}
-            className="absolute right-2 bottom-2"
-          />
+        <Recipients picked={picked} onRemove={onRemove} />
+        <TextArea
+          size="sm"
+          aria-label={m.message_forward_note_label()}
+          placeholder={placeholder}
+          rows={3}
+          maxLength={FORWARD_NOTE_MAX_LENGTH}
+          value={note}
+          onChange={onNoteChange}
+          isDisabled={sending}
+          onTextAreaKeyDown={(event) => {
+            if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+            if (event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            if (canSend) onSend();
+          }}
+        />
+        <div className="flex justify-end">
+          <Button
+            size="md"
+            isDisabled={!canSend}
+            isLoading={sending}
+            showTextWhileLoading
+            onPress={onSend}
+            aria-keyshortcuts="Meta+Enter Control+Enter"
+          >
+            {sendLabel}
+          </Button>
         </div>
       </div>
     </div>

@@ -63,6 +63,11 @@ async function openForwardDialog(conversationId: string) {
   );
 }
 
+/** The dialog's labelled send button, by what it says ("Forward", or "Join and forward"). */
+const sendButton = (label: string) =>
+  `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
+const send = (label = "Forward") => browser("eval", `${sendButton(label)}.click()`);
+
 async function pick(search: string, label: string) {
   await browser("fill", 'input[placeholder="Search targets"]', search);
   await waitFor(`document.querySelector(${JSON.stringify(targetRow(label))}) !== null`);
@@ -159,9 +164,12 @@ test("forwards a message with its attachment to a channel and a new DM, with a n
   await pick(channelB, `#${channelB}`);
   await pick(writerName, `@${writerName}`);
   await browser("fill", '[role="dialog"] textarea', note);
-  await waitFor(`${bodyIncludes("2 selected")}`);
+  // Both picks show as chips by the note.
+  await waitFor(
+    `document.querySelectorAll('[role="dialog"] [aria-label="Recipients"] [role="row"]').length === 2`,
+  );
   await shot("1440-dialog-selected");
-  await click('button[aria-label="Send forward"]');
+  await send();
   await waitFor(bodyIncludes("Forwarded to 2 destinations"));
   await shot("1440-toast");
 
@@ -208,23 +216,20 @@ test("Open source message goes back to the original", async () => {
   await shot("1440-source");
 }, 60_000);
 
-test("a channel the viewer has not joined asks first, then joins and forwards", async () => {
+test("a channel the viewer has not joined says so on the button, then joins and forwards", async () => {
   await openForwardDialog(ids.a);
   await pick(channelC, `#${channelC}`);
   await waitFor(bodyIncludes("Not joined"));
-  await click('button[aria-label="Send forward"]');
-  await waitFor(
-    bodyIncludes(`You haven't joined #${channelC}. Forwarding will join the channel first.`),
-  );
+  await waitFor(`${sendButton("Join and forward")} !== undefined`);
   await shot("1440-join-warning");
-  // The warning alone changed nothing.
+  // Picking it alone changed nothing.
   expect(
     await db.conversationMember.count({
       where: { conversationId: ids.c, userId: DEV_BROWSER_USER.id },
     }),
   ).toBe(0);
   expect(await db.message.count({ where: { conversationId: ids.c } })).toBe(0);
-  await click('button[aria-label="Send forward"]');
+  await send("Join and forward");
   await waitFor(bodyIncludes(`Forwarded to #${channelC}.`));
   expect(
     await db.conversationMember.count({
@@ -254,7 +259,7 @@ test("on a phone the targets and the note are two steps", async () => {
   );
   await shot("390-destinations");
   await pick(channelB, `#${channelB}`);
-  await clickNamed("button", "Add a note");
+  await clickNamed("button", "Next");
   await waitFor(`document.querySelector('[role="dialog"] textarea') !== null`);
   await shot("390-note");
   await clickNamed("button", "Back to destinations");
