@@ -18,7 +18,7 @@ import { m } from "#src/paraglide/messages";
 import {
   loadPublicChannelThreadFollowingAgents,
   unfollowPublicChannelThreadAgent,
-} from "./channels.functions";
+} from "./channel-threads.functions";
 import { threadFollowingAgentsQueryKey } from "./conversation-query-keys";
 
 type FollowingAgent = {

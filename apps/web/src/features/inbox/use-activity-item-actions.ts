@@ -2,12 +2,12 @@ import { useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { markPublicChannelRead } from "#src/features/conversations/channels.functions";
+import { setPublicConversationUnread } from "#src/features/conversations/channel-sidebar-actions.functions";
 import {
-  markPublicChannelRead,
   markPublicChannelThreadRead,
   setPublicChannelThreadFollowed,
-  setPublicConversationUnread,
-} from "#src/features/conversations/channels.functions";
+} from "#src/features/conversations/channel-threads.functions";
 import {
   markDirectConversationRead,
   markDirectThreadRead,

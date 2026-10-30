@@ -4,12 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { useEndReplyIntentsOnArrival } from "#src/features/agents/agent-post-clearing";
 import { useConversationTasks } from "#src/features/tasks/use-conversation-tasks";
+import { joinPublicChannel, sendPublicChannelMessage } from "./channels.functions";
 import {
-  joinPublicChannel,
   markPublicChannelThreadRead,
-  sendPublicChannelMessage,
   setPublicChannelThreadFollowed,
-} from "./channels.functions";
+} from "./channel-threads.functions";
 import {
   directConversationQuery,
   directConversationUpdates,

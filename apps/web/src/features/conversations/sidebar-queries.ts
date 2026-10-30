@@ -4,10 +4,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import {
   listPublicChannels,
   setPublicChannelMuted,
-  setPublicConversationHidden,
   setPublicConversationPinned,
-  setPublicConversationUnread,
 } from "./channels.functions";
+import {
+  setPublicConversationHidden,
+  setPublicConversationUnread,
+} from "./channel-sidebar-actions.functions";
 import {
   loadDirectConversationBadges,
   loadDirectConversationPreferences,

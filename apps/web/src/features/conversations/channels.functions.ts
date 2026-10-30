@@ -34,14 +34,6 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 const channelInput = z.object({ channelId: z.uuid() });
 const channelPageInput = channelInput.extend(conversationPageInputSchema);
 const channelUpdatesInput = channelInput.extend(conversationUpdatesCursorSchema.shape);
-const channelThreadReadInput = channelInput.extend({
-  threadRootId: z.uuid(),
-  throughSequence: z.number().int().positive(),
-});
-const channelThreadFollowInput = channelInput.extend({
-  threadRootId: z.uuid(),
-  followed: z.boolean(),
-});
 function channelScope({ db, workspaceId, user }: WorkspaceUserContext) {
   return {
     channels: new PublicChannels(db),
@@ -350,106 +342,6 @@ export const deletePublicChannel = createServerFn({ method: "POST" })
     return channels.deleteChannel(workspaceId, userId, data.channelId);
   });
 
-export const setPublicChannelCollapseLongMessages = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelInput.extend({ collapseLongMessages: z.boolean() }))
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.setCollapseLongMessages(
-      workspaceId,
-      userId,
-      data.channelId,
-      data.collapseLongMessages,
-    );
-  });
-
-export const setPublicChannelMuted = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelInput.extend({ muted: z.boolean() }))
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.setUserMuted(workspaceId, userId, data.channelId, data.muted);
-  });
-
-/** Pins the conversation after this member's other pins, or unpins it (#121). */
-export const setPublicConversationPinned = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelInput.extend({ pinned: z.boolean() }))
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.setUserPinned(workspaceId, userId, data.channelId, data.pinned);
-  });
-
-/** Marks the conversation unread for this member, or clears the marker (#122). */
-export const setPublicConversationUnread = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelInput.extend({ unread: z.boolean() }))
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.setUserUnread(workspaceId, userId, data.channelId, data.unread);
-  });
-
-/** Closes (hides) the conversation for this member only, or brings it back (#122). */
-export const setPublicConversationHidden = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelInput.extend({ hidden: z.boolean() }))
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.setUserHidden(workspaceId, userId, data.channelId, data.hidden);
-  });
-
-export const markPublicChannelThreadRead = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelThreadReadInput)
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    await channels.markThreadReadForUser(
-      workspaceId,
-      userId,
-      data.channelId,
-      data.threadRootId,
-      data.throughSequence,
-    );
-  });
-
-export const setPublicChannelThreadFollowed = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelThreadFollowInput)
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.setUserThreadFollowed(
-      workspaceId,
-      userId,
-      data.channelId,
-      data.threadRootId,
-      data.followed,
-    );
-  });
-
-const channelThreadAgentsInput = channelInput.extend({ threadRootId: z.uuid() });
-
-export const loadPublicChannelThreadFollowingAgents = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelThreadAgentsInput)
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.threadFollowingAgents(workspaceId, userId, data.channelId, data.threadRootId);
-  });
-
-export const unfollowPublicChannelThreadAgent = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelThreadAgentsInput.extend({ agentId: z.uuid() }))
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.unfollowAgentFromThread(
-      workspaceId,
-      userId,
-      data.channelId,
-      data.threadRootId,
-      data.agentId,
-    );
-  });
-
 export const sendPublicChannelMessage = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(
@@ -527,4 +419,34 @@ export const toggleChannelMessageReaction = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { reactions } = await toggleChannelReaction(context, data);
     return reactions ?? undefined;
+  });
+
+export const setPublicChannelCollapseLongMessages = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(channelInput.extend({ collapseLongMessages: z.boolean() }))
+  .handler(async ({ data, context }) => {
+    const { channels, workspaceId, userId } = channelScope(context);
+    return channels.setCollapseLongMessages(
+      workspaceId,
+      userId,
+      data.channelId,
+      data.collapseLongMessages,
+    );
+  });
+
+export const setPublicChannelMuted = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(channelInput.extend({ muted: z.boolean() }))
+  .handler(async ({ data, context }) => {
+    const { channels, workspaceId, userId } = channelScope(context);
+    return channels.setUserMuted(workspaceId, userId, data.channelId, data.muted);
+  });
+
+/** Pins the conversation after this member's other pins, or unpins it (#121). */
+export const setPublicConversationPinned = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(channelInput.extend({ pinned: z.boolean() }))
+  .handler(async ({ data, context }) => {
+    const { channels, workspaceId, userId } = channelScope(context);
+    return channels.setUserPinned(workspaceId, userId, data.channelId, data.pinned);
   });

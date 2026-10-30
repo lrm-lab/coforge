@@ -1,8 +1,6 @@
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
-import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
 import { isAppErrorCode } from "#src/lib/app-error";
-import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import {
@@ -26,75 +24,26 @@ import {
   announceJoinedOrLeft,
   type ConversationRealtime,
 } from "./conversation-realtime.server";
+import { hasChannelAdminAuthority } from "./channel-authority.server";
+import type { AgentDisplay } from "#src/server/agents/agent-display.server";
 import {
-  hasChannelAdminAuthority,
-  resolveChannelAuthority,
-  type ChannelAdminBasis,
-  type ChannelCapabilities,
-} from "./channel-authority.server";
-import { resolveAgentChannelStatuses } from "#src/server/agents/agent-channel-status.server";
-import { getAgentDisplay, type AgentDisplay } from "#src/server/agents/agent-display.server";
+  agentChannelInfo,
+  directConversationRoster,
+  shapeAgentRoster,
+  type AgentChannelInfo,
+  type AgentChannelRoster,
+} from "./agent-channel-reads.server";
+import {
+  memberNotFound,
+  normalizeChannelName,
+  parseChannelTarget,
+  parseMemberInput,
+  USER_TARGET,
+  type AgentChannelMemberInput,
+} from "./agent-channel-targets.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-
-const CHANNEL_TARGET = /^#[a-z0-9][a-z0-9_-]{0,31}$/;
-const USER_TARGET = /^@[a-z0-9][a-z0-9_-]{0,31}$/;
-const MEMBER_HANDLE = /^@[a-z0-9][a-z0-9_-]{0,31}$/;
-
-export type AgentChannelInfo = {
-  id: string;
-  name: string;
-  description: string;
-  archived: boolean;
-  joined: boolean;
-  muted: boolean;
-  memberCounts: { agents: number; humans: number };
-  /**
-   * Stored channelRole, present only for an active acting member.
-   */
-  channelRole?: string;
-  /** Present only when the acting Agent has channel-admin authority on this channel — either
-   * basis. */
-  channelAdminBasis?: ChannelAdminBasis;
-  /** Every capability name; only the ones this Agent may currently invoke are `true`. */
-  channelCapabilities: ChannelCapabilities;
-  /**
-   * A Project discussion group owned by this Workspace; fields match workspace info --projects.
-   */
-  project?: {
-    id: string;
-    name: string;
-    slug: string;
-    githubFullName?: string;
-    githubHtmlUrl?: string;
-  };
-};
-
-export type AgentChannelRoster = {
-  target: string;
-  // Channel roles apply to active #channel members; @user DM rosters omit them.
-  agents: Array<{
-    name: string;
-    displayName: string;
-    description: string;
-    serverRole: string;
-    channelRole?: string;
-    channelAdminBasis?: ChannelAdminBasis;
-    self: boolean;
-    status: "online" | "offline" | "unknown";
-    activity?: string;
-    activityDetail?: string;
-  }>;
-  humans: Array<{
-    username: string;
-    serverRole: string;
-    channelRole?: string;
-    channelAdminBasis?: ChannelAdminBasis;
-  }>;
-};
-
-export type AgentChannelMemberInput = { user?: string; agent?: string };
 
 /** The seam route handlers depend on, so unit tests can supply a fake instead of Prisma. */
 export type AgentChannelManagementRepository = Pick<
@@ -109,11 +58,6 @@ export type AgentChannelManagementRepository = Pick<
   | "addMember"
   | "removeMember"
 >;
-
-/** A member handle that names no one this operation can reach (404). */
-function memberNotFound(handle: string) {
-  return new AgentChannelManagementError(404, `member not found: @${handle}`);
-}
 
 /**
  * Workspace-scoped Agent channel lifecycle and rosters. ACTIVE_MEMBER_WHERE excludes soft-left targets.
@@ -140,7 +84,7 @@ export class AgentChannelManagement {
 
   async info(workspaceId: string, agentId: string, target: string): Promise<AgentChannelInfo> {
     const { channel } = await this.targetChannel(workspaceId, target);
-    return this.channelInfo(workspaceId, channel, agentId);
+    return agentChannelInfo(this.db, workspaceId, channel, await this.actor(workspaceId, agentId));
   }
 
   async members(workspaceId: string, agentId: string, target: string): Promise<AgentChannelRoster> {
@@ -152,7 +96,7 @@ export class AgentChannelManagement {
         await this.actor(workspaceId, agentId),
         channel.id,
       );
-      return this.shapeAgentRoster(workspaceId, agentId, `#${channel.channelName}`, raw);
+      return shapeAgentRoster(this.display, workspaceId, agentId, `#${channel.channelName}`, raw);
     }
     if (!USER_TARGET.test(parentTarget))
       throw new AgentChannelManagementError(400, "target must be a #channel or @user");
@@ -164,7 +108,14 @@ export class AgentChannelManagement {
       this.db,
     ).findUserAgentConversation(workspaceId, user.id, agentId);
     if (!conversation) throw new AgentChannelManagementError(404, "channel not found");
-    return this.roster(workspaceId, conversation.id, agentId, parentTarget);
+    return directConversationRoster(
+      this.db,
+      this.display,
+      workspaceId,
+      conversation.id,
+      agentId,
+      parentTarget,
+    );
   }
 
   private async actor(workspaceId: string, agentId: string) {
@@ -226,7 +177,7 @@ export class AgentChannelManagement {
   ) {
     const delegated = await workspaceAssistantUser(this.db, workspaceId, agentId);
     if (delegated) {
-      const name = this.normalizeChannelName(rawName);
+      const name = normalizeChannelName(rawName);
       const created = await this.channels.create(
         workspaceId,
         delegated.userId,
@@ -247,7 +198,7 @@ export class AgentChannelManagement {
     if (!agent)
       throw new AgentChannelManagementError(403, "this Agent does not belong to the Workspace");
     await this.assertCallerNotPrivate(workspaceId, agentId, "create");
-    const name = this.normalizeChannelName(rawName);
+    const name = normalizeChannelName(rawName);
     if (name === "general") throw new AgentChannelManagementError(409, "general is reserved");
     let channel: {
       id: string;
@@ -313,7 +264,7 @@ export class AgentChannelManagement {
     if (patch.name !== undefined) {
       if (channelName === "general")
         throw new AgentChannelManagementError(400, "cannot rename #general");
-      nextName = this.normalizeChannelName(patch.name);
+      nextName = normalizeChannelName(patch.name);
       if (nextName === "general") throw new AgentChannelManagementError(409, "general is reserved");
     }
     // Shared with the human settings panel, which applies the same authority and archive rules.
@@ -333,10 +284,11 @@ export class AgentChannelManagement {
         throw new AgentChannelManagementError(409, "channel name is already in use");
       throw error;
     }
-    return this.channelInfo(
+    return agentChannelInfo(
+      this.db,
       workspaceId,
       await this.findChannel(workspaceId, nextName ?? channelName),
-      agentId,
+      await this.actor(workspaceId, agentId),
     );
   }
 
@@ -369,8 +321,8 @@ export class AgentChannelManagement {
     target: string,
     input: AgentChannelMemberInput,
   ) {
-    const channelName = this.parseChannelTarget(target);
-    const { kind, handle } = this.parseMemberInput(input);
+    const channelName = parseChannelTarget(target);
+    const { kind, handle } = parseMemberInput(input);
     const channel = await this.findChannel(workspaceId, channelName);
     let userId: string | undefined;
     let resolvedAgentId: string | undefined;
@@ -445,8 +397,8 @@ export class AgentChannelManagement {
     target: string,
     input: AgentChannelMemberInput,
   ) {
-    const channelName = this.parseChannelTarget(target);
-    const { kind, handle } = this.parseMemberInput(input);
+    const channelName = parseChannelTarget(target);
+    const { kind, handle } = parseMemberInput(input);
     const channel = await this.findChannel(workspaceId, channelName);
     if (channelName === "general")
       throw new AgentChannelManagementError(400, "cannot remove a member from #general");
@@ -525,7 +477,7 @@ export class AgentChannelManagement {
 
   /** A `#channel` target and the visible channel it names (400 if malformed, 404 if unknown). */
   private async targetChannel(workspaceId: string, target: string) {
-    const channelName = this.parseChannelTarget(target);
+    const channelName = parseChannelTarget(target);
     return { channelName, channel: await this.findChannel(workspaceId, channelName) };
   }
 
@@ -537,210 +489,5 @@ export class AgentChannelManagement {
     if (!channel || channel.hiddenFromWorkspaceAt)
       throw new AgentChannelManagementError(404, "channel not found");
     return channel;
-  }
-
-  private async channelInfo(
-    workspaceId: string,
-    channel: Pick<Conversation, "id" | "channelName" | "description" | "archivedAt" | "projectId">,
-    agentId: string,
-  ): Promise<AgentChannelInfo> {
-    const actor = await this.actor(workspaceId, agentId);
-    const [member, memberCounts, authority, project] = await Promise.all([
-      this.db.conversationMember.findFirst({
-        where: { conversationId: channel.id, ...actor, ...ACTIVE_MEMBER_WHERE },
-        select: { channelMuted: true },
-      }),
-      this.memberCounts(channel.id),
-      resolveChannelAuthority(this.db, workspaceId, actor, channel),
-      this.channelProject(workspaceId, channel.projectId),
-    ]);
-    return {
-      id: channel.id,
-      name: `#${channel.channelName}`,
-      description: channel.description,
-      archived: channel.archivedAt !== null,
-      joined: Boolean(member),
-      muted: member?.channelMuted ?? false,
-      memberCounts,
-      channelRole: authority.channelRole,
-      channelAdminBasis: authority.adminBasis,
-      channelCapabilities: authority.capabilities,
-      ...(project ? { project } : {}),
-    };
-  }
-
-  /**
-   * Resolve the bound Project only in this Workspace, even if a corrupt projectId crosses Workspaces.
-   */
-  private async channelProject(
-    workspaceId: string,
-    projectId: string | null,
-  ): Promise<AgentChannelInfo["project"]> {
-    if (!projectId) return undefined;
-    const project = await this.db.project.findFirst({
-      where: { id: projectId, workspaceId },
-      select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },
-    });
-    if (!project) return undefined;
-    return {
-      id: project.id,
-      name: project.name,
-      slug: project.slug,
-      ...(project.githubFullName ? { githubFullName: project.githubFullName } : {}),
-      ...(project.githubHtmlUrl ? { githubHtmlUrl: project.githubHtmlUrl } : {}),
-    };
-  }
-
-  private async memberCounts(conversationId: string) {
-    const [agents, humans] = await Promise.all([
-      this.db.conversationMember.count({
-        where: { conversationId, agentId: { not: null }, ...ACTIVE_MEMBER_WHERE },
-      }),
-      this.db.conversationMember.count({
-        where: { conversationId, userId: { not: null }, ...ACTIVE_MEMBER_WHERE },
-      }),
-    ]);
-    return { agents, humans };
-  }
-
-  /**
-   * DM roster: query directly because PublicChannels.members requires a named channel.
-   */
-  private async roster(
-    workspaceId: string,
-    conversationId: string,
-    callingAgentId: string,
-    target: string,
-  ): Promise<AgentChannelRoster> {
-    const rows = await this.db.conversationMember.findMany({
-      where: { conversationId, ...ACTIVE_MEMBER_WHERE },
-      select: {
-        agentId: true,
-        userId: true,
-        agent: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            description: true,
-            role: true,
-            computerId: true,
-          },
-        },
-        user: { select: { id: true, username: true } },
-      },
-    });
-    const agentRows = rows.flatMap((row) => (row.agent ? [row.agent] : []));
-    const humanRows = rows.flatMap((row) => (row.user ? [row.user] : []));
-    const roles = humanRows.length
-      ? await this.db.workspaceMembership.findMany({
-          where: { workspaceId, userId: { in: humanRows.map((row) => row.id) } },
-          select: { userId: true, role: true },
-        })
-      : [];
-    const roleByUserId = new Map(roles.map((role) => [role.userId, role.role]));
-    // DM entries omit channelRole/channelAdminBasis.
-    return this.shapeAgentRoster(workspaceId, callingAgentId, target, {
-      agents: agentRows.map((agent) => ({ ...agent, serverRole: agent.role })),
-      humans: humanRows.map((row) => ({
-        id: row.id,
-        username: row.username,
-        serverRole: roleByUserId.get(row.id) ?? "member",
-      })),
-    });
-  }
-
-  /**
-   * Shape shared channel/DM membership facts for the Agent: add self and live status/activity
-   * via resolveAgentChannelStatuses; keep membership, roles and authority in shared data.
-   */
-  private async shapeAgentRoster(
-    workspaceId: string,
-    callingAgentId: string,
-    target: string,
-    raw: {
-      agents: Array<{
-        id: string;
-        name: string;
-        displayName: string;
-        description: string;
-        serverRole: string;
-        channelRole?: string;
-        channelAdminBasis?: ChannelAdminBasis;
-        computerId: string | null;
-      }>;
-      humans: Array<{
-        id: string;
-        username: string;
-        serverRole: string;
-        channelRole?: string;
-        channelAdminBasis?: ChannelAdminBasis;
-      }>;
-    },
-  ): Promise<AgentChannelRoster> {
-    const statuses = await resolveAgentChannelStatuses(
-      this.resolvedDisplay(),
-      raw.agents.map((agent) => ({ workspaceId, computerId: agent.computerId, agentId: agent.id })),
-    );
-    const agents = raw.agents.map((agent, index) => ({
-      name: agent.name,
-      displayName: agent.displayName,
-      description: agent.description,
-      serverRole: agent.serverRole,
-      channelRole: agent.channelRole,
-      channelAdminBasis: agent.channelAdminBasis,
-      self: agent.id === callingAgentId,
-      ...statuses[index],
-    }));
-    return {
-      target,
-      agents: agents.sort((left, right) => left.name.localeCompare(right.name)),
-      humans: raw.humans
-        .map((human) => ({
-          username: human.username,
-          serverRole: human.serverRole,
-          channelRole: human.channelRole,
-          channelAdminBasis: human.channelAdminBasis,
-        }))
-        .sort((left, right) => left.username.localeCompare(right.username)),
-    };
-  }
-
-  /**
-   * Construct AgentDisplay lazily so missing Redis becomes per-Agent unknown status, not a failed roster.
-   */
-  private resolvedDisplay(): Pick<AgentDisplay, "snapshot" | "snapshotMany"> {
-    return (
-      this.display ?? {
-        snapshot: (scope) => getAgentDisplay().snapshot(scope),
-        snapshotMany: (scopes) => getAgentDisplay().snapshotMany(scopes),
-      }
-    );
-  }
-
-  private parseChannelTarget(target: string): string {
-    if (!CHANNEL_TARGET.test(target))
-      throw new AgentChannelManagementError(400, "target must be a #channel");
-    return target.slice(1);
-  }
-
-  private normalizeChannelName(rawName: string): string {
-    const name = rawName.startsWith("#") ? rawName.slice(1) : rawName;
-    if (!CHANNEL_NAME_PATTERN.test(name))
-      throw new AgentChannelManagementError(400, "invalid channel name");
-    return name;
-  }
-
-  private parseMemberInput(input: AgentChannelMemberInput): {
-    kind: "user" | "agent";
-    handle: string;
-  } {
-    if ((input.user === undefined) === (input.agent === undefined))
-      throw new AgentChannelManagementError(400, "exactly one of --user or --agent is required");
-    const kind: "user" | "agent" = input.user !== undefined ? "user" : "agent";
-    const raw = (input.user ?? input.agent)!;
-    if (!MEMBER_HANDLE.test(raw))
-      throw new AgentChannelManagementError(400, "member handle must be an @handle");
-    return { kind, handle: raw.slice(1) };
   }
 }
