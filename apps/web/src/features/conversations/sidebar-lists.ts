@@ -119,7 +119,10 @@ export function useReopenClosedOnOpen(target: PinRef) {
       const row = list.get(id);
       // Listed and open, or a channel they are not in: nothing to bring back.
       if (row && (!row.hidden || ("joined" in row && !row.joined))) return;
-      void sidebar.actions.reopen(target).catch(() => {});
+      // A failed reopening leaves the open chat out of the list: say so where it can be traced.
+      void sidebar.actions
+        .reopen(target)
+        .catch((cause: unknown) => console.error("closed chat could not be reopened", cause));
     });
   }, [id, sidebar, target]);
 }
