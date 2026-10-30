@@ -12,6 +12,12 @@ import type { TaskConversations } from "./task-conversations.server";
  * refusal to its status; the service owns authorization (the reader sees the task's channel).
  */
 type Principal = { workspaceId: string; agentId: string };
+
+/** Whether the Agent's owner has task conversations on (the `taskConversations` experiment). */
+export type TaskConversationsGate = () => Promise<boolean>;
+
+const OFF_MESSAGE =
+  "Task conversations are not turned on for this Agent's owner. Turn on Task conversations in Settings → Experiments to use this command.";
 type Service = Pick<TaskConversations, "view" | "reply" | "follow" | "unfollow" | "following">;
 
 const refSchema = z.object({
@@ -31,7 +37,16 @@ const asRef = (body: { channel: string; task_number: number }) => ({
   number: body.task_number,
 });
 
+class TaskConversationsOff extends Error {}
+
+/** The experiment decides for the Agent's owner; with it off the routes answer as if absent. */
+async function requireOn(gate: TaskConversationsGate) {
+  if (!(await gate())) throw new TaskConversationsOff();
+}
+
 function failure(error: unknown) {
+  if (error instanceof TaskConversationsOff)
+    return Response.json({ error: OFF_MESSAGE, code: "task_conversations_off" }, { status: 404 });
   if (error instanceof z.ZodError)
     return Response.json({ error: "invalid task request", code: "INVALID_INPUT" }, { status: 400 });
   if (error instanceof AppError)
@@ -48,8 +63,14 @@ function queryRef(request: Request) {
   });
 }
 
-export async function handleTaskViewGet(request: Request, principal: Principal, service: Service) {
+export async function handleTaskViewGet(
+  request: Request,
+  principal: Principal,
+  service: Service,
+  gate: TaskConversationsGate,
+) {
   try {
+    await requireOn(gate);
     const ref = queryRef(request);
     const limit = limitSchema.parse(new URL(request.url).searchParams.get("limit") ?? undefined);
     return Response.json(await service.view(principal, asRef(ref), { limit }));
@@ -58,8 +79,13 @@ export async function handleTaskViewGet(request: Request, principal: Principal, 
   }
 }
 
-export async function handleTaskFollowingGet(principal: Principal, service: Service) {
+export async function handleTaskFollowingGet(
+  principal: Principal,
+  service: Service,
+  gate: TaskConversationsGate,
+) {
   try {
+    await requireOn(gate);
     return Response.json({ tasks: await service.following(principal) });
   } catch (error) {
     return failure(error);
@@ -70,8 +96,10 @@ export async function handleTaskReplyPost(
   request: Request,
   principal: Principal,
   service: Service,
+  gate: TaskConversationsGate,
 ) {
   try {
+    await requireOn(gate);
     const body = replySchema.parse(await readAgentJsonBody(request));
     return Response.json({
       ...(await service.reply(principal, asRef(body), {
@@ -89,8 +117,10 @@ export async function handleTaskFollowPost(
   request: Request,
   principal: Principal,
   service: Service,
+  gate: TaskConversationsGate,
 ) {
   try {
+    await requireOn(gate);
     const body = refSchema.parse(await readAgentJsonBody(request));
     return Response.json({ ok: true, ...(await service.follow(principal, asRef(body))) });
   } catch (error) {
@@ -102,8 +132,10 @@ export async function handleTaskUnfollowPost(
   request: Request,
   principal: Principal,
   service: Service,
+  gate: TaskConversationsGate,
 ) {
   try {
+    await requireOn(gate);
     const body = unfollowSchema.parse(await readAgentJsonBody(request));
     return Response.json({
       ok: true,
