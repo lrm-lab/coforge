@@ -1,5 +1,13 @@
 import { Fragment, useState, type ReactNode } from "react";
-import { Bell01, BellOff01, Folder, MessageChatSquare, Pin01, XClose } from "@untitledui/icons";
+import {
+  Bell01,
+  BellOff01,
+  Folder,
+  MessageChatSquare,
+  Pin01,
+  Plus,
+  XClose,
+} from "@untitledui/icons";
 import { SubmenuTrigger } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -8,6 +16,7 @@ import { m } from "#src/paraglide/messages";
 import type { PinRef } from "./pinned-conversations";
 import { useSidebarActions } from "./sidebar-lists";
 import type { ChatSection } from "./chat-section.schemas";
+import { ChatSectionDialog } from "./chat-section-dialog";
 import {
   conversationRowMenuEnabled,
   conversationRowMenuItems,
@@ -63,6 +72,7 @@ export function ConversationRowMenu({
 }) {
   const enabled = target.kind === "direct" || conversationRowMenuEnabled(target);
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const toast = useAppToast();
   const actions = useSidebarActions();
   const items = conversationRowMenuItems(target);
@@ -71,15 +81,19 @@ export function ConversationRowMenu({
       ? { kind: "channel", channelId: target.id }
       : { kind: "direct", conversationId: target.conversationId };
 
+  function moveTo(sectionId: string | null) {
+    const save = () => actions.moveToSection(row, sectionId);
+    save().catch(() => onSectionError(save, sectionId ?? undefined));
+  }
+
   /** Applies the change to the row at once (the menu closes as it would for any choice) and saves
    * it; a save that fails for good puts the row back, and the section it was moving into says so
    * (§13). */
   function handleAction(key: unknown) {
+    if (key === "section-new") return setCreating(true);
     if (String(key).startsWith("section:")) {
       const id = String(key).slice("section:".length);
-      const sectionId = id === "home" ? null : id;
-      const save = () => actions.moveToSection(row, sectionId);
-      save().catch(() => onSectionError(save, sectionId ?? undefined));
+      moveTo(id === "home" ? null : id);
       return;
     }
     const run = {
@@ -98,51 +112,67 @@ export function ConversationRowMenu({
   if (!enabled) return children;
 
   return (
-    <Dropdown.Root trigger="contextMenu" isOpen={open} onOpenChange={setOpen}>
-      {children}
-      <Dropdown.Popover placement="bottom start">
-        <Dropdown.Menu aria-label={m.conversation_menu_label()} onAction={handleAction}>
-          <SubmenuTrigger>
-            <Dropdown.Item
-              id="move-section"
-              icon={Folder}
-              label={m.chat_section_move()}
-              isDisabled={!sectionsReady}
-              selectionIndicator="none"
-            />
-            <Dropdown.Popover placement="right top">
-              <Dropdown.Menu aria-label={m.chat_section_move()} onAction={handleAction}>
-                <Dropdown.Item
-                  id="section:home"
-                  label={
-                    target.kind === "channel" ? m.channels_title() : m.messages_agents_action()
-                  }
-                  selectionIndicator="none"
-                />
-                {sections.map((section) => (
-                  <Dropdown.Item
-                    key={section.id}
-                    id={`section:${section.id}`}
-                    label={`${section.emoji ? `${section.emoji} ` : ""}${section.name}`}
-                    selectionIndicator="none"
-                  />
-                ))}
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </SubmenuTrigger>
-          {items.map((item) => (
-            <Fragment key={item.id}>
-              {item.id === "close-chat" && <Dropdown.Separator />}
+    <>
+      <Dropdown.Root trigger="contextMenu" isOpen={open} onOpenChange={setOpen}>
+        {children}
+        <Dropdown.Popover placement="bottom start">
+          <Dropdown.Menu aria-label={m.conversation_menu_label()} onAction={handleAction}>
+            <SubmenuTrigger>
               <Dropdown.Item
-                id={item.id}
-                icon={itemIcon(item)}
-                label={itemLabel(item)}
+                id="move-section"
+                icon={Folder}
+                label={m.chat_section_move()}
+                isDisabled={!sectionsReady}
                 selectionIndicator="none"
               />
-            </Fragment>
-          ))}
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown.Root>
+              <Dropdown.Popover placement="right top">
+                <Dropdown.Menu aria-label={m.chat_section_move()} onAction={handleAction}>
+                  <Dropdown.Item
+                    id="section:home"
+                    label={
+                      target.kind === "channel" ? m.channels_title() : m.messages_agents_action()
+                    }
+                    selectionIndicator="none"
+                  />
+                  {sections.map((section) => (
+                    <Dropdown.Item
+                      key={section.id}
+                      id={`section:${section.id}`}
+                      label={`${section.emoji ? `${section.emoji} ` : ""}${section.name}`}
+                      selectionIndicator="none"
+                    />
+                  ))}
+                  <Dropdown.Separator />
+                  <Dropdown.Item
+                    id="section-new"
+                    icon={Plus}
+                    label={m.chat_section_create()}
+                    selectionIndicator="none"
+                  />
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </SubmenuTrigger>
+            {items.map((item) => (
+              <Fragment key={item.id}>
+                {item.id === "close-chat" && <Dropdown.Separator />}
+                <Dropdown.Item
+                  id={item.id}
+                  icon={itemIcon(item)}
+                  label={itemLabel(item)}
+                  selectionIndicator="none"
+                />
+              </Fragment>
+            ))}
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown.Root>
+      {/* A section made from here takes the row in. */}
+      {creating && (
+        <ChatSectionDialog
+          onClose={() => setCreating(false)}
+          onCreated={(section) => moveTo(section.id)}
+        />
+      )}
+    </>
   );
 }

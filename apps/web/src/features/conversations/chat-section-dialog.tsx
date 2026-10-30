@@ -16,10 +16,13 @@ export function ChatSectionDialog({
   section,
   deleting = false,
   onClose,
+  onCreated,
 }: {
   section?: ChatSection;
   deleting?: boolean;
   onClose: () => void;
+  /** What follows a new section's creation (moving the row it was made from into it). */
+  onCreated?: (section: ChatSection) => void;
 }) {
   const [name, setName] = useState(section?.name ?? "");
   // A new section starts with the folder mark already chosen; an edited one keeps its own (or none).
@@ -41,7 +44,7 @@ export function ChatSectionDialog({
       if (section && deleting) await actions.removeSection(section.id);
       else if (parsed.success) {
         if (section) await actions.updateSection(section.id, parsed.data);
-        else await actions.createSection(parsed.data);
+        else onCreated?.(await actions.createSection(parsed.data));
       }
       onClose();
     } catch {
