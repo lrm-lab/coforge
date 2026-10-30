@@ -7,6 +7,7 @@ import {
   APP_CONFIG_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
   AGENT_TURN_INTERRUPT_CAPABILITY,
+  MACHINE_STATUS_CAPABILITY,
 } from "@lrm/coforge-sdk/internal";
 import { APP_REGISTRATION_NOTICE_CAPABILITY } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import {
@@ -29,6 +30,7 @@ export function readyCapabilities(
     APP_CONFIG_CAPABILITY,
     AGENT_TURN_INTERRUPT_CAPABILITY,
     APP_REGISTRATION_NOTICE_CAPABILITY,
+    MACHINE_STATUS_CAPABILITY,
     ...(runtimeAuth ? [RUNTIME_AUTH_CAPABILITY, RUNTIME_AUTH_STATUS_READ_CAPABILITY] : []),
     ...(runtimeAuth && kiroEnterpriseAuthSupported(platform)
       ? [KIRO_IDENTITY_CENTER_AUTH_CAPABILITY]

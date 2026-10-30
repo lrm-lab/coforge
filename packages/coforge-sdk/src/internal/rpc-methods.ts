@@ -41,6 +41,8 @@ export const RPC_METHODS = {
   daemonUsageScanResult: "daemon:v1:provider:usage_scan_result",
   daemonModelRefresh: "daemon:v1:provider:model_refresh",
   daemonModelRefreshResult: "daemon:v1:provider:model_refresh_result",
+  daemonMachineDiskStatus: "daemon:v1:machine:disk_status",
+  daemonMachineMemoryStatus: "daemon:v1:machine:memory_status",
   daemonEffortRead: "daemon:v1:provider:effort_read",
   daemonEffortReadResult: "daemon:v1:provider:effort_read_result",
   computerRestart: "computer:v1:lifecycle:restart",

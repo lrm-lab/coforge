@@ -48,7 +48,7 @@ import { resolveLaunchIdentity, type SessionReference } from "./launch-identity"
 import {
   runtimeDisplayName,
   sessionInvalidateActivityText,
-  sessionInvalidateMessage,
+  connectionSessionInvalidate,
 } from "./session-invalidate-activity";
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
 import { activityDraft } from "./activity-draft";
@@ -96,8 +96,6 @@ import {
   MENTION_DELIVERY_TERMINAL_CODES,
   AGENT_ACTIVITY_DETAIL_KIND,
   type AgentActivity,
-  type AgentSessionInvalidate,
-  type AgentSessionInvalidateReason,
   type AgentMessageResponse,
   type AgentStartIntent,
   type AgentSessionReport,
@@ -143,6 +141,8 @@ import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
+import { rememberUsage } from "./usage-memory";
+import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentInbox, appInbox, workspaceEnvelope } from "./agent-inbox-factories";
@@ -371,6 +371,12 @@ export class DaemonRuntime {
   readonly #catalogFreshnessSweep = new CatalogFreshnessSweep({
     transport: () => (this.#started && !this.#stopping ? this.#transport : undefined),
     recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
+  });
+  /** Reports this machine's disk and memory while the connection is up. */
+  readonly #machineStatus = runtimeMachineStatus({
+    connection: () => this.#connection,
+    dataDirectory: () => this.stateDirectory,
+    transport: () => (this.#started && !this.#stopping ? this.#transport : undefined),
   });
   readonly #wakeRecycle = new WakeRecycle({
     provider: (provider) => this.#createProvider(provider),
@@ -727,7 +733,10 @@ export class DaemonRuntime {
     this.#appConfigs = new AgentAppConfigSync({
       // `#requestAppConfigSnapshot` asks only through a transport that has the method.
       requestSnapshot: (agentId) =>
-        this.#transport.requestAppConfigSnapshot!({ ...this.#envelope(), agentId }),
+        this.#transport.requestAppConfigSnapshot!({
+          ...this.#envelope(),
+          agentId,
+        }),
       apps: { [CLEANER_APP_ID]: this.systemCleaner },
     });
     // The transport is replaced on each start, so the runner reaches the route through whichever
@@ -816,13 +825,13 @@ export class DaemonRuntime {
       // effectively-unconditional signal — there is no longer a separate controlEpoch gate.
       invalidateSession: (intent, launchId, sessionId, reason) => {
         this.#transport.sendSessionInvalidate?.(
-          this.#sessionInvalidateMessage(
-            intent.agentId,
-            intent.provider,
+          connectionSessionInvalidate(this.#connection, this.#runtimeInstanceId, {
+            agentId: intent.agentId,
+            provider: intent.provider,
             sessionId,
             launchId,
             reason,
-          ),
+          }),
         );
       },
       result: async (result) => {
@@ -848,7 +857,7 @@ export class DaemonRuntime {
       interruptedActivity: (agentId) => this.#drafts.interrupted(agentId),
       showQuietTurn: (agentId, launch, publish) => this.#showQuietTurn(agentId, launch, publish),
       reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
-      rememberUsage: (snapshot) => this.#rememberUsage(snapshot),
+      rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
       releaseTurnEndHolds: (agentId) => this.#releaseTurnEndHolds(agentId),
       drainAppInboxNotices: (agentId) => this.drainAppInboxNotices(agentId),
       failCollectorRunningSlots: (agentId, reason) =>
@@ -1246,6 +1255,7 @@ export class DaemonRuntime {
       this.#coldIdleSweep.start();
       this.#stalledRecoverySweep.start();
       this.#catalogFreshnessSweep.start();
+      this.#machineStatus.start();
       // Kick off optional inventory before flushing buffered publications so immediate probes can
       // make progress while the first Agent inputs are delivered.
       const codeAgentReport = this.#codeAgentInventory.reportRuntimes(transport);
@@ -1701,13 +1711,13 @@ export class DaemonRuntime {
                   // current stale session can still succeed; once the report lands below the
                   // server has already moved to the new id and this would always be a no-op.
                   this.#transport.sendSessionInvalidate?.(
-                    this.#sessionInvalidateMessage(
+                    connectionSessionInvalidate(this.#connection, this.#runtimeInstanceId, {
                       agentId,
-                      config.provider,
-                      driverReplacedSessionId,
-                      launch.launchId,
-                      "missing",
-                    ),
+                      provider: config.provider,
+                      sessionId: driverReplacedSessionId,
+                      launchId: launch.launchId,
+                      reason: "missing",
+                    }),
                   );
                 }
                 await this.#reportAgentSession({
@@ -2052,19 +2062,6 @@ export class DaemonRuntime {
       },
       agentApiKey,
     );
-  }
-
-  #rememberUsage(snapshot: UsageSnapshot): void {
-    const current = this.#observedUsage.get(snapshot.provider);
-    this.#observedUsage.set(snapshot.provider, {
-      ...current,
-      ...snapshot,
-      primary: snapshot.primary ?? current?.primary,
-      secondary: snapshot.secondary ?? current?.secondary,
-      // Stamped at observation time, not when `scanUsage` later reuses this snapshot as its
-      // fallback — a passively observed reading is never as fresh as "now".
-      collectedAt: snapshot.collectedAt ?? new Date().toISOString(),
-    });
   }
 
   #currentObservedUsage(provider: RuntimeProvider): UsageSnapshot | undefined {
@@ -2558,22 +2555,6 @@ export class DaemonRuntime {
         entryText ? { entries: [{ kind: "text", text: entryText }] } : {},
       ),
     );
-  }
-
-  #sessionInvalidateMessage(
-    agentId: string,
-    provider: RuntimeProvider,
-    sessionId: string,
-    launchId: string,
-    reason: AgentSessionInvalidateReason,
-  ): AgentSessionInvalidate {
-    return sessionInvalidateMessage(this.#envelope(), this.#runtimeInstanceId, {
-      agentId,
-      provider,
-      sessionId,
-      launchId,
-      reason,
-    });
   }
 
   /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
@@ -3127,6 +3108,7 @@ export class DaemonRuntime {
     this.#coldIdleSweep.stop();
     this.#stalledRecoverySweep.stop();
     this.#catalogFreshnessSweep.stop();
+    this.#machineStatus.stop();
     this.#activityPublisher.disable();
     for (const [agentId, launch] of this.#currentActivityLaunches) {
       launch.startup?.dispose();

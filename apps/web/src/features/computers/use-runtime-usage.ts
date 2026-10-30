@@ -3,7 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
-import { readUsage } from "./computers.functions";
+import { readUsage } from "./computer-usage.functions";
 import { scanRuntimeUsage } from "./usage-scan";
 
 function runtimeUsageQueryKey(computerId: string, provider: RuntimeProvider) {

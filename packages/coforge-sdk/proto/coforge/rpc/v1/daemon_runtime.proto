@@ -224,6 +224,33 @@ message RuntimeAuthStatusReport {
   repeated RuntimeAuthState runtimes = 6;
 }
 
+// Daemon -> server notices, methods `daemon:v1:machine:disk_status` and
+// `daemon:v1:machine:memory_status`: what the Computer has left on the Agent data directory's
+// filesystem and in memory. Sent when the connection is established and then on their own timers
+// (an hour for disk, five minutes for memory); a machine whose numbers cannot be read sends
+// nothing rather than a guess. Additive: protocol_major stays 1, and an older server refuses the
+// method, which the daemon ignores.
+message MachineDiskStatusReport {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  int64 reported_at_ms = 5;
+  // Bytes; total > 0 and 0 <= available <= total, checked before sending and on receipt.
+  int64 available_bytes = 6;
+  int64 total_bytes = 7;
+}
+
+message MachineMemoryStatusReport {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  int64 reported_at_ms = 5;
+  int64 available_bytes = 6;
+  int64 total_bytes = 7;
+}
+
 enum RuntimeAuthStateKind {
   RUNTIME_AUTH_STATE_KIND_UNSPECIFIED = 0;
   RUNTIME_AUTH_STATE_KIND_LOGGED_IN = 1;

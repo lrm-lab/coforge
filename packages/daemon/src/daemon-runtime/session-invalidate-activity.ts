@@ -1,5 +1,6 @@
 import {
   RUNTIME_PROVIDER,
+  WORKSPACE_PROTOCOL_MAJOR,
   type AgentSessionInvalidate,
   type AgentSessionInvalidateReason,
   type RuntimeProvider,
@@ -53,4 +54,25 @@ export function sessionInvalidateActivityText(
     detail: `Stored ${runtimeLabel} session ${rejected ? "replay rejected" : "missing"}; cold-starting a new session…`,
     entryText: `Stored ${runtimeLabel} session ${staleSessionId} ${rejected ? "was rejected by the provider during replay" : "is unavailable locally"}. Falling back to a cold start; earlier runtime context may not be restored.`,
   };
+}
+
+/** The same message for a runtime's own connection and instance. */
+export function connectionSessionInvalidate(
+  connection: { workspaceId: string; computerId: string },
+  daemonInstanceId: string,
+  fields: Pick<
+    AgentSessionInvalidate,
+    "agentId" | "provider" | "sessionId" | "launchId" | "reason"
+  >,
+): AgentSessionInvalidate {
+  return sessionInvalidateMessage(
+    {
+      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
+      requestId: crypto.randomUUID(),
+      workspaceId: connection.workspaceId,
+      computerId: connection.computerId,
+    },
+    daemonInstanceId,
+    fields,
+  );
 }

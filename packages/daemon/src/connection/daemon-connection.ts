@@ -26,6 +26,10 @@ import {
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { ListenerSlot } from "./listener-slot";
+import {
+  defaultDaemonConnectionTiming,
+  type DaemonConnectionTiming,
+} from "./daemon-connection-timing";
 import { DaemonNoticePublications } from "./daemon-notice-publications";
 import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
@@ -103,6 +107,7 @@ import {
   encodeDaemonRuntimeCodeAgentsUpdateRequest,
   encodeRuntimeAuthStatusReport,
   RUNTIME_AUTH_STATUS_REPORT_METHOD,
+  type MachineStatusReport,
   type RuntimeAuthStatusReport,
   DAEMON_RUNTIME_READY_METHOD,
   DAEMON_RUNTIME_SHUTDOWN_METHOD,
@@ -224,27 +229,6 @@ const AGENT_STATUS_REFRESH_MS = 30_000;
 export const COMPUTER_STATUS_REFRESH_MS = 30_000;
 const REMEMBERED_REQUEST_IDS = 256;
 const logger = getLogger(["coforge", "daemon", "connection"]);
-
-export interface DaemonConnectionTiming {
-  schedule(callback: () => void, delayMs: number): unknown;
-  cancel(timer: unknown): void;
-  scheduleRepeating?(callback: () => void, delayMs: number): unknown;
-  cancelRepeating?(timer: unknown): void;
-  /** The connection's own clock, so a test can cross the inbound-liveness window without
-   * waiting for it. Production reads the wall clock. */
-  now?(): number;
-}
-
-const defaultDaemonConnectionTiming: DaemonConnectionTiming = {
-  schedule(callback, delayMs) {
-    const timer = setTimeout(callback, delayMs);
-    timer.unref();
-    return timer;
-  },
-  cancel(timer) {
-    clearTimeout(timer as ReturnType<typeof setTimeout>);
-  },
-};
 
 /** The Daemon's single connection for its configured Workspace. */
 export class DaemonConnection implements DaemonConnectionClient {
@@ -1939,6 +1923,14 @@ export class DaemonConnection implements DaemonConnectionClient {
 
   async reportRuntimeAuthStatus(report: RuntimeAuthStatusReport): Promise<void> {
     await this.#rpc(RUNTIME_AUTH_STATUS_REPORT_METHOD, encodeRuntimeAuthStatusReport(report));
+  }
+
+  sendMachineDiskStatus(report: MachineStatusReport): Promise<void> {
+    return this.#notices.sendMachineDiskStatus(report);
+  }
+
+  sendMachineMemoryStatus(report: MachineStatusReport): Promise<void> {
+    return this.#notices.sendMachineMemoryStatus(report);
   }
 
   async reportAgentSession(report: AgentSessionReport): Promise<void> {

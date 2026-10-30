@@ -43,6 +43,16 @@ model Computer {
   /// not a Workspace, so it lives here rather than on `computer_runtimes`. Null until a daemon that
   /// reports it connects.
   runtimeAuth       Json?
+  /// What the Agent data directory's filesystem had left, as last reported by this Computer's
+  /// daemon: bytes free and the volume's size, and when the daemon measured them.
+  diskAvailableBytes BigInt?
+  diskTotalBytes     BigInt?
+  diskReportedAt     DateTime?
+  /// Memory the machine could hand to a new process (reclaimable, not only free pages), and when
+  /// the daemon measured it. Null until a daemon that reports machine status connects.
+  memoryAvailableBytes BigInt?
+  memoryTotalBytes     BigInt?
+  memoryReportedAt     DateTime?
   /// Where this Computer runs: "local" on a machine the User controls,
   /// "cloud" on the deployment's Swarm cluster.
   kind              String                 @default("local")

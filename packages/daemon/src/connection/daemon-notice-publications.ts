@@ -11,12 +11,17 @@ import {
   type AgentMentionDeliveryTransition,
   type AgentMessageDeliveryAck,
   type AgentMessageDeliveryRejection,
+  type MachineStatusReport,
+  MACHINE_DISK_STATUS_METHOD,
+  MACHINE_MEMORY_STATUS_METHOD,
+  encodeMachineDiskStatusReport,
+  encodeMachineMemoryStatusReport,
 } from "@lrm/coforge-sdk/internal";
 
 /**
  * The one-line notices a daemon sends over the control channel without waiting for an answer:
- * delivery acknowledgements and rejections, and mention settlements. None of them keeps state — a
- * transport replaced mid-flight just drops the answer.
+ * delivery acknowledgements and rejections, mention settlements, and what this machine has left.
+ * None of them keeps state — a transport replaced mid-flight just drops the answer.
  */
 export class DaemonNoticePublications {
   constructor(private readonly rpc: (method: string, data: Uint8Array) => Promise<unknown>) {}
@@ -46,5 +51,17 @@ export class DaemonNoticePublications {
       AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD,
       encodeAgentMentionDeliveryTerminalError(report),
     ).then(() => undefined);
+  }
+
+  sendMachineDiskStatus(report: MachineStatusReport): Promise<void> {
+    return this.rpc(MACHINE_DISK_STATUS_METHOD, encodeMachineDiskStatusReport(report)).then(
+      () => undefined,
+    );
+  }
+
+  sendMachineMemoryStatus(report: MachineStatusReport): Promise<void> {
+    return this.rpc(MACHINE_MEMORY_STATUS_METHOD, encodeMachineMemoryStatusReport(report)).then(
+      () => undefined,
+    );
   }
 }

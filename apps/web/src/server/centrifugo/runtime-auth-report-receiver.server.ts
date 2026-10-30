@@ -18,6 +18,7 @@ import {
   createDaemonRuntimeCodeAgentsUpdateMethod,
   type CentrifugoRpcMethod,
 } from "./rpc-handler.server";
+import { machineStatusMethods } from "./machine-status-receiver.server";
 
 /**
  * A Computer's runtime login report (`daemon:v1:runtime_auth:status_report`). Only the connection's own
@@ -79,5 +80,6 @@ export function computerRuntimeMethods(
           runtimeAuthChangeAnnouncer(db, createCentrifugoServerApi()),
         )
       : unavailable,
+    ...machineStatusMethods(db),
   };
 }

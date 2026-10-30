@@ -6,6 +6,7 @@ import {
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
+import { machineStatusView } from "#src/features/computers/computer-machine-status";
 import { readCloudComputerImages } from "#src/server/hosts/cloud-image-inventory.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
@@ -15,12 +16,10 @@ import {
   computerIdInputSchema,
   refreshRuntimeCatalogInputSchema,
   readRestartStatusInputSchema,
-  readUsageInputSchema,
   restartComputerInputSchema,
   upgradeComputerInputSchema,
   scanAgentWorkspacesInputSchema,
   deleteAgentWorkspaceInputSchema,
-  scanUsageInputSchema,
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
   formatCloudComputerInputSchema,
@@ -33,11 +32,9 @@ import {
 } from "#src/features/auth/function-auth";
 import {
   createCentrifugoServerApi,
-  createUsageScan,
   daemonControlChannel,
   reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
-import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
 import {
@@ -107,41 +104,6 @@ function runtimeVisibility(db: WorkspaceUserContext["db"]) {
   return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
 }
 
-export const scanUsage = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(scanUsageInputSchema)
-  .handler(async ({ context, data }) => {
-    const { user, db, workspaceId } = context;
-    const visibility = runtimeVisibility(db);
-    if (
-      !(await visibility.isOwner({ workspaceId, userId: user.id }, data.computerId, data.provider))
-    )
-      throw new Error("runtime is not available");
-    const scanId = await createUsageScan(createCentrifugoServerApi(), {
-      workspaceId,
-      computerId: data.computerId,
-      provider: data.provider,
-    });
-    return { scanId, status: "pending" as const };
-  });
-
-export const readUsage = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(readUsageInputSchema)
-  .handler(async ({ context, data }) => {
-    const { user, db, workspaceId } = context;
-    const visibility = runtimeVisibility(db);
-    if (
-      !(await visibility.isOwner({ workspaceId, userId: user.id }, data.computerId, data.provider))
-    )
-      throw new Error("runtime is not available");
-    return getUsageCache().read({
-      workspaceId,
-      computerId: data.computerId,
-      provider: data.provider,
-    });
-  });
-
 export { listComputerNames } from "./computer-list-names.functions";
 
 export const listComputers = createServerFn({ method: "GET" })
@@ -169,6 +131,12 @@ export const listComputers = createServerFn({ method: "GET" })
               platform: true,
               osVersion: true,
               runtimeAuth: true,
+              diskAvailableBytes: true,
+              diskTotalBytes: true,
+              diskReportedAt: true,
+              memoryAvailableBytes: true,
+              memoryTotalBytes: true,
+              memoryReportedAt: true,
               owner: {
                 select: {
                   id: true,
@@ -239,6 +207,7 @@ export const listComputers = createServerFn({ method: "GET" })
           computerVersion: computer.computerVersion,
           platform: computer.platform,
           osVersion: computer.osVersion,
+          machine: machineStatusView(computer),
           creator: {
             username: computer.owner.username,
             displayName: computer.owner.displayName,

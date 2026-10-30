@@ -6,6 +6,7 @@ import type {
 import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil";
 
 import type { ComputerIdentity } from "./computer-identity";
+import type { MachineStatusView } from "./computer-machine-status";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 
 /** What a rescan the page asked for came back with: the daemon answered, or it did not in time,
@@ -33,6 +34,8 @@ export type ComputerDetailView = ComputerIdentity & {
   upgrade?: ComputerUpgradeStatus | null;
   platform?: string | null;
   osVersion?: string | null;
+  /** What the Computer last reported about its disk and memory; `null` per kind when unknown. */
+  machine?: MachineStatusView;
   creator?: {
     displayName: string | null;
     username: string;

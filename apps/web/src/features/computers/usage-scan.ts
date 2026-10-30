@@ -1,6 +1,6 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
-import { readUsage, scanUsage } from "./computers.functions";
+import { readUsage, scanUsage } from "./computer-usage.functions";
 import { waitForUsageScanResult } from "./usage-poll";
 
 /**

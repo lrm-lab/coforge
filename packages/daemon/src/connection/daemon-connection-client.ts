@@ -34,6 +34,7 @@ import type {
   AgentMentionDeliveryTransition,
   AgentMentionDeliveryTerminalError,
   RuntimeAuthStatusReport,
+  MachineStatusReport,
   DaemonRuntimeShutdown,
   DaemonRuntimeReadyRequest,
   DaemonRuntimeCodeAgentsUpdateRequest,
@@ -113,6 +114,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void>;
   updateCodeAgents?(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void>;
   reportRuntimeAuthStatus?(report: RuntimeAuthStatusReport): Promise<void>;
+  sendMachineDiskStatus?(report: MachineStatusReport): Promise<void>;
+  sendMachineMemoryStatus?(report: MachineStatusReport): Promise<void>;
   reportRuntimeAuthLogin?(report: RuntimeAuthLoginReport): Promise<void>;
   reportRuntimeAuthLogout?(report: RuntimeAuthLogoutReport): Promise<void>;
   onRuntimeAuth?(callback: (intent: RuntimeAuthIntent) => void): () => void;
