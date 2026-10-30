@@ -130,7 +130,32 @@ if [ -f "$safety_script" ]; then
 		migrations_dir="$(dirname "$compose_file")/../../src/apps/web/prisma/migrations"
 	fi
 	if [ -d "$migrations_dir" ]; then
-		bash "$safety_script" "${safety_args[@]}" "$migrations_dir"
+		# Query database for already-applied migrations to inspect only pending migrations
+		applied_migrations=""
+		pg_container="$(compose ps -q postgres 2>/dev/null || docker ps --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=postgres" -q | head -n 1)"
+		if [ -n "$pg_container" ]; then
+			applied_migrations="$(docker exec "$pg_container" psql -U coforge -d coforge -t -A -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL" 2>/dev/null || true)"
+		fi
+
+		pending_migrations=()
+		for mdir in "$migrations_dir"/*; do
+			[ -d "$mdir" ] || continue
+			mname="$(basename "$mdir")"
+			if [ -n "$applied_migrations" ]; then
+				if ! printf '%s\n' "$applied_migrations" | grep -Fqx "$mname"; then
+					if [ -f "$mdir/migration.sql" ]; then
+						pending_migrations+=("$mdir/migration.sql")
+					fi
+				fi
+			fi
+		done
+
+		if [ "${#pending_migrations[@]}" -gt 0 ]; then
+			printf 'blue-green-deploy: inspecting %d pending migration(s) for breaking changes...\n' "${#pending_migrations[@]}" >&2
+			bash "$safety_script" "${safety_args[@]}" "${pending_migrations[@]}"
+		else
+			printf 'blue-green-deploy: no pending unapplied migrations to inspect\n' >&2
+		fi
 	fi
 fi
 
