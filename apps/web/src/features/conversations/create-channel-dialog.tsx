@@ -113,8 +113,10 @@ export function CreateChannelDialog({
       }}
     >
       {memberPicker ? (
-        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden">
-          <Dialog className="flex h-[min(36rem,calc(100dvh-4rem))] flex-col p-0 md:flex-row">
+        // On a phone the panes stack and the dialog takes the screen's height, so the picker has
+        // room to fill (task #331); side by side they share a fixed height.
+        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full">
+          <Dialog className="flex h-full flex-col p-0 md:h-[min(36rem,calc(100dvh-4rem))] md:flex-row">
             {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
           </Dialog>
         </Modal>
@@ -332,7 +334,7 @@ function CreateChannelForm({
         directory={directory}
         disabled={locked}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-6">
+      <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto p-6 max-md:shrink-0 md:flex-1">
         <ButtonUtility
           aria-label={m.controls_close()}
           icon={XClose}
@@ -358,7 +360,9 @@ function CreateChannelForm({
           >
             {nameField}
             {projectField}
-            <ul className="flex flex-col gap-1">
+            {/* On a phone the picker's ticks and the count already show who is chosen; a list
+                here would take its height from the picker with every tick. */}
+            <ul className="flex flex-col gap-1 max-md:hidden">
               {selectedGroupChatCandidates(candidates, selectedKeys).map((entry) => (
                 <li key={entry.key} className="flex items-center gap-3 py-1">
                   <IdentityAvatar
@@ -423,7 +427,7 @@ function GroupChatPickerPane({
 }) {
   const shown = filterGroupChatCandidates(candidates, search);
   return (
-    <aside className="flex min-h-0 shrink-0 flex-col gap-3 border-b border-secondary bg-secondary p-4 max-md:max-h-[14rem] max-md:pt-14 md:w-[20rem] md:border-r md:border-b-0">
+    <aside className="flex min-h-0 flex-col gap-3 border-b border-secondary bg-secondary p-4 max-md:flex-1 max-md:pt-14 md:w-[20rem] md:shrink-0 md:border-r md:border-b-0">
       <Input
         aria-label={m.channel_members_search_placeholder()}
         placeholder={m.channel_members_search_placeholder()}
@@ -459,7 +463,10 @@ function GroupChatPickerPane({
                 isDisabled={disabled}
                 onChange={(on) => onToggle(entry.key, on)}
                 aria-label={entry.name}
-                className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed"
+                // `relative` keeps React Aria's visually hidden input inside the row. Without it the
+                // input is placed against the dialog, whose scroll area then grows past the list
+                // and scrolls the whole dialog when a lower row is ticked (task #331).
+                className="relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed"
               >
                 {({ isSelected, isDisabled, isFocusVisible }) => (
                   <>

@@ -53,7 +53,7 @@ function TargetRow({
         isDisabled={!selectable}
         onChange={(on) => onToggle(target, on)}
         aria-label={label}
-        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed"
+        className="relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed"
       >
         {({ isSelected: on, isDisabled, isFocusVisible }) => (
           <>

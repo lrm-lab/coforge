@@ -185,7 +185,7 @@ export function ComputerDetailAgentRoster({
                       isDisabled={locked}
                       isSelected={selectedIds.has(agent.id)}
                       onChange={toggle}
-                      className="flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed"
+                      className="relative flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed"
                     >
                       {({ isSelected, isDisabled, isFocusVisible }) => (
                         <>

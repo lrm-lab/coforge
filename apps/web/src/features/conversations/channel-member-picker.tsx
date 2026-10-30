@@ -210,7 +210,7 @@ function ChannelCandidateRow({
         onChange={(on) => onToggle(entry.key, on)}
         aria-label={entry.displayName}
         className={cn(
-          "flex w-full cursor-pointer items-center gap-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed",
+          "relative flex w-full cursor-pointer items-center gap-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed",
           pad,
         )}
       >
