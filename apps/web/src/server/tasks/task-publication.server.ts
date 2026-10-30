@@ -14,6 +14,7 @@ import {
   agentMessageSender,
   type AgentMessageSender,
 } from "#src/server/conversations/sender-display.server";
+import { deliveryTarget } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { taskView, type SelectedTask } from "./task-view.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 
@@ -103,6 +104,7 @@ export async function publishAssignmentReceipt(
         conversationId: message.conversationId,
         messageId: message.id,
         sequence: message.sequence,
+        ...(message.threadRootId && { threadRootId: message.threadRootId }),
       }),
     ),
     Promise.resolve().then(() =>
@@ -118,9 +120,12 @@ export async function publishAssignmentReceipt(
       ports,
       message,
       requestId,
-      message.conversation.channelName
-        ? `#${message.conversation.channelName}`
-        : `@${message.conversation.members[0]!.user!.username}`,
+      deliveryTarget(
+        message.conversation.channelName
+          ? `#${message.conversation.channelName}`
+          : `@${message.conversation.members[0]!.user!.username}`,
+        message.threadRootId,
+      ),
       agentMessageSender(null),
     ),
   ]);

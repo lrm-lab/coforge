@@ -19,7 +19,7 @@ test("an admin Agent may reserve a Todo task for another Agent with one personal
       owner: { id: f.peerAgent.id },
     });
     const receipt = await f.db.message.findUniqueOrThrow({
-      where: { id: result.assignmentReceipt!.messageId },
+      where: { id: result.assignmentReceipts![0]!.messageId },
       include: { mentions: true, deliveries: true },
     });
     expect(receipt.mentions.map((row) => row.actorId)).toEqual([f.peerAgent.id]);
@@ -305,13 +305,14 @@ test("admin Agent assignments preserve CAS, one receipt and one personal deliver
       expectedRevision: seed.revision,
     };
     const first = await f.board.execute(f.actor, command);
-    expect((await f.board.execute(f.actor, command)).assignmentReceipt?.messageId).toBe(
-      first.assignmentReceipt?.messageId,
+    const receiptId = first.assignmentReceipts![0]!.messageId;
+    expect((await f.board.execute(f.actor, command)).assignmentReceipts?.[0]?.messageId).toBe(
+      receiptId,
     );
-    expect(await f.db.message.count({ where: { id: first.assignmentReceipt!.messageId } })).toBe(1);
+    expect(await f.db.message.count({ where: { id: receiptId } })).toBe(1);
     expect(
       await f.db.agentMessageDelivery.count({
-        where: { messageId: first.assignmentReceipt!.messageId, agentId: f.peerAgent.id },
+        where: { messageId: receiptId, agentId: f.peerAgent.id },
       }),
     ).toBe(1);
     await expect(

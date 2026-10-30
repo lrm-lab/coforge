@@ -142,18 +142,22 @@ test("a created Task's title stores its references as tokens, and its own mentio
       ].sort(),
     );
 
-    // The assignment receipt is unchanged: top level in the conversation, delivered only to the
-    // assignee, on the conversation's own target.
+    // The assignment receipt is a reply in the Task's own thread, delivered only to the assignee,
+    // on that thread's target.
+    const receiptId = created.assignmentReceipts![0]!.messageId;
     const receipt = await db.message.findUniqueOrThrow({
-      where: { id: created.assignmentReceipt!.messageId },
+      where: { id: receiptId },
       select: { threadRootId: true, deliveries: { select: { agentId: true } } },
     });
-    expect(receipt).toEqual({ threadRootId: null, deliveries: [{ agentId: helper.id }] });
+    expect(receipt).toEqual({
+      threadRootId: created.tasks[0]!.messageId,
+      deliveries: [{ agentId: helper.id }],
+    });
     expect(
       published
-        .filter((payload) => payload.messageId === created.assignmentReceipt!.messageId)
+        .filter((payload) => payload.messageId === receiptId)
         .map((payload) => [payload.agentId, payload.target]),
-    ).toEqual([[helper.id, `#${channel.channelName}`]]);
+    ).toEqual([[helper.id, `#${channel.channelName}:${created.tasks[0]!.messageId}`]]);
 
     // Amending compares titles as they read: re-sending the same readable title changes nothing
     // (no history, tokens kept), and a real change is recorded in readable form.

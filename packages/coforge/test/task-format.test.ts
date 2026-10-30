@@ -169,7 +169,7 @@ test("An empty own list still states its coverage, and a missing field reads unk
   ]);
 });
 
-test("A create receipt lists each new Task, the assignment receipt and each thread to follow up in", () => {
+test("A create receipt lists each new Task, each assignment receipt and each thread to follow up in", () => {
   const text = formatTasksCreated("#general", {
     tasks: [
       task(42, {
@@ -181,12 +181,20 @@ test("A create receipt lists each new Task, the assignment receipt and each thre
       }),
       task(43, { title: "Review it" }),
     ],
-    assignmentReceipt: {
-      messageId: "9abcdef0-1111-2222-3333-444444444444",
-      content: '📌 Assigned @kiro to task #42 "Ship it"',
-      assignee: "@kiro",
-      state: "started",
-    },
+    assignmentReceipts: [
+      {
+        messageId: "9abcdef0-1111-2222-3333-444444444444",
+        content: '📌 Ada assigned #42 "Ship it" to @kiro',
+        assignee: "@kiro",
+        state: "started",
+      },
+      {
+        messageId: "8abcdef0-1111-2222-3333-444444444444",
+        content: '📌 Ada assigned #43 "Review it" to @kiro',
+        assignee: "@kiro",
+        state: "started",
+      },
+    ],
   });
   expect(text).toBe(
     [
@@ -195,7 +203,10 @@ test("A create receipt lists each new Task, the assignment receipt and each thre
       '#43 [todo] assignee=unassigned claimedAt=null msg=43abcdef0-111 "Review it"',
       "",
       "Assignment receipt (msg=9abcdef0-1111):",
-      '📌 Assigned @kiro to task #42 "Ship it"',
+      '📌 Ada assigned #42 "Ship it" to @kiro',
+      "",
+      "Assignment receipt (msg=8abcdef0-1111):",
+      '📌 Ada assigned #43 "Review it" to @kiro',
       "",
       "To follow up in each task's thread:",
       '#42 → coforge message send --target "#general:42abcdef0-111"',

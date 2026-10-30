@@ -67,7 +67,9 @@ export async function assignTask(
       assigneeHandle: assigneeMention(owner),
       receipt: await notices.receipt({
         id: receiptId,
-        body: noticeText.assigned(assigneeMention(owner), await notices.quote([task])),
+        task,
+        body: (quoted) =>
+          noticeText.assigned(noticeActor(member).displayName, quoted, assigneeMention(owner)),
         assignee: owner,
         actor: member,
       }),
@@ -80,12 +82,14 @@ export async function assignTask(
   return {
     tasks: task ? [taskView(task, ports.reader)] : [],
     ...(receipt && {
-      assignmentReceipt: {
-        messageId: receipt.id,
-        content: receipt.body,
-        assignee: result.assigneeHandle ?? command.assignee!,
-        state: "assigned" as const,
-      },
+      assignmentReceipts: [
+        {
+          messageId: receipt.id,
+          content: receipt.body,
+          assignee: result.assigneeHandle ?? command.assignee!,
+          state: "assigned" as const,
+        },
+      ],
     }),
   };
 }

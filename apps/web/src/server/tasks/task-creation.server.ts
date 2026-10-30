@@ -11,7 +11,7 @@ import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
-import { assigneeMention, noticeText } from "./task-notices.server";
+import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
 import { DUPLICATE_TASK_WINDOW_MS, normalizeTaskTitle } from "./task-command-validation.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import {
@@ -48,9 +48,11 @@ export async function createTasks(
   const requestIds = await Promise.all(
     titles.map((_, index) => indexedRequestId(command.idempotencyKey, index)),
   );
-  const receiptId = await indexedRequestId(
-    `${member.id}:create:${command.idempotencyKey}:assignment`,
-    1,
+  // One receipt per Task, in its own thread; the first keeps the id a single receipt had.
+  const receiptIds = await Promise.all(
+    titles.map((_, index) =>
+      indexedRequestId(`${member.id}:create:${command.idempotencyKey}:assignment`, index + 1),
+    ),
   );
   const result = await withNotices(ports, scope, async (tx, notices) => {
     const retried = await tx.task.findMany({
@@ -64,13 +66,16 @@ export async function createTasks(
     });
     if (retried.length) {
       if (retried.length !== titles.length) throw new AppError("CONFLICT");
-      const receipt = await tx.message.findUnique({ where: { id: receiptId } });
-      const assigned = receipt ? await receiptAssignee(tx, receipt.id) : null;
+      const receipts = await tx.message.findMany({
+        where: { id: { in: receiptIds } },
+        orderBy: { sequence: "asc" },
+      });
+      const assigned = receipts[0] ? await receiptAssignee(tx, receipts[0].id) : null;
       return {
         tasks: retried,
         created: false,
         sequences: [] as number[],
-        receipt,
+        receipts,
         assigneeHandle: assigned?.handle ?? null,
         started: assigned?.memberId === member.id,
       };
@@ -97,7 +102,7 @@ export async function createTasks(
           created: false,
           held: true,
           sequences: [] as number[],
-          receipt: null,
+          receipts: [],
           assigneeHandle: null,
           started: false,
         };
@@ -279,22 +284,31 @@ export async function createTasks(
     });
     const quoted = await notices.quote(tasks);
     await notices.inConversation(noticeText.created(quoted));
-    // The assignee's receipt, started or only reserved: one assignment notice in the
-    // conversation, with its fixed id and its one delivery to an Agent assignee that is not
-    // the creator.
-    const receipt = assignee
-      ? await notices.receipt({
-          id: receiptId,
-          body: noticeText.assigned(assigneeMention(assignee), quoted),
-          assignee,
-          actor: member,
-        })
-      : null;
+    // The assignee's receipts, started or only reserved: one assignment notice in each Task's
+    // thread, with its fixed id and its one delivery to an Agent assignee that is not the
+    // creator.
+    const receipts = [];
+    if (assignee)
+      for (const [index, task] of tasks.entries())
+        receipts.push(
+          await notices.receipt({
+            id: receiptIds[index]!,
+            task,
+            body: (subject) =>
+              noticeText.assigned(
+                noticeActor(member).displayName,
+                subject,
+                assigneeMention(assignee),
+              ),
+            assignee,
+            actor: member,
+          }),
+        );
     return {
       tasks,
       created: true,
       sequences,
-      receipt,
+      receipts,
       assigneeHandle: assignee ? assigneeMention(assignee) : null,
       started,
     };
@@ -357,20 +371,20 @@ export async function createTasks(
       }
     }
     await Promise.all(effects);
-    if (result.receipt)
-      await publishAssignmentReceipt(ports, result.receipt.id, command.idempotencyKey);
+    for (const receipt of result.receipts)
+      await publishAssignmentReceipt(ports, receipt.id, command.idempotencyKey);
   }
-  const { receipt } = result;
+  const { receipts } = result;
   return {
     tasks: result.tasks.map((task) => taskView(task, ports.reader)),
     ...(result.held ? { state: "held" as const } : {}),
-    ...(receipt && {
-      assignmentReceipt: {
+    ...(receipts.length > 0 && {
+      assignmentReceipts: receipts.map((receipt) => ({
         messageId: receipt.id,
         content: receipt.body,
         assignee: result.assigneeHandle ?? command.assignee!,
         state: result.started ? ("started" as const) : ("assigned" as const),
-      },
+      })),
     }),
   };
 }

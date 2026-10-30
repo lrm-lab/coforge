@@ -157,12 +157,14 @@ describe("Agent Task freshness", () => {
       idempotencyKey: "claim-forward",
       tasks: [],
       claims: [],
-      assignmentReceipt: {
-        messageId: "receipt-message",
-        content: "claimed",
-        assignee: "@agent-a",
-        state: "started" as const,
-      },
+      assignmentReceipts: [
+        {
+          messageId: "receipt-message",
+          content: "claimed",
+          assignee: "@agent-a",
+          state: "started" as const,
+        },
+      ],
     };
     const harness = await messageHarness(
       async (request) => {

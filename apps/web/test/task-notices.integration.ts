@@ -274,10 +274,10 @@ test("claims, moves and unassignment post in the Task's own thread", async () =>
   const unassigned = inThread(docsTask, `🔓 Alice An unassigned #${docsTask!.number} "Write docs"`);
   expect(await noticesAfter(mark)).toEqual([
     unassigned,
-    {
-      body: `📌 Assigned @${bob.username} to task #${docsTask!.number} "Write docs"`,
-      thread: null,
-    },
+    inThread(
+      docsTask,
+      `📌 Alice An assigned #${docsTask!.number} "Write docs" to @${bob.username}`,
+    ),
     unassigned,
   ]);
 
@@ -314,7 +314,7 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
   } = await channelFixture("receipts");
 
   // Created assigned to oneself, a Task starts at once. Its receipt is still the one assignment
-  // notice in the channel (no claim line).
+  // notice (no claim line), in the Task's own thread.
   let mark = await latestSequence();
   const started = await run(asAgent, {
     operation: "create",
@@ -322,12 +322,14 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
     assignee: `@${agent.name}`,
   });
   const startedTask = started.tasks[0]!;
-  const startedLine = `📌 Assigned @${agent.name} to task #${startedTask.number} "Started by me"`;
+  const startedLine = `📌 Notice Agent assigned #${startedTask.number} "Started by me" to @${agent.name}`;
   expect(await noticesAfter(mark)).toEqual([
     { body: `📋 1 new task created: #${startedTask.number} "Started by me"`, thread: null },
-    { body: startedLine, thread: null },
+    { body: startedLine, thread: startedTask.messageId },
   ]);
-  expect(started.assignmentReceipt).toMatchObject({ state: "started", content: startedLine });
+  expect(started.assignmentReceipts).toEqual([
+    expect.objectContaining({ state: "started", content: startedLine }),
+  ]);
 
   // Reserved for someone else, it is the same assignment notice. The assignee reads as its
   // resolved `@handle` however the caller wrote it.
@@ -338,17 +340,19 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
     assignee: agent.name,
   });
   const reservedTask = reserved.tasks[0]!;
-  const assignLine = `📌 Assigned @${agent.name} to task #${reservedTask.number} "Reserved"`;
+  const assignLine = `📌 Alice An assigned #${reservedTask.number} "Reserved" to @${agent.name}`;
   expect(await noticesAfter(mark)).toEqual([
     { body: `📋 1 new task created: #${reservedTask.number} "Reserved"`, thread: null },
-    { body: assignLine, thread: null },
+    { body: assignLine, thread: reservedTask.messageId },
   ]);
-  expect(reserved.assignmentReceipt).toMatchObject({ state: "assigned", content: assignLine });
+  expect(reserved.assignmentReceipts).toEqual([
+    expect.objectContaining({ state: "assigned", content: assignLine }),
+  ]);
 
   await run(asAlice, { operation: "update", number: reservedTask.number, status: "closed" });
   await run(asAlice, { operation: "unassign", number: reservedTask.number });
 
-  const receiptIds = [started, reserved].map((result) => result.assignmentReceipt!.messageId);
+  const receiptIds = [started, reserved].map((result) => result.assignmentReceipts![0]!.messageId);
   const notices = await allNotices();
   // Each receipt carries its push; no other notice has one. Only the receipt of a person's
   // assignment is delivered to the Agent: an Agent that assigns itself never wakes itself.
@@ -357,7 +361,7 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
     notices
       .filter((notice) => notice._count.deliveries > 0)
       .map((notice) => [notice.id, notice._count.deliveries]),
-  ).toEqual([[reserved.assignmentReceipt!.messageId, 1]]);
+  ).toEqual([[reserved.assignmentReceipts![0]!.messageId, 1]]);
   expect(pushed.filter((id) => notices.some((notice) => notice.id === id)).sort()).toEqual(
     receiptsFirst,
   );
@@ -395,9 +399,13 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
     number: (await run(asAlice, { operation: "create", title: "Second" })).tasks[0]!.number,
     assignee: `@${bob.username}`,
   });
-  for (const receipt of [created.assignmentReceipt!, assigned.assignmentReceipt!]) {
+  for (const [result, task] of [
+    [created, created.tasks[0]!],
+    [assigned, assigned.tasks[0]!],
+  ] as const) {
+    const receipt = result.assignmentReceipts![0]!;
     // The body is the same server-built text; the mention row is what reaches the muted assignee.
-    expect(receipt.content).toStartWith(`📌 Assigned @${bob.username} to task #`);
+    expect(receipt.content).toEndWith(` to @${bob.username}`);
     const stored = await db.message.findUniqueOrThrow({
       where: { id: receipt.messageId },
       select: {
@@ -409,17 +417,22 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
     });
     expect(stored).toEqual({
       body: receipt.content,
-      threadRootId: null,
+      threadRootId: task.messageId,
       mentions: [{ kind: "user", actorId: bob.id, handle: bob.username }],
       _count: { deliveries: 0 },
     });
     expect(await push.notificationForRecipient(receipt.messageId, bob.id)).not.toBeNull();
   }
 
-  // An Agent assignee's receipt keeps its one delivery and now reads as a personal mention.
-  const agentReceipt = (
-    await run(asAlice, { operation: "create", title: "For the Agent", assignee: `@${agent.name}` })
-  ).assignmentReceipt!;
+  // An Agent assignee's receipt keeps its one delivery and now reads as a personal mention, aimed
+  // at the Task's thread, which the Agent now follows.
+  const forAgent = await run(asAlice, {
+    operation: "create",
+    title: "For the Agent",
+    assignee: `@${agent.name}`,
+  });
+  const agentReceipt = forAgent.assignmentReceipts![0]!;
+  const agentTask = forAgent.tasks[0]!;
   const pending = await new PrismaDirectConversationRepository(db).readPendingAgentDeliveries(
     workspaceId,
     agent.id,
@@ -427,8 +440,14 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
   expect(pending.filter((delivery) => delivery.messageId === agentReceipt.messageId)).toEqual([
     expect.objectContaining({
       body: `[CoForge current channel role: member; coordinator=none]\n${agentReceipt.content}`,
-      target: `#${channel.channelName}`,
+      target: `#${channel.channelName}:${agentTask.messageId}`,
       mentionsAgent: true,
     }),
   ]);
+  expect(
+    await db.threadFollow.findMany({
+      where: { rootMessageId: agentTask.messageId },
+      select: { memberId: true },
+    }),
+  ).toEqual([{ memberId: memberId({ agentId: agent.id }) }]);
 });

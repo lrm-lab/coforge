@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 
-test("an Agent that creates Tasks for itself gets the assignment receipt without a delivery", async () => {
+test("an Agent that creates Tasks for itself gets a receipt in each one's thread, without a delivery", async () => {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
   if (!connectionString)
     throw new Error("TASK_TEST_DATABASE_URL or DATABASE_URL must point to local PostgreSQL");
@@ -50,17 +50,20 @@ test("an Agent that creates Tasks for itself gets the assignment receipt without
         assignee: `@${agent.name}`,
       },
     );
-    expect(batch.assignmentReceipt).toMatchObject({
-      state: "started",
-      assignee: `@${agent.name}`,
-    });
-    expect(batch.assignmentReceipt!.messageId).not.toBe(batch.tasks[0]!.messageId);
+    // One receipt per Task, each in that Task's own thread.
+    expect(batch.assignmentReceipts).toMatchObject([
+      { state: "started", assignee: `@${agent.name}` },
+      { state: "started", assignee: `@${agent.name}` },
+    ]);
+    const receipt = batch.assignmentReceipts![0]!;
+    expect(receipt.messageId).not.toBe(batch.tasks[0]!.messageId);
     const assignmentMessage = await db.message.findUniqueOrThrow({
-      where: { id: batch.assignmentReceipt!.messageId },
+      where: { id: receipt.messageId },
       include: { deliveries: true },
     });
     expect(assignmentMessage.senderMemberId).toBeNull();
-    expect(assignmentMessage.body).toBe(batch.assignmentReceipt!.content);
+    expect(assignmentMessage.threadRootId).toBe(batch.tasks[0]!.messageId);
+    expect(assignmentMessage.body).toBe(receipt.content);
     // An Agent that assigns itself already holds the receipt in its command result; delivering
     // it too would wake the Agent with its own action.
     expect(assignmentMessage.deliveries).toEqual([]);

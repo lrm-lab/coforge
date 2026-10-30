@@ -37,13 +37,15 @@ type NoticeWriter = {
   /** A reply in the Task's own thread. */
   inThread(task: NoticeSubject, body: (task: QuotedTask) => string): Promise<PostedNotice>;
   /**
-   * Fixed-id receipt with an assignee mention (overrides human mute) and one delivery to an
-   * Agent assignee other than the actor. Self-assigned Agents already hold it in the result.
-   * The body is server-built @handle text.
+   * Fixed-id receipt in the Task's own thread, with an assignee mention (overrides human mute)
+   * and one delivery to an Agent assignee other than the actor, whose target is that thread.
+   * Self-assigned Agents already hold it in the result. The assignee follows the thread, so its
+   * later replies reach them. The body is server-built @handle text.
    */
   receipt(input: {
     id: string;
-    body: string;
+    task: NoticeSubject;
+    body: (task: QuotedTask) => string;
     assignee: Assignee;
     actor: Member;
   }): Promise<PostedNotice>;
@@ -86,12 +88,29 @@ export async function withNotices<T>(
         const [quoted] = await quote([task]);
         return postAndSignal({ body: body(quoted!), threadRootId: task.messageId });
       },
-      receipt: ({ assignee, actor, ...input }) =>
-        post({
-          ...input,
+      receipt: async ({ id, task, body, assignee, actor }) => {
+        const [quoted] = await quote([task]);
+        const notice = await post({
+          id,
+          body: body(quoted!),
+          threadRootId: task.messageId,
           deliverTo: assignee.id === actor.id ? null : assignee.agentId,
           mentions: assignee,
-        }),
+        });
+        await tx.threadFollow.upsert({
+          where: {
+            memberId_rootMessageId: { memberId: assignee.id, rootMessageId: task.messageId },
+          },
+          create: {
+            memberId: assignee.id,
+            rootMessageId: task.messageId,
+            conversationId: conversation.conversationId,
+            workspaceId: conversation.workspaceId,
+          },
+          update: {},
+        });
+        return notice;
+      },
     });
   });
   await signalNotices(ports, posted);

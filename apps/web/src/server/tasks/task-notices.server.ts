@@ -8,8 +8,9 @@ import {
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 
 /**
- * The wording of the server notices TaskBoard posts when a Task changes. Creation, conversion and
- * assignment notices are top-level; the rest are replies in the Task's own thread.
+ * The wording of the server notices TaskBoard posts when a Task changes. Creation and conversion
+ * notices are top-level; the rest, assignment included, are replies in the Task's own thread (as
+ * Raft's).
  */
 
 declare const brand: unique symbol;
@@ -103,8 +104,8 @@ export const noticeText = {
     `📋 ${tasks.length} new ${plural(tasks, "task")} created: ${references(tasks)}`,
   converted: (actor: DisplayName, task: QuotedTask) =>
     `📋 ${actor} converted a message to task ${reference(task)}`,
-  assigned: (assignee: AssigneeMention, tasks: readonly QuotedTask[]) =>
-    `📌 Assigned ${assignee} to ${plural(tasks, "task")} ${references(tasks)}`,
+  assigned: (actor: DisplayName, task: QuotedTask, assignee: AssigneeMention) =>
+    `📌 ${actor} assigned ${reference(task)} to ${assignee}`,
   claimed: (claimer: Handle, task: QuotedTask) => `📌 ${claimer} claimed ${reference(task)}`,
   moved: (actor: DisplayName, task: QuotedTask, status: TaskStatus) =>
     `${STATUS_WORDING[status].emoji} ${actor} moved ${reference(task)} to ${STATUS_WORDING[status].label}`,

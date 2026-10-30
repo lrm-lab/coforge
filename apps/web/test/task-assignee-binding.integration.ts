@@ -94,5 +94,5 @@ test("reassigning to a picked member binds by id too", async () => {
   );
   expect(reassigned.tasks[0]!.owner).toMatchObject({ kind: "agent", id: agent.id });
   // The receipt names the assignee as people read it, never the binding.
-  expect(reassigned.assignmentReceipt?.assignee).toBe(`@${twin}`);
+  expect(reassigned.assignmentReceipts?.[0]?.assignee).toBe(`@${twin}`);
 });

@@ -189,12 +189,13 @@ export type TaskResult = {
   pagination?: TaskListPagination;
   claims?: TaskClaimResult[];
   history?: TaskHistoryEvent[];
-  assignmentReceipt?: {
+  /** One per assigned Task, each posted in that Task's own thread. */
+  assignmentReceipts?: Array<{
     messageId: string;
     content: string;
     assignee: string;
     state: "started" | "assigned";
-  };
+  }>;
   resourceFollowup?: {
     id: string;
     ownerAgentId: string;

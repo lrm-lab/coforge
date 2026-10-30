@@ -103,13 +103,11 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
     (task) =>
       `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} msg=${shortId(task.messageId)}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
   );
-  const receipt = result.assignmentReceipt
-    ? [
-        "",
-        `Assignment receipt (msg=${shortId(result.assignmentReceipt.messageId)}):`,
-        result.assignmentReceipt.content,
-      ]
-    : [];
+  const receipt = (result.assignmentReceipts ?? []).flatMap((receipt) => [
+    "",
+    `Assignment receipt (msg=${shortId(receipt.messageId)}):`,
+    receipt.content,
+  ]);
   if (result.state === "held")
     return [
       `Existing task found in ${target}; no duplicate was created:`,

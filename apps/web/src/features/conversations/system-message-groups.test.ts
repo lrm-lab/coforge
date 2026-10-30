@@ -28,7 +28,7 @@ describe("system message kind", () => {
   });
 
   test("an assignment or unassignment notice is summarized as a system message", () => {
-    expect(systemMessageKind('📌 Assigned @coder to task #3 "Fix login"')).toBe("system");
+    expect(systemMessageKind('📌 Frank assigned #3 "Fix login" to @coder')).toBe("system");
     expect(systemMessageKind('🔓 Frank An unassigned #4 "Fix login"')).toBe("system");
   });
 

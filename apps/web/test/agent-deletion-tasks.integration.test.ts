@@ -29,7 +29,7 @@ test.skipIf(!connectionString)(
         title: "Before delete",
         assignee: `@${agent.name}`,
       });
-      expect(before.assignmentReceipt).toMatchObject({ assignee: `@${agent.name}` });
+      expect(before.assignmentReceipts).toMatchObject([{ assignee: `@${agent.name}` }]);
       const beforeMessage = await db.message.findUniqueOrThrow({
         where: { id: before.tasks[0]!.messageId },
         select: { deliveries: { select: { agentId: true } } },
