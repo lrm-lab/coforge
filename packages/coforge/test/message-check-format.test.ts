@@ -63,18 +63,16 @@ test("a check counts the conversations still unread beyond the ones it showed", 
   ).not.toContain("Still unread");
 });
 
-test("a plain read names the position the server held before it", () => {
+test("a plain read prints no cursor line, only an advanced read position", () => {
   const output = formatReadWindow("#general", {
     messages: [message("#general")],
     unreadCursorBefore: 5,
   });
-  expect(output).toContain(
-    'Server unread cursor before this read: seq 5. Use coforge message read --target "#general" --after 5 to browse newer messages.',
-  );
-  expect(formatReadWindow("#general", { messages: [message("#general")] })).not.toContain(
-    "Server unread cursor",
-  );
+  expect(output).not.toContain("unread cursor");
   expect(output).toContain("Read window: 1 returned, seq 7, oldest to newest.");
+  expect(formatReadWindow("#general", { messages: [message("#general")] })).not.toContain(
+    "unread cursor",
+  );
 });
 
 test("message check says plainly when there are no pending messages", async () => {

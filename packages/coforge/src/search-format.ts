@@ -103,7 +103,10 @@ function searchPageCommand(
   paging: { before?: string; offset?: number; cursor?: string },
 ): string {
   const args = ["coforge message search"];
-  if (query) args.push(`--query ${JSON.stringify(query)}`);
+  // Single quotes, not JSON.stringify's double: an Agent pastes the line into a shell, and
+  // double quotes still expand $ and `.
+  const sq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  if (query) args.push(`--query ${sq(query)}`);
   if (options.target !== undefined) args.push(`--target ${JSON.stringify(options.target)}`);
   if (options.sender !== undefined) args.push(`--sender ${JSON.stringify(options.sender)}`);
   if (options.sort !== undefined) args.push(`--sort ${options.sort}`);

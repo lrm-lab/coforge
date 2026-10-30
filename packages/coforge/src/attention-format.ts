@@ -37,19 +37,17 @@ async function setChannelMuted(
 }
 
 /**
- * `thread unfollow`: stops ordinary delivery for a thread, then says what brings it back. The
- * reason is printed and not stored (CoForge keeps no reason for a follow), and a follow comes back
- * through a reply from the Agent or a reply that mentions it.
+ * `thread unfollow`: stops ordinary delivery for a thread, then says what brings it back. A
+ * follow comes back through a reply from the Agent or a reply that mentions it.
  */
 async function unfollowThread(
   unfollow: ((target: string, followed: boolean) => Promise<unknown>) | undefined,
-  { target, reason }: { target: string; reason?: string },
+  { target }: { target: string },
 ): Promise<string> {
   if (!unfollow) throw new Error("Thread settings transport is unavailable");
   await unfollow(target, false);
   return [
     `Unfollowed ${target}. Ordinary delivery for this thread has stopped.`,
-    `Reason: ${reason ?? "no longer following"}`,
     `A later reply that mentions you follows the thread again; unfollow it again with: coforge thread unfollow --target "${target}"`,
     "Replying in this thread follows it again automatically.",
   ].join("\n");

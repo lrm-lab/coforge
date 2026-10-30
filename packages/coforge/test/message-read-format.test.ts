@@ -147,15 +147,14 @@ test("an unread page with nothing from others but more beyond it says to keep re
   ]);
 });
 
-test("a plain read names the server unread cursor even when it is 0", () => {
+test("a plain read prints no cursor line when the read position did not advance", () => {
   const output = formatReadWindow(
     "#general",
     { messages: [message(1)], unreadCursorBefore: 0 },
     {},
   );
-  expect(output).toContain(
-    'Server unread cursor before this read: seq 0. Use coforge message read --target "#general" --after 0 to browse newer messages.',
-  );
+  expect(output).not.toContain("unread cursor");
+  expect(output).not.toContain("Read position");
 });
 
 test("a plain latest read reports when it advanced the server read position", () => {
@@ -165,7 +164,7 @@ test("a plain latest read reports when it advanced the server read position", ()
     {},
   );
   expect(output).toContain("Read position: seq 1 → 4.");
-  expect(output).not.toContain("Server unread cursor before this read");
+  expect(output).not.toContain("unread cursor");
 });
 
 test("a history row carries the thread's reply count when it has replies", () => {

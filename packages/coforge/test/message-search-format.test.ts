@@ -83,7 +83,7 @@ test("formatSearchResults continues a recent search with its cursor", () => {
     "(1 result · truncated=true · more results exist; the Next page command below continues exactly after this page)",
   );
   expect(output.split("\n").at(-1)).toBe(
-    'Next page: coforge message search --query "release" --target "#general" --sender "@ada" --sort recent --after "2026-09-01T00:00:00Z" --limit 1 --cursor "abc_-9"',
+    'Next page: coforge message search --query \'release\' --target "#general" --sender "@ada" --sort recent --after "2026-09-01T00:00:00Z" --limit 1 --cursor "abc_-9"',
   );
   expect(output).not.toContain("--offset");
 });
@@ -98,7 +98,7 @@ test("formatSearchResults pages a relevance search with --offset", () => {
     "(1 result · truncated=true · more results exist, page with --offset 3)",
   );
   expect(output.split("\n").at(-1)).toBe(
-    'Next page: coforge message search --query "release" --limit 1 --offset 3',
+    "Next page: coforge message search --query 'release' --limit 1 --offset 3",
   );
 });
 
@@ -131,7 +131,7 @@ test("formatSearchResults words an incomplete search as older messages not searc
     "incomplete=true · stopped after reading 5000 messages, back to 2026-08-01 08:00:00 +08:00; older messages were not searched, so these are NOT all the matches",
   );
   expect(output).toContain(
-    'Next (search older messages): coforge message search --query "release" --sort recent --limit 1 --cursor "c1"\nOr narrow the search: add --target \'#<channel>\' or --sender <handle>.',
+    "Next (search older messages): coforge message search --query 'release' --sort recent --limit 1 --cursor \"c1\"\nOr narrow the search: add --target '#<channel>' or --sender <handle>.",
   );
   const narrowed = formatSearchResults(
     "release",

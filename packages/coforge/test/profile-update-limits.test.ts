@@ -20,13 +20,13 @@ test("a display name is trimmed, then must be 1 to 80 characters", () => {
   expect(update("--display-name", ` ${"x".repeat(80)} `)).not.toThrow();
 });
 
-test("a description is trimmed, may be empty to clear it, and is at most 500 characters", () => {
-  expect(update("--description", "y".repeat(501))).toThrow(
-    "--description must be at most 500 characters",
+test("a description is trimmed, may be empty to clear it, and is at most 3000 characters", () => {
+  expect(update("--description", "y".repeat(3001))).toThrow(
+    "--description must be at most 3000 characters",
   );
-  expect(update("--description", "y".repeat(500))).not.toThrow();
+  expect(update("--description", "y".repeat(3000))).not.toThrow();
   expect(update("--description", "")).not.toThrow();
-  expect(update("--description", ` ${"y".repeat(500)} `)).not.toThrow();
+  expect(update("--description", ` ${"y".repeat(3000)} `)).not.toThrow();
 });
 
 test("an unknown option still gets the usage line", () => {

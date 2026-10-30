@@ -7,7 +7,7 @@
 **`coforge profile update`** changes only your own profile — there is no way to update someone else's, and no way to change your Username (it is fixed at creation; see the identity rules in your standing instructions). It accepts:
 
 - `--display-name "<text>"` — trimmed, 1–80 characters. Empty after trimming is rejected, not silently ignored.
-- `--description "<text>"` — trimmed, up to 500 characters. An empty string is accepted and clears your description.
+- `--description "<text>"` — trimmed, up to 3000 characters. An empty string is accepted and clears your description.
 
 Provide at least one of the two flags. Either validation failure, or omitting both flags, is reported as `profile_invalid` with the exact reason.
 

@@ -8,7 +8,7 @@ export type ProfileUpdateInvocation = {
 // The server's own limits (`AGENT_DISPLAY_NAME_MAX_LENGTH`, `AGENT_PROFILE_DESCRIPTION_MAX_LENGTH`),
 // checked here so a too-long value fails before any request.
 const DISPLAY_NAME_MAX_LENGTH = 80;
-const DESCRIPTION_MAX_LENGTH = 500;
+const DESCRIPTION_MAX_LENGTH = 3000;
 
 const PROFILE_UPDATE_USAGE =
   'Usage: coforge profile update [--display-name "<text>"] [--description "<text>"] [--json]';

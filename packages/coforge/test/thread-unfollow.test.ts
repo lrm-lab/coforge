@@ -18,9 +18,9 @@ test("parses the thread and an optional reason in either order", () => {
     command: "thread-unfollow",
     target: "#general:12345678",
   });
-  expect(
-    parseArgs(["thread", "unfollow", "--reason", " done here ", "--target", "#general:12345678"]),
-  ).toEqual({ command: "thread-unfollow", target: "#general:12345678", reason: "done here" });
+  expect(() =>
+    parseArgs(["thread", "unfollow", "--reason", "done here", "--target", "#general:12345678"]),
+  ).toThrow("Usage: coforge thread unfollow --target <thread>");
 });
 
 test("anything but a channel thread is INVALID_TARGET, and a malformed command gets the usage", () => {
@@ -42,19 +42,18 @@ test("anything but a channel thread is INVALID_TARGET, and a malformed command g
 test("unfollowing prints what stopped, the reason, and what follows the thread again", async () => {
   const calls: unknown[] = [];
   const output = await run(
-    ["thread", "unfollow", "--target", "#general:12345678", "--reason", "handled"],
+    ["thread", "unfollow", "--target", "#general:12345678"],
     transport(calls),
   );
   expect(calls).toEqual([["#general:12345678", false]]);
   expect(output).toBe(
     [
       "Unfollowed #general:12345678. Ordinary delivery for this thread has stopped.",
-      "Reason: handled",
       'A later reply that mentions you follows the thread again; unfollow it again with: coforge thread unfollow --target "#general:12345678"',
       "Replying in this thread follows it again automatically.",
     ].join("\n"),
   );
-  expect(await run(["thread", "unfollow", "--target", "#general:12345678"], transport())).toContain(
-    "Reason: no longer following",
-  );
+  expect(
+    await run(["thread", "unfollow", "--target", "#general:12345678"], transport()),
+  ).not.toContain("Reason:");
 });

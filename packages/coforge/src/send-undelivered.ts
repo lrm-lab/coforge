@@ -35,6 +35,9 @@ export function undeliveredMentionError(
     code: "MENTION_DELIVERY_FAILED",
     message: `Partial result for message ${sent.messageId}: message status=queued; ${count} @mention${count === 1 ? "" : "s"} status=not_queued.`,
     retryable: false,
+    // The message is queued, so this is a partial success, not a send failure: exit 0 like
+    // Raft, or a script that retries on nonzero re-sends a message already delivered.
+    exitCode: 0,
     effect: "message_queued",
     draftSaved: false,
     outputMode,

@@ -131,11 +131,10 @@ export function formatReadWindow(
     const advanced =
       response.readPositionAfter !== undefined &&
       response.readPositionAfter > response.unreadCursorBefore;
-    lines.push(
-      advanced
-        ? `Read position: seq ${response.unreadCursorBefore} → ${response.readPositionAfter}.`
-        : `Server unread cursor before this read: seq ${response.unreadCursorBefore}. Use coforge message read --target "${target}" --after ${response.unreadCursorBefore} to browse newer messages.`,
-    );
+    if (advanced)
+      lines.push(
+        `Read position: seq ${response.unreadCursorBefore} → ${response.readPositionAfter}.`,
+      );
   }
   const taskHint = formatTaskWorkflowHint(messages);
   if (taskHint) lines.push(taskHint);
