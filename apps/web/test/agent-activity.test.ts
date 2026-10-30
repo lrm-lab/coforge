@@ -33,11 +33,9 @@ test("a public Agent's Activity goes to the shared channel; any other visibility
 });
 
 test("a public Agent's display goes to the shared status channel; any other to its own", () => {
-  expect(agentStatusChannelFor("workspace-1", "agent-1", "public")).toBe(
-    "agent:status:workspace-1",
-  );
+  expect(agentStatusChannelFor("workspace-1", "agent-1", "public")).toBe("agentstatus:workspace-1");
   expect(agentStatusChannelFor("workspace-1", "agent-1", "private")).toBe(
-    "agent:status:workspace-1:agent-1",
+    "agentstatus:workspace-1:agent-1",
   );
 });
 

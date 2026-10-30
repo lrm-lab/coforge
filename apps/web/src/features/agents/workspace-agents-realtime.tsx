@@ -14,13 +14,9 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { useSyncedStore } from "#src/hooks/use-synced-store";
 
-import {
-  listAgents,
-  getAgentActivitySubscriptionTokenForAgent,
-  getAgentStatusSubscriptionToken,
-  getAgentStatusSubscriptionTokenForAgent,
-} from "./agents.functions";
+import { listAgents, getAgentActivitySubscriptionTokenForAgent } from "./agents.functions";
 import { useAgentStatuses, type AgentStatusView } from "./agent-status-realtime";
+import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import {
   activityInConversation,
   RECENT_ACTIVITY_LIMIT,
@@ -93,6 +89,7 @@ export function WorkspaceAgentsProvider({
   viewerId,
   agents,
   extraAgents: loadedExtras,
+  agentStreamPositions,
   children,
 }: {
   workspaceId?: string;
@@ -102,12 +99,12 @@ export function WorkspaceAgentsProvider({
   /** The extras the page loaded with the roster, so the first paint already lists a DM with
    * another member's Agent; absent when that read failed, and the browser reads them then. */
   extraAgents?: ExtraAgent[];
+  /** Where the page's Agent reads stood in the status stream (`loadWorkspaceAgents`). */
+  agentStreamPositions?: StreamPositions;
   children: ReactNode;
 }) {
   const refreshAgents = useServerFn(listAgents);
-  const getStatusToken = useServerFn(getAgentStatusSubscriptionToken);
   const getPrivateActivityToken = useServerFn(getAgentActivitySubscriptionTokenForAgent);
-  const getPrivateStatusToken = useServerFn(getAgentStatusSubscriptionTokenForAgent);
   const loadExtras = useServerFn(loadExtraAgents);
   const queryClient = useQueryClient();
   // The Agents the store holds right now, so a read can name the extras it still shows busy and
@@ -190,8 +187,8 @@ export function WorkspaceAgentsProvider({
     agents,
     workspaceId,
     refresh: refreshWithExtras,
-    getConnectionToken: getStatusToken,
     extraAgents,
+    readPositions: agentStreamPositions,
     onVisibilityChangedEvent: workspaceId
       ? () => {
           // A model label follows the Agent's visibility too (`agent-models.ts`).
@@ -199,9 +196,6 @@ export function WorkspaceAgentsProvider({
         }
       : undefined,
     onDirectoryChangedEvent: directoryInvalidator.schedule,
-    getPrivateAgentStatusToken: workspaceId
-      ? (agentId) => getPrivateStatusToken({ data: { agentId } })
-      : undefined,
   });
 
   heldAgents.current = visibleAgents;

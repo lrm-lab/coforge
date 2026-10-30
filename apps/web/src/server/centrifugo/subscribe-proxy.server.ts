@@ -57,9 +57,9 @@ const CHANNELS: {
   allows: (access: BrowserSubscriptionAccess, user: string, ids: string[]) => Promise<boolean>;
 }[] = [
   {
-    // `chat:workspace:<id>`, `agent:status:<id>`, `agent:activity:<id>`, `presence:workspace:<id>`
+    // `chat:workspace:<id>`, `agentstatus:<id>`, `agent:activity:<id>`, `presence:workspace:<id>`
     pattern: new RegExp(
-      `^(?:chat:workspace|agent:status|agent:activity|presence:workspace):${UUID}$`,
+      `^(?:chat:workspace|agentstatus|agent:activity|presence:workspace):${UUID}$`,
     ),
     allows: async (access, user, [workspaceId]) =>
       (await access.workspaceRole(workspaceId!, user)) !== undefined,
@@ -70,8 +70,8 @@ const CHANNELS: {
     allows: async (_access, user, [userId]) => userId === user,
   },
   {
-    // `agent:status:<workspace>:<agent>`, `agent:activity:<workspace>:<agent>`: a private Agent's.
-    pattern: new RegExp(`^agent:(?:status|activity):${UUID}:${UUID}$`),
+    // `agentstatus:<workspace>:<agent>`, `agent:activity:<workspace>:<agent>`: a private Agent's.
+    pattern: new RegExp(`^(?:agentstatus|agent:activity):${UUID}:${UUID}$`),
     allows: async (access, user, [workspaceId, agentId]) => {
       const [role, agent] = await Promise.all([
         access.workspaceRole(workspaceId!, user),

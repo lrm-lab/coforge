@@ -39,7 +39,9 @@ await mockModuleForFile("#src/features/workspaces/workspaces.functions", () => (
 // The Workspace layout's other reads: they only have to answer for the layout to load.
 const workspaceReads = {
   "#src/features/notifications/notifications.functions": { getBrowserNotificationSettings: {} },
-  "#src/features/agents/agents.functions": { listAgents: [] },
+  "#src/features/agents/workspace-agents.functions": {
+    loadWorkspaceAgents: { agents: [], extraAgents: [], streamPositions: {} },
+  },
   "#src/features/settings/settings.functions": { getUserPreferences: {} },
   "#src/features/panel-tabs/panel-tabs.functions": { getPanelTabOrders: {} },
   "#src/features/records/records.functions": { loadRecordsNavAttention: { preview: false } },

@@ -471,3 +471,43 @@ test("a batch Centrifugo refused as a whole fails each publication with its erro
     { status: "rejected", reason: new Error("Centrifugo batch failed (103)") },
   ]);
 });
+
+test("an Agent status publication reaches the old channel name too, in one broadcast (task #348)", async () => {
+  const requests: unknown[] = [];
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      requests.push(await new Request(input, init).json());
+      return Response.json({ result: {} });
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  const api = createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: "http://centrifugo.test/api",
+    COFORGE_CENTRIFUGO_API_KEY: "test-api-key",
+  });
+
+  await api.publishJson("agentstatus:workspace-1", { type: "agent:display" });
+  await api.publish("agentstatus:workspace-1:agent-1", Uint8Array.of(42));
+  await api.publishJson("agent:activity:workspace-1", { type: "other" });
+
+  expect(requests).toEqual([
+    {
+      method: "broadcast",
+      params: {
+        channels: ["agentstatus:workspace-1", "agent:status:workspace-1"],
+        data: { type: "agent:display" },
+      },
+    },
+    {
+      method: "broadcast",
+      params: {
+        channels: ["agentstatus:workspace-1:agent-1", "agent:status:workspace-1:agent-1"],
+        b64data: "Kg==",
+      },
+    },
+    {
+      method: "publish",
+      params: { channel: "agent:activity:workspace-1", data: { type: "other" } },
+    },
+  ]);
+});

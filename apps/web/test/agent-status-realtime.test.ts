@@ -7,7 +7,8 @@ const {
   mergeAgentStatusSnapshot,
   mergeExtraAgents,
   nextDisplayRefreshDelayMs,
-  shouldRefreshAgentDirectoryOnGap,
+  statusSubscribeCatchUp,
+  coalesced,
 } = await import("#src/features/agents/agent-status-realtime");
 const {
   agentStatusChannel,
@@ -23,7 +24,7 @@ import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/cofor
 
 test("agentStatusChannelForAgent names the per-Agent re-routing destination", () => {
   expect(agentStatusChannelForAgent("workspace-1", "agent-1")).toBe(
-    "agent:status:workspace-1:agent-1",
+    "agentstatus:workspace-1:agent-1",
   );
   expect(agentStatusChannelForAgent("workspace-1", "agent-1")).not.toBe(
     agentStatusChannel("workspace-1"),
@@ -73,15 +74,6 @@ test("isAgentDirectoryChangedEvent accepts only id and supported change kinds", 
   expect(isAgentDirectoryChangedEvent({ type: "agent.changed.v1", agentId: "agent-1" })).toBe(
     false,
   );
-});
-
-test("does not invalidate Agent directories on the first subscription gap", () => {
-  expect(shouldRefreshAgentDirectoryOnGap(false, "unrecovered")).toBe(false);
-  expect(shouldRefreshAgentDirectoryOnGap(false, "recovered")).toBe(false);
-  expect(shouldRefreshAgentDirectoryOnGap(true, "none")).toBe(false);
-  expect(shouldRefreshAgentDirectoryOnGap(true, "recovered")).toBe(true);
-  expect(shouldRefreshAgentDirectoryOnGap(true, "unrecovered")).toBe(true);
-  expect(shouldRefreshAgentDirectoryOnGap(true, "lost")).toBe(true);
 });
 
 // Realtime gap: an owner/admin (or a private Agent's creator) can see private Agents
@@ -399,4 +391,57 @@ test("an expired display high-water cannot be revived by an equal or lower revis
       "workspace-1",
     )[0]?.display?.activityKind,
   ).toBe("offline");
+});
+
+test("the status subscription reads the roster again only if the stream moved past the page's read", async () => {
+  const at = (offset: number) => ({ epoch: "e", offset });
+  const subscribedAt = (offset: number) => ({
+    wasRecovering: false,
+    recovered: false,
+    position: () => at(offset),
+  });
+  // The page read its Agents at publication 4.
+  expect(await statusSubscribeCatchUp(subscribedAt(4), at(4), true)).toEqual({
+    roster: false,
+    directories: false,
+  });
+  expect(await statusSubscribeCatchUp(subscribedAt(5), at(4), true)).toEqual({
+    roster: true,
+    directories: false,
+  });
+  // A later subscribe that lost publications reads the directories too; one that replayed them
+  // reads nothing.
+  expect(
+    await statusSubscribeCatchUp({ wasRecovering: true, recovered: false }, undefined, false),
+  ).toEqual({ roster: true, directories: true });
+  expect(
+    await statusSubscribeCatchUp({ wasRecovering: true, recovered: true }, undefined, false),
+  ).toEqual({ roster: false, directories: false });
+});
+
+test("catch-ups asked while a read runs share one later read", async () => {
+  const reads: ReturnType<typeof Promise.withResolvers<void>>[] = [];
+  const catchUp = coalesced(() => {
+    const read = Promise.withResolvers<void>();
+    reads.push(read);
+    return read.promise;
+  });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  catchUp();
+  catchUp();
+  catchUp();
+  expect(reads).toHaveLength(1);
+
+  // Asked after the first read started, so answered by one more, not by the one running.
+  reads[0]!.reject(new Error("offline"));
+  await settle();
+  expect(reads).toHaveLength(2);
+
+  reads[1]!.resolve();
+  await settle();
+  expect(reads).toHaveLength(2);
+
+  catchUp();
+  expect(reads).toHaveLength(3);
 });

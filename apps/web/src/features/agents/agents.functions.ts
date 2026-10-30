@@ -68,6 +68,7 @@ import {
   publicAgentRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
+import { readAgentRoster } from "#src/server/agents/agent-roster.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
@@ -122,58 +123,9 @@ function changeAgentVisibilityUseCase(db: Database) {
 
 export const listAgents = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .handler(async ({ context: { user, db, workspaceId } }) => {
-    const agents = await manageAgents(db).list({ userId: user.id, workspaceId });
-    const statuses = getAgentStatusCache();
-    // One round trip for every Agent's status lease, not one per Agent: the list is the page's
-    // whole point and every row asks for the same kind of thing. Agents without a Computer have no
-    // lease to read, so they are not asked for and stay `undefined` exactly as before.
-    const scoped = agents.filter((agent) => agent.computerId);
-    const scopes = scoped.map((agent) => ({
-      workspaceId,
-      computerId: agent.computerId as string,
-      agentId: agent.id,
-    }));
-    // The display read model is script-backed and reads or projects each Agent's own state, so it
-    // gets the same treatment: one round trip for the page. A display failure still never hides an
-    // Agent profile — it leaves the rows without their display block, all of them together rather
-    // than one at a time. The two reads touch different keys, so they go out together.
-    const [statusSnapshots, displaySnapshots] = await Promise.all([
-      statuses.snapshotMany(scopes),
-      getAgentDisplay()
-        .snapshotMany(scopes)
-        .catch(() => []),
-    ]);
-    const statusByAgentId = new Map(
-      scoped.map((agent, index) => [agent.id, statusSnapshots[index]] as const),
-    );
-    const displayByAgentId = new Map(
-      scoped.map((agent, index) => [agent.id, displaySnapshots[index]] as const),
-    );
-    return agents.map((agent) => {
-      const status = statusByAgentId.get(agent.id);
-      const displaySnapshot = displayByAgentId.get(agent.id);
-      const mascot = agentMascot(agent.id, agent.avatarMascot);
-      return {
-        ...agent,
-        mascot,
-        avatarUrl: agentAvatarUrl(agent.id, mascot),
-        stopped: Boolean(agent.stoppedAt),
-        ...(displaySnapshot ? { display: displaySnapshot } : {}),
-        status: {
-          value: status?.status ?? ("inactive" as const),
-          expiresAt: status?.expiresAt ?? null,
-          ordering: status
-            ? {
-                daemonInstanceId: status.daemonInstanceId,
-                clientSeq: status.clientSeq,
-                observedAtMs: status.observedAtMs,
-              }
-            : null,
-        },
-      };
-    });
-  });
+  .handler(async ({ context: { user, db, workspaceId } }) =>
+    readAgentRoster(db, user.id, workspaceId),
+  );
 
 /** Ensures the User's weekly-report assistant Agent exists for Members setup. */
 export const ensureWeeklyReportAssistantMember = createServerFn({ method: "POST" })

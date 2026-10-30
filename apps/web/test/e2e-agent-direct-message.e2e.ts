@@ -9,10 +9,7 @@ import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/cofor
 import { Centrifuge } from "centrifuge";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import {
-  issueBrowserRealtimeToken,
-  issueAgentStatusSubscriptionToken,
-} from "#src/server/auth/browser-realtime-token.server";
+import { issueBrowserRealtimeToken } from "#src/server/auth/browser-realtime-token.server";
 import {
   agentStatusChannel,
   decodeAgentStatusEvent,
@@ -214,20 +211,15 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
   const displayEvents: AgentDisplaySnapshot[] = [];
   const statusSubscriptionErrors: unknown[] = [];
   // Mirrors the real browser: one connection token with no channel grants of
-  // its own, plus a client-side subscription authorized by its own narrower
-  // subscription token (see `issueAgentStatusSubscriptionToken`).
+  // its own, and the status channel subscribed without a token, the subscribe
+  // proxy checking it.
   const statusClient = new Centrifuge("ws://127.0.0.1:8000/connection/websocket", {
     token: await issueBrowserRealtimeToken({
       userId: DEV_BROWSER_USER.id,
       workspaceId,
     }),
   });
-  const statusSubscription = statusClient.newSubscription(agentStatusChannel(workspaceId), {
-    token: await issueAgentStatusSubscriptionToken({
-      userId: DEV_BROWSER_USER.id,
-      workspaceId,
-    }),
-  });
+  const statusSubscription = statusClient.newSubscription(agentStatusChannel(workspaceId));
   statusSubscription.on("publication", (publication) => {
     if (publication.data?.type === "agent:display")
       displayEvents.push(parseAgentDisplaySnapshot(publication.data));

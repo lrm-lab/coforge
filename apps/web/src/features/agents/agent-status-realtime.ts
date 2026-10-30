@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import {
@@ -14,7 +14,12 @@ import {
   isAgentVisibilityChangedEvent,
   type AgentStatusEvent,
 } from "./agent-status-channel";
-import { subscriptionGap } from "#src/features/realtime/subscription-gap";
+import {
+  missedBySubscribe,
+  type StreamPosition,
+  type StreamPositions,
+  type SubscribedRecovery,
+} from "#src/features/realtime/subscription-gap";
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "./activity-probe-timeout";
 import { isBusyTone } from "./agent-activity-presentation";
@@ -42,16 +47,6 @@ export type AgentStatusView = {
 type UnknownAgentStatusView = Omit<AgentStatusView, "value"> & {
   value: "unknown";
 };
-
-/** The first status subscription has no retained history by design; its roster read already
- * covers the page-load gap. Directory projections need the extra invalidation only after a
- * later reconnect could have missed an Agent lifecycle event. */
-export function shouldRefreshAgentDirectoryOnGap(
-  hasSubscribed: boolean,
-  gap: "none" | "recovered" | "unrecovered" | "lost",
-) {
-  return hasSubscribed && gap !== "none";
-}
 
 function eventIsNewer(agent: StatusTrackedAgent, event: AgentStatusEvent) {
   const ordering = agent.status.ordering;
@@ -204,20 +199,56 @@ export function nextDisplayRefreshDelayMs<T extends StatusTrackedAgent>(
   return deadline <= now ? 1_000 : deadline - now + 10;
 }
 
+/**
+ * What the Workspace status subscription reads again once `subscribed`: the roster if it may have
+ * missed a publication (`missedBySubscribe`; on the first subscribe, judged by where the page's own
+ * read stood at `readPosition`), and the directory projections too after a later subscribe that
+ * did, since a missed directory publication can affect every open channel's mention queries.
+ */
+export async function statusSubscribeCatchUp(
+  recovery: SubscribedRecovery,
+  readPosition: StreamPosition | undefined,
+  first: boolean,
+): Promise<{ roster: boolean; directories: boolean }> {
+  const roster = await missedBySubscribe(recovery, () => (first ? readPosition : undefined));
+  return { roster, directories: roster && !first };
+}
+
+/**
+ * Runs `run` when called, and when called while it runs, once more after: every call is answered
+ * by a run that starts after it, however many calls arrive during one. A failed run is dropped.
+ */
+export function coalesced(run: () => Promise<unknown>): () => void {
+  let running = false;
+  let again = false;
+  return () => {
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    void (async () => {
+      do {
+        again = false;
+        await run().catch(() => {});
+      } while (again);
+      running = false;
+    })();
+  };
+}
+
 export function useAgentStatuses<T extends StatusTrackedAgent>({
   agents,
   workspaceId,
   refresh,
-  getConnectionToken,
   extraAgents = [],
   onVisibilityChangedEvent,
   onDirectoryChangedEvent,
-  getPrivateAgentStatusToken,
+  readPositions,
 }: {
   agents: T[];
   workspaceId?: string;
   refresh: () => Promise<T[]>;
-  getConnectionToken: () => Promise<string>;
   /** Named entries for Agents visible to the viewer beyond their own `agents` roster. Merged
    * (via `mergeExtraAgents`) into each new `agents` value; `refresh()` returns its own extras,
    * so its result is never merged with these. A live publication updates them in place. */
@@ -228,16 +259,16 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   /** Called whenever an Agent directory event arrives. The caller can invalidate other
    * Workspace-scoped projections (for example channel mention directories). */
   onDirectoryChangedEvent?: () => void;
-  /** A private Agent's `agent:display` snapshot no longer arrives on the shared status
-   * channel, so this hook derives which of its own current Agents need a per-Agent subscription
-   * from their `visibility` field itself — no lag from an external, previous-render list. */
-  getPrivateAgentStatusToken?: (agentId: string) => Promise<string>;
+  /** Where `agents` and `extraAgents` were read in each status channel's stream, by channel: a
+   * channel's first subscribe reads them again only if its stream moved past it. */
+  readPositions?: StreamPositions;
 }) {
   const [visibleAgents, setVisibleAgents] = useState(() =>
     expireAgentStatuses(mergeExtraAgents(agents, extraAgents), Date.now()),
   );
   const mounted = useRef(true);
-  const hasSubscribed = useRef(false);
+  // The status channels subscribed so far, so each channel's first subscribe is told apart.
+  const subscribedChannels = useRef(new Set<string>());
   const currentWorkspaceId = useRef(workspaceId);
   const visibleWorkspaceId = useRef(workspaceId);
   currentWorkspaceId.current = workspaceId;
@@ -313,20 +344,24 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
       );
   }, [refresh, workspaceId]);
 
+  // One snapshot read per catch-up asked at once: several private channels subscribing together,
+  // or the directory events a resubscribe replays.
+  const catchUp = useMemo(() => coalesced(refreshSnapshot), [refreshSnapshot]);
+
   const handleStatusPublication = (data: unknown) => {
     try {
       const value = publicationData(data);
       if (isAgentVisibilityChangedEvent(value)) {
         // Refetch immediately: `mergeAgentStatusSnapshot` drops any Agent absent from the fresh
         // list (extras included), and its per-Agent channels follow from that same list.
-        void refreshSnapshot().catch(() => {});
+        catchUp();
         onVisibilityChangedEvent?.();
         onDirectoryChangedEvent?.();
       } else if (isAgentDirectoryChangedEvent(value)) {
         // The event carries only an id and change kind. Re-read the caller's authorized roster
         // so create/delete/rename changes also update the status-dot store and private visibility
         // subscriptions without exposing directory data on the shared status channel.
-        void refreshSnapshot().catch(() => {});
+        catchUp();
         // A created/deleted Agent may change what the viewer can see, so reuse the visibility
         // event's hook.
         onVisibilityChangedEvent?.();
@@ -341,45 +376,51 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     } catch {}
   };
 
+  // The status channels are subscribed without a token, the subscribe proxy checking each.
   useRealtimeSubscription({
     channel: workspaceId ? agentStatusChannel(workspaceId) : undefined,
-    getToken: getConnectionToken,
-    // Re-read the list once the channel is live, so a change published before it (while the page
-    // loaded, or while the connection was down) is not lost; reading it on `connected` instead
-    // left the gap until this channel's token arrived. The `agent` namespace keeps no history
-    // (`infra/centrifugo/config.yaml`), so every subscribe — the first and each one after a
-    // reconnect — is unrecovered and reads once.
+    // Re-read the list once the channel is live if it may have missed a change: published after
+    // the page's read but before the first subscribe (the stream moved past `readPositions`), or
+    // while the connection was down beyond what the `agentstatus` namespace's short history
+    // replays (`infra/centrifugo/config.yaml`).
     onSubscribed: (recovery) => {
-      const gap = subscriptionGap(recovery);
-      const refreshDirectories = shouldRefreshAgentDirectoryOnGap(hasSubscribed.current, gap);
-      hasSubscribed.current = true;
-      if (gap !== "none") {
-        void refreshSnapshot().catch(() => {});
-        // A missed directory publication can affect every open channel's mention queries, not
-        // only the Agent roster that this subscription owns.
-        if (refreshDirectories) {
-          onVisibilityChangedEvent?.();
-          onDirectoryChangedEvent?.();
-        }
-      }
+      if (!workspaceId) return;
+      const channel = agentStatusChannel(workspaceId);
+      const first = !subscribedChannels.current.has(channel);
+      subscribedChannels.current.add(channel);
+      const readPosition = readPositions?.[channel];
+      void statusSubscribeCatchUp(recovery, readPosition, first)
+        .then(({ roster, directories }) => {
+          if (roster) catchUp();
+          if (directories) {
+            onVisibilityChangedEvent?.();
+            onDirectoryChangedEvent?.();
+          }
+        })
+        .catch(() => {});
     },
     onPublication: (publication) => handleStatusPublication(publication.data),
   });
 
-  // One status subscription per visible private Agent, on the same shared client,
-  // derived from this hook's own current `visibleAgents` state — never an external, previous-
-  // render list, so a freshly-private Agent (e.g. right after an `agent:visibility_changed`
-  // refresh above) is subscribed in the very render that learns about it.
+  // One status subscription per visible private Agent, whose `agent:display` snapshots do not
+  // arrive on the shared status channel, derived from this hook's own current `visibleAgents`
+  // state — never an external, previous-render list, so a freshly-private Agent (e.g. right after
+  // an `agent:visibility_changed` refresh above) is subscribed in the very render that learns
+  // about it. Each catches up as the Workspace channel does, from the page's read position for it
+  // if it has one.
   useRealtimeSubscriptions({
-    channels:
-      workspaceId && getPrivateAgentStatusToken
-        ? visibleAgents
-            .filter((agent) => agent.visibility === AGENT_VISIBILITY.PRIVATE)
-            .map((agent) => ({
-              channel: agentStatusChannelForAgent(workspaceId, agent.id),
-              getToken: () => getPrivateAgentStatusToken(agent.id),
-            }))
-        : [],
+    channels: workspaceId
+      ? visibleAgents
+          .filter((agent) => agent.visibility === AGENT_VISIBILITY.PRIVATE)
+          .map((agent) => ({
+            channel: agentStatusChannelForAgent(workspaceId, agent.id),
+          }))
+      : [],
+    onSubscribed: (channel, recovery) => {
+      void missedBySubscribe(recovery, () => readPositions?.[channel])
+        .then((missed) => missed && catchUp())
+        .catch(() => {});
+    },
     onPublication: (_channel, publication) => handleStatusPublication(publication.data),
   });
 

@@ -587,7 +587,7 @@ describe("Agent activity publication", () => {
       });
 
       expect(publishedJson).toHaveLength(1);
-      expect(publishedJson[0]!.channel).toBe("agent:status:workspace-1:agent-1");
+      expect(publishedJson[0]!.channel).toBe("agentstatus:workspace-1:agent-1");
     });
 
     test("does not publish to the shared activity or status channel", async () => {
@@ -622,7 +622,7 @@ describe("Agent activity publication", () => {
 
       const body = (await response.json()) as { result?: unknown };
       expect(body.result).toBeUndefined();
-      expect(publishedJson.every((entry) => entry.channel !== "agent:status:workspace-1")).toBe(
+      expect(publishedJson.every((entry) => entry.channel !== "agentstatus:workspace-1")).toBe(
         true,
       );
     });

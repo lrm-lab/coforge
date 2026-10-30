@@ -3,6 +3,7 @@ import { importJWK, SignJWT, type JWK } from "jose";
 import {
   agentStatusChannel,
   agentStatusChannelForAgent,
+  legacyAgentStatusChannel,
 } from "#src/features/agents/agent-status-channel";
 import {
   agentActivityChannel,
@@ -62,13 +63,20 @@ export async function issueAgentActivitySubscriptionToken(
   );
 }
 
+/**
+ * The status channel's token, for a page loaded before the channels moved to `agentstatus` (task
+ * #348): only such a page still asks for one, so it is for the old name it subscribes to. A page
+ * since subscribes without a token, the subscribe proxy checking it.
+ */
 export async function issueAgentStatusSubscriptionToken(
   input: { userId: string; workspaceId: string },
   environment: Record<string, string | undefined> = process.env,
 ): Promise<string> {
   return browserRealtimeSigner(
     environment,
-    { channel: agentStatusChannel(input.workspaceId) },
+    {
+      channel: legacyAgentStatusChannel(agentStatusChannel(input.workspaceId)),
+    },
     input.userId,
   );
 }
@@ -89,14 +97,19 @@ export async function issueAgentActivitySubscriptionTokenForAgent(
   );
 }
 
-/** The per-Agent status-channel sibling of `issueAgentActivitySubscriptionTokenForAgent`. */
+/** The per-Agent status-channel sibling of `issueAgentActivitySubscriptionTokenForAgent`, for an
+ * old page as `issueAgentStatusSubscriptionToken` is. */
 export async function issueAgentStatusSubscriptionTokenForAgent(
   input: { userId: string; workspaceId: string; agentId: string },
   environment: Record<string, string | undefined> = process.env,
 ): Promise<string> {
   return browserRealtimeSigner(
     environment,
-    { channel: agentStatusChannelForAgent(input.workspaceId, input.agentId) },
+    {
+      channel: legacyAgentStatusChannel(
+        agentStatusChannelForAgent(input.workspaceId, input.agentId),
+      ),
+    },
     input.userId,
   );
 }

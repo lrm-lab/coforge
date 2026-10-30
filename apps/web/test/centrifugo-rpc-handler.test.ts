@@ -391,7 +391,7 @@ describe("CentrifugoRpcHandler", () => {
     expect(displayObservations).toHaveLength(1);
     expect(publications).toEqual([
       {
-        channel: "agent:status:workspace-1",
+        channel: "agentstatus:workspace-1",
         data: {
           agentId: "agent-1",
           status: "active",
@@ -402,7 +402,7 @@ describe("CentrifugoRpcHandler", () => {
         },
       },
       {
-        channel: "agent:status:workspace-1",
+        channel: "agentstatus:workspace-1",
         data: {
           type: "agent:display",
           protocolMajor: 1,
@@ -478,8 +478,8 @@ describe("CentrifugoRpcHandler", () => {
     expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
 
     expect(publications).toEqual([
-      { channel: "agent:status:workspace-1:agent-1" },
-      { channel: "agent:status:workspace-1:agent-1" },
+      { channel: "agentstatus:workspace-1:agent-1" },
+      { channel: "agentstatus:workspace-1:agent-1" },
     ]);
   });
 

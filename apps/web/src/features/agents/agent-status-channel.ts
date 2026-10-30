@@ -16,13 +16,18 @@ export type AgentStatusEvent = {
   observedAtMs: number;
 };
 
-export const agentStatusChannel = (workspaceId: string) => `agent:status:${workspaceId}`;
+const AGENT_STATUS_NAMESPACE = "agentstatus:";
+
+/** The status channels live in their own namespace, `agentstatus`, whose short history lets a page
+ * tell whether its first subscribe missed anything (task #348). */
+export const agentStatusChannel = (workspaceId: string) =>
+  `${AGENT_STATUS_NAMESPACE}${workspaceId}`;
 
 /** The re-routed destination for a private Agent's `agent:display` snapshot, the
  * status-channel sibling of `agentActivityChannelForAgent`: only a viewer who can currently see
  * that Agent is ever issued a subscription token for it. */
 export const agentStatusChannelForAgent = (workspaceId: string, agentId: string) =>
-  `agent:status:${workspaceId}:${agentId}`;
+  `${AGENT_STATUS_NAMESPACE}${workspaceId}:${agentId}`;
 
 /** Where an Agent's `agent:display` is published; the same fail-closed rule as
  * `agentActivityChannelFor`. */
@@ -30,6 +35,18 @@ export const agentStatusChannelFor = (workspaceId: string, agentId: string, visi
   visibility === AGENT_VISIBILITY.PUBLIC
     ? agentStatusChannel(workspaceId)
     : agentStatusChannelForAgent(workspaceId, agentId);
+
+/** Whether `channel` is one of the status channels. */
+export const isAgentStatusChannel = (channel: string) => channel.startsWith(AGENT_STATUS_NAMESPACE);
+
+/**
+ * The name status channel `channel` had before `agentstatus` (task #348). A page loaded before the
+ * move still listens on it with a token for it (`issueAgentStatusSubscriptionToken`), so until
+ * pages stop fetching subscription tokens (task #348, the page's own subscribe), whose change
+ * removes this, the server API publishes every status publication to both names.
+ */
+export const legacyAgentStatusChannel = (channel: string) =>
+  `agent:status:${channel.slice(AGENT_STATUS_NAMESPACE.length)}`;
 
 /**
  * The id-only event a visibility change publishes on the shared status channel. A

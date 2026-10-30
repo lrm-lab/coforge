@@ -94,7 +94,7 @@ test("accepts a matching launch, writes the display snapshot, and publishes it",
 
   expect(puts).toEqual([message]);
   expect(published).toEqual([
-    { channel: "agent:status:workspace", data: { type: "agent:display", ...snapshot } },
+    { channel: "agentstatus:workspace", data: { type: "agent:display", ...snapshot } },
   ]);
 });
 
@@ -230,7 +230,7 @@ test("routes the display snapshot to a private Agent's per-Agent status channel"
   expect(await method(encodeAgentContextUsage(message), { principal })).toBeInstanceOf(Uint8Array);
 
   expect(published).toEqual([
-    { channel: "agent:status:workspace:agent", data: { type: "agent:display", ...snapshot } },
+    { channel: "agentstatus:workspace:agent", data: { type: "agent:display", ...snapshot } },
   ]);
 });
 
@@ -260,7 +260,7 @@ test("keeps the shared status channel when the visibility dependency resolves pu
 
   await method(encodeAgentContextUsage(message), { principal });
 
-  expect(published).toEqual([{ channel: "agent:status:workspace" }]);
+  expect(published).toEqual([{ channel: "agentstatus:workspace" }]);
 });
 
 // `agentVisibility` is a required dependency (no `?`): a lookup that cannot answer the

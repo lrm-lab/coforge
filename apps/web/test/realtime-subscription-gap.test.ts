@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import {
+  missedBySubscribe,
   olderStreamPositions,
   streamMovedSince,
   subscriptionGap,
@@ -70,4 +71,23 @@ test("an expired subscription token is routine until it repeats; a refused subsc
   expect(reporter.shouldReport(109)).toBe(true);
   reporter.subscribed();
   expect(reporter.shouldReport(109)).toBe(false);
+});
+
+test("a subscribe missed something when it lost publications, or first subscribed past the read", async () => {
+  const at = (offset: number) => ({ epoch: "e", offset });
+  const first = (offset: number) => ({
+    wasRecovering: false,
+    recovered: false,
+    position: () => at(offset),
+  });
+  expect(await missedBySubscribe({ wasRecovering: true, recovered: true }, () => at(1))).toBe(
+    false,
+  );
+  expect(await missedBySubscribe({ wasRecovering: true, recovered: false }, () => at(9))).toBe(
+    true,
+  );
+  expect(await missedBySubscribe(first(4), () => at(4))).toBe(false);
+  expect(await missedBySubscribe(first(5), async () => at(4))).toBe(true);
+  // A read without a position may lack anything.
+  expect(await missedBySubscribe(first(4), () => undefined)).toBe(true);
 });

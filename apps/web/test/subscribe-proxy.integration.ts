@@ -91,8 +91,12 @@ beforeAll(async () => {
   const shipped = Bun.YAML.parse(
     await Bun.file(join(import.meta.dir, "../../../infra/centrifugo/config.yaml")).text(),
   ) as Shipped;
-  const chat = shipped.channel.namespaces.find((namespace) => namespace.name === "chat");
-  if (!chat) throw new Error("infra/centrifugo/config.yaml declares no chat namespace");
+  const shippedNamespaces = ["chat", "agent", "agentstatus"].map((name) => {
+    const namespace = shipped.channel.namespaces.find((declared) => declared.name === name);
+    if (!namespace) throw new Error(`infra/centrifugo/config.yaml declares no ${name} namespace`);
+    // The publish proxy is not under test here.
+    return { ...namespace, publish_proxy_enabled: false };
+  });
   const origin = `http://host.docker.internal:${proxy.port}`;
   const configPath = join(root, "config.json");
   await writeFile(
@@ -123,7 +127,7 @@ beforeAll(async () => {
             endpoint: `${origin}/sub-refresh`,
           },
         },
-        namespaces: [chat],
+        namespaces: shippedNamespaces,
       },
     }),
     { mode: 0o644 },
@@ -315,4 +319,15 @@ test("a mention published between a read and the subscribe shows as missed, and 
   const read = (await chatStreamPositions([channel], api))[channel];
   await api.publishJson(channel, { type: "conversation.activity.v1" });
   expect(streamMovedSince(read, await subscribedAt())).toBe(true);
+}, 30_000);
+
+test("an Agent status publication reaches both its names, and the new one keeps a position", async () => {
+  const api = createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: `http://127.0.0.1:${centrifugoPort}/api`,
+    COFORGE_CENTRIFUGO_API_KEY: API_KEY,
+  });
+  const channel = "agentstatus:66666666-6666-4666-8666-666666666666";
+  await api.publishJson(channel, { type: "agent:display" });
+  await api.publish(channel, new TextEncoder().encode("{}"));
+  expect((await chatStreamPositions([channel], api))[channel]?.offset).toBe(2);
 }, 30_000);

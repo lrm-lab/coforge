@@ -435,22 +435,26 @@ export function useRealtimeSubscription({
  * per-Agent channels added for the viewer's own visible private Agents, one activity and
  * one status channel per Agent, whose membership changes as Agents are created, deleted or
  * change visibility. `useRealtimeSubscription` only ever manages one fixed channel; this hook is
- * its sibling for a channel list, on the same shared client, diffed by channel name so an Agent
- * leaving the set unsubscribes without disturbing the others.
+ * its sibling for a channel list, on the same shared subscriptions, diffed by channel name so an
+ * Agent leaving the set unsubscribes without disturbing the others.
  */
 export function useRealtimeSubscriptions({
   channels,
   onPublication,
+  onSubscribed,
 }: {
-  channels: readonly { channel: string; getToken: () => Promise<string> }[];
+  /** A channel without `getToken` is subscribed without a token, the subscribe proxy checking it. */
+  channels: readonly { channel: string; getToken?: () => Promise<string> }[];
   onPublication: (channel: string, publication: RealtimePublication) => void;
+  /** `SharedRealtimeOptions.onSubscribed`, for each channel. */
+  onSubscribed?: (channel: string, recovery: SubscribedRecovery) => void;
 }) {
   const client = useBrowserRealtime();
-  const onPublicationRef = useRef(onPublication);
-  const tokenGetters = useRef(new Map<string, () => Promise<string>>());
+  const handlers = useRef({ onPublication, onSubscribed });
+  const tokenGetters = useRef(new Map<string, (() => Promise<string>) | undefined>());
 
   useEffect(() => {
-    onPublicationRef.current = onPublication;
+    handlers.current = { onPublication, onSubscribed };
   });
   // Keep the latest getToken per channel without forcing a resubscribe when only its closure
   // identity changes across renders (see the channelKey-only dependency below).
@@ -458,31 +462,36 @@ export function useRealtimeSubscriptions({
 
   const channelKey = [...new Set(channels.map((entry) => entry.channel))].sort().join("\u0000");
 
+  // Each channel's lease, kept across set changes so a channel staying in the set is not
+  // resubscribed (and does not read again what a first subscribe may have missed).
+  const leases = useRef(new Map<string, () => void>());
   useEffect(() => {
-    if (!client || !channelKey) return;
-    const names = channelKey.split("\u0000");
-    const subscriptions = names.map((channel) => {
-      const subscription = client.newSubscription(channel, {
-        getToken: () => tokenGetters.current.get(channel)!(),
-      });
-      subscription.on("publication", (publication) =>
-        runHandler(channel, (value) => onPublicationRef.current(channel, value), publication),
-      );
-      const errors = subscriptionErrorReporter();
-      subscription.on("subscribed", errors.subscribed);
-      subscription.on("error", (event) => {
-        if (errors.shouldReport(event.error.code))
-          console.warn(`realtime subscription error on ${channel}`, event.error);
-        else console.debug(`realtime subscription token expired on ${channel}; renewing`);
-      });
-      subscription.subscribe();
-      return subscription;
-    });
-    return () => {
-      for (const subscription of subscriptions) {
-        subscription.unsubscribe();
-        client.removeSubscription(subscription);
+    if (!client) return;
+    const wanted = new Set(channelKey ? channelKey.split("\u0000") : []);
+    for (const [channel, release] of leases.current)
+      if (!wanted.has(channel)) {
+        release();
+        leases.current.delete(channel);
       }
-    };
+    for (const channel of wanted) {
+      if (leases.current.has(channel)) continue;
+      const getToken = tokenGetters.current.get(channel);
+      leases.current.set(
+        channel,
+        subscribeToSharedRealtime(client, {
+          channel,
+          getToken: getToken && (() => tokenGetters.current.get(channel)!()),
+          onPublication: (publication) => handlers.current.onPublication(channel, publication),
+          onSubscribed: (recovery) => handlers.current.onSubscribed?.(channel, recovery),
+        }),
+      );
+    }
   }, [client, channelKey]);
+  useEffect(() => {
+    const held = leases.current;
+    return () => {
+      for (const release of held.values()) release();
+      held.clear();
+    };
+  }, [client]);
 }

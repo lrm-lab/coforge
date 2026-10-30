@@ -24,8 +24,7 @@ import { BrowserPushLifecycle } from "#src/features/notifications/browser-push-l
 import { InPageNotifications } from "#src/features/notifications/in-page-notifications";
 import { NotificationActivationContext } from "#src/features/notifications/notification-activation-banner";
 import { getBrowserNotificationSettings } from "#src/features/notifications/notifications.functions";
-import { listAgents } from "#src/features/agents/agents.functions";
-import { loadExtraAgents } from "#src/features/agents/extra-agents.functions";
+import { loadWorkspaceAgents } from "#src/features/agents/workspace-agents.functions";
 import { WorkspaceAgentsProvider } from "#src/features/agents/workspace-agents-realtime";
 import { WorkspacePresenceProvider } from "#src/features/workspaces/member-presence";
 import { getUserPreferences } from "#src/features/settings/settings.functions";
@@ -72,14 +71,12 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       });
   },
   loader: async ({ location }) => {
-    const [user, switcher, notifications, agents, extraAgents, preferences, tabOrders, recordsNav] =
+    const [user, switcher, notifications, workspaceAgents, preferences, tabOrders, recordsNav] =
       await Promise.all([
         getUserProfile(),
         loadWorkspaceSwitcher(),
         getBrowserNotificationSettings(),
-        listAgents(),
-        // The other members' Agents are an addition: without them the browser reads them itself.
-        loadExtraAgents({ data: { heldAgentIds: [] } }).catch(() => undefined),
+        loadWorkspaceAgents(),
         getUserPreferences(),
         getPanelTabOrders(),
         loadRecordsNavAttention().catch(() => ({ preview: false })),
@@ -93,8 +90,9 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       currentWorkspace: switcher.current,
       canCreateAgents: switcher.canCreateAgents,
       notifications,
-      agents,
-      extraAgents,
+      agents: workspaceAgents.agents,
+      extraAgents: workspaceAgents.extraAgents,
+      agentStreamPositions: workspaceAgents.streamPositions,
       timeZone: preferences.timeZone,
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
@@ -112,6 +110,7 @@ function AppLayout() {
     currentWorkspace,
     agents,
     extraAgents,
+    agentStreamPositions,
     recordsPreview,
     notifications,
     timeZone,
@@ -151,6 +150,7 @@ function AppLayout() {
                 viewerId={user.id}
                 agents={agents}
                 extraAgents={extraAgents}
+                agentStreamPositions={agentStreamPositions}
               >
                 <PanelTabOrderProvider workspaceId={currentWorkspace.id} orders={tabOrders}>
                   {/* Every open page leaves a Workspace its owner deleted. */}

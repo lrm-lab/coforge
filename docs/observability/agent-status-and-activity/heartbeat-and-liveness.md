@@ -25,7 +25,7 @@ turn/message 生命周期事件）；这些信号自 2026-09-18 起统一上报�
 取出已过期的 lease，对每个成员运行 `SWEEP_STALE`：还新鲜则从索引移除；刚过期且未探测过
 则记录一次待定探测并向其 Daemon 发布新的 `agent:activity_probe` 意图；已探测但仍在等待则
 跳过；探测已经等待超过 `ACTIVITY_PROBE_TIMEOUT_MS`（5 秒）则判定为不可达，清除可见忙碌
-状态并直接把结果推给 `agent:status:<workspace_id>`，浏览器随即可见 Agent 变回 online。Daemon 用一条带 `probe_id` 的普通 `agent:activity` 应答，按序取第一条
+状态并直接把结果推给 `agentstatus:<workspace_id>`，浏览器随即可见 Agent 变回 online。Daemon 用一条带 `probe_id` 的普通 `agent:activity` 应答，按序取第一条
 成立的：仍有未读投递（Memory Agent 批量观察的普通频道消息不算）回复 `message_received`，
 启动中回复 `starting`，有最近一条忙碌 Activity 则重发它，否则回复 `idle`；探测应答不算新的忙碌证据。服务端把它当成真实观测处理，
 而不是当成心跳：只有心跳和 `runtime_progress` 本身不改变可见状态，探测应答可以把展示从
