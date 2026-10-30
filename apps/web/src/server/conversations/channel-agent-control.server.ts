@@ -4,7 +4,8 @@ import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidan
 import type { AgentControl } from "#src/server/agents/agent-control.server";
 import type { ComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 
 /** The first turn of every Agent a member resumes in a channel. */
 function resumePrompt(channelName: string, username: string, guidance: string) {
@@ -93,9 +94,7 @@ export class ChannelAgentControl {
     const channel = await this.db.conversation.findFirst({
       where: {
         id: channelId,
-        workspaceId,
-        channelName: { not: null },
-        ...VISIBLE_CONVERSATION_WHERE,
+        ...visibleChannelWhere(workspaceId, { userId }),
       },
       select: {
         channelName: true,

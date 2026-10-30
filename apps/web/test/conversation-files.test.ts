@@ -4,7 +4,12 @@ import { listConversationFiles } from "#src/server/conversations/conversation-fi
 
 function database(options: {
   workspaceMember?: boolean;
-  conversation?: { directKey: string | null; channelName: string | null; members: object[] };
+  conversation?: {
+    directKey: string | null;
+    channelName: string | null;
+    visibility: string;
+    members: object[];
+  };
 }) {
   const attachmentQueries: object[] = [];
   return {
@@ -44,7 +49,7 @@ function database(options: {
 describe("conversation files authorization", () => {
   test("allows a Workspace member who has not joined a public channel", async () => {
     const { db, attachmentQueries } = database({
-      conversation: { directKey: null, channelName: "general", members: [] },
+      conversation: { directKey: null, channelName: "general", visibility: "public", members: [] },
     });
 
     await expect(
@@ -63,7 +68,7 @@ describe("conversation files authorization", () => {
   test("rejects a non-Workspace member", async () => {
     const { db, attachmentQueries } = database({
       workspaceMember: false,
-      conversation: { directKey: null, channelName: "general", members: [] },
+      conversation: { directKey: null, channelName: "general", visibility: "public", members: [] },
     });
 
     await expect(
@@ -78,7 +83,12 @@ describe("conversation files authorization", () => {
 
   test("rejects a non-member of a private conversation", async () => {
     const { db, attachmentQueries } = database({
-      conversation: { directKey: "agent:agent-1|user:user-2", channelName: null, members: [] },
+      conversation: {
+        directKey: "agent:agent-1|user:user-2",
+        channelName: null,
+        visibility: "public",
+        members: [],
+      },
     });
 
     await expect(

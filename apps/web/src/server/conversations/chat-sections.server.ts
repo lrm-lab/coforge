@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 import { viewerDirectConversationWhere } from "./viewer-direct-conversations.server";
 import { lockMemberPins, setConversationPin } from "./conversation-pins.server";
 import { lockConversation } from "./conversation-lock.server";
@@ -184,8 +184,10 @@ export class ChatSections {
           leftAt: null,
           conversation: {
             archivedAt: null,
-            ...VISIBLE_CONVERSATION_WHERE,
-            OR: [{ channelName: { not: null } }, viewerDirectConversationWhere(this.userId)],
+            OR: [
+              visibleChannelWhere(this.workspaceId, { userId: this.userId }),
+              viewerDirectConversationWhere(this.userId),
+            ],
           },
         },
         select: { id: true },

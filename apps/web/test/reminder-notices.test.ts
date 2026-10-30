@@ -5,7 +5,12 @@ import { ReminderNotices } from "#src/server/conversations/reminder-notices.serv
 const authorized = {
   workspaceMembership: { findUnique: async () => ({ userId: "user-1" }) },
   conversation: {
-    findFirst: async () => ({ directKey: null, channelName: "general", members: [] }),
+    findFirst: async () => ({
+      directKey: null,
+      channelName: "general",
+      visibility: "public",
+      members: [],
+    }),
   },
   message: { findMany: async () => [{ id: "message-1" }] },
 };

@@ -1,4 +1,4 @@
-import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 import { viewerDirectConversationWhere } from "./viewer-direct-conversations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
@@ -165,7 +165,7 @@ async function activeMemberships(
       OR: [
         {
           conversationId: { in: channelIds },
-          conversation: { channelName: { not: null }, ...VISIBLE_CONVERSATION_WHERE },
+          conversation: visibleChannelWhere(workspaceId, { userId }),
         },
         // Only a DM the member can open, the same ones their Direct messages list shows.
         { conversationId: { in: directIds }, conversation: viewerDirectConversationWhere(userId) },

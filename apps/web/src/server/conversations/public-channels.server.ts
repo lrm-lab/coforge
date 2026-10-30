@@ -6,7 +6,8 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import type { BulkFileRemoval } from "#src/server/files/file-storage.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
-import { memberChannel, type ChannelActor, type PublicChannelPorts } from "./channel-access.server";
+import { memberChannel, type PublicChannelPorts } from "./channel-access.server";
+import type { ChannelActor } from "./channel-actor.server";
 import { sendChannel } from "./channel-send.server";
 import { changeChannelCoordinator } from "./channel-coordination.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";

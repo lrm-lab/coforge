@@ -5,6 +5,7 @@ import {
   followedChannelThreadsSql,
   humanUnreadReplySql,
 } from "#src/server/conversations/human-unread.server";
+import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
 import { viewerDirectConversationSql } from "#src/server/conversations/viewer-direct-conversations.server";
 
 /**
@@ -168,7 +169,7 @@ export function navHasUnreadSql(workspaceId: string, userId: string) {
       -- A notified mention is unread until the viewer reads it; the cheapest term goes first.
       SELECT 1 FROM "pending_mention_actions" pma
       JOIN "conversations" pc ON pc."id" = pma."conversationId"
-       AND pc."archivedAt" IS NULL AND pc."hiddenFromWorkspaceAt" IS NULL
+       AND pc."archivedAt" IS NULL AND ${readableChannelSql("pc", workspaceId, { userId })}
       WHERE pma."workspaceId" = ${workspaceId}::uuid AND pma."targetUserId" = ${userId}::uuid
         AND pma."notifiedAt" IS NOT NULL AND pma."dismissedAt" IS NULL
         AND pma."targetReadAt" IS NULL

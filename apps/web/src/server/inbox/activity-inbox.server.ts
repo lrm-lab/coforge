@@ -4,6 +4,7 @@ import type {
   ActivityItemDone,
 } from "#src/features/inbox/activity-inbox.schemas";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { channelListMembers } from "#src/server/conversations/channel-list-preview.server";
 import {
   browserMessageFields,
@@ -232,7 +233,9 @@ export class ActivityInbox {
         targetUserId: userId,
         notifiedAt: { not: null },
         dismissedAt: null,
-        message: { conversation: { archivedAt: null, hiddenFromWorkspaceAt: null } },
+        message: {
+          conversation: { archivedAt: null, ...visibleChannelWhere(workspaceId, { userId }) },
+        },
       },
       select: {
         id: true,

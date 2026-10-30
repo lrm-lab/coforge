@@ -1,5 +1,6 @@
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { readableConversationWhere } from "#src/server/conversations/channel-read-access.server";
 import { TASK_SCOPE_WHERE } from "./task-view.server";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
@@ -27,7 +28,8 @@ export async function resolveTaskScope(
       where: {
         id: command.conversationId,
         workspaceId: principal.workspaceId,
-        ...TASK_SCOPE_WHERE,
+        // A private channel the person is not in is a missing one.
+        ...readableConversationWhere(principal.workspaceId, { userId: principal.userId }),
       },
       select: {
         id: true,

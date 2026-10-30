@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
-import type { ChannelActor } from "./channel-access.server";
+import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 
@@ -99,12 +99,6 @@ export function canDeleteChannel(channelName: string, serverRole: string | undef
  * is one they may unarchive; a channel admin unarchives their own channel from its settings. */
 export function canListArchivedChannels(serverRole: string | undefined) {
   return roleCan(serverRole, "manageChannels");
-}
-
-/** A `ConversationMember` `where` clause identifying `actor`'s own row in a channel. Shared by
- * `PublicChannels` (which otherwise duplicated this as a private method) and this module. */
-export function channelActorMemberWhere(actor: ChannelActor) {
-  return "userId" in actor ? { userId: actor.userId } : { agentId: actor.agentId };
 }
 
 /** The actor's own server role: a human's Workspace role, or an Agent's own `role` column.

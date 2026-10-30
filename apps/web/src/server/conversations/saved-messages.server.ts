@@ -1,10 +1,7 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import {
-  ACTIVE_MEMBER_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-  TARGETABLE_CONVERSATION_WHERE,
-} from "./active-member.server";
+import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { readableConversationWhere } from "./channel-read-access.server";
 import { browserMessageFields, mapBrowserMessage } from "./conversation-history.server";
 import { attachForwardedAccess } from "./message-forward-view.server";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
@@ -19,8 +16,11 @@ import { announceViewerEvent, type ConversationRealtime } from "./conversation-r
  * access helper: the message must exist in the conversation given, and saving requires an
  * *active* membership — the same seam `toggleUserMessageReaction` applies (the compound member
  * FK makes it structural: no member row, no save). Reading is scoped through the viewer's own
- * member rows instead, and like pins it is independent of leave: a soft-left member still sees
- * (and can clear) the bookmarks made while they were active — `leftAt` only blocks new saves.
+ * member rows instead, and like pins it is independent of leave for a DM or public channel: a
+ * soft-left member still sees (and can clear) the bookmarks made while they were active — `leftAt`
+ * only blocks new saves. A private channel they left is the exception for reading: its bookmarks
+ * leave the list until they can read it again (they can still clear them). A person with no member
+ * row at all cannot clear anything: that is `NOT_FOUND`, like a missing message.
  *
  * Conversation-scope ownership for DMs/channels beyond membership stays with the caller, next
  * to its send paths, exactly as the reaction repository documents.
@@ -44,7 +44,7 @@ export async function saveUserMessage(
       id: messageId,
       conversationId,
       workspaceId,
-      conversation: { ...VISIBLE_CONVERSATION_WHERE, AND: [TARGETABLE_CONVERSATION_WHERE] },
+      conversation: readableConversationWhere(workspaceId, { userId }),
     },
     select: { id: true },
   });
@@ -92,7 +92,8 @@ export async function unsaveUserMessage(
     where: { conversationId, workspaceId, userId },
     select: { id: true },
   });
-  if (!member) throw new AppError("ACCESS_DENIED");
+  // No member row at all is a missing message, whatever conversation it is in.
+  if (!member) throw new AppError("NOT_FOUND");
   const { count } = await db.savedMessage.deleteMany({
     where: { messageId: message.id, memberId: member.id },
   });
@@ -143,11 +144,12 @@ export async function listUserSavedMessages(
 ): Promise<SavedMessageView[]> {
   const { workspaceId, userId } = input;
   const rows = await db.savedMessage.findMany({
-    // A message in a channel hidden from the Workspace leaves Saved until the channel is back.
+    // A message in a channel hidden from the Workspace, or a private one the person has left,
+    // leaves Saved until the channel is readable again.
     where: {
       workspaceId,
       member: { workspaceId, userId },
-      conversation: { ...VISIBLE_CONVERSATION_WHERE, AND: [TARGETABLE_CONVERSATION_WHERE] },
+      conversation: readableConversationWhere(workspaceId, { userId }),
     },
     select: savedMessageSelect,
     orderBy: { createdAt: "desc" },

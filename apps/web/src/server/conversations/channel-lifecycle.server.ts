@@ -9,16 +9,11 @@ import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-m
 import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
-import {
-  findChannelById,
-  memberChannel,
-  type ChannelActor,
-  type PublicChannelPorts,
-} from "./channel-access.server";
+import { findChannelById, memberChannel, type PublicChannelPorts } from "./channel-access.server";
+import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
 import {
   canDeleteChannel,
   canHideGeneralChannel,
-  channelActorMemberWhere,
   isChannelRole,
   resolveActorServerRole,
   resolveChannelAuthority,
@@ -177,7 +172,7 @@ export async function changeChannelInfo(
   channelId: string,
   patch: { name?: string; description?: string },
 ) {
-  const channel = await findChannelById(db, workspaceId, channelId);
+  const channel = await findChannelById(db, workspaceId, actor, channelId);
   const authority = await resolveChannelAuthority(db, workspaceId, actor, channel);
   if (!authority.capabilities.update) throw new AppError("ACCESS_DENIED");
   if (channel.archivedAt) throw new AppError("CONFLICT");
@@ -287,7 +282,7 @@ export async function deleteChannel(
   storage: () => Promise<BulkFileRemoval> = getFileStorage,
 ) {
   const [channel, serverRole] = await Promise.all([
-    findChannelById(db, workspaceId, channelId),
+    findChannelById(db, workspaceId, { userId }, channelId),
     resolveActorServerRole(db, workspaceId, { userId }),
   ]);
   const name = channel.channelName!;
@@ -344,7 +339,7 @@ export async function changeChannelArchived(
   channelId: string,
   archived: boolean,
 ) {
-  const channel = await findChannelById(db, workspaceId, channelId);
+  const channel = await findChannelById(db, workspaceId, actor, channelId);
   if (channel.channelName === "general") throw new AppError("CONFLICT");
   const authority = await resolveChannelAuthority(db, workspaceId, actor, channel);
   if (!authority.capabilities[archived ? "archive" : "unarchive"])

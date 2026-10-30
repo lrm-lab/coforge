@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
 
 export type MessageSearchSort = "relevance" | "recent";
 
@@ -38,9 +39,10 @@ function containsPattern(term: string): string {
  * body match is `ILIKE`, which the trigram GIN index `messages_body_idx` serves for terms of
  * three or more characters; shorter terms scan the Workspace's messages.
  *
- * A human may read every channel in the Workspace (joined, left or never joined, archived too)
- * and only the direct conversations they belong to, the same rule `ConversationHistory.authorize`
- * applies to a single conversation. System rows have no sender and are never results.
+ * A human may read every public channel in the Workspace (joined, left or never joined, archived
+ * too), the private ones they are in (`readableChannelSql`), and only the direct conversations
+ * they belong to, the same rule `ConversationHistory.authorize` applies to a single
+ * conversation. System rows have no sender and are never results.
  */
 export async function findMessageSearchIds(
   db: PrismaClient,
@@ -48,9 +50,9 @@ export async function findMessageSearchIds(
 ): Promise<string[]> {
   const conditions: Prisma.Sql[] = [
     Prisma.sql`m."workspaceId" = ${criteria.workspaceId}::uuid`,
-    // A channel hidden from the Workspace is searched by nobody.
-    Prisma.sql`c."hiddenFromWorkspaceAt" IS NULL`,
-    Prisma.sql`(c."channelName" IS NOT NULL OR c."directKey" IS NOT NULL AND EXISTS (
+    // A channel is searched only by those who may read it (hidden and private ones included).
+    Prisma.sql`(${readableChannelSql("c", criteria.workspaceId, { userId: criteria.viewerUserId })}
+      OR c."directKey" IS NOT NULL AND EXISTS (
       SELECT 1 FROM "conversation_members" v
       WHERE v."conversationId" = c."id" AND v."userId" = ${criteria.viewerUserId}::uuid))`,
     ...criteria.terms.map((term) => Prisma.sql`m."body" ILIKE ${containsPattern(term)}`),

@@ -12,11 +12,10 @@ import {
   channelEndSequence,
   findChannelById,
   memberChannel,
-  type ChannelActor,
   type PublicChannelPorts,
 } from "./channel-access.server";
+import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
 import {
-  channelActorMemberWhere,
   deriveChannelAdminBasis,
   deriveChannelCapabilities,
   resolveActorServerRole,
@@ -119,7 +118,7 @@ export async function removeChannelMember(
   channelId: string,
   target: ChannelActor,
 ) {
-  const channel = await findChannelById(db, workspaceId, channelId);
+  const channel = await findChannelById(db, workspaceId, { userId: actorUserId }, channelId);
   if (channel.channelName === "general") throw new AppError("CONFLICT");
   const authority = await resolveChannelAuthority(
     db,
@@ -162,7 +161,7 @@ export async function channelMembers(
   channelId: string,
 ) {
   await authorizeChannelActor(db, workspaceId, actor);
-  const channel = await findChannelById(db, workspaceId, channelId);
+  const channel = await findChannelById(db, workspaceId, actor, channelId);
   const isGeneral = channel.channelName === "general";
 
   const [memberRows, workspaceUsers, workspaceAgents, actorServerRole] = await Promise.all([
@@ -328,7 +327,7 @@ export async function addChannelMembers(
 ) {
   const { db, realtime } = ports;
   await authorizeChannelActor(db, workspaceId, actor);
-  const channel = await findChannelById(db, workspaceId, channelId);
+  const channel = await findChannelById(db, workspaceId, actor, channelId);
   // Nobody joins an archived channel, including by being added.
   if (channel.archivedAt) throw new AppError("CONFLICT");
 

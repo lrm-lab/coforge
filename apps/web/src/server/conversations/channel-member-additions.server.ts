@@ -1,6 +1,6 @@
 import { isAppErrorCode } from "#src/lib/app-error";
 import type { PublicChannels } from "./public-channels.server";
-import type { ChannelActor } from "./channel-access.server";
+import type { ChannelActor } from "./channel-actor.server";
 
 /** Why one picked person or Agent did not join: a stable code, never shown verbatim. */
 export type MemberAdditionFailure = {

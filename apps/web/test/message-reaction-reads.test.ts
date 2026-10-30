@@ -16,7 +16,12 @@ function fakeDb({ member = true } = {}) {
   const db = {
     workspaceMembership: { findUnique: async () => (member ? { userId: "user-1" } : null) },
     conversation: {
-      findFirst: async () => ({ directKey: null, channelName: "general", members: [] }),
+      findFirst: async () => ({
+        directKey: null,
+        channelName: "general",
+        visibility: "public",
+        members: [],
+      }),
     },
     message: {
       findMany: (query: { where: unknown }) => {

@@ -1,4 +1,5 @@
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { canReadChannel } from "./channel-read-access.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
@@ -219,6 +220,7 @@ export class ConversationHistory {
         select: {
           directKey: true,
           channelName: true,
+          visibility: true,
           members: { where: { userId }, select: { id: true, leftAt: true } },
         },
       }),
@@ -228,7 +230,12 @@ export class ConversationHistory {
     const viewer = conversation.members[0];
     const viewerMemberId = viewer?.id;
     const activeMemberId = viewer?.leftAt === null ? viewer.id : undefined;
-    if (conversation.channelName !== null) return { viewerMemberId, activeMemberId, direct: false };
+    if (conversation.channelName !== null) {
+      // A private channel the viewer is not in is a missing one.
+      if (!canReadChannel(conversation, activeMemberId !== undefined))
+        throw new AppError("NOT_FOUND");
+      return { viewerMemberId, activeMemberId, direct: false };
+    }
     if (conversation.directKey !== null && viewerMemberId)
       return { viewerMemberId, activeMemberId, direct: true };
     throw new AppError("ACCESS_DENIED");

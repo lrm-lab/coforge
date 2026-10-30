@@ -1,4 +1,5 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
+import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type {
@@ -214,6 +215,7 @@ async function readAccess(
       conversation: {
         select: {
           channelName: true,
+          visibility: true,
           kind: true,
           hiddenFromWorkspaceAt: true,
           archivedAt: true,
@@ -278,7 +280,9 @@ async function readAccess(
       directVisible &&
       source.hiddenFromWorkspaceAt === null &&
       Boolean(attachment.messageId || attachment.commentThread) &&
-      (Boolean(actor.userId && source.channelName !== null) || activeMember),
+      (actor.userId && source.channelName !== null
+        ? canReadChannel(source, activeMember)
+        : activeMember),
     activeMember,
     archived: source.archivedAt !== null,
     readOnly:

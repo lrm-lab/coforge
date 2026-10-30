@@ -98,7 +98,7 @@ describe("ConversationHistory", () => {
       conversation: {
         findFirst: async (input: object) => {
           conversationQueries.push(input);
-          return { directKey: null, channelName: "general", members: [] };
+          return { directKey: null, channelName: "general", visibility: "public", members: [] };
         },
       },
       message: {
@@ -136,6 +136,7 @@ describe("ConversationHistory", () => {
         findFirst: async () => ({
           directKey: null,
           channelName: "general",
+          visibility: "public",
           members: [{ id: "channel-member-1" }],
         }),
       },
@@ -252,6 +253,7 @@ describe("ConversationHistory", () => {
         findFirst: async () => ({
           directKey: null,
           channelName: "engineering",
+          visibility: "public",
           members: [],
         }),
       },
@@ -326,7 +328,12 @@ describe("ConversationHistory", () => {
     const db = {
       workspaceMembership: { findUnique: async () => membership },
       conversation: {
-        findFirst: async () => ({ directKey: null, channelName: "engineering", members: [] }),
+        findFirst: async () => ({
+          directKey: null,
+          channelName: "engineering",
+          visibility: "public",
+          members: [],
+        }),
       },
       $queryRaw: async () => [],
       message: {

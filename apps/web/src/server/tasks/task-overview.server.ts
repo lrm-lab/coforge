@@ -5,12 +5,11 @@ import {
 } from "#src/features/tasks/conversation-task-subset";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { VISIBLE_CONVERSATION_WHERE } from "#src/server/conversations/active-member.server";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { withProjectIconUrl } from "#src/server/projects/project-images.server";
 import {
   FINISHED_TASK_STATUSES,
   storedTaskStatus,
-  CONVERSATION_KIND_WHERE,
   TASK_MEMBER_SELECT,
   taskMember,
   taskSelection,
@@ -112,14 +111,17 @@ function finishedFilterWhere({ owners = [], projects = [] }: FinishedTaskFilter)
 }
 
 /**
- * The conversations whose Tasks the Workspace Tasks page shows: every visible channel. A direct
- * message's Tasks, the viewer's own included, stay on that conversation's Tasks tab.
+ * The conversations whose Tasks the Workspace Tasks page shows the viewer: every channel they may
+ * read. A direct message's Tasks, the viewer's own included, stay on that conversation's Tasks tab.
+ * Tasks in a channel hidden from the Workspace, or a private one the viewer is not in, are not
+ * listed.
  */
-const OVERVIEW_CONVERSATION_WHERE: Prisma.ConversationWhereInput = {
-  // Tasks in a channel hidden from the Workspace leave the overview until it is restored.
-  ...VISIBLE_CONVERSATION_WHERE,
-  ...CONVERSATION_KIND_WHERE.channel,
-};
+function overviewConversationWhere(
+  workspaceId: string,
+  userId: string,
+): Prisma.ConversationWhereInput {
+  return visibleChannelWhere(workspaceId, { userId });
+}
 
 function overviewSelection(userId: string) {
   return {
@@ -189,7 +191,7 @@ export class TaskOverviewReads {
         workspaceId,
         // Finished Tasks only grow; the board pages them through `finishedPage` instead.
         status: { in: UNFINISHED_TASK_STATUSES },
-        conversation: OVERVIEW_CONVERSATION_WHERE,
+        conversation: overviewConversationWhere(workspaceId, userId),
       },
       // Newest first: a group renders its first cards, and new work is what gets looked at.
       orderBy: [{ createdAt: "desc" }, { messageId: "asc" }],
@@ -213,7 +215,7 @@ export class TaskOverviewReads {
         workspaceId,
         conversationId: ref.conversationId,
         number: ref.number,
-        conversation: OVERVIEW_CONVERSATION_WHERE,
+        conversation: overviewConversationWhere(workspaceId, userId),
       },
       select: overviewSelection(userId),
     });
@@ -369,7 +371,7 @@ export class TaskOverviewReads {
     const { workspaceId, userId, conversationId } = scope;
     if (!conversationId) {
       await requireWorkspaceMember(this.db, workspaceId, userId);
-      return { workspaceId, conversation: OVERVIEW_CONVERSATION_WHERE };
+      return { workspaceId, conversation: overviewConversationWhere(workspaceId, userId) };
     }
     return {
       workspaceId,

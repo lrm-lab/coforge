@@ -8,7 +8,7 @@ import { directMessageAgentWhere } from "#src/server/agents/agent-visibility.ser
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
-import { visibleChannelWhere } from "./channel-access.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 
 /** Round-robin over the lists, so a long run of one kind does not crowd the others out. */
 function interleave<T>(lists: readonly (readonly T[])[], limit: number): T[] {
@@ -43,7 +43,7 @@ export async function searchForwardTargets(
     members: { where: { userId, ...ACTIVE_MEMBER_WHERE }, select: { id: true }, take: 1 },
   } as const;
   const channelWhere = {
-    ...visibleChannelWhere(workspaceId),
+    ...visibleChannelWhere(workspaceId, { userId }),
     kind: null,
     channelName: named ?? { not: null },
   };

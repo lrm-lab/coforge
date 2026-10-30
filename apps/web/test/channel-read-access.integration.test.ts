@@ -1,23 +1,27 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import {
   CHANNEL_VISIBILITY,
   type ChannelVisibility,
 } from "#src/features/conversations/channel-visibility";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
-import type { ChannelActor } from "#src/server/conversations/channel-access.server";
-import { channelActorMemberWhere } from "#src/server/conversations/channel-authority.server";
+import {
+  channelActorMemberWhere,
+  type ChannelActor,
+} from "#src/server/conversations/channel-actor.server";
 import {
   canReadChannel,
-  readableChannelWhere,
+  readableChannelSql,
+  readableConversationWhere,
+  visibleChannelWhere,
 } from "#src/server/conversations/channel-read-access.server";
 import { teardown } from "./helpers/workspace-teardown";
 
 /**
- * The read rule for channels (task #302), as a query and in memory, over every kind of reader: a
- * public channel is everyone's; a private one only its active members', the Workspace owner
- * included. Both forms give the same answer for every channel and reader; a hidden channel and a
+ * The read rule for channels (task #302), as a query, as raw SQL and in memory, over every kind of
+ * reader: a public channel is everyone's; a private one only its active members', the Workspace
+ * owner included. All three forms give the same answer for every channel and reader; a hidden channel and a
  * DM are never a channel read; a caller's own `OR` cannot widen the rule; the database refuses a
  * private DM.
  *
@@ -100,8 +104,15 @@ test.skipIf(!connectionString)(
       for (const [name, reader] of Object.entries(readers)) {
         const reads = async (id: string) =>
           (await db.conversation.count({
-            where: { id, ...readableChannelWhere(workspace.id, reader) },
+            where: { id, ...visibleChannelWhere(workspace.id, reader) },
           })) === 1;
+        const readsBySql = async (id: string, workspaceId = workspace.id) =>
+          (
+            await db.$queryRaw<{ id: string }[]>(
+              Prisma.sql`SELECT c."id" FROM "conversations" c
+                WHERE c."id" = ${id}::uuid AND ${readableChannelSql("c", workspaceId, reader)}`,
+            )
+          ).length === 1;
         const activeMember = async (id: string) =>
           (await db.conversationMember.count({
             where: {
@@ -121,19 +132,30 @@ test.skipIf(!connectionString)(
             byQuery: expected,
           });
           expect(canReadChannel(channel, await activeMember(channel.id))).toBe(byQuery);
+          expect(await readsBySql(channel.id)).toBe(byQuery);
         }
-        expect({ name, hidden: await reads(hidden.id), direct: await reads(direct.id) }).toEqual({
+        expect({
           name,
-          hidden: false,
-          direct: false,
-        });
+          hidden: [await reads(hidden.id), await readsBySql(hidden.id)],
+          direct: [await reads(direct.id), await readsBySql(direct.id)],
+        }).toEqual({ name, hidden: [false, false], direct: [false, false] });
+        // Another Workspace's reads never reach it, in SQL either.
+        expect(await readsBySql(open.id, crypto.randomUUID())).toBe(false);
       }
 
       // A caller's own OR narrows the read; it never replaces the rule.
       expect(
         await db.conversation.count({
           where: {
-            ...readableChannelWhere(workspace.id, readers.outsider!),
+            ...visibleChannelWhere(workspace.id, readers.outsider!),
+            OR: [{ id: closed.id }, { id: open.id }],
+          },
+        }),
+      ).toBe(1);
+      expect(
+        await db.conversation.count({
+          where: {
+            ...readableConversationWhere(workspace.id, { userId: people.outsider }),
             OR: [{ id: closed.id }, { id: open.id }],
           },
         }),
@@ -141,7 +163,7 @@ test.skipIf(!connectionString)(
       // Another Workspace's reads never reach it.
       expect(
         await db.conversation.count({
-          where: { id: open.id, ...readableChannelWhere(crypto.randomUUID(), readers.member!) },
+          where: { id: open.id, ...visibleChannelWhere(crypto.randomUUID(), readers.member!) },
         }),
       ).toBe(0);
       // Only a channel can be private.

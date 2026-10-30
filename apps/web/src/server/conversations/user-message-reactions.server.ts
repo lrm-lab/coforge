@@ -1,17 +1,14 @@
 import { isValidReactionEmoji } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import {
-  ACTIVE_MEMBER_WHERE,
-  TARGETABLE_CONVERSATION_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "./active-member.server";
+import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { readableConversationWhere } from "./channel-read-access.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { writeReaction, type VersionedReactions } from "./reaction-write.server";
 
 /**
  * A signed-in user's own emoji reaction on one conversation message. Conversation-scope
- * authorization (DM ownership, channel visibility) stays with the caller — the DM
+ * authorization (DM ownership) stays with the caller — the DM
  * repository and `PublicChannels` own those checks next to their send paths. This helper also
  * rejects internal destinations and resolves the caller's active membership, then writes the
  * reaction (`writeReaction`, which tells the conversation's open pages through `realtime`) and
@@ -36,7 +33,7 @@ export async function toggleUserMessageReaction(
       id: messageId,
       conversationId,
       workspaceId,
-      conversation: { ...VISIBLE_CONVERSATION_WHERE, ...TARGETABLE_CONVERSATION_WHERE },
+      conversation: readableConversationWhere(workspaceId, { userId }),
     },
     select: { id: true, threadRootId: true },
   });

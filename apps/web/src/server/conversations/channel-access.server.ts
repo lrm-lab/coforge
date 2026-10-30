@@ -8,11 +8,9 @@ import { requireWorkspaceMember } from "#src/server/workspaces/workspace-members
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
+import type { ChannelActor } from "./channel-actor.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
-
-/** A channel actor is either a human (by Workspace `userId`) or an Agent (by `agentId`); the
- * human/Web UI and the Agent CLI share `PublicChannels.members`/`addMembers` through this. */
-export type ChannelActor = { userId: string } | { agentId: string };
 
 /** What `PublicChannels` hands each of its channel modules: the database, and the publishers a
  * write announces itself through after it commits. */
@@ -106,16 +104,6 @@ export async function resolveChannelThreadRoot(
   return rows[0];
 }
 
-/** The Workspace's channels as every read here sees them: channels only (not DMs), and not hidden
- * from the Workspace. A caller narrows it further (`id`, `archivedAt`) by spreading it. */
-export function visibleChannelWhere(workspaceId: string) {
-  return {
-    workspaceId,
-    channelName: { not: null },
-    ...VISIBLE_CONVERSATION_WHERE,
-  } satisfies Prisma.ConversationWhereInput;
-}
-
 /** The `ChannelActor` equivalent of `requireWorkspaceMember`: a human must be a Workspace member,
  * an Agent must belong to the Workspace. */
 export async function authorizeChannelActor(
@@ -131,9 +119,15 @@ export async function authorizeChannelActor(
   if (!agent) throw new AppError("ACCESS_DENIED");
 }
 
-export async function findChannelById(db: PrismaClient, workspaceId: string, channelId: string) {
+/** The channel `reader` may read, or `NOT_FOUND`: one they cannot read is a missing one. */
+export async function findChannelById(
+  db: PrismaClient,
+  workspaceId: string,
+  reader: ChannelActor,
+  channelId: string,
+) {
   const channel = await db.conversation.findFirst({
-    where: { id: channelId, ...visibleChannelWhere(workspaceId) },
+    where: { id: channelId, ...visibleChannelWhere(workspaceId, reader) },
     select: { id: true, channelName: true, description: true, archivedAt: true },
   });
   if (!channel) throw new AppError("NOT_FOUND");
@@ -142,7 +136,7 @@ export async function findChannelById(db: PrismaClient, workspaceId: string, cha
 
 /** A Workspace member's view of one channel, with the viewer's Workspace role. The membership and
  * the channel are read at once; a non-member is still refused before a missing channel is
- * reported. */
+ * reported, and a private channel the viewer is not in is a missing one. */
 export async function viewerChannel(
   db: PrismaClient,
   workspaceId: string,
@@ -155,7 +149,7 @@ export async function viewerChannel(
       select: { role: true },
     }),
     db.conversation.findFirst({
-      where: { id: channelId, ...visibleChannelWhere(workspaceId) },
+      where: { id: channelId, ...visibleChannelWhere(workspaceId, { userId }) },
       include: {
         project: {
           select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },

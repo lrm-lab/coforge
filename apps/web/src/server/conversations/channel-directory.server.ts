@@ -2,9 +2,10 @@ import { compareChannelNames } from "#src/features/conversations/channel-signals
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
-import { visibleChannelWhere, type PublicChannelPorts } from "./channel-access.server";
+import type { PublicChannelPorts } from "./channel-access.server";
 import { canListArchivedChannels, resolveActorServerRole } from "./channel-authority.server";
 import { isClosedAndUnpinned } from "./channel-closed.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 import { channelListPreviews } from "./channel-list-preview.server";
 import { channelInfoOf } from "./conversation-realtime.server";
 import { HUMAN_UNREAD_MESSAGE_SQL } from "./human-unread.server";
@@ -16,8 +17,7 @@ import { HUMAN_UNREAD_MESSAGE_SQL } from "./human-unread.server";
  * Every channel of the Workspace by id and current name, closed and archived ones included: the
  * authority a body's channel references are checked against before they link (see
  * `rehypeReferenceChips`), and what the composer's `#` list offers, with each channel's
- * description and archived flag for its row. Every channel is public, so every member can open
- * each one.
+ * description and archived flag for its row. A private channel is listed only to its members.
  */
 export async function channelNames(
   { db }: PublicChannelPorts,
@@ -26,7 +26,7 @@ export async function channelNames(
 ) {
   await requireWorkspaceMember(db, workspaceId, userId);
   const channels = await db.conversation.findMany({
-    where: visibleChannelWhere(workspaceId),
+    where: visibleChannelWhere(workspaceId, { userId }),
     select: { id: true, channelName: true, description: true, archivedAt: true },
   });
   return channels.map((channel) => ({ id: channel.id, ...channelInfoOf(channel) }));
@@ -39,7 +39,7 @@ export async function listChannels(
 ) {
   await requireWorkspaceMember(db, workspaceId, userId);
   const channelRows = db.conversation.findMany({
-    where: visibleChannelWhere(workspaceId),
+    where: visibleChannelWhere(workspaceId, { userId }),
     orderBy: { channelName: "asc" },
     select: {
       id: true,
@@ -186,7 +186,7 @@ export async function archivedChannels(
   const serverRole = await resolveActorServerRole(db, workspaceId, { userId });
   if (!canListArchivedChannels(serverRole)) throw new AppError("ACCESS_DENIED");
   const channels = await db.conversation.findMany({
-    where: { ...visibleChannelWhere(workspaceId), archivedAt: { not: null } },
+    where: { ...visibleChannelWhere(workspaceId, { userId }), archivedAt: { not: null } },
     orderBy: [{ archivedAt: "desc" }, { channelName: "asc" }],
     select: { id: true, channelName: true, archivedAt: true },
   });
