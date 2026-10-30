@@ -67,10 +67,11 @@ export function agentErrorResponse(error: unknown): Response {
     const status = APP_ERROR_HTTP_STATUS[error.code];
     const reason = APP_ERROR_REASON[error.code];
     const refusal: AgentApiRefusal = {
-      error: error.errorId ? `${reason} (${error.errorId})` : reason,
+      error: `${error.errorId ? `${reason} (${error.errorId})` : reason}${error.hint ? `: ${error.hint}` : ""}`,
       code: error.code,
       // The same request can succeed later only when the failure was temporary.
       retryable: status === 503,
+      ...(error.details ? { details: error.details } : {}),
     };
     return Response.json(refusal, { status, headers: NO_STORE });
   }

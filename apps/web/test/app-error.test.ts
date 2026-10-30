@@ -145,3 +145,34 @@ describe("server error disclosure", () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 });
+
+/** What a browser holds after a server function threw: a plain Error with the message only. */
+const crossed = (error: Error) => new Error(error.message);
+
+test("details survive the trip to the browser with the code and the errorId", () => {
+  const details = { taskNumber: 7, holder: "atlas", holderName: "Atlas: the Bot" };
+  const received = crossed(new AppError("CONFLICT", { errorId: "source_message_taken", details }));
+  expect(isAppError(received)).toBe(true);
+  expect(received).toMatchObject({ code: "CONFLICT", errorId: "source_message_taken", details });
+});
+
+test("an error without details is read as before", () => {
+  const received = crossed(new AppError("CONFLICT", { errorId: "agent-migrating" }));
+  expect(isAppError(received)).toBe(true);
+  expect(received).toMatchObject({ code: "CONFLICT", errorId: "agent-migrating" });
+  expect((received as { details?: unknown }).details).toBeUndefined();
+});
+
+test("a hint is for Agents and never crosses to the browser", () => {
+  const error = new AppError("CONFLICT", { errorId: "x", hint: "secret sentence" });
+  expect(error.message).not.toContain("secret sentence");
+});
+
+test("details that are not a flat record of strings and numbers are dropped", () => {
+  for (const tail of ['{"a":{"b":1}}', '{"a":[1]}', '{"a":true}', "{not json"]) {
+    const received = new Error(`COFORGE_APP_ERROR:CONFLICT:x ${tail}`);
+    expect(isAppError(received)).toBe(true);
+    expect(received).toMatchObject({ code: "CONFLICT", errorId: "x" });
+    expect((received as { details?: unknown }).details).toBeUndefined();
+  }
+});

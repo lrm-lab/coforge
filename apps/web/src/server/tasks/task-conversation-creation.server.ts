@@ -23,15 +23,33 @@ import {
   type SelectedTask,
 } from "./task-view.server";
 
-/** The message already has someone else's live task: who holds it, so the creator can add to that
- * task or say `alongside`. */
+/** The message already has someone else's live task. The refusal names the task and who holds it
+ * (by display name; the handle is in the details), and the two ways on: add to that task, or say
+ * `alongside`. */
 export const SOURCE_MESSAGE_TAKEN = "source_message_taken";
 export class SourceMessageTaken extends AppError {
-  constructor(
-    readonly taskNumber: number,
-    readonly holder: string,
-  ) {
-    super("CONFLICT", { errorId: SOURCE_MESSAGE_TAKEN });
+  constructor(held: {
+    taskNumber: number;
+    holder: string;
+    holderName: string;
+    board: string | null;
+  }) {
+    const { taskNumber, board } = held;
+    // The name is a person's words placed in a sentence an Agent reads: one short line, no quoting.
+    const holderName =
+      held.holderName
+        .replace(/[\p{Cc}`]+/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 60) || held.holder;
+    const reply = board
+      ? `coforge task reply "${board}:#${taskNumber}"`
+      : `coforge task reply --target <the target you used> --number ${taskNumber}`;
+    super("CONFLICT", {
+      errorId: SOURCE_MESSAGE_TAKEN,
+      details: { taskNumber, holder: held.holder, holderName },
+      hint: `this message is already task #${taskNumber}, held by ${holderName}. Add to that task with \`${reply}\`, or create yours beside it with --alongside.`,
+    });
   }
 }
 
@@ -227,14 +245,21 @@ async function assertSourceFree(tx: Transaction, sourceMessageId: string, creato
     },
     select: {
       number: true,
+      conversation: { select: { channelName: true } },
       owner: {
-        select: { user: { select: { username: true } }, agent: { select: { name: true } } },
+        select: {
+          user: { select: { username: true, displayName: true } },
+          agent: { select: { name: true, displayName: true } },
+        },
       },
     },
   });
   if (!live) return;
-  throw new SourceMessageTaken(
-    live.number,
-    live.owner?.agent?.name ?? live.owner?.user?.username ?? "someone",
-  );
+  const holder = live.owner?.agent?.name ?? live.owner?.user?.username ?? "someone";
+  throw new SourceMessageTaken({
+    taskNumber: live.number,
+    holder,
+    holderName: live.owner?.agent?.displayName ?? live.owner?.user?.displayName ?? holder,
+    board: live.conversation.channelName ? `#${live.conversation.channelName}` : null,
+  });
 }

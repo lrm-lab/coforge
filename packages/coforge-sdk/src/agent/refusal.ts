@@ -7,9 +7,15 @@ import { isRecord } from "#src/internal/json-record";
  * the Agent; `code` is a stable UPPER_SNAKE code; `retryable` says whether the same request can
  * succeed later.
  */
-export type AgentApiRefusal = { error: string; code?: string; retryable?: boolean };
+export type AgentApiRefusal = {
+  error: string;
+  code?: string;
+  retryable?: boolean;
+  /** Facts a caller can act on without parsing `error` (a held task's number, who holds it). */
+  details?: Record<string, string | number>;
+};
 
-const REFUSAL_FIELDS: ReadonlySet<string> = new Set(["error", "code", "retryable"]);
+const REFUSAL_FIELDS: ReadonlySet<string> = new Set(["error", "code", "retryable", "details"]);
 const STABLE_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 /**
@@ -24,5 +30,13 @@ export function decodeAgentApiRefusal(value: unknown): AgentApiRefusal | undefin
   if (value.code !== undefined && (typeof value.code !== "string" || !STABLE_CODE.test(value.code)))
     return undefined;
   if (value.retryable !== undefined && typeof value.retryable !== "boolean") return undefined;
+  if (value.details !== undefined && !isDetails(value.details)) return undefined;
   return value as AgentApiRefusal;
+}
+
+function isDetails(value: unknown): value is Record<string, string | number> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((entry) => typeof entry === "string" || typeof entry === "number")
+  );
 }

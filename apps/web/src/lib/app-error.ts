@@ -54,15 +54,31 @@ export const APP_ERROR_HTTP_STATUS: Record<AppErrorCode, number> = {
 
 const APP_ERROR_PREFIX = "COFORGE_APP_ERROR:";
 
+export type AppErrorDetails = Record<string, string | number>;
+
 export class AppError extends Error {
   readonly code: AppErrorCode;
   readonly errorId?: string;
 
-  constructor(code: AppErrorCode, options: { errorId?: string } = {}) {
-    super(`${APP_ERROR_PREFIX}${code}${options.errorId ? `:${options.errorId}` : ""}`);
+  /** Facts a client can act on. They cross to the browser in the message; a hint does not. */
+  readonly details?: AppErrorDetails;
+  /** A sentence for an Agent, appended to its refusal. Never sent to the browser. */
+  readonly hint?: string;
+
+  constructor(
+    code: AppErrorCode,
+    options: { errorId?: string; details?: AppErrorDetails; hint?: string } = {},
+  ) {
+    super(
+      `${APP_ERROR_PREFIX}${code}${options.errorId ? `:${options.errorId}` : ""}${
+        options.details ? ` ${JSON.stringify(options.details)}` : ""
+      }`,
+    );
     this.name = "AppError";
     this.code = code;
     this.errorId = options.errorId;
+    this.details = options.details;
+    this.hint = options.hint;
     this.stack = undefined;
   }
 }
@@ -86,19 +102,49 @@ export function isAppError(error: unknown): error is AppError {
     const code = Reflect.get(error, "code");
     if (!APP_ERROR_CODES.some((candidate) => candidate === code)) return false;
     if (!Reflect.get(error, "errorId") && error.message.startsWith(APP_ERROR_PREFIX)) {
-      const [msgCode, ...idParts] = error.message.slice(APP_ERROR_PREFIX.length).split(":");
-      if (msgCode === code && idParts.length > 0) {
-        Object.assign(error, { errorId: idParts.join(":") });
-      }
+      const wire = readWire(error.message);
+      if (wire.code === code && wire.errorId) Object.assign(error, { errorId: wire.errorId });
+      if (wire.code === code && wire.details && !Reflect.get(error, "details"))
+        Object.assign(error, { details: wire.details });
     }
     return true;
   }
   if (error.name !== "Error" || !error.message.startsWith(APP_ERROR_PREFIX)) return false;
-  const [code, ...idParts] = error.message.slice(APP_ERROR_PREFIX.length).split(":");
+  const { code, errorId, details } = readWire(error.message);
   if (!APP_ERROR_CODES.some((candidate) => candidate === code)) return false;
-  const errorId = idParts.length > 0 ? idParts.join(":") : undefined;
   error.name = "AppError";
-  Object.assign(error, { code, ...(errorId ? { errorId } : {}) });
+  Object.assign(error, { code, ...(errorId ? { errorId } : {}), ...(details ? { details } : {}) });
   error.stack = undefined;
   return true;
+}
+
+/** `COFORGE_APP_ERROR:<code>[:<errorId>][ <details as JSON>]`: the details come off first, as they
+ * may hold colons. Details that do not parse are dropped. */
+function readWire(message: string): { code: string; errorId?: string; details?: AppErrorDetails } {
+  const rest = message.slice(APP_ERROR_PREFIX.length);
+  const at = rest.indexOf(" {");
+  let details: AppErrorDetails | undefined;
+  if (at >= 0) {
+    try {
+      const parsed: unknown = JSON.parse(rest.slice(at + 1));
+      if (isFlatRecord(parsed)) details = parsed;
+    } catch {
+      // Not details: ignored.
+    }
+  }
+  const [code = "", ...idParts] = (at >= 0 ? rest.slice(0, at) : rest).split(":");
+  return {
+    code,
+    ...(idParts.length ? { errorId: idParts.join(":") } : {}),
+    ...(details ? { details } : {}),
+  };
+}
+
+function isFlatRecord(value: unknown): value is AppErrorDetails {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => typeof entry === "string" || typeof entry === "number")
+  );
 }

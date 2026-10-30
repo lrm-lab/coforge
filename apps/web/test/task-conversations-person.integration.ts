@@ -138,10 +138,20 @@ test("a message someone else is working on is taken, unless the person says alon
     where: { id: held.id },
     data: { ownerMemberId: people.author.memberId, status: "in_progress" },
   });
-  await expect(run({ operation: "convert", messageId: sourceId })).rejects.toMatchObject({
+  const refusal = await run({ operation: "convert", messageId: sourceId }).catch((e) => e);
+  expect(refusal).toMatchObject({
     code: "CONFLICT",
     errorId: "source_message_taken",
+    details: {
+      taskNumber: held.number,
+      holder: `tcp-author-${suffix}`,
+      holderName: "author",
+    },
   });
+  // The refusal an Agent reads names the holder by display name and both ways on.
+  expect(refusal.hint).toContain("held by author");
+  expect(refusal.hint).toContain(`coforge task reply "#tcp-${suffix}:#${held.number}"`);
+  expect(refusal.hint).toContain("--alongside");
   const beside = await run({ operation: "convert", messageId: sourceId, alongside: true });
   expect(beside.tasks[0]!.sourceMessageId).toBe(sourceId);
 });

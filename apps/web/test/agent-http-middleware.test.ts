@@ -96,3 +96,23 @@ test("agent authentication failures stay 401 while unknown failures are 500", as
   expect(unknown.status).toBe(500);
   expect(await unknown.json()).toEqual({ error: "internal server error" });
 });
+
+test("an AppError's details and hint travel in the refusal, and it still decodes", async () => {
+  const details = { taskNumber: 7, holder: "atlas", holderName: "Atlas Bot" };
+  const response = agentErrorResponse(
+    new AppError("CONFLICT", {
+      errorId: "source_message_taken",
+      hint: "Task #7 is held by Atlas Bot.",
+      details,
+    }),
+  );
+  expect(response.status).toBe(409);
+  const body = await response.json();
+  expect(body).toEqual({
+    error: "conflict (source_message_taken): Task #7 is held by Atlas Bot.",
+    code: "CONFLICT",
+    retryable: false,
+    details,
+  });
+  expect(decodeAgentApiRefusal(body)).toEqual(body);
+});

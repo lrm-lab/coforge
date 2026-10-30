@@ -3,7 +3,10 @@ import type { AgentTaskRequest } from "@lrm/coforge-sdk/agent";
 import { TASK_STATUSES, type TaskPrincipal, type TaskResult } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
 import { AppError } from "#src/lib/app-error";
-import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
+import {
+  agentAuthMiddleware,
+  agentErrorResponse,
+} from "#src/server/agents/agent-http-middleware.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { TASK_V2_USE_CREATE, TaskBoard } from "#src/server/tasks/task-board.server";
@@ -89,14 +92,7 @@ export async function handleAgentTaskPost(
     );
     return Response.json({ ...result, idempotencyKey: command.idempotencyKey });
   } catch (error) {
-    if (error instanceof SourceMessageTaken)
-      return Response.json(
-        {
-          error: `Task #${error.taskNumber} (${error.holder}) is already working on that message. Add to that task's conversation, or create yours beside it with --alongside.`,
-          code: error.code,
-        },
-        { status: 409 },
-      );
+    if (error instanceof SourceMessageTaken) return agentErrorResponse(error);
     if (error instanceof AppError && error.errorId === TASK_V2_USE_CREATE)
       return Response.json(
         {
