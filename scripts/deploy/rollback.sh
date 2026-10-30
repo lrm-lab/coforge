@@ -101,6 +101,11 @@ while [ "$SECONDS" -lt "$deadline" ]; do
 		ready=true
 		break
 	fi
+	hstatus="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 3 "http://127.0.0.1:${target_port}/health" 2>/dev/null || true)"
+	if [ "$hstatus" = "200" ]; then
+		ready=true
+		break
+	fi
 	sleep 1
 done
 

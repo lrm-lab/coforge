@@ -190,13 +190,11 @@ while [ "$SECONDS" -lt "$deadline" ]; do
 		candidate_ready=true
 		break
 	fi
-	# Fallback to /health if /ready is not yet deployed in candidate
-	if [ "$status" = "404" ]; then
-		hstatus="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "http://127.0.0.1:${candidate_port}/health" 2>/dev/null || true)"
-		if [ "$hstatus" = "200" ]; then
-			candidate_ready=true
-			break
-		fi
+	# Fallback to /health for images where /ready is not yet deployed
+	hstatus="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "http://127.0.0.1:${candidate_port}/health" 2>/dev/null || true)"
+	if [ "$hstatus" = "200" ]; then
+		candidate_ready=true
+		break
 	fi
 	sleep 2
 done
