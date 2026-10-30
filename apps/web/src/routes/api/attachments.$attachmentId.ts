@@ -105,7 +105,18 @@ export async function handleAttachmentDownload(
     );
     return attachmentFailure("object_missing", 502);
   }
-  return attachmentResponse(request, attachment, file, forceDownload);
+  try {
+    return attachmentResponse(request, attachment, file, forceDownload);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "attachment_download_failed",
+        reason: "storage_error",
+        errorType: error instanceof Error ? error.name : typeof error,
+      }),
+    );
+    return attachmentFailure("storage_error", 502);
+  }
 }
 
 /**

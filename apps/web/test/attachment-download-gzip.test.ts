@@ -163,3 +163,30 @@ test("a storage read that throws says storage_error", async () => {
   expect(response.status).toBe(502);
   expect(await response.json()).toEqual({ error: "storage_error" });
 });
+
+test("a non-ASCII file name is carried by filename* with an ASCII fallback (task #298)", async () => {
+  for (const [fileName, ascii, ext] of [
+    ["头像包-终版.zip", "___-__.zip", "%E5%A4%B4%E5%83%8F%E5%8C%85-%E7%BB%88%E7%89%88.zip"],
+    ["📦 bundle 🚀.zip", "__ bundle __.zip", "%F0%9F%93%A6%20bundle%20%F0%9F%9A%80.zip"],
+  ] as const) {
+    const response = await download({ fileName, contentType: "application/zip" }, "zip-bytes", {
+      query: "?download",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe(
+      `attachment; filename="${ascii}"; filename*=UTF-8''${ext}`,
+    );
+    expect(await response.text()).toBe("zip-bytes");
+  }
+});
+
+test("an ASCII file name still answers filename= alone, sanitized", async () => {
+  const response = await download(
+    { fileName: 'we"ird\\name.zip', contentType: "application/zip" },
+    "zip-bytes",
+    { query: "?download" },
+  );
+  expect(response.headers.get("content-disposition")).toBe(
+    'attachment; filename="we_ird_name.zip"',
+  );
+});

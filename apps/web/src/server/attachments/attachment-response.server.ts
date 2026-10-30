@@ -38,6 +38,35 @@ export function isDeliveryInlinePreview(attachment: {
   );
 }
 
+/** The RFC 5987 `attr-char` set: what may stay literal inside `filename*`. */
+const ATTR_CHAR = /^[A-Za-z0-9!#$&+\-.^_`|~]$/;
+
+/**
+ * The `Content-Disposition` value for one stored file, per RFC 6266. A header value is ASCII-only,
+ * so `filename=` gets a sanitized ASCII fallback and a non-ASCII name also rides in
+ * `filename*=UTF-8''<percent-encoded>` (RFC 5987). Without this, a CJK or emoji file name makes
+ * `new Response` throw `TypeError` — which was the production 500 on the avatar archives (task
+ * #298).
+ */
+export function contentDispositionFileName(
+  disposition: "attachment" | "inline",
+  fileName: string,
+): string {
+  const safe = fileName.replace(/["\\\r\n]/g, "_");
+  const ascii = safe.replace(/[^\x20-\x7e]/g, "_") || "download";
+  if (ascii === safe) return `${disposition}; filename="${ascii}"`;
+  const ext = [...safe]
+    .map((char) =>
+      ATTR_CHAR.test(char)
+        ? char
+        : [...new TextEncoder().encode(char)]
+            .map((byte) => `%${byte.toString(16).toUpperCase().padStart(2, "0")}`)
+            .join(""),
+    )
+    .join("");
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${ext}`;
+}
+
 /**
  * Response headers for one authorized attachment. `forceDownload` (the `?download` query)
  * always yields `Content-Disposition: attachment`; otherwise safe raster images are served with
@@ -48,10 +77,12 @@ export function attachmentResponseHeaders(
   forceDownload: boolean,
 ): Record<string, string> {
   const inline = !forceDownload && isInlineImage(attachment.contentType);
-  const fileName = attachment.fileName.replace(/["\\\r\n]/g, "_");
   return {
     "Content-Type": inline ? attachment.contentType : "application/octet-stream",
-    "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${fileName}"`,
+    "Content-Disposition": contentDispositionFileName(
+      inline ? "inline" : "attachment",
+      attachment.fileName,
+    ),
     "X-Content-Type-Options": "nosniff",
     "cache-control": PRIVATE_NO_STORE,
   };

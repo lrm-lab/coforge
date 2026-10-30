@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { readAuthorizedAttachment } from "#src/server/attachments/attachment.server";
 import { attachmentFailure } from "#src/routes/api/attachments.$attachmentId";
+import { contentDispositionFileName } from "#src/server/attachments/attachment-response.server";
 
 export const Route = createFileRoute("/api/agent/v1/attachments/$attachmentId")({
   server: {
@@ -47,12 +48,23 @@ export const Route = createFileRoute("/api/agent/v1/attachments/$attachmentId")(
           );
           return attachmentFailure("object_missing", 502);
         }
-        return new Response(file.body, {
-          headers: {
-            "Content-Type": attachment.contentType,
-            "Content-Disposition": `attachment; filename="${attachment.fileName.replace(/["\\\r\n]/g, "_")}"`,
-          },
-        });
+        try {
+          return new Response(file.body, {
+            headers: {
+              "Content-Type": attachment.contentType,
+              "Content-Disposition": contentDispositionFileName("attachment", attachment.fileName),
+            },
+          });
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: "attachment_download_failed",
+              reason: "storage_error",
+              errorType: error instanceof Error ? error.name : typeof error,
+            }),
+          );
+          return attachmentFailure("storage_error", 502);
+        }
       },
     },
   },
