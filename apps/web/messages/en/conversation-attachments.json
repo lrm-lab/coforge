@@ -25,6 +25,5 @@
   "conversation_attachment_signed_out_detail": "Reload the page to sign in again.",
   "conversation_attachment_forbidden_detail": "You can't upload files here.",
   "conversation_attachment_offline_detail": "Check your connection, then retry.",
-  "conversation_attachment_remove_named": "Remove {name}",
-  "conversation_attachment_remove_not_attached": "Remove files that can't be attached"
+  "conversation_attachment_remove_named": "Remove {name}"
 }
