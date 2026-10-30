@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
-import type {
-  MessageRequestIdempotency,
-  MessageRequestScope,
-} from "#src/server/conversations/message-request-idempotency.server";
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
+import { MemoryMessageRequestIdempotency } from "./helpers/memory-message-request-idempotency";
 
 const persisted = {
   id: "message-a",
@@ -24,19 +21,6 @@ const persisted = {
   latestSenderDescription: "",
   attachments: [],
 };
-
-class MemoryMessageRequestIdempotency implements MessageRequestIdempotency {
-  readonly results = new Map<string, typeof persisted>();
-
-  async execute(scope: MessageRequestScope, persist: () => Promise<typeof persisted>) {
-    const key = `${scope.workspaceId}:${scope.senderKind}:${scope.senderId}:${scope.idempotencyKey}`;
-    const existing = this.results.get(key);
-    if (existing) return existing;
-    const message = await persist();
-    this.results.set(key, message);
-    return message;
-  }
-}
 
 describe("SendDirectMessage request idempotency", () => {
   test("same sender scope and idempotencyKey persists once and returns the same message", async () => {
