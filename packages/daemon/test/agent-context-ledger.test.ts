@@ -41,16 +41,6 @@ test("a new context shows everything again", () => {
   expect(ledger.claim("sender", "x", "r1")).toBe(true);
 });
 
-test("a released claim is shown again, unless the context has moved on", () => {
-  const { ledger } = open();
-  ledger.claim("sender", "x", "r1");
-  ledger.release("sender", "x", "r1");
-  expect(ledger.claim("sender", "x", "r1")).toBe(true);
-  ledger.advance();
-  ledger.release("sender", "x", "r1");
-  expect(ledger.claim("sender", "x", "r1")).toBe(true);
-});
-
 test("the context number and the claims survive a reopen", () => {
   const first = open();
   first.ledger.advance();

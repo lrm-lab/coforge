@@ -51,15 +51,4 @@ export class AgentContextLedger {
       .run(kind, id, rev, this.generation());
     return result.changes === 1;
   }
-
-  /** Takes a claim back when the output it was made for never reached the Agent, so the next
-   * output shows it. Only a row still at that revision in this context goes. */
-  release(kind: ContextObservationKind, id: string, rev: string): void {
-    this.#db
-      .prepare(
-        `DELETE FROM context_observations
-         WHERE kind = ? AND id = ? AND rev = ? AND generation = ?`,
-      )
-      .run(kind, id, rev, this.generation());
-  }
 }
