@@ -241,3 +241,34 @@ test("failed catch-ups are counted and heard until one lands", async () => {
   expect(reconciler.caughtUp()).toBe(true);
   expect(heard).toBe(3);
 });
+
+test("a subscribe that found nothing new catches the page up without a read, unless one runs", async () => {
+  let reads = 0;
+  const idle = createConversationReconciler(
+    { afterSequence: 5 },
+    async () => {
+      reads++;
+      return [];
+    },
+    () => {},
+  );
+  let notified = 0;
+  idle.subscribe(() => notified++);
+  idle.caughtUpWithoutRead();
+  expect({ caughtUp: idle.caughtUp(), notified, reads }).toEqual({
+    caughtUp: true,
+    notified: 1,
+    reads: 0,
+  });
+
+  // A read under way decides: until it lands the page is not caught up.
+  const reading = createConversationReconciler(
+    { afterSequence: 5 },
+    (_cursor, signal) => hang(signal),
+    () => {},
+  );
+  void reading.reconcile();
+  reading.caughtUpWithoutRead();
+  expect(reading.caughtUp()).toBe(false);
+  reading.stop();
+});

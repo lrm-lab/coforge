@@ -390,6 +390,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     (event) => reactionSync.apply(event.messageId, event),
     () => void reactionSync.repair(),
     onRead,
+    { key: query.queryKey, caughtUp: reconciliation.caughtUpWithoutRead },
   );
 
   /** Replace the loaded history with a window around one message. */

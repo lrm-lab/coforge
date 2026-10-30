@@ -19,8 +19,11 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { TaskConversationPages } from "#src/server/conversations/task-conversation-page.server";
 import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
 import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
-import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
-import { userConversationChannel } from "./conversation-realtime";
+import {
+  readAfterStreamPositions,
+  readWindowAfterStreamPosition,
+} from "#src/server/conversations/chat-stream-positions.server";
+import { conversationRealtimeChannel, userConversationChannel } from "./conversation-realtime";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { toggleDirectReaction } from "#src/server/conversations/reaction-toggles.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
@@ -45,11 +48,16 @@ export const loadDirectConversation = createServerFn({ method: "GET" })
   .validator(directConversationPageInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    const page = await new DirectConversations(db).page(workspaceId, user.id, data.conversationId, {
-      beforeSequence: data.beforeSequence,
-      afterSequence: data.afterSequence,
-      limit: data.limit,
-    });
+    const page = await readWindowAfterStreamPosition(
+      data,
+      conversationRealtimeChannel(data.conversationId),
+      () =>
+        new DirectConversations(db).page(workspaceId, user.id, data.conversationId, {
+          beforeSequence: data.beforeSequence,
+          afterSequence: data.afterSequence,
+          limit: data.limit,
+        }),
+    );
     return {
       ...page,
       messages: await attachViewerViews(db, workspaceId, user.id, page.messages),

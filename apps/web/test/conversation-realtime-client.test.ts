@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { subscribeToConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
 
 type PublicationListener = (context: { data: unknown }) => void;
-type SubscribedListener = (context: { wasRecovering: boolean; recovered: boolean }) => void;
+type SubscribedContext = {
+  wasRecovering: boolean;
+  recovered: boolean;
+  streamPosition?: { epoch: string; offset: number };
+};
+type SubscribedListener = (context: SubscribedContext) => void;
 
 function fakeClient() {
   let created = 0;
@@ -37,7 +42,7 @@ function fakeClient() {
     publish(data: unknown) {
       for (const listener of publications) listener({ data });
     },
-    subscribed(context: { wasRecovering: boolean; recovered: boolean }) {
+    subscribed(context: SubscribedContext) {
       subscription.state = "subscribed";
       for (const listener of subscribedListeners) listener(context);
     },
@@ -221,6 +226,55 @@ describe("subscribeToConversationRealtime", () => {
 
     expect(heard).toEqual([event, { ...event, version: 5, reactions: null }]);
     expect(reconciled).toBe(0);
+  });
+
+  test("a first subscribe reads again only what the stream moved past", async () => {
+    const at = (offset: number) => ({ epoch: "e", offset });
+    const firstSubscribe = async (opened: number, read: number, subscribedAt: number) => {
+      const heard: string[] = [];
+      const { client, subscribed } = fakeClient();
+      subscribeToConversationRealtime(client, {
+        conversationId: "conversation-a",
+        getToken: async () => "token",
+        openedAt: at(opened),
+        readPosition: async () => at(read),
+        reconcile: () => heard.push("messages"),
+        onCaughtUp: () => heard.push("caught up"),
+        onMemberChanged: (stale) => heard.push(`members (${stale})`),
+      });
+      subscribed({ wasRecovering: false, recovered: false, streamPosition: at(subscribedAt) });
+      await Bun.sleep(0);
+      return heard;
+    };
+    // Nothing published since the page opened the window: no read at all.
+    expect(await firstSubscribe(4, 4, 4)).toEqual(["caught up"]);
+    // A message after the window's read: its messages, and its member lists, read again.
+    expect(await firstSubscribe(4, 4, 5)).toEqual(["messages", "members (page-payload)"]);
+    // Opened from an older copy whose read has since brought the window up to date: the member
+    // lists, seeded from that copy, are read again; the messages are not.
+    expect(await firstSubscribe(3, 5, 5)).toEqual(["caught up", "members (page-payload)"]);
+  });
+
+  test("a first subscribe's comparison that settles after the conversation was left does nothing", async () => {
+    const heard: string[] = [];
+    const { client, subscribed } = fakeClient();
+    let settle: (position: { epoch: string; offset: number }) => void = () => {};
+    const leave = subscribeToConversationRealtime(client, {
+      conversationId: "conversation-a",
+      getToken: async () => "token",
+      readPosition: () => new Promise((resolve) => (settle = resolve)),
+      reconcile: () => heard.push("messages"),
+      onMemberChanged: () => heard.push("members"),
+    });
+    subscribed({
+      wasRecovering: false,
+      recovered: false,
+      streamPosition: { epoch: "e", offset: 5 },
+    });
+    leave();
+    settle({ epoch: "e", offset: 4 });
+    await Bun.sleep(0);
+    expect(heard).toEqual([]);
   });
 
   test("only a resubscribe that lost publications says reactions may be stale", () => {

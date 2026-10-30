@@ -22,8 +22,15 @@ import {
   mentionSelectorsSchema,
 } from "./conversation.schemas";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
-import { userConversationChannel, workspaceConversationChannel } from "./conversation-realtime";
+import {
+  readAfterStreamPositions,
+  readWindowAfterStreamPosition,
+} from "#src/server/conversations/chat-stream-positions.server";
+import {
+  conversationRealtimeChannel,
+  userConversationChannel,
+  workspaceConversationChannel,
+} from "./conversation-realtime";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
 import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
@@ -94,11 +101,16 @@ export const loadPublicChannel = createServerFn({ method: "GET" })
   .validator(channelPageInput)
   .handler(async ({ data, context }) => {
     const { channels, db, workspaceId, userId } = channelScope(context);
-    const page = await channels.open(workspaceId, userId, data.channelId, {
-      beforeSequence: data.beforeSequence,
-      afterSequence: data.afterSequence,
-      limit: data.limit,
-    });
+    const page = await readWindowAfterStreamPosition(
+      data,
+      conversationRealtimeChannel(data.channelId),
+      () =>
+        channels.open(workspaceId, userId, data.channelId, {
+          beforeSequence: data.beforeSequence,
+          afterSequence: data.afterSequence,
+          limit: data.limit,
+        }),
+    );
     return {
       ...page,
       messages: await attachViewerViews(db, workspaceId, userId, page.messages),

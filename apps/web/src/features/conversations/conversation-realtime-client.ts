@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import {
@@ -7,7 +8,14 @@ import {
   type SharedRealtimeClient,
 } from "#src/features/realtime/browser-realtime";
 import { getConversationRealtimeToken } from "#src/features/realtime/realtime.functions";
-import { subscriptionGap } from "#src/features/realtime/subscription-gap";
+import { queryStreamPosition } from "#src/features/realtime/query-stream-position";
+import {
+  missedBySubscribe,
+  subscriptionGap,
+  type StreamPosition,
+  type StreamPositions,
+  type SubscribedRecovery,
+} from "#src/features/realtime/subscription-gap";
 import {
   conversationRealtimeChannel,
   decodeChannelUpdatedEvent,
@@ -28,6 +36,15 @@ export function subscribeToConversationRealtime(
   input: {
     conversationId: string;
     getToken: () => Promise<string>;
+    /** Where the page's newest window was read in this conversation's stream, once a read of it
+     * under way has settled; undefined when it has none. A first subscribe past nothing new since
+     * reads nothing again (`streamMovedSince`). */
+    readPosition?: () => Promise<StreamPosition | undefined>;
+    /** Where the window stood in the stream when the page opened it: its member lists were read
+     * from that copy or after it, so a first subscribe past nothing new since leaves them. */
+    openedAt?: StreamPosition;
+    /** A first subscribe found nothing new since the window was read: caught up without a read. */
+    onCaughtUp?: () => void;
     /** `restart`: the page came back (visible, online, or a resubscribe that could not replay
      * what it missed), so a read in flight may be stuck on a connection that died meanwhile
      * (`createConversationReconciler`). */
@@ -50,8 +67,8 @@ export function subscribeToConversationRealtime(
      * it reads nothing. */
     onReaction?: (event: MessageReactionEvent) => void;
     /** A resubscribe could not replay every missed publication: the loaded messages' reactions
-     * may be stale. A first subscribe does not count: the page's read carries no stream position
-     * to compare (`streamMovedSince`), so a change between that read and it waits for the next. */
+     * may be stale. A first subscribe does not count: a reaction between the page's read and it
+     * waits for the next. */
     onPublicationsLost?: () => void;
     /** A member's top-level read position moved forward. */
     onRead?: (event: ConversationReadEvent) => void;
@@ -60,6 +77,23 @@ export function subscribeToConversationRealtime(
   const channel = conversationRealtimeChannel(input.conversationId);
   const requestReconciliation = (options?: { restart?: boolean }) => {
     if (document.visibilityState === "visible") input.reconcile(options);
+  };
+  // Left: a first subscribe's comparison that settles later does nothing.
+  let closed = false;
+  /** A first subscribe reads again only what the stream moved past: the messages past the window's
+   * last read, the member lists past where the page opened it. */
+  const catchUpFirstSubscribe = async (
+    recovery: SubscribedRecovery,
+    readPosition: () => Promise<StreamPosition | undefined>,
+  ) => {
+    const [messages, members] = await Promise.all([
+      missedBySubscribe(recovery, readPosition),
+      missedBySubscribe(recovery, () => input.openedAt),
+    ]);
+    if (closed) return;
+    if (messages) requestReconciliation({ restart: true });
+    else input.onCaughtUp?.();
+    if (members) input.onMemberChanged?.("page-payload");
   };
   const releaseSubscription = subscribeToSharedRealtime(client, {
     channel,
@@ -71,6 +105,12 @@ export function subscribeToConversationRealtime(
       // resubscribe that lost publications — may include a member change as well as messages.
       const gap = subscriptionGap(context);
       if (gap === "none") return;
+      if (gap === "unrecovered" && input.readPosition) {
+        void catchUpFirstSubscribe(context, input.readPosition).catch((error: unknown) =>
+          console.error(`realtime catch-up failed on ${channel}`, error),
+        );
+        return;
+      }
       requestReconciliation({ restart: true });
       if (gap === "lost") input.onPublicationsLost?.();
       input.onMemberChanged?.(gap === "unrecovered" ? "page-payload" : "all");
@@ -118,6 +158,7 @@ export function subscribeToConversationRealtime(
   window.addEventListener("online", onBack);
   window.addEventListener("pageshow", onPageShow);
   return () => {
+    closed = true;
     window.clearInterval(safetyTimer);
     document.removeEventListener("visibilitychange", onBack);
     window.removeEventListener("online", onBack);
@@ -134,9 +175,19 @@ export function useConversationRealtime(
   onReaction?: (event: MessageReactionEvent) => void,
   onPublicationsLost?: () => void,
   onRead?: (event: ConversationReadEvent) => void,
+  /** The Query holding the conversation's window (`key`), whose newest page carries its stream
+   * position, and what to call when a first subscribe found nothing new since it was read
+   * (`caughtUp`); without it, every first subscribe catches up. */
+  windowQuery?: { key: QueryKey; caughtUp: () => void },
 ) {
   const client = useBrowserRealtime();
+  const queryClient = useQueryClient();
   const getToken = useServerFn(getConversationRealtimeToken);
+  const windowRef = useRef(windowQuery);
+  windowRef.current = windowQuery;
+  // Where the window stood when this conversation opened here, which its member lists were seeded
+  // from: kept across a resubscribe of the same conversation, which may follow a refetch.
+  const opened = useRef<{ conversationId: string; at: StreamPosition | undefined }>(undefined);
   const reconcileRef = useRef(reconcile);
   reconcileRef.current = reconcile;
   const memberChangedRef = useRef(onMemberChanged);
@@ -155,6 +206,8 @@ export function useConversationRealtime(
     return subscribeToConversationRealtime(client, {
       conversationId,
       getToken: () => getToken({ data: { conversationId } }),
+      ...windowPositions(queryClient, windowRef.current?.key, conversationId, opened),
+      onCaughtUp: () => windowRef.current?.caughtUp(),
       reconcile: (options) => void reconcileRef.current(options).catch(() => {}),
       onMemberChanged: (stale) => memberChangedRef.current?.(stale),
       onChannelUpdated: () => channelUpdatedRef.current?.(),
@@ -164,5 +217,30 @@ export function useConversationRealtime(
       onPublicationsLost: () => publicationsLostRef.current?.(),
       onRead: (event) => readRef.current?.(event),
     });
-  }, [client, conversationId, getToken]);
+  }, [client, conversationId, getToken, queryClient]);
+}
+
+type PositionedWindow = { pages: { streamPositions?: StreamPositions }[] };
+const newestPositions = (data: PositionedWindow | undefined) => data?.pages.at(-1)?.streamPositions;
+
+/** Where the conversation's window stands in its stream for `subscribeToConversationRealtime`: as
+ * it opened (`openedAt`, kept in `opened` per conversation), and once a read of it under way
+ * settles (`readPosition`). */
+function windowPositions(
+  queryClient: QueryClient,
+  windowKey: QueryKey | undefined,
+  conversationId: string,
+  opened: { current: { conversationId: string; at: StreamPosition | undefined } | undefined },
+) {
+  if (!windowKey) return {};
+  const channel = conversationRealtimeChannel(conversationId);
+  if (opened.current?.conversationId !== conversationId)
+    opened.current = {
+      conversationId,
+      at: newestPositions(queryClient.getQueryData<PositionedWindow>(windowKey))?.[channel],
+    };
+  return {
+    openedAt: opened.current.at,
+    readPosition: () => queryStreamPosition(queryClient, windowKey, channel, newestPositions),
+  };
 }

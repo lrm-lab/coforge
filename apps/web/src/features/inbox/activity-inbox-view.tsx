@@ -18,7 +18,11 @@ import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import { loadActivityInbox, markActivityInboxRead } from "./activity-inbox.functions";
 import { useActivityInboxRealtime } from "./use-activity-inbox-realtime";
+import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
+import { rereadQueryMissedBySubscribe } from "#src/features/realtime/query-stream-position";
+import type { SubscribedRecovery } from "#src/features/realtime/subscription-gap";
 import {
+  ACTIVITY_INBOX_LISTS_KEY,
   ACTIVITY_INBOX_QUERY_PREFIX,
   activityInboxQuery,
   type ActivityInboxPage,
@@ -116,10 +120,30 @@ export function ActivityInboxView({
       )
       .catch(() => undefined);
   }, [filter, loadFirstPage, queryClient, workspaceId]);
+  // What was published after the list's first page was read but before the subscription started
+  // reaches the list only through a read.
+  // Realtime refreshes the lists only: the nav dot hears the same events and reads itself.
+  const refreshLists = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_LISTS_KEY }),
+    [queryClient],
+  );
+  const onSubscribed = useCallback(
+    (recovery: SubscribedRecovery) =>
+      void rereadQueryMissedBySubscribe<{ pages: ActivityInboxPage[] }>(
+        queryClient,
+        activityInboxQuery(workspaceId, filter).queryKey,
+        userConversationChannel(user.id),
+        recovery,
+        refreshLists,
+        (data) => data?.pages[0]?.streamPositions,
+      ),
+    [filter, queryClient, refreshLists, user.id, workspaceId],
+  );
   useActivityInboxRealtime({
     userId: user.id,
     onMessage: refreshFirstPage,
-    onActivity: refreshList,
+    onActivity: refreshLists,
+    onSubscribed,
     refreshOnPins: true,
   });
 

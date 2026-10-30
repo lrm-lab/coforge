@@ -27,13 +27,10 @@ import {
 import type { PinRef } from "./pinned-conversations";
 import { directRowsOf } from "./sidebar-rows";
 import type { ChatList } from "./conversation-unread";
+import { queryStreamPosition } from "#src/features/realtime/query-stream-position";
 import { serverChatSectionsApi, type ChatSectionsApi } from "./chat-sections";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
-import {
-  olderStreamPositions,
-  type StreamPosition,
-  type StreamPositions,
-} from "#src/features/realtime/subscription-gap";
+import { olderStreamPositions, type StreamPosition } from "#src/features/realtime/subscription-gap";
 
 /**
  * The Chat sidebar's two lists as Query reads: the server calls behind them, the query options the
@@ -222,19 +219,6 @@ export const chatListQueryKey: Record<ChatList, (workspaceId: string) => readonl
   saved: savedMessagesQueryKey,
 };
 
-/** Resolves once no read of `queryKey` is under way. */
-function readSettled(queryClient: QueryClient, queryKey: readonly unknown[]): Promise<void> {
-  const reading = () => queryClient.isFetching({ queryKey }) > 0;
-  if (!reading()) return Promise.resolve();
-  return new Promise((resolve) => {
-    const unsubscribe = queryClient.getQueryCache().subscribe(() => {
-      if (reading()) return;
-      unsubscribe();
-      resolve();
-    });
-  });
-}
-
 /**
  * Where a list's last server read stands in a signal channel's stream, for
  * `rereadMissedBySubscribe`; undefined when the read had no position for that channel (Centrifugo
@@ -249,8 +233,5 @@ export async function listReadPosition(
   list: ChatList,
   channel: string,
 ): Promise<StreamPosition | undefined> {
-  const queryKey = chatListQueryKey[list](workspaceId);
-  await readSettled(queryClient, queryKey);
-  return queryClient.getQueryData<{ streamPositions?: StreamPositions }>(queryKey)
-    ?.streamPositions?.[channel];
+  return queryStreamPosition(queryClient, chatListQueryKey[list](workspaceId), channel);
 }

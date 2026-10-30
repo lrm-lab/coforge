@@ -5,6 +5,9 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
+import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
+import { rereadQueryMissedBySubscribe } from "#src/features/realtime/query-stream-position";
+import type { SubscribedRecovery } from "#src/features/realtime/subscription-gap";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 
 import { loadActivityInbox, loadActivityNavAttention } from "./activity-inbox.functions";
@@ -89,14 +92,36 @@ export const activityNavAttentionQuery = () =>
  * it announces a Done and a read-all as well as a new mention — and a boolean cannot tell which
  * way it went locally, so it re-reads.
  */
-export function activityNavAttentionRealtime(queryClient: QueryClient): {
+export function activityNavAttentionRealtime(
+  queryClient: QueryClient,
+  userId: string,
+): {
   onMessage: () => void;
   onActivity: () => void;
+  onSubscribed: (recovery: SubscribedRecovery) => void;
 } {
   const queryKey = activityNavAttentionQuery().queryKey;
+  const reread = () => void queryClient.invalidateQueries({ queryKey });
   return {
+    // The read's stream positions stay: a message delivered here moved the dot without a read.
     onMessage: () =>
-      queryClient.setQueryData<{ hasUnread: boolean }>(queryKey, { hasUnread: true }),
-    onActivity: () => void queryClient.invalidateQueries({ queryKey }),
+      queryClient.setQueryData<ActivityNavAttention>(queryKey, (current) => ({
+        streamPositions: {},
+        ...current,
+        hasUnread: true,
+      })),
+    onActivity: reread,
+    // A message published after the dot was read but before the subscription started reaches it
+    // only through a read.
+    onSubscribed: (recovery) =>
+      void rereadQueryMissedBySubscribe(
+        queryClient,
+        queryKey,
+        userConversationChannel(userId),
+        recovery,
+        reread,
+      ),
   };
 }
+
+type ActivityNavAttention = Awaited<ReturnType<typeof loadActivityNavAttention>>;

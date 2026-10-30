@@ -32,6 +32,21 @@ export function streamMovedSince(
 }
 
 /**
+ * Whether data kept live by a channel may lack something its subscription will never deliver, once
+ * that subscription is `subscribed`: nothing when the subscribe replayed every missed publication,
+ * everything when it lost some, and on a first subscribe only if the stream has moved past where
+ * the data was read (`readPosition`, `streamMovedSince`).
+ */
+export async function missedBySubscribe(
+  recovery: SubscribedRecovery,
+  readPosition: () => Promise<StreamPosition | undefined> | StreamPosition | undefined,
+): Promise<boolean> {
+  const gap = subscriptionGap(recovery);
+  if (gap !== "unrecovered") return gap === "lost";
+  return streamMovedSince(await readPosition(), recovery.position?.());
+}
+
+/**
  * The positions a list built from two reads stands at: per channel, the older of the two, since
  * the list may lack what either read did. A channel only one read has a position for, or whose
  * two positions are in different epochs (an offset is meaningful only within its epoch), has none.

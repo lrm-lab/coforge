@@ -116,6 +116,13 @@ export function createConversationReconciler<T extends ConversationMessage>(
     advance(to: ConversationUpdatesCursor) {
       if (to.afterSequence > cursor.afterSequence) cursor = to;
     },
+    /** Nothing was published since the window was read (the page's first subscribe compared
+     * their stream positions): the page is caught up without a read. One under way still decides. */
+    caughtUpWithoutRead() {
+      if (caughtUp || active) return;
+      caughtUp = true;
+      notify();
+    },
     /**
      * Reads what arrived past the cursor; the promise settles when the page is caught up or the
      * read failed (and its retry is scheduled). A call made while a read runs asks for one more

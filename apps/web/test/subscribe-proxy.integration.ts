@@ -11,13 +11,18 @@ import {
   type BrowserSubscriptionAccess,
 } from "#src/server/centrifugo/subscribe-proxy.server";
 import { issueBrowserRealtimeToken } from "#src/server/auth/browser-realtime-token.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { chatStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
+import { streamMovedSince, type StreamPosition } from "#src/features/realtime/subscription-gap";
 
 // A page subscribes without a token and Centrifugo asks the Web, through the subscribe and
 // sub-refresh proxies exactly as `infra/centrifugo/config.yaml` declares them: a refusal is final,
 // a Web that cannot answer is retried until it can, a grant that is lost ends at its refresh, and
 // a daemon's connection is refused. A page connects with the Web's own connection token, whose
-// meta Centrifugo must hand the proxy. Docker required: `mise run test:centrifugo`.
+// meta Centrifugo must hand the proxy. It also checks the stream positions a page compares to
+// tell whether a subscribe missed anything (task #348). Docker required: `mise run test:centrifugo`.
 
+const API_KEY = "subscribe-proxy-integration";
 const ADA = "33333333-3333-4333-8333-333333333333";
 const GRACE = "44444444-4444-4444-8444-444444444444";
 const CONVERSATION = "55555555-5555-4555-8555-555555555555";
@@ -94,6 +99,7 @@ beforeAll(async () => {
     configPath,
     JSON.stringify({
       health: { enabled: true },
+      http_api: { key: API_KEY },
       log: { level: "error" },
       client: {
         allowed_origins: ["*"],
@@ -278,3 +284,35 @@ test("a grant that is lost ends when it is next refreshed", async () => {
     readers.add(ADA);
   }
 }, 120_000);
+
+/**
+ * Task #348: a page reads its Activity dot with where the viewer's own channel stood, then
+ * subscribes. A mention published in between must show as missed, and nothing published must
+ * show as nothing missed, with the positions the server API and the subscribe actually report.
+ */
+test("a mention published between a read and the subscribe shows as missed, and only then", async () => {
+  const api = createCentrifugoServerApi({
+    COFORGE_CENTRIFUGO_API_URL: `http://127.0.0.1:${centrifugoPort}/api`,
+    COFORGE_CENTRIFUGO_API_KEY: API_KEY,
+  });
+  const channel = `chat:user:${ADA}`;
+  await api.publishJson(channel, { type: "earlier" });
+  const subscribedAt = async () => {
+    const page = await connected(ADA);
+    const subscription = page.newSubscription(channel);
+    const position = new Promise<StreamPosition | undefined>((resolve) =>
+      subscription.once("subscribed", ({ streamPosition }) => resolve(streamPosition)),
+    );
+    subscription.subscribe();
+    const at = await position;
+    page.disconnect();
+    return at;
+  };
+
+  const quiet = (await chatStreamPositions([channel], api))[channel];
+  expect(streamMovedSince(quiet, await subscribedAt())).toBe(false);
+
+  const read = (await chatStreamPositions([channel], api))[channel];
+  await api.publishJson(channel, { type: "conversation.activity.v1" });
+  expect(streamMovedSince(read, await subscribedAt())).toBe(true);
+}, 30_000);

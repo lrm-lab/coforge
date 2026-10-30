@@ -11,6 +11,7 @@ import {
   type ConversationActivityEvent,
 } from "#src/features/conversations/conversation-activity-event";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
+import type { SubscribedRecovery } from "#src/features/realtime/subscription-gap";
 import { getUserConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
 
 /** A burst of messages (an Agent posting several in a row) refreshes the listener once. */
@@ -27,12 +28,16 @@ export function useActivityInboxRealtime({
   userId,
   onMessage,
   onActivity,
+  onSubscribed,
   refreshOnPins = false,
 }: {
   userId: string;
   /** One message the viewer may read: not their own, not a system notice. */
   onMessage?: (event: ConversationActivityEvent) => void;
   onActivity: () => void;
+  /** The channel became `subscribed`, and may have missed what was published before (see
+   * `queryMissedBySubscribe`). */
+  onSubscribed?: (recovery: SubscribedRecovery) => void;
   refreshOnPins?: boolean;
 }) {
   const getUserToken = useServerFn(getUserConversationSubscriptionToken);
@@ -44,6 +49,10 @@ export function useActivityInboxRealtime({
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+  const onSubscribedRef = useRef(onSubscribed);
+  useEffect(() => {
+    onSubscribedRef.current = onSubscribed;
+  }, [onSubscribed]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -76,5 +85,6 @@ export function useActivityInboxRealtime({
     channel: userConversationChannel(userId),
     getToken: getUserToken,
     onPublication,
+    onSubscribed: (recovery) => onSubscribedRef.current?.(recovery),
   });
 }

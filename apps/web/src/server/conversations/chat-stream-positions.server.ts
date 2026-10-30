@@ -47,3 +47,18 @@ export async function readAfterStreamPositions<T>(
   const streamPositions = await chatStreamPositions(channels, streams);
   return { streamPositions, data: await read() };
 }
+
+/**
+ * A conversation window read; its newest window (read with no cursor) comes with where the
+ * conversation's stream stood before it, for the page's first subscribe. The field is optional, so
+ * a window kept in the browser's storage from before it still opens (`STORED_SHAPE_VERSION`).
+ */
+export async function readWindowAfterStreamPosition<T extends object>(
+  cursor: { beforeSequence?: number; afterSequence?: number },
+  channel: string,
+  read: () => Promise<T>,
+): Promise<T & { streamPositions?: StreamPositions }> {
+  if (cursor.beforeSequence !== undefined || cursor.afterSequence !== undefined) return read();
+  const { streamPositions, data } = await readAfterStreamPositions([channel], read);
+  return { ...data, streamPositions };
+}
