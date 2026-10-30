@@ -66,6 +66,7 @@ jobs:
             {"name":"chat","history_size":200,"history_ttl":"5m","force_recovery":true},
             {"name":"runtimeauth"},
             {"name":"agent","publication_data_format":"binary"},
+            {"name":"agentstatus","history_size":10,"history_ttl":"5m","force_recovery":true},
             {"name":"presence","presence":true,"join_leave":true,"force_push_join_leave":true,"allow_presence_for_subscriber":true}]
         ports:
           - 8000:8000
