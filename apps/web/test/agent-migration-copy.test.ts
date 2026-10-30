@@ -132,13 +132,8 @@ test("a move that cannot start says which Computer holds it back, and where to f
     message: m.agent_migration_error_runtime_not_shared(names),
     fixAt: "target",
   });
-  expect(runtimeRefusal("agent-migration-model-missing")).toEqual({
-    message: m.agent_migration_error_model_missing(names),
-    fixAt: "target",
-  });
   expect(m.agent_migration_error_runtime_missing(names)).toContain("Studio Mac");
   expect(m.agent_migration_error_runtime_missing(names)).toContain("Claude Code");
-  expect(m.agent_migration_error_model_missing(names)).toContain("sonnet");
   // A Computer that is gone is fixed on the Computers page, not on its own.
   expect(refusal("agent-migration-target-unavailable", "INVALID_INPUT")).toEqual({
     message: m.agent_migration_error_target_unavailable(),

@@ -3,7 +3,10 @@ import {
   AgentMigrationSourceStopError,
   type AgentMigrationOrchestrator,
 } from "./agent-migration-orchestrator.server";
-import type { AgentRuntimeSelectionRefusal } from "#src/server/agents/agent-runtime-availability.server";
+import type {
+  AgentRuntimeRefusalWithoutModel,
+  AgentRuntimeSelectionRefusal,
+} from "#src/server/agents/agent-runtime-availability.server";
 import type { AgentMigrationRequestRefusal, AgentMigrations } from "./agent-migrations.server";
 
 /**
@@ -78,12 +81,13 @@ export class AgentMigrationRequests {
       isWorkspaceAdmin(workspaceId: string, userId: string): Promise<boolean>;
       /** A Computer's name as people see it, or null when it has none. */
       computerName(computerId: string): Promise<string | null>;
-      /** Why the Computer cannot run the Agent's runtime for its owner, or null when it can. */
+      /** Why the Computer cannot run the Agent's runtime for its owner, or null when it can. A
+       * move never asks about the model catalog, so a missing model is not one of the answers. */
       runtimeRefusal(
         workspaceId: string,
         agentId: string,
         computerId: string,
-      ): Promise<AgentRuntimeSelectionRefusal | null>;
+      ): Promise<AgentRuntimeRefusalWithoutModel | null>;
       /** Whether the Computer is detecting its runtimes now, from a rescan. */
       runtimeDetecting(workspaceId: string, computerId: string): Promise<boolean>;
       /** The Computer the Agent is placed on now, or null when it has none. */
@@ -152,10 +156,9 @@ export class AgentMigrationRequests {
       input.agentId,
       input.targetComputerId,
     );
-    // Raft checks only whether the target can run the selected runtime. A stale or incomplete
-    // model catalog must not stop a move; the target daemon reports a real model failure when the
-    // Agent starts there.
-    if (runtimeRefusal && runtimeRefusal !== "model_missing") {
+    // Raft checks only whether the target can run the selected runtime; the selection is passed
+    // with `requireModel: false`, so no model catalog can stop a move or hide a later refusal.
+    if (runtimeRefusal) {
       // A runtime not reported yet may be what a rescan in flight is about to report.
       const detecting =
         (runtimeRefusal === "runtime_unconfirmed" || runtimeRefusal === "runtime_missing") &&

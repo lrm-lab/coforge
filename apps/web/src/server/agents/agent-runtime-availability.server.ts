@@ -14,13 +14,19 @@ export type AgentRuntimeSelection = {
   fastMode?: boolean;
 };
 
+/** Whether the selection can run there. `requireModel: false` asks only whether the runtime can
+ * take this Agent at all: a model catalog is an observation, not a permission (a move checks it
+ * when the Agent starts there). */
+export type AgentRuntimeAvailability = {
+  connected: boolean;
+  providers: ReadonlySet<RuntimeProvider>;
+  models: readonly unknown[];
+};
+
 export function agentRuntimeSelectionIsAvailable(
   config: AgentRuntimeSelection,
-  inventory: {
-    connected: boolean;
-    providers: ReadonlySet<RuntimeProvider>;
-    models: readonly unknown[];
-  },
+  inventory: AgentRuntimeAvailability,
+  options: { requireModel?: boolean } = {},
 ): boolean {
   if (!inventory.connected) return false;
   if (!providerIsSelectable(config.provider, inventory.providers)) return false;
@@ -33,6 +39,7 @@ export function agentRuntimeSelectionIsAvailable(
   )
     return true;
   if (!config.model) return !config.modelProvider && !config.reasoning;
+  if (options.requireModel === false) return true;
   return inventory.models.some((value) => modelMatches(value, config));
 }
 
@@ -54,22 +61,48 @@ export type AgentRuntimeSelectionRefusal =
  * `reported` is every runtime the Computer reported, shared or not; `unusable` those it reported
  * as installed but not usable; `providers` only those this person may select there.
  */
+export type AgentRuntimeRefusalWithoutModel = Exclude<
+  AgentRuntimeSelectionRefusal,
+  "model_missing"
+>;
+
+/** A check that does not read the model catalog cannot refuse for a missing model: saying so in
+ * the type keeps the catalog out of callers that only ask "can this runtime take the Agent?". */
 export function agentRuntimeSelectionRefusal(
   config: AgentRuntimeSelection,
-  inventory: Parameters<typeof agentRuntimeSelectionIsAvailable>[1] & {
+  inventory: AgentRuntimeAvailability & {
     reported: ReadonlySet<RuntimeProvider>;
     unusable: ReadonlySet<RuntimeProvider>;
   },
+  options: { requireModel: false },
+): AgentRuntimeRefusalWithoutModel | null;
+export function agentRuntimeSelectionRefusal(
+  config: AgentRuntimeSelection,
+  inventory: AgentRuntimeAvailability & {
+    reported: ReadonlySet<RuntimeProvider>;
+    unusable: ReadonlySet<RuntimeProvider>;
+  },
+  options?: { requireModel?: true },
+): AgentRuntimeSelectionRefusal | null;
+export function agentRuntimeSelectionRefusal(
+  config: AgentRuntimeSelection,
+  inventory: AgentRuntimeAvailability & {
+    reported: ReadonlySet<RuntimeProvider>;
+    unusable: ReadonlySet<RuntimeProvider>;
+  },
+  options: { requireModel?: boolean } = {},
 ): AgentRuntimeSelectionRefusal | null {
   if (!inventory.connected) return "not_connected";
-  if (agentRuntimeSelectionIsAvailable(config, inventory)) return null;
+  if (agentRuntimeSelectionIsAvailable(config, inventory, options)) return null;
   if (inventory.reported.size === 0) return "runtime_unconfirmed";
   if (!providerIsSelectable(config.provider, inventory.reported)) return "runtime_missing";
   if (providerIsSelectable(config.provider, inventory.unusable)) return "runtime_unusable";
   if (!providerIsSelectable(config.provider, inventory.providers)) return "runtime_not_shared";
   // Provider and sharing are settled; a Fast request this runtime cannot apply, or the model.
+  // Every check that does not need the model runs first: a move that does not read catalogs must
+  // not let a stale one hide a refusal that the target Computer's own page would report.
   if (fastModeUnsupported(config)) return "fast_mode_unsupported";
-  return "model_missing";
+  return options.requireModel === false ? null : "model_missing";
 }
 
 /** Fast mode exists only where the runtime's adapter applies it, and there for every model: one

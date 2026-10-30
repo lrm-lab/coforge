@@ -127,10 +127,6 @@ const REFUSALS: Record<
     message: m.agent_migration_error_runtime_not_shared,
     fixAt: "target",
   },
-  "agent-migration-model-missing": {
-    message: m.agent_migration_error_model_missing,
-    fixAt: "target",
-  },
   "agent-migration-fast-mode-unsupported": {
     message: m.agent_migration_error_fast_mode_unsupported,
     fixAt: "target",

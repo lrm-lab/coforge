@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { AgentMigrations } from "#src/server/agent-migrations/agent-migrations.server";
 import { AgentMigrationRequests } from "#src/server/agent-migrations/agent-migration-requests.server";
 import { AgentMigrationSourceStopError } from "#src/server/agent-migrations/agent-migration-orchestrator.server";
-import type { AgentRuntimeSelectionRefusal } from "#src/server/agents/agent-runtime-availability.server";
+import type { AgentRuntimeRefusalWithoutModel } from "#src/server/agents/agent-runtime-availability.server";
 import { storedRuntimeSelection } from "#src/server/agents/computer-runtime-availability.server";
 import { memoryStore } from "./helpers/agent-migration-memory-store";
 
@@ -16,7 +16,7 @@ function setup(
   options: {
     available?: boolean;
     fails?: "stop" | "lease";
-    runtimeRefusal?: AgentRuntimeSelectionRefusal;
+    runtimeRefusal?: AgentRuntimeRefusalWithoutModel;
     runtimeDetecting?: boolean;
     readiness?: Record<string, Readiness>;
   } = {},
@@ -163,7 +163,7 @@ test("a failure after the source stopped is not reported as a source that never 
 });
 
 test("a Computer that cannot run the Agent's runtime is refused before anything stops, saying why", async () => {
-  const cases: [AgentRuntimeSelectionRefusal, string][] = [
+  const cases: [AgentRuntimeRefusalWithoutModel, string][] = [
     ["runtime_unconfirmed", "agent-migration-runtime-unconfirmed"],
     ["runtime_missing", "agent-migration-runtime-missing"],
     ["runtime_not_shared", "agent-migration-runtime-not-shared"],
@@ -179,7 +179,7 @@ test("a Computer that cannot run the Agent's runtime is refused before anything 
 });
 
 test("a target still detecting its runtimes says so, instead of lacking the Agent's runtime", async () => {
-  const cases: [AgentRuntimeSelectionRefusal, string][] = [
+  const cases: [AgentRuntimeRefusalWithoutModel, string][] = [
     ["runtime_unconfirmed", "agent-migration-runtime-detecting"],
     ["runtime_missing", "agent-migration-runtime-detecting"],
     // A rescan cannot share a runtime, so this refusal stands.
@@ -194,10 +194,16 @@ test("a target still detecting its runtimes says so, instead of lacking the Agen
   }
 });
 
-test("a stale model catalog does not block a move when the target runtime is usable", async () => {
-  const { requests, requested } = setup({ runtimeRefusal: "model_missing" });
-  await requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" });
-  expect(requested).toEqual(["computer-b"]);
+test("a refusal that is not about the model still stops the move", async () => {
+  // The move asks about the runtime only; a model catalog never reaches this check.
+  const { requests, requested } = setup({ runtimeRefusal: "fast_mode_unsupported" });
+  await expect(
+    requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
+  ).rejects.toMatchObject({
+    code: "INVALID_INPUT",
+    errorId: "agent-migration-fast-mode-unsupported",
+  });
+  expect(requested).toEqual([]);
 });
 
 test("a move checks the target against the Agent's stored selection, key included", () => {

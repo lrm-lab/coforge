@@ -9,6 +9,7 @@ import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/com
 import type { AgentRuntimeConfig } from "./agent-runtime-config.server";
 import {
   agentRuntimeSelectionRefusal,
+  type AgentRuntimeRefusalWithoutModel,
   type AgentRuntimeSelection,
   type AgentRuntimeSelectionRefusal,
 } from "./agent-runtime-availability.server";
@@ -27,7 +28,22 @@ export async function computerCanRunAgent(
   return (await computerRuntimeRefusal(db, principal, computerId, config)) === null;
 }
 
-/** Why `computerCanRunAgent` refuses, or null when the Computer can run the Agent. */
+/** Why `computerCanRunAgent` refuses, or null when the Computer can run the Agent. With
+ * `requireModel: false` only the runtime itself is judged: a model catalog is an observation. */
+export function computerRuntimeRefusal(
+  db: PrismaClient,
+  principal: { workspaceId: string; userId: string },
+  computerId: string,
+  config: AgentRuntimeSelection,
+  options: { requireModel: false },
+): Promise<AgentRuntimeRefusalWithoutModel | null>;
+export function computerRuntimeRefusal(
+  db: PrismaClient,
+  principal: { workspaceId: string; userId: string },
+  computerId: string,
+  config: AgentRuntimeSelection,
+  options?: { requireModel?: true },
+): Promise<AgentRuntimeSelectionRefusal | null>;
 export async function computerRuntimeRefusal(
   db: PrismaClient,
   { workspaceId, userId }: { workspaceId: string; userId: string },
@@ -70,7 +86,7 @@ export async function computerRuntimeRefusal(
   const models = connection?.computer.modelCatalogs.flatMap((catalog) =>
     Array.isArray(catalog.models) ? catalog.models : [],
   );
-  const refusal = agentRuntimeSelectionRefusal(config, {
+  const facts = {
     connected: Boolean(connection),
     reported: new Set(
       connection?.computer.runtimes.map(({ provider }) => provider as RuntimeProvider),
@@ -84,8 +100,10 @@ export async function computerRuntimeRefusal(
     ),
     providers,
     models: models ?? [],
-  });
-  return options.requireModel === false && refusal === "model_missing" ? null : refusal;
+  };
+  return options.requireModel === false
+    ? agentRuntimeSelectionRefusal(config, facts, { requireModel: false })
+    : agentRuntimeSelectionRefusal(config, facts);
 }
 
 /** An Agent's stored runtime configuration, as the selection `computerCanRunAgent` checks. */

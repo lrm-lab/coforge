@@ -101,3 +101,27 @@ test("the built-in runtime counts Pi on the Computer as offering it", () => {
     ),
   ).toBe("runtime_not_shared");
 });
+
+test("without the model catalog only the runtime is judged, and no later refusal is skipped", () => {
+  const noModels = { requireModel: false } as const;
+  // The model is not in the catalog: a check that does not read catalogs says nothing about it.
+  expect(agentRuntimeSelectionRefusal(claude, inventory({ models: [] }), noModels)).toBeNull();
+  // A refusal that is not about the model still fires, in its own place (DSH has no Fast tier).
+  const dsh = { ...claude, provider: RUNTIME_PROVIDER.DSH, fastMode: true };
+  expect(
+    agentRuntimeSelectionRefusal(
+      dsh,
+      inventory({ reported: [RUNTIME_PROVIDER.DSH], models: [] }),
+      noModels,
+    ),
+  ).toBe("fast_mode_unsupported");
+  expect(
+    agentRuntimeSelectionRefusal(
+      claude,
+      inventory({ unusable: [RUNTIME_PROVIDER.CLAUDE_CODE], selectable: [] }),
+      noModels,
+    ),
+  ).toBe("runtime_unusable");
+  // With the catalog required, the same selection is refused for the model.
+  expect(agentRuntimeSelectionRefusal(claude, inventory({ models: [] }))).toBe("model_missing");
+});

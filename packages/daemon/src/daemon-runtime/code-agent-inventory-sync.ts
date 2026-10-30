@@ -22,6 +22,7 @@ import type { DaemonConnectionClient } from "#src/connection/daemon-connection-c
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { CommandCodeEffortReads } from "./command-code-effort-reads";
+import { CatalogFreshness, reportedWithCatalogFailures } from "./catalog-freshness";
 
 // Deliberately the runtime's category: these records predate this module and keep their routing.
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -84,6 +85,8 @@ export class CodeAgentInventorySync {
   #runtimeVersions = new Map<RuntimeMetadata["provider"], string>();
   /** The runtimes of the last report, so a freshness check judges the same installed set. */
   #reportedRuntimes: RuntimeMetadata[] | undefined;
+  /** What to re-discover while the connection stays up: moved catalogs, and failed probes. */
+  readonly #freshness: CatalogFreshness;
   /** Devin's `thought_level` sweep; production resolves this Computer's `devin`. */
   readonly #devinEfforts: (
     stateDirectory: string | undefined,
@@ -107,6 +110,14 @@ export class CodeAgentInventorySync {
     this.#owner = owner;
     this.#isLive = isLive;
     this.#devinEfforts = devinEfforts ?? readHostDevinEfforts;
+    this.#freshness = new CatalogFreshness({
+      discovery: this.#discovery,
+      owner,
+      isLive: (transport) => this.#isLive(transport),
+      report: async (transport, requestId, runtimes, catalogs) => {
+        await this.#sendInventory(transport, requestId, runtimes, catalogs);
+      },
+    });
     this.#efforts = new CommandCodeEffortReads({
       owner,
       stateDirectory: () => this.#discovery.stateDirectory,
@@ -163,23 +174,9 @@ export class CodeAgentInventorySync {
         .then(() => this.#reportCatalogs(report.runtimes, transport));
   }
 
-  /**
-   * Re-discovers the catalogs that changed on disk since they were scanned: an installed CLI
-   * update, a sign-in or a sign-out changes the provider's probe-cache key without telling the
-   * daemon anything. Reading the keys costs file stats only; nothing spawns unless one moved.
-   */
-  async recheckCatalogs(transport: DaemonConnectionClient): Promise<void> {
-    const runtimes = this.#reportedRuntimes;
-    if (!runtimes || !this.#isLive(transport)) return;
-    const { changedProviders = [] } = await this.#discovery.cachedCatalogs(runtimes);
-    if (!changedProviders.length || !this.#isLive(transport)) return;
-    logger.info("Code Agent catalog changed on disk; refreshing", {
-      event: "code_agent_catalog:changed",
-      ...this.#scope(crypto.randomUUID()),
-      providers: changedProviders,
-      outcome: "started",
-    });
-    this.refreshStaleCatalogs({ runtimes, needsCatalogRefresh: true }, transport);
+  /** Re-discovers catalogs that moved on disk, then retries the providers whose wait elapsed. */
+  recheckCatalogs(transport: DaemonConnectionClient, now = Date.now()): Promise<void> {
+    return this.#freshness.recheck(transport, this.#reportedRuntimes, now);
   }
 
   /** Answers a server model refresh request after every refresh that arrived before it. */
@@ -241,16 +238,8 @@ export class CodeAgentInventorySync {
       });
       // A runtime whose launch handshake (start/version) failed its catalog probe is unusable:
       // the report marks it so the settings page names why, not just that it failed.
-      const reported = runtimes.map((runtime) => {
-        const failure = failures.find((entry) => entry.provider === runtime.provider);
-        if (failure && (failure.code === "start_failed" || failure.code === "version_unsupported"))
-          return {
-            ...runtime,
-            unavailableCode: failure.code,
-            ...(failure.diagnostic ? { diagnostic: failure.diagnostic } : {}),
-          };
-        return runtime;
-      });
+      const reported = reportedWithCatalogFailures(runtimes, failures);
+      this.#freshness.settle(failures, catalogs);
       if (!this.#isLive(transport)) return;
       await this.#sendInventory(transport, requestId, reported, catalogs);
       this.#reportedRuntimes = reported;
@@ -327,17 +316,9 @@ export class CodeAgentInventorySync {
     });
     try {
       const { catalogs, failures } = await this.#discovery.catalogs(runtimes);
+      this.#freshness.settle(failures, catalogs);
       if (!this.#isLive(transport)) return;
-      const reported = runtimes.map((runtime) => {
-        const failure = failures.find((entry) => entry.provider === runtime.provider);
-        if (failure && (failure.code === "start_failed" || failure.code === "version_unsupported"))
-          return {
-            ...runtime,
-            unavailableCode: failure.code,
-            ...(failure.diagnostic ? { diagnostic: failure.diagnostic } : {}),
-          };
-        return runtime;
-      });
+      const reported = reportedWithCatalogFailures(runtimes, failures);
       await this.#sendInventory(transport, requestId, reported, catalogs);
       if (!this.#isLive(transport)) return;
       const resolved = await this.#resolveDevinEfforts(runtimes, catalogs, scope);

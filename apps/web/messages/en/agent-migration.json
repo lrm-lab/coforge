@@ -50,7 +50,6 @@
   "agent_migration_error_runtime_missing": "{computer} does not support {runtime}. Install or enable {runtime} there, or choose another Computer.",
   "agent_migration_error_runtime_unusable": "{computer} has {runtime} installed but cannot use it. Check the reason on that Computer, or choose another Computer.",
   "agent_migration_error_runtime_not_shared": "{runtime} on {computer} belongs to that Computer's owner and is not shared. Ask them to make it public in the Computer's settings, or choose another Computer.",
-  "agent_migration_error_model_missing": "{runtime} on {computer} does not offer {model}, the model this Agent uses. Set it up there, or choose another Computer.",
   "agent_migration_source_outdated": "This Agent's Computer runs a CoForge Computer too old to move Agents. Update CoForge Computer there, then try again.",
   "agent_migration_source_offline": "This Agent's Computer is offline. Connect it, then try again.",
   "agent_migration_target_outdated": "That Computer runs a CoForge Computer too old to receive Agents. Update CoForge Computer there, or choose another Computer.",
