@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { readMeta, writeMeta } from "./agent-state-db";
 
 /** What the ledger remembers having shown the Agent: a sender's description (`sender`) or a
@@ -38,10 +39,12 @@ export class AgentContextLedger {
   }
 
   /**
-   * Records `(kind, id, rev)` as shown in the current context. True for the first appearance (the
-   * caller shows it), false when this context already showed that revision.
+   * Records `(kind, id, text)` as shown in the current context; the ledger keeps a hash of the
+   * text, not the text. True for the first appearance (the caller shows it), false when this
+   * context already showed that revision.
    */
-  claim(kind: ContextObservationKind, id: string, rev: string): boolean {
+  claim(kind: ContextObservationKind, id: string, text: string): boolean {
+    const rev = createHash("sha256").update(text).digest("base64url");
     const result = this.#db
       .prepare(
         `INSERT INTO context_observations (kind, id, rev, generation) VALUES (?, ?, ?, ?)

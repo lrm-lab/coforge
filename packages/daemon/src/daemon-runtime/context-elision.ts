@@ -50,7 +50,7 @@ export function elideSeenInContext(
       )
     )
       next = { ...next, senderDescription: "" };
-    const channel = message.target.startsWith("#") ? message.target.split(":")[0]! : undefined;
+    const channel = channelOf(message.target);
     if (
       message.channelCoordination &&
       channel &&
@@ -64,12 +64,20 @@ export function elideSeenInContext(
 }
 
 /** `elideSeenInContext` for one Agent's read, or the messages as they are when the Agent's runtime
- * does not report compaction. */
+ * does not report compaction or the operation's output does not print a sender's description and
+ * a channel's role line (a search hit does not, so it must not use them up). */
 export function elideForAgent(
   contexts: Pick<AgentContexts, "ledger"> | undefined,
   agentId: string,
   messages: AgentMessageRecord[],
+  operation: string,
 ): AgentMessageRecord[] {
-  const ledger = contexts?.ledger(agentId);
-  return ledger && messages.length ? elideSeenInContext(messages, ledger) : messages;
+  if (messages.length === 0 || operation === "search") return messages;
+  try {
+    const ledger = contexts?.ledger(agentId);
+    return ledger ? elideSeenInContext(messages, ledger) : messages;
+  } catch {
+    // A ledger that cannot be read must never cost the Agent a message's text.
+    return messages;
+  }
 }

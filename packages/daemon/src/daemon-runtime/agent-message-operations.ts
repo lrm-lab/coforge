@@ -3,6 +3,7 @@ import type { AgentMessageOperationsPorts } from "./agent-message-ports";
 import { agentSendResponse } from "./agent-send-result";
 import { getLogger } from "@logtape/logtape";
 import {
+  diagnosticErrorCode,
   HELD_CONTEXT_LIMIT,
   mentionsInContent,
   threadParentTarget,
@@ -10,7 +11,6 @@ import {
   type AgentMessageResponse,
   type LocalAgentMessageRequest,
 } from "@lrm/coforge-sdk/internal";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
   locallyHeldSend,
   planAgentInboxFreshness,
@@ -459,7 +459,7 @@ export class AgentMessageOperations {
     const messages =
       this.#ports.isMemoryAgent?.(agentId) && unfolded.length
         ? fenceChannelTranscriptForMemory(unfolded)
-        : elideForAgent(this.#ports.contexts, agentId, unfolded);
+        : elideForAgent(this.#ports.contexts, agentId, unfolded, operation);
     return {
       idempotencyKey: request.idempotencyKey,
       accepted: result.accepted,

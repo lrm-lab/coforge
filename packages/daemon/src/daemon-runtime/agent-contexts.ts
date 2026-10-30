@@ -1,6 +1,10 @@
+import { getLogger } from "@logtape/logtape";
+import { thrownMessage } from "@lrm/coforge-sdk/internal";
 import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
 import type { AgentStateDb } from "#src/persistence/agent-state-db";
 import { reportsCompaction } from "./context-elision";
+
+const logger = getLogger(["coforge", "daemon", "agent-contexts"]);
 
 /**
  * Each Agent's context ledger, for the runtimes that report a finished compaction: only there
@@ -23,6 +27,16 @@ export class AgentContexts {
    * session may be new), or a finished compaction. */
   newContext(agentId: string, runtime?: string): void {
     if (runtime) this.#runtimes.set(agentId, runtime);
-    this.ledger(agentId)?.advance();
+    try {
+      this.ledger(agentId)?.advance();
+    } catch (error) {
+      // The ledger is a convenience: a launch or a compaction finish must not fail over it. The
+      // context stays as it was, so the Agent is shown less repeated text, never less new text.
+      logger.warn("could not start a new Agent context", {
+        event: "agent_context.advance_failed",
+        agent_id: agentId,
+        error: thrownMessage(error),
+      });
+    }
   }
 }

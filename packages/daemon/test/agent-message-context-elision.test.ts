@@ -29,10 +29,10 @@ function record(sequence: number) {
   };
 }
 
-function setup() {
+function setup(stateDb = (root: string, agentId: string) => AgentStateDb.open(root, agentId)) {
   const root = join(tmpdir(), `coforge-context-ops-${crypto.randomUUID()}`);
   roots.push(root);
-  const contexts = new AgentContexts((agentId) => AgentStateDb.open(root, agentId));
+  const contexts = new AgentContexts((agentId) => stateDb(root, agentId));
   const operations = new AgentMessageOperations({
     connection: { workspaceId: "workspace", computerId: "computer" },
     attention: new AgentMessageAttentionIndex(
@@ -63,7 +63,14 @@ function setup() {
       undefined,
       "key",
     );
-  return { contexts, check };
+  const search = () =>
+    operations.handle(
+      "agent-a",
+      { idempotencyKey: "search", context: "context", operation: "search", query: "hello" },
+      undefined,
+      "key",
+    );
+  return { contexts, check, search };
 }
 
 test("a runtime that reports compaction is told a sender and a role line once per context", async () => {
@@ -86,4 +93,21 @@ test("a runtime that does not report compaction is never left short", async () =
     expect(messages.map((m) => m.senderDescription)).toEqual(["Staff engineer", "Staff engineer"]);
     expect(messages.map((m) => m.channelCoordination)).toEqual([ROLE, ROLE]);
   }
+});
+
+test("search results are never elided, and do not use up what a later read shows", async () => {
+  const { contexts, check, search } = setup();
+  contexts.newContext("agent-a", "claude-code");
+  const found = (await search()).messages;
+  expect(found.map((m) => m.senderDescription)).toEqual(["Staff engineer", "Staff engineer"]);
+  expect((await check()).messages[0]!.senderDescription).toBe("Staff engineer");
+});
+
+test("a ledger that cannot be opened costs neither a launch nor any message text", async () => {
+  const { contexts, check } = setup(() => {
+    throw new Error("state database is closed");
+  });
+  expect(() => contexts.newContext("agent-a", "claude-code")).not.toThrow();
+  const { messages } = await check();
+  expect(messages.map((m) => m.senderDescription)).toEqual(["Staff engineer", "Staff engineer"]);
 });

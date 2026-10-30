@@ -92,7 +92,7 @@ export async function checkPendingMessages(
     accepted: true,
     attentionCount: attention.reduce((n, a) => n + a.pendingCount, 0),
     summaries: attention.map((item) => ({ ...item, flags: [...item.flags] })),
-    messages: elideForAgent(ports.contexts, agentId, messages),
+    messages: elideForAgent(ports.contexts, agentId, messages, "check"),
     messageId: "",
     hasMore,
     // The App Inbox is read only to say so when a check found no message.
