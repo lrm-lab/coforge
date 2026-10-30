@@ -142,7 +142,23 @@ export function useOpenConversationTask() {
       }),
     [router],
   );
-  return { openTaskNumber, openTask, closeTask };
+  /** Leaves the popup for a message in the chat, landing on its row: Chat's one-shot `message`
+   * (`useConversationPositionJump`), or `msg` where a page hosts the conversation (`open`). */
+  const showMessage = useCallback(
+    (messageId: string) =>
+      void router.navigate({
+        to: ".",
+        resetScroll: false,
+        search: (previous: ConversationTaskSearch & { threadRootId?: string; open?: string }) => ({
+          ...conversationSearchWithoutTask(previous),
+          view: "chat" as const,
+          threadRootId: undefined,
+          ...(previous.open ? { msg: messageId } : { message: messageId }),
+        }),
+      }),
+    [router],
+  );
+  return { openTaskNumber, openTask, closeTask, showMessage };
 }
 
 /**

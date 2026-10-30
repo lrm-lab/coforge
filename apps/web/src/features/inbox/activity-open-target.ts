@@ -13,16 +13,19 @@ import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server"
  * A mention the viewer was notified of opens at that message, in its thread when it is a reply.
  * Any other item that mentions the viewer opens at its first mention, read or not; otherwise a
  * thread opens scrolled to its first unread reply, and a conversation opens at its first unread
- * message, or its newest one when everything is read.
+ * message, or its newest one when everything is read. A Task's conversation opens as its popup
+ * over the board it is on.
  */
 export function activityOpenTarget({
   place,
   thread,
+  task,
   firstUnreadMessageId,
   firstMentionMessageId,
   latest,
   mentionAction,
 }: ActivityInboxItem): HostedConversationTarget {
+  if (task) return { kind: "channel", id: place.conversationId, task: task.number };
   // A mention item is always a channel's, and never a thread item: its reply's thread is named by
   // the mention itself.
   const kind = mentionAction || place.kind === "channel" ? "channel" : "dm";
@@ -44,7 +47,7 @@ export function activityOpenTarget({
 export function activityChatLink(workspaceSlug: string, target: HostedConversationTarget) {
   const search = target.threadRootId
     ? { threadRootId: target.threadRootId, message: target.messageId }
-    : { message: target.messageId };
+    : { message: target.messageId, task: target.task };
   const hash = target.threadReplyId ? messageHash(target.threadReplyId) : undefined;
   return target.kind === "channel"
     ? {
@@ -62,9 +65,9 @@ export function activityChatLink(workspaceSlug: string, target: HostedConversati
 }
 
 /**
- * The card that stands for what the pane shows: the thread card of the open thread, else the card
- * of the open conversation itself. One card at most, so a channel's card and its thread's card are
- * never marked together.
+ * The card that stands for what the pane shows: the Task card of the open Task popup, the thread
+ * card of the open thread, else the card of the open conversation itself. One card at most, so a
+ * channel's card and its thread's card are never marked together.
  */
 export function openedItemKey(
   items: readonly ActivityInboxItem[],
@@ -76,7 +79,9 @@ export function openedItemKey(
     if (item.place.conversationId !== opened.id) continue;
     const target = activityOpenTarget(item);
     if (target.kind !== opened.kind) continue;
-    if (!target.threadRootId) conversationCard ??= item.key;
+    if (target.task !== undefined) {
+      if (target.task === opened.task) return item.key;
+    } else if (!target.threadRootId) conversationCard ??= item.key;
     else if (opened.threadRootId && target.threadRootId === opened.threadRootId) return item.key;
   }
   return conversationCard;

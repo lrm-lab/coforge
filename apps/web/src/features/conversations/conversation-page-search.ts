@@ -78,6 +78,8 @@ export type HostedConversationTarget = ConversationPageTarget & {
   threadReplyId?: string;
   /** The pane shows only the thread rooted at `messageId`, without the conversation around it. */
   threadAlone?: boolean;
+  /** The Task, by its number, whose popup opens over the conversation. */
+  task?: number;
 };
 
 /**

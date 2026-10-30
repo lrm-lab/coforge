@@ -55,7 +55,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   const link = activityChatLink(workspaceSlug, target);
   const href = router.buildLocation(link).publicHref;
   const unread = item.unreadCount > 0;
-  const { place, thread } = item;
+  const { place, thread, task } = item;
   // A channel goes by its name; a DM, and a thread in one, by who is on the other side, whether an
   // Agent or a member.
   const title =
@@ -64,7 +64,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
       : place.peer.kind === "people" && place.peer.userId === viewerId
         ? m.conversation_dm_self_name({ name: place.peer.displayName })
         : place.peer.displayName;
-  // Where a thread is, before its latest reply.
+  // Where a thread or a Task is, before its latest reply.
   const placeLabel = place.kind === "channel" ? `#${title}` : `@${title}`;
   const sender =
     item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
@@ -126,7 +126,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                   unread ? "text-primary" : "text-secondary",
                 )}
               >
-                {thread ? <Preview message={thread.root} /> : title}
+                {task ? task.title : thread ? <Preview message={thread.root} /> : title}
               </span>
               <ActivityItemBadges item={item} filter={filter} />
               {/* Gives way to the Done check wherever the check shows (hover, focus, the open
@@ -141,7 +141,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               />
             </span>
             <span className="truncate text-sm text-tertiary">
-              {thread && `${placeLabel} · `}
+              {(thread || task) && `${placeLabel} · `}
               <span className="font-semibold text-secondary">{sender}: </span>
               <Preview message={item.latest} />
             </span>
@@ -159,7 +159,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 label={m.activity_inbox_mark_read()}
                 selectionIndicator="none"
               />
-            ) : thread ? null : (
+            ) : thread || task ? null : (
               <Dropdown.Item
                 key="unread"
                 id="unread"
@@ -174,11 +174,11 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               label={m.activity_inbox_menu_done()}
               selectionIndicator="none"
             />
-            {thread && place.kind === "channel" && (
+            {(task || (thread && place.kind === "channel")) && (
               <Dropdown.Item
                 id="unfollow"
                 icon={BellOff01}
-                label={m.conversation_thread_unfollow()}
+                label={task ? m.tasks_unfollow() : m.conversation_thread_unfollow()}
                 selectionIndicator="none"
               />
             )}
@@ -247,9 +247,14 @@ function ActivityItemBadges({
 }) {
   const task = item.thread?.task;
   const showMention = filter !== "mentions" && item.unreadMention;
-  if (!task && !showMention && item.unreadCount === 0) return null;
+  if (!task && !item.task && !showMention && item.unreadCount === 0) return null;
   return (
     <span className="flex shrink-0 items-center gap-1.5">
+      {item.task && (
+        <Badge type="color" size="sm" color="gray">
+          #{item.task.number}
+        </Badge>
+      )}
       {task && (
         <Badge type="color" size="sm" color={TASK_STATUS_COLOR[task.status].badge}>
           #{task.number}

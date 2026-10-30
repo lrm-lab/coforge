@@ -1,10 +1,9 @@
 import type { ComponentProps } from "react";
 
-import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { ConversationPane } from "./conversation-pane";
 import type { DirectConversationView } from "./conversation-types";
-import { ThreadLoadStatus, ThreadRootState, type ThreadRootLoad } from "./thread-root-state";
+import { ThreadLoadStatus, ThreadRootState, threadRootLoadOf } from "./thread-root-state";
 import { useConversationThread } from "./thread-queries";
 
 type PaneProps = ComponentProps<typeof ConversationPane>;
@@ -29,11 +28,7 @@ export function ThreadPane({
 }) {
   const thread = useConversationThread(conversation.conversationId, root.id);
   if (!thread.data) {
-    const load: ThreadRootLoad = thread.isError
-      ? isAppErrorCode(thread.error, "NOT_FOUND")
-        ? { status: "missing" }
-        : { status: "failed", errorId: isAppError(thread.error) ? thread.error.errorId : undefined }
-      : { status: "loading" };
+    const load = threadRootLoadOf(thread);
     const retry = () => void thread.refetch();
     // The Task popup shows the Task itself in place of a header, and its thread below it.
     return rootSlot ? (

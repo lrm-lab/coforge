@@ -13,6 +13,11 @@ import {
   markDirectThreadRead,
   setDirectConversationUnread,
 } from "#src/features/conversations/conversations.functions";
+import {
+  markTaskConversationRead,
+  setTaskFollow,
+} from "#src/features/tasks/task-conversation.functions";
+import { taskFollowQueryKey } from "#src/features/tasks/task-follow";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import { markActivityItemDone, setActivityMentionRead } from "./activity-inbox.functions";
 import {
@@ -49,6 +54,8 @@ export function useActivityItemActions({
   const setChannelUnread = useServerFn(setPublicConversationUnread);
   const setDirectUnread = useServerFn(setDirectConversationUnread);
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
+  const markTaskRead = useServerFn(markTaskConversationRead);
+  const setTaskFollowed = useServerFn(setTaskFollow);
   const markDone = useServerFn(markActivityItemDone);
   const setMentionRead = useServerFn(setActivityMentionRead);
 
@@ -75,12 +82,17 @@ export function useActivityItemActions({
     function read({
       place,
       thread,
+      task,
       latestSequence: throughSequence,
       mentionAction,
     }: ActivityInboxItem) {
       // A mention the viewer was notified of keeps its own read state: they are not in the channel.
       if (mentionAction)
         return setMentionRead({ data: { resolutionId: mentionAction.resolutionId, read: true } });
+      if (task)
+        return markTaskRead({
+          data: { conversationId: place.conversationId, number: task.number, throughSequence },
+        });
       if (thread) {
         const threadRootId = thread.root.id;
         return place.kind === "channel"
@@ -108,7 +120,15 @@ export function useActivityItemActions({
               ? setChannelUnread({ data: { channelId: place.conversationId, unread: true } })
               : setDirectUnread({ data: { conversationId: place.conversationId, unread: true } }),
         ),
-      unfollow: ({ place, thread }: ActivityInboxItem) => {
+      unfollow: ({ place, thread, task }: ActivityInboxItem) => {
+        if (task) {
+          const ref = { conversationId: place.conversationId, number: task.number };
+          // The Task's popup may be open beside the list, its menu reading the follow.
+          return run(async () => {
+            await setTaskFollowed({ data: { ...ref, follow: false } });
+            await queryClient.invalidateQueries({ queryKey: taskFollowQueryKey(ref) });
+          });
+        }
         if (!thread) return;
         run(() =>
           setThreadFollowed({
@@ -136,7 +156,8 @@ export function useActivityItemActions({
                     }
                   : {
                       kind: "conversation",
-                      conversationId: item.place.conversationId,
+                      // A Task's item is its own conversation's, listed under the board.
+                      conversationId: item.task?.conversationId ?? item.place.conversationId,
                       throughSequence: item.latestSequence,
                     },
             });
@@ -158,6 +179,8 @@ export function useActivityItemActions({
     setChannelUnread,
     setDirectUnread,
     setThreadFollowed,
+    markTaskRead,
+    setTaskFollowed,
     markDone,
     setMentionRead,
   ]);

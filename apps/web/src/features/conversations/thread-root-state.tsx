@@ -2,6 +2,7 @@ import { AlertCircle } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { MessageSkeleton } from "./message-skeleton";
 import { ThreadPaneHeader } from "./thread-pane-header";
@@ -18,6 +19,13 @@ export type ThreadRootLoad =
   | { status: "loading" }
   | { status: "missing" }
   | { status: "failed"; errorId?: string };
+
+/** Where a read that has not answered yet stands: in flight, or failed as missing or otherwise. */
+export function threadRootLoadOf(read: { isError: boolean; error: unknown }): ThreadRootLoad {
+  if (!read.isError) return { status: "loading" };
+  if (isAppErrorCode(read.error, "NOT_FOUND")) return { status: "missing" };
+  return { status: "failed", errorId: isAppError(read.error) ? read.error.errorId : undefined };
+}
 
 /**
  * The thread while it is read, drawn as the loaded pane draws it: the first message over its rule,

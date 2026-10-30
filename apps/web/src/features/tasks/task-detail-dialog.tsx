@@ -27,6 +27,8 @@ import { TaskPerson } from "./task-owner";
 import { getTaskMoveCommand, taskStatusOptions } from "./task-move";
 import { executeTask } from "./tasks.functions";
 import { TaskDeleteDialog, taskDeleteMenuItem, useCanDeleteTask } from "./task-delete";
+import { TaskSourceLink } from "./task-source";
+import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
 import { useConversationTaskWrites } from "./use-conversation-tasks";
 import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workflow";
 
@@ -123,6 +125,9 @@ type TaskDetailDialogProps = {
   members?: readonly Mentionable[];
   currentMemberId: string | null;
   thread?: (taskSection: ReactNode) => ReactNode;
+  /** Leaves the popup for a message in the conversation's chat; where absent, a Task made from
+   * someone's message does not link it. */
+  onOpenSource?: (messageId: string) => void;
 };
 
 /**
@@ -139,15 +144,28 @@ export function TaskDetailDialog({
   members,
   currentMemberId,
   thread,
+  onOpenSource,
 }: TaskDetailDialogProps) {
   const [deleting, setDeleting] = useState(false);
   const canDelete = useCanDeleteTask(task, currentMemberId);
+  // A Task followed for its own conversation; a message's thread keeps the thread's own follow.
+  const follow = useTaskFollow(task, open && Boolean(thread) && ownsDiscussion(task));
   const section = (
     <TaskSection
       task={task}
       onCommand={onCommand}
       members={members}
       currentMemberId={currentMemberId}
+      source={
+        task.sourceMessageId && onOpenSource && conversationName
+          ? {
+              conversationId: task.conversationId,
+              messageId: task.sourceMessageId,
+              channel: conversationName,
+              onOpen: () => onOpenSource(task.sourceMessageId!),
+            }
+          : undefined
+      }
     />
   );
   return (
@@ -175,7 +193,7 @@ export function TaskDetailDialog({
                   {m.tasks_details_title({ number: String(task.number) })}
                 </Heading>
               </div>
-              {canDelete && (
+              {(follow || canDelete) && (
                 <Dropdown.Root>
                   <ButtonUtility
                     tooltip={m.tasks_more_actions({ number: String(task.number) })}
@@ -183,9 +201,10 @@ export function TaskDetailDialog({
                     size="sm"
                     color="tertiary"
                   />
-                  <Dropdown.Popover placement="bottom end" className="w-48">
+                  <Dropdown.Popover placement="bottom end" className="w-52">
                     <Dropdown.Menu onAction={(key) => key === "delete" && setDeleting(true)}>
-                      {taskDeleteMenuItem()}
+                      {follow && taskFollowMenuItem(follow)}
+                      {canDelete && taskDeleteMenuItem()}
                     </Dropdown.Menu>
                   </Dropdown.Popover>
                 </Dropdown.Root>
@@ -242,11 +261,14 @@ function TaskSection({
   onCommand,
   members,
   currentMemberId,
+  source,
 }: {
   task: TaskView;
   onCommand?: (command: DetailCommand) => Promise<void>;
   members?: readonly Mentionable[];
   currentMemberId: string | null;
+  /** The message the Task was made from, as a link back to it. */
+  source?: ComponentProps<typeof TaskSourceLink>;
 }) {
   const execute = useServerFn(executeTask);
   const writeTasks = useConversationTaskWrites();
@@ -364,6 +386,11 @@ function TaskSection({
         <TaskField label={m.tasks_created_by()} className="max-sm:hidden">
           <TaskPerson person={creator} />
         </TaskField>
+        {source && (
+          <TaskField label={m.tasks_source()} className="sm:col-span-3">
+            <TaskSourceLink {...source} />
+          </TaskField>
+        )}
       </dl>
       {error && (
         <p role="alert" className="text-sm text-error-primary">

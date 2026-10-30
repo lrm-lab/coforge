@@ -11,6 +11,7 @@ import { resolveVisibleConversationSlot } from "#src/features/agents/profile-pan
 import { TaskDetailDialog } from "#src/features/tasks/task-detail-dialog";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
+import { ownsDiscussion } from "#src/features/tasks/task-follow";
 
 import { ConversationPane } from "./conversation-pane";
 import { SeenByDirectory } from "./message-seen-by";
@@ -25,6 +26,7 @@ import {
 } from "./open-conversation-thread";
 import { makeReferenceBodyFormatter } from "./mention-text";
 import { ThreadPane } from "./thread-pane";
+import { TaskDiscussionPane } from "./task-discussion-pane";
 import { NO_THREADS } from "./thread-summary-model";
 import { useThreadTailSequence } from "./thread-queries";
 import { ThreadRootState, type ThreadRootLoad } from "./thread-root-state";
@@ -109,21 +111,28 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     closeTask: closeTaskReference,
   } = taskPopup ?? conversationTaskPopup;
   const openTask = useNumberedTask(conversation.conversationId, openTaskNumber) ?? taskPopup?.task;
-  const openTaskMessageId = openTask?.messageId ?? undefined;
+  // A Task with a conversation of its own, or made without a message (one nobody has spoken about
+  // yet), shows that conversation, never a message's thread.
+  const taskDiscussionId = openTask?.discussionConversationId ?? undefined;
+  const ownDiscussion = Boolean(openTask && ownsDiscussion(openTask));
+  const openTaskMessageId = ownDiscussion ? undefined : (openTask?.messageId ?? undefined);
   const { root: openTaskRoot, reads: taskRootReads } = useTaskPopupRoot(
     conversation,
     openTaskMessageId,
   );
   // What every thread pane shares: the side pane and the thread under the task popup.
-  const threadPaneProps = (root: DirectConversationView["messages"][number]) => ({
+  const sidePaneProps = {
     ...conversationProps,
-    streamRead: windowRead,
     onOpenTask: openTaskReference,
     channelNames,
     channels: channelList,
     onLoadMessageAround,
-    // A thread has its own scroll position; it must never steer the main stream's refetch policy.
+    // A side pane has its own scroll position; it must never steer the main stream's refetch policy.
     onFollowingLatestChange: undefined,
+  };
+  const threadPaneProps = (root: DirectConversationView["messages"][number]) => ({
+    ...sidePaneProps,
+    streamRead: windowRead,
     root,
     conversation: { ...conversation, readThroughSequence: threadCursor(root.id) },
     onSend: (
@@ -134,10 +143,15 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         threadRootId: root.id,
       }),
   });
+  const taskRepliesEmpty = {
+    title: m.tasks_no_replies(),
+    description: "",
+    media: <MessageSquare aria-hidden="true" className="size-6 text-tertiary" />,
+  };
   const dialog = openTask ? (
     <TaskDetailDialog
       // One popup instance per task: switching tasks from a chip inside the popup starts fresh.
-      key={openTask.messageId}
+      key={openTask.id}
       task={openTask}
       open
       onOpenChange={(next) => {
@@ -147,19 +161,27 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       conversationName={conversationName}
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}
+      onOpenSource={taskPopup ? undefined : conversationTaskPopup.showMessage}
       thread={
-        openTaskRoot &&
-        ((taskSection) => (
-          <ThreadPane
-            {...threadPaneProps(openTaskRoot)}
-            rootSlot={taskSection}
-            emptyState={{
-              title: m.tasks_no_replies(),
-              description: "",
-              media: <MessageSquare aria-hidden="true" className="size-6 text-tertiary" />,
-            }}
-          />
-        ))
+        ownDiscussion
+          ? (taskSection) => (
+              <TaskDiscussionPane
+                {...sidePaneProps}
+                conversationId={taskDiscussionId}
+                board={{ conversationId: conversation.conversationId, number: openTask.number }}
+                mentionables={conversation.mentionables}
+                rootSlot={taskSection}
+                emptyState={taskRepliesEmpty}
+              />
+            )
+          : openTaskRoot &&
+            ((taskSection) => (
+              <ThreadPane
+                {...threadPaneProps(openTaskRoot)}
+                rootSlot={taskSection}
+                emptyState={taskRepliesEmpty}
+              />
+            ))
       }
     />
   ) : null;

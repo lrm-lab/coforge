@@ -35,3 +35,8 @@ export const ATTACHMENT_COMMENTS_QUERY_PREFIX = ["attachment-comments"] as const
 export function attachmentCommentsQueryKey(attachmentId: string) {
   return [...ATTACHMENT_COMMENTS_QUERY_PREFIX, attachmentId] as const;
 }
+
+/** A Task's own conversation, read in pages from its newest message (`useTaskConversation`). */
+export function taskConversationQueryKey(conversationId: string | undefined) {
+  return ["conversation", "task", conversationId] as const;
+}

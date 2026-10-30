@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 
 import { composerDraftKey } from "./composer-draft";
+import { useComposerScope } from "./composer-scope";
 import { useMessageOutbox, useOutboxEntries } from "./use-message-outbox";
 
 /**
@@ -22,7 +23,8 @@ export function usePaneOutbox({
   /** A new send started: the pane brings its latest messages into view. */
   onNewSend: () => void;
 }) {
-  const outboxDraftKey = composerDraftKey(conversation.conversationId, rootId);
+  const outboxDraftKey =
+    useComposerScope()?.draftKey ?? composerDraftKey(conversation.conversationId, rootId);
   const outbox = useMessageOutbox({ draftKey: outboxDraftKey, onSend, onSent });
   const outboxEntries = useOutboxEntries(outboxDraftKey);
   const loadedMessageIds = useMemo(

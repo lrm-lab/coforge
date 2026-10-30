@@ -46,8 +46,9 @@ export function ConversationTaskBoard({
   taskView,
   search,
   onOpenTask,
+  onOpenMessage,
   ...conversation
-}: Omit<ConversationBoard, "loading" | "error"> & {
+}: Omit<ConversationBoard, "loading" | "error" | "onOpenCreated"> & {
   conversationId: string;
   /** The viewer's membership in the conversation; empty when they are not a member. */
   currentMemberId: string;
@@ -55,6 +56,8 @@ export function ConversationTaskBoard({
   taskView: ConversationTaskCommands;
   search: Parameters<typeof useTaskBoardSearch>[0];
   onOpenTask: (number: number) => void;
+  /** Where a Task made from a message is shown: that message in the chat. */
+  onOpenMessage: (messageId: string) => void | Promise<void>;
 }) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const view = useTaskBoardSearch(search);
@@ -88,7 +91,14 @@ export function ConversationTaskBoard({
       view={view}
       onOpenTask={(task) => onOpenTask(task.number)}
       onCommand={run}
-      conversation={{ ...conversation, loading, error }}
+      conversation={{
+        ...conversation,
+        loading,
+        error,
+        // A Task made from a message opens on it in the chat; one without a message, its popup.
+        onOpenCreated: (task) =>
+          task.messageId ? onOpenMessage(task.messageId) : onOpenTask(task.number),
+      }}
     />
   );
 }

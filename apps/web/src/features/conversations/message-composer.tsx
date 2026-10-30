@@ -13,6 +13,7 @@ import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { useFileDrop } from "./use-file-drop";
+import { useComposerScope } from "./composer-scope";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
@@ -112,7 +113,8 @@ export function MessageComposer({
   const toast = useAppToast();
   // Device-local draft, scoped to this chat (and thread): typing here never touches another
   // conversation, and the text survives switching chats, reloads, and restarts on this device.
-  const draftKey = composerDraftKey(conversationId, threadRootId);
+  const scope = useComposerScope();
+  const draftKey = scope?.draftKey ?? composerDraftKey(conversationId, threadRootId);
   // A failed send keeps its idempotency key so a retry of the same text is idempotent.
   const retryRef = useRef<{ body: string; idempotencyKey: string; asTask: boolean } | undefined>(
     undefined,
@@ -208,7 +210,7 @@ export function MessageComposer({
     },
   });
   const { attachments, setAttachments, uploading, anyFailed, room, addFiles, tray } =
-    useComposerAttachments(conversationId);
+    useComposerAttachments(scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
   // Set only by editing an unsent Task back into the composer: Send then sends it as a Task again.
   const [asTask, setAsTask] = useState(false);
   // The edited-back Task belongs to its draft; another conversation's Send is a plain send again.

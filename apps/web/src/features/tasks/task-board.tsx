@@ -42,8 +42,8 @@ export type ConversationBoard = {
   error?: string;
   /** Creates the Tasks together, in the given order. */
   onCreateTask?: (titles: string[], idempotencyKey: string) => Promise<TaskView[]>;
-  /** Where a single Task just created from the board is shown: its message in the chat. */
-  onOpenMessage: (messageId: string) => void | Promise<void>;
+  /** Shows a single Task just created from the board. */
+  onOpenCreated: (task: TaskView) => void | Promise<void>;
 };
 
 const FINISHED: readonly FinishedStatus[] = ["done", "closed"];
@@ -199,10 +199,9 @@ export function TaskBoard<T extends BoardTask>({
           onOpenChange={setCreateOpen}
           onCreate={async (titles, idempotencyKey) => {
             const created = await onCreateTask(titles, idempotencyKey);
-            // One new Task opens its message in the chat; several stay on the board, where they
-            // now show in To do.
-            const hostMessageId = created.length === 1 ? created[0]!.messageId : null;
-            if (hostMessageId) await conversation?.onOpenMessage(hostMessageId);
+            // One new Task opens: its message in the chat, or, made without one, its popup.
+            // Several stay on the board, where they now show in To do.
+            if (created.length === 1) await conversation?.onOpenCreated(created[0]!);
           }}
         />
       )}

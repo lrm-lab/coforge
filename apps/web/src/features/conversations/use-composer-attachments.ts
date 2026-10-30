@@ -12,9 +12,10 @@ import { localId } from "./composer-behavior";
 
 /**
  * The composer's attachments: the files chosen for the next send, each uploaded as soon as it is
- * added, one `/api/attachments` request at a time.
+ * added, one `/api/attachments` request at a time, to the conversation `uploadTo` gives (made, for
+ * a Task's, when the first file needs it: `ComposerScope.uploadTo`).
  */
-export function useComposerAttachments(conversationId: string) {
+export function useComposerAttachments(uploadTo: () => Promise<string>) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   /** The uploads in flight, so removing a tile cancels its request, and the tiles removed, so one
    * still waiting its turn is never sent. */
@@ -41,7 +42,7 @@ export function useComposerAttachments(conversationId: string) {
     inFlight.current.set(pending.localId, controller);
     try {
       const id = await uploadAttachment(
-        conversationId,
+        await uploadTo(),
         pending.file,
         (progress) =>
           setAttachments((current) =>

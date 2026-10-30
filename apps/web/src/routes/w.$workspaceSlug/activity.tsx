@@ -75,8 +75,14 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
 function ActivityPage() {
   // Only what the list and the pane's target read: the pane's own address state is read where it
   // is rendered, so a tab or Task popup change there does not re-render the list.
-  const { filter, open, msg, threadRootId } = Route.useSearch({
-    select: ({ filter, open, msg, threadRootId }) => ({ filter, open, msg, threadRootId }),
+  const { filter, open, msg, threadRootId, task } = Route.useSearch({
+    select: ({ filter, open, msg, threadRootId, task }) => ({
+      filter,
+      open,
+      msg,
+      threadRootId,
+      task,
+    }),
     structuralSharing: true,
   });
   const navigate = useNavigate({ from: Route.fullPath });
@@ -107,6 +113,7 @@ function ActivityPage() {
           open: hostedConversationOpenParam(next),
           msg: next.messageId,
           threadRootId: next.threadRootId,
+          task: next.task,
         }),
         hash: next.threadReplyId ? messageHash(next.threadReplyId) : undefined,
         replace: !listHistory.openOverList(),
@@ -128,8 +135,8 @@ function ActivityPage() {
     const target = parseHostedConversation(open, msg);
     if (!target) return undefined;
     const threadAlone = target.threadAlone && msg !== undefined;
-    return { ...target, threadRootId, threadAlone: threadAlone || undefined };
-  }, [open, msg, threadRootId]);
+    return { ...target, threadRootId, threadAlone: threadAlone || undefined, task };
+  }, [open, msg, threadRootId, task]);
   return (
     <ActivityInboxView
       filter={filter ?? "all"}
