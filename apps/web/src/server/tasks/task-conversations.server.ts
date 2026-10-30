@@ -12,6 +12,7 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
+import { postUnfollowNotice } from "./task-unfollow-notice.server";
 import { postTaskMessage } from "./task-discussion-send.server";
 import {
   discussionOf,
@@ -242,12 +243,16 @@ export class TaskConversations {
     return { taskRef: `${boardName}:#${task.number}`, following: true, changed: created };
   }
 
-  /** `reason` is for the notice in the conversation that someone stopped following (not yet shown). */
-  async unfollow(principal: TaskPrincipal, ref: TaskConversationRef, _reason?: string) {
-    const { task, member, boardName } = await this.resolve(principal, ref, { member: true });
+  /** `reason` is shown in the notice that someone stopped following (`task-unfollow-notice`). */
+  async unfollow(principal: TaskPrincipal, ref: TaskConversationRef, reason?: string) {
+    const { task, member, scope, boardName } = await this.resolve(principal, ref, {
+      member: true,
+    });
     const removed = await this.ports.db.taskFollow.deleteMany({
       where: { taskId: task.id, memberId: member!.id },
     });
+    if (removed.count > 0)
+      await postUnfollowNotice(this.ports, scope, task, member!.id, reason).catch(() => undefined);
     return {
       taskRef: `${boardName}:#${task.number}`,
       following: false,
@@ -338,6 +343,7 @@ export class TaskConversations {
         number: true,
         title: true,
         status: true,
+        messageId: true,
         discussionConversationId: true,
       },
     });

@@ -268,3 +268,25 @@ test("an unreceived reply replays to its follower by the task it names, until th
     data: { leftAt: null },
   });
 });
+
+test("stopping to follow leaves a notice with the reason in the conversation, once, and wakes nobody", async () => {
+  await conversations.follow(as("peer"), ref);
+  const discussionId = (await db.task.findUniqueOrThrow({ where: { id: taskId } }))
+    .discussionConversationId!;
+  const before = await db.message.count({ where: { conversationId: discussionId } });
+  await conversations.unfollow(as("peer"), ref, "not mine <@agent:x>");
+  await conversations.unfollow(as("peer"), ref, "again");
+  const posted = await db.message.findMany({
+    where: { conversationId: discussionId },
+    orderBy: { sequence: "desc" },
+    take: 5,
+    include: { deliveries: true },
+  });
+  expect(posted.length).toBe(Math.min(5, before + 1));
+  expect(posted[0]).toMatchObject({
+    senderMemberId: null,
+    body: expect.stringContaining("stopped following this task: not mine < @agent:x>."),
+  });
+  expect(posted[0]!.deliveries).toEqual([]);
+  await conversations.follow(as("peer"), ref);
+});
