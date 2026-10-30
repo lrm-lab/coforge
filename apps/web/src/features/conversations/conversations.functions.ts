@@ -16,6 +16,7 @@ import {
 } from "./conversation.schemas";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { TaskConversationPages } from "#src/server/conversations/task-conversation-page.server";
 import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
 import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
@@ -325,4 +326,42 @@ export const toggleDirectMessageReaction = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { reactions } = await toggleDirectReaction(context, data);
     return reactions ?? undefined;
+  });
+
+/** The newest page of a task's own conversation (older ones by `beforeSequence`), read by its
+ * board's rule: the same shape as a direct conversation's, so the message list shows it. */
+export const loadTaskConversation = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationPageInputSchema)
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    const page = await new TaskConversationPages(db).page(
+      workspaceId,
+      user.id,
+      data.conversationId,
+      {
+        beforeSequence: data.beforeSequence,
+        afterSequence: data.afterSequence,
+        limit: data.limit,
+      },
+    );
+    return {
+      ...page,
+      messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
+    };
+  });
+
+/** What arrived in a task's conversation after `afterSequence`. */
+export const loadTaskConversationUpdates = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationUpdatesInputSchema)
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    const messages = await new TaskConversationPages(db).updates(
+      workspaceId,
+      user.id,
+      data.conversationId,
+      data.afterSequence,
+    );
+    return attachViewerViews(db, workspaceId, user.id, messages);
   });

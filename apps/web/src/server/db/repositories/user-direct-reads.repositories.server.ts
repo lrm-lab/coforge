@@ -114,6 +114,65 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
   return { members: row.members, sender, agent, peer };
 }
 
+/** What a conversation member row carries for the pane to offer and resolve them. */
+export type ConversationMentionableMember = {
+  user: {
+    id: string;
+    username: string;
+    displayName: string;
+    description: string | null;
+    avatarObjectKey: string | null;
+  } | null;
+  agent: {
+    id: string;
+    name: string;
+    displayName: string | null;
+    description: string | null;
+    avatarMascot: string | null;
+  } | null;
+};
+
+/**
+ * The people and Agents of a conversation as the pane offers and resolves them: their public
+ * profiles, sorted by handle; mention affinity is zero (nobody has been named yet), and the viewer
+ * is included so their own stored mention resolves instead of rendering a raw token.
+ */
+export function conversationMentionables(
+  workspaceId: string,
+  members: readonly ConversationMentionableMember[],
+) {
+  return members
+    .map((member) =>
+      member.user
+        ? {
+            kind: "user" as const,
+            id: member.user.id,
+            handle: member.user.username,
+            label: humanLabel(member.user),
+            description: member.user.description?.trim() ?? "",
+            avatarUrl: workspaceUserAvatarUrl(
+              workspaceId,
+              member.user.id,
+              member.user.avatarObjectKey ?? null,
+            ),
+            mentionScore: 0,
+          }
+        : member.agent
+          ? {
+              kind: "agent" as const,
+              id: member.agent.id,
+              handle: member.agent.name,
+              label: member.agent.displayName?.trim() || member.agent.name,
+              description: member.agent.description?.trim() ?? "",
+              avatarUrl: agentAvatarUrl(member.agent.id, member.agent.avatarMascot),
+              mentionScore: 0,
+            }
+          : undefined,
+    )
+    .filter((mentionable) => mentionable !== undefined)
+    .sort((left, right) => left.handle.localeCompare(right.handle));
+}
+
 /**
  * A window of one of the viewer's direct conversations, by its id, and who is on the other side:
  * an Agent, or a member (the viewer themself in their own). Whether the viewer may read it is
@@ -220,36 +279,7 @@ export async function openConversationForUser(
     viewerId: sender.user ? userId : undefined,
     // DM mention candidates have zero affinity and sort by handle. Include the viewer so
     // their own stored human mention resolves instead of rendering a raw token.
-    mentionables: members
-      .map((member) =>
-        member.user
-          ? {
-              kind: "user" as const,
-              id: member.user.id,
-              handle: member.user.username,
-              label: humanLabel(member.user),
-              description: member.user.description?.trim() ?? "",
-              avatarUrl: workspaceUserAvatarUrl(
-                workspaceId,
-                member.user.id,
-                member.user.avatarObjectKey ?? null,
-              ),
-              mentionScore: 0,
-            }
-          : member.agent
-            ? {
-                kind: "agent" as const,
-                id: member.agent.id,
-                handle: member.agent.name,
-                label: member.agent.displayName?.trim() || member.agent.name,
-                description: member.agent.description?.trim() ?? "",
-                avatarUrl: agentAvatarUrl(member.agent.id, member.agent.avatarMascot),
-                mentionScore: 0,
-              }
-            : undefined,
-      )
-      .filter((mentionable) => mentionable !== undefined)
-      .sort((left, right) => left.handle.localeCompare(right.handle)),
+    mentionables: conversationMentionables(workspaceId, members),
     hasOlder,
     hasNewer,
     messages: messages.map((message) => mapBrowserMessage(message, workspaceId)),
