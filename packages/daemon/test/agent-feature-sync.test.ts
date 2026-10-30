@@ -69,3 +69,34 @@ test("an Agent that is not live is never restarted by a delivery", async () => {
     await sync.restartIfChanged({ agentId: "a", features: { taskConversations: true } } as never),
   ).toBe(false);
 });
+
+test("a launch config that states no features never restarts the session over a delivery", async () => {
+  const restarts: string[] = [];
+  const sync = new AgentFeatureSync({
+    live: () => true,
+    keep: () => {},
+    restart: async (agentId) => void restarts.push(agentId),
+  });
+  sync.launched("a", {});
+  const taken = await sync.restartIfChanged({
+    agentId: "a",
+    features: { taskConversations: true },
+  } as never);
+  expect(taken).toBe(false);
+  expect(restarts).toEqual([]);
+});
+
+test("a restart that fails leaves no notice for a prompt that did not change", async () => {
+  const sync = new AgentFeatureSync({
+    live: () => true,
+    keep: () => {},
+    restart: async () => {
+      throw new Error("the process would not end");
+    },
+  });
+  sync.launched("a", { features: { taskConversations: false } });
+  await expect(
+    sync.restartIfChanged({ agentId: "a", features: { taskConversations: true } } as never),
+  ).rejects.toThrow();
+  expect(sync.noticePrefix("a")).toBe("");
+});

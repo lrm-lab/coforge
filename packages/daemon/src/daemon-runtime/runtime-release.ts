@@ -156,6 +156,14 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
   /** Restarts a live runtime so its next launch reads fresh launch config (a feature changed).
    * Whatever waits for the launch, the delivery that revealed the change included, is presented
    * by it. */
+  canRestartForFreshConfig(agentId: string): boolean {
+    return Boolean(
+      this.#ports.launch(agentId) &&
+      this.#ports.runtime(agentId)?.session &&
+      this.#ports.restartConfig(agentId),
+    );
+  }
+
   async restartForFreshConfig(agentId: string): Promise<void> {
     const launch = this.#ports.launch(agentId);
     const session = this.#ports.runtime(agentId)?.session;

@@ -317,9 +317,7 @@ export class DaemonRuntime {
   /** Ends a live process without a stopped/crashed Activity, for a stalled provider's restart or
    * a cold idle stop; the Agent stays active and wakeable. */
   readonly #features = new AgentFeatureSync({
-    live: (agentId) =>
-      this.#agentProcessManager.session(agentId) !== undefined &&
-      this.#currentActivityLaunches.has(agentId),
+    live: (agentId) => this.#runtimeRelease.canRestartForFreshConfig(agentId),
     keep: (m) => this.#exitedDelivery.keepForNextLaunch(m.agentId, m),
     restart: (agentId) => this.#runtimeRelease.restartForFreshConfig(agentId),
   });

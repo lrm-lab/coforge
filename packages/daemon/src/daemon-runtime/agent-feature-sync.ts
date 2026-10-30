@@ -33,7 +33,11 @@ export class AgentFeatureSync {
 
   /** What the session being launched now was told, from its launch config identity. */
   launched(agentId: string, identity: WireFeatures | undefined): void {
-    this.#launched.set(agentId, identity?.features?.taskConversations === true);
+    // A launch config that states no features (an older server, or a rollout mixing both) says
+    // nothing to compare against, so no delivery restarts the session over it.
+    if (identity?.features)
+      this.#launched.set(agentId, identity.features.taskConversations === true);
+    else this.#launched.delete(agentId);
   }
 
   /** Restarts the Agent when `message` shows a changed feature; true when it took the delivery. */
@@ -46,7 +50,13 @@ export class AgentFeatureSync {
     if (now === was) return false;
     this.#notices.set(agentId, now ? FEATURE_NOTICE_ON : FEATURE_NOTICE_OFF);
     this.ports.keep(message);
-    await this.ports.restart(agentId);
+    try {
+      await this.ports.restart(agentId);
+    } catch (error) {
+      // The session keeps its old prompt, so the notice would say what is not true.
+      this.#notices.delete(agentId);
+      throw error;
+    }
     return true;
   }
 
