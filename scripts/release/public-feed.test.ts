@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { FEED_READ_TIMEOUT_MS, type FeedFetch, readFeedObject } from "./public-feed";
+import { FEED_READ_TIMEOUT_MS, feedOssConnection, type FeedFetch, readFeedObject } from "./public-feed";
 
 /** A fetch that answers from `answers` in order, then repeats the last one. */
 function scripted(...answers: (() => Promise<Response>)[]): {
@@ -96,5 +96,59 @@ describe("reading a public release feed", () => {
       }),
     ).rejects.toThrow("no response within 5 ms");
     expect(seen).toEqual([1]);
+  });
+
+  test("an OSS client reads the object, not the CDN URL", async () => {
+    const { fetch, calls } = scripted(ok("unreached"));
+    const read: string[] = [];
+    const oss = { get: async (key: string) => { read.push(key); return { content: Buffer.from("1.2.6\n") }; } };
+    await expect(
+      readFeedObject("https://releases.coforge.cn", "latest", fetch, { ...options, oss }),
+    ).resolves.toBe("1.2.6\n");
+    expect(read).toEqual(["latest"]);
+    expect(calls).toEqual([]);
+  });
+
+  test("an OSS 4xx is the feed's answer, not retried; a 5xx is", async () => {
+    const failures: number[] = [];
+    let attempt = 0;
+    const oss = {
+      get: async (_key: string) => {
+        attempt++;
+        if (attempt === 1) { failures.push(0); throw Object.assign(new Error("denied"), { status: 403 }); }
+        return { content: "1.2.7\n" };
+      },
+    };
+    await expect(
+      readFeedObject("https://releases.coforge.cn", "latest", scripted()["fetch"], { ...options, oss }),
+    ).rejects.toThrow("oss://releases.coforge.cn/latest: denied");
+    expect(attempt).toBe(1);
+
+    let five = 0;
+    const retryable = {
+      get: async (_key: string) => {
+        five++;
+        if (five === 1) throw Object.assign(new Error("busy"), { status: 503 });
+        return { content: "1.2.8\n" };
+      },
+    };
+    await expect(
+      readFeedObject("https://releases.coforge.cn", "latest", scripted()["fetch"], { ...options, oss: retryable }),
+    ).resolves.toBe("1.2.8\n");
+    expect(five).toBe(2);
+  });
+
+  test("the known feeds name their backing buckets", () => {
+    expect(feedOssConnection("https://releases.coforge.cn")).toEqual({
+      bucket: "coforge-releases",
+      endpoint: "oss-accelerate.aliyuncs.com",
+      region: "oss-cn-beijing",
+    });
+    expect(feedOssConnection("https://releases-staging.coforge.cn")).toEqual({
+      bucket: "coforge-releases-staging",
+      endpoint: "oss-accelerate.aliyuncs.com",
+      region: "oss-cn-beijing",
+    });
+    expect(feedOssConnection("https://cdn.example/feed")).toBeUndefined();
   });
 });

@@ -42,7 +42,7 @@ import { compileTargetArtifacts, isReleaseTarget, type ReleaseTarget } from "./c
 import { darwinSignerFor, type DarwinSigningIdentity } from "./darwin-signing";
 import { assertInstallerCoversRelease, productInstallerProtocol } from "./installer-feed";
 import { resolvePhotonWasmBytes } from "./photon-wasm";
-import { readFeedObject } from "./public-feed";
+import { feedOssConnection, readFeedObject } from "./public-feed";
 import {
   assertForward,
   assertStagingDevVersion,
@@ -55,94 +55,14 @@ import {
 /* OSS client and credentials                                                                    */
 /* -------------------------------------------------------------------------------------------- */
 
-export interface OssCredentials {
-  accessKeyId: string;
-  accessKeySecret: string;
-  stsToken?: string;
-}
-
-/** Where the object store lives. Production always uses the real bucket over HTTPS
- * (virtual-hosted-style: `https://<bucket>.<endpoint>/<key>`); tests override `endpoint` to a
- * local fixture server and set `cname: true` (so the SDK talks to that host directly instead of
- * prefixing it with the bucket name) and `secure: false`. */
-export interface OssConnection {
-  bucket: string;
-  endpoint: string;
-  /** The bucket's region id (`oss-cn-beijing`), which V4 signing writes into every request's
-   * credential scope. ali-oss does not derive it from `endpoint` and silently defaults to
-   * `oss-cn-hangzhou`, and OSS rejects a scope for the wrong region with `InvalidArgument`.
-   * Defaults to the region named by a public `oss-<region>.aliyuncs.com` endpoint. */
-  region?: string;
-  cname?: boolean;
-  secure?: boolean;
-}
-
-/** The region id a public OSS endpoint names (`oss-cn-beijing.aliyuncs.com` -> `oss-cn-beijing`),
- * or undefined for any other host (a fixture server, a custom domain, or a global transfer
- * acceleration endpoint such as `oss-accelerate.aliyuncs.com`, which names no region). */
-export function regionFromEndpoint(endpoint: string): string | undefined {
-  const host = endpoint.replace(/^https?:\/\//i, "").replace(/[/:].*$/, "");
-  if (/^oss-accelerate(?:-overseas)?\.aliyuncs\.com$/i.test(host)) return undefined;
-  const match = /^(oss-[a-z0-9-]+?)(?:-internal)?\.aliyuncs\.com$/i.exec(host);
-  return match?.[1];
-}
-
-/** Builds the ali-oss client this script uploads through, with V4 signing (`authorizationV4:
- * true`) - see the file banner for why V1 is no longer an option for this bucket. `credentials`,
- * when given, is used as-is; this is how tests point the client at a local fixture server with
- * static test credentials. Without it, credentials come from the `@alicloud/credentials` default
- * chain, and `refreshSTSToken` re-reads that chain whenever the resolved credential carries a
- * security token - the same pattern `apps/web`'s OSS file storage uses - so a client built from a
- * federated STS token does not start signing with an expired one partway through a publish that
- * compiled six targets before it ever made a network call. */
-export async function createOssClient(
-  connection: OssConnection,
-  credentials?: OssCredentials,
-): Promise<OSS> {
-  const region = connection.region ?? regionFromEndpoint(connection.endpoint);
-  if (!region) {
-    throw new Error(
-      `cannot derive the OSS region from endpoint ${connection.endpoint}; pass --region (V4 ` +
-        "signing needs the bucket's region in every request)",
-    );
-  }
-  const base = {
-    bucket: connection.bucket,
-    endpoint: connection.endpoint,
-    region,
-    cname: connection.cname ?? false,
-    secure: connection.secure ?? true,
-    authorizationV4: true,
-    // Transient transport errors (-1/-2: reset, connect timeout) retry at the SDK level. A response
-    // timeout carries no status, so it is putObject's own retry loop that rescues it.
-    retryMax: 2,
-  };
-  if (credentials) {
-    return new OSS({ ...credentials, ...base });
-  }
-  const chain = new Credential();
-  const readCredential = async (): Promise<OssCredentials> => {
-    const credential = await chain.getCredential();
-    if (!credential.accessKeyId || !credential.accessKeySecret) {
-      throw new Error(
-        "Alibaba Cloud credential chain returned no AccessKey; set ALIBABA_CLOUD_ROLE_ARN, " +
-          "ALIBABA_CLOUD_OIDC_PROVIDER_ARN and ALIBABA_CLOUD_OIDC_TOKEN_FILE for GitHub OIDC, or " +
-          "ALIBABA_CLOUD_ACCESS_KEY_ID/ALIBABA_CLOUD_ACCESS_KEY_SECRET locally (or pass --dry-run).",
-      );
-    }
-    return {
-      accessKeyId: credential.accessKeyId,
-      accessKeySecret: credential.accessKeySecret,
-      stsToken: credential.securityToken ?? undefined,
-    };
-  };
-  const initial = await readCredential();
-  return new OSS({
-    ...initial,
-    ...base,
-    ...(initial.stsToken ? { refreshSTSToken: readCredential } : {}),
-  });
-}
+import {
+  createFeedOssClient,
+  createOssClient,
+  regionFromEndpoint,
+  type OssConnection,
+  type OssCredentials,
+} from "./oss-client";
+export { createOssClient, regionFromEndpoint, type OssConnection, type OssCredentials };
 
 /** The request URL for an object, built the same way the SDK itself would route the request
  * (bucket-prefixed host unless `cname` is set) - used only for the unauthenticated
@@ -660,12 +580,16 @@ async function stagingDevVersion(options: {
   version?: string;
   line?: string;
   client: OSS;
+  /** Reads production's feed objects through OSS when set; the anonymous CDN read otherwise. */
+  feedOss?: { get(key: string): Promise<{ content: unknown }> };
   fetchImpl: typeof fetch;
   log: (line: string) => void;
 }): Promise<string> {
   const { client } = options;
   const [production, staging] = await Promise.all([
-    readFeedObject(options.productionFeedUrl, LATEST_OBJECT_KEY, options.fetchImpl),
+    readFeedObject(options.productionFeedUrl, LATEST_OBJECT_KEY, options.fetchImpl, {
+      oss: options.feedOss,
+    }),
     readObjectIfPresent(client, LATEST_OBJECT_KEY),
   ]);
   const productionLatest = production.trim();
@@ -750,6 +674,9 @@ export interface PublishDependencies {
    * photon-wasm.ts. Tests override this with a fixture so they never depend on the exact
    * installed @silvia-odwyer/photon-node version. */
   resolvePhotonWasm?: ResolvePhotonWasmFn;
+  /** Builds the client a feed URL's objects are read through; when absent every feed read stays
+   * anonymous. `--feed-oss` wires `createFeedOssClient` + `feedOssConnection` here. */
+  feedOssFor?: (feedUrl: string) => Promise<{ get(key: string): Promise<{ content: unknown }> } | undefined>;
 }
 
 export interface PublishOutcome {
@@ -796,6 +723,7 @@ export async function runPublish(
       version: options.version,
       line: options.line,
       client,
+      feedOss: await deps.feedOssFor?.(options.productionFeedUrl),
       fetchImpl: deps.fetchImpl ?? fetch,
       log,
     });
@@ -917,6 +845,9 @@ function parseArgv(argv: string[]): ParsedArgs {
       case "--allow-existing":
         result.allowExisting = true;
         break;
+      case "--feed-oss":
+        result.feedOss = true;
+        break;
       case "--version":
         result.version = requireValue(argv, (index += 1), flag);
         break;
@@ -996,6 +927,23 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
       if (set && !args.version)
         throw new Error(`a split publication names its version: use --version with ${flag}`);
     const commit = args.commit ?? (await currentGitCommit());
+    // `--feed-oss` reads a feed's objects through its backing OSS bucket over the accelerate
+    // endpoint; the read keeps the job's ambient credential, or the release-reader role when
+    // `COFORGE_FEED_ROLE_ARN` is configured (createFeedOssClient). The anonymous CDN read is the
+    // default until the workflow opts in.
+    const feedOssClients = new Map<string, Promise<{ get(key: string): Promise<{ content: unknown }> } | undefined>>();
+    const feedOssFor = args.feedOss
+      ? (feedUrl: string) => {
+          if (!feedOssClients.has(feedUrl)) {
+            const connection = feedOssConnection(feedUrl);
+            feedOssClients.set(
+              feedUrl,
+              connection ? createFeedOssClient(connection) : Promise.resolve(undefined),
+            );
+          }
+          return feedOssClients.get(feedUrl)!;
+        }
+      : undefined;
     const options: PublishOptions = {
       version: args.version,
       productionFeedUrl: args.productionFeedUrl,
@@ -1010,7 +958,11 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
     };
     // console.log/console.error, not the injected `deps`, are the actual "script stdout/stderr":
     // this is what publish.test.ts's credential-leak test captures and asserts against.
-    const outcome = await runPublish(options, { ...deps, log: (line) => console.log(line) });
+    const outcome = await runPublish(options, {
+      ...deps,
+      log: (line) => console.log(line),
+      ...(feedOssFor ? { feedOssFor } : {}),
+    });
     // A GitHub Actions step reads the published version from its outputs file; numbered against
     // the production feed, it is known only now.
     if (process.env.GITHUB_OUTPUT)

@@ -23,7 +23,13 @@ import { readFile } from "node:fs/promises";
 
 import { manifestObjectKey, LATEST_OBJECT_KEY } from "./publish";
 import { installerManifestKey, installerVersionFromCargoToml } from "./installer-feed";
-import { readFeedObject, type FeedFetch } from "./public-feed";
+import {
+  feedOssConnection,
+  readFeedObject,
+  type FeedFetch,
+  type FeedReadOptions,
+} from "./public-feed";
+import { createOssClient } from "./oss-client";
 import { assertProductionPromotion, requireStable, stableVersionOf } from "./release-line";
 
 export type ReleaseTrack = "computer" | "installer";
@@ -45,6 +51,10 @@ export interface ProductionCandidate {
 
 export interface CandidateDependencies {
   fetch?: FeedFetch;
+  /** The OSS client a feed URL reads through (already bucket-bound, credentialed); `undefined`
+   * keeps the anonymous CDN path. The production candidate holds no Alibaba credential until the
+   * release-reader role exists, so the workflow passes these only when the role is configured. */
+  ossFor?: (feedUrl: string) => Promise<FeedReadOptions["oss"]>;
 }
 
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
@@ -54,6 +64,9 @@ export async function verifyProductionCandidate(
   deps: CandidateDependencies = {},
 ): Promise<void> {
   const fetch = deps.fetch ?? ((url, init) => globalThis.fetch(url, init));
+  const feedOptions = async (feedUrl: string): Promise<FeedReadOptions> => ({
+    oss: await deps.ossFor?.(feedUrl),
+  });
   const { track, version, commit, stagingFeedUrl, stagingVersion, withoutStaging } = candidate;
   if (!FULL_COMMIT.test(commit)) {
     throw new Error(`commit must be a full commit, 40 lowercase hex characters: ${commit}`);
@@ -97,9 +110,15 @@ export async function verifyProductionCandidate(
 
   // The installer's staging pointer moves on its own (`pointer_only`), so it is not compared.
   const [productionLatest, stagingLatest, manifestText] = await Promise.all([
-    productionFeedUrl ? readFeedObject(productionFeedUrl, LATEST_OBJECT_KEY, fetch) : undefined,
-    stagingVersion ? readFeedObject(stagingFeedUrl, LATEST_OBJECT_KEY, fetch) : undefined,
-    manifestKey ? readFeedObject(stagingFeedUrl, manifestKey, fetch) : undefined,
+    productionFeedUrl
+      ? readFeedObject(productionFeedUrl, LATEST_OBJECT_KEY, fetch, await feedOptions(productionFeedUrl))
+      : undefined,
+    stagingVersion
+      ? readFeedObject(stagingFeedUrl, LATEST_OBJECT_KEY, fetch, await feedOptions(stagingFeedUrl))
+      : undefined,
+    manifestKey
+      ? readFeedObject(stagingFeedUrl, manifestKey, fetch, await feedOptions(stagingFeedUrl))
+      : undefined,
   ]);
   if (productionLatest !== undefined) {
     assertProductionPromotion({ version, productionLatest: productionLatest.trim() });
@@ -122,22 +141,37 @@ export async function verifyProductionCandidate(
 if (import.meta.main) {
   const args = Bun.argv.slice(2);
   const withoutStaging = args.includes("--without-staging");
+  const feedOss = args.includes("--feed-oss");
   const options = ["--staging-version=", "--production-feed-url="];
   const option = (prefix: string) =>
     args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
   const stagingVersion = option("--staging-version=");
   const productionFeedUrl = option("--production-feed-url=");
   const [track, version, commit, stagingFeedUrl, cargoTomlPath] = args.filter(
-    (arg) => arg !== "--without-staging" && !options.some((prefix) => arg.startsWith(prefix)),
+    (arg) =>
+      arg !== "--without-staging" &&
+      arg !== "--feed-oss" &&
+      !options.some((prefix) => arg.startsWith(prefix)),
   );
   if ((track !== "computer" && track !== "installer") || !version || !commit || !stagingFeedUrl) {
     console.error(
-      "usage: production-candidate.ts [--without-staging] [--staging-version=<version>] [--production-feed-url=<url>] <computer|installer> <version> <commit> <staging-feed-url> [cargo-toml]",
+      "usage: production-candidate.ts [--without-staging] [--feed-oss] [--staging-version=<version>] [--production-feed-url=<url>] <computer|installer> <version> <commit> <staging-feed-url> [cargo-toml]",
     );
     process.exit(2);
   }
   try {
+    // `--feed-oss` reads each feed's objects through its backing OSS bucket over the
+    // accelerate endpoint with this job's ambient credential; without it the anonymous CDN
+    // read remains (the job holds no Alibaba credential until the reader role exists).
+    const ossClients = new Map<string, FeedReadOptions["oss"]>();
+    const ossFor = async (feedUrl: string) => {
+      const connection = feedOssConnection(feedUrl);
+      if (!connection) return undefined;
+      if (!ossClients.has(feedUrl)) ossClients.set(feedUrl, await createOssClient(connection));
+      return ossClients.get(feedUrl);
+    };
     await verifyProductionCandidate({
+      ...(feedOss ? { ossFor } : {}),
       track,
       version,
       commit,

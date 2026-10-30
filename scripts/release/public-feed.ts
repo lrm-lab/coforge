@@ -1,7 +1,10 @@
 /**
- * Anonymous reads of a public release feed through its CDN: what the production candidate check
- * and staging's numbering read without a credential. A feed's object keys are publish.ts's
- * (`LATEST_OBJECT_KEY`, `manifestObjectKey`) and installer-feed.ts's.
+ * Reads of a public release feed's objects. The anonymous path reads the feed's CDN URL, which a
+ * domestic host answers in seconds but an overseas GitHub runner often cannot reach at all; a
+ * caller that already holds OSS credentials instead passes an `oss` client and the same object is
+ * read over the proven `oss-accelerate` channel the publish itself uploads through. A feed's
+ * object keys are publish.ts's (`LATEST_OBJECT_KEY`, `manifestObjectKey`) and
+ * installer-feed.ts's.
  */
 
 /** The fetch a feed read uses; tests inject one that answers from fixtures. */
@@ -16,13 +19,37 @@ export const FEED_READ_TIMEOUT_MS = 30_000;
  * not made fast by waiting longer. */
 export const DEFAULT_FEED_RETRY_DELAYS_MS: readonly number[] = [2_000, 6_000];
 
+/** A release feed's backing OSS connection. The CDN domain is the public face; the object
+ * itself lives in the feed's bucket and is reachable (with credentials) through the same
+ * cross-border acceleration endpoint the upload proves on every publish. Unknown feeds stay
+ * anonymous. */
+const FEED_OSS_CONNECTIONS: Readonly<Record<string, { bucket: string }>> = {
+  "https://releases.coforge.cn": { bucket: "coforge-releases" },
+  "https://releases-staging.coforge.cn": { bucket: "coforge-releases-staging" },
+};
+
+const FEED_OSS_ENDPOINT = "oss-accelerate.aliyuncs.com";
+const FEED_OSS_REGION = "oss-cn-beijing";
+
+/** The OSS connection a public feed URL backs onto, or `undefined` when the feed is not one of
+ * the known release buckets. */
+export function feedOssConnection(
+  feedUrl: string,
+): { bucket: string; endpoint: string; region: string } | undefined {
+  const known = FEED_OSS_CONNECTIONS[feedUrl.replace(/\/+$/, "")];
+  if (!known) return undefined;
+  return { bucket: known.bucket, endpoint: FEED_OSS_ENDPOINT, region: FEED_OSS_REGION };
+}
+
 export type FeedReadOptions = {
   /** Waits before each retry; the number of entries is the number of retries. */
   retryDelaysMs?: readonly number[];
   /** Where a failed attempt says so; the default is this process's warning line. */
   log?: (line: string) => void;
   /** One attempt's deadline; the default is `FEED_READ_TIMEOUT_MS`. */
-  timeoutMs?: number;
+  /** Reads `key` through an OSS client (already bucket-bound) instead of the anonymous CDN URL.
+   * The accelerate endpoint rejects anonymous reads, so this is the only OSS path. */
+  oss?: { get(key: string): Promise<{ content: unknown }> };
 };
 
 /**
@@ -36,13 +63,15 @@ export async function readFeedObject(
   fetch: FeedFetch,
   options: FeedReadOptions = {},
 ): Promise<string> {
-  const url = `${feedUrl.replace(/\/+$/, "")}/${key}`;
+  const url = options.oss
+    ? `oss://${feedUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/${key}`
+    : `${feedUrl.replace(/\/+$/, "")}/${key}`;
   const delays = options.retryDelaysMs ?? DEFAULT_FEED_RETRY_DELAYS_MS;
   const log = options.log ?? ((line: string) => console.warn(line));
   const timeoutMs = options.timeoutMs ?? FEED_READ_TIMEOUT_MS;
   for (let attempt = 0; ; attempt++) {
     try {
-      return await readOnce(url, fetch, timeoutMs);
+      return options.oss ? await readOnceOss(url, key, options.oss, timeoutMs) : await readOnce(url, fetch, timeoutMs);
     } catch (error) {
       if (!(error instanceof FeedReadError) || !error.transient || attempt >= delays.length)
         throw error;
@@ -62,6 +91,36 @@ class FeedReadError extends Error {
     super(message);
     this.name = "FeedReadError";
   }
+}
+
+async function readOnceOss(
+  url: string,
+  key: string,
+  oss: { get(key: string): Promise<{ content: unknown }> },
+  timeoutMs: number,
+): Promise<string> {
+  let result: { content: unknown };
+  try {
+    result = await Promise.race([
+      oss.get(key),
+      Bun.sleep(timeoutMs).then(() => {
+        throw new FeedReadError(`${url}: no response within ${timeoutMs} ms`, true);
+      }),
+    ]);
+  } catch (error) {
+    if (error instanceof FeedReadError) throw error;
+    // ali-oss carries the HTTP status on `status`; 4xx is the object's own answer, not transient.
+    const status = (error as { status?: number }).status;
+    throw new FeedReadError(
+      `${url}: ${error instanceof Error ? error.message : String(error)}`,
+      status === undefined || status >= 500,
+    );
+  }
+  const content = result.content;
+  if (typeof content === "string") return content;
+  if (content instanceof Uint8Array || Buffer.isBuffer(content))
+    return new TextDecoder().decode(content as Uint8Array);
+  throw new FeedReadError(`${url}: unreadable object content`, false);
 }
 
 async function readOnce(url: string, fetch: FeedFetch, timeoutMs: number): Promise<string> {

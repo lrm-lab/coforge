@@ -208,10 +208,17 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
           # Signs the darwin executables (scripts/release/darwin-signing.ts); no other step holds it.
           COFORGE_DARWIN_SIGNING_KEY: ${{ secrets.COFORGE_DARWIN_SIGNING_KEY }}
+          # The release-reader role this step assumes only for the production feed's `latest`
+          # read (publish.ts --feed-oss): the publisher role writes this bucket but does not read
+          # production's. Empty until Frank sets the repo variable; the read stays anonymous CDN
+          # while it is.
+          COFORGE_FEED_ROLE_ARN: ${{ vars.COFORGE_FEED_READER_ROLE_ARN }}
+          COFORGE_FEED_OIDC_PROVIDER_ARN: acs:ram::1085194890307801:oidc-provider/github-actions
         run: |
           release=()
           if [ -n "$INPUT_VERSION" ]; then release+=(--version "$INPUT_VERSION"); fi
           if [ -n "$INPUT_LINE" ]; then release+=(--line "$INPUT_LINE"); fi
+          if [ -n "$COFORGE_FEED_ROLE_ARN" ]; then release+=(--feed-oss); fi
           # GitHub-hosted runners reach oss-cn-beijing over the public cross-border path, measured
           # at 17-56 KB/s from dev.59 on, on both Linux and macOS runners. OSS transfer
           # acceleration routes the upload over Alibaba Cloud's backbone instead; the endpoint is
