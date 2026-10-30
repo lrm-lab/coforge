@@ -30,7 +30,6 @@ import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import {
   StalledTurnTracker,
   stalledTurnNotice,
-  stalledTurnObservation,
   stalledTurnSilenceMs,
 } from "./stalled-turn-indicator";
 import { interruptAgentTurn } from "./turn-interrupt";
@@ -64,9 +63,6 @@ import {
   recoveryHasContent,
   recoveryOf,
   runtimeConfigOf,
-  type AgentInput,
-  type AgentInputCompletion,
-  type AgentInputQueue,
   type AgentRecoveryContext,
 } from "./runtime-launch-intent";
 import { validUsageWindow } from "./runtime-activity-text";
@@ -173,7 +169,6 @@ import {
   type ActivityDraft,
   type BusyAgentReport,
   isBusyActivityDetailKind,
-  type PublishedActivityLaunch,
 } from "./agent-activity-publisher";
 import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { ActivityLaunch } from "./activity-launch";
@@ -420,7 +415,7 @@ export class DaemonRuntime {
     hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
     isLaunching: (agentId) => this.#agentLaunches.has(agentId),
     isStopping: (agentId) => this.#stoppingAgents.has(agentId),
-    deliverMessage: (agentId, message) =>
+    deliverMessage: (_agentId, message) =>
       isTrackedMention(message)
         ? this.#mentionDeliveries.deliver(message)
         : this.#messageAttention.receive(message),

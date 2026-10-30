@@ -1,7 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import type { AgentSession } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { diagnosticErrorCode, diagnosticErrorName } from "@lrm/coforge-sdk/internal";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import type { ActivityLaunch } from "./activity-launch";
 import {
