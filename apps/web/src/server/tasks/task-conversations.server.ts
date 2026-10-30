@@ -1,4 +1,4 @@
-import type { TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type { MentionSelectorInput, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 
 import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
@@ -12,6 +12,8 @@ import { lockConversation } from "#src/server/conversations/conversation-lock.se
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
+import { postTaskMessage } from "./task-discussion-send.server";
+import { discussionOf, followTask, joinDiscussion } from "./task-discussion-store.server";
 import { resolveTaskScope } from "./task-scope.server";
 import { TASK_SCOPE_WHERE } from "./task-view.server";
 
@@ -19,15 +21,7 @@ import { TASK_SCOPE_WHERE } from "./task-view.server";
  * person's page) and its number. */
 export type TaskConversationRef = { target?: string; conversationId?: string; number: number };
 
-export const TASK_FOLLOW_REASONS = [
-  "created",
-  "claimed",
-  "assigned",
-  "replied",
-  "mentioned",
-  "manual",
-] as const;
-export type TaskFollowReason = (typeof TASK_FOLLOW_REASONS)[number];
+export { TASK_FOLLOW_REASONS, type TaskFollowReason } from "./task-discussion-store.server";
 
 const MAX_VIEW_MESSAGES = 20;
 
@@ -75,13 +69,27 @@ export class TaskConversations {
   async reply(
     principal: TaskPrincipal,
     ref: TaskConversationRef,
-    input: { body: string; idempotencyKey?: string },
+    input: {
+      body: string;
+      idempotencyKey?: string;
+      attachmentIds?: readonly string[];
+      mentions?: readonly MentionSelectorInput[];
+    },
   ) {
     const body = input.body.trim();
-    if (!body) throw new AppError("INVALID_INPUT");
+    if (!body || body.length > 64_000) throw new AppError("INVALID_INPUT");
     const { task, member, scope } = await this.resolve(principal, ref, { member: true });
     const post = async () => {
-      const posted = await this.post(task.id, scope, member!, body);
+      const posted = await this.ports.db.$transaction((tx) =>
+        postTaskMessage(tx, {
+          taskId: task.id,
+          scope,
+          member: member!,
+          body,
+          attachmentIds: input.attachmentIds,
+          mentions: input.mentions,
+        }),
+      );
       // After the commit, and only for the first of a retried reply; a failed push is replayed.
       await publishTaskConversationMessage(this.ports, posted.messageId, posted.messageId).catch(
         () => undefined,
@@ -89,7 +97,7 @@ export class TaskConversations {
       return {
         id: posted.messageId,
         sequence: posted.sequence,
-        body,
+        body: posted.body,
         createdAt: posted.createdAt,
         threadRootId: null,
         attachments: [],
@@ -109,75 +117,6 @@ export class TaskConversations {
           )
         : await post();
     return { messageId: persisted.id, sequence: persisted.sequence };
-  }
-
-  /**
-   * The write: under the board's lock the replier must still be an active member, so a member who
-   * left a private channel while the request was in flight is refused as if the task were gone.
-   */
-  private async post(
-    taskId: string,
-    scope: { conversationId: string; workspaceId: string },
-    member: { id: string; userId: string | null; agentId: string | null },
-    body: string,
-  ) {
-    return this.ports.db.$transaction(async (tx) => {
-      await lockConversation(tx, scope.conversationId);
-      const [active, task] = await Promise.all([
-        tx.conversationMember.findFirst({
-          where: { id: member.id, conversationId: scope.conversationId, ...ACTIVE_MEMBER_WHERE },
-          select: { id: true },
-        }),
-        tx.task.findUnique({
-          where: { id: taskId },
-          select: { id: true, discussionConversationId: true },
-        }),
-      ]);
-      if (!active || !task) throw new AppError("NOT_FOUND");
-      const conversationId = await this.discussionOf(tx, task, scope.workspaceId);
-      await lockConversation(tx, conversationId);
-      const seat = await joinDiscussion(tx, scope.workspaceId, conversationId, member);
-      const sequence = await allocateSequence(tx, conversationId);
-      await tx.taskFollow.createMany({
-        data: [
-          {
-            taskId,
-            memberId: member.id,
-            conversationId: scope.conversationId,
-            workspaceId: scope.workspaceId,
-            reason: "replied",
-          },
-        ],
-        skipDuplicates: true,
-      });
-      const recipients = await tx.taskFollow.findMany({
-        where: {
-          taskId,
-          memberId: { not: member.id },
-          member: { agentId: { not: null }, ...ACTIVE_MEMBER_WHERE, agent: ACTIVE_AGENT_WHERE },
-        },
-        select: { member: { select: { agentId: true } } },
-      });
-      const message = await tx.message.create({
-        data: {
-          workspaceId: scope.workspaceId,
-          conversationId,
-          senderMemberId: seat.id,
-          body,
-          sequence,
-          deliveries: {
-            create: recipients.map(({ member: follower }) => ({
-              workspaceId: scope.workspaceId,
-              conversationId,
-              agentId: follower.agentId!,
-              sequence,
-            })),
-          },
-        },
-        select: { id: true, sequence: true, createdAt: true },
-      });
-      return { messageId: message.id, sequence: message.sequence, createdAt: message.createdAt };
-    });
   }
 
   /**
@@ -229,19 +168,8 @@ export class TaskConversations {
 
   async follow(principal: TaskPrincipal, ref: TaskConversationRef) {
     const { task, member, scope, boardName } = await this.resolve(principal, ref, { member: true });
-    const created = await this.ports.db.taskFollow.createMany({
-      data: [
-        {
-          taskId: task.id,
-          memberId: member!.id,
-          conversationId: scope.conversationId,
-          workspaceId: scope.workspaceId,
-          reason: "manual",
-        },
-      ],
-      skipDuplicates: true,
-    });
-    return { taskRef: `${boardName}:#${task.number}`, following: true, changed: created.count > 0 };
+    const created = await followTask(this.ports.db, scope, task.id, member!.id, "manual");
+    return { taskRef: `${boardName}:#${task.number}`, following: true, changed: created };
   }
 
   /** `reason` is for the notice in the conversation that someone stopped following (not yet shown). */
@@ -353,29 +281,6 @@ export class TaskConversations {
   }
 
   /** The task's conversation, made now if the task has none. */
-  private async discussionOf(
-    tx: Transaction,
-    task: { id: string; discussionConversationId: string | null },
-    workspaceId: string,
-  ) {
-    if (task.discussionConversationId) return task.discussionConversationId;
-    const fresh = await tx.task.findUnique({
-      where: { id: task.id },
-      select: { discussionConversationId: true },
-    });
-    if (!fresh) throw new AppError("NOT_FOUND");
-    if (fresh.discussionConversationId) return fresh.discussionConversationId;
-    const conversation = await tx.conversation.create({
-      data: { workspaceId, kind: "task_thread" },
-      select: { id: true },
-    });
-    await tx.task.update({
-      where: { id: task.id },
-      data: { discussionConversationId: conversation.id },
-    });
-    return conversation.id;
-  }
-
   private async discussionPage(conversationId: string, limit: number) {
     const [total, rows] = await Promise.all([
       this.ports.db.message.count({ where: { conversationId } }),
@@ -413,26 +318,6 @@ export class TaskConversations {
 /** `#channel`, or `dm:@peer` for a task on a direct board. */
 function boardLabel(channelName: string | null, peer?: string | null) {
   return channelName ? `#${channelName}` : `dm:@${peer ?? "?"}`;
-}
-
-/** The member's seat in the task's conversation, taken (or taken back) by speaking in it. */
-function joinDiscussion(
-  tx: Transaction,
-  workspaceId: string,
-  conversationId: string,
-  member: { userId: string | null; agentId: string | null },
-) {
-  return member.userId
-    ? tx.conversationMember.upsert({
-        where: { conversationId_userId: { conversationId, userId: member.userId } },
-        create: { workspaceId, conversationId, userId: member.userId },
-        update: { leftAt: null },
-      })
-    : tx.conversationMember.upsert({
-        where: { conversationId_agentId: { conversationId, agentId: member.agentId! } },
-        create: { workspaceId, conversationId, agentId: member.agentId! },
-        update: { leftAt: null },
-      });
 }
 
 /**
