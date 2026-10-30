@@ -67,7 +67,6 @@ export type AuthorizeResult = {
   deviceCode: string;
   userCode: string;
   verificationUri: string;
-  verificationUriComplete: string;
   expiresInSeconds: number;
   intervalSeconds: number;
 };
@@ -85,13 +84,13 @@ export async function authorizeDevice(input: {
     userCodeHash: digest(userCode),
     expiresAt: new Date(now + DEVICE_CODE_TTL_SECONDS * 1000),
   });
-  const formatted = formatUserCode(userCode);
-  const verificationUri = `${input.origin}/oauth/verify`;
+  // Only the bare page: the person types the code shown on the Computer. A link with the code
+  // already in it would let someone send theirs and have it approved by whoever opens it, so none
+  // is issued (`verification_uri_complete` is optional in RFC 8628 §3.2), as in Raft 1.0.59.
   return {
     deviceCode,
-    userCode: formatted,
-    verificationUri,
-    verificationUriComplete: `${verificationUri}?user_code=${encodeURIComponent(formatted)}`,
+    userCode: formatUserCode(userCode),
+    verificationUri: `${input.origin}/oauth/verify`,
     expiresInSeconds: DEVICE_CODE_TTL_SECONDS,
     intervalSeconds: DEVICE_POLL_INTERVAL_SECONDS,
   };

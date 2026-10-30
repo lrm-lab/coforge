@@ -56,7 +56,6 @@ export async function deviceAuthorizationRequest(
       device_code: result.deviceCode,
       user_code: result.userCode,
       verification_uri: result.verificationUri,
-      verification_uri_complete: result.verificationUriComplete,
       expires_in: result.expiresInSeconds,
       interval: result.intervalSeconds,
     },

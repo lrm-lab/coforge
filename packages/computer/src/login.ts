@@ -78,8 +78,8 @@ export class ComputerLogin {
     }
     if (!input.json) writeInstruction("");
     writeInstruction(input.json ? "Complete device authorization:" : "To sign in:");
-    writeInstruction(`Verify at:   ${colors.cyan(terminalText(authorization.verificationUri))}`);
-    writeInstruction(`User code:   ${colors.bold(terminalText(authorization.userCode))}`);
+    writeInstruction(`Open:        ${colors.cyan(terminalText(authorization.verificationUri))}`);
+    writeInstruction(`Enter code:  ${colors.bold(terminalText(authorization.userCode))}`);
     if (!input.json) writeInstruction("");
     (this.options.writeProgressLine ?? this.options.writeLine)("Waiting for authorization…");
 

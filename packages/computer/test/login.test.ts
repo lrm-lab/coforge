@@ -62,8 +62,8 @@ test("login completes the device-code flow and persists the credential", async (
     "Server:      https://coforge.example",
     "",
     "To sign in:",
-    "Verify at:   https://auth.example/activate",
-    "User code:   ABCD-EFGH",
+    "Open:        https://auth.example/activate",
+    "Enter code:  ABCD-EFGH",
     "",
     "Result:      Login complete. No Workspace registration was created.",
   ]);
@@ -109,8 +109,8 @@ test("login opens the verification page and still prints fallback instructions",
   }).run({ serverUrl: "https://coforge.example", json: false });
 
   expect(opened).toEqual(["https://auth.example/activate"]);
-  expect(output).toContain("Verify at:   https://auth.example/activate");
-  expect(output).toContain("User code:   ABCD-EFGH");
+  expect(output).toContain("Open:        https://auth.example/activate");
+  expect(output).toContain("Enter code:  ABCD-EFGH");
 });
 
 test("JSON login writes exactly one stable stdout object without secrets", async () => {

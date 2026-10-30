@@ -80,9 +80,9 @@ test("a grant is pending until approved, then yields exactly one token", async (
   const start = Date.parse("2026-09-08T00:00:00Z");
   const grant = await authorizeDevice({ store, origin: "https://example.test", now: () => start });
 
-  // The client prefers verification_uri_complete, so the code has to survive the round trip
-  // through a URL and back through normalization.
-  expect(grant.verificationUriComplete).toContain(encodeURIComponent(grant.userCode));
+  // Only the bare page is issued: the code is typed there, never carried in a link.
+  expect(grant.verificationUri).toBe("https://example.test/oauth/verify");
+  expect(grant).not.toHaveProperty("verificationUriComplete");
   expect(normalizeUserCode(grant.userCode)).toHaveLength(8);
 
   const pending = await pollDeviceToken({

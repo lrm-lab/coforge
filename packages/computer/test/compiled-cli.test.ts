@@ -330,7 +330,7 @@ test("local test build strips terminal controls from device authorization instru
     expect(stdout + stderr).toContain("AUTH_DEVICE_CODE_CANCELLED");
     expect(stdout + stderr).not.toContain("\u001b");
     expect(stdout + stderr).toContain("/activate%1B[31mPWN");
-    expect(stdout + stderr).toContain("User code:   ABCDPWN");
+    expect(stdout + stderr).toContain("Enter code:  ABCDPWN");
     expect(requests).toEqual([
       "/.well-known/oauth-authorization-server",
       "/oauth/device",

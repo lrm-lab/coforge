@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { DeviceVerifyPage } from "#src/features/device-auth/device-verify-page";
 import { getDeviceVerifyUser } from "#src/features/device-auth/device-auth.functions";
-import { normalizeUserCode } from "#src/features/device-auth/device-code-format";
 
 /**
  * Where a Computer's `login` sends the person sitting in front of it. Deliberately outside
@@ -13,22 +12,13 @@ import { normalizeUserCode } from "#src/features/device-auth/device-code-format"
  * the route rather than an instruction the user has to follow.
  */
 export const Route = createFileRoute("/oauth/verify")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    user_code: typeof search.user_code === "string" ? search.user_code : undefined,
-  }),
   loader: async () => ({ user: await getDeviceVerifyUser() }),
   component: Verify,
 });
 
 function Verify() {
   const { user } = Route.useLoaderData();
-  const { user_code: userCode } = Route.useSearch();
-  // The code arrives prefilled from `verification_uri_complete`, but it is only ever a
-  // convenience: the field stays editable and nothing is approved until the person confirms.
-  return (
-    <DeviceVerifyPage
-      account={user.account}
-      initialCode={userCode ? normalizeUserCode(userCode) : ""}
-    />
-  );
+  // The code is always typed from the Computer's screen, never taken from the link: a link someone
+  // sent with their code in it must not be one click from signing their Computer in as you.
+  return <DeviceVerifyPage account={user.account} />;
 }

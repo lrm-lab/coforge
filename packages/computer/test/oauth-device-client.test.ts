@@ -3,6 +3,35 @@ import { expect, test } from "bun:test";
 import { OAuthDeviceClient } from "#src/oauth-device-client";
 import { ComputerLogin } from "#src/login";
 
+test("device client opens the bare verification page even when a code-carrying link is offered", async () => {
+  const responses = [
+    Response.json({
+      issuer: "https://auth.example",
+      device_authorization_endpoint: "https://auth.example/device",
+      token_endpoint: "https://auth.example/token",
+    }),
+    Response.json({
+      device_code: "device-secret",
+      user_code: "ABCD-EFGH",
+      verification_uri: "https://auth.example/activate",
+      verification_uri_complete: "https://auth.example/activate?user_code=ABCD-EFGH",
+      expires_in: 600,
+    }),
+  ];
+  const client = new OAuthDeviceClient({
+    clientId: "coforge-computer",
+    scope: "openid offline_access",
+    fetch: async () => {
+      const response = responses.shift();
+      if (!response) throw new Error("unexpected request");
+      return response;
+    },
+  });
+
+  const authorization = await client.authorize("https://auth.example");
+  expect(authorization.verificationUri).toBe("https://auth.example/activate");
+});
+
 test("device client discovers RFC endpoints and starts authorization", async () => {
   const requests: Array<{ url: string; body?: string }> = [];
   const responses = [

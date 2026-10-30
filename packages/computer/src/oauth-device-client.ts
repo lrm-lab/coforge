@@ -44,7 +44,8 @@ export class OAuthDeviceClient implements DeviceAuthorizationClient {
     });
     const body = await readJson<Record<string, unknown>>(response, "device authorization");
     const verificationUri = normalizeEndpoint(
-      optionalString(body, "verification_uri_complete") ?? requiredString(body, "verification_uri"),
+      // Never `verification_uri_complete`: the code is typed on the page, not carried in the link.
+      requiredString(body, "verification_uri"),
       "verification URI",
     );
     return {

@@ -45,13 +45,11 @@ function problemMessage(state: DeviceCodeState): string | null {
 
 export function DeviceVerifyPage({
   account,
-  initialCode,
 }: {
   /** How the signed-in account is named: its email, or its @username. */
   account: string;
-  initialCode: string;
 }) {
-  const [code, setCode] = useState(initialCode);
+  const [code, setCode] = useState("");
   const [stage, setStage] = useState<Stage>({ name: "entry" });
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
