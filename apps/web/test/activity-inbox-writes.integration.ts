@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
+import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
+import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import { cleanup, database, kindOf, seed } from "./helpers/activity-inbox-fixture";
 
 /**
@@ -37,6 +39,31 @@ test("Done and read-all tell the person's other pages, so a second tab's dot cle
     announced.length = 0;
     await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
     expect(announced).toEqual([{ workspaceId: workspace.id, userId: alice.id }]);
+  } finally {
+    await cleanup(db, suffix);
+  }
+});
+
+test("the inbox a person's pages write through publishes to their channel", async () => {
+  const db = database();
+  const suffix = crypto.randomUUID();
+  try {
+    const { alice, workspace, channel, post } = await seed(db, suffix);
+    const general = await channel("general");
+    await post(general.conversation.id, general.bobMember.id, "hello");
+    const published: { channel: string; data: unknown }[] = [];
+    const inbox = browserActivityInbox(db, {
+      publishJson: async (channel: string, data: unknown) => {
+        published.push({ channel, data });
+      },
+      broadcast: async () => {},
+    } as never);
+
+    await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
+    expect(published).toContainEqual({
+      channel: userConversationChannel(alice.id),
+      data: { type: "activity.changed.v1", workspaceId: workspace.id },
+    });
   } finally {
     await cleanup(db, suffix);
   }

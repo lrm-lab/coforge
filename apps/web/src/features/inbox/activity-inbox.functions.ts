@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
+import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import {
   activityInboxPageSchema,
   activityInboxReadAllSchema,
@@ -24,7 +25,7 @@ export const markActivityItemDone = createServerFn({ method: "POST" })
   .validator(activityItemDoneSchema)
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
-    await new ActivityInbox(db).markDone(workspaceId, user.id, data);
+    await browserActivityInbox(db).markDone(workspaceId, user.id, data);
   });
 
 /** Reads every joined conversation and listed thread up to when the viewer's list was loaded;
@@ -34,7 +35,7 @@ export const markActivityInboxRead = createServerFn({ method: "POST" })
   .validator(activityInboxReadAllSchema)
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
-    await new ActivityInbox(db).markAllRead(workspaceId, user.id, {
+    await browserActivityInbox(db).markAllRead(workspaceId, user.id, {
       before: new Date(data.before),
     });
   });
