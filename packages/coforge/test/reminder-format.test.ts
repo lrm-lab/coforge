@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { run } from "../index";
 
 const reminderId = "12345678-1234-4123-8123-123456789abc";
@@ -47,13 +47,19 @@ test("an empty list says so plainly", () => {
 });
 
 test("a schedule names the reminder it produced instead of saying Accepted", () => {
-  expect(
-    formatReminderResponse("schedule", {
-      accepted: true,
-      reminders: [reminder()],
-      events: [],
-    } as never),
-  ).toBe('#abcdef12 [scheduled] (one-time) next=2026-10-30T09:00:00Z "Check the deploy"');
+  // The response reads the wall clock for OVERDUE; pin it before the reminder's fire time.
+  setSystemTime(now);
+  try {
+    expect(
+      formatReminderResponse("schedule", {
+        accepted: true,
+        reminders: [reminder()],
+        events: [],
+      } as never),
+    ).toBe('#abcdef12 [scheduled] (one-time) next=2026-10-30T09:00:00Z "Check the deploy"');
+  } finally {
+    setSystemTime();
+  }
 });
 test("formats usable reminder lists, empty logs, and receipt acknowledgements", async () => {
   const base = {
