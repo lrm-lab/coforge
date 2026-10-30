@@ -111,11 +111,8 @@ These rules apply to `src/server/conversations/`.
   changes apply to it, and it is never archived. The only admin-derived
   capability on it is `update`, for a Workspace owner or admin, and only its
   description can change: its name is fixed.
-- A Workspace owner or admin can hide `#general` from the whole Workspace
-  (`Conversation.hiddenFromWorkspaceAt`) and restore it. While hidden it is gone
-  for everyone, themselves included: every channel read filters through
-  `VISIBLE_CONVERSATION_WHERE` (raw SQL: `"hiddenFromWorkspaceAt" IS NULL`), so a
-  new channel read must too. Enrollment keeps running, so a restore is whole.
+- Who may read a channel (a hidden `#general`, a private channel) is in
+  [channel-access.md](./channel-access.md).
 - Only a Workspace owner or admin deletes a channel (`deleteChannel`), never
   `#general`; a channel admin cannot, and no Agent command does. Deletion is
   hard and whole: everything in the channel goes, Reminders aimed at it or its

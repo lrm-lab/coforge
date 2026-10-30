@@ -1,4 +1,5 @@
 import { Prisma } from "#src/generated/prisma/client";
+import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 
 /** Only a destination key identifies a DM; internal conversations also have no channel name. */
 export const DIRECT_CONVERSATION_WHERE = {
@@ -35,13 +36,14 @@ export const ACTIVE_CHANNEL_MEMBER_WHERE = {
 } satisfies Prisma.ConversationMemberWhereInput;
 
 /**
- * A channel any Workspace member may read: it has a channel name (a DM has none), is not
- * archived, and is not hidden from the Workspace. The privacy rule for what a surface outside the
+ * A channel any Workspace member may read: it has a channel name (a DM has none), is public (a
+ * private channel is its members' alone), is not archived, and is not hidden from the Workspace. The privacy rule for what a surface outside the
  * Workspace's own members (an installed app) may list.
  */
 export const PUBLIC_CHANNEL_WHERE = {
   channelName: { not: null },
   archivedAt: null,
+  visibility: CHANNEL_VISIBILITY.PUBLIC,
   ...VISIBLE_CONVERSATION_WHERE,
 } satisfies Prisma.ConversationWhereInput;
 

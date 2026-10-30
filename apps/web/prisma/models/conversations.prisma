@@ -36,6 +36,10 @@ model Conversation {
   /// its history kept, until they restore it. Unrelated to a member closing a chat
   /// (`ConversationMember.hiddenAt`).
   hiddenFromWorkspaceAt DateTime?
+  /// Who may read this channel: "public", every Workspace member; "private", only its active
+  /// members, people and Agents, owners and admins included (`channel-read-access.server.ts`).
+  /// Always "public" for a direct or internal conversation (`conversations_visibility_check`).
+  visibility     String                 @default("public")
   nextTaskNumber Int                    @default(1)
   /// Message sequence counter, the sole source a send allocates from (`allocateSequence`).
   /// No index by design so the allocation UPDATE stays a HOT update on the conversation row.
