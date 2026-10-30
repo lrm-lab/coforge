@@ -169,7 +169,7 @@ export function OutboxMessageRow({
                 <Button
                   color="link-color"
                   size="sm"
-                  href={localizeHref(workspacePath(workspaceSlug, "/computers"))}
+                  href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
                 >
                   {m.agent_connect_computer()}
                 </Button>

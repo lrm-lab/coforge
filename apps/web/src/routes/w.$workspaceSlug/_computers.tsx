@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Outlet, createFileRoute, getRouteApi, useParams, useRouter } from "@tanstack/react-router";
+import {
+  Outlet,
+  createFileRoute,
+  getRouteApi,
+  useParams,
+  useRouter,
+  useSearch,
+} from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { latestComputerVersionQuery } from "#src/features/computers/latest-version.query";
 import { AddComputerDialog } from "#src/features/computers/add-computer-dialog";
@@ -61,7 +68,24 @@ function ComputersPage() {
     from: "/w/$workspaceSlug/_computers/computer/$computerId",
     shouldThrow: false,
   });
-  const [addComputerOpen, setAddComputerOpen] = useState(false);
+  const addRequested = useSearch({
+    from: "/w/$workspaceSlug/_computers/computers",
+    shouldThrow: false,
+  })?.add;
+  const [addComputerOpen, setAddComputerOpen] = useState(addRequested === "1");
+  // `/computers?add=1` opens the dialog once; closing it drops the parameter so the page shows
+  // its usual selection.
+  const dismissAdd = (open: boolean) => {
+    setAddComputerOpen(open);
+    const workspaceSlug = currentWorkspace?.slug;
+    if (!open && addRequested && workspaceSlug)
+      void router.navigate({
+        to: "/w/$workspaceSlug/computers",
+        params: { workspaceSlug },
+        search: {},
+        replace: true,
+      });
+  };
   const [connectedComputerName, setConnectedComputerName] = useState<string | null>(null);
   const computersWhenAddOpened = useRef<ReadonlySet<string> | null>(null);
   const connectionProbe = useQuery({
@@ -107,7 +131,7 @@ function ComputersPage() {
       </ComputerLayout>
       <AddComputerDialog
         open={addComputerOpen}
-        onOpenChange={setAddComputerOpen}
+        onOpenChange={dismissAdd}
         installOrigin={installOrigin}
         workspaceSlug={currentWorkspace?.slug ?? null}
         connectedComputerName={connectedComputerName}

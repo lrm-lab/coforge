@@ -231,7 +231,7 @@ export function AgentCreateDialog({
                     {m.controls_cancel()}
                   </Button>
                   <Button
-                    href={localizeHref(workspacePath(workspaceSlug, "/computers"))}
+                    href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
                     onPress={() => onOpenChange(false)}
                   >
                     {m.agent_connect_computer()}
