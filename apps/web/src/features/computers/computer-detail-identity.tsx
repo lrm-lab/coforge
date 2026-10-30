@@ -9,8 +9,14 @@ import { ComputerDate } from "./computer-detail-date";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { m } from "#src/paraglide/messages";
 import type { ComputerDetailView } from "./computer-detail-view";
+import {
+  isMachineDiskLow,
+  machineUsageLabel,
+  type MachineStatusReading,
+} from "./computer-machine-status";
+import { cn } from "#src/lib/utils";
 
-/** Hostname, OS, Version/Image rows (and their upgrade slots), and who added the Computer. */
+/** Hostname, OS, Disk, Memory, Version/Image rows (and their upgrade slots), and who added the Computer. */
 export function ComputerDetailIdentityRows({
   computer,
   label,
@@ -45,6 +51,14 @@ export function ComputerDetailIdentityRows({
         value={<span className="font-mono">{computer.name}</span>}
       />
       <DetailRow label={m.computer_system()} value={operatingSystemLabel(computer)} />
+      <DetailRow
+        label={m.computer_disk()}
+        value={<MachineUsage reading={computer.machine?.disk ?? null} base={1000} warn />}
+      />
+      <DetailRow
+        label={m.computer_memory()}
+        value={<MachineUsage reading={computer.machine?.memory ?? null} base={1024} />}
+      />
       <DetailRow
         label={m.computer_version()}
         value={
@@ -101,5 +115,26 @@ export function ComputerDetailIdentityRows({
         />
       )}
     </dl>
+  );
+}
+
+/** Used / total, in the warning colour when `warn` and the disk is low; "Unknown" without a
+ * current reading. */
+function MachineUsage({
+  reading,
+  base,
+  warn = false,
+}: {
+  reading: MachineStatusReading | null;
+  base: 1000 | 1024;
+  warn?: boolean;
+}) {
+  if (!reading) return m.computer_metadata_unknown();
+  return (
+    <span
+      className={cn("tabular-nums", warn && isMachineDiskLow(reading) && "text-warning-primary")}
+    >
+      {machineUsageLabel(reading, base)}
+    </span>
   );
 }

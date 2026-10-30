@@ -70,6 +70,8 @@
   "computer_delete_error": "The Computer could not be deleted. Delete all Agents first, then try again.",
   "computer_hostname": "Hostname",
   "computer_system": "System",
+  "computer_disk": "Disk",
+  "computer_memory": "Memory",
   "computer_delete_dialog_title": "Delete {name}?",
   "computer_format_action": "Format Disk",
   "computer_format_description": "Removes this cloud computer's files and sessions, then starts the same computer again. Agents, messages, and workspaces stay. A default cloud computer is shared, so every workspace on it loses its local files.",

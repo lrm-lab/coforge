@@ -82,3 +82,27 @@ function reading(
     return null;
   return { ...value, reportedAt: reportedAt.toISOString() };
 }
+
+/**
+ * "412 GB / 1 TB": used, then total, each in its own unit. Disks count in powers of 1000, as the
+ * drive and Finder label them; memory in powers of 1024, so 32 GiB of RAM reads "32 GB".
+ */
+export function machineUsageLabel(
+  reading: { availableBytes: number; totalBytes: number },
+  base: 1000 | 1024,
+): string {
+  return `${capacityLabel(reading.totalBytes - reading.availableBytes, base)} / ${capacityLabel(reading.totalBytes, base)}`;
+}
+
+function capacityLabel(bytes: number, base: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let value = bytes;
+  let unit = 0;
+  // Round before settling on a unit, so 999.6 GB reads "1 TB", not "1000 GB".
+  const round = (n: number) => (n < 10 && unit > 0 ? Math.round(n * 10) / 10 : Math.round(n));
+  while (round(value) >= base && unit < units.length - 1) {
+    value /= base;
+    unit += 1;
+  }
+  return `${round(value)} ${units[unit]}`;
+}

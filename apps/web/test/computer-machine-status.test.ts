@@ -11,6 +11,7 @@ import { createMachineStatusMethod } from "#src/server/centrifugo/machine-status
 import {
   isMachineDiskLow,
   machineStatusView,
+  machineUsageLabel,
   MACHINE_DISK_LOW_BYTES,
   MEMORY_STALE_AFTER_MS,
   DISK_STALE_AFTER_MS,
@@ -146,4 +147,20 @@ test("a disk is low only when it is nearly full and nearly out of absolute room"
   expect(isMachineDiskLow({ availableBytes: 15 * GIB, totalBytes: 120 * GIB })).toBe(false);
   // Under a tenth of a larger volume: low.
   expect(isMachineDiskLow({ availableBytes: 15 * GIB, totalBytes: 200 * GIB })).toBe(true);
+});
+
+test("usage reads used / total: disks in powers of 1000, memory in powers of 1024", () => {
+  expect(machineUsageLabel({ availableBytes: 88e9, totalBytes: 500e9 }, 1000)).toBe(
+    "412 GB / 500 GB",
+  );
+  expect(machineUsageLabel({ availableBytes: 588e9, totalBytes: 1e12 }, 1000)).toBe(
+    "412 GB / 1 TB",
+  );
+  expect(machineUsageLabel({ availableBytes: 13.64 * GIB, totalBytes: 32 * GIB }, 1024)).toBe(
+    "18 GB / 32 GB",
+  );
+  expect(machineUsageLabel({ availableBytes: 6.5 * GIB, totalBytes: 8 * GIB }, 1024)).toBe(
+    "1.5 GB / 8 GB",
+  );
+  expect(machineUsageLabel({ availableBytes: 0.4e9, totalBytes: 1e12 }, 1000)).toBe("1 TB / 1 TB");
 });
