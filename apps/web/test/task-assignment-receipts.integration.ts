@@ -89,17 +89,21 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     const receipts = created.assignmentReceipts!;
     expect(receipts.map((receipt) => receipt.state)).toEqual(["assigned", "assigned"]);
     const threads = created.tasks.map((task) => `${target}:${task.messageId}`);
+    // The receipts are published concurrently, so they may be published in either order. The
+    // daemon does not depend on it: it dedupes by delivery and keeps one read cursor per thread.
     expect(published).toHaveLength(2);
     expect(published).toEqual(
-      receipts.map((receipt, index) =>
-        expect.objectContaining({
-          messageId: receipt.messageId,
-          latestSenderKind: "system",
-          latestSenderHandle: "",
-          latestSenderDescription: "",
-          agentId: assigned!.id,
-          target: threads[index],
-        }),
+      expect.arrayContaining(
+        receipts.map((receipt, index) =>
+          expect.objectContaining({
+            messageId: receipt.messageId,
+            latestSenderKind: "system",
+            latestSenderHandle: "",
+            latestSenderDescription: "",
+            agentId: assigned!.id,
+            target: threads[index],
+          }),
+        ),
       ),
     );
     const retried = await board.execute(principal, command);
