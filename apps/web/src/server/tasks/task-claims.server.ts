@@ -2,6 +2,7 @@ import { BROWSER_MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/menti
 import { TASK_CLAIM_BLOCKED_ACTIONS } from "@lrm/coforge-sdk/internal";
 import {
   MESSAGE_ANCHOR_SOURCE,
+  UUID_LIKE_PATTERN,
   type TaskClaimConflict,
   type TaskClaimResult,
   type TaskCommand,
@@ -109,6 +110,8 @@ export async function findSourceMessage(
   // it names, so the lookup stays an index range on the message id instead of reading every
   // top-level message in the conversation.
   const anchor = MESSAGE_ANCHOR.test(messageId) ? messageId : undefined;
+  // Neither an anchor nor a whole id names no message; the id column would refuse the text.
+  if (!anchor && !UUID_LIKE_PATTERN.test(messageId)) throw new AppError("NOT_FOUND");
   const messages = await tx.message.findMany({
     where: anchor
       ? channelThreadRootWhere(conversationId, anchor)

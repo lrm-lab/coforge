@@ -27,6 +27,13 @@ function resourceReceipt(task: TaskView): string {
   return ` resource-receipt=${task.resourceReceiptRecordedAt ? "recorded" : "pending"}`;
 }
 
+/** `msg=` is the channel message the Task sits on; a Task made from a message (`create --message-id`)
+ * sits on none and names that one as `source=`. */
+function messageField(task: TaskView): string {
+  const source = task.sourceMessage ? ` source=${shortId(task.sourceMessage.messageId)}` : "";
+  return `msg=${task.messageId ? shortId(task.messageId) : "-"}${source}`;
+}
+
 function times(task: TaskView): string {
   return ` created=${formatUtcTimestamp(task.createdAt)} updated=${formatUtcTimestamp(task.updatedAt)}`;
 }
@@ -37,7 +44,7 @@ function boardRow(task: TaskView): string {
   const creatorMark = departure(task.creator);
   const creator = ` (by @${task.creator.handle}${creatorMark ? ` [${creatorMark}]` : ""})`;
   const details = task.description ? `\n  details: ${fenceMessageBody(task.description)}` : "";
-  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} msg=${task.messageId ? shortId(task.messageId) : "-"} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
+  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
 }
 
 /** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
@@ -55,7 +62,7 @@ function ownRow(task: TaskView): string {
   const mark = departure(task.creator);
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
   const title = task.title.replace(/\s+/g, " ").trim();
-  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} msg=${task.messageId ? shortId(task.messageId) : "-"}${resourceReceipt(task)}${times(task)} ${title}`;
+  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} ${messageField(task)}${resourceReceipt(task)}${times(task)} ${title}`;
 }
 
 /**
@@ -111,7 +118,7 @@ function threadReply(target: string, task: TaskView): string | null {
 export function formatTasksCreated(target: string, result: TaskResult): string {
   const rows = result.tasks.map(
     (task) =>
-      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} msg=${task.messageId ? shortId(task.messageId) : "-"}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
+      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} ${messageField(task)}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
   );
   const receipt = (result.assignmentReceipts ?? []).flatMap((receipt) => [
     "",

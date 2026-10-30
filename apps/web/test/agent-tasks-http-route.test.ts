@@ -3,8 +3,11 @@ import { expect, test } from "bun:test";
 import { AppError } from "#src/lib/app-error";
 import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
 import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
+import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 
-const principal = { workspaceId: "workspace-1", agentId: "agent-1", userId: "user-1" };
+// What the Agent API authenticates names the owner beside the Agent; the route scopes it.
+const authenticated = { workspaceId: "workspace-1", agentId: "agent-1", userId: "user-1" };
+const principal = agentTaskPrincipal(authenticated);
 
 const request = (body: unknown) =>
   new Request("https://server.example/api/agent/v1/tasks", {
@@ -133,24 +136,13 @@ test("an unknown field is still rejected by the strict schema before the board i
   expect(called).toBe(false);
 });
 
-test("the board receives an agent-scoped principal — never the owner's userId alongside it", async () => {
+test("an Agent API principal becomes the Agent alone, never its owner's userId beside it", () => {
   // The HTTP auth principal carries the agent AND its owner (`userId`). The real board's scope()
   // throws ACCESS_DENIED unless EXACTLY ONE of the two is set, so a pass-through principal makes
-  // every agent Task command over HTTP a 400 that says only "ACCESS_DENIED". This pins the fix.
-  let receivedPrincipal: unknown;
-  const result = await handleAgentTaskPost(
-    request({ idempotencyKey: "request-1", operation: "list", target: "#general" }),
-    principal,
-    {
-      execute: async (passedPrincipal) => {
-        receivedPrincipal = passedPrincipal;
-        return { tasks: [] };
-      },
-    },
-  );
-
-  expect(result.status).toBe(200);
-  expect(receivedPrincipal).toEqual({ workspaceId: "workspace-1", agentId: "agent-1" });
+  // every agent Task command over HTTP an "ACCESS_DENIED". Every task route takes its principal
+  // from this function, and the handlers' types refuse the authenticated shape as it is.
+  expect(principal).toEqual({ workspaceId: "workspace-1", agentId: "agent-1" });
+  expect(Object.keys(principal)).not.toContain("userId");
 });
 
 test("a board error carrying a domain code is answered 400 with that code, not one flat word", async () => {

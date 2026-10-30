@@ -6,6 +6,7 @@ import { isFile } from "#src/server/attachments/upload-file.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { resolveTaskAttachmentTarget } from "#src/server/tasks/task-attachment-target.server";
+import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 import { resolveAttachmentConversation } from "#src/server/agents/agent-target-status.server";
 
 export type AgentAttachmentUploadPrincipal = { workspaceId: string; agentId: string };
@@ -105,7 +106,7 @@ export const Route = createFileRoute("/api/agent/v1/attachments/")({
           resolveTarget: (workspaceId, agentId, target) =>
             repository.resolveAgentSendTarget(workspaceId, agentId, target),
           resolveTask: (taskPrincipal, taskTarget) =>
-            resolveTaskAttachmentTarget(db, taskPrincipal, taskTarget),
+            resolveTaskAttachmentTarget(db, agentTaskPrincipal(taskPrincipal), taskTarget),
           store: (input) => storeAgentAttachment(db, input),
         });
       },

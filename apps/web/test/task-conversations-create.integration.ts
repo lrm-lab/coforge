@@ -7,7 +7,9 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
+import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -231,4 +233,80 @@ test("a person keeps the message-based flow, and a source needs the experiment",
   await expect(
     run("maker", { operation: "create", title: "x", createsResource: true }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
+
+const post = (principal: object, body: Record<string, unknown>) =>
+  handleAgentTaskPost(
+    new Request("http://x/api/agent/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotencyKey: crypto.randomUUID(),
+        target: `#${channelName}`,
+        ...body,
+      }),
+    }),
+    agentTaskPrincipal(principal as { workspaceId: string; agentId: string }),
+    board,
+  );
+
+test("over the Agent route: claim by message is a 409 pointing at create, never a 500", async () => {
+  await experiment(true);
+  // The principal the Agent API authenticates names the owner beside the Agent.
+  const principal = { ...as("worker"), userId: crypto.randomUUID() };
+  for (const body of [
+    { operation: "claim", messageId: sourceId },
+    { operation: "claim", messageIds: [sourceId] },
+    { operation: "claim", messageId: sourceId.slice(0, 13) },
+    { operation: "convert", messageId: sourceId },
+    { operation: "claim", messageId: "01a18ee9-cfb2" },
+    { operation: "claim", messageId: "not-a-message-id" },
+    { operation: "claim", messageId: crypto.randomUUID() },
+    { operation: "claim", number: 1, messageId: sourceId },
+  ]) {
+    const response = await post(principal, body);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "task_v2_use_create" });
+  }
+});
+
+test("over the Agent route: create names its source message whole or by its short id", async () => {
+  await experiment(true);
+  const principal = { ...as("maker"), userId: crypto.randomUUID() };
+  for (const messageId of [sourceId, sourceId.slice(0, 13)]) {
+    const response = await post(principal, {
+      operation: "create",
+      title: `From ${messageId}`,
+      messageId,
+      alongside: true,
+    });
+    expect(response.status).toBe(200);
+    const created = (await response.json()) as {
+      tasks: Array<{ sourceMessage?: { messageId: string } }>;
+    };
+    expect(created.tasks[0]!.sourceMessage?.messageId).toBe(sourceId);
+  }
+});
+
+test("a message id that names no message is a not-found result, never a 500", async () => {
+  // Task conversations off, so the legacy claim path reads the id; and on, where create reads it.
+  for (const enabled of [false, true]) {
+    await experiment(enabled);
+    const worker = { ...as("worker"), userId: crypto.randomUUID() };
+    const claim = await post(worker, { operation: "claim", messageId: "not-a-message-id" });
+    expect(claim.status).toBe(enabled ? 409 : 200);
+    if (!enabled)
+      expect(await claim.json()).toMatchObject({
+        claims: [{ messageId: "not-a-message-id", success: false, reason: "message not found" }],
+      });
+    if (enabled) {
+      const maker = { ...as("maker"), userId: crypto.randomUUID() };
+      const create = await post(maker, {
+        operation: "create",
+        title: "t",
+        messageId: "not-a-message-id",
+      });
+      expect(create.status).toBe(404);
+    }
+  }
+  await experiment(true);
 });

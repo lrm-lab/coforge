@@ -369,3 +369,28 @@ test("A claim that authorises no work is refused with the rows, as a conflict wh
     }),
   ).toMatchObject({ code: "CLAIM_FAILED" });
 });
+
+test("A Task made from a channel message names it beside the message it sits on", () => {
+  const source = {
+    messageId: "01a18ee9-cfb2-7c3a-9d11-aaaaaaaaaaaa",
+    senderName: "Ada",
+    preview: "x",
+  };
+  const made = task(4, { messageId: null, sourceMessage: source });
+  const plain = task(5, { messageId: null });
+  const board = formatTaskBoard("#c", { tasks: [made, plain] } as TaskResult, "all");
+  expect(board).toContain("msg=- source=01a18ee9-cfb2 rev=");
+  expect(board.split("\n").find((line) => line.startsWith("#5"))).toContain("msg=- rev=");
+  const own = formatMyTaskList(
+    {
+      tasks: [{ ...made, channelRef: "#c" }],
+      coverage,
+      pagination: { mode: "complete", truncated: false },
+    },
+    undefined,
+  );
+  expect(own).toContain("msg=- source=01a18ee9-cfb2");
+  expect(formatTasksCreated("#c", { tasks: [made] } as TaskResult)).toContain(
+    "msg=- source=01a18ee9-cfb2",
+  );
+});

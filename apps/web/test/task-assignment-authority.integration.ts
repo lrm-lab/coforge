@@ -2,6 +2,7 @@ import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.ser
 import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
 import { expect, test } from "bun:test";
 import { AppError } from "#src/lib/app-error";
+import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 import { taskAssignmentFixture } from "./helpers/task-assignment-fixture";
 
 test("an admin Agent may reserve a Todo task for another Agent with one personal assignment receipt", async () => {
@@ -342,7 +343,7 @@ test("assignment refusal explains the Workspace owner/admin requirement through 
           assignee: `@${f.peerAgent.name}`,
         }),
       }),
-      f.actor,
+      agentTaskPrincipal(f.actor as { workspaceId: string; agentId: string }),
       f.board,
     );
     expect(response.status).toBe(403);

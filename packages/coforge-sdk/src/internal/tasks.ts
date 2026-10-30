@@ -256,8 +256,9 @@ export type TaskClaimConflict = {
   observedAt: string;
 };
 
-export type TaskPrincipal = {
-  workspaceId: string;
-  userId?: string;
-  agentId?: string;
-};
+/** Who acts on a board: a person or an Agent, never both (the board refuses a principal naming
+ * both, so the type does too). An Agent API request authenticates an Agent beside its owner; the
+ * owner is not the actor. */
+export type TaskPrincipal =
+  | { workspaceId: string; userId: string; agentId?: never }
+  | { workspaceId: string; agentId: string; userId?: never };

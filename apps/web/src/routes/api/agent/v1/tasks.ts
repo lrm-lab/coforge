@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentTaskRequest } from "@lrm/coforge-sdk/agent";
 import { TASK_STATUSES, type TaskPrincipal, type TaskResult } from "@lrm/coforge-sdk/internal";
+import {
+  agentTaskPrincipal,
+  type AgentTaskPrincipal,
+} from "#src/server/tasks/task-principal.server";
 import { z } from "zod";
 import { AppError } from "#src/lib/app-error";
 import {
@@ -78,18 +82,14 @@ const taskRequestSchema = z
 /** The raw HTTP adapter validates JSON shape; the board owns command invariants and authorization. */
 export async function handleAgentTaskPost(
   request: Request,
-  principal: TaskPrincipal,
+  principal: AgentTaskPrincipal,
   board: {
     execute(principal: TaskPrincipal, command: AgentTaskRequest): Promise<TaskResult>;
   },
 ): Promise<Response> {
   try {
     const command = taskRequestSchema.parse(await readAgentJsonBody(request));
-    // Agent Task commands act as the agent, not its owner user.
-    const result = await board.execute(
-      { workspaceId: principal.workspaceId, agentId: principal.agentId },
-      command,
-    );
+    const result = await board.execute(principal, command);
     return Response.json({ ...result, idempotencyKey: command.idempotencyKey });
   } catch (error) {
     if (error instanceof SourceMessageTaken) return agentErrorResponse(error);
@@ -138,7 +138,8 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
       POST: ({ request, context: { principal, db } }) =>
         handleAgentTaskPost(
           request,
-          principal,
+          // Agent Task commands act as the agent, not its owner user.
+          agentTaskPrincipal(principal),
           new TaskBoard(db, {
             // The Agent reads its results: a person mentioned in a title reads as their @handle.
             reader: "agent",

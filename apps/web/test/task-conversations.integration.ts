@@ -4,6 +4,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
+import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("TASK_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -294,9 +295,10 @@ test("stopping to follow leaves a notice with the reason in the conversation, on
 
 test("the route answers an Agent authenticated with its owner beside it", async () => {
   // The Agent API's principal names the Agent and the user who owns it; the board refuses both.
+  const authenticated = { ...as("worker"), userId: crypto.randomUUID() };
   const response = await handleTaskViewGet(
     new Request(`http://x/?channel=${encodeURIComponent(ref.target)}&task_number=1`),
-    { ...as("worker"), userId: crypto.randomUUID() } as never,
+    agentTaskPrincipal(authenticated),
     conversations,
     async () => true,
   );
