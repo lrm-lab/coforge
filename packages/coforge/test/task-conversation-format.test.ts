@@ -70,12 +70,11 @@ test("the task's assignee, creator, source message and description head the view
         owner: { handle: "kiro" },
         creator: { handle: "ada" },
         createdAt: "2026-10-30T09:00:00.000Z",
-      },
-      sourceMessage: {
-        id: "01a16c6c-1c03-77cc-ac0d-1ec28453613a",
-        content: "the flaky\ntest again",
-        createdAt: "2026-10-30T08:00:00.000Z",
-        senderName: "bob",
+        sourceMessage: {
+          messageId: "01a16c6c-1c03-77cc-ac0d-1ec28453613a",
+          senderName: "bob",
+          preview: "the flaky test again",
+        },
       },
     }),
   );

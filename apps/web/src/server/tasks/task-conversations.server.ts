@@ -73,7 +73,6 @@ export class TaskConversations {
     return {
       taskRef: `${boardName}:#${task.number}`,
       task: taskView(full, "agent"),
-      sourceMessage: await this.sourceMessage(full),
       following: follow !== null,
       followReason: follow?.reason ?? null,
       conversation: { exists: discussion !== null, replyCount: discussion?.total ?? 0 },
@@ -349,30 +348,6 @@ export class TaskConversations {
       member: scope.member,
       boardName: boardLabel(scope.channelName, ref.target?.replace(/^@/, "")),
     };
-  }
-
-  /** The channel message a task was made from, as the reader sees it in the board. */
-  private async sourceMessage(task: { sourceMessageId: string | null; conversationId: string }) {
-    if (!task.sourceMessageId) return null;
-    const message = await this.ports.db.message.findFirst({
-      where: { id: task.sourceMessageId, conversationId: task.conversationId },
-      select: {
-        id: true,
-        body: true,
-        createdAt: true,
-        sender: {
-          select: { user: { select: { username: true } }, agent: { select: { name: true } } },
-        },
-      },
-    });
-    return message
-      ? {
-          id: message.id,
-          content: message.body,
-          createdAt: message.createdAt.toISOString(),
-          senderName: message.sender?.agent?.name ?? message.sender?.user?.username ?? null,
-        }
-      : null;
   }
 
   /** The task's conversation, made now if the task has none. */
