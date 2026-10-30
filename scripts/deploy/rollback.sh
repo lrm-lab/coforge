@@ -125,7 +125,8 @@ fi
 
 tmp_upstream="${upstream_file}.tmp.$$"
 sed "s/web_${active_slot}:3000/web_${target_slot}:3000/g" "$upstream_file" > "$tmp_upstream"
-mv "$tmp_upstream" "$upstream_file"
+cat "$tmp_upstream" > "$upstream_file"
+rm -f "$tmp_upstream"
 
 # 4. Reload Caddy
 caddy_container="$(docker ps --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=caddy" -q | head -n 1)"

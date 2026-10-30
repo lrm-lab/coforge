@@ -218,7 +218,8 @@ fi
 printf 'blue-green-deploy: switching Caddy upstream to web_%s:3000...\n' "$candidate_slot" >&2
 tmp_upstream="${upstream_file}.tmp.$$"
 sed "s/web_${active_slot}:3000/web_${candidate_slot}:3000/g" "$upstream_file" > "$tmp_upstream"
-mv "$tmp_upstream" "$upstream_file"
+cat "$tmp_upstream" > "$upstream_file"
+rm -f "$tmp_upstream"
 
 caddy_container="$(compose ps -q caddy 2>/dev/null || docker ps --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=caddy" -q | head -n 1)"
 if [ -n "$caddy_container" ]; then
@@ -228,7 +229,8 @@ if [ -n "$caddy_container" ]; then
 	else
 		printf 'blue-green-deploy: Caddy validation failed; rolling upstream file back\n' >&2
 		sed "s/web_${candidate_slot}:3000/web_${active_slot}:3000/g" "$upstream_file" > "$tmp_upstream"
-		mv "$tmp_upstream" "$upstream_file"
+		cat "$tmp_upstream" > "$upstream_file"
+		rm -f "$tmp_upstream"
 		docker stop -t 10 "$(compose ps -q "web_${candidate_slot}")" >/dev/null 2>&1 || true
 		printf 'outcome=failed\nhealth_result=caddy reload failed\n'
 		exit 1
