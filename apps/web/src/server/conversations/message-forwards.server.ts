@@ -158,7 +158,18 @@ export class MessageForwards {
       const committed = await this.ports.idempotency.find(scope).catch(() => undefined);
       if (committed?.state === "completed") return succeeded(committed.message, false);
       await copies?.discard();
-      return failed(failureOf(error));
+      const code = failureOf(error);
+      // A refusal the forwarder can act on is theirs to read; anything else is ours.
+      if (code === "failed")
+        console.error(
+          JSON.stringify({
+            event: "message_forward_failed",
+            workspaceId,
+            destination,
+            error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          }),
+        );
+      return failed(code);
     }
   }
 
