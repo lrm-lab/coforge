@@ -58,8 +58,17 @@ test("without a cloud cluster the assistant runs on the oldest Computer its user
   expect((await sendTo(user.id, noCluster)).computerId).toBe(first.id);
 });
 
-test("without a cloud cluster or a Computer the send says to connect one", async () => {
+test("without a cloud cluster or a local Computer the send says to connect one", async () => {
   const user = await member("none");
+  await db.computer.create({
+    data: {
+      ownerId: user.id,
+      machineId: `extra-${suffix}`,
+      kind: "cloud",
+      cloudSlot: "extra",
+      workspaces: { create: { workspaceId: workspace.id } },
+    },
+  });
   const error = await sendTo(user.id, noCluster).catch((cause: unknown) => cause);
   expect(isAppErrorCode(error, "TEMPORARILY_UNAVAILABLE")).toBe(true);
   expect((error as { errorId?: string }).errorId).toBe("workspace-assistant-computer-required");

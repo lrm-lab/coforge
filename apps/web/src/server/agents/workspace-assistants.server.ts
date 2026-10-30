@@ -124,14 +124,19 @@ export class WorkspaceAssistants {
   }
 
   /**
-   * Where a deployment with no cloud cluster runs the assistant: the oldest Computer the user
+   * Where a deployment with no cloud cluster runs the assistant: the oldest local Computer the user
    * added that is connected to this Workspace (a v7 id sorts by creation, so the choice never
    * flips between sends). Another member's Computer is never considered, an administrator's
    * included. An offline one still counts; the send says so as it does for any Agent.
    */
   async #ownComputerId(workspaceId: string, userId: string): Promise<string | undefined> {
     const computer = await this.db.computer.findFirst({
-      where: { ownerId: userId, deletedAt: null, workspaces: { some: { workspaceId } } },
+      where: {
+        ownerId: userId,
+        kind: "local",
+        deletedAt: null,
+        workspaces: { some: { workspaceId } },
+      },
       orderBy: { id: "asc" },
       select: { id: true },
     });

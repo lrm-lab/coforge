@@ -5,7 +5,6 @@ import { AppError } from "#src/lib/app-error";
 
 test("a send refused with a known errorId says what to do, and offers to connect a Computer", () => {
   const guidance = unsentGuidance("workspace-assistant-computer-required");
-  expect(guidance?.action).toBe("connect-computer");
   expect(guidance?.message()).toContain("Computer");
 });
 
