@@ -1,7 +1,10 @@
 import { Checkbox as AriaCheckbox } from "react-aria-components";
 
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { useVisibleLiveAgents } from "#src/features/agents/workspace-agents-realtime";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { BadgeWithButton } from "#src/components/base/badges/badges";
+import { Button } from "#src/components/base/buttons/button";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -119,8 +122,10 @@ export function ChannelCandidateChips({
   );
 }
 
-/** The candidates a search left, grouped into Agents and people, each a ticked row; plus the two
- * states that are not "no data": everyone is already a member, and this search matched nobody. */
+/** The candidates a search left, grouped into Agents and people, each a ticked row; plus the
+ * states that are not "no data": everyone is already a member, this search matched nobody, and it
+ * matched only a private Agent of the viewer's, which no channel holds, so it says so and links to
+ * its profile, where it can be made public. */
 export function ChannelCandidateGroups({
   candidates,
   shown,
@@ -128,6 +133,7 @@ export function ChannelCandidateGroups({
   selected,
   disabled,
   onToggle,
+  onOpenAgent,
   inset = "page",
 }: {
   /** Every candidate, so "everyone is already in" is told apart from "no match". */
@@ -137,6 +143,7 @@ export function ChannelCandidateGroups({
   selected: ReadonlySet<string>;
   disabled: boolean;
   onToggle: (key: string, on: boolean) => void;
+  onOpenAgent: (agentId: string) => void;
   inset?: Inset;
 }) {
   const pad = insets[inset];
@@ -179,9 +186,47 @@ export function ChannelCandidateGroups({
       )}
       {candidates.length > 0 && shown.length === 0 && (
         <p className={cn("py-4 text-center text-sm text-tertiary", pad)}>
-          {m.channel_members_no_matches({ query: term })}
+          <NoMatches term={term} disabled={disabled} onOpenAgent={onOpenAgent} />
         </p>
       )}
+    </>
+  );
+}
+
+/** Why a search found no one to add: nobody matched, or only a private Agent of the viewer's did,
+ * which no channel holds; that one links to its profile, where it can be made public. Reads the
+ * Agents only once a search has come up empty. */
+function NoMatches({
+  term,
+  disabled,
+  onOpenAgent,
+}: {
+  term: string;
+  disabled: boolean;
+  onOpenAgent: (agentId: string) => void;
+}) {
+  const query = term.toLowerCase();
+  const privateMatch = useVisibleLiveAgents().find(
+    (agent) =>
+      agent.visibility === AGENT_VISIBILITY.PRIVATE &&
+      memberMatchesSearch(query, {
+        kind: "agent",
+        displayName: agent.displayName,
+        name: agent.name,
+      }),
+  );
+  if (!query || !privateMatch) return m.channel_members_no_matches({ query: term });
+  return (
+    <>
+      {m.channel_members_private_agent({ name: privateMatch.displayName })}{" "}
+      <Button
+        color="link-color"
+        size="sm"
+        isDisabled={disabled}
+        onPress={() => onOpenAgent(privateMatch.id)}
+      >
+        {m.channel_members_private_agent_open()}
+      </Button>
     </>
   );
 }

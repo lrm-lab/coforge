@@ -89,6 +89,7 @@ export function ChannelMembersPage({
       createdAgentJoin={createdAgentJoin}
       data={members.data}
       onDone={() => onViewChange("members")}
+      onOpenAgent={(agentId) => roster.onOpenProfile({ kind: "agent", id: agentId })}
     />
   ) : (
     <MembersRoster

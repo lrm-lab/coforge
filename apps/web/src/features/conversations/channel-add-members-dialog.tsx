@@ -7,6 +7,7 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { useOpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import {
@@ -85,6 +86,7 @@ export function ChannelAddMembersDialog({
   };
 }) {
   const queryClient = useQueryClient();
+  const { openAgentProfile } = useOpenAgentProfile();
   const members = useChannelMembers(channelId);
   const [search, setSearch] = useState("");
   // The proposal seeds the selection once; it must not fight the human's own removals on later
@@ -201,6 +203,10 @@ export function ChannelAddMembersDialog({
                     selected={selected}
                     disabled={submitting}
                     onToggle={toggle}
+                    onOpenAgent={(agentId) => {
+                      close();
+                      openAgentProfile(agentId);
+                    }}
                     inset="dialog"
                   />
                 </div>

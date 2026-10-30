@@ -35,6 +35,8 @@
   "channel_members_add_member": "Add Member",
   "channel_members_search": "Search",
   "channel_members_name_placeholder": "Name",
+  "channel_members_private_agent": "{name} is a private Agent and can’t join channels.",
+  "channel_members_private_agent_open": "Open profile",
   "channel_members_all_added": "All members added",
   "channel_members_deselect": "Deselect {name}",
   "channel_members_adding": "Adding…",

@@ -12,6 +12,7 @@ import {
   getComputerRuntimeCatalog,
   listComputers,
 } from "#src/features/computers/computers.functions";
+import { useVisibleLiveAgents } from "#src/features/agents/workspace-agents-realtime";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -26,6 +27,7 @@ import {
   pickedMemberIds,
   type ChannelCandidate,
 } from "./channel-member-picker";
+import { memberMatchesSearch } from "./channel-member-search";
 import type { ChannelMembers } from "./channel-members-query";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 
@@ -36,6 +38,7 @@ export function AddMembersView({
   createdAgentJoin,
   data,
   onDone,
+  onOpenAgent,
 }: {
   channelId: string;
   channelName: string;
@@ -43,6 +46,7 @@ export function AddMembersView({
   createdAgentJoin: CreatedAgentJoin;
   data: ChannelMembers;
   onDone: () => void;
+  onOpenAgent: (agentId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const add = useServerFn(addPublicChannelMembersReportingRefusals);
@@ -75,7 +79,13 @@ export function AddMembersView({
   // Joined some other way meanwhile (a refetch, another member): nothing left to retry.
   const unjoined =
     failure && !data.agents.some((agent) => agent.id === failure.agent.id) ? failure : null;
-  const createName = term && shown.length === 0 ? term : "";
+  // A search no candidate answers names the Agent to create, unless an Agent the viewer can see
+  // already answers it (in the channel, or private): that one exists, and its name is taken.
+  const query = term.toLowerCase();
+  const taken = useVisibleLiveAgents().some((agent) =>
+    memberMatchesSearch(query, { kind: "agent", displayName: agent.displayName, name: agent.name }),
+  );
+  const createName = term && shown.length === 0 && !taken ? term : "";
 
   async function joinCreated(agent: CreatedAgent, startPublished: boolean) {
     if (await createdAgentJoin.join(agent, startPublished)) {
@@ -185,6 +195,7 @@ export function AddMembersView({
             selected={selected}
             disabled={busy}
             onToggle={toggle}
+            onOpenAgent={onOpenAgent}
             inset="box"
           />
         </div>

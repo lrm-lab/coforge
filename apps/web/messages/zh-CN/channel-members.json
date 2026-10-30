@@ -35,6 +35,8 @@
   "channel_members_add_member": "添加成员",
   "channel_members_search": "搜索",
   "channel_members_name_placeholder": "名称",
+  "channel_members_private_agent": "{name} 是私有 Agent，不能加入频道。",
+  "channel_members_private_agent_open": "打开资料页",
   "channel_members_all_added": "所有成员都已添加",
   "channel_members_deselect": "取消选择 {name}",
   "channel_members_adding": "添加中…",
