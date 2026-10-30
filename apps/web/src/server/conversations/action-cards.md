@@ -8,8 +8,8 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   row in one conversation-locked transaction (`createActionCardMessage`). The server alone posts
   `app:grant_agent` (`AppGrantCards`) once per waiting app access request, under its row lock;
   whoever decides the request settles the card in that transaction (`settleAppGrantCard`).
-- `ActionCards.viewsFor(workspaceId, viewerUserId, messageIds)` is one batched lookup per message
-  page. Never look up action cards per message.
+- `ActionCards.viewsFor(workspaceId, viewerUserId, messageIds)` (`action-card-views.server.ts`) is
+  one batched lookup per message page. Never look up action cards per message.
 - Every commit path runs the real operation first, under the committing human's identity and that
   operation's own authorization (`PublicChannels.create`/`addMembers`, `createAgent` with
   `assertCanCreateAgents`, `AppAgentAccess.approve`), then marks the card `executed` with a
