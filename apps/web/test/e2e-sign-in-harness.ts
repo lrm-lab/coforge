@@ -130,8 +130,8 @@ export const codeTab = signInTab("Sign in with a code");
 export const passwordTab = signInTab("Sign in with a password");
 
 /** The condition "the sign-in page is up on `origin` and its tabs are ready". */
-export const onSignInPage = (origin: string) =>
-  `location.origin === ${JSON.stringify(origin)} && location.pathname.endsWith("/login") && ${hydrated(codeTab)}`;
+export const onSignInPage = (origin: string, tab = codeTab) =>
+  `location.origin === ${JSON.stringify(origin)} && location.pathname.endsWith("/login") && ${hydrated(tab)}`;
 
 /**
  * Forgets the sign-in attempts the Web server has counted. The limits live in Redis for 15
@@ -366,10 +366,15 @@ export function openBrowser(session: string) {
     await setInput(nameFieldSelector, displayName);
     await browser("eval", `${button(label)}.click()`);
   }
-  /** Opens the password tab, which waits for its form, and fills it and presses its button
-   * (`Sign In`, or `登录`). */
-  async function submitSignIn(account: string, password: string, label = "Sign In") {
-    await browser("eval", `${passwordTab}.click()`);
+  /** Opens the password tab (`Sign in with a password`, or `密码登录`), which waits for its form,
+   * and fills it and presses its button (`Sign In`, or `登录`). */
+  async function submitSignIn(
+    account: string,
+    password: string,
+    label = "Sign In",
+    tab = passwordTab,
+  ) {
+    await browser("eval", `${tab}.click()`);
     await waitFor(hydrated(accountField));
     await setInput(accountFieldSelector, account);
     await setInput(passwordFieldSelector, password);

@@ -14,6 +14,7 @@ import {
   removeSignInAccounts,
   requireLocalServices,
   signInEmailOf,
+  signInTab,
   startSignInStack,
   type Person,
 } from "./e2e-sign-in-harness";
@@ -55,6 +56,9 @@ const languages = {
     name: "Ivy Invitee",
     lateName: "Lena Late",
     h1: "Enter your display name",
+    signIn: "Sign In",
+    codeTab: "Sign in with a code",
+    passwordTab: "Sign in with a password",
     continue: "Continue",
     join: (team: string) => `Join ${team}`,
     switcher: "Current workspace",
@@ -69,6 +73,9 @@ const languages = {
     name: "安栋",
     lateName: "迟到",
     h1: "输入你的昵称",
+    signIn: "登录",
+    codeTab: "验证码登录",
+    passwordTab: "密码登录",
     continue: "继续",
     join: (team: string) => `加入 ${team}`,
     switcher: "当前工作区",
@@ -118,20 +125,31 @@ test("a sign-up from a working invite is asked for a name only and joins without
   try {
     stack = await startSignInStack({ people, webPort, artifacts });
     const { origin } = stack;
-    const onSignInHere = onSignInPage(origin);
     const onNameStepHere = onNameStep(origin);
     const fieldNames = `[...document.querySelectorAll("main input")].map((input) => input.name)`;
     const noticeText = `(document.querySelector("main form [role=status]")?.textContent ?? null)`;
     const inAppAt = (path: string) =>
       `location.origin === ${JSON.stringify(origin)} && location.pathname.includes(${JSON.stringify(path)}) && document.body.innerText.includes("general")`;
-    async function signInAs(person: PersonKey, returnTo?: string) {
+    /** Signs in from the sign-in page in `locale`, as the join page sends people there: with its
+     * own path, unprefixed, as `returnTo`. */
+    async function signInAs(
+      person: PersonKey,
+      returnTo?: string,
+      language: (typeof languages)[keyof typeof languages] = languages.en,
+    ) {
+      const { locale } = language;
       await browser("cookies", "clear");
       await browser(
         "open",
-        `${origin}/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`,
+        `${origin}${locale === "en" ? "" : `/${locale}`}/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`,
       );
-      await waitFor(onSignInHere);
-      await submitSignIn(signInEmailOf(people[person]), personPassword);
+      await waitFor(onSignInPage(origin, signInTab(language.codeTab)));
+      await submitSignIn(
+        signInEmailOf(people[person]),
+        personPassword,
+        language.signIn,
+        signInTab(language.passwordTab),
+      );
     }
 
     await removeSeeded();
@@ -155,15 +173,10 @@ test("a sign-up from a working invite is asked for a name only and joins without
     await browser("set", "viewport", "1440", "900");
 
     // ── An invite sign-up: the name only, then the join page, then the invited Workspace alone ──
-    // Run once per language. The page's language comes from the locale prefix, so the zh-CN run
-    // opens the name step under `/zh-CN` with the same `returnTo`.
-    async function atName(language: (typeof languages)[keyof typeof languages], returnTo: string) {
-      if (language.locale === "en") return;
-      await browser(
-        "open",
-        `${origin}/${language.locale}/welcome?returnTo=${encodeURIComponent(returnTo)}`,
-      );
-      await waitFor(onNameStepHere);
+    // Run once per language. The browser asks for English; the zh-CN run signs in from the
+    // `/zh-CN` sign-in page and stays in Chinese from there on.
+    async function atName(language: (typeof languages)[keyof typeof languages]) {
+      expect(await evaluate<string>("location.pathname")).toBe(`/${language.locale}/welcome`);
       expect(await evaluate<string>(`document.querySelector("main h1")?.textContent`)).toBe(
         language.h1,
       );
@@ -171,11 +184,10 @@ test("a sign-up from a working invite is asked for a name only and joins without
     for (const language of Object.values(languages)) {
       const link = await newLink();
       const joinPath = `/join/${link.token}`;
-      const returnTo = language.locale === "en" ? joinPath : `/${language.locale}${joinPath}`;
       const person = language.invitee;
-      await signInAs(person, returnTo);
+      await signInAs(person, joinPath, language);
       await waitFor(onNameStepHere);
-      await atName(language, returnTo);
+      await atName(language);
       expect(await evaluate<string[]>(fieldNames)).toEqual(["displayName"]);
       expect(await evaluate<string | null>(noticeText)).toBeNull();
       await shoot(language.shot("01-invite-name-only.png"));
@@ -231,11 +243,10 @@ test("a sign-up from a working invite is asked for a name only and joins without
         data: { expiresAt: new Date(Date.now() - 60_000) },
       });
       const joinPath = `/join/${expiring.token}`;
-      const returnTo = language.locale === "en" ? joinPath : `/${language.locale}${joinPath}`;
       const person = language.late;
-      await signInAs(person, returnTo);
+      await signInAs(person, joinPath, language);
       await waitFor(onNameStepHere);
-      await atName(language, returnTo);
+      await atName(language);
       expect(await evaluate<string | null>(noticeText)).toBe(language.notice);
       expect(await evaluate<string[]>(fieldNames)).toEqual(["displayName", "workspaceSlug"]);
       await shoot(language.shot("04-expired-invite-notice.png"));
