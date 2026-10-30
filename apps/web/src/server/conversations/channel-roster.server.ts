@@ -28,10 +28,10 @@ import {
   announceNotifiedPeople,
   claimMentionActions,
   notifyMentionTargets,
-  publishNonMemberDeliveries,
   releaseMentionActions,
   type MentionActionResult,
 } from "./pending-mention-actions.server";
+import { publishNonMemberDeliveries } from "./non-member-deliveries.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 /** Who is in a channel: joining and leaving it, adding and removing members, the roster with the
