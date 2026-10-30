@@ -1,9 +1,7 @@
-import { useServerFn } from "@tanstack/react-start";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useRef } from "react";
 
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getRuntimeAuthSubscriptionToken } from "#src/features/realtime/realtime.functions";
 import type { RuntimeAuthSignal } from "#src/server/computers/runtime-auth.server";
 import { parseRuntimeAuthSignal, runtimeAuthChannel } from "./runtime-auth-realtime";
 
@@ -19,10 +17,8 @@ export function useRuntimeAuthSignals(
   handlers: { onSignal: (signal: RuntimeAuthSignal) => void; onSubscribed: () => void },
 ) {
   const userId = workspaceRoute.useLoaderData({ select: ({ user }) => user.id });
-  const getToken = useServerFn(getRuntimeAuthSubscriptionToken);
   useRealtimeSubscription({
     channel: runtimeAuthChannel(userId),
-    getToken,
     onSubscribed: () => handlers.onSubscribed(),
     onPublication: ({ data }) => {
       const signal = parseRuntimeAuthSignal(data);

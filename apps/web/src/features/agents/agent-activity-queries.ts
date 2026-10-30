@@ -1,8 +1,6 @@
 import { queryOptions, skipToken, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 
 import { getAgentActivityFeed, getWorkspaceActivity } from "./agent-activity.functions";
-import { getAgentActivitySubscriptionToken } from "./agents.functions";
 import {
   agentActivityChannel,
   agentActivityChannelForAgent,
@@ -123,14 +121,11 @@ function applyActivityPublication(
 export function useWorkspaceActivityRealtime(
   workspaceId: string | undefined,
   privateAgentIds: readonly string[],
-  getPrivateAgentActivityToken: ((agentId: string) => Promise<string>) | undefined,
 ) {
   const queryClient = useQueryClient();
-  const getConnectionToken = useServerFn(getAgentActivitySubscriptionToken);
 
   useRealtimeSubscription({
     channel: workspaceId ? agentActivityChannel(workspaceId) : undefined,
-    getToken: getConnectionToken,
     onSubscribed: () => {
       void queryClient.invalidateQueries({ queryKey: agentActivityKeys.all });
     },
@@ -141,13 +136,9 @@ export function useWorkspaceActivityRealtime(
   });
 
   useRealtimeSubscriptions({
-    channels:
-      workspaceId && getPrivateAgentActivityToken
-        ? privateAgentIds.map((agentId) => ({
-            channel: agentActivityChannelForAgent(workspaceId, agentId),
-            getToken: () => getPrivateAgentActivityToken(agentId),
-          }))
-        : [],
+    channels: workspaceId
+      ? privateAgentIds.map((agentId) => agentActivityChannelForAgent(workspaceId, agentId))
+      : [],
     onPublication: (channel, publication) => {
       if (!workspaceId) return;
       const agentId = privateAgentIds.find(

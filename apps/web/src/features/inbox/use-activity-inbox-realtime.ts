@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useServerFn } from "@tanstack/react-start";
 
 import {
   decodeActivityChangedEvent,
@@ -12,7 +11,6 @@ import {
 } from "#src/features/conversations/conversation-activity-event";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import type { SubscribedRecovery } from "#src/features/realtime/subscription-gap";
-import { getUserConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
 
 /** A burst of messages (an Agent posting several in a row) refreshes the listener once. */
 const REFRESH_DELAY_MS = 300;
@@ -40,7 +38,6 @@ export function useActivityInboxRealtime({
   onSubscribed?: (recovery: SubscribedRecovery) => void;
   refreshOnPins?: boolean;
 }) {
-  const getUserToken = useServerFn(getUserConversationSubscriptionToken);
   const onActivityRef = useRef(onActivity);
   useEffect(() => {
     onActivityRef.current = onActivity;
@@ -83,7 +80,6 @@ export function useActivityInboxRealtime({
 
   useRealtimeSubscription({
     channel: userConversationChannel(userId),
-    getToken: getUserToken,
     onPublication,
     onSubscribed: (recovery) => onSubscribedRef.current?.(recovery),
   });

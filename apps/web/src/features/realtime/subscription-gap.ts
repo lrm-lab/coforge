@@ -81,27 +81,3 @@ export function subscriptionGap({
   if (!wasRecovering) return "unrecovered";
   return recovered ? "none" : "lost";
 }
-
-/** Consecutive expired-token errors on one channel after which renewal itself is failing. */
-const EXPIRED_TOKEN_ERRORS_BEFORE_REPORT = 3;
-
-/**
- * Decides which of one channel's subscription errors to report. 109, the subscription token
- * expired (after a long time offline or asleep, every channel's at once), is routine: the client
- * renews the token and subscribes again by itself. It is reported only when it keeps coming back
- * without a successful subscribe in between, since then the renewed tokens are being refused too.
- * Anything else (103, permission denied) leaves the channel without updates and is reported.
- */
-export function subscriptionErrorReporter() {
-  let expiredInARow = 0;
-  return {
-    shouldReport(code: number) {
-      if (code !== 109) return true;
-      expiredInARow += 1;
-      return expiredInARow >= EXPIRED_TOKEN_ERRORS_BEFORE_REPORT;
-    },
-    subscribed() {
-      expiredInARow = 0;
-    },
-  };
-}

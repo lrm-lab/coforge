@@ -1,6 +1,5 @@
 import { useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import {
   piChatEventSchema,
   type PiChatResult,
@@ -13,13 +12,11 @@ import {
 } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { PiChatLiveHistory, applyPiChatEvent } from "@lrm/coforge-sdk/internal/pi-chat-stream";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getUserConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 
 /** Use the shared browser connection; native cursors reconcile reads against in-flight live events. */
 export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessionId: string) {
   const queries = useQueryClient();
-  const getToken = useServerFn(getUserConversationSubscriptionToken);
   const live = useRef(new PiChatLiveHistory(sessionId));
   const assemblies = useRef(new Map<string, PiChatFrameAssembly>());
   const queryKey = ["pi-chat", workspaceSlug, scope.computerId, "session", sessionId];
@@ -30,7 +27,6 @@ export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessi
   };
   useRealtimeSubscription({
     channel: userConversationChannel(scope.userId),
-    getToken,
     onSubscribed: recover,
     onError: recover,
     onPublication: ({ data }) => {

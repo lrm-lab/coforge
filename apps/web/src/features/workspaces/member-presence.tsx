@@ -1,12 +1,10 @@
 import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
-import { useServerFn } from "@tanstack/react-start";
 
 import {
   useBrowserRealtime,
   useRealtimeSubscription,
   type RealtimeClient,
 } from "#src/features/realtime/browser-realtime";
-import { getWorkspacePresenceSubscriptionToken } from "#src/features/realtime/realtime.functions";
 import { workspacePresenceChannel } from "./presence-channel";
 
 /**
@@ -98,13 +96,11 @@ export function WorkspacePresenceProvider({
     setStore({ workspaceId, presence: new WorkspacePresence() });
   const { presence } = store;
   const client = useBrowserRealtime();
-  const getToken = useServerFn(getWorkspacePresenceSubscriptionToken);
   const channel = workspaceId ? workspacePresenceChannel(workspaceId) : undefined;
   // `onSubscribed` also fires after every resubscribe, which is when a disconnect may have
   // hidden joins and leaves.
   useRealtimeSubscription({
     channel,
-    getToken,
     onSubscribed: () => {
       if (!client || !channel) return;
       // A failed read keeps the last known state; the next resubscribe reads again.

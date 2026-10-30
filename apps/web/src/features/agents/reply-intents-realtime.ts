@@ -1,15 +1,10 @@
-import { useCallback, useEffect } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { useEffect } from "react";
 
 import {
   conversationRealtimeChannel,
   userConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import {
-  getConversationRealtimeToken,
-  getUserConversationSubscriptionToken,
-} from "#src/features/realtime/realtime.functions";
 
 import { useLiveAgentActivity } from "#src/features/settings/live-agent-activity";
 import { useReplyIntentStore } from "./reply-intents-context";
@@ -36,10 +31,8 @@ export function useUserChannelReplyIntents(
   useEffect(() => {
     if (!live) replyIntents.clear();
   }, [live, replyIntents]);
-  const getToken = useServerFn(getUserConversationSubscriptionToken);
   useRealtimeSubscription({
     channel: live && workspaceId && viewerId ? userConversationChannel(viewerId) : undefined,
-    getToken,
     onSubscribed: () => replyIntents.clear(),
     onPublication: ({ data }) => {
       if (live && workspaceId) applyUserChannelPublication(replyIntents, data, workspaceId);
@@ -54,11 +47,6 @@ export function useConversationReplyIntents(
 ) {
   const replyIntents = useReplyIntentStore();
   const [live] = useLiveAgentActivity();
-  const getToken = useServerFn(getConversationRealtimeToken);
-  const getConversationToken = useCallback(
-    () => getToken({ data: { conversationId } }),
-    [getToken, conversationId],
-  );
   useEffect(() => {
     if (live && workspaceId && conversationId)
       return replyIntents.retainConversation(conversationId);
@@ -68,7 +56,6 @@ export function useConversationReplyIntents(
       live && workspaceId && conversationId
         ? conversationRealtimeChannel(conversationId)
         : undefined,
-    getToken: getConversationToken,
     recoverable: true,
     positioned: true,
     onSubscribed: ({ wasRecovering }) => {

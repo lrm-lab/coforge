@@ -93,7 +93,6 @@ describe("subscribeToConversationRealtime", () => {
     let reconciled = 0;
     subscribeToConversationRealtime(client, {
       conversationId: "conversation-a",
-      getToken: async () => "token",
       reconcile: () => {
         reconciled += 1;
       },
@@ -124,7 +123,6 @@ describe("subscribeToConversationRealtime", () => {
     let reconciled = 0;
     subscribeToConversationRealtime(client, {
       conversationId: "conversation-a",
-      getToken: async () => "token",
       reconcile: () => {
         reconciled += 1;
       },
@@ -146,7 +144,6 @@ describe("subscribeToConversationRealtime", () => {
     let reconciled = 0;
     subscribeToConversationRealtime(client, {
       conversationId: "conversation-a",
-      getToken: async () => "token",
       reconcile: () => {
         reconciled += 1;
       },
@@ -168,7 +165,6 @@ describe("subscribeToConversationRealtime", () => {
     let reconciled = 0;
     subscribeToConversationRealtime(client, {
       conversationId: "conversation-a",
-      getToken: async () => "token",
       reconcile: () => {
         reconciled += 1;
       },
@@ -202,7 +198,6 @@ describe("subscribeToConversationRealtime", () => {
     let reconciled = 0;
     subscribeToConversationRealtime(client, {
       conversationId: "conversation-a",
-      getToken: async () => "token",
       reconcile: () => {
         reconciled += 1;
       },
@@ -235,7 +230,6 @@ describe("subscribeToConversationRealtime", () => {
       const { client, subscribed } = fakeClient();
       subscribeToConversationRealtime(client, {
         conversationId: "conversation-a",
-        getToken: async () => "token",
         openedAt: at(opened),
         readPosition: async () => at(read),
         reconcile: () => heard.push("messages"),
@@ -261,7 +255,6 @@ describe("subscribeToConversationRealtime", () => {
     let settle: (position: { epoch: string; offset: number }) => void = () => {};
     const leave = subscribeToConversationRealtime(client, {
       conversationId: "conversation-a",
-      getToken: async () => "token",
       readPosition: () => new Promise((resolve) => (settle = resolve)),
       reconcile: () => heard.push("messages"),
       onMemberChanged: () => heard.push("members"),
@@ -282,7 +275,6 @@ describe("subscribeToConversationRealtime", () => {
     let lost = 0;
     subscribeToConversationRealtime(client, {
       conversationId: "conversation-a",
-      getToken: async () => "token",
       reconcile: () => {},
       onPublicationsLost: () => {
         lost += 1;
@@ -306,12 +298,10 @@ test("conversation views share one physical subscription until the last release"
   let second = 0;
   const releaseFirst = subscribeToConversationRealtime(client, {
     conversationId: "c",
-    getToken: async () => "token",
     reconcile: () => first++,
   });
   const releaseSecond = subscribeToConversationRealtime(client, {
     conversationId: "c",
-    getToken: async () => "token",
     reconcile: () => second++,
   });
   try {

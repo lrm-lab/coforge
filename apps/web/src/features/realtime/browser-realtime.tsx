@@ -10,11 +10,7 @@ import {
   type Connection,
   type ConnectionEvent,
 } from "./connection-status";
-import {
-  subscriptionErrorReporter,
-  type StreamPosition,
-  type SubscribedRecovery,
-} from "./subscription-gap";
+import { type StreamPosition, type SubscribedRecovery } from "./subscription-gap";
 import { createConnectionJournal } from "./connection-journal";
 import { watchRealtimeWake } from "./realtime-wake";
 
@@ -158,8 +154,9 @@ export type RealtimeClient = Pick<ClientInfo, "client" | "user">;
  * Subscribes one authorized channel on the shared Workspace connection.
  *
  * The Workspace layout owns the only browser connection; features subscribe
- * through this hook and never construct their own Centrifuge client. A channel
- * with a narrower server-issued grant supplies its own `getToken`.
+ * through this hook and never construct their own Centrifuge client. No channel
+ * carries a token of its own: the subscribe proxy decides who may hold it
+ * (`subscribe-proxy.server.ts`).
  */
 export type RealtimeSubscriptionError = {
   channel: string;
@@ -219,7 +216,6 @@ function dispatch<T>(channel: string, handlers: Iterable<(value: T) => void>, va
 function acquireSharedSubscription(
   client: SharedRealtimeClient,
   channel: string,
-  getToken?: () => Promise<string>,
   options?: { recoverable?: boolean; positioned?: boolean },
 ): SharedSubscriptionEntry {
   let byChannel = sharedSubscriptions.get(client);
@@ -230,7 +226,6 @@ function acquireSharedSubscription(
   let entry = byChannel.get(channel);
   if (!entry) {
     const nativeOptions = {
-      ...(getToken ? { getToken } : {}),
       ...(options?.recoverable !== undefined ? { recoverable: options.recoverable } : {}),
       ...(options?.positioned !== undefined ? { positioned: options.positioned } : {}),
     };
@@ -252,9 +247,7 @@ function acquireSharedSubscription(
       leaveHandlers,
       errorHandlers,
     };
-    const errors = subscriptionErrorReporter();
     subscription.on("subscribed", (context) => {
-      errors.subscribed();
       created.position = context.streamPosition;
       const recovery = {
         wasRecovering: context.wasRecovering,
@@ -276,14 +269,9 @@ function acquireSharedSubscription(
     subscription.on("leave", ({ info }) => {
       dispatch(channel, leaveHandlers, info);
     });
-    // A rejected or dropped subscription (e.g. Centrifugo's 103: permission
-    // denied when no valid subscription token is presented) otherwise fails
-    // silently, leaving the feature looking connected but never updating.
+    // A failed subscribe otherwise fails silently, leaving the feature looking connected but never
+    // updating. A refusal by the subscribe proxy (403) arrives as `unsubscribed` below instead.
     subscription.on("error", (event) => {
-      if (!errors.shouldReport(event.error.code)) {
-        console.debug(`realtime subscription token expired on ${channel}; renewing`);
-        return;
-      }
       console.warn(`realtime subscription error on ${channel}`, event.error);
       dispatch(channel, errorHandlers, {
         channel,
@@ -321,7 +309,6 @@ export type SharedRealtimeOptions = {
   channel: string;
   recoverable?: boolean;
   positioned?: boolean;
-  getToken?: () => Promise<string>;
   /** The channel became `subscribed`: its first subscribe and every resubscribe. The recovery
    * flags say whether publications may have been missed (see `subscriptionGap`). */
   onSubscribed?: (recovery: SubscribedRecovery) => void;
@@ -336,7 +323,6 @@ export function subscribeToSharedRealtime(
   client: SharedRealtimeClient,
   {
     channel,
-    getToken,
     recoverable,
     positioned,
     onSubscribed,
@@ -346,7 +332,7 @@ export function subscribeToSharedRealtime(
     onError,
   }: SharedRealtimeOptions,
 ): () => void {
-  const entry = acquireSharedSubscription(client, channel, getToken, { recoverable, positioned });
+  const entry = acquireSharedSubscription(client, channel, { recoverable, positioned });
   const onPublicationHandler = (publication: RealtimePublication) => onPublication?.(publication);
   const onSubscribedHandler = (recovery: SubscribedRecovery) => onSubscribed?.(recovery);
   const onJoinHandler = (joined: RealtimeClient) => onJoin?.(joined);
@@ -380,7 +366,6 @@ export function subscribeToSharedRealtime(
 
 export function useRealtimeSubscription({
   channel,
-  getToken,
   recoverable,
   positioned,
   onSubscribed,
@@ -418,7 +403,6 @@ export function useRealtimeSubscription({
     const current = () => (handlers.current.channel === channel ? handlers.current : undefined);
     return subscribeToSharedRealtime(client, {
       channel,
-      getToken,
       recoverable,
       positioned,
       onPublication: (publication) => current()?.onPublication?.(publication),
@@ -427,7 +411,7 @@ export function useRealtimeSubscription({
       onLeave: (left) => current()?.onLeave?.(left),
       onError: (error) => current()?.onError?.(error),
     });
-  }, [client, channel, getToken, recoverable, positioned]);
+  }, [client, channel, recoverable, positioned]);
 }
 
 /**
@@ -443,24 +427,18 @@ export function useRealtimeSubscriptions({
   onPublication,
   onSubscribed,
 }: {
-  /** A channel without `getToken` is subscribed without a token, the subscribe proxy checking it. */
-  channels: readonly { channel: string; getToken?: () => Promise<string> }[];
+  channels: readonly string[];
   onPublication: (channel: string, publication: RealtimePublication) => void;
   /** `SharedRealtimeOptions.onSubscribed`, for each channel. */
   onSubscribed?: (channel: string, recovery: SubscribedRecovery) => void;
 }) {
   const client = useBrowserRealtime();
   const handlers = useRef({ onPublication, onSubscribed });
-  const tokenGetters = useRef(new Map<string, (() => Promise<string>) | undefined>());
 
   useEffect(() => {
     handlers.current = { onPublication, onSubscribed };
   });
-  // Keep the latest getToken per channel without forcing a resubscribe when only its closure
-  // identity changes across renders (see the channelKey-only dependency below).
-  for (const { channel, getToken } of channels) tokenGetters.current.set(channel, getToken);
-
-  const channelKey = [...new Set(channels.map((entry) => entry.channel))].sort().join("\u0000");
+  const channelKey = [...new Set(channels)].sort().join("\u0000");
 
   // Each channel's lease, kept across set changes so a channel staying in the set is not
   // resubscribed (and does not read again what a first subscribe may have missed).
@@ -475,12 +453,10 @@ export function useRealtimeSubscriptions({
       }
     for (const channel of wanted) {
       if (leases.current.has(channel)) continue;
-      const getToken = tokenGetters.current.get(channel);
       leases.current.set(
         channel,
         subscribeToSharedRealtime(client, {
           channel,
-          getToken: getToken && (() => tokenGetters.current.get(channel)!()),
           onPublication: (publication) => handlers.current.onPublication(channel, publication),
           onSubscribed: (recovery) => handlers.current.onSubscribed?.(channel, recovery),
         }),

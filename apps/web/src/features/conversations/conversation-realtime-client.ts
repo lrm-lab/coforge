@@ -1,13 +1,11 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 
 import {
   useBrowserRealtime,
   subscribeToSharedRealtime,
   type SharedRealtimeClient,
 } from "#src/features/realtime/browser-realtime";
-import { getConversationRealtimeToken } from "#src/features/realtime/realtime.functions";
 import { queryStreamPosition } from "#src/features/realtime/query-stream-position";
 import {
   missedBySubscribe,
@@ -35,7 +33,6 @@ export function subscribeToConversationRealtime(
   client: SharedRealtimeClient,
   input: {
     conversationId: string;
-    getToken: () => Promise<string>;
     /** Where the page's newest window was read in this conversation's stream, once a read of it
      * under way has settled; undefined when it has none. A first subscribe past nothing new since
      * reads nothing again (`streamMovedSince`). */
@@ -99,7 +96,6 @@ export function subscribeToConversationRealtime(
     channel,
     recoverable: true,
     positioned: true,
-    getToken: input.getToken,
     onSubscribed: (context) => {
       // Anything the subscription could not replay — before the first subscribe, or across a
       // resubscribe that lost publications — may include a member change as well as messages.
@@ -182,7 +178,6 @@ export function useConversationRealtime(
 ) {
   const client = useBrowserRealtime();
   const queryClient = useQueryClient();
-  const getToken = useServerFn(getConversationRealtimeToken);
   const windowRef = useRef(windowQuery);
   windowRef.current = windowQuery;
   // Where the window stood when this conversation opened here, which its member lists were seeded
@@ -205,7 +200,6 @@ export function useConversationRealtime(
     if (!client || !conversationId) return;
     return subscribeToConversationRealtime(client, {
       conversationId,
-      getToken: () => getToken({ data: { conversationId } }),
       ...windowPositions(queryClient, windowRef.current?.key, conversationId, opened),
       onCaughtUp: () => windowRef.current?.caughtUp(),
       reconcile: (options) => void reconcileRef.current(options).catch(() => {}),
@@ -217,7 +211,7 @@ export function useConversationRealtime(
       onPublicationsLost: () => publicationsLostRef.current?.(),
       onRead: (event) => readRef.current?.(event),
     });
-  }, [client, conversationId, getToken, queryClient]);
+  }, [client, conversationId, queryClient]);
 }
 
 type PositionedWindow = { pages: { streamPositions?: StreamPositions }[] };

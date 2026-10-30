@@ -6,7 +6,6 @@ import {
   openTaskConversation,
 } from "#src/features/tasks/task-conversation.functions";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getConversationRealtimeToken } from "#src/features/realtime/realtime.functions";
 import { mergeMessages } from "./conversation-messages";
 import { taskConversationQueryKey } from "./conversation-query-keys";
 import { conversationRealtimeChannel, decodeMessageAvailableEvent } from "./conversation-realtime";
@@ -42,7 +41,6 @@ export function useTaskConversation({
   const loadUpdates = useServerFn(loadTaskConversationUpdates);
   const open = useServerFn(openTaskConversation);
   const markRead = useServerFn(markTaskConversationRead);
-  const getToken = useServerFn(getConversationRealtimeToken);
   const queryClient = useQueryClient();
   // The conversation made here, until the Task itself names it.
   const [made, setMade] = useState<string>();
@@ -85,10 +83,6 @@ export function useTaskConversation({
   );
   useRealtimeSubscription({
     channel: conversationId ? conversationRealtimeChannel(conversationId) : undefined,
-    getToken: useCallback(
-      () => getToken({ data: { conversationId: conversationId ?? "" } }),
-      [getToken, conversationId],
-    ),
     recoverable: true,
     // A resubscribe may have missed replies.
     onSubscribed: useCallback(() => {

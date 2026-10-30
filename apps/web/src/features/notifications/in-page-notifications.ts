@@ -3,7 +3,6 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { deLocalizeHref } from "#src/paraglide/runtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getUserConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
 import {
   decodeNotificationAvailableEvent,
   userConversationChannel,
@@ -44,7 +43,7 @@ export function shouldShowInPageNotification(input: {
  * (`BrowserPushLifecycle`) still owns delivery once every tab is closed.
  *
  * `workspaceId` gates readiness the same way `BrowserRealtimeProvider` itself does — the shared
- * connection, and the `chat:user:` subscription token, both require a selected Workspace — not to
+ * connection requires a selected Workspace — not to
  * filter which Workspace's notifications show: a member expects to hear about other Workspaces
  * too while working in this one.
  */
@@ -57,7 +56,6 @@ export function InPageNotifications({
   viewerId?: string;
   workspaceId?: string;
 }) {
-  const getToken = useServerFn(getUserConversationSubscriptionToken);
   const fetchNotification = useServerFn(getMessageNotification);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
@@ -78,7 +76,6 @@ export function InPageNotifications({
 
   useRealtimeSubscription({
     channel: enabled && viewerId && workspaceId ? userConversationChannel(viewerId) : undefined,
-    getToken: enabled && viewerId && workspaceId ? getToken : undefined,
     onPublication,
   });
 

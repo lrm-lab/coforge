@@ -25,7 +25,7 @@ export const agentStatusChannel = (workspaceId: string) =>
 
 /** The re-routed destination for a private Agent's `agent:display` snapshot, the
  * status-channel sibling of `agentActivityChannelForAgent`: only a viewer who can currently see
- * that Agent is ever issued a subscription token for it. */
+ * that Agent may hold it (the subscribe proxy checks). */
 export const agentStatusChannelForAgent = (workspaceId: string, agentId: string) =>
   `${AGENT_STATUS_NAMESPACE}${workspaceId}:${agentId}`;
 

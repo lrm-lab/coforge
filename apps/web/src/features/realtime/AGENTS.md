@@ -6,8 +6,9 @@ These rules apply to `src/features/realtime/`.
   connection for the Workspace the page URL names. Feature modules may subscribe to authorized channels but must not
   create additional browser WebSocket connections.
 - React consumers subscribe through `useRealtimeSubscription`; imperative conversation readers use `subscribeToSharedRealtime` from `browser-realtime.tsx`. Both use its one ref-counted pool. It
-  owns the client type. A channel with a narrower server-issued grant supplies
-  its own subscription token to the hook.
+  owns the client type. A page subscribes every channel without a token: Centrifugo asks the
+  subscribe proxy (`server/centrifugo/subscribe-proxy.server.ts`) whether its user may hold it,
+  and asks again at each refresh, so a lost grant ends the subscription (task #348).
 - The connection's state changes, the client's errors and slow token fetches go to the
   console through `connection-journal.ts`, wired once in `BrowserRealtimeProvider`. Centrifugo
   logs only rejected commands, so this is the only record of a connection that never hears back
@@ -33,7 +34,7 @@ These rules apply to `src/features/realtime/`.
 - Re-read state a channel may have missed in its `onSubscribed`, as
   `subscriptionGap` (`subscription-gap.ts`) classifies the event, never on
   the client's `connected` event: a channel receives nothing until its own
-  subscribe completes, which waits for its subscription token.
+  subscribe completes, which waits for the subscribe proxy's answer.
 - A read that a channel keeps live carries that channel's stream position, read
   on the server before the data and never alongside it
   (`readAfterStreamPositions`; `history` without a limit,

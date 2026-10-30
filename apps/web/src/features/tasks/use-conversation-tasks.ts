@@ -12,10 +12,6 @@ import {
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import {
-  getUserConversationSubscriptionToken,
-  getWorkspaceConversationSubscriptionToken,
-} from "#src/features/realtime/realtime.functions";
 import { decodeTaskChangedEvent } from "./task-realtime";
 import { executeTask } from "./tasks.functions";
 import { browserTimers, createTaskChangeBurst } from "./conversation-task-changes";
@@ -148,8 +144,6 @@ export function useConversationTasks(conversationId: string) {
   const execute = useServerFn(executeTask);
   const userId = appRoute.useLoaderData({ select: (data) => data.user.id });
   const workspaceId = useCurrentWorkspaceId() ?? "";
-  const getWorkspaceToken = useServerFn(getWorkspaceConversationSubscriptionToken);
-  const getUserToken = useServerFn(getUserConversationSubscriptionToken);
   const write = useConversationTaskWrites();
   const apply = useCallback(
     (changes: readonly TaskChanges[]) => write(conversationId, changes),
@@ -174,12 +168,10 @@ export function useConversationTasks(conversationId: string) {
   }, []);
   useRealtimeSubscription({
     channel: workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
-    getToken: getWorkspaceToken,
     onPublication: onTaskChanged,
   });
   useRealtimeSubscription({
     channel: userConversationChannel(userId),
-    getToken: getUserToken,
     onPublication: onTaskChanged,
   });
   const [error, setError] = useState("");

@@ -26,17 +26,25 @@ const API_KEY = "subscribe-proxy-integration";
 const ADA = "33333333-3333-4333-8333-333333333333";
 const GRACE = "44444444-4444-4444-8444-444444444444";
 const CONVERSATION = "55555555-5555-4555-8555-555555555555";
+const WORKSPACE = "66666666-6666-4666-8666-666666666666";
+const AGENT = "77777777-7777-4777-8777-777777777777";
 
 /** Who reads `CONVERSATION`; the conversation check throws while the Web is `down`. */
 const readers = new Set([ADA]);
 let down = false;
+/** `AGENT`'s visibility; Grace made it, and Ada is a plain member of `WORKSPACE`. */
+let agentVisibility = "public";
 /** How much sooner than `SUBSCRIPTION_LIFETIME_S` a grant runs out. */
 let shortenBy = 0;
 /** How many times Centrifugo asked the sub-refresh proxy. */
 let refreshes = 0;
 const access: BrowserSubscriptionAccess = {
-  workspaceRole: async () => undefined,
-  workspaceAgent: async () => undefined,
+  workspaceRole: async (workspaceId, userId) =>
+    workspaceId === WORKSPACE && userId === ADA ? "member" : undefined,
+  workspaceAgent: async (workspaceId, agentId) =>
+    workspaceId === WORKSPACE && agentId === AGENT
+      ? { visibility: agentVisibility, ownerId: GRACE, systemKind: null }
+      : undefined,
   readsConversation: async (conversationId, userId) => {
     if (down) throw new Error("database unavailable");
     return conversationId === CONVERSATION && readers.has(userId);
@@ -275,7 +283,8 @@ test("a grant that is lost ends when it is next refreshed", async () => {
     await until(() => page.subscription.state === SubscriptionState.Subscribed, 5_000);
     readers.delete(ADA);
     await until(() => page.subscription.state === SubscriptionState.Unsubscribed, 90_000);
-    // Expired (2501), it subscribed again and met the refusal; the connection stays.
+    await Bun.sleep(2_000);
+    // Expired (2501), it subscribed again and met the refusal, final; the connection stays.
     expect(page.states).toEqual([
       "subscribing 0",
       "subscribed",
@@ -286,6 +295,31 @@ test("a grant that is lost ends when it is next refreshed", async () => {
   } finally {
     shortenBy = 0;
     readers.add(ADA);
+  }
+}, 120_000);
+
+test("an Agent made private while a page shows it ends at the next refresh, and is not retried", async () => {
+  // Task #348: pages hold every channel through the subscribe proxy, with no token to outlive the
+  // grant. Ada sees Grace's Agent while it is public; once it is private she must stop hearing it.
+  const ada = await connected(ADA);
+  shortenBy = SUBSCRIPTION_LIFETIME_S - 2;
+  try {
+    const page = watched(ada, `agentstatus:${WORKSPACE}:${AGENT}`);
+    await until(() => page.subscription.state === SubscriptionState.Subscribed, 5_000);
+    agentVisibility = "private";
+    await until(() => page.subscription.state === SubscriptionState.Unsubscribed, 90_000);
+    // The refusal is final: nothing asks again, and the connection stays.
+    await Bun.sleep(2_000);
+    expect(page.states).toEqual([
+      "subscribing 0",
+      "subscribed",
+      "subscribing 2501",
+      "unsubscribed 403",
+    ]);
+    expect(ada.state).toBe(State.Connected);
+  } finally {
+    shortenBy = 0;
+    agentVisibility = "public";
   }
 }, 120_000);
 

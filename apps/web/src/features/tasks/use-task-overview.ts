@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { getRouteApi, useHydrated } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@tanstack/react-db";
@@ -16,10 +15,6 @@ import {
   publicationDataOrUndefined,
   publicationType,
 } from "#src/features/realtime/publication-data";
-import {
-  getUserConversationSubscriptionToken,
-  getWorkspaceConversationSubscriptionToken,
-} from "#src/features/realtime/realtime.functions";
 import {
   createTaskOverview,
   taskOverviewQuery,
@@ -118,8 +113,6 @@ function useTaskOverviewRealtime(
 ) {
   const queryClient = useQueryClient();
   const userId = appRoute.useLoaderData({ select: (data) => data.user.id });
-  const getWorkspaceToken = useServerFn(getWorkspaceConversationSubscriptionToken);
-  const getUserToken = useServerFn(getUserConversationSubscriptionToken);
   // One buffer per overview: a Workspace switch drops what the old one had not applied yet.
   const burst = useMemo(
     () => ({
@@ -182,12 +175,10 @@ function useTaskOverviewRealtime(
 
   useRealtimeSubscription({
     channel: overview && workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
-    getToken: getWorkspaceToken,
     onPublication: onWorkspacePublication,
   });
   useRealtimeSubscription({
     channel: overview ? userConversationChannel(userId) : undefined,
-    getToken: getUserToken,
     onPublication: onUserPublication,
   });
 }

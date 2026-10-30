@@ -4,7 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getWorkspaceConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
 import { isAppError } from "#src/lib/app-error";
 import { decodeWorkspaceDeletedEvent } from "./workspace-realtime";
 import { openWorkspace } from "./workspaces.functions";
@@ -19,7 +18,6 @@ import { openWorkspace } from "./workspaces.functions";
  */
 export function LeaveDeletedWorkspace({ workspaceId }: { workspaceId: string }) {
   const navigate = useNavigate();
-  const getToken = useServerFn(getWorkspaceConversationSubscriptionToken);
   const checkWorkspace = useServerFn(openWorkspace);
   const checking = useRef(false);
 
@@ -46,7 +44,6 @@ export function LeaveDeletedWorkspace({ workspaceId }: { workspaceId: string }) 
 
   useRealtimeSubscription({
     channel: workspaceConversationChannel(workspaceId),
-    getToken,
     onPublication,
     onError,
   });

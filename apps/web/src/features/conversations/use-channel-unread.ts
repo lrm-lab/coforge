@@ -1,13 +1,8 @@
 import { useCallback, useRef, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 import type { StreamPosition, SubscribedRecovery } from "#src/features/realtime/subscription-gap";
-import {
-  getUserConversationSubscriptionToken,
-  getWorkspaceConversationSubscriptionToken,
-} from "#src/features/realtime/realtime.functions";
 import {
   decodeViewerEvent,
   userConversationChannel,
@@ -91,8 +86,6 @@ export function useChannelUnread({
   onConversationActivity: (event: ConversationActivityEvent) => void;
 }): UnreadState {
   const [counts, setCounts] = useState<UnreadCounts>({});
-  const getWorkspaceToken = useServerFn(getWorkspaceConversationSubscriptionToken);
-  const getUserToken = useServerFn(getUserConversationSubscriptionToken);
   const refs = useRef({
     workspaceId,
     userId,
@@ -139,7 +132,6 @@ export function useChannelUnread({
 
   useRealtimeSubscription({
     channel: workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
-    getToken: workspaceId ? getWorkspaceToken : undefined,
     onPublication,
     onSubscribed: (recovery) => {
       if (workspaceId)
@@ -206,7 +198,6 @@ export function useChannelUnread({
   }, []);
   useRealtimeSubscription({
     channel: userId ? userConversationChannel(userId) : undefined,
-    getToken: userId ? getUserToken : undefined,
     onPublication: onUserPublication,
     onSubscribed: (recovery) => {
       if (userId) void rereadMissed("user", userConversationChannel(userId), recovery);

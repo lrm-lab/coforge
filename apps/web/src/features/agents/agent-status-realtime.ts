@@ -412,9 +412,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     channels: workspaceId
       ? visibleAgents
           .filter((agent) => agent.visibility === AGENT_VISIBILITY.PRIVATE)
-          .map((agent) => ({
-            channel: agentStatusChannelForAgent(workspaceId, agent.id),
-          }))
+          .map((agent) => agentStatusChannelForAgent(workspaceId, agent.id))
       : [],
     onSubscribed: (channel, recovery) => {
       void missedBySubscribe(recovery, () => readPositions?.[channel])

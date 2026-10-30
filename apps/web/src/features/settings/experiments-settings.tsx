@@ -14,7 +14,6 @@ import {
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
-import { getWorkspaceConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
 import { decodeWorkspaceFeaturesChangedEvent } from "#src/features/workspaces/workspace-realtime";
 import { m } from "#src/paraglide/messages";
 import { getExperiments, setExperiment } from "./experiments.functions";
@@ -42,12 +41,10 @@ type ExperimentsData = Awaited<ReturnType<typeof getExperiments>>;
  */
 export function useWorkspaceExperiments(enabled: boolean) {
   const load = useServerFn(getExperiments);
-  const getToken = useServerFn(getWorkspaceConversationSubscriptionToken);
   const workspaceId = useCurrentWorkspaceId();
   const queryClient = useQueryClient();
   useRealtimeSubscription({
     channel: enabled && workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
-    getToken,
     onPublication: useCallback(
       (publication: { data: unknown }) => {
         if (decodeWorkspaceFeaturesChangedEvent(publication.data)?.workspaceId === workspaceId)

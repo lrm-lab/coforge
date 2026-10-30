@@ -251,8 +251,7 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
     };
     await waitFor(async () => (await statuses.get(statusScope)) === "active");
     // These two waits are the regression check for the client-side Agent status
-    // subscription: a rejected subscribe (Centrifugo 103: permission denied,
-    // e.g. from a missing or mismatched subscription token) would never
+    // subscription: a subscribe the proxy refused (403) would never
     // deliver these publications and this would time out instead of passing.
     await waitFor(() => statusEvents.some((event) => event.status === "active"));
     await waitFor(() => displayEvents.some((event) => event.activityKind !== "offline"));

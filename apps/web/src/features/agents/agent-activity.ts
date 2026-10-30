@@ -36,7 +36,7 @@ export const agentActivityChannel = (workspaceId: string) => `agent:activity:${w
 
 /** The re-routed destination for a private Agent's Activity: the publish proxy
  * forwards the same raw frame here instead of the shared `agentActivityChannel`, and only a
- * viewer who can currently see that Agent is ever issued a subscription token for it. */
+ * viewer who can currently see that Agent may hold it (the subscribe proxy checks). */
 export const agentActivityChannelForAgent = (workspaceId: string, agentId: string) =>
   `agent:activity:${workspaceId}:${agentId}`;
 

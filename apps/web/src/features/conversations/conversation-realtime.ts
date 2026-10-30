@@ -13,8 +13,8 @@ export const conversationRealtimeChannel = (conversationId: string) => `chat:${c
  * list. It also carries a public channel's `channel.created.v1` and `channel.updated.v1`, so the
  * sidebar lists a created, renamed, deleted or archived channel from the event, and `task.changed.v1` (`features/tasks/task-realtime.ts`), so an open
  * Tasks page updates the rows a Task write changed, and `workspace.deleted.v1`
- * (`features/workspaces/workspace-realtime.ts`), so every open page leaves a deleted Workspace. Authorization mirrors the status/activity workspace channels: the
- * subscription token is issued only to Workspace members.
+ * (`features/workspaces/workspace-realtime.ts`), so every open page leaves a deleted Workspace. Authorization mirrors the status/activity workspace channels: only
+ * Workspace members' pages may hold it (the subscribe proxy checks).
  */
 export const workspaceConversationChannel = (workspaceId: string) =>
   `chat:workspace:${workspaceId}`;

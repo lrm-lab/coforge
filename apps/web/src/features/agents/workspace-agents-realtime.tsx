@@ -14,7 +14,7 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { useSyncedStore } from "#src/hooks/use-synced-store";
 
-import { listAgents, getAgentActivitySubscriptionTokenForAgent } from "./agents.functions";
+import { listAgents } from "./agents.functions";
 import { useAgentStatuses, type AgentStatusView } from "./agent-status-realtime";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import {
@@ -104,7 +104,6 @@ export function WorkspaceAgentsProvider({
   children: ReactNode;
 }) {
   const refreshAgents = useServerFn(listAgents);
-  const getPrivateActivityToken = useServerFn(getAgentActivitySubscriptionTokenForAgent);
   const loadExtras = useServerFn(loadExtraAgents);
   const queryClient = useQueryClient();
   // The Agents the store holds right now, so a read can name the extras it still shows busy and
@@ -213,11 +212,7 @@ export function WorkspaceAgentsProvider({
   // One per Workspace: a switch starts from an empty set, and nothing outlives the shell.
   const replyIntents = useMemo(() => createReplyIntentStore(), [workspaceId]);
   useEffect(() => () => replyIntents.clear(), [replyIntents]);
-  useWorkspaceActivityRealtime(
-    workspaceId,
-    privateAgentIds,
-    workspaceId ? (agentId) => getPrivateActivityToken({ data: { agentId } }) : undefined,
-  );
+  useWorkspaceActivityRealtime(workspaceId, privateAgentIds);
   useUserChannelReplyIntents(workspaceId, viewerId, replyIntents);
 
   // An Agent no longer visible to this viewer (dropped by `mergeAgentStatusSnapshot`
