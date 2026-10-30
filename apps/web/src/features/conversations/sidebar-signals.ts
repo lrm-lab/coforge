@@ -5,7 +5,7 @@ import { channelNamesAfter, type ChannelSignal } from "./channel-signals";
 import { channelNamesQueryKey, sidebarChannelsQueryKey } from "./conversation-query-keys";
 import type { ChatList } from "./conversation-unread";
 import type { Sidebar } from "./sidebar-collections";
-import type { ConversationActivityEvent } from "./conversation-realtime";
+import type { ConversationActivityEvent } from "./conversation-activity-event";
 
 type ChannelNamesRead = Awaited<ReturnType<typeof listChannelNames>>;
 

@@ -8,10 +8,12 @@ import {
 import {
   decodeChannelCreatedEvent,
   decodeChannelUpdatedEvent,
-  decodeConversationActivityEvent,
-  type ConversationActivityEvent,
   type ViewerEvent,
 } from "./conversation-realtime";
+import {
+  decodeConversationActivityEvent,
+  type ConversationActivityEvent,
+} from "./conversation-activity-event";
 
 /**
  * Sidebar unread state for the Chat page (Slack/Discord model): a per-badge count

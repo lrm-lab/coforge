@@ -16,7 +16,7 @@ import {
 import { applyChannelSignalToLists, applyConversationActivityToRow } from "./sidebar-signals";
 import { directListsOf, type DirectRow } from "./sidebar-rows";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
-import type { ConversationActivityEvent } from "./conversation-realtime";
+import type { ConversationActivityEvent } from "./conversation-activity-event";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";
 import {
   chatSectionOrderQuery,

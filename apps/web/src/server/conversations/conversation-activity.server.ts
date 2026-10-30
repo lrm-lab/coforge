@@ -1,5 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import type { ConversationActivityEvent } from "#src/features/conversations/conversation-realtime";
+import type { ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { messagePreviewLine } from "./message-preview-line.server";
 import { browserSenderName } from "./sender-display.server";

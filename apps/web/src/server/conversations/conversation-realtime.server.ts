@@ -6,13 +6,13 @@ import {
   type ActivityChangedEvent,
   type ChannelCreatedEvent,
   type ChannelUpdatedEvent,
-  type ConversationActivityEvent,
   type MessageAvailableEvent,
   type MessageReactionEvent,
   type MemberChangedEvent,
   type ViewerEvent,
   type ChannelInfo,
 } from "#src/features/conversations/conversation-realtime";
+import { type ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import type { TaskChangedEvent } from "#src/features/tasks/task-realtime";
 import { isPeopleDirectKey, peopleDirectKeyPair } from "#src/features/conversations/direct-key";
 import {

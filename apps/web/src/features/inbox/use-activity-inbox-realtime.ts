@@ -3,11 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 
 import {
   decodeActivityChangedEvent,
-  decodeConversationActivityEvent,
   decodeViewerEvent,
   userConversationChannel,
-  type ConversationActivityEvent,
 } from "#src/features/conversations/conversation-realtime";
+import {
+  decodeConversationActivityEvent,
+  type ConversationActivityEvent,
+} from "#src/features/conversations/conversation-activity-event";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { getUserConversationSubscriptionToken } from "#src/features/realtime/realtime.functions";
 

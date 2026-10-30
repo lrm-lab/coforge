@@ -8,12 +8,14 @@ import {
   getWorkspaceConversationSubscriptionToken,
 } from "#src/features/realtime/realtime.functions";
 import {
-  decodeConversationActivityEvent,
   decodeViewerEvent,
   userConversationChannel,
   workspaceConversationChannel,
-  type ConversationActivityEvent,
 } from "./conversation-realtime";
+import {
+  decodeConversationActivityEvent,
+  type ConversationActivityEvent,
+} from "./conversation-activity-event";
 import {
   applyMarked,
   applyUnreadEvent,
