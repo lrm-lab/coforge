@@ -1,21 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { spawn } from "node:child_process";
 import { join } from "node:path";
 
 const scriptPath = join(__dirname, "check-migration-safety.sh");
 const migrationsDir = join(__dirname, "../../apps/web/prisma/migrations");
 
-function runSafetyCheck(args: string[], env: Record<string, string> = {}): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(scriptPath, args, {
-      env: { ...process.env, ...env },
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d.toString()));
-    child.stderr.on("data", (d) => (stderr += d.toString()));
-    child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+async function runSafetyCheck(
+  args: string[],
+  env: Record<string, string> = {},
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const proc = Bun.spawn([scriptPath, ...args], {
+    env: { ...process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
   });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { code, stdout, stderr };
 }
 
 describe("check-migration-safety", () => {
