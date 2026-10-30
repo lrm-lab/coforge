@@ -16,7 +16,6 @@ import {
   computerIdInputSchema,
   refreshRuntimeCatalogInputSchema,
   readRestartStatusInputSchema,
-  restartComputerInputSchema,
   upgradeComputerInputSchema,
   scanAgentWorkspacesInputSchema,
   deleteAgentWorkspaceInputSchema,
@@ -47,8 +46,6 @@ import { isWorkspaceMemberComputer } from "#src/server/computers/computer-member
 import { listedWorkspaceComputerWhere } from "#src/server/computers/computer-list-visibility.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
-import { RestartComputer } from "#src/server/computers/restart-computer.server";
-import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
 import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
@@ -72,33 +69,6 @@ import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
-
-export const restartComputer = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(restartComputerInputSchema)
-  .handler(async ({ context, data }) => {
-    const { user, db, workspaceId } = context;
-    return new RestartComputer(
-      {
-        canRestart: (scope) => isWorkspaceMemberComputer(db, scope),
-      },
-      createCentrifugoServerApi(),
-      getComputerRestartStore(),
-    ).execute({ userId: user.id, workspaceId }, data);
-  });
-
-export const readComputerRestartStatus = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(readRestartStatusInputSchema)
-  .handler(async ({ context, data }) => {
-    const { user, db, workspaceId } = context;
-    const scope = { workspaceId, computerId: data.computerId };
-    if (!(await isWorkspaceMemberComputer(db, { userId: user.id, ...scope })))
-      throw new Error("Computer is not available");
-    const status = await getComputerRestartStore().status(scope, data.requestId);
-    if (!status) throw new Error("Restart request is not available");
-    return status;
-  });
 
 function runtimeVisibility(db: WorkspaceUserContext["db"]) {
   return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));

@@ -8,6 +8,10 @@ import { createAgent } from "#src/features/agents/agents.functions";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { getComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
+import {
+  readComputerRestartStatus,
+  restartComputer,
+} from "#src/features/computers/computer-restart.functions";
 import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -17,8 +21,6 @@ import {
   ComputerDetailPending,
 } from "#src/features/computers/computers-pending";
 import {
-  readComputerRestartStatus,
-  restartComputer,
   scanAgentWorkspaces,
   deleteAgentWorkspace,
   deleteComputer,
