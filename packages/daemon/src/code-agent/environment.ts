@@ -1,5 +1,6 @@
 import { dirname } from "node:path";
 import { isLaunchUnsafeAgentEnvironmentName } from "@lrm/coforge-sdk/internal/agent-environment";
+import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
   codeAgentExecutableSearchPath,
   executablePathDelimiter,
@@ -107,10 +108,13 @@ export function agentRuntimeContextEnvironment(
  */
 export function usableAgentEnvironment(
   environment: Readonly<Record<string, string>> | undefined,
+  provider?: RuntimeProvider,
 ): Record<string, string> {
   if (!environment) return {};
   return Object.fromEntries(
-    Object.entries(environment).filter(([name]) => !isLaunchUnsafeAgentEnvironmentName(name)),
+    Object.entries(environment).filter(
+      ([name]) => !isLaunchUnsafeAgentEnvironmentName(name, provider),
+    ),
   );
 }
 
@@ -120,6 +124,9 @@ export function agentEnvironment(
   platform: NodeJS.Platform = process.platform,
   options: {
     envVars?: Readonly<Record<string, string>>;
+    /** The launch's runtime provider: provider-reserved names are skipped from `envVars` only for
+     * that provider (a name another runtime needs stays usable there). */
+    provider?: RuntimeProvider;
     extraEnv?: Readonly<Record<string, string | undefined>>;
     /** The commit co-author trailer hook plan resolved at launch (`agent-process-manager.ts`);
      * omitted injects nothing, so discovery and usage callers are unaffected. */
@@ -130,7 +137,7 @@ export function agentEnvironment(
   for (const [name, value] of Object.entries({
     ...inherited,
     FORCE_COLOR: "0",
-    ...usableAgentEnvironment(options.envVars),
+    ...usableAgentEnvironment(options.envVars, options.provider),
     ...options.extraEnv,
   })) {
     if (value !== undefined) environment[name] = value;

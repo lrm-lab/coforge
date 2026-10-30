@@ -200,6 +200,17 @@ test("a refused variable names the rule it broke, so the editor can say why", as
   expect(f.events).toEqual(["lock", "unlock", "lock", "unlock", "lock", "unlock"]);
 });
 
+test("a provider-reserved name refuses only that runtime's Agent", async () => {
+  const f = fixture();
+  f.agent.runtimeConfig.runtime = RUNTIME_PROVIDER.CODEX;
+  await expect(
+    f.environment.save(principal, "agent-1", { OPENAI_BASE_URL: "https://elsewhere" }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "agent-environment-reserved-name" });
+  f.agent.runtimeConfig.runtime = RUNTIME_PROVIDER.OPENCODE;
+  await f.environment.save(principal, "agent-1", { OPENAI_BASE_URL: "https://elsewhere" });
+  expect(f.agent.runtimeConfig.environment).toBeDefined();
+});
+
 test("a stored environment the rule now reserves still reaches the launch, and the editor can show it", async () => {
   const key = new Uint8Array(32).fill(7);
   const nonce = crypto.getRandomValues(new Uint8Array(12));

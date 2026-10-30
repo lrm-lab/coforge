@@ -24,6 +24,7 @@ function claudeLaunchEnvironment(
   const environment = withoutClaudeCodeMarker(
     agentEnvironment(options.environment, withDefaultAutoCompactWindow(Bun.env), undefined, {
       envVars: options.runtime?.envVars,
+      provider: options.runtime?.provider,
       gitHooks: options.gitHooks,
     }),
   );

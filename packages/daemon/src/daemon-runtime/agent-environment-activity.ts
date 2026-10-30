@@ -13,8 +13,9 @@ import { activityDraft } from "./activity-draft";
 export function ignoredAgentEnvironmentActivity(
   scope: { workspaceId: string; agentId: string },
   environment: Readonly<Record<string, string>> | undefined,
+  provider?: string,
 ): ActivityDraft | undefined {
-  const names = environment ? launchUnsafeAgentEnvironmentNames(environment) : [];
+  const names = environment ? launchUnsafeAgentEnvironmentNames(environment, provider) : [];
   if (names.length === 0) return undefined;
   const listed = names.join(", ");
   const plural = names.length > 1;

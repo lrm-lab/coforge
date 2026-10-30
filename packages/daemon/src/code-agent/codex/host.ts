@@ -32,6 +32,7 @@ export const codexRuntimeHost: CodexRuntimeHost = {
   buildSessionEnvironment: (options: AgentSessionOptions) =>
     agentEnvironment(options.environment, Bun.env, undefined, {
       envVars: options.runtime?.envVars,
+      provider: options.runtime?.provider,
       extraEnv: { NO_COLOR: "1" },
       gitHooks: options.gitHooks,
     }),

@@ -83,13 +83,26 @@ export const AGENT_ENVIRONMENT_RESERVED_PREFIXES: readonly string[] = [
 
 const RESERVED_NAMES: ReadonlySet<string> = new Set(AGENT_ENVIRONMENT_RESERVED_NAMES);
 
+/** Names reserved only for one runtime's launch environment, keyed by `RUNTIME_PROVIDER` value: a
+ * variable that is dangerous for that provider (it would steer the provider's own requests to a
+ * third-party endpoint) but legitimate elsewhere. Codex's app-server honors `OPENAI_BASE_URL`, so
+ * a saved value would redirect its authenticated OpenAI traffic; for OpenCode the same name is how
+ * a person points it at an OpenAI-compatible endpoint on purpose. */
+export const AGENT_ENVIRONMENT_PROVIDER_RESERVED_NAMES: Readonly<
+  Record<string, readonly string[]>
+> = {
+  codex: ["OPENAI_BASE_URL"],
+};
+
 /** Whether a variable name is one no environment may set. Compared in upper case: Windows names
  * are case-insensitive, and a case-mixed spelling must not slip past on any platform. */
-export function isReservedAgentEnvironmentName(name: string): boolean {
+export function isReservedAgentEnvironmentName(name: string, provider?: string): boolean {
   const upper = name.toUpperCase();
   return (
     RESERVED_NAMES.has(upper) ||
-    AGENT_ENVIRONMENT_RESERVED_PREFIXES.some((prefix) => upper.startsWith(prefix))
+    AGENT_ENVIRONMENT_RESERVED_PREFIXES.some((prefix) => upper.startsWith(prefix)) ||
+    (provider !== undefined &&
+      (AGENT_ENVIRONMENT_PROVIDER_RESERVED_NAMES[provider]?.includes(upper) ?? false))
   );
 }
 
@@ -99,16 +112,21 @@ export function isReservedAgentEnvironmentName(name: string): boolean {
  * knobs by design (docs/observability/agent-status-and-activity/runtime-lifecycle.md), while the
  * capability names among them are cleared before launch (`DAEMON_LAUNCH_ENV_KEYS`).
  */
-export function isLaunchUnsafeAgentEnvironmentName(name: string): boolean {
-  return !name.toUpperCase().startsWith("COFORGE_") && isReservedAgentEnvironmentName(name);
+export function isLaunchUnsafeAgentEnvironmentName(name: string, provider?: string): boolean {
+  return (
+    !name.toUpperCase().startsWith("COFORGE_") && isReservedAgentEnvironmentName(name, provider)
+  );
 }
 
 /** The names an environment carries that a launch has to skip, so an edge can report each one
  * instead of failing, or silently dropping the whole map. */
 export function launchUnsafeAgentEnvironmentNames(
   environment: Readonly<Record<string, string>>,
+  provider?: string,
 ): string[] {
-  return Object.keys(environment).filter(isLaunchUnsafeAgentEnvironmentName);
+  return Object.keys(environment).filter((name) =>
+    isLaunchUnsafeAgentEnvironmentName(name, provider),
+  );
 }
 
 /** The rule an environment breaks, named so an edge can refuse it with a reason instead of a guess. */
@@ -139,8 +157,9 @@ export function agentEnvironmentShapeViolation(
 /** The first rule `environment` breaks, in the order count, each name and value, then total size. */
 export function agentEnvironmentViolation(
   environment: Readonly<Record<string, unknown>>,
+  provider?: string,
 ): AgentEnvironmentViolation | undefined {
-  return firstViolation(environment, true);
+  return firstViolation(environment, true, provider);
 }
 
 function firstViolation(
@@ -150,10 +169,12 @@ function firstViolation(
 function firstViolation(
   environment: Readonly<Record<string, unknown>>,
   checkReserved: true,
+  provider?: string,
 ): AgentEnvironmentViolation | undefined;
 function firstViolation(
   environment: Readonly<Record<string, unknown>>,
   checkReserved: boolean,
+  provider?: string,
 ): AgentEnvironmentViolation | undefined {
   const entries = Object.entries(environment);
   if (entries.length > AGENT_ENVIRONMENT_MAX_VARIABLES) return "too-many";
@@ -165,7 +186,7 @@ function firstViolation(
       return "invalid-name";
     // The caller that asks for the shape rule has already decided a reserved name is not its
     // business, so the check is skipped rather than reported and filtered back out.
-    if (checkReserved && isReservedAgentEnvironmentName(name)) return "reserved-name";
+    if (checkReserved && isReservedAgentEnvironmentName(name, provider)) return "reserved-name";
     if (
       typeof value !== "string" ||
       value.includes("\0") ||

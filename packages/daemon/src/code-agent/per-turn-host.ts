@@ -13,7 +13,11 @@ export const perTurnSessionHost: PerTurnSessionHost = {
         sanitize && declared ? sanitize(declared) : declared,
         sanitize ? sanitize(Bun.env) : Bun.env,
         undefined,
-        { envVars: options.runtime?.envVars, gitHooks: options.gitHooks },
+        {
+          envVars: options.runtime?.envVars,
+          provider: options.runtime?.provider,
+          gitHooks: options.gitHooks,
+        },
       ),
       ...policy.environment,
     };

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { agentEnvironment, agentRuntimeContextEnvironment } from "#src/code-agent/environment";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 test("inherits local host variables and overlays custom, adapter, then system values without mutating the host", () => {
   const inherited = {
@@ -88,6 +89,21 @@ test("never applies a reserved variable the Agent's stored environment carries",
   // Inherited host values are the daemon's own environment, not an Agent override.
   expect(environment.HOME).toBe("/Users/agent");
   expect(environment.PATH?.split(":")).toContain("/usr/bin");
+});
+
+test("a provider-reserved variable is skipped only for that runtime", () => {
+  const envVars = { OPENAI_BASE_URL: "https://elsewhere", MY_VAR: "kept" };
+  const codex = agentEnvironment(undefined, { PATH: "/usr/bin" }, "linux", {
+    envVars,
+    provider: RUNTIME_PROVIDER.CODEX,
+  });
+  expect(codex).not.toHaveProperty("OPENAI_BASE_URL");
+  expect(codex.MY_VAR).toBe("kept");
+  const opencode = agentEnvironment(undefined, { PATH: "/usr/bin" }, "linux", {
+    envVars,
+    provider: RUNTIME_PROVIDER.OPENCODE,
+  });
+  expect(opencode.OPENAI_BASE_URL).toBe("https://elsewhere");
 });
 
 test("preserves inherited command-scope Git configuration before the GitHub helper", () => {

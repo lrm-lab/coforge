@@ -19,6 +19,7 @@ export const devinRuntimeHost: DevinRuntimeHost = {
   buildEnvironment: (options) => ({
     ...agentEnvironment(options.environment, Bun.env, undefined, {
       envVars: options.runtime?.envVars,
+      provider: options.runtime?.provider,
       gitHooks: options.gitHooks,
       extraEnv: { NO_COLOR: "1" },
     }),

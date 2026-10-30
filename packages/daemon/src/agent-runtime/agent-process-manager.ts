@@ -147,7 +147,10 @@ export class AgentProcessManager {
     }
     // Probed against the same PATH the Agent's own git calls will search.
     const gitHooks = await this.#resolveGitHooks(
-      agentEnvironment(environment, Bun.env, process.platform, { envVars: config.envVars }).PATH,
+      agentEnvironment(environment, Bun.env, process.platform, {
+        envVars: config.envVars,
+        provider: config.provider,
+      }).PATH,
     );
     let session: AgentSession;
     try {
@@ -174,7 +177,7 @@ export class AgentProcessManager {
         // the process will, without the names the shared rule refuses. An Agent with no stored
         // environment keeps the configuration it was started with, field for field.
         runtime: config.envVars
-          ? { ...config, envVars: usableAgentEnvironment(config.envVars) }
+          ? { ...config, envVars: usableAgentEnvironment(config.envVars, config.provider) }
           : config,
         environment,
         gitHooks,

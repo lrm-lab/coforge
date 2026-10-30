@@ -175,6 +175,7 @@ import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentInbox, appInbox, workspaceEnvelope } from "./agent-inbox-factories";
+import { agentIdForContext, contextFor } from "./agent-context";
 import {
   cleanupUnconfirmed,
   launchFailureDraft,
@@ -1837,6 +1838,7 @@ export class DaemonRuntime {
       const skipped = ignoredAgentEnvironmentActivity(
         { workspaceId: this.#connection.workspaceId, agentId },
         launchConfig.envVars,
+        config.provider,
       );
       if (skipped) this.#activityPublisher.publish(agentId, launch, skipped);
       this.#agentApiKeys.set(agentId, agentApiKey);
@@ -3121,7 +3123,10 @@ export class DaemonRuntime {
           this.#activityPublisher.publish(
             agentId,
             activityLaunch,
-            this.#runtimeErrorActivity(agentId, stopFailureMessage(this.#cleanupUnconfirmed(agentId, error))),
+            this.#runtimeErrorActivity(
+              agentId,
+              stopFailureMessage(this.#cleanupUnconfirmed(agentId, error)),
+            ),
           );
         throw error;
       })
@@ -3726,16 +3731,11 @@ export class DaemonRuntime {
   }
 
   #agentIdForContext(context: string): string {
-    const agentId = [...this.#agentContexts.entries()].find(([, value]) => value === context)?.[0];
-    if (!agentId)
-      throw new AgentPreflightError("invalid agent local context", "AGENT_CONTEXT_INVALID");
-    return agentId;
+    return agentIdForContext(this.#agentContexts, context);
   }
 
   #contextFor(agentId: string): string {
-    const context = crypto.randomUUID();
-    this.#agentContexts.set(agentId, context);
-    return context;
+    return contextFor(this.#agentContexts, agentId);
   }
 
   issueAgentContext(agentId: string, context: string = crypto.randomUUID()): string {

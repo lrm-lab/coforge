@@ -10,6 +10,7 @@ import {
   agentEnvironmentNameViolation,
   agentEnvironmentShapeViolation,
   agentEnvironmentViolation,
+  isLaunchUnsafeAgentEnvironmentName,
   isReservedAgentEnvironmentName,
   launchUnsafeAgentEnvironmentNames,
 } from "./agent-environment";
@@ -99,6 +100,21 @@ describe("agent environment limits", () => {
     expect(agentEnvironmentViolation({ A: "s".repeat(32_769) })).toBe("invalid-value");
     const big = "s".repeat(32_768);
     expect(agentEnvironmentViolation({ A: big, B: big, C: big, D: big })).toBe("too-large");
+  });
+
+  test("a provider-reserved name is refused only for that provider", () => {
+    expect(isReservedAgentEnvironmentName("OPENAI_BASE_URL")).toBe(false);
+    expect(isReservedAgentEnvironmentName("OPENAI_BASE_URL", "codex")).toBe(true);
+    expect(isReservedAgentEnvironmentName("OPENAI_BASE_URL", "opencode")).toBe(false);
+    expect(isLaunchUnsafeAgentEnvironmentName("OPENAI_BASE_URL", "codex")).toBe(true);
+    expect(isLaunchUnsafeAgentEnvironmentName("OPENAI_BASE_URL", "opencode")).toBe(false);
+    expect(agentEnvironmentViolation({ OPENAI_BASE_URL: "http://x" }, "codex")).toBe(
+      "reserved-name",
+    );
+    expect(agentEnvironmentViolation({ OPENAI_BASE_URL: "http://x" }, "opencode")).toBeUndefined();
+    expect(launchUnsafeAgentEnvironmentNames({ OPENAI_BASE_URL: "x" }, "codex")).toEqual([
+      "OPENAI_BASE_URL",
+    ]);
   });
 
   test("names a shape rule without a reserved name, for an edge that skips those instead", () => {

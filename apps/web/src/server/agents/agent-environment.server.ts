@@ -68,7 +68,7 @@ export class AgentEnvironment {
       // A deleted Agent has no environment to edit, and no restart either. Answers the
       // same NOT_FOUND a live-view lookup gives, not the authorization failure above it.
       assertAgentLive(agent);
-      const envVars = validateAgentEnvironment(input);
+      const envVars = validateAgentEnvironment(input, agent.runtimeConfig.runtime);
       const config = await this.#ownedConfig(principal, agentId);
       const { environment: _environment, ...withoutEnvironment } = config;
       const nextConfig = Object.keys(envVars).length
@@ -169,10 +169,13 @@ export function storedAgentEnvironment(input: unknown): Record<string, string> {
   return envVars;
 }
 
-export function validateAgentEnvironment(input: unknown): Record<string, string> {
+export function validateAgentEnvironment(
+  input: unknown,
+  provider?: string,
+): Record<string, string> {
   if (!input || typeof input !== "object" || Array.isArray(input))
     throw new Error("Agent environment must be a variable map");
-  const violation = agentEnvironmentViolation(input as Record<string, unknown>);
+  const violation = agentEnvironmentViolation(input as Record<string, unknown>, provider);
   // The errorId names the broken rule for the editor to show, never a submitted name or value.
   if (violation) throw new AppError("INVALID_INPUT", { errorId: `agent-environment-${violation}` });
   const envVars: Record<string, string> = Object.create(null);
