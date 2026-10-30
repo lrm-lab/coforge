@@ -68,7 +68,10 @@ async function pick(search: string, label: string) {
   await click(targetRow(label));
 }
 
+/** A screenshot once no dialog is still fading in or out: one taken mid-fade shows the page
+ * through it. */
 async function shot(name: string) {
+  await waitFor(`!document.querySelector("[data-entering], [data-exiting]")`);
   await browser("screenshot", join(artifacts, `${name}.png`));
 }
 
