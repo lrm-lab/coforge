@@ -23,6 +23,15 @@ export function assertExpectedRevision(task: { revision: number }, expectedRevis
 }
 
 /**
+ * The columns that take a Task's assignee away. A Task in progress or in review with nobody on it
+ * is work nobody is doing, so it is open again; a finished or closed one stays as it is.
+ */
+export function withoutAssignee(task: { status: string }) {
+  const reopened = task.status === "in_progress" || task.status === "in_review";
+  return { ownerMemberId: null, claimedAt: null, ...(reopened ? { status: "todo" as const } : {}) };
+}
+
+/**
  * Guard the Task write by the caller's row, revision and guard; mismatch is CONFLICT.
  * The row lock also serializes history numbering.
  */

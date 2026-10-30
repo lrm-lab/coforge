@@ -187,6 +187,12 @@ test("Task changes record history events with their before and after state", asy
       },
       {
         seq: 5,
+        eventType: "status_changed",
+        ...byAgent,
+        payload: { from: "in_progress", to: "todo" },
+      },
+      {
+        seq: 6,
         eventType: "assignee_changed",
         ...byAlice,
         payload: agentAssignee,

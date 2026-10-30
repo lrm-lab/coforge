@@ -5,7 +5,7 @@ import { ordinaryTaskStatusMove, taskStatusMoveAllowed } from "@lrm/coforge-sdk/
 /** The whole table, so a change to it is a change here on purpose. */
 const TABLE: Record<string, string[]> = {
   todo: ["in_progress", "closed"],
-  in_progress: ["in_review", "closed"],
+  in_progress: ["todo", "in_review", "closed"],
   in_review: ["in_progress", "done", "closed"],
   done: ["todo", "in_progress", "in_review", "closed"],
   closed: ["todo"],
@@ -19,6 +19,10 @@ test("an ordinary member moves a Task forward, back for rework, and reopens a fi
       const allowed = to === from || TABLE[from]!.includes(to);
       expect(ordinaryTaskStatusMove(from, to)).toBe(allowed);
     }
+});
+
+test("a Task started by mistake goes back to Todo", () => {
+  expect(ordinaryTaskStatusMove("in_progress", "todo")).toBe(true);
 });
 
 test("In Review goes back to In Progress for more work", () => {

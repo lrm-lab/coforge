@@ -6,14 +6,15 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 /**
  * The statuses a Task may move to in ordinary hands, as the reference product's board works: work
- * moves forward Todo → In Progress → In Review → Done, In Review may be sent back to In Progress
- * for more work, Closed may be set from anywhere, and a finished Task may be reopened. A Workspace
+ * moves forward Todo → In Progress → In Review → Done, In Progress may be withdrawn to Todo,
+ * In Review may be sent back to In Progress for more work, Closed may be set from anywhere, and a finished Task may be reopened. A Workspace
  * owner or admin may set any status at all; this table is what everyone else may do. The server's
  * TaskBoard and the browser's board both read it, so the two cannot drift apart.
  */
 export const ORDINARY_TASK_STATUS_MOVES: Record<TaskStatus, readonly TaskStatus[]> = {
   todo: ["in_progress", "closed"],
-  in_progress: ["in_review", "closed"],
+  // Back to Todo withdraws a Task that was started by mistake.
+  in_progress: ["todo", "in_review", "closed"],
   in_review: ["in_progress", "done", "closed"],
   // A Done Task goes back to Todo, In Progress or In Review.
   done: ["todo", "in_progress", "in_review", "closed"],

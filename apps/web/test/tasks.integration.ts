@@ -473,10 +473,7 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
         numbers: [releasedReview.tasks[0]!.number, batchClosed.tasks[0]!.number],
       },
     );
-    expect(partial.tasks[0]).toMatchObject({
-      status: "in_review",
-      owner: { kind: "agent" },
-    });
+    expect(partial.tasks[0]).toMatchObject({ status: "in_progress", owner: { kind: "agent" } });
     expect(partial.claims).toEqual([
       expect.objectContaining({
         number: releasedReview.tasks[0]!.number,

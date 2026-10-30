@@ -4,7 +4,12 @@ import { AppError } from "#src/lib/app-error";
 import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
 import { taskView } from "./task-view.server";
 import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
-import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./task-change.server";
+import {
+  findTaskByNumber,
+  assertExpectedRevision,
+  commitTaskChange,
+  withoutAssignee,
+} from "./task-change.server";
 import { withNotices } from "./task-notice-posting.server";
 import { signalTaskChange, publishAssignmentReceipt } from "./task-publication.server";
 import { BOUND_ASSIGNEE, receiptAssignee, assigneeMember } from "./task-assignees.server";
@@ -53,7 +58,7 @@ export async function assignTask(
       member,
       current,
       { ownerMemberId: current.ownerMemberId },
-      { ownerMemberId: owner?.id ?? null, claimedAt: null },
+      owner ? { ownerMemberId: owner.id, claimedAt: null } : withoutAssignee(current),
     );
     if (!owner) {
       await notices.inThread(task, (quoted) =>
@@ -117,7 +122,7 @@ export async function unassignTask(
       member,
       current,
       { ownerMemberId: current.ownerMemberId },
-      { ownerMemberId: null, claimedAt: null },
+      withoutAssignee(current),
     );
     await notices.inThread(task, (quoted) =>
       noticeText.unassigned(noticeActor(member).displayName, quoted),

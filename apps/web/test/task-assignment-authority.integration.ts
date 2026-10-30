@@ -162,7 +162,7 @@ for (const kind of ["user", "agent"] as const) {
           expectedRevision: created.revision,
         })
       ).tasks[0];
-      expect(unassigned).toMatchObject({ status: "in_progress", owner: null, claimedAt: null });
+      expect(unassigned).toMatchObject({ status: "todo", owner: null, claimedAt: null });
       const assigned = (
         await f.board.execute(f.actor, {
           ...f.command(),
@@ -173,7 +173,7 @@ for (const kind of ["user", "agent"] as const) {
         })
       ).tasks[0];
       expect(assigned).toMatchObject({
-        status: "in_progress",
+        status: "todo",
         owner: { id: self.id },
         claimedAt: null,
       });

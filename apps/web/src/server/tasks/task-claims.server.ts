@@ -28,6 +28,7 @@ import {
   findTaskByNumber,
   commitTaskChange,
   ensureTaskExecutionSession,
+  withoutAssignee,
 } from "./task-change.server";
 import { withNotices } from "./task-notice-posting.server";
 import { signalTaskChange } from "./task-publication.server";
@@ -266,7 +267,7 @@ export async function unclaimTask(
         ownerMemberId: member.id,
         status: { not: "done" },
       },
-      { ownerMemberId: null, claimedAt: null },
+      withoutAssignee(task),
     ),
   );
   await signalTaskChange(ports, updated);

@@ -432,8 +432,8 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         expectedRevision: claimed.tasks[0]!.revision,
       },
     );
-    // Releasing assignment is independent from workflow state in the published contract.
-    expect(unclaimed.tasks[0]).toMatchObject({ status: "in_progress", owner: null });
+    // Releasing the assignment leaves no unowned Task in progress: it is open again.
+    expect(unclaimed.tasks[0]).toMatchObject({ status: "todo", owner: null });
 
     const reclaimed = await board.execute(
       { workspaceId: workspace.id, agentId: agent!.id },
