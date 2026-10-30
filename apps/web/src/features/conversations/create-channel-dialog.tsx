@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
@@ -13,8 +13,10 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { loadWorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import {
   buildGroupChatCandidates,
   canCreateGroupChat,
@@ -111,11 +113,13 @@ export function CreateChannelDialog({
       onOpenChange={(value) => {
         if (!busy.current) onOpenChange(value);
       }}
+      // On a phone the group chat dialog is Raft's sheet: edge to edge and down to the bottom.
+      className={memberPicker ? "max-md:px-0 max-md:[--modal-pb:0px]" : undefined}
     >
       {memberPicker ? (
-        // On a phone the panes stack and the dialog takes the screen's height, so the picker has
-        // room to fill (task #331); side by side they share a fixed height.
-        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full">
+        // On a phone the sheet takes the screen's height, so the member list has room to fill
+        // (task #331); side by side the panes share a fixed height.
+        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-b-none">
           <Dialog className="flex h-full flex-col p-0 md:h-[min(36rem,calc(100dvh-4rem))] md:flex-row">
             {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
           </Dialog>
@@ -178,6 +182,8 @@ function CreateChannelForm({
     name: string;
     notice: "members" | "created";
   } | null>(null);
+  const formId = useId();
+  const wide = useBreakpoint("md");
   const nameValid = CHANNEL_NAME_PATTERN.test(name.trim());
   const canCreate = canCreateGroupChat(selectedKeys.size, minMembers);
   const locked = saving || created !== null;
@@ -323,18 +329,71 @@ function CreateChannelForm({
       </>
     );
   }
+  const picker = (
+    <GroupChatPicker
+      candidates={candidates}
+      search={search}
+      onSearchChange={setSearch}
+      selectedKeys={selectedKeys}
+      onToggle={toggle}
+      directory={directory}
+      disabled={locked}
+      framed={!wide}
+    />
+  );
+  const minMembersHint = !canCreate && (
+    <p className="text-sm text-tertiary">{m.channel_group_min_members({ count: minMembers })}</p>
+  );
+  const finishButton = (size?: "sm") => (
+    <Button type="submit" form={formId} size={size} isDisabled={locked || !nameValid || !canCreate}>
+      {m.channel_group_finish()}
+    </Button>
+  );
+  if (!wide) {
+    // A phone gets Raft's sheet: close, title and Finish along the top, then one column whose
+    // member list takes what the fields leave (task #331).
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-2 border-b border-secondary py-3 pr-4 pl-2">
+          <ButtonUtility
+            aria-label={m.controls_close()}
+            icon={XClose}
+            size="sm"
+            color="tertiary"
+            onClick={close}
+          />
+          <Heading
+            slot="title"
+            className="min-w-0 flex-1 truncate text-md font-semibold text-primary"
+          >
+            {m.channel_start_group()}
+          </Heading>
+          {!createdNotice && finishButton("sm")}
+        </div>
+        {createdNotice ? (
+          <div className="p-4">{createdNotice}</div>
+        ) : (
+          <form
+            id={formId}
+            onSubmit={(event) => void submit(event)}
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
+          >
+            {nameField}
+            {projectField}
+            {errorText}
+            {minMembersHint}
+            <div className="flex min-h-48 flex-1 flex-col gap-3">{picker}</div>
+          </form>
+        )}
+      </div>
+    );
+  }
   return (
     <>
-      <GroupChatPickerPane
-        candidates={candidates}
-        search={search}
-        onSearchChange={setSearch}
-        selectedKeys={selectedKeys}
-        onToggle={toggle}
-        directory={directory}
-        disabled={locked}
-      />
-      <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto p-6 max-md:shrink-0 md:flex-1">
+      <aside className="flex min-h-0 w-[20rem] shrink-0 flex-col gap-3 border-r border-secondary bg-secondary p-4">
+        {picker}
+      </aside>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-6">
         <ButtonUtility
           aria-label={m.controls_close()}
           icon={XClose}
@@ -355,14 +414,13 @@ function CreateChannelForm({
           <div className="mt-5">{createdNotice}</div>
         ) : (
           <form
+            id={formId}
             onSubmit={(event) => void submit(event)}
             className="mt-5 flex flex-1 flex-col gap-4"
           >
             {nameField}
             {projectField}
-            {/* On a phone the picker's ticks and the count already show who is chosen; a list
-                here would take its height from the picker with every tick. */}
-            <ul className="flex flex-col gap-1 max-md:hidden">
+            <ul className="flex flex-col gap-1">
               {selectedGroupChatCandidates(candidates, selectedKeys).map((entry) => (
                 <li key={entry.key} className="flex items-center gap-3 py-1">
                   <IdentityAvatar
@@ -385,19 +443,13 @@ function CreateChannelForm({
                 </li>
               ))}
             </ul>
-            {!canCreate && (
-              <p className="text-sm text-tertiary">
-                {m.channel_group_min_members({ count: minMembers })}
-              </p>
-            )}
+            {minMembersHint}
             {errorText}
             <div className="mt-auto flex justify-end gap-3 pt-2">
               <Button type="button" color="secondary" onPress={close}>
                 {m.channel_members_cancel()}
               </Button>
-              <Button type="submit" isDisabled={locked || !nameValid || !canCreate}>
-                {m.channel_group_finish()}
-              </Button>
+              {finishButton()}
             </div>
           </form>
         )}
@@ -406,9 +458,9 @@ function CreateChannelForm({
   );
 }
 
-/** The left pane of the group chat dialog: a search and the Workspace's people and public
- * Agents, each a ticked row. */
-function GroupChatPickerPane({
+/** The group chat dialog's member picker: a search and the Workspace's people and public Agents,
+ * each a ticked row, in a column its parent sizes. A phone frames the list, as Raft does. */
+function GroupChatPicker({
   candidates,
   search,
   onSearchChange,
@@ -416,6 +468,7 @@ function GroupChatPickerPane({
   onToggle,
   directory,
   disabled,
+  framed = false,
 }: {
   candidates: GroupChatCandidate[];
   search: string;
@@ -424,17 +477,23 @@ function GroupChatPickerPane({
   onToggle: (key: string, on: boolean) => void;
   directory: { isPending: boolean; isError: boolean; refetch: () => unknown };
   disabled: boolean;
+  framed?: boolean;
 }) {
   const shown = filterGroupChatCandidates(candidates, search);
   return (
-    <aside className="flex min-h-0 flex-col gap-3 border-b border-secondary bg-secondary p-4 max-md:flex-1 max-md:pt-14 md:w-[20rem] md:shrink-0 md:border-r md:border-b-0">
+    <>
       <Input
         aria-label={m.channel_members_search_placeholder()}
         placeholder={m.channel_members_search_placeholder()}
         value={search}
         onChange={onSearchChange}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        className={cx(
+          "min-h-0 flex-1 overflow-y-auto",
+          framed && "rounded-lg border border-secondary p-1",
+        )}
+      >
         {directory.isPending && (
           <p className="px-2 py-2 text-sm text-tertiary">{m.channel_members_loading()}</p>
         )}
@@ -491,6 +550,6 @@ function GroupChatPickerPane({
           ))}
         </ul>
       </div>
-    </aside>
+    </>
   );
 }
