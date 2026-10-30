@@ -12,9 +12,15 @@ import {
 } from "#src/server/conversations/mentions.server";
 import {
   agentMessageSender,
+  MESSAGE_SENDER_SELECT,
   type AgentMessageSender,
 } from "#src/server/conversations/sender-display.server";
-import { deliveryTarget } from "#src/server/db/repositories/direct-conversation-agent-message.server";
+import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
+import {
+  conversationTarget,
+  deliveryTarget,
+  TARGET_CONVERSATION_SELECT,
+} from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { taskView, type SelectedTask } from "./task-view.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 
@@ -72,6 +78,42 @@ export async function publishDeliveries(
   );
 }
 
+/**
+ * Pushes a message of a task's own conversation to the Agents it was delivered to, each by the
+ * task it names (`#channel:#N`, from that Agent's seat). A directed wake, like a Task delivery.
+ */
+export async function publishTaskConversationMessage(
+  ports: TaskBoardPorts,
+  messageId: string,
+  requestId: string,
+) {
+  if (!ports.dependencies.publisher) return;
+  const message = await ports.db.message.findUniqueOrThrow({
+    where: { id: messageId },
+    include: {
+      conversation: { select: TARGET_CONVERSATION_SELECT },
+      sender: MESSAGE_SENDER_SELECT,
+      mentions: MESSAGE_MENTIONS_SELECT,
+      deliveries: { include: { agent: { select: { computerId: true } } } },
+    },
+  });
+  const sender = agentMessageSender(message.sender);
+  await Promise.allSettled(
+    message.deliveries.map(async (delivery) => {
+      const targetOf = await directTargets(ports.db, message.workspaceId, delivery.agentId, [
+        message.conversation,
+      ]);
+      await publishDeliveries(
+        ports,
+        { ...message, deliveries: [delivery] },
+        requestId,
+        conversationTarget(message.conversation, targetOf),
+        sender,
+      );
+    }),
+  );
+}
+
 export async function publishAssignmentReceipt(
   ports: TaskBoardPorts,
   messageId: string,
@@ -95,8 +137,8 @@ export async function publishAssignmentReceipt(
       deliveries: { include: { agent: { select: { computerId: true } } } },
     },
   });
-  // A receipt in a task's own conversation is published with that conversation's delivery.
-  if (message.conversation.kind === "task_thread") return;
+  if (message.conversation.kind === "task_thread")
+    return publishTaskConversationMessage(ports, message.id, requestId);
   // Receipts count no unread: signal only the conversation, never sidebar badges. Human
   // assignees receive a Mentions Activity item and activity.changed.v1.
   const assignedPerson = message.mentions.find((mention) => mention.kind === "user")?.actorId;

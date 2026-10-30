@@ -188,6 +188,8 @@ export type TargetConversation = {
   channelName: string | null;
   directKey?: string | null;
   members: { user?: { username: string } | null; agent?: { id: string; name: string } | null }[];
+  /** The task this conversation is the discussion of: it is named by its board and the task. */
+  taskDiscussionOf?: { number: number; conversation: TargetConversation } | null;
 };
 
 /** The target of a direct conversation from the reader's seat (`directTargets`); `undefined` for a
@@ -202,7 +204,7 @@ export async function directTargets(
   conversations: readonly TargetConversation[],
 ): Promise<DirectTargetOf> {
   const seatOf = (conversation: TargetConversation): DirectSeat | undefined => {
-    if (conversation.channelName) return undefined;
+    if (conversation.channelName || conversation.taskDiscussionOf) return undefined;
     const username = conversation.members.find((member) => member.user)?.user?.username;
     if (username) return { name: username, kind: "human" };
     const peerId = agentPeerOf(conversation.directKey ?? null, readerAgentId);
@@ -213,7 +215,9 @@ export async function directTargets(
     db,
     workspaceId,
     readerAgentId,
-    conversations.flatMap((conversation) => seatOf(conversation) ?? []),
+    conversations.flatMap(
+      (conversation) => seatOf(conversation.taskDiscussionOf?.conversation ?? conversation) ?? [],
+    ),
   );
   return (conversation) => {
     const seat = seatOf(conversation);

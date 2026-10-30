@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { handleTaskReplyPost } from "#src/server/tasks/task-conversation-routes.server";
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks_/reply")({
           request,
           principal,
           new TaskConversations(
-            { db, reader: "agent", dependencies: {} },
+            { db, reader: "agent", dependencies: { publisher: createCentrifugoServerApi() } },
             getMessageRequestIdempotency(),
           ),
           taskConversationsGate(db, principal),

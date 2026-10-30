@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import {
   ACTIVE_MEMBER_WHERE,
   DIRECT_CONVERSATION_WHERE,
@@ -51,10 +52,42 @@ export async function pendingDeliveryWhere(
     agentId,
     ...selected,
     deliveryId: { notIn: stale.map((row) => row.deliveryId) },
-    conversation: { ...VISIBLE_CONVERSATION_WHERE, AND: [TARGETABLE_CONVERSATION_WHERE] },
+    conversation: {
+      ...VISIBLE_CONVERSATION_WHERE,
+      OR: [
+        TARGETABLE_CONVERSATION_WHERE,
+        // A task's conversation has no channel of its own: it replays only while its board is
+        // still one the Agent may read.
+        {
+          kind: "task_thread",
+          taskDiscussionOf: {
+            conversation: {
+              OR: [
+                visibleChannelWhere(workspaceId, { agentId }),
+                { ...VISIBLE_CONVERSATION_WHERE, ...DIRECT_CONVERSATION_WHERE },
+              ],
+            },
+          },
+        },
+      ],
+    },
     OR: [
       { conversation: DIRECT_CONVERSATION_WHERE },
-      { conversation: { members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } } } },
+      {
+        conversation: {
+          kind: { not: "task_thread" },
+          members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
+        },
+      },
+      // A task's conversation is the Agent's while it follows the task; its seat there only
+      // keeps a read position.
+      {
+        conversation: {
+          taskDiscussionOf: {
+            follows: { some: { member: { agentId, ...ACTIVE_MEMBER_WHERE } } },
+          },
+        },
+      },
       { message: { pendingMentionActions: { some: NOTIFIED_AGENT_WHERE(agentId) } } },
     ],
   };

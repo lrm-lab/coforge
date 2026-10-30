@@ -74,7 +74,13 @@ export function deliveryTarget(parent: string, rootId?: string | null) {
  * reader sees it (`targetOf`, from `directTargets`; required, so a caller cannot forget it). A
  * conversation with neither a person nor an Agent peer is an App's events.
  */
-export function conversationTarget(conversation: TargetConversation, targetOf: DirectTargetOf) {
+export function conversationTarget(
+  conversation: TargetConversation,
+  targetOf: DirectTargetOf,
+): string {
+  // A task's discussion: its board and the task, `#channel:#N` (a task is not a thread root).
+  if (conversation.taskDiscussionOf)
+    return `${conversationTarget(conversation.taskDiscussionOf.conversation, targetOf)}:#${conversation.taskDiscussionOf.number}`;
   if (conversation.channelName) return channelTarget(conversation.channelName);
   return targetOf(conversation) ?? `@${undefined}`;
 }
@@ -90,12 +96,25 @@ export const CONVERSATION_TARGET_MEMBERS = {
   take: 2,
 } satisfies Prisma.Conversation$membersArgs;
 
+/** What `conversationTarget` reads of a conversation, and of the board when it is a task's. */
+export const TARGET_CONVERSATION_SELECT = {
+  channelName: true,
+  directKey: true,
+  members: CONVERSATION_TARGET_MEMBERS,
+  taskDiscussionOf: {
+    select: {
+      number: true,
+      conversation: {
+        select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
+      },
+    },
+  },
+} satisfies Prisma.ConversationSelect;
+
 /** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
 export const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
   ...AGENT_MESSAGE_INCLUDE,
-  conversation: {
-    select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
-  },
+  conversation: { select: TARGET_CONVERSATION_SELECT },
 } satisfies Prisma.MessageInclude;
 
 /** Where a Message is delivered: its conversation's target, with its thread root if it has one. */

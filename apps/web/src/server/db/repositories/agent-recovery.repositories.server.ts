@@ -1,7 +1,7 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
 
 import {
-  CONVERSATION_TARGET_MEMBERS,
+  TARGET_CONVERSATION_SELECT,
   conversationTarget,
   deliveryTarget,
   AGENT_FORWARD_SELECT,
@@ -59,9 +59,7 @@ export async function readPendingAgentDeliveries(
       deliveryId: true,
       messageId: true,
       conversationId: true,
-      conversation: {
-        select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
-      },
+      conversation: { select: TARGET_CONVERSATION_SELECT },
       sequence: true,
       message: {
         select: {

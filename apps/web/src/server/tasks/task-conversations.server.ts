@@ -11,6 +11,7 @@ import type { MessageRequestIdempotency } from "#src/server/conversations/messag
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
+import { publishTaskConversationMessage } from "./task-publication.server";
 import { resolveTaskScope } from "./task-scope.server";
 import { TASK_SCOPE_WHERE } from "./task-view.server";
 
@@ -81,6 +82,10 @@ export class TaskConversations {
     const { task, member, scope } = await this.resolve(principal, ref, { member: true });
     const post = async () => {
       const posted = await this.post(task.id, scope, member!, body);
+      // After the commit, and only for the first of a retried reply; a failed push is replayed.
+      await publishTaskConversationMessage(this.ports, posted.messageId, posted.messageId).catch(
+        () => undefined,
+      );
       return {
         id: posted.messageId,
         sequence: posted.sequence,

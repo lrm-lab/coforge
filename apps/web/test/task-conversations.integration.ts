@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -234,4 +235,36 @@ test("a task nobody has replied to reads as empty, and an outsider cannot read",
     code: "NOT_FOUND",
   });
   await db.task.delete({ where: { id: quiet.id } });
+});
+
+test("an unreceived reply replays to its follower by the task it names, until the board is lost", async () => {
+  const repository = new PrismaDirectConversationRepository(db);
+  const pending = await repository.readPendingAgentDeliveries(workspaceId, agents.peer.id);
+  expect(pending.length).toBeGreaterThan(0);
+  expect(pending.every((delivery) => delivery.target === `#${channelName}:#1`)).toBe(true);
+
+  // A follower without a seat in the conversation is replayed to as well, and one that
+  // stopped following is not.
+  const discussionId = (await db.task.findUniqueOrThrow({ where: { id: taskId } }))
+    .discussionConversationId!;
+  const seat = await db.conversationMember.findUniqueOrThrow({
+    where: { conversationId_agentId: { conversationId: discussionId, agentId: agents.peer.id } },
+  });
+  await db.conversationMember.update({ where: { id: seat.id }, data: { leftAt: new Date() } });
+  expect((await repository.readPendingAgentDeliveries(workspaceId, agents.peer.id)).length).toBe(
+    pending.length,
+  );
+  await conversations.unfollow(as("peer"), ref);
+  expect(await repository.readPendingAgentDeliveries(workspaceId, agents.peer.id)).toEqual([]);
+  await conversations.follow(as("peer"), ref);
+
+  await db.conversationMember.update({
+    where: { id: agents.peer.memberId },
+    data: { leftAt: new Date() },
+  });
+  expect(await repository.readPendingAgentDeliveries(workspaceId, agents.peer.id)).toEqual([]);
+  await db.conversationMember.update({
+    where: { id: agents.peer.memberId },
+    data: { leftAt: null },
+  });
 });
