@@ -127,3 +127,21 @@ export async function sidebarWith(
   if (synced) await Promise.all([sidebar.channels.preload(), sidebar.directs.preload()]);
   return { sidebar, saves, server, queryClient };
 }
+
+/** The fake server's reads as a `SidebarApi`, without the writes. */
+export function serverlessApi(server: {
+  channels: Channel[];
+  preferences: Awaited<ReturnType<SidebarApi["loadDirectPreferences"]>>;
+}): SidebarApi {
+  return {
+    sections: sectionApi,
+    listChannels: async () => ({ streamPositions: {}, channels: server.channels }),
+    loadDirectPreferences: async () => server.preferences,
+    loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
+    pin: async () => {},
+    setMuted: async () => {},
+    markUnread: async () => {},
+    close: async () => {},
+    arrange: async () => {},
+  };
+}
