@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { storeAgentAttachment } from "#src/server/attachments/attachment.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -16,6 +17,7 @@ const people = {} as Record<
 >;
 const agent = { id: "", name: "", memberId: "" };
 const conversations = new TaskConversations({ db, reader: "people", dependencies: {} });
+const agents = new TaskConversations({ db, reader: "agent", dependencies: {} });
 const as = (key: keyof typeof people) => ({ workspaceId, userId: people[key].id });
 const ref = () => ({ conversationId: boardId, number: 1 });
 
@@ -127,23 +129,48 @@ test("stopping to follow, then being mentioned again, follows again", async () =
   expect((await followOf(people.friend.memberId))?.reason).toBe("mentioned");
 });
 
-test("uploads are a person's: an Agent cannot attach, and another person's file is refused", async () => {
+test("an Agent uploads to the task's conversation and attaches the file; nobody else's file", async () => {
+  const principal = { workspaceId, agentId: agent.id };
+  const agentRef = { target: `#tcpl-${suffix}`, number: 1 };
+  const { conversationId } = await agents.open(principal, agentRef);
+  const stored = await storeAgentAttachment(
+    db,
+    {
+      agentId: agent.id,
+      conversationId,
+      workspaceId,
+      file: new File(["hi"], "hi.txt", { type: "text/plain" }),
+      contentType: "text/plain",
+    },
+    async () => ({ put: async () => {}, remove: async () => {} }) as never,
+  );
+  const sent = await agents.reply(principal, agentRef, {
+    body: "with a file",
+    attachmentIds: [stored.id],
+  });
+  const linked = await db.attachment.findUniqueOrThrow({ where: { id: stored.id } });
+  expect(linked.messageId).toBe(sent.messageId);
+  // The file is spent, and a stranger's id is refused.
   await expect(
-    conversations.reply(
-      { workspaceId, agentId: agent.id },
-      { ...ref(), target: undefined },
-      {
-        body: "with a file",
-        attachmentIds: [crypto.randomUUID()],
-      },
-    ),
-  ).rejects.toMatchObject({ code: expect.any(String) });
+    agents.reply(principal, agentRef, { body: "again", attachmentIds: [stored.id] }),
+  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
   await expect(
     conversations.reply(as("writer"), ref(), {
       body: "with a file",
       attachmentIds: [crypto.randomUUID()],
     }),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+
+  // Off the board, an Agent can neither open the conversation nor reply.
+  await db.conversationMember.update({
+    where: { id: agent.memberId },
+    data: { leftAt: new Date() },
+  });
+  await expect(agents.open(principal, agentRef)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await expect(agents.reply(principal, agentRef, { body: "late" })).rejects.toMatchObject({
+    code: "NOT_FOUND",
+  });
+  await db.conversationMember.update({ where: { id: agent.memberId }, data: { leftAt: null } });
 });
 
 test("an empty or oversized body is refused", async () => {

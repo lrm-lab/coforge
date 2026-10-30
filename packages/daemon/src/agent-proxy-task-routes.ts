@@ -60,6 +60,12 @@ function bodyRequest(
     if (typeof value !== "string") return badRequest();
     body[field] = value;
   }
+  if (route === "reply" && fields.attachmentIds !== undefined) {
+    const ids = fields.attachmentIds;
+    if (!Array.isArray(ids) || ids.length > 10 || ids.some((id) => typeof id !== "string"))
+      return badRequest();
+    body.attachmentIds = ids;
+  }
   if (route === "reply" && fields.mentions !== undefined) {
     if (!isValidMentionSelectorArray(fields.mentions)) return badRequest();
     body.mentions = fields.mentions;

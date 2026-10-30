@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { mentionSelectorsSchema } from "#src/features/conversations/conversation.schemas";
+import {
+  attachmentIdsSchema,
+  mentionSelectorsSchema,
+} from "#src/features/conversations/conversation.schemas";
 
 import { AppError } from "#src/lib/app-error";
 import {
@@ -33,6 +36,7 @@ const replySchema = refSchema.extend({
   content: z.string().min(1).max(50_000),
   idempotencyKey: z.string().min(1),
   mentions: mentionSelectorsSchema,
+  attachmentIds: attachmentIdsSchema,
 });
 const limitSchema = z.coerce.number().int().min(1).max(20).optional();
 const unfollowSchema = refSchema.extend({ reason: z.string().trim().min(1).max(200).optional() });
@@ -149,6 +153,7 @@ export async function handleTaskReplyPost(
         body: body.content,
         idempotencyKey: body.idempotencyKey,
         mentions: body.mentions,
+        attachmentIds: body.attachmentIds,
       })),
       idempotencyKey: body.idempotencyKey,
     });

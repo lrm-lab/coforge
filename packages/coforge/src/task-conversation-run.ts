@@ -61,7 +61,7 @@ async function runReply(
   invocation: Extract<TaskConversationInvocation, { op: "reply" }>,
   readBody: () => Promise<string>,
 ): Promise<string> {
-  const { task, json, mentions } = invocation;
+  const { task, json, mentions, attachmentIds } = invocation;
   const outputMode = json ? "json" : "text";
   const heredoc = [
     `coforge task reply "${task.ref}" <<'${HEREDOC_DELIMITER}'`,
@@ -102,6 +102,7 @@ async function runReply(
       content,
       idempotencyKey: crypto.randomUUID(),
       ...(mentions ? { mentions } : {}),
+      ...(attachmentIds ? { attachmentIds } : {}),
     };
     const reply = decoded(
       decodeAgentTaskReplyResponse,

@@ -5,6 +5,7 @@ import { storeAgentAttachment } from "#src/server/attachments/attachment.server"
 import { isFile } from "#src/server/attachments/upload-file.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { resolveTaskAttachmentTarget } from "#src/server/tasks/task-attachment-target.server";
 import { resolveAttachmentConversation } from "#src/server/agents/agent-target-status.server";
 
 export type AgentAttachmentUploadPrincipal = { workspaceId: string; agentId: string };
@@ -15,6 +16,12 @@ export type AgentAttachmentUploadDependencies = {
     agentId: string,
     target: string,
   ): Promise<{ conversationId: string }>;
+  /** A task's own conversation, when `target` names a task (`#channel:#7`); null for any other
+   * target. Makes the conversation if the task has none yet, with the Agent's seat in it. */
+  resolveTask?(
+    principal: AgentAttachmentUploadPrincipal,
+    target: string,
+  ): Promise<{ conversationId: string } | null>;
   store(input: {
     agentId: string;
     conversationId: string;
@@ -47,11 +54,21 @@ export async function handleAgentAttachmentUpload(
   if (mimeTypeField && !MIME_TYPE_PATTERN.test(mimeTypeField))
     return Response.json({ error: "mimeType is invalid" }, { status: 400 });
 
-  const resolved = await resolveAttachmentConversation(
-    (workspaceId, agentId, parent) => dependencies.resolveTarget(workspaceId, agentId, parent),
-    principal,
-    target,
-  );
+  let task: { conversationId: string } | null = null;
+  try {
+    task = (await dependencies.resolveTask?.(principal, target)) ?? null;
+  } catch (error) {
+    if (isAppErrorCode(error, "NOT_FOUND") || isAppErrorCode(error, "ACCESS_DENIED"))
+      return Response.json({ error: "target is not accessible" }, { status: 403 });
+    throw error;
+  }
+  const resolved =
+    task ??
+    (await resolveAttachmentConversation(
+      (workspaceId, agentId, parent) => dependencies.resolveTarget(workspaceId, agentId, parent),
+      principal,
+      target,
+    ));
   if (resolved instanceof Response) return resolved;
   const { conversationId } = resolved;
 
@@ -87,6 +104,8 @@ export const Route = createFileRoute("/api/agent/v1/attachments/")({
         return handleAgentAttachmentUpload(request, principal, {
           resolveTarget: (workspaceId, agentId, target) =>
             repository.resolveAgentSendTarget(workspaceId, agentId, target),
+          resolveTask: (taskPrincipal, taskTarget) =>
+            resolveTaskAttachmentTarget(db, taskPrincipal, taskTarget),
           store: (input) => storeAgentAttachment(db, input),
         });
       },

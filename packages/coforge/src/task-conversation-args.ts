@@ -8,7 +8,13 @@ import { resolveTaskRef, type TaskRef } from "./task-ref";
  * conversation. */
 export type TaskConversationInvocation = { command: "task-conversation" } & (
   | { op: "view"; task: TaskRef; limit?: number }
-  | { op: "reply"; task: TaskRef; json?: boolean; mentions?: MentionSelectorInput[] }
+  | {
+      op: "reply";
+      task: TaskRef;
+      json?: boolean;
+      mentions?: MentionSelectorInput[];
+      attachmentIds?: string[];
+    }
   | { op: "read"; task: TaskRef; options: MessageReadOptions }
   | { op: "follow"; task: TaskRef }
   | { op: "unfollow"; task: TaskRef; reason?: string }
@@ -20,7 +26,7 @@ type TaskConversationOp = Exclude<TaskConversationInvocation["op"], "following">
 /** What each command takes besides the task: flags with a value, and flags without one. */
 const FLAGS: Record<TaskConversationOp, { values: string[]; switches: string[] }> = {
   view: { values: ["--limit"], switches: [] },
-  reply: { values: ["--mention"], switches: ["--json"] },
+  reply: { values: ["--mention", "--attachment-id"], switches: ["--json"] },
   read: { values: ["--before", "--after", "--around", "--limit"], switches: ["--unread"] },
   follow: { values: [], switches: [] },
   unfollow: { values: ["--reason"], switches: [] },
@@ -38,6 +44,7 @@ function collect(op: TaskConversationOp, args: readonly string[]) {
   const { values: valueFlags, switches } = FLAGS[op];
   const values = new Map<string, string>();
   const mentions: string[] = [];
+  const attachmentIds: string[] = [];
   const given = new Set<string>();
   let positional: string | undefined;
   for (let index = 0; index < args.length; index++) {
@@ -50,6 +57,12 @@ function collect(op: TaskConversationOp, args: readonly string[]) {
     }
     const known = ["--target", "--number", ...valueFlags, ...switches].includes(name);
     if (!known) throw invalidArgument(command, `Unknown argument "${name}".`);
+    if (name === "--attachment-id") {
+      const list = args[++index];
+      if (list === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
+      attachmentIds.push(...list.split(/[\s,]+/).filter(Boolean));
+      continue;
+    }
     if (name === "--mention") {
       const mention = args[++index];
       if (mention === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
@@ -63,7 +76,7 @@ function collect(op: TaskConversationOp, args: readonly string[]) {
     if (value === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
     values.set(name, value);
   }
-  return { positional, values, given, mentions };
+  return { positional, values, given, mentions, attachmentIds };
 }
 
 function mentionSelector(value: string): MentionSelectorInput {
@@ -75,6 +88,14 @@ function mentionSelector(value: string): MentionSelectorInput {
       retryable: false,
     });
   return parsed;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function attachmentIdList(ids: readonly string[]): string[] {
+  const bad = ids.find((id) => !UUID.test(id));
+  if (bad) throw invalidArg("--attachment-id must be a full attachment UUID.");
+  return [...new Set(ids.map((id) => id.toLowerCase()))];
 }
 
 function viewLimit(raw: string | undefined): number | undefined {
@@ -103,7 +124,10 @@ export function parseTaskConversationArgs(
   const op = args[0];
   if (op === "list" && args.includes("--following")) return parseFollowing(args.slice(1));
   if (!op || !Object.hasOwn(FLAGS, op)) return undefined;
-  const { positional, values, given, mentions } = collect(op as TaskConversationOp, args.slice(1));
+  const { positional, values, given, mentions, attachmentIds } = collect(
+    op as TaskConversationOp,
+    args.slice(1),
+  );
   const task = resolveTaskRef(positional, values.get("--target"), values.get("--number"));
   const invocation = { command: "task-conversation" as const, task };
   switch (op as TaskConversationOp) {
@@ -117,6 +141,7 @@ export function parseTaskConversationArgs(
         op: "reply",
         ...(given.has("--json") ? { json: true } : {}),
         ...(mentions.length ? { mentions: mentions.map(mentionSelector) } : {}),
+        ...(attachmentIds.length ? { attachmentIds: attachmentIdList(attachmentIds) } : {}),
       };
     case "read":
       return {

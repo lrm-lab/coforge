@@ -307,3 +307,41 @@ test("maps a store INVALID_INPUT failure to 400 for an empty file and 413 for an
     error: "file exceeds the maximum attachment size",
   });
 });
+
+test("a task ref stores the file in the task's own conversation, not its board", async () => {
+  let stored: string | undefined;
+  const response = await handleAgentAttachmentUpload(
+    uploadRequest({ target: "#general:#7", file: new Blob(["hello"]) }),
+    principal,
+    {
+      resolveTask: async (_principal, target) =>
+        target === "#general:#7" ? { conversationId: "task-conversation" } : null,
+      resolveTarget: async () => {
+        throw new Error("must not resolve the board");
+      },
+      store: async (input) => {
+        stored = input.conversationId;
+        return { id: "a", fileName: "note.txt", contentType: "text/plain", sizeBytes: 5 };
+      },
+    },
+  );
+  expect(response.status).toBe(200);
+  expect(stored).toBe("task-conversation");
+});
+
+test("a task the Agent cannot reach answers as an inaccessible target", async () => {
+  const response = await handleAgentAttachmentUpload(
+    uploadRequest({ target: "#private:#7", file: new Blob(["hello"]) }),
+    principal,
+    {
+      resolveTask: async () => {
+        throw new AppError("NOT_FOUND");
+      },
+      resolveTarget: async () => {
+        throw new Error("must not resolve the board");
+      },
+      store: stubStore(),
+    },
+  );
+  expect(response.status).toBe(403);
+});

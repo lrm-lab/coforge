@@ -48,9 +48,6 @@ test("task reply takes a ref and --json, and nothing the server would drop", () 
     task: GENERAL_7,
     json: true,
   });
-  expect(refusal(["reply", "#general:#7", "--attachment-id", "a"]).message).toBe(
-    'Unknown argument "--attachment-id".',
-  );
 });
 
 test("task read takes the message read window", () => {
@@ -149,5 +146,23 @@ test("task reply takes repeated --mention selectors and refuses a malformed one"
   ).toMatchObject({ op: "reply", mentions: [{ type: "agent", id, name: "kiro" }] });
   expect(refusal(["reply", "#general:#7", "--mention", "kiro"]).code).toBe(
     "INVALID_MENTION_SELECTOR",
+  );
+});
+
+test("task reply takes attachment ids, repeated or listed, once each", () => {
+  const a = "11111111-2222-4333-8444-555555555555";
+  const b = "66666666-7777-4888-8999-aaaaaaaaaaaa";
+  expect(
+    parseTaskConversationArgs([
+      "reply",
+      "#general:#7",
+      "--attachment-id",
+      `${a},${b}`,
+      "--attachment-id",
+      a,
+    ]),
+  ).toMatchObject({ op: "reply", attachmentIds: [a, b] });
+  expect(refusal(["reply", "#general:#7", "--attachment-id", "abcd1234"]).message).toBe(
+    "--attachment-id must be a full attachment UUID.",
   );
 });

@@ -51,14 +51,15 @@ export async function postTaskMessage(
   const seat = await joinDiscussion(tx, workspaceId, conversationId, member);
 
   const attachmentIds = [...new Set(input.attachmentIds ?? [])];
-  if (attachmentIds.length && !member.userId) throw new AppError("INVALID_INPUT");
   const available = attachmentIds.length
     ? await tx.attachment.findMany({
         where: {
           id: { in: attachmentIds },
           conversationId,
           workspaceId,
-          ...userUploadedAttachmentWhere(member.userId!),
+          ...(member.userId
+            ? userUploadedAttachmentWhere(member.userId)
+            : { uploaderAgentId: member.agentId }),
           messageId: null,
         },
         select: { id: true },
