@@ -1,6 +1,8 @@
 import type {
   DaemonRuntimeProviderModelRefreshRequest,
   DaemonRuntimeProviderModelRefreshResponse,
+  ProviderModelRefreshResult,
+  RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 
 type RefreshResults = {
@@ -15,6 +17,11 @@ type RefreshResults = {
 
 /** Allows runtime version probes, sequential CLI listings, cleanup and the inventory report. */
 export const MODEL_CATALOG_REFRESH_TIMEOUT_MS = 45_000;
+
+export type ModelCatalogRefreshOutcome =
+  | { status: "refreshed"; results: ProviderModelRefreshResult[] }
+  | { status: "error"; results: ProviderModelRefreshResult[] }
+  | { status: "timeout" };
 
 /** Waits for this Computer's reply to this probe, rather than a newer inventory timestamp. The
  * Computer reads as detecting its runtimes meanwhile, whatever the outcome. */
@@ -35,12 +42,17 @@ export class ComputerModelCatalogRefresh {
     },
   ) {}
 
-  async execute(viewer: { userId: string; workspaceId: string }, computerId: string) {
+  async execute(
+    viewer: { userId: string; workspaceId: string },
+    computerId: string,
+    provider?: RuntimeProvider,
+  ) {
     const request: DaemonRuntimeProviderModelRefreshRequest = {
       protocolMajor: 1,
       requestId: crypto.randomUUID(),
       workspaceId: viewer.workspaceId,
       computerId,
+      ...(provider ? { provider } : {}),
     };
     const { results, publish, detection } = this.dependencies;
     const scope = { workspaceId: viewer.workspaceId, computerId };
@@ -52,10 +64,10 @@ export class ComputerModelCatalogRefresh {
       do {
         const result = await results.read(request.requestId);
         if (result) {
-          if (!result.accepted || result.status !== "refreshed" || !result.catalogs)
-            // The daemon's own sentence, when it sent one: it names the failure the page shows.
-            return { status: "error" as const, message: result.message };
-          return { status: "refreshed" as const, catalogs: result.catalogs };
+          // `refreshed` names the request's answer; each provider's own outcome lives in
+          // `results`, so one failed runtime never hides another's fresh catalog.
+          if (!result.accepted) return { status: "error" as const, results: [] };
+          return { status: "refreshed" as const, results: result.results };
         }
         await this.timing.wait();
       } while (this.timing.now() < deadline);
@@ -67,4 +79,38 @@ export class ComputerModelCatalogRefresh {
       await detection.end(scope).catch(() => {});
     }
   }
+}
+
+/** Maps a terminal per-provider answer to the browser's shape: a named refresh returns its own
+ * outcome; a whole-Computer rescan returns every fresh catalog, or the first failure's reason. */
+export function refreshOutcomeFor(
+  results: ProviderModelRefreshResult[],
+  visibleProviders: ReadonlySet<RuntimeProvider>,
+  provider?: RuntimeProvider,
+) {
+  const visible = results.filter((entry) => visibleProviders.has(entry.provider));
+  if (provider) {
+    const entry = visible.find((outcome) => outcome.provider === provider);
+    if (!entry) return { status: "error" as const };
+    if (entry.status !== "refreshed" || !entry.catalog)
+      return {
+        status: "error" as const,
+        provider: entry.provider,
+        code: entry.code,
+        diagnostic: entry.diagnostic,
+      };
+    return { status: "refreshed" as const, catalog: entry.catalog };
+  }
+  const failure = visible.find((entry) => entry.status !== "refreshed");
+  if (failure)
+    return {
+      status: "error" as const,
+      provider: failure.provider,
+      code: failure.code,
+      diagnostic: failure.diagnostic,
+    };
+  return {
+    status: "refreshed" as const,
+    catalogs: visible.flatMap((entry) => (entry.catalog ? [entry.catalog] : [])),
+  };
 }

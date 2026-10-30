@@ -13,6 +13,7 @@ import { HostJobError } from "#src/server/hosts/host-jobs.server";
 
 import {
   computerIdInputSchema,
+  refreshRuntimeCatalogInputSchema,
   readRestartStatusInputSchema,
   readUsageInputSchema,
   restartComputerInputSchema,
@@ -39,7 +40,10 @@ import {
 import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
-import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-model-catalog-refresh.server";
+import {
+  ComputerModelCatalogRefresh,
+  refreshOutcomeFor,
+} from "#src/server/computers/computer-model-catalog-refresh.server";
 import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
@@ -400,7 +404,7 @@ export const getComputerRuntimeCatalog = createServerFn({ method: "GET" })
  * catalog reads, only this Workspace's Computer and visible runtimes may be returned. */
 export const refreshComputerRuntimeCatalog = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(computerIdInputSchema)
+  .validator(refreshRuntimeCatalogInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     declareNoStore();
@@ -418,20 +422,18 @@ export const refreshComputerRuntimeCatalog = createServerFn({ method: "POST" })
           daemonControlChannel(workspaceId, data.computerId),
           encodeDaemonRuntimeProviderModelRefreshRequest(request),
         ),
-    }).execute({ userId: user.id, workspaceId }, data.computerId);
+    }).execute({ userId: user.id, workspaceId }, data.computerId, data.provider);
     if (refreshed.status !== "refreshed") return refreshed;
     const runtimes = await runtimeVisibility(db).list({ workspaceId, userId: user.id });
-    const visibleProviders = new Set(
-      runtimes
-        .filter((runtime) => runtime.computerId === data.computerId)
-        .map((runtime) => runtime.provider),
-    );
-    return {
-      ...refreshed,
-      catalogs: refreshed.catalogs.filter((catalog) =>
-        visibleProviders.has(runtimeProvider(catalog.provider)),
+    return refreshOutcomeFor(
+      refreshed.results,
+      new Set(
+        runtimes
+          .filter((runtime) => runtime.computerId === data.computerId)
+          .map((runtime) => runtime.provider),
       ),
-    };
+      data.provider,
+    );
   });
 
 export const setRuntimeVisibility = createServerFn({ method: "POST" })

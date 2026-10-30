@@ -56,7 +56,7 @@ async function startedRuntime(options: { refuse?: boolean } = {}) {
       // One provider with a login flow, whose adapter is the fake below: no CLI runs.
       runtimes: async () => [{ provider: "codex", version: "0.165.0", displayName: "Codex" }],
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      catalogs: async () => ({ catalogs: [], failures: [] }),
     },
     undefined,
     undefined,

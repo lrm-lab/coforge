@@ -40,7 +40,9 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   after it. A CLI that fetches its list over the network has its own deadline next to its catalog
   reader (`opencode models --verbose`, `agy models`). Explicit refreshes force Pi and forbid Codex's
   disk fallback; offline or failed probes are omitted, logged as `code_agent_catalog:discovery_failed`,
-  and never cached. Ordinary inventory retains its existing cache fallback policy.
+  and never cached. Each provider's failure reports back per provider: classified start/version
+  failures also mark the runtime's `unavailableCode`/`diagnostic` in the inventory report; a
+  requested refresh names just its provider's outcome (`results`). Ordinary inventory retains its existing cache fallback policy.
 - Report the maintained Claude Code model catalog when Claude Code is installed. Never launch the
   CLI to infer a dynamic catalog; its machine-readable initialization does not give a dependable
   list. `claudeStaticCatalog(version)` lists a pinned model only when the probed CLI meets the

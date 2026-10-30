@@ -1,4 +1,5 @@
 // Opt-in after the managed E2E setup; requires authenticated kiro-cli and consumes usage.
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -129,8 +130,7 @@ test("real Kiro v3 reads and replies through Web, Centrifugo and Daemon", async 
       proxy,
       {
         runtimes: async () => [{ provider: "kiro", version: "2.21.2", displayName: "Kiro v3" }],
-        cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-        catalogs: async () => [],
+        ...emptyCatalogs,
       },
       join(root, "state"),
     );

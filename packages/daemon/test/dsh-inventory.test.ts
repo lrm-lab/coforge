@@ -51,7 +51,7 @@ test(
         ),
       ).toBe(false);
       expect(await Bun.file(log).exists()).toBe(false);
-      const catalogs = await discoverCodeAgentCatalogs(runtimes, options);
+      const { catalogs } = await discoverCodeAgentCatalogs(runtimes, options);
       expect(catalogs.find((entry) => entry.provider === "dsh")?.models[0]?.id).toBe(
         "native-model",
       );
@@ -140,11 +140,14 @@ test(
       { provider: "dsh" as const, version: "0.2.1-rc.2", displayName: "DeepSeek Harness" },
     ];
     try {
-      const catalogs = await discoverCodeAgentCatalogs(runtimes, options);
+      const { catalogs } = await discoverCodeAgentCatalogs(runtimes, options);
       expect(catalogs.some((catalog) => catalog.provider === "coforge")).toBe(true);
       expect(catalogs.some((catalog) => catalog.provider === "dsh")).toBe(false);
       // An explicit refresh is one provider's failure too: the other catalogs still come back.
-      const forced = await discoverCodeAgentCatalogs(runtimes, { ...options, force: true });
+      const { catalogs: forced } = await discoverCodeAgentCatalogs(runtimes, {
+        ...options,
+        force: true,
+      });
       expect(forced.some((catalog) => catalog.provider === "coforge")).toBe(true);
       expect(forced.some((catalog) => catalog.provider === "dsh")).toBe(false);
     } finally {

@@ -242,7 +242,7 @@ export async function startEvalDaemon(input: {
         { provider: RUNTIME_PROVIDER.COFORGE, version: "eval", displayName: "CoForge (Pi)" },
       ],
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      catalogs: async () => ({ catalogs: [], failures: [] }),
     },
     stateDirectory,
   );

@@ -55,7 +55,7 @@ test("WSS Skills query scans a stopped Agent without launching or changing inven
         return [];
       },
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      catalogs: async () => ({ catalogs: [], failures: [] }),
     },
     join(root, "state"),
   );

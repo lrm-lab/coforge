@@ -43,7 +43,8 @@ These rules apply to `src/server/computers/`.
 - `computer-agent-workspaces.server.ts` summarizes the Daemon's existing
   workspace-directory observations for the Computer owner's detail inventory.
 - `computer-model-catalog-refresh.server.ts` waits for the terminal reply to
-  an explicit model probe; ordinary catalog reads use the stored inventory.
+  an explicit model probe — scoped to one provider when the request names it; ordinary catalog
+  reads use the stored inventory. Each provider's outcome reports separately.
   The same probe is the Computer page's "Rescan runtimes": the daemon re-runs
   runtime discovery before it re-reports.
 - `computer-runtime-detection.server.ts` marks a Computer as detecting its

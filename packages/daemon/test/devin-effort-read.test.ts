@@ -79,7 +79,11 @@ test("the Devin catalog publishes fast and reports again once efforts resolve", 
     ],
   };
   const updates: { catalogs?: { models?: { id: string; reasoningEfforts: string[] }[] }[] }[] = [];
-  const replies: { catalogs?: { models?: { id: string; reasoningEfforts: string[] }[] }[] }[] = [];
+  const replies: {
+    results?: {
+      catalog?: { models?: { id: string; reasoningEfforts: string[] }[] };
+    }[];
+  }[] = [];
   const transport = {
     updateCodeAgents: async (report: (typeof updates)[number]) => {
       updates.push(report);
@@ -93,7 +97,7 @@ test("the Devin catalog publishes fast and reports again once efforts resolve", 
     {
       runtimes: async () => [{ provider: "devin", version: "3000.11.228", displayName: "Devin" }],
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [catalog],
+      catalogs: async () => ({ catalogs: [catalog], failures: [] }),
       stateDirectory,
     },
     { workspaceId: "workspace-a", computerId: "computer-a" },
@@ -109,6 +113,7 @@ test("the Devin catalog publishes fast and reports again once efforts resolve", 
       {
         protocolMajor: 1,
         requestId: "refresh-1",
+        provider: "devin",
         workspaceId: "workspace-a",
         computerId: "computer-a",
       },
@@ -121,7 +126,7 @@ test("the Devin catalog publishes fast and reports again once efforts resolve", 
       "high",
       "max",
     ]);
-    expect(replies.at(0)?.catalogs?.[0]?.models?.[0]?.reasoningEfforts).toEqual([
+    expect(replies.at(0)?.results?.[0]?.catalog?.models?.[0]?.reasoningEfforts).toEqual([
       "medium",
       "high",
       "max",
@@ -145,22 +150,25 @@ test("an unresolved Devin effort read does not republish", async () => {
     {
       runtimes: async () => [{ provider: "devin", version: "3000.11.228", displayName: "Devin" }],
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [
-        {
-          provider: "devin",
-          models: [
-            {
-              id: "swe-2-high",
-              displayName: "SWE-2",
-              description: "",
-              modelProvider: "devin",
-              reasoningEfforts: [],
-              defaultReasoning: "",
-              recommended: false,
-            },
-          ],
-        },
-      ],
+      catalogs: async () => ({
+        catalogs: [
+          {
+            provider: "devin",
+            models: [
+              {
+                id: "swe-2-high",
+                displayName: "SWE-2",
+                description: "",
+                modelProvider: "devin",
+                reasoningEfforts: [],
+                defaultReasoning: "",
+                recommended: false,
+              },
+            ],
+          },
+        ],
+        failures: [],
+      }),
       stateDirectory,
     },
     { workspaceId: "workspace-a", computerId: "computer-a" },
@@ -173,6 +181,7 @@ test("an unresolved Devin effort read does not republish", async () => {
       {
         protocolMajor: 1,
         requestId: "refresh-2",
+        provider: "devin",
         workspaceId: "workspace-a",
         computerId: "computer-a",
       },
@@ -198,22 +207,25 @@ test("a sweep that changes nothing does not republish", async () => {
     {
       runtimes: async () => [{ provider: "devin", version: "3000.11.228", displayName: "Devin" }],
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [
-        {
-          provider: "devin",
-          models: [
-            {
-              id: "swe-2-high",
-              displayName: "SWE-2",
-              description: "",
-              modelProvider: "devin",
-              reasoningEfforts: ["medium", "high", "max"],
-              defaultReasoning: "",
-              recommended: false,
-            },
-          ],
-        },
-      ],
+      catalogs: async () => ({
+        catalogs: [
+          {
+            provider: "devin",
+            models: [
+              {
+                id: "swe-2-high",
+                displayName: "SWE-2",
+                description: "",
+                modelProvider: "devin",
+                reasoningEfforts: ["medium", "high", "max"],
+                defaultReasoning: "",
+                recommended: false,
+              },
+            ],
+          },
+        ],
+        failures: [],
+      }),
       stateDirectory,
     },
     { workspaceId: "workspace-a", computerId: "computer-a" },
@@ -229,6 +241,7 @@ test("a sweep that changes nothing does not republish", async () => {
       {
         protocolMajor: 1,
         requestId: "refresh-3",
+        provider: "devin",
         workspaceId: "workspace-a",
         computerId: "computer-a",
       },

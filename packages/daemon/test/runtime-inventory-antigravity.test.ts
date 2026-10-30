@@ -197,7 +197,7 @@ describe("Antigravity CLI model catalog in the inventory", () => {
           piModels: async () => [],
           cacheDirectory: stateDirectory,
         };
-        const live = await discoverCodeAgentCatalogs(runtimes, options);
+        const { catalogs: live } = await discoverCodeAgentCatalogs(runtimes, options);
         expect(live.find((catalog) => catalog.provider === "antigravity")?.models).toHaveLength(14);
 
         // The cached read has no `commands`: it can only serve what the live pass wrote.

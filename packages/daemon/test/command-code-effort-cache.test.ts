@@ -223,7 +223,7 @@ test("an effort read without a state directory answers failed and does not start
     {
       runtimes: async () => [],
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      catalogs: async () => ({ catalogs: [], failures: [] }),
     },
     { workspaceId: "workspace-a", computerId: "computer-a" },
     () => true,

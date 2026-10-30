@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RuntimeStartFailedError, RuntimeVersionUnsupportedError } from "@lrm/coforge-anvil";
 import type { CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
 import { DshCatalogDiscovery } from "#src/code-agent/dsh/catalog";
 
@@ -75,6 +76,32 @@ test("a failed forced refresh preserves the old DSH cache and reports failure", 
     );
     expect(await discovery.cached(options)).toEqual(catalog);
     expect(await discovery.discover(options)).toEqual(catalog);
+  });
+});
+
+test("a DSH catalog failure keeps its typed reason instead of a bare refresh failure", async () => {
+  await fixture(async (options) => {
+    // `RuntimeStartFailedError` and `RuntimeVersionUnsupportedError` carry host-authored, already
+    // redacted text; the refresh must report them rather than an unclassified "Error".
+    for (const typed of [
+      new RuntimeStartFailedError("The runtime could not be started", "missing shim"),
+      new RuntimeVersionUnsupportedError("requires exactly 0.2.1-rc.2"),
+    ]) {
+      const discovery = new DshCatalogDiscovery(async () => {
+        throw typed;
+      });
+      await expect(discovery.discover(options)).rejects.toBe(typed);
+    }
+
+    // An unknown native failure still collapses to the safe message — but its `code` names the
+    // underlying class/errno so the daemon log carries a real signal, never private text.
+    const unknown = new DshCatalogDiscovery(async () => {
+      throw Object.assign(new Error("private native diagnostic"), { code: "EACCES" });
+    });
+    const failure = await unknown.discover(options).catch((error) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toBe("DSH model catalog refresh failed");
+    expect((failure as { code?: string }).code).toBe("EACCES");
   });
 });
 

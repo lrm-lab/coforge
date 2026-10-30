@@ -135,22 +135,32 @@ message DaemonRuntimeProviderModelRefreshRequest {
   string request_id = 2;
   string workspace_id = 3;
   string computer_id = 4;
-  string message_type = 5;
+  // The runtime the user asked about; the daemon refreshes only its catalog.
+  string provider = 5;
+  string message_type = 6;
 }
 
-// Daemon -> server RPC, method `daemon:v1:provider:model_refresh_result`. `catalogs` carries the
-// freshly discovered catalog only when `status` is `refreshed`; `status` is one of
-// `refreshed | refused | error`.
+// One provider's terminal outcome for a requested model refresh. `status` is `refreshed` or
+// `error`; `code` is a runtime unavailable code and `diagnostic` the runtime's own redacted
+// line, both present only on `error`. `catalog` is the fresh model list on `refreshed`.
+message ProviderModelRefreshResult {
+  string provider = 1;
+  string status = 2;
+  string code = 3;
+  string diagnostic = 4;
+  CodeAgentModelCatalog catalog = 5;
+}
+
+// Daemon -> server RPC, method `daemon:v1:provider:model_refresh_result`. Every provider the
+// request covered gets its own entry; a failed provider does not change the others' outcome.
 message DaemonRuntimeProviderModelRefreshResponse {
   uint32 protocol_major = 1;
   string request_id = 2;
   string workspace_id = 3;
   string computer_id = 4;
   bool accepted = 5;
-  string status = 6;
-  string message = 7;
-  repeated CodeAgentModelCatalog catalogs = 8;
-  string message_type = 9;
+  repeated ProviderModelRefreshResult results = 6;
+  string message_type = 7;
 }
 
 // Server -> daemon, on the daemon control channel: read one Command Code model's effort choices.

@@ -4,9 +4,12 @@ import {
   type CodeAgentModelCatalog,
   type DaemonRuntimeCommandCodeEffortReadRequest,
   type DaemonRuntimeProviderModelRefreshRequest,
+  type ProviderModelRefreshResult,
   type RuntimeMetadata,
+  type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import { readHostCommandCodeEfforts } from "#src/code-agent/command-code/effort-read";
+import type { CatalogDiscoveryFailure } from "#src/code-agent/runtime-inventory";
 import { readHostDevinEfforts, type DevinCatalogEfforts } from "#src/code-agent/devin/effort-read";
 import { discoverPiModels } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
@@ -35,8 +38,11 @@ export type CodeAgentDiscovery = {
   ): Promise<{ catalogs: CodeAgentModelCatalog[]; needsRefresh: boolean }>;
   catalogs(
     runtimes: RuntimeMetadata[],
-    options?: { force: boolean },
-  ): Promise<CodeAgentModelCatalog[]>;
+    options?: { force: boolean; provider?: RuntimeProvider },
+  ): Promise<{
+    catalogs: CodeAgentModelCatalog[];
+    failures: CatalogDiscoveryFailure[];
+  }>;
   /** This Computer's probe-cache directory. Absent only for test discoveries. */
   stateDirectory?: string;
 };
@@ -253,9 +259,7 @@ export class CodeAgentInventorySync {
     });
     const reply = async (response: {
       accepted: boolean;
-      status: "refreshed" | "error";
-      message?: string;
-      catalogs?: CodeAgentModelCatalog[];
+      results: ProviderModelRefreshResult[];
     }): Promise<void> => {
       await transport.sendProviderModelRefreshResult?.({
         protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
@@ -267,34 +271,74 @@ export class CodeAgentInventorySync {
     };
     try {
       const runtimes = await this.#discovery.runtimes();
-      const catalogs = await this.#discovery.catalogs(runtimes, { force: true });
+      const { catalogs, failures } = await this.#discovery.catalogs(runtimes, {
+        force: true,
+        provider: request.provider,
+      });
+      // A runtime whose launch handshake (start/version) failed its catalog probe is unusable:
+      // the report marks it so the settings page names why, not just that it failed.
+      const reported = runtimes.map((runtime) => {
+        const failure = failures.find((entry) => entry.provider === runtime.provider);
+        if (failure && (failure.code === "start_failed" || failure.code === "version_unsupported"))
+          return {
+            ...runtime,
+            unavailableCode: failure.code,
+            ...(failure.diagnostic ? { diagnostic: failure.diagnostic } : {}),
+          };
+        return runtime;
+      });
       if (!this.#isLive(transport)) return;
-      await this.#sendInventory(transport, requestId, runtimes, catalogs);
-      const resolved = await this.#resolveDevinEfforts(runtimes, catalogs, scope);
+      await this.#sendInventory(transport, requestId, reported, catalogs);
+      const resolved =
+        request.provider === RUNTIME_PROVIDER.DEVIN
+          ? await this.#resolveDevinEfforts(reported, catalogs, scope)
+          : undefined;
       if (resolved && this.#isLive(transport))
-        await this.#sendInventory(transport, crypto.randomUUID(), runtimes, resolved);
-      this.#runtimeAuth?.inventoryObserved(runtimes);
+        await this.#sendInventory(transport, crypto.randomUUID(), reported, resolved);
+      this.#runtimeAuth?.inventoryObserved(reported);
       logger.info("Code Agent catalog refresh completed", {
         event: "code_agent_catalog:refresh_completed",
         ...scope,
+        provider: request.provider,
         catalog_count: catalogs.length,
+        failure_count: failures.length,
         elapsed_ms: Math.round(performance.now() - startedAt),
-        outcome: "ok",
+        outcome: failures.length ? "partial" : "ok",
       });
-      await reply({ accepted: true, status: "refreshed", catalogs: resolved ?? catalogs });
+      const finalCatalogs = resolved ?? catalogs;
+      const outcomeFor = (provider: RuntimeProvider): ProviderModelRefreshResult => {
+        const failure = failures.find((entry) => entry.provider === provider);
+        if (failure)
+          return {
+            provider,
+            status: "error",
+            code: failure.code,
+            ...(failure.diagnostic ? { diagnostic: failure.diagnostic } : {}),
+          };
+        const catalog = finalCatalogs.find((entry) => entry.provider === provider);
+        if (catalog) return { provider, status: "refreshed", catalog };
+        const runtime = reported.find((entry) => entry.provider === provider);
+        return {
+          provider,
+          status: "error",
+          code: runtime?.unavailableCode ?? "unknown",
+          ...(runtime?.diagnostic ? { diagnostic: runtime.diagnostic } : {}),
+        };
+      };
+      const providers = request.provider
+        ? [request.provider]
+        : reported.map((runtime) => runtime.provider);
+      await reply({ accepted: true, results: providers.map(outcomeFor) });
     } catch (error) {
       logger.warning("Code Agent catalog refresh failed", {
         event: "code_agent_catalog:refresh_failed",
         ...scope,
+        provider: request.provider,
         error_code: diagnosticErrorCode(error),
         outcome: "failed",
       });
       if (!this.#isLive(transport)) return;
-      await reply({
-        accepted: false,
-        status: "error",
-        message: error instanceof Error ? error.message : "model refresh failed",
-      }).catch(() => {});
+      await reply({ accepted: false, results: [] }).catch(() => {});
     }
   }
 
@@ -317,9 +361,19 @@ export class CodeAgentInventorySync {
       outcome: "started",
     });
     try {
-      const catalogs = await this.#discovery.catalogs(runtimes);
+      const { catalogs, failures } = await this.#discovery.catalogs(runtimes);
       if (!this.#isLive(transport)) return;
-      await this.#sendInventory(transport, requestId, runtimes, catalogs);
+      const reported = runtimes.map((runtime) => {
+        const failure = failures.find((entry) => entry.provider === runtime.provider);
+        if (failure && (failure.code === "start_failed" || failure.code === "version_unsupported"))
+          return {
+            ...runtime,
+            unavailableCode: failure.code,
+            ...(failure.diagnostic ? { diagnostic: failure.diagnostic } : {}),
+          };
+        return runtime;
+      });
+      await this.#sendInventory(transport, requestId, reported, catalogs);
       if (!this.#isLive(transport)) return;
       const resolved = await this.#resolveDevinEfforts(runtimes, catalogs, scope);
       if (resolved && this.#isLive(transport))

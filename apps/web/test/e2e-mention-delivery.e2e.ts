@@ -1,3 +1,4 @@
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -149,8 +150,7 @@ test("a tracked @mention is delivered to a running Agent and refused for a stopp
         runtimes: async () => [
           { provider: "pi", version: "fixture", displayName: "Mention delivery fixture" },
         ],
-        cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-        catalogs: async () => [],
+        ...emptyCatalogs,
       },
       daemonStateDirectory,
     );

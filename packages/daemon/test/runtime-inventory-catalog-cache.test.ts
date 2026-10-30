@@ -119,7 +119,7 @@ test(
           exited: Promise.resolve(0),
         }),
       };
-      const catalogs = await discoverCodeAgentCatalogs(
+      const { catalogs } = await discoverCodeAgentCatalogs(
         [{ provider: "opencode" as const, version: "2.0.30", displayName: "OpenCode" }],
         {
           cwd: process.cwd(),

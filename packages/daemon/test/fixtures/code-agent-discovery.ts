@@ -5,5 +5,5 @@ import type { CodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventor
 export const emptyCodeAgentDiscovery = {
   runtimes: async () => [],
   cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-  catalogs: async () => [],
+  catalogs: async () => ({ catalogs: [], failures: [] }),
 } satisfies CodeAgentDiscovery;

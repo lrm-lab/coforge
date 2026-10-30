@@ -70,7 +70,7 @@ test("WSS Workspace Files query lists a stopped Agent's working directory withou
         return [];
       },
       cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      catalogs: async () => ({ catalogs: [], failures: [] }),
     },
     join(root, "state"),
   );

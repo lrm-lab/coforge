@@ -40,6 +40,7 @@ import { RuntimeProviderMark } from "./runtime-provider-mark";
 import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
 import { useCommandCodeEfforts } from "./use-command-code-efforts";
 import { useRuntimeCatalogRefresh } from "./use-runtime-catalog-refresh";
+import { RuntimeRefreshFailure } from "./runtime-refresh-failure";
 
 export * from "./agent-runtime-fields-state";
 
@@ -422,11 +423,7 @@ export function AgentRuntimeFields({
               />
             </div>
           </div>
-          {catalogRefresh.failed && (
-            <p role="alert" className="text-sm text-error-primary">
-              {m.agent_form_model_refresh_failed()}
-            </p>
-          )}
+          {catalogRefresh.failure && <RuntimeRefreshFailure failure={catalogRefresh.failure} />}
         </>
       )}
       {piConfigured && customModelActive && (

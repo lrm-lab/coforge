@@ -9,6 +9,7 @@ import {
   type CodeAgentModelCatalog,
   type RuntimeMetadata,
   type RuntimeProvider,
+  type RuntimeUnavailableCode,
 } from "@lrm/coforge-sdk/internal";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
@@ -78,6 +79,8 @@ type CatalogCommands = {
 export type CodeAgentDiscoveryOptions = {
   /** Explicit refreshes may not substitute a provider's local cache for a failed live probe. */
   force?: boolean;
+  /** A user-requested refresh covers only this provider's discovery. */
+  provider?: RuntimeProvider;
   /** How external Code Agent CLIs are found and versioned; production passes `hostCodeAgentProbe`. */
   probe: ExternalCodeAgentProbe;
   commands?: CatalogCommands;
@@ -246,10 +249,16 @@ export async function loadCachedCodeAgentCatalogs(
  * the probe cache in a single pass once every discovery has settled, avoiding concurrent
  * read-modify-write races between providers.
  */
+export type CatalogDiscoveryFailure = {
+  provider: RuntimeProvider;
+  code: RuntimeUnavailableCode;
+  diagnostic?: string;
+};
+
 export async function discoverCodeAgentCatalogs(
   runtimes: RuntimeMetadata[],
   options: CodeAgentDiscoveryOptions,
-): Promise<CodeAgentModelCatalog[]> {
+): Promise<{ catalogs: CodeAgentModelCatalog[]; failures: CatalogDiscoveryFailure[] }> {
   const probe = options.probe;
   const environment = options.environment ?? Bun.env;
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
@@ -461,7 +470,17 @@ export async function discoverCodeAgentCatalogs(
         Promise.reject(new Error("DSH model catalog refresh failed")),
       ]);
   }
-  const results = await settleCatalogDiscoveries(discoveries);
+  const settled = await settleCatalogDiscoveries(
+    options.provider
+      ? discoveries.filter(([provider]) => provider === options.provider)
+      : discoveries,
+  );
+  const results = settled.flatMap(({ provider, result }) =>
+    result ? [{ provider, ...result }] : [],
+  );
+  const failures = settled.flatMap(({ provider, failure }) =>
+    failure ? [{ provider, ...failure }] : [],
+  );
   if (options.cacheDirectory) {
     const cacheDirectory = options.cacheDirectory;
     const probedAt = Date.now();
@@ -482,14 +501,17 @@ export async function discoverCodeAgentCatalogs(
           current[provider] = { ...current[provider], key, catalog, catalogProbedAt: probedAt };
       });
   }
-  return results.flatMap(({ catalog }) => (catalog ? [catalog] : []));
+  return {
+    catalogs: results.flatMap(({ catalog }) => (catalog ? [catalog] : [])),
+    failures,
+  };
 }
 
 export async function discoverCodeAgentInventory(
   options: CodeAgentDiscoveryOptions,
 ): Promise<CodeAgentInventory> {
   const runtimes = await discoverCodeAgentRuntimes(options);
-  const catalogs = await discoverCodeAgentCatalogs(runtimes, options);
+  const { catalogs } = await discoverCodeAgentCatalogs(runtimes, options);
   return { runtimes, catalogs };
 }
 

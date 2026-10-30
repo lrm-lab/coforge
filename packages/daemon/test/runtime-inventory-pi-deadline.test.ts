@@ -32,7 +32,7 @@ test(
       });
       const { result, records } = await captureDaemonLogs(async () => {
         const startedAt = performance.now();
-        const catalogs = await discoverCodeAgentCatalogs(
+        const { catalogs } = await discoverCodeAgentCatalogs(
           [{ provider: "pi", version: "0.0.0", displayName: "Pi" }],
           {
             cwd: home,

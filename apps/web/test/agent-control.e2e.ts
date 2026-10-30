@@ -1,3 +1,4 @@
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -90,8 +91,7 @@ test("Profile controls and Skills cross Web, WSS, native child and Session persi
           runtimes: async () => [
             { provider: "pi", version: "fixture", displayName: "Pi protocol fixture" },
           ],
-          cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-          catalogs: async () => [],
+          ...emptyCatalogs,
         },
         join(root, "state"),
       );

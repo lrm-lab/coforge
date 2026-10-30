@@ -1,3 +1,4 @@
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -153,8 +154,7 @@ test("a new Agent introduces itself to its creator by DM on its first start, unt
     proxy,
     {
       runtimes: async () => [{ provider: "pi", version: "fixture", displayName: "Pi E2E fixture" }],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      ...emptyCatalogs,
     },
     daemonStateDirectory,
   );

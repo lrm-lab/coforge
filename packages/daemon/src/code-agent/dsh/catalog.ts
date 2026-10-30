@@ -3,8 +3,8 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { discoverDshCatalog } from "@lrm/coforge-anvil/dsh";
-import { RuntimeVersionUnsupportedError } from "@lrm/coforge-anvil";
-import type { CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
+import { RuntimeStartFailedError, RuntimeVersionUnsupportedError } from "@lrm/coforge-anvil";
+import { diagnosticErrorCode, type CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
 import { dshRuntimeHost } from "./host";
 
 export type DshCatalogOptions = {
@@ -184,10 +184,18 @@ export class DshCatalogDiscovery {
         this.#cached = { key: after.key, catalog: structuredClone(catalog) };
       return catalog;
     } catch (error) {
-      if (error instanceof RuntimeVersionUnsupportedError) throw error;
+      // Typed launch/version failures already carry host-authored, redacted text; report them.
+      if (
+        error instanceof RuntimeVersionUnsupportedError ||
+        error instanceof RuntimeStartFailedError
+      )
+        throw error;
       // Preserve the last successful metadata; the existing refresh error path reports failure.
-      // Do not persist or forward native diagnostics, which may contain private configuration.
-      throw new Error("DSH model catalog refresh failed");
+      // Do not persist or forward native diagnostics, which may contain private configuration —
+      // but keep the underlying class/errno as the code so logs carry a real signal.
+      throw Object.assign(new Error("DSH model catalog refresh failed"), {
+        code: diagnosticErrorCode(error),
+      });
     }
   }
 }

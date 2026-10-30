@@ -1,3 +1,4 @@
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -196,8 +197,7 @@ test("live OpenRouter Pi delivery writes an Agent reply to canonical DB", async 
       proxy,
       {
         runtimes: async () => [{ provider: "pi", version: "live", displayName: "Pi" }],
-        cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-        catalogs: async () => [],
+        ...emptyCatalogs,
       },
       state,
     );

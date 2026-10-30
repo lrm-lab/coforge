@@ -1,3 +1,4 @@
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -114,8 +115,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
         runtimes: async () => [
           { provider: "pi", version: "fixture", displayName: "Channel fixture" },
         ],
-        cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-        catalogs: async () => [],
+        ...emptyCatalogs,
       },
       daemonStateDirectory,
     );

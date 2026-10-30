@@ -46,8 +46,13 @@ test("a model refresh makes its own terminal catalog observable to the waiting r
       encodeDaemonRuntimeProviderModelRefreshResponse({
         ...request,
         accepted: true,
-        status: "refreshed",
-        catalogs: [{ provider: "antigravity", models: [] }],
+        results: [
+          {
+            provider: "antigravity",
+            status: "refreshed",
+            catalog: { provider: "antigravity", models: [] },
+          },
+        ],
       }),
       {
         principal: {
@@ -60,8 +65,13 @@ test("a model refresh makes its own terminal catalog observable to the waiting r
     expect(await results.read(request.requestId)).toMatchObject({
       requestId: request.requestId,
       accepted: true,
-      status: "refreshed",
-      catalogs: [{ provider: "antigravity", models: [] }],
+      results: [
+        {
+          provider: "antigravity",
+          status: "refreshed",
+          catalog: { provider: "antigravity", models: [] },
+        },
+      ],
     });
   } finally {
     await results.clear(request.requestId);
@@ -88,8 +98,7 @@ test("a terminal probe error and a missing reply stay failures and clear pending
                 encodeDaemonRuntimeProviderModelRefreshResponse({
                   ...value,
                   accepted: false,
-                  status: "error",
-                  message: "fixture probe failed",
+                  results: [],
                 }),
                 {
                   principal: {
@@ -113,14 +122,11 @@ test("a terminal probe error and a missing reply stay failures and clear pending
         { userId: "user-1", workspaceId: "workspace-1" },
         "computer-1",
       );
-      // The daemon's own sentence reaches the page, which names the failure with it.
       expect(result).toEqual(
-        outcome === "error"
-          ? { status: "error", message: "fixture probe failed" }
-          : { status: outcome },
+        outcome === "error" ? { status: "error", results: [] } : { status: outcome },
       );
       expect(await results.read(request!.requestId)).toBeUndefined();
-      await results.accept({ ...request!, accepted: true, status: "refreshed", catalogs: [] });
+      await results.accept({ ...request!, accepted: true, results: [] });
       expect(await results.read(request!.requestId)).toBeUndefined();
     }
   } finally {
@@ -141,8 +147,7 @@ test("foreign scope and unauthorized replies cannot complete a model refresh", a
   const result: DaemonRuntimeProviderModelRefreshResponse = {
     ...request,
     accepted: true,
-    status: "refreshed",
-    catalogs: [],
+    results: [],
   };
   try {
     await results.begin({ request, userId: "user-1", revision: "" });
@@ -163,11 +168,8 @@ test("foreign scope and unauthorized replies cannot complete a model refresh", a
     ).toMatchObject({ code: 403 });
     expect(await results.read(request.requestId)).toBeUndefined();
     await results.accept(result);
-    await results.accept({ ...result, accepted: false, status: "error" });
-    expect(await results.read(request.requestId)).toMatchObject({
-      accepted: true,
-      status: "refreshed",
-    });
+    await results.accept({ ...result, accepted: false });
+    expect(await results.read(request.requestId)).toMatchObject({ accepted: true });
   } finally {
     await results.clear(request.requestId);
     redis.close();
@@ -212,8 +214,13 @@ test("a refresh waits past another request's report and returns only its own fre
             ...value,
             requestId: crypto.randomUUID(),
             accepted: true,
-            status: "refreshed",
-            catalogs: [{ provider: "antigravity", models: [] }],
+            results: [
+              {
+                provider: "antigravity",
+                status: "refreshed",
+                catalog: { provider: "antigravity", models: [] },
+              },
+            ],
           });
           expect(await results.read(value.requestId)).toBeUndefined();
         },
@@ -224,13 +231,20 @@ test("a refresh waits past another request's report and returns only its own fre
         async wait() {
           waits += 1;
           now = 21_000;
-          await reply({ ...request!, accepted: true, status: "refreshed", catalogs: fresh });
+          await reply({
+            ...request!,
+            accepted: true,
+            results: [{ provider: "antigravity", status: "refreshed", catalog: fresh[0] }],
+          });
         },
       },
     );
     expect(
       await refresh.execute({ userId: "user-1", workspaceId: "workspace-1" }, "computer-1"),
-    ).toEqual({ status: "refreshed", catalogs: fresh });
+    ).toEqual({
+      status: "refreshed",
+      results: [{ provider: "antigravity", status: "refreshed", catalog: fresh[0] }],
+    });
     expect(waits).toBe(1);
     expect(await results.read(request!.requestId)).toBeUndefined();
   } finally {

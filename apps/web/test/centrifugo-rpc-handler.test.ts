@@ -8,7 +8,6 @@ import {
   createDaemonRuntimeCodeAgentsUpdateMethod,
   createDaemonRuntimeReadyMethod,
   createDaemonRuntimeUsageScanResultMethod,
-  createDaemonRuntimeProviderModelRefreshResultMethod,
   createComputerUpgradeResultMethod,
   createDaemonConnectionStatusMethod,
   type CentrifugoRpcMethod,
@@ -21,7 +20,6 @@ import {
   encodeAgentMessageDeliveryRejection,
   encodeAgentStatus,
   encodeDaemonRuntimeCodeAgentsUpdateRequest,
-  encodeDaemonRuntimeProviderModelRefreshResponse,
   encodeDaemonRuntimeReadyRequest,
   encodeDaemonRuntimeUsageScanResponse,
   encodeComputerUpgradeResult,
@@ -1294,92 +1292,6 @@ describe("CentrifugoRpcHandler", () => {
       message: "invalid usage scan result",
     });
     expect(records).toEqual([]);
-  });
-
-  describe("Daemon model refresh result method", () => {
-    test("accepts the Daemon's terminal reply for a refresh it performed", async () => {
-      const accepted: unknown[] = [];
-      const method = createDaemonRuntimeProviderModelRefreshResultMethod({
-        async accept(result) {
-          accepted.push(result);
-        },
-      });
-      const payload = encodeDaemonRuntimeProviderModelRefreshResponse({
-        protocolMajor: 1,
-        requestId: "refresh-1",
-        workspaceId: "workspace-1",
-        computerId: "computer-1",
-        accepted: true,
-        status: "refreshed",
-        catalogs: [{ provider: "codex", models: [] }],
-      });
-
-      expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
-      expect(accepted).toEqual([
-        expect.objectContaining({
-          requestId: "refresh-1",
-          status: "refreshed",
-          catalogs: [{ provider: "codex", models: [] }],
-        }),
-      ]);
-    });
-
-    test("accepts a refresh error reply", async () => {
-      const accepted: unknown[] = [];
-      const method = createDaemonRuntimeProviderModelRefreshResultMethod({
-        async accept(result) {
-          accepted.push(result);
-        },
-      });
-      const payload = encodeDaemonRuntimeProviderModelRefreshResponse({
-        protocolMajor: 1,
-        requestId: "refresh-2",
-        workspaceId: "workspace-1",
-        computerId: "computer-1",
-        accepted: false,
-        status: "error",
-        message: "probe exploded",
-      });
-
-      expect(await method(payload, { principal: principal() })).toBeInstanceOf(Uint8Array);
-      expect(accepted).toEqual([
-        expect.objectContaining({ requestId: "refresh-2", accepted: false, status: "error" }),
-      ]);
-    });
-
-    test("rejects a principal from another Computer", async () => {
-      const method = createDaemonRuntimeProviderModelRefreshResultMethod();
-      const payload = encodeDaemonRuntimeProviderModelRefreshResponse({
-        protocolMajor: 1,
-        requestId: "refresh-3",
-        workspaceId: "workspace-1",
-        computerId: "computer-2",
-        accepted: true,
-        status: "refreshed",
-      });
-
-      expect(await method(payload, { principal: principal() })).toEqual({
-        code: 403,
-        message: "daemon runtime identity is not authorized",
-      });
-    });
-
-    test("rejects an invalid reply", async () => {
-      const method = createDaemonRuntimeProviderModelRefreshResultMethod();
-      const payload = encodeDaemonRuntimeProviderModelRefreshResponse({
-        protocolMajor: 2,
-        requestId: "",
-        workspaceId: "workspace-1",
-        computerId: "computer-1",
-        accepted: true,
-        status: "refreshed",
-      });
-
-      expect(await method(payload, { principal: principal() })).toEqual({
-        code: 400,
-        message: "invalid model refresh result",
-      });
-    });
   });
 
   test("composed protocol methods fail closed until persistence is wired", async () => {

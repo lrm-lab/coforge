@@ -8,6 +8,8 @@ import { createAgent } from "#src/features/agents/agents.functions";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { getComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
+import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
+import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ComputerNotFound } from "#src/features/computers/computer-not-found";
 import {
@@ -164,7 +166,16 @@ function ComputerDetailPage() {
                 const result = await rescanRuntimes({ data: { computerId } });
                 await router.invalidate({ sync: true });
                 return result.status === "error"
-                  ? { status: "error", message: result.message }
+                  ? {
+                      status: "error",
+                      message:
+                        "provider" in result && result.provider && "code" in result && result.code
+                          ? `${runtimeProviderLabel(result.provider)}: ${runtimeUnavailableReason(
+                              result.code,
+                              result.diagnostic,
+                            )}`
+                          : undefined,
+                    }
                   : { status: result.status };
               }
             : undefined

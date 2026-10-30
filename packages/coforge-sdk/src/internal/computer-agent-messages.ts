@@ -145,15 +145,27 @@ export type DaemonRuntimeProviderModelRefreshRequest = {
   requestId: string;
   workspaceId: string;
   computerId: string;
+  /** The runtime the user asked about; absent re-probes every provider (runtime rescan). */
+  provider?: RuntimeProvider;
   messageType?: DaemonRuntimeMessageType;
 };
-/** Daemon -> server. `catalogs` carries the freshly discovered catalog when `status` is
- * `refreshed`; `status` is one of `refreshed | refused | error`. */
-export type DaemonRuntimeProviderModelRefreshResponse = DaemonRuntimeProviderModelRefreshRequest & {
+/** One provider's terminal outcome for a requested model refresh. `code`/`diagnostic` name the
+ * failure only on `error`; `catalog` is the fresh model list on `refreshed`. */
+export type ProviderModelRefreshResult = {
+  provider: RuntimeProvider;
+  status: "refreshed" | "error";
+  code?: RuntimeUnavailableCode;
+  diagnostic?: string;
+  catalog?: CodeAgentModelCatalog;
+};
+/** Daemon -> server. Every provider the request covered gets its own entry; a failed provider
+ * does not change the others' outcome. */
+export type DaemonRuntimeProviderModelRefreshResponse = Omit<
+  DaemonRuntimeProviderModelRefreshRequest,
+  "provider"
+> & {
   accepted: boolean;
-  status: string;
-  message?: string;
-  catalogs?: CodeAgentModelCatalog[];
+  results: ProviderModelRefreshResult[];
 };
 /** Server -> daemon. Read one Command Code model's effort choices after the user selects it. */
 export type DaemonRuntimeCommandCodeEffortReadRequest = {

@@ -1,3 +1,4 @@
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
@@ -205,8 +206,7 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
     proxy,
     {
       runtimes: async () => [{ provider: "pi", version: "fixture", displayName: "Pi E2E fixture" }],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      ...emptyCatalogs,
     },
     daemonStateDirectory,
   );

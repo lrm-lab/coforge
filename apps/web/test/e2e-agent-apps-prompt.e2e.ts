@@ -1,3 +1,4 @@
+import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -196,8 +197,7 @@ test("an Agent's launch names its Workspace's apps in the instructions its provi
     undefined,
     {
       runtimes: async () => [],
-      cachedCatalogs: async () => ({ catalogs: [], needsRefresh: false }),
-      catalogs: async () => [],
+      ...emptyCatalogs,
     },
     join(workspaceRoot, ".state"),
   );
