@@ -371,8 +371,11 @@ export async function createTasks(
       }
     }
     await Promise.all(effects);
-    for (const receipt of result.receipts)
-      await publishAssignmentReceipt(ports, receipt.id, command.idempotencyKey);
+    // One delivery per Task's receipt, each its own daemon request: the receipt's id is stable
+    // across retries, as the command's key is for a single one.
+    await Promise.all(
+      result.receipts.map((receipt) => publishAssignmentReceipt(ports, receipt.id, receipt.id)),
+    );
   }
   const { receipts } = result;
   return {

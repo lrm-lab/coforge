@@ -1,3 +1,4 @@
+import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { quotedTask, type QuotedTask } from "./task-notices.server";
@@ -97,17 +98,17 @@ export async function withNotices<T>(
           deliverTo: assignee.id === actor.id ? null : assignee.agentId,
           mentions: assignee,
         });
-        await tx.threadFollow.upsert({
-          where: {
-            memberId_rootMessageId: { memberId: assignee.id, rootMessageId: task.messageId },
-          },
-          create: {
-            memberId: assignee.id,
-            rootMessageId: task.messageId,
-            conversationId: conversation.conversationId,
-            workspaceId: conversation.workspaceId,
-          },
-          update: {},
+        // The receipt is the thread's first reply when it starts the thread, so it enrolls as a
+        // reply does: the assignee, and the root's author while nobody follows yet.
+        const root = await tx.message.findUniqueOrThrow({
+          where: { id: task.messageId },
+          select: { senderMemberId: true },
+        });
+        await enrollThreadReplyFollowers(tx, {
+          workspaceId: conversation.workspaceId,
+          conversationId: conversation.conversationId,
+          root: { id: task.messageId, senderMemberId: root.senderMemberId },
+          participantMemberIds: [assignee.id],
         });
         return notice;
       },

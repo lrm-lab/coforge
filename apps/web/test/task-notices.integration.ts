@@ -425,7 +425,8 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
   }
 
   // An Agent assignee's receipt keeps its one delivery and now reads as a personal mention, aimed
-  // at the Task's thread, which the Agent now follows.
+  // at the Task's thread, which the Agent now follows, and so does the Task's author, as a first
+  // reply enrolls them.
   const forAgent = await run(asAlice, {
     operation: "create",
     title: "For the Agent",
@@ -448,6 +449,11 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
     await db.threadFollow.findMany({
       where: { rootMessageId: agentTask.messageId },
       select: { memberId: true },
+      orderBy: { memberId: "asc" },
     }),
-  ).toEqual([{ memberId: memberId({ agentId: agent.id }) }]);
+  ).toEqual(
+    [memberId({ agentId: agent.id }), memberId({ userId: alice.id })]
+      .sort()
+      .map((id) => ({ memberId: id })),
+  );
 });
