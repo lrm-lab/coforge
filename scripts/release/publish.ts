@@ -29,7 +29,6 @@ import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import Credential from "@alicloud/credentials";
 import OSS from "ali-oss";
 
 import {
@@ -42,7 +41,8 @@ import { compileTargetArtifacts, isReleaseTarget, type ReleaseTarget } from "./c
 import { darwinSignerFor, type DarwinSigningIdentity } from "./darwin-signing";
 import { assertInstallerCoversRelease, productInstallerProtocol } from "./installer-feed";
 import { resolvePhotonWasmBytes } from "./photon-wasm";
-import { feedOssConnection, readFeedObject } from "./public-feed";
+import { readFeedObject } from "./public-feed";
+import { feedOssResolver } from "./feed-oss";
 import {
   assertForward,
   assertStagingDevVersion,
@@ -56,7 +56,6 @@ import {
 /* -------------------------------------------------------------------------------------------- */
 
 import {
-  createFeedOssClient,
   createOssClient,
   regionFromEndpoint,
   type OssConnection,
@@ -675,8 +674,10 @@ export interface PublishDependencies {
    * installed @silvia-odwyer/photon-node version. */
   resolvePhotonWasm?: ResolvePhotonWasmFn;
   /** Builds the client a feed URL's objects are read through; when absent every feed read stays
-   * anonymous. `--feed-oss` wires `createFeedOssClient` + `feedOssConnection` here. */
-  feedOssFor?: (feedUrl: string) => Promise<{ get(key: string): Promise<{ content: unknown }> } | undefined>;
+   * anonymous. `--feed-oss` wires `feedOssResolver` here. */
+  feedOssFor?: (
+    feedUrl: string,
+  ) => Promise<{ get(key: string): Promise<{ content: unknown }> } | undefined>;
 }
 
 export interface PublishOutcome {
@@ -927,23 +928,7 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
       if (set && !args.version)
         throw new Error(`a split publication names its version: use --version with ${flag}`);
     const commit = args.commit ?? (await currentGitCommit());
-    // `--feed-oss` reads a feed's objects through its backing OSS bucket over the accelerate
-    // endpoint; the read keeps the job's ambient credential, or the release-reader role when
-    // `COFORGE_FEED_ROLE_ARN` is configured (createFeedOssClient). The anonymous CDN read is the
-    // default until the workflow opts in.
-    const feedOssClients = new Map<string, Promise<{ get(key: string): Promise<{ content: unknown }> } | undefined>>();
-    const feedOssFor = args.feedOss
-      ? (feedUrl: string) => {
-          if (!feedOssClients.has(feedUrl)) {
-            const connection = feedOssConnection(feedUrl);
-            feedOssClients.set(
-              feedUrl,
-              connection ? createFeedOssClient(connection) : Promise.resolve(undefined),
-            );
-          }
-          return feedOssClients.get(feedUrl)!;
-        }
-      : undefined;
+    const feedOssFor = feedOssResolver(args.feedOss);
     const options: PublishOptions = {
       version: args.version,
       productionFeedUrl: args.productionFeedUrl,

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { FEED_READ_TIMEOUT_MS, feedOssConnection, type FeedFetch, readFeedObject } from "./public-feed";
+import {
+  FEED_READ_TIMEOUT_MS,
+  feedOssConnection,
+  type FeedFetch,
+  readFeedObject,
+} from "./public-feed";
 
 /** A fetch that answers from `answers` in order, then repeats the last one. */
 function scripted(...answers: (() => Promise<Response>)[]): {
@@ -101,7 +106,12 @@ describe("reading a public release feed", () => {
   test("an OSS client reads the object, not the CDN URL", async () => {
     const { fetch, calls } = scripted(ok("unreached"));
     const read: string[] = [];
-    const oss = { get: async (key: string) => { read.push(key); return { content: Buffer.from("1.2.6\n") }; } };
+    const oss = {
+      get: async (key: string) => {
+        read.push(key);
+        return { content: Buffer.from("1.2.6\n") };
+      },
+    };
     await expect(
       readFeedObject("https://releases.coforge.cn", "latest", fetch, { ...options, oss }),
     ).resolves.toBe("1.2.6\n");
@@ -115,12 +125,18 @@ describe("reading a public release feed", () => {
     const oss = {
       get: async (_key: string) => {
         attempt++;
-        if (attempt === 1) { failures.push(0); throw Object.assign(new Error("denied"), { status: 403 }); }
+        if (attempt === 1) {
+          failures.push(0);
+          throw Object.assign(new Error("denied"), { status: 403 });
+        }
         return { content: "1.2.7\n" };
       },
     };
     await expect(
-      readFeedObject("https://releases.coforge.cn", "latest", scripted()["fetch"], { ...options, oss }),
+      readFeedObject("https://releases.coforge.cn", "latest", scripted()["fetch"], {
+        ...options,
+        oss,
+      }),
     ).rejects.toThrow("oss://releases.coforge.cn/latest: denied");
     expect(attempt).toBe(1);
 
@@ -133,7 +149,10 @@ describe("reading a public release feed", () => {
       },
     };
     await expect(
-      readFeedObject("https://releases.coforge.cn", "latest", scripted()["fetch"], { ...options, oss: retryable }),
+      readFeedObject("https://releases.coforge.cn", "latest", scripted()["fetch"], {
+        ...options,
+        oss: retryable,
+      }),
     ).resolves.toBe("1.2.8\n");
     expect(five).toBe(2);
   });

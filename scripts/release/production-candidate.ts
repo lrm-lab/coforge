@@ -111,7 +111,12 @@ export async function verifyProductionCandidate(
   // The installer's staging pointer moves on its own (`pointer_only`), so it is not compared.
   const [productionLatest, stagingLatest, manifestText] = await Promise.all([
     productionFeedUrl
-      ? readFeedObject(productionFeedUrl, LATEST_OBJECT_KEY, fetch, await feedOptions(productionFeedUrl))
+      ? readFeedObject(
+          productionFeedUrl,
+          LATEST_OBJECT_KEY,
+          fetch,
+          await feedOptions(productionFeedUrl),
+        )
       : undefined,
     stagingVersion
       ? readFeedObject(stagingFeedUrl, LATEST_OBJECT_KEY, fetch, await feedOptions(stagingFeedUrl))

@@ -71,7 +71,9 @@ export async function readFeedObject(
   const timeoutMs = options.timeoutMs ?? FEED_READ_TIMEOUT_MS;
   for (let attempt = 0; ; attempt++) {
     try {
-      return options.oss ? await readOnceOss(url, key, options.oss, timeoutMs) : await readOnce(url, fetch, timeoutMs);
+      return options.oss
+        ? await readOnceOss(url, key, options.oss, timeoutMs)
+        : await readOnce(url, fetch, timeoutMs);
     } catch (error) {
       if (!(error instanceof FeedReadError) || !error.transient || attempt >= delays.length)
         throw error;
