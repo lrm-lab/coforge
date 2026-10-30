@@ -19,6 +19,7 @@ type ComposerProps = ComponentProps<typeof MessageComposer>;
 export function ConversationComposerFooter({
   conversation,
   root,
+  narrow,
   readOnlyNotice,
   mentionCompletion,
   composerTarget,
@@ -31,6 +32,8 @@ export function ConversationComposerFooter({
   conversation: Omit<DirectConversationView, "agent">;
   /** The thread root this pane replies to; absent for the main stream. */
   root?: { id: string };
+  /** A thread or the Task popup: no message column, no stream notices, a reply's placeholder. */
+  narrow: boolean;
   readOnlyNotice?: ReactNode;
   mentionCompletion: boolean;
   composerTarget?: string;
@@ -50,15 +53,15 @@ export function ConversationComposerFooter({
   // handle so the same person's older messages don't push their own recent one down.
   const recentHandles = useRecentConversationHandles(conversation.messages);
   return (
-    <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-      {!root && <ConversationUpdateNotice conversation={conversation} />}
-      {!readOnlyNotice && !root && <NotificationActivationBanner />}
+    <div className={narrow ? undefined : MESSAGE_COLUMN_CLASS}>
+      {!narrow && <ConversationUpdateNotice conversation={conversation} />}
+      {!readOnlyNotice && !narrow && <NotificationActivationBanner />}
       {readOnlyNotice ?? (
         <MessageComposer
           conversationId={conversation.conversationId}
           threadRootId={root?.id}
-          inThread={Boolean(root)}
-          target={root ? undefined : composerTarget}
+          inThread={narrow}
+          target={narrow ? undefined : composerTarget}
           mentionables={mentionCandidates}
           mentionOutsiders={conversation.mentionOutsiders}
           recentHandles={recentHandles}

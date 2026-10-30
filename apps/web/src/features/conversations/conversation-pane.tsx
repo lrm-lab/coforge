@@ -1,19 +1,10 @@
 import { WorkspaceAssistantWelcome } from "./workspace-assistant-welcome";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
-import { ProgressBar } from "react-aria-components";
-import { Spinner } from "#src/components/ui/spinner";
 
 import { useStateWithRef } from "#src/hooks/use-state-with-ref";
 import { useAppToast } from "#src/components/ui/toast";
 import { useTimeZone } from "#src/lib/time-zone-context";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -44,16 +35,16 @@ import { OutboxMessageRow } from "./outbox-message-row";
 import { SystemMessageGroup } from "./system-message-group";
 import { groupSystemMessages } from "./system-message-groups";
 import { usePaneOutbox } from "./use-pane-outbox";
-import { MessageNavigationGroup } from "./message-navigation-group";
+import { ComposerEdgeOverlay } from "./composer-edge-overlay";
 import { useOwnMessagesIndex } from "./own-messages-menu";
 import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
 import { useConversationOpenBoundary } from "./use-conversation-open-boundary";
 import { useSystemMessageGroups } from "./use-system-message-groups";
-import { replyCountLabel } from "./conversation-labels";
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
-import { ReplyingAgentsLine } from "#src/features/agents/replying-agents-line";
+import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
+import { ThreadRepliesMarker } from "./thread-replies-marker";
 
 export function ConversationPane({
   conversation,
@@ -291,6 +282,11 @@ export function ConversationPane({
    * expanded message must not re-collapse behind the reader. */
   const { expandedMessages, toggleExpandedMessage } = useMessageExpansion();
   const collapsible = conversation.collapseLongMessages === true;
+  // A thread, or the Task popup's discussion: a narrow pane that keeps no message column.
+  const narrow = Boolean(root ?? rootSlot);
+  // A window replacement in flight (an "around" read) has no messages yet, but that is not an
+  // empty conversation: only a settled read may say so (stream-state.ts, #112/#113).
+  const streamLoading = streamState(conversation.messages.length, streamRead) === "loading";
   // Runs of consecutive system messages fold into one summary line (system-message-groups.ts). A
   // run never crosses a day divider or the unread divider, so both stay drawn, and the message the
   // pane opens on (the unread boundary) is always a group's first message or a row of its own.
@@ -692,7 +688,7 @@ export function ConversationPane({
         >
           {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. A
               thread pane is already narrow and keeps none. */}
-          <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
+          <div className={narrow ? undefined : MESSAGE_COLUMN_CLASS}>
             {root && !rootSlot && root.weeklyReportHidden !== true && (
               <div
                 aria-label={m.conversation_thread_root()}
@@ -730,16 +726,7 @@ export function ConversationPane({
               </div>
             )}
             {threadMarker && (
-              // Where the replies begin and how many there are; notices count, since they are
-              // replies in this thread too. The pane always holds the whole thread, so this is
-              // the top of the replies, never a load-older point. `message-text` makes it read at the
-              // size of the messages under it (Settings → Message font size).
-              <div className="message-text px-4 pt-2 text-center text-md text-tertiary md:px-6">
-                <p className="pb-1">{m.conversation_thread_beginning()}</p>
-                <p className="border-b border-secondary pb-2">
-                  {replyCountLabel(visibleMessages.length + shownOutbox.length)}
-                </p>
-              </div>
+              <ThreadRepliesMarker count={visibleMessages.length + shownOutbox.length} />
             )}
             {!root && conversation.hasOlder && onLoadOlder && (
               <OlderMessagesRow
@@ -749,47 +736,12 @@ export function ConversationPane({
                 onLoad={() => void loadOlder()}
               />
             )}
-            {streamState(conversation.messages.length, streamRead) === "loading" ? (
-              // A window replacement is in flight (an "around" read): no messages yet, but that is not
-              // an empty conversation. Only a settled read may say so (stream-state.ts, #112/#113).
-              <div
-                role="status"
-                className={cn(
-                  "flex items-center justify-center text-tertiary",
-                  root ? "px-4 py-8 md:px-6" : "px-4 pt-[clamp(2rem,10svh,5rem)] pb-8 md:px-6",
-                )}
-              >
-                <ProgressBar
-                  isIndeterminate
-                  aria-label={m.conversation_loading()}
-                  className="inline-flex shrink-0"
-                >
-                  <Spinner className="size-4" />
-                </ProgressBar>
-              </div>
-            ) : visibleMessages.length === 0 && shownOutbox.length === 0 ? (
-              <Empty
-                className={
-                  root
-                    ? "px-4 py-8 md:px-6"
-                    : "items-start px-4 pt-[clamp(2rem,10svh,5rem)] pb-8 text-left md:px-6"
-                }
-              >
-                <EmptyHeader className={root ? "gap-2" : "w-full max-w-sm items-start gap-3"}>
-                  <EmptyMedia className="mb-1">{emptyState.media}</EmptyMedia>
-                  <EmptyTitle
-                    role="heading"
-                    aria-level={root ? 3 : 2}
-                    className={cn(
-                      "max-w-full [overflow-wrap:anywhere]",
-                      root ? "text-sm" : "text-xl font-semibold",
-                    )}
-                  >
-                    {emptyState.title}
-                  </EmptyTitle>
-                  <EmptyDescription>{emptyState.description}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
+            {streamLoading || (visibleMessages.length === 0 && shownOutbox.length === 0) ? (
+              <ConversationStreamPlaceholder
+                loading={streamLoading}
+                narrow={narrow}
+                emptyState={emptyState}
+              />
             ) : (
               // Every loaded row is rendered, in normal flow. Nothing here computes a row's position
               // or its height, so no measurement can shift a row under the reader and no scroll
@@ -921,35 +873,25 @@ export function ConversationPane({
               )}
           </div>
         </div>
-        {/* Along the composer's top edge, over the history's bottom padding: who is typing on the
-            left, and the jump group anchored to the composer's top-right corner. The overlay
-            repeats the composer's column and side margins, so both sit right above the composer
-            at any width rather than at the far pane edge beside the scrollbar, and the line
-            truncates before the group instead of running under it. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
-          <div className={root ? undefined : MESSAGE_COLUMN_CLASS}>
-            <div className="flex items-end gap-2 px-4 md:px-6">
-              <ReplyingAgentsLine
-                conversationId={conversation.conversationId}
-                threadRootId={root?.id ?? null}
-                className="min-w-0 flex-1"
-              />
-              <MessageNavigationGroup
-                index={ownIndex}
-                followingLatest={followingLatest}
-                newMessageCount={newMessageCount}
-                onShowMessage={(messageId) => void showMessage(messageId)}
-                onShowLatest={() => void showLatestMessages()}
-                formatBody={formatIndexBody}
-              />
-            </div>
-          </div>
-        </div>
+        <ComposerEdgeOverlay
+          narrow={narrow}
+          conversationId={conversation.conversationId}
+          threadRootId={root?.id ?? null}
+          navigation={{
+            index: ownIndex,
+            followingLatest,
+            newMessageCount,
+            onShowMessage: (messageId) => void showMessage(messageId),
+            onShowLatest: () => void showLatestMessages(),
+            formatBody: formatIndexBody,
+          }}
+        />
       </div>
 
       <ConversationComposerFooter
         conversation={conversation}
         root={root}
+        narrow={narrow}
         readOnlyNotice={readOnlyNotice}
         mentionCompletion={mentionCompletion}
         composerTarget={composerTarget}
