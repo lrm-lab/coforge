@@ -87,7 +87,9 @@ const refused: [string, TaskCommand][] = [
     command({ operation: "create", title: "x".repeat(8_001) }),
   ],
   ["a create with a number", command({ operation: "create", title: "a", number: 1 })],
-  ["a create with a message id", command({ operation: "create", title: "a", messageId: "m-1" })],
+  // A create may name a source message under task conversations; where they are off the board
+  // refuses it (task-conversations-create.integration.ts), which needs the experiment's switch.
+  ["alongside on a list", command({ operation: "list", alongside: true })],
   ["an amend with a blank title", command({ operation: "amend", number: 1, title: " " })],
   [
     "an amend title over 10000 characters",
