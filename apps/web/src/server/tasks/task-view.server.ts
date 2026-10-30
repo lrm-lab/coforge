@@ -75,6 +75,21 @@ export const taskSelection = {
   message: {
     select: { sequence: true, mentions: BROWSER_MESSAGE_MENTIONS_SELECT },
   },
+  // The message a task made under task conversations was made from, for the `sourceMessage` of its view.
+  sourceMessage: {
+    select: {
+      id: true,
+      body: true,
+      threadRootId: true,
+      mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+      sender: {
+        select: {
+          user: { select: { username: true } },
+          agent: { select: { name: true } },
+        },
+      },
+    },
+  },
 } satisfies Prisma.TaskSelect;
 
 export type SelectedTask = Prisma.TaskGetPayload<{ select: typeof taskSelection }>;
@@ -175,6 +190,12 @@ export function readTaskText(
  * count leaves both out, and a page keeps what it had. */
 export type DiscussionCounts = { replyCount: number; earlierReplies: number };
 
+/** The first line of a source message, cut for a card or a `task view` line. */
+function sourcePreview(text: string) {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > 160 ? `${line.slice(0, 159)}…` : line;
+}
+
 export function taskView(
   task: SelectedTask,
   reader: TaskReader = "people",
@@ -217,6 +238,21 @@ export function taskView(
       earlierDiscussion: { threadRootId: task.messageId!, replyCount: counts.earlierReplies },
     }),
     ...(task.sourceMessageId && { sourceMessageId: task.sourceMessageId }),
+    sourceMessage: task.sourceMessage
+      ? {
+          messageId: task.sourceMessage.id,
+          ...(task.sourceMessage.threadRootId && {
+            threadRootId: task.sourceMessage.threadRootId,
+          }),
+          senderName:
+            task.sourceMessage.sender?.user?.username ??
+            task.sourceMessage.sender?.agent?.name ??
+            null,
+          preview: sourcePreview(
+            readTaskText(task.sourceMessage.body, reader, task.sourceMessage.mentions),
+          ),
+        }
+      : null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };

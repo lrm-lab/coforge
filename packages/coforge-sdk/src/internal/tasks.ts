@@ -87,6 +87,14 @@ export type TaskView = {
   earlierDiscussion?: { threadRootId: string; replyCount: number };
   /** The channel message the task was made from (`create --message-id`). */
   sourceMessageId?: string | null;
+  /** The channel message the task was made from, as a card or `task view` shows it; null when it
+   * was made from none. `threadRootId` is set when that message is a reply. */
+  sourceMessage?: {
+    messageId: string;
+    threadRootId?: string;
+    senderName: string | null;
+    preview: string;
+  } | null;
 };
 
 export type TaskResourceReceipt = {
