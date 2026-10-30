@@ -60,6 +60,27 @@ pub fn prepare_version(
     selection: &str,
     already_verified: Option<&str>,
 ) -> Result<Prepared, UpdateError> {
+    prepare_version_with_stage(
+        lock,
+        release,
+        store,
+        selection,
+        already_verified,
+        &mut |_| {},
+    )
+}
+
+/// As [`prepare_version`], reporting download progress and the verification boundary.
+/// `stage` is deliberately optional at the public entry point so existing callers keep the
+/// same behavior while the installer CLI can show byte progress for an upgrade.
+pub fn prepare_version_with_stage(
+    lock: &MachineMutationLock,
+    release: &dyn ReleaseSource,
+    store: &VersionStore,
+    selection: &str,
+    already_verified: Option<&str>,
+    stage: &mut dyn FnMut(&str),
+) -> Result<Prepared, UpdateError> {
     store.require_lock(lock)?;
     let version = release.resolve_version(selection)?;
     let verified = already_verified == Some(version.as_str());
@@ -73,13 +94,20 @@ pub fn prepare_version(
     let computer = computer_artifact(&manifest, store.target())?;
 
     let staging = store.begin_staging(lock, &version)?;
+    stage("Downloading 0 bytes");
     let computer =
         release.download_computer(&version, store.target(), computer, &staging.computer_path())?;
+    stage(&format!("Downloading {} bytes", computer.size));
     let photon_wasm = release.download_photon_wasm(
         &version,
         &manifest.photon_wasm,
         &staging.photon_wasm_path(),
     )?;
+    stage(&format!(
+        "Downloading {} bytes",
+        computer.size.saturating_add(photon_wasm.size)
+    ));
+    stage("Verifying download");
     let installation = staging.install(computer, photon_wasm)?;
     Ok(Prepared {
         version,

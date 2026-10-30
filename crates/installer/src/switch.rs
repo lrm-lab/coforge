@@ -105,20 +105,20 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
         if plan.supervisor_running {
             match plan.running_runtimes {
                 Some(count) => self.say(&format!(
-                    "Stopping Computer supervisor and {count} Workspace runtime{}",
+                    "Stopping ({count} Workspace runtime{})",
                     plural(count)
                 )),
-                None => self.say("Stopping Computer supervisor"),
+                None => self.say("Stopping"),
             }
             self.stop_supervisor(plan.stop)?;
         } else {
             self.say("Computer supervisor is not running; no processes to restart");
         }
-        self.say(&format!("Switching the active executable to {version}"));
+        self.say(&format!("Switching to {version}"));
         self.activate(target)?;
         if plan.supervisor_running {
             self.install_service_definition(target)?;
-            self.say(&format!("Starting Computer supervisor {version}"));
+            self.say(&format!("Starting {version}"));
             self.ports
                 .service
                 .start()

@@ -24,6 +24,7 @@
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::time::Instant;
 
 use coforge_installer::compiled_feed;
 use coforge_installer::contract::{EXIT_FAILED, ReceiptStatus, UpgradeReceipt};
@@ -121,11 +122,17 @@ fn transaction(
     json: bool,
 ) -> ExitCode {
     let origin = from_directory.map_or(ReleaseOrigin::Feed, ReleaseOrigin::Directory);
+    let mut stage_started = Instant::now();
     let mut report_stage = |line: &str| {
+        // Each transaction stage is emitted with the time since the previous stage. Keeping the
+        // timing in the CLI boundary leaves the library callback useful to callers and tests.
+        let elapsed = stage_started.elapsed();
+        stage_started = Instant::now();
+        let timed = format!("{line} ({:.1}s)", elapsed.as_secs_f64());
         if json {
-            eprintln!("==> {line}");
+            eprintln!("==> {timed}");
         } else {
-            stage(line);
+            stage(&timed);
         }
     };
     match installation::transaction(

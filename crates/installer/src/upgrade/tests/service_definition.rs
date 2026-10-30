@@ -56,10 +56,7 @@ fn an_upgrade_installs_the_new_definition_before_it_starts_a_service_whose_defin
     assert_eq!(service.calls(), ["state", "stop", "install", "start"]);
     assert_eq!(service.installed(), [service_definition(NEW)]);
     let position = |line: &str| stages.iter().position(|stage| stage == line).unwrap();
-    assert_eq!(
-        position(INSTALLING) + 1,
-        position("Starting Computer supervisor 0.2.0")
-    );
+    assert_eq!(position(INSTALLING) + 1, position("Starting 0.2.0"));
 }
 
 #[test]

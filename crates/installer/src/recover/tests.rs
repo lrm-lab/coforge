@@ -330,7 +330,7 @@ fn a_success_whose_receipt_could_not_be_written_is_kept_by_recover() {
         // The receipt cannot be written once the request is recorded: a directory stands where
         // the result file goes, so the commit after the switch is refused.
         let mut block = |line: &str| {
-            if line.starts_with("Preparing") {
+            if line.starts_with("Verifying current version") {
                 fs::create_dir(&result).unwrap();
             }
         };

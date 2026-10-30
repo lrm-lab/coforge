@@ -9,7 +9,7 @@ use super::{
 use crate::active::read_active;
 use crate::contract::{ActiveState, LifecycleProtocol, LifecycleServiceDefinition, RuntimeState};
 use crate::lifecycle::{reported_service_definition, service_definition_if_listed};
-use crate::prepare::prepare_version;
+use crate::prepare::prepare_version_with_stage;
 use crate::service::{ServiceError, ServiceState};
 use crate::switch::refusal_inside_service;
 
@@ -30,10 +30,10 @@ impl Run<'_, '_> {
         if let Some(active) = &active {
             self.ports.store.verify_installed(&active.current)?;
         }
-        self.switch
-            .say(&format!("Preparing CoForge Computer {selection}"));
+        self.switch.say("Verifying current version");
         // The target is resolved before anything is installed, so a refused downgrade leaves no
         // version directory behind.
+        self.switch.say("Resolving target version");
         let target = self.ports.release.resolve_version(selection)?;
         if let Some(installed) = &active
             && let Some(refusal) =
@@ -44,14 +44,16 @@ impl Run<'_, '_> {
         // The active version was verified above under this lock; a same-version upgrade must not
         // hash it again.
         let verified = active.as_ref().map(|active| active.current.as_str());
-        let to = prepare_version(
+        let to = prepare_version_with_stage(
             self.lock,
             self.ports.release,
             self.ports.store,
             &target,
             verified,
+            &mut |line| self.switch.say(line),
         )?
         .version;
+        self.switch.say("Checking new version");
         let probe = self
             .ports
             .lifecycle

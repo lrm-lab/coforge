@@ -23,87 +23,8 @@ use crate::update_error::UpdateError;
 
 const OTHER_REQUEST: &str = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
-fn run(
-    ports: &Ports<'_>,
-    request_id: &str,
-    selection: &str,
-    caller: Option<VerifiedCaller>,
-) -> (Outcome, Vec<String>) {
-    run_with(ports, request_id, selection, caller, false)
-}
-
-fn run_with(
-    ports: &Ports<'_>,
-    request_id: &str,
-    selection: &str,
-    caller: Option<VerifiedCaller>,
-    allow_downgrade: bool,
-) -> (Outcome, Vec<String>) {
-    let mut stages = Vec::new();
-    let request = UpgradeRequest {
-        request_id,
-        selection,
-        caller,
-        allow_downgrade,
-    };
-    let outcome = upgrade(ports, &request, &mut |stage| stages.push(stage.to_owned()));
-    (outcome, stages)
-}
-
-fn exit_of(outcome: &Outcome) -> u8 {
-    match outcome {
-        Outcome::Receipt(receipt) => receipt.exit_code(),
-        Outcome::NoReceipt { exit, .. } => *exit,
-    }
-}
-
-fn receipt(outcome: &Outcome) -> &UpgradeReceipt {
-    match outcome {
-        Outcome::Receipt(receipt) => receipt,
-        other => panic!("expected a receipt, got {other:?}"),
-    }
-}
-
-/// The receipt the outcome reports is on disk, and it reads back through the store's validation.
-fn committed(fixture: &Fixture, outcome: &Outcome) -> UpgradeReceipt {
-    let stored = ReceiptStore::new(fixture.root())
-        .read(REQUEST)
-        .unwrap()
-        .expect("a committed receipt");
-    assert_eq!(&stored, receipt(outcome));
-    stored
-}
-
-fn active(fixture: &Fixture) -> Option<ActiveState> {
-    read_active(fixture.root()).unwrap()
-}
-
-fn active_state(current: &str, previous: Option<&str>) -> Option<ActiveState> {
-    Some(ActiveState {
-        schema_version: ACTIVE_STATE_SCHEMA_VERSION,
-        current: current.to_owned(),
-        previous: previous.map(str::to_owned),
-    })
-}
-
-fn pids(receipt: &UpgradeReceipt) -> Vec<u32> {
-    receipt
-        .dead_process_identities()
-        .unwrap_or_default()
-        .iter()
-        .map(|process| process.pid)
-        .collect()
-}
-
-/// The lifecycle answers of an upgrade from a running [`OLD`] supervisor to [`NEW`].
-fn script_running_upgrade(fixture: &Fixture, lifecycle: &FakeLifecycle) {
-    fixture.answers_protocols(lifecycle);
-    lifecycle.answers_status(&fixture.computer(OLD), vec![Some(running(OLD, "old-id"))]);
-    lifecycle.answers_status(
-        &fixture.computer(NEW),
-        vec![Some(stopped(NEW)), Some(running(NEW, "new-id"))],
-    );
-}
+mod support;
+use support::*;
 
 #[test]
 fn a_running_supervisor_moves_to_the_new_version_and_is_restarted() {
@@ -139,10 +60,16 @@ fn a_running_supervisor_moves_to_the_new_version_and_is_restarted() {
     assert_eq!(
         stages,
         [
-            "Preparing CoForge Computer latest",
-            "Stopping Computer supervisor and 1 Workspace runtime",
-            "Switching the active executable to 0.2.0",
-            "Starting Computer supervisor 0.2.0",
+            "Verifying current version",
+            "Resolving target version",
+            "Downloading 0 bytes",
+            "Downloading 39 bytes",
+            "Downloading 60 bytes",
+            "Verifying download",
+            "Checking new version",
+            "Stopping (1 Workspace runtime)",
+            "Switching to 0.2.0",
+            "Starting 0.2.0",
             "Waiting for the Computer supervisor to report 0.2.0",
             "Computer supervisor 0.2.0 healthy",
         ]
@@ -174,9 +101,15 @@ fn a_first_install_probes_the_new_executable_and_restarts_nothing() {
     assert_eq!(
         stages,
         [
-            "Preparing CoForge Computer 0.2.0",
+            "Verifying current version",
+            "Resolving target version",
+            "Downloading 0 bytes",
+            "Downloading 39 bytes",
+            "Downloading 60 bytes",
+            "Verifying download",
+            "Checking new version",
             "Computer supervisor is not running; no processes to restart",
-            "Switching the active executable to 0.2.0",
+            "Switching to 0.2.0",
             "Checking the activated executable reports 0.2.0",
             "Activated executable 0.2.0 confirmed",
         ]
@@ -739,7 +672,10 @@ fn an_older_version_is_refused_without_the_flag_before_anything_changes() {
             "CoForge Computer 0.1.0 is older than the installed 0.2.0. Nothing was changed. To go back, run `coforge-computer upgrade --version 0.1.0 --allow-downgrade`."
         )
     );
-    assert_eq!(stages, ["Preparing CoForge Computer 0.1.0"]);
+    assert_eq!(
+        stages,
+        ["Verifying current version", "Resolving target version"]
+    );
     assert_eq!(active(&fixture), active_state(NEW, None));
     assert_eq!(Journal::new(fixture.root()).read().unwrap(), None);
     assert!(!fixture.computer(OLD).exists());
