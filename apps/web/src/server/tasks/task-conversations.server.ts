@@ -368,7 +368,7 @@ export async function postTaskNotice(
   tx: Transaction,
   scope: { conversationId: string; workspaceId: string },
   taskId: string,
-  notice: { body: string; deliverToAgentId?: string | null },
+  notice: { id?: string; body: string; deliverToAgentId?: string | null },
 ) {
   const task = await tx.task.findUniqueOrThrow({
     where: { id: taskId },
@@ -391,6 +391,7 @@ export async function postTaskNotice(
   const sequence = await allocateSequence(tx, conversationId);
   return tx.message.create({
     data: {
+      id: notice.id,
       workspaceId: scope.workspaceId,
       conversationId,
       body: notice.body,

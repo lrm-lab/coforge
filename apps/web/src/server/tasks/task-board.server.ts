@@ -143,6 +143,8 @@ export class TaskBoard {
     const member = scope.member!;
     const ports = this.ports;
     const conversations =
+      // The browser keeps the message-based flow until its pages offer the new one.
+      principal.agentId !== undefined &&
       (command.operation === "create" ||
         command.operation === "convert" ||
         command.operation === "claim") &&

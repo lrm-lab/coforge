@@ -8,8 +8,9 @@ import type { Member, Transaction, TaskBoardPorts } from "./task-board-ports.ser
 import { ensureTaskExecutionSession } from "./task-change.server";
 import { findSourceMessage } from "./task-claims.server";
 import { creationChanges, historyRows } from "./task-history.server";
-import { announceTasks, signalTaskChange } from "./task-publication.server";
+import { announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-realtime.server";
+import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { postTaskNotice } from "./task-conversations.server";
 import {
@@ -21,13 +22,15 @@ import {
 
 /** The message already has someone else's live task: who holds it, so the creator can add to that
  * task or say `alongside`. */
-export class SourceMessageTaken extends Error {
-  readonly code = "source_message_taken";
+export const SOURCE_MESSAGE_TAKEN = "source_message_taken";
+/** The assignee is an Agent whose owner has not turned task conversations on. */
+export const ASSIGNEE_CONVERSATIONS_OFF = "assignee_task_conversations_off";
+export class SourceMessageTaken extends AppError {
   constructor(
     readonly taskNumber: number,
     readonly holder: string,
   ) {
-    super(`source_message_taken: task #${taskNumber} (${holder}) is on that message`);
+    super("CONFLICT", { errorId: SOURCE_MESSAGE_TAKEN });
   }
 }
 
@@ -45,7 +48,9 @@ export async function createConversationTasks(
 ) {
   const titles = (command.titles ?? [command.title!]).map((title) => title.trim());
   if (command.description != null && titles.length !== 1) throw new AppError("INVALID_INPUT");
-  if (command.attachmentId) throw new AppError("INVALID_INPUT");
+  // A resource task records its receipt against a message, which this task does not have yet.
+  if (command.attachmentId || command.createsResource) throw new AppError("INVALID_INPUT");
+  if (command.alongside && !command.messageId) throw new AppError("INVALID_INPUT");
   if (command.messageId && !scope.channel) throw new AppError("INVALID_INPUT");
   const requestIds = await Promise.all(
     titles.map((_, index) => indexedRequestId(command.idempotencyKey, index)),
@@ -75,6 +80,16 @@ export async function createConversationTasks(
     if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
+    // An Agent follows its owner's switch: one whose owner has task conversations off could not open
+    // the task's conversation it would be told about.
+    if (
+      assignee?.agentId &&
+      !(await taskConversationsEnabled(ports.db, {
+        workspaceId: scope.workspaceId,
+        agentId: assignee.agentId,
+      }))
+    )
+      throw new AppError("CONFLICT", { errorId: ASSIGNEE_CONVERSATIONS_OFF });
     const started = assignee?.id === member.id;
     const [allocated] = await tx.$queryRaw<Array<{ first: number }>>`
       UPDATE "conversations"
@@ -134,7 +149,6 @@ export async function createConversationTasks(
       tasks: result.tasks.map((task) => taskView(task, "people")),
       publicationId: `${result.tasks[0]!.id}:task-created`,
     }).catch(() => undefined);
-    for (const task of result.tasks) await signalTaskChange(ports, task);
   }
   return { tasks: result.tasks.map((task) => taskView(task, ports.reader)) };
 }

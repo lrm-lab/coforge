@@ -211,3 +211,40 @@ test("a source message from another channel is not found", async () => {
     run("maker", { operation: "create", title: "Leak", messageId: foreign.id }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
+
+test("a task cannot be given to an Agent whose owner has task conversations off", async () => {
+  const other = await db.user.create({
+    data: { username: `tcc-other-owner-${suffix}`, displayName: "Other" },
+  });
+  await db.workspaceMembership.create({ data: { workspaceId, userId: other.id, role: "member" } });
+  const stranger = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `tcc-stranger-${suffix}`,
+      displayName: "stranger",
+      ownerId: other.id,
+      runtimeConfig: {},
+    },
+  });
+  await db.conversationMember.create({
+    data: { workspaceId, conversationId: channelId, agentId: stranger.id },
+  });
+  await expect(
+    run("maker", { operation: "create", title: "Not for them", assignee: `@${stranger.name}` }),
+  ).rejects.toMatchObject({ code: "CONFLICT", errorId: "assignee_task_conversations_off" });
+});
+
+test("a person keeps the message-based flow, and a source needs the experiment", async () => {
+  await db.workspaceMembership.updateMany({ where: { workspaceId }, data: { role: "owner" } });
+  await experiment(false);
+  await expect(
+    run("maker", { operation: "create", title: "x", messageId: sourceId }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  await experiment(true);
+  await expect(
+    run("maker", { operation: "create", title: "x", alongside: true }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  await expect(
+    run("maker", { operation: "create", title: "x", createsResource: true }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});

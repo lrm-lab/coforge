@@ -104,6 +104,7 @@ export async function withNotices<T>(
         // assignee follows the task.
         if (!task.messageId) {
           const posted = await postTaskNotice(tx, conversation, task.id, {
+            id,
             body: body(quoted!),
             deliverToAgentId: assignee.id === actor.id ? null : assignee.agentId,
           });

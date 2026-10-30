@@ -83,6 +83,7 @@ export async function publishAssignmentReceipt(
       conversation: {
         select: {
           channelName: true,
+          kind: true,
           members: {
             where: { userId: { not: null } },
             take: 1,
@@ -94,6 +95,8 @@ export async function publishAssignmentReceipt(
       deliveries: { include: { agent: { select: { computerId: true } } } },
     },
   });
+  // A receipt in a task's own conversation is published with that conversation's delivery.
+  if (message.conversation.kind === "task_thread") return;
   // Receipts count no unread: signal only the conversation, never sidebar badges. Human
   // assignees receive a Mentions Activity item and activity.changed.v1.
   const assignedPerson = message.mentions.find((mention) => mention.kind === "user")?.actorId;
