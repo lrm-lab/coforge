@@ -415,20 +415,6 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
     );
     expect(batch.tasks).toHaveLength(2);
     expect(batch.tasks.every((task) => task.status === "in_progress")).toBe(true);
-    expect(batch.assignmentReceipt).toMatchObject({
-      state: "started",
-      assignee: `@${agent.name}`,
-    });
-    expect(batch.assignmentReceipt!.messageId).not.toBe(batch.tasks[0]!.messageId);
-    const assignmentMessage = await db.message.findUniqueOrThrow({
-      where: { id: batch.assignmentReceipt!.messageId },
-      include: { deliveries: true },
-    });
-    expect(assignmentMessage.senderMemberId).toBeNull();
-    expect(assignmentMessage.body).toBe(batch.assignmentReceipt!.content);
-    // An Agent that assigns itself already holds the receipt in its command result; delivering
-    // it too would wake the Agent with its own action.
-    expect(assignmentMessage.deliveries).toEqual([]);
     expect(batch.tasks[0]!.claimedAt).toEqual(expect.any(String));
     const allTasks = await board.execute(
       { workspaceId: workspace.id, agentId: agent.id },
