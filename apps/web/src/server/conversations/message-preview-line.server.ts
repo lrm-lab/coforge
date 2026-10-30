@@ -33,8 +33,33 @@ export function peopleReadableBody(body: string, mentions: readonly PreviewMenti
  * grapheme clusters, so an emoji sequence, a flag or a skin-tone modifier is never split.
  * Markdown stays as written.
  */
-export function messagePreviewLine(body: string, mentions: readonly PreviewMentionRef[]): string {
-  const line = peopleReadableBody(body, mentions).replace(/\s+/gu, " ").trim();
+export function messagePreviewLine(
+  body: string,
+  mentions: readonly PreviewMentionRef[],
+  forwardedBody?: string | null,
+): string {
+  return oneLine(forwardPreviewText(peopleReadableBody(body, mentions), forwardedBody));
+}
+
+/** The text a preview shows for a message: its own, or, for a forward sent without a note, the
+ * start of what it forwards, so a preview is never empty. `forwardedBody` is the forward's
+ * `sourceBody` (already plain text); null for any other message. */
+export function forwardPreviewText(text: string, forwardedBody?: string | null): string {
+  if (text.trim() || forwardedBody == null) return text;
+  return `${FORWARDED_PREVIEW_PREFIX}${forwardedBody}`;
+}
+
+/** What a preview of a note-less forward starts with: a mark, not a word, as the server has no
+ * viewer locale. */
+const FORWARDED_PREVIEW_PREFIX = "↪ ";
+
+/** How much of a forward's original a list query fetches for a preview: well over what one line
+ * shows (`MESSAGE_PREVIEW_MAX_LENGTH`), since whitespace runs collapse and a cluster spans several
+ * characters. */
+export const FORWARDED_PREVIEW_SOURCE_LENGTH = MESSAGE_PREVIEW_MAX_LENGTH * 4;
+
+function oneLine(text: string): string {
+  const line = text.replace(/\s+/gu, " ").trim();
   const characters = Array.from(graphemes.segment(line), (part) => part.segment);
   if (characters.length <= MESSAGE_PREVIEW_MAX_LENGTH) return line;
   return `${characters.slice(0, MESSAGE_PREVIEW_MAX_LENGTH - 1).join("")}…`;

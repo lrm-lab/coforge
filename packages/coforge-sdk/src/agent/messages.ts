@@ -1,6 +1,7 @@
 import type { AgentPendingMentionAction, MessageTaskMetadata } from "#src/internal/local-daemon";
 
 export type { AgentPendingMentionAction };
+import type { ForwardedMessage } from "#src/internal/forwarded-message";
 import type { MessageSenderKind } from "#src/internal/message-sender";
 
 export type AgentMessageOperation = "read" | "search" | "send";
@@ -78,6 +79,9 @@ export type AgentMessage = {
     sizeBytes: number;
   }[];
   task?: MessageTaskMetadata;
+  /** Present when this message is a forward: the original it carries. `body` is then only the
+   * forwarder's note, possibly empty. */
+  forwarded?: ForwardedMessage;
 };
 
 /**

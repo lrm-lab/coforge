@@ -12,7 +12,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/avatars/` — how a face is drawn, for people and Agents alike: the sticker (`AvatarSticker`, `StickerPicture`), `IdentityAvatar` (a sticker picture as a sticker, an uploaded photo on the base `Avatar`; the initial and its tone from `name`; a missing picture the default cartoon person of a `userId`), the deleted-identity greying, and the radio tile of the avatar pickers (`AvatarChoice`). A lower layer: `agents/`, `conversations/` and `profiles/` import it and it imports none of them, except the import-free `agents/mascot-contract.ts`. The cartoon people's pictures and the default one an id chooses are `src/lib/person-picture.ts`, which the server reads too.
 - `features/cache-persistence/` — the browser's copy of the Query cache in IndexedDB that Chat opens from (what is kept, per person, removed at sign-out).
 - `features/computers/` — Computer list/detail, setup, and Runtime Usage.
-- `features/conversations/` — channels, direct messages, threads, composer, message rendering, action cards, saved messages, and the sidebar lists.
+- `features/conversations/` — channels, direct messages, threads, composer, message rendering, action cards, forwarding a message (`message-forward.ts`, `message-forward.functions.ts`), saved messages, and the sidebar lists.
 - `features/device-auth/` — device-code verification page.
 - `features/errors/` — page-level load-error view and the router's 404 page.
 - `features/files/` — what a file is, from its name and media type: extension, size text, kind, preview kind and language, type label, and the icon it is drawn with (`FileTypeIcon`).

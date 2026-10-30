@@ -50,10 +50,14 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
 
 export function useAppToast() {
   return {
-    success(title: string, options?: { durationMs?: number }) {
+    success(
+      title: string,
+      options?: { durationMs?: number; action?: { label: string; onClick: () => void } },
+    ) {
       toast.success(title, {
         id: `success:${title}`,
         duration: options?.durationMs,
+        action: options?.action,
       });
     },
     // A toast only confirms that an action failed; an error reference belongs under an inline

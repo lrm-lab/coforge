@@ -6,6 +6,7 @@ import {
   TARGETABLE_CONVERSATION_WHERE,
 } from "./active-member.server";
 import { browserMessageFields, mapBrowserMessage } from "./conversation-history.server";
+import { attachForwardedAccess } from "./message-forward-view.server";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
 
 /**
@@ -151,5 +152,12 @@ export async function listUserSavedMessages(
     select: savedMessageSelect,
     orderBy: { createdAt: "desc" },
   });
-  return rows.map((row) => savedMessageView(row, workspaceId));
+  const views = rows.map((row) => savedMessageView(row, workspaceId));
+  const messages = await attachForwardedAccess(
+    db,
+    workspaceId,
+    userId,
+    views.map((view) => view.message),
+  );
+  return views.map((view, index) => ({ ...view, message: messages[index]! }));
 }

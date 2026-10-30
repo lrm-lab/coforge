@@ -3,7 +3,10 @@ import {
   BROWSER_MESSAGE_MENTIONS_SELECT,
   browserMessageMention,
 } from "#src/server/conversations/mentions.server";
-import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
+import {
+  forwardPreviewText,
+  peopleReadableBody,
+} from "#src/server/conversations/message-preview-line.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { messageNotificationTag } from "./web-push-notifications.server";
 import type {
@@ -72,6 +75,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
           },
         },
         mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+        forward: { select: { sourceBody: true } },
         conversation: {
           include: { workspace: { select: { slug: true } } },
         },
@@ -83,9 +87,10 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     // their name, never their username, and an Agent's as its `@handle`. Mention-pierce reads the
     // stored mention rows themselves, the same rows the renderer chips, so an `@handle` in code or
     // a link label pierces nothing.
-    const readableBody = peopleReadableBody(
-      message.body,
-      message.mentions.map(browserMessageMention),
+    // A forward sent without a note previews as what it forwards.
+    const readableBody = forwardPreviewText(
+      peopleReadableBody(message.body, message.mentions.map(browserMessageMention)),
+      message.forward?.sourceBody,
     );
     const mentionedUserIds = message.mentions
       .filter((mention) => mention.kind === "user")

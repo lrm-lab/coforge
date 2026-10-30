@@ -1,10 +1,13 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { FORWARDED_PREVIEW_SOURCE_LENGTH } from "#src/server/conversations/message-preview-line.server";
 
 /** A channel's newest top-level message and the sender member row that wrote it, if any. */
 export type LatestTopLevelRow = {
   conversationId: string;
   messageId: string;
   body: string;
+  /** The start of the `sourceBody` of a forward with a blank body, null for any other message. */
+  forwardedBody: string | null;
   createdAt: Date;
   senderUserId: string | null;
   senderAgentId: string | null;
@@ -30,6 +33,8 @@ export async function latestTopLevelMessageRows(
     SELECT c."id" AS "conversationId",
            latest."id" AS "messageId",
            latest."body" AS "body",
+           CASE WHEN latest."body" ~ '^[[:space:]]*$'
+                THEN left(forward."sourceBody", ${FORWARDED_PREVIEW_SOURCE_LENGTH}::int) END AS "forwardedBody",
            latest."createdAt" AS "createdAt",
            sender."userId" AS "senderUserId",
            sender."agentId" AS "senderAgentId"
@@ -41,6 +46,7 @@ export async function latestTopLevelMessageRows(
       ORDER BY m."sequence" DESC LIMIT 1
     ) latest
     LEFT JOIN "conversation_members" sender ON sender."id" = latest."senderMemberId"
+    LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
     WHERE c."id" = ANY(${[...conversationIds]}::uuid[])
   `;
 }

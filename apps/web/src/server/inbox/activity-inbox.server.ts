@@ -9,6 +9,7 @@ import {
   browserMessageFields,
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
+import { attachForwardedAccess } from "#src/server/conversations/message-forward-view.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import {
   markActivityAllRead,
@@ -320,9 +321,13 @@ export class ActivityInbox {
         },
       }),
     ]);
-    const messageById = new Map(
-      messages.map((message) => [message.id, mapBrowserMessage(message, workspaceId)]),
+    const settledMessages = await attachForwardedAccess(
+      this.db,
+      workspaceId,
+      userId,
+      messages.map((message) => mapBrowserMessage(message, workspaceId)),
     );
+    const messageById = new Map(settledMessages.map((message) => [message.id, message]));
     const agentById = new Map(
       agents.map((agent) => [
         agent.id,

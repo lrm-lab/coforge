@@ -28,7 +28,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
   operations, signing a Code Agent runtime in and out (`runtime-auth*`), runtime visibility, explicit model catalog refresh, and what the server remembers across a
   daemon's shutdown and return.
 - `server/hosts/` — host-node enrollment, registration, heartbeat, the global online list, and container-computer jobs.
-- `server/conversations/` — public channels, channel authority, stopping and resuming a channel's Agents, direct messages, history, message search, action cards, reactions, tracked @mention delivery outcomes (`mention-deliveries`), and conversation realtime.
+- `server/conversations/` — public channels, channel authority, stopping and resuming a channel's Agents, direct messages, history, message search, action cards, message forwards, reactions, tracked @mention delivery outcomes (`mention-deliveries`), and conversation realtime.
 - `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.
 - `server/errors/` — public error mapping and request error handling.
 - `server/feature-flags/` — whether a feature is on for a Workspace (`isFeatureEnabled`): the flag registry, and the flagd definition file the boot reads and installs as the OpenFeature provider (`COFORGE_FEATURE_FLAGS_FILE`).

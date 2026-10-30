@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import type { MentionSelectorInput } from "@lrm/coforge-sdk/internal";
+import type { ForwardedMessage, MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import {
@@ -56,6 +56,10 @@ export async function sendChannel(
     mentions?: readonly MentionSelectorInput[];
     /** Runs inside the send's transaction once the message and its uploads are written. */
     withinSend?: SentMessageHook;
+    /** A forward's body is the forwarder's note and may be empty; no other send accepts that. */
+    allowEmptyBody?: boolean;
+    /** The forwarded original as an Agent that is delivered the message reads it. */
+    forwarded?: ForwardedMessage;
   },
 ) {
   const { workspaceId, userId, channelId, idempotencyKey, attachmentIds, threadRootId } = input;
@@ -72,7 +76,7 @@ export async function sendChannel(
   // Postgres `message.body` is unbounded text. The browser composer stays at 8_000
   // (`sendConversationMessageInputSchema`); this path also accepts an eval prompt or an
   // Agent channel reply past that, which otherwise throws and kills the eval runner.
-  if (!body || body.length > 64_000) throw new AppError("INVALID_INPUT");
+  if ((!body && !input.allowEmptyBody) || body.length > 64_000) throw new AppError("INVALID_INPUT");
   let created = false;
   const saved = await (ctx.idempotency ?? getMessageRequestIdempotency()).execute(
     { workspaceId, senderKind: "user", senderId: userId, idempotencyKey },
@@ -296,6 +300,7 @@ export async function sendChannel(
       createdAtMs: message.createdAt.getTime(),
       body: message.body,
       mentions: message.mentions,
+      forwarded: input.forwarded,
       target: `#${channel.channelName}${message.threadRootId ? `:${message.threadRootId}` : ""}`,
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,

@@ -6,6 +6,8 @@ import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { useIsMessageSaved } from "./conversation-host";
+import { useOpenForward } from "./message-forward-host";
+import { canForwardMessage } from "./message-forward-model";
 import type { ReadState } from "./conversation-pane-layout";
 import type { MessageView } from "./message-view";
 import { messagePlainText } from "./selection-copy";
@@ -34,6 +36,7 @@ export function useMessageRowActions({
 }) {
   const toast = useAppToast();
   const saveSaved = useIsMessageSaved(message.id);
+  const openForward = useOpenForward();
   // The mobile shell (single-pane below `lg`) has no hover to reveal the reply/reaction
   // actions, and keeping the toolbar always visible puts two buttons on every message.
   // Instead a tap on the row's non-interactive surface (an embed marked `data-no-row-tap`, such as a video's player, is not one) opens a
@@ -79,6 +82,15 @@ export function useMessageRowActions({
           toast.error(m.conversation_save_failed());
         })),
     saveSaved,
+    onForward:
+      openForward && conversationId && canForwardMessage(message)
+        ? () =>
+            openForward({
+              message,
+              conversationId,
+              plainBody: messagePlainText(message, channelNames),
+            })
+        : undefined,
     seenBy: readState && conversationId ? { conversationId } : undefined,
     onCopy: () =>
       void copyText(messagePlainText(message, channelNames)).then((copied) => {
@@ -87,7 +99,12 @@ export function useMessageRowActions({
       }),
   };
   const hasActions = Boolean(
-    onOpenThread || onToggleReaction || onToggleSave || copyable || actions.seenBy,
+    onOpenThread ||
+    onToggleReaction ||
+    onToggleSave ||
+    actions.onForward ||
+    copyable ||
+    actions.seenBy,
   );
   return { actions, copyable, hasActions, sheetActions, actionsOpen, setActionsOpen, openActions };
 }

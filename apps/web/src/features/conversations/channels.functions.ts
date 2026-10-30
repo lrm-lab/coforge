@@ -13,7 +13,7 @@ import { ChannelAgentControl } from "#src/server/conversations/channel-agent-con
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { userAgentControl } from "#src/server/agents/user-agent-control.server";
-import { attachActionCardViews } from "#src/server/conversations/action-cards.server";
+import { attachViewerViews } from "#src/server/conversations/viewer-views.server";
 import { attachmentView } from "#src/server/attachments/attachment-view.server";
 import {
   attachmentIdsSchema,
@@ -108,7 +108,7 @@ export const loadPublicChannel = createServerFn({ method: "GET" })
     });
     return {
       ...page,
-      messages: await attachActionCardViews(db, workspaceId, userId, page.messages),
+      messages: await attachViewerViews(db, workspaceId, userId, page.messages),
     };
   });
 
@@ -142,7 +142,7 @@ export const loadPublicChannelUpdates = createServerFn({ method: "GET" })
       data.afterSequence,
       data.afterReplySequence,
     );
-    return attachActionCardViews(db, workspaceId, userId, messages);
+    return attachViewerViews(db, workspaceId, userId, messages);
   });
 
 export const loadPublicChannelMembers = createServerFn({ method: "GET" })

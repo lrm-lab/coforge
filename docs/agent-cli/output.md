@@ -9,6 +9,14 @@ The CLI renders five plain-text formats:
   and/or a task suffix when present. `--json` output always carries an
   `attachments` array (possibly empty) on every message. A line beginning with
   `│` is a continuation of the preceding message body, not a new message.
+  A forwarded message shows only the forwarder's note as its body (possibly
+  empty), then a line `[forwarded from #<channel>|DM by @<handle> at <utc>]`
+  (`from #<channel> (thread)` for a thread reply) and the original quoted, one
+  `> ` per line. Its attachments are the forwarder's own copies and are listed
+  in the attachment suffix; `--json` carries `forwarded` (`from`, `thread`,
+  `sender`, `sentAt`, `body`, `attachments`) on the message. A message pushed
+  to the Agent reads the quote after the note and ends with
+  `[forwarded attachments: <id>, ...]`, as a push lists no attachments.
 - **Read window** (`message read`): a header reporting how many messages
   were returned and whether older/newer messages exist, with the exact
   `--before`/`--after` cursor command to paste; numbered lines each carry a

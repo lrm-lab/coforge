@@ -4,13 +4,14 @@ import {
   CONVERSATION_TARGET_MEMBERS,
   conversationTarget,
   deliveryTarget,
+  AGENT_FORWARD_SELECT,
 } from "./direct-conversation-agent-message.server";
 import { recoveryRefs, directTargets } from "./agent-peer-direct.repositories.server";
 import { Prisma } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import {
-  agentMessageView,
+  agentDeliveryView,
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
 import {
@@ -70,6 +71,8 @@ export async function readPendingAgentDeliveries(
           threadRootId: true,
           sender: MESSAGE_SENDER_SELECT,
           mentions: MESSAGE_MENTIONS_SELECT,
+          forward: AGENT_FORWARD_SELECT,
+          attachments: { select: { id: true }, orderBy: { position: "asc" } },
           pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
           memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
         },
@@ -121,7 +124,7 @@ export async function readPendingAgentDeliveries(
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
-      ...agentMessageView(delivery.message, agentId, coordination.get(delivery.conversationId)),
+      ...agentDeliveryView(delivery.message, agentId, coordination.get(delivery.conversationId)),
       ...(delivery.message.memoryHint?.deliveredAt &&
       delivery.message.memoryHint.targetAgentId === agentId
         ? {
@@ -170,7 +173,7 @@ export async function readAgentRecoveryContext(
   const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
   const unreadSummary: Record<string, number> = {};
   const unreadConversationIds: Record<string, string> = {};
-  const { mentionsByMessage, hintsByMessage } = await recoverySecondPass(
+  const { mentionsByMessage, hintsByMessage, forwardsByMessage } = await recoverySecondPass(
     ports.db,
     workspaceId,
     agentId,
@@ -221,8 +224,13 @@ export async function readAgentRecoveryContext(
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
-      ...agentMessageView(
-        { body: row.body, mentions: mentionsByMessage.get(row.id) ?? [] },
+      ...agentDeliveryView(
+        {
+          body: row.body,
+          mentions: mentionsByMessage.get(row.id) ?? [],
+          forward: forwardsByMessage.get(row.id),
+          attachments: forwardsByMessage.get(row.id)?.message.attachments,
+        },
         agentId,
         coordination.get(row.conversationId),
       ),

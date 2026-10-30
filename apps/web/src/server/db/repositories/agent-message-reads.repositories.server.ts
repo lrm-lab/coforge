@@ -8,7 +8,11 @@ import {
   MESSAGE_MENTIONS_SELECT,
   type MessageMentionRef,
 } from "#src/server/conversations/mentions.server";
-import { agentMessageView } from "#src/server/conversations/agent-message-view.server";
+import {
+  agentMessageView,
+  type StoredAgentForward,
+} from "#src/server/conversations/agent-message-view.server";
+import { AGENT_FORWARD_SELECT } from "./direct-conversation-agent-message.server";
 import { pendingMentionActionsForMessage } from "#src/server/conversations/pending-mention-actions.server";
 import { unresolvedMentionHandles } from "#src/server/conversations/unresolved-mentions.server";
 import {
@@ -127,6 +131,7 @@ export async function agentMessagesByIds(
       sender: MESSAGE_SENDER_SELECT,
       attachments: { orderBy: { position: "asc" } },
       mentions: MESSAGE_MENTIONS_SELECT,
+      forward: AGENT_FORWARD_SELECT,
     },
   });
   const coordination = await readChannelCoordination(
@@ -149,6 +154,7 @@ function agentContextRecord<
     sender: Parameters<typeof agentMessageSender>[0];
     body: string;
     mentions: readonly MessageMentionRef[];
+    forward?: StoredAgentForward | null;
     createdAt: Date;
     attachments: { id: string; fileName: string; contentType: string; sizeBytes: number }[];
   },

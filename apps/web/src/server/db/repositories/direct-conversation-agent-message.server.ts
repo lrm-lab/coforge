@@ -6,7 +6,10 @@ import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
-import { agentMessageView } from "#src/server/conversations/agent-message-view.server";
+import {
+  agentMessageView,
+  type StoredAgentForward,
+} from "#src/server/conversations/agent-message-view.server";
 import {
   MESSAGE_MENTIONS_SELECT,
   type MessageMentionRef,
@@ -32,6 +35,17 @@ const ACTION_CARD_STATE_SELECT = {
   select: { state: true },
 } satisfies NonNullable<Prisma.MessageInclude["actionCard"]>;
 
+/** The snapshot an Agent reads of a forwarded message (`agentForwarded`). */
+export const AGENT_FORWARD_SELECT = {
+  select: {
+    sourceConversationName: true,
+    sourceThreadRootId: true,
+    sourceSenderHandle: true,
+    sourceCreatedAt: true,
+    sourceBody: true,
+  },
+} satisfies NonNullable<Prisma.MessageInclude["forward"]>;
+
 /** Message projection sent to an Agent. */
 export const AGENT_MESSAGE_INCLUDE = {
   memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
@@ -40,6 +54,7 @@ export const AGENT_MESSAGE_INCLUDE = {
   task: TASK_METADATA_SELECT,
   actionCard: ACTION_CARD_STATE_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
+  forward: AGENT_FORWARD_SELECT,
   // The thread's reply count, so a history line can say how many answers a message has.
   _count: { select: { replies: true } },
 } satisfies Prisma.MessageInclude;
@@ -97,6 +112,7 @@ export function toAgentMessage(
     task: Parameters<typeof messageTask>[0];
     attachments: AttachmentMetadata[];
     actionCard?: { state: string } | null;
+    forward?: StoredAgentForward | null;
     memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
     mentions?: MessageMentionRef[];
     _count?: { replies: number };
@@ -114,7 +130,13 @@ export function toAgentMessage(
     senderHandle: sender.handle,
     senderDescription: sender.description,
     ...agentMessageView(
-      { body: row.body, mentions: row.mentions ?? [], actionCard: row.actionCard },
+      {
+        body: row.body,
+        mentions: row.mentions ?? [],
+        actionCard: row.actionCard,
+        forward: row.forward,
+        attachments: row.attachments,
+      },
       readerAgentId,
       channelCoordination,
     ),

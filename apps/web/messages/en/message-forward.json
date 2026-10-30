@@ -1,0 +1,47 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "message_forward_action": "Forward",
+  "message_forward_badge": "Forwarded",
+  "message_forward_badge_count": " message",
+  "message_forward_from_channel": "from #{name}",
+  "message_forward_from_channel_thread": "from #{name} · thread",
+  "message_forward_from_dm": "from DM",
+  "message_forward_from_dm_thread": "from DM · thread",
+  "message_forward_dm": "DM",
+  "message_forward_open_source": "Open source message",
+  "message_forward_preview": "Forwarded: {text}",
+  "message_forward_selected_from": "1 selected from {source}",
+  "message_forward_search": "Search targets",
+  "message_forward_selected_count": "{count} selected",
+  "message_forward_no_matches": "No destinations match your search",
+  "message_forward_search_failed": "Couldn't search destinations.",
+  "message_forward_not_joined": "Not joined",
+  "message_forward_unavailable": "Destination unavailable",
+  "message_forward_note_label": "Optional note",
+  "message_forward_note_placeholder": "Add a note",
+  "message_forward_note_placeholder_target": "Add note for {target}...",
+  "message_forward_note_placeholder_none": "Select a target, then add an optional note...",
+  "message_forward_add_note": "Add a note",
+  "message_forward_back": "Back to destinations",
+  "message_forward_send": "Send forward",
+  "message_forward_join_warning": "You haven't joined {channel}. Forwarding will join the channel first. Click Send again to confirm.",
+  "message_forward_join_failed": "Couldn't join {target}. Try again.",
+  "message_forward_sent_to": "Forwarded to {target}.",
+  "message_forward_sent_to_many": "Forwarded to {count} destinations",
+  "message_forward_view_in_chat": "View in Chat",
+  "message_forward_partial": "Forwarded to {delivered} of {total} destinations. Try the remaining destinations.",
+  "message_forward_none": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Couldn't forward to {count} destination. Review the selection and try again.",
+        "countPlural=other": "Couldn't forward to {count} destinations. Review the selection and try again."
+      }
+    }
+  ],
+  "message_forward_try_again": "Try Again",
+  "message_forward_uncertain": "We couldn't confirm whether the forward finished. It's safe to try again.",
+  "message_forward_source_gone": "This message is no longer available. Review the original conversation and try again.",
+  "message_forward_not_forwardable": "This message can't be forwarded."
+}

@@ -1,6 +1,7 @@
 import type { WeeklyReportMessageSuggestion } from "#src/features/records/weekly-report-message-card";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
+import type { ForwardedMessageView } from "./message-forward";
 import { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
 import { dayLabel } from "./message-dividers";
 import type { ReactionSummary } from "./message-reactions";
@@ -43,6 +44,9 @@ export type MessageView = {
    * Replaces the plain-text draft hint line with the interactive card; the
    * underlying `body` stays available to assistive technology. */
   actionCard?: ActionCardView;
+  /** Present when this message is a forward: the frozen original its card shows. The message's
+   * own `body` is then the forwarder's note and its `attachments` the card's. */
+  forwarded?: ForwardedMessageView;
   weeklyReportSuggestion?: WeeklyReportMessageSuggestion;
   weeklyReportDisplayBody?: string;
   /** Platform wake stored for the Agent. The conversation pane omits the row. */

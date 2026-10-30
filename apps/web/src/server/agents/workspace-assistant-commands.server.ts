@@ -23,6 +23,7 @@ import {
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
 import { agentMessageView } from "#src/server/conversations/agent-message-view.server";
+import { AGENT_FORWARD_SELECT } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import { attachmentView } from "#src/server/attachments/attachment-view.server";
 import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
@@ -42,6 +43,7 @@ const assistantMessageInclude = {
   sender: MESSAGE_SENDER_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
   actionCard: { select: { state: true } },
+  forward: AGENT_FORWARD_SELECT,
   attachments: { orderBy: { position: "asc" } },
 } satisfies Prisma.MessageInclude;
 function assistantMessage(

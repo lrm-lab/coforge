@@ -74,3 +74,10 @@ test("truncation never splits a flag or a skin-tone modifier", () => {
   );
   expect(messagePreviewLine(`${"a".repeat(119)}${thumbsUp}x`, [])).toBe(`${"a".repeat(119)}…`);
 });
+
+test("a forward sent without a note previews as what it forwards; a note wins", () => {
+  expect(messagePreviewLine("", [], "first line\nsecond")).toBe("↪ first line second");
+  expect(messagePreviewLine("  ", [], "original")).toBe("↪ original");
+  expect(messagePreviewLine("my note", [], "original")).toBe("my note");
+  expect(messagePreviewLine("", [], null)).toBe("");
+});

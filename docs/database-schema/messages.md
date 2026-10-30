@@ -85,6 +85,22 @@ message's reactions when rendering conversation history. Removing a message or
 a conversation member cascades to its reactions. The browser groups reactions
 by emoji for display; there is no separate reaction-count column.
 
+## `message_forward`
+
+A `message_forwards` row marks a message as a forward of another and holds the
+snapshot it carries. Its primary key `messageId` is the new message in the
+destination conversation (one-to-one, removed with it), whose `body` is the
+forwarder's note and may be empty. `sourceMessageId` points at the original and
+is set to null when the original is deleted, so the snapshot stays and only
+"open original" goes; `sourceConversationId` and `sourceThreadRootId` stay for
+the viewer's access check. The snapshot columns (`sourceSenderName`,
+`sourceSenderHandle`, `sourceCreatedAt`, `sourceBody`, `sourceConversationName`)
+are frozen at forward time; `sourceConversationName` is null for a direct conversation.
+`sourceBody` is stored with mentions and references already read back as plain
+text, so a forward never notifies anyone the original named. The original's
+attachments are copied in object storage; the copies are the new message's own
+`attachments` rows, so deleting either never touches the other.
+
 ## Attachment comments
 
 `AttachmentCommentThread` (`attachment_comment_threads`) lazily binds one
@@ -135,18 +151,18 @@ An ordinary DM is identified only by `DIRECT_CONVERSATION_WHERE` / `directConver
 (`directKey IS NOT NULL`). A null channel name also occurs in internal discussions and is never
 an authorization grant. Review of all 17 original `channelName: null` / SQL `IS NULL` occurrences:
 
-| File under `apps/web/src` | Decision |
-| --- | --- |
-| `server/agents/agent-inbox-list.server.ts` (2) | Replace DM join/read-boundary conditions with shared SQL predicate; include directKey in its membership projection. |
-| `server/agents/workspace-assistant-commands.server.ts` (1) | Resolve only real DMs or channels. |
-| `server/attachments/attachment.server.ts` (2) | Upload/download DM branches use shared Prisma predicate. |
-| `server/conversations/conversation-realtime-access.server.ts` (1) | Subscription DM branch uses shared predicate. |
-| `server/conversations/conversation-realtime.server.ts` (1) | Only real DM members contribute notification destinations; participant lookup moves to `conversation-signal.repositories.server.ts`. |
-| `server/db/repositories/agent-attention.repositories.server.ts` (4) | Both DM scan branches, delivery eligibility and final DM attention condition use shared predicates; generic deliveries additionally require an ordinary destination. |
-| `server/db/repositories/reminder.repositories.server.ts` (1) | A human target resolves only a real DM; anchor lookup moves to `reminder-anchor.repositories.server.ts`. |
-| `features/conversations/saved-messages-collection.ts` (1) | Retain: optimistic DTO placeholder, not a database predicate; server reload supplies the destination. |
-| `server/tasks/task-overview.server.ts` (1) | Retain: output DTO discriminant, not authorization. |
-| `server/workspace-memory/{detect-segments,ov-sink.server,sweep}.test.ts` (3) | Retain: DM test fixture values, not queries. |
+| File under `apps/web/src`                                                    | Decision                                                                                                                                                             |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/agents/agent-inbox-list.server.ts` (2)                               | Replace DM join/read-boundary conditions with shared SQL predicate; include directKey in its membership projection.                                                  |
+| `server/agents/workspace-assistant-commands.server.ts` (1)                   | Resolve only real DMs or channels.                                                                                                                                   |
+| `server/attachments/attachment.server.ts` (2)                                | Upload/download DM branches use shared Prisma predicate.                                                                                                             |
+| `server/conversations/conversation-realtime-access.server.ts` (1)            | Subscription DM branch uses shared predicate.                                                                                                                        |
+| `server/conversations/conversation-realtime.server.ts` (1)                   | Only real DM members contribute notification destinations; participant lookup moves to `conversation-signal.repositories.server.ts`.                                 |
+| `server/db/repositories/agent-attention.repositories.server.ts` (4)          | Both DM scan branches, delivery eligibility and final DM attention condition use shared predicates; generic deliveries additionally require an ordinary destination. |
+| `server/db/repositories/reminder.repositories.server.ts` (1)                 | A human target resolves only a real DM; anchor lookup moves to `reminder-anchor.repositories.server.ts`.                                                             |
+| `features/conversations/saved-messages-collection.ts` (1)                    | Retain: optimistic DTO placeholder, not a database predicate; server reload supplies the destination.                                                                |
+| `server/tasks/task-overview.server.ts` (1)                                   | Retain: output DTO discriminant, not authorization.                                                                                                                  |
+| `server/workspace-memory/{detect-segments,ov-sink.server,sweep}.test.ts` (3) | Retain: DM test fixture values, not queries.                                                                                                                         |
 
 Uploader lifecycle: production has no User hard-delete operation; Agent deletion is the existing
 soft-delete transaction (`PrismaAgentDeletionStore`), preserving attachment and discussion rows.

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bookmark, BookmarkCheck, Copy01 } from "@untitledui/icons";
+import { Bookmark, BookmarkCheck, Copy01, FlipForward } from "@untitledui/icons";
 import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -18,6 +18,8 @@ type MessageActions = {
   onToggleReaction?: (emoji: string) => void;
   onToggleSave?: () => void;
   saveSaved: boolean;
+  /** Opens the Forward dialog; absent for a message that cannot be forwarded. */
+  onForward?: () => void;
   onCopy: () => void;
   /** An own message's "N seen" (`message-seen-by.tsx`), read from its conversation. */
   seenBy?: { conversationId: string };
@@ -33,7 +35,7 @@ type MessageActions = {
  * (iOS Safari) report `hover: hover` anyway — any missing gate would leave the bar
  * visible after the sheet closes. Hidden also means `pointer-events-none` — an
  * invisible bar must not swallow taps aimed at the message under it. Order is thread,
- * reactions, then whole-message copy last — the IM-standard order (#546).
+ * reactions, forward, save, then whole-message copy last — the IM-standard order (#546).
  */
 export function MessageActionToolbar({
   messageId,
@@ -42,6 +44,7 @@ export function MessageActionToolbar({
   onToggleReaction,
   onToggleSave,
   saveSaved,
+  onForward,
   onCopy,
   seenBy,
 }: MessageActions & { grouped: boolean }) {
@@ -57,6 +60,17 @@ export function MessageActionToolbar({
     >
       {onOpenThread && <ThreadToolbarEntry rootId={messageId} onOpen={onOpenThread} />}
       {onToggleReaction && <MessageReactionPicker onPick={(emoji) => onToggleReaction(emoji)} />}
+      {onForward && (
+        <ButtonUtility
+          size="xs"
+          color="tertiary"
+          icon={FlipForward}
+          tooltip={m.message_forward_action()}
+          aria-label={m.message_forward_action()}
+          onClick={onForward}
+          className="p-1 *:data-icon:size-3.5"
+        />
+      )}
       {onToggleSave && (
         <ButtonUtility
           size="xs"
@@ -103,6 +117,7 @@ export function MessageActionSheet({
   onToggleReaction,
   onToggleSave,
   saveSaved,
+  onForward,
   onCopy,
   seenBy,
 }: MessageActions & {
@@ -191,6 +206,21 @@ export function MessageActionSheet({
             </div>
           )}
           <div className="flex flex-col px-3 pt-1 pb-3">
+            {onForward && (
+              <Button
+                color="tertiary"
+                size="md"
+                noTextPadding
+                iconLeading={FlipForward}
+                onPress={() => {
+                  onOpenChange(false);
+                  onForward();
+                }}
+                className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
+              >
+                {m.message_forward_action()}
+              </Button>
+            )}
             {onToggleSave && (
               <Button
                 color="tertiary"
@@ -206,7 +236,7 @@ export function MessageActionSheet({
                 {saveSaved ? m.conversation_unsave() : m.conversation_save()}
               </Button>
             )}
-            {(onToggleReaction || onToggleSave) && (copyable || onOpenThread) && (
+            {(onToggleReaction || onToggleSave || onForward) && (copyable || onOpenThread) && (
               <div aria-hidden="true" className="mx-1 mt-1 mb-1 h-px bg-secondary" />
             )}
             {onOpenThread && (

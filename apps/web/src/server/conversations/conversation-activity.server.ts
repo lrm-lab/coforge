@@ -72,6 +72,7 @@ export async function announceMessage(
         },
       },
       mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+      forward: { select: { sourceBody: true } },
     },
   });
   if (!stored) return;
@@ -86,6 +87,7 @@ export async function announceMessage(
     preview: messagePreviewLine(
       stored.body,
       stored.mentions.map((mention) => browserMessageMention(mention)),
+      stored.forward?.sourceBody,
     ),
     sender: {
       kind: stored.sender?.userId ? "user" : stored.sender?.agentId ? "agent" : "system",

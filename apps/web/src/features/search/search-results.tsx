@@ -310,7 +310,9 @@ function SearchResultRow({
     : `@${directName(conversation.direct) ?? message.senderName}`;
   const text = message.body
     ? messagePlainText({ body: message.body, mentions: message.mentions })
-    : (message.attachments[0]?.fileName ?? "");
+    : message.forwarded
+      ? m.message_forward_preview({ text: message.forwarded.sourceBody })
+      : (message.attachments[0]?.fileName ?? "");
   const target = messagePreviewTarget(conversation, message);
   const onClick = useResultClick({
     onPreview: preview && target ? () => preview(target) : undefined,

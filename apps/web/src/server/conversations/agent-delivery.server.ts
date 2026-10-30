@@ -2,6 +2,7 @@ import {
   AGENT_MESSAGE_METHOD,
   WORKSPACE_PROTOCOL_MAJOR,
   encodeAgentMessageDelivery,
+  type ForwardedMessage,
   type MentionDeliveryEnvelope,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -10,6 +11,7 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import type { PendingAgentDelivery } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
+import { withForwarded } from "./agent-message-view.server";
 import { agentReadableBody, type MessageMentionRef } from "./mentions.server";
 
 type AgentMessageDelivery = Parameters<typeof encodeAgentMessageDelivery>[0];
@@ -23,21 +25,25 @@ export function channelTarget(channelName: string): string {
  * The one way a message is encoded for an Agent's daemon. Its body always goes through
  * `agentReadableBody` here, with the message's mention rows, so no stored token (`<@agent:…>`,
  * `<@task:N>`, `<@channel:…>`, `<@thread:…>`) ever reaches a daemon, whichever path sends it. A body that is
- * already readable reads back unchanged.
+ * already readable reads back unchanged. A forward's original (`forwarded`) is read into the body
+ * after the note, as the wire has no field for it.
  */
 export function encodeAgentDelivery(
   delivery: Omit<AgentMessageDelivery, "protocolMajor" | "method" | "createdAtMs"> & {
     mentions: readonly MessageMentionRef[];
+    /** The original a forwarded message carries. */
+    forwarded?: ForwardedMessage;
     /** When the message was created: every path that delivers one knows it, so none may omit it. */
     createdAtMs: number;
   },
 ): Uint8Array {
-  const { mentions, body, ...rest } = delivery;
+  const { mentions, body, forwarded, ...rest } = delivery;
+  const readable = agentReadableBody(body, mentions);
   return encodeAgentMessageDelivery({
     ...rest,
     protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
     method: AGENT_MESSAGE_METHOD,
-    body: agentReadableBody(body, mentions),
+    body: forwarded ? withForwarded(readable, forwarded) : readable,
   });
 }
 

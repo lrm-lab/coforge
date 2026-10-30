@@ -3,6 +3,8 @@ import { channelSummaryBody } from "./message-summary";
 import { fenceMessageBody } from "./message-body-format";
 import { shortId } from "./short-id";
 import {
+  formatUtcTimestamp,
+  renderForwardedMessage,
   renderMessageSender,
   threadParentTarget,
   UUID_LIKE_PATTERN,
@@ -21,16 +23,7 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-export function formatUtcTimestamp(createdAt: string): string {
-  const date = new Date(createdAt);
-  const year = date.getUTCFullYear();
-  const month = pad(date.getUTCMonth() + 1);
-  const day = pad(date.getUTCDate());
-  const hours = pad(date.getUTCHours());
-  const minutes = pad(date.getUTCMinutes());
-  const seconds = pad(date.getUTCSeconds());
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}Z`;
-}
+export { formatUtcTimestamp };
 
 /** `YYYY-MM-DD HH:MM:SS +08:00`: the time on this machine's clock, with its offset from UTC. */
 export function formatLocalTimeWithOffset(createdAt: string): string {
@@ -51,6 +44,12 @@ export function attachmentSuffix(message: AgentMessageRecord): string {
   const noun = attachments.length === 1 ? "attachment" : "attachments";
   const list = attachments.map(({ fileName, id }) => `${fileName} (id:${id})`).join(", ");
   return ` [${attachments.length} ${noun}: ${list} — use \`coforge attachment view --id <attachmentId> --output <path>\` to download]`;
+}
+
+/** A forwarded message's original under the message line: the header and the snapshot quoted. The
+ * attachment ids are already in the line's own attachment list. */
+export function forwardedSuffix(message: AgentMessageRecord): string {
+  return message.forwarded ? `\n${renderForwardedMessage(message.forwarded)}` : "";
 }
 
 export function taskSuffix(message: AgentMessageRecord): string {
@@ -122,7 +121,7 @@ export function formatMessageResolve(result: unknown, messageId = ""): string {
 
 function messageLine(message: AgentMessageRecord, body: string): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
-  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${notice}`;
+  return `[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${forwardedSuffix(message)}${notice}`;
 }
 
 export const NON_MEMBER_MENTION_NOTICE =

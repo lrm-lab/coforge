@@ -1,0 +1,29 @@
+/// A message forwarded from another conversation: the new message's `body` is the forwarder's
+/// note (possibly empty) and this row is the snapshot of the original it carries. The snapshot is
+/// frozen at forward time: `sourceBody` has its mentions and references already read back as
+/// plain text, so forwarding notifies nobody the original named, and a later edit or delete of
+/// the original changes nothing here. The new message's own attachments are copies of the
+/// original's.
+model MessageForward {
+  /// The new message, in the destination conversation.
+  messageId              String   @id @db.Uuid
+  /// The original, until it is deleted; the snapshot then stays and only "open original" goes.
+  sourceMessageId        String?  @db.Uuid
+  sourceConversationId   String   @db.Uuid
+  /// The original's thread root when it was a reply; the "open original" permission check and the
+  /// "from #channel · thread" line read it.
+  sourceThreadRootId     String?  @db.Uuid
+  /// The source conversation as it was named: the channel name, null for a direct conversation.
+  sourceConversationName String?
+  sourceSenderName       String
+  sourceSenderHandle     String
+  sourceCreatedAt        DateTime
+  sourceBody             String
+  createdAt              DateTime @default(now())
+  message                Message  @relation("MessageForwardOf", fields: [messageId], references: [id], onDelete: Cascade)
+  sourceMessage          Message? @relation("MessageForwardSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+
+  /// Serves the `SET NULL` when an original is deleted.
+  @@index([sourceMessageId])
+  @@map("message_forwards")
+}

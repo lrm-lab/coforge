@@ -1,4 +1,5 @@
 import { workspaceAssistantWelcome } from "#src/server/agents/workspace-assistant-welcome.server";
+import type { ForwardedMessage } from "@lrm/coforge-sdk/internal";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
@@ -388,6 +389,10 @@ export class DirectConversations {
       threadRootId?: string;
       /** Runs inside the send's transaction once the message and its uploads are written. */
       withinSend?: SentMessageHook;
+      /** A forward's body is the forwarder's note and may be empty; no other send accepts that. */
+      allowEmptyBody?: boolean;
+      /** The forwarded original as an Agent that is delivered the message reads it. */
+      forwarded?: ForwardedMessage;
     },
     { idempotency, centrifugo, realtime }: DirectMessageSending,
   ) {

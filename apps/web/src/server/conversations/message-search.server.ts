@@ -6,6 +6,7 @@ import {
   type MessageSearchSort,
 } from "#src/server/db/repositories/message-search.repositories.server";
 import { browserMessageFields, mapBrowserMessage } from "./conversation-history.server";
+import { attachForwardedAccess } from "./message-forward-view.server";
 import { browserSenderName } from "./sender-display.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
@@ -144,5 +145,15 @@ export async function searchMessages(
       },
     ];
   });
-  return { results, hasMore: ids.length > input.limit, searchedAt };
+  const messages = await attachForwardedAccess(
+    db,
+    input.workspaceId,
+    input.userId,
+    results.map((hit) => hit.message),
+  );
+  return {
+    results: results.map((hit, index) => ({ ...hit, message: messages[index]! })),
+    hasMore: ids.length > input.limit,
+    searchedAt,
+  };
 }

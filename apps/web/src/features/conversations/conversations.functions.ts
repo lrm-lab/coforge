@@ -26,7 +26,7 @@ import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.ser
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
-import { attachActionCardViews } from "#src/server/conversations/action-cards.server";
+import { attachViewerViews } from "#src/server/conversations/viewer-views.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { withMessageSendTrace } from "#src/server/observability/tracing.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
@@ -51,7 +51,7 @@ export const loadDirectConversation = createServerFn({ method: "GET" })
     });
     return {
       ...page,
-      messages: await attachActionCardViews(db, workspaceId, user.id, page.messages),
+      messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
     };
   });
 
@@ -67,7 +67,7 @@ export const loadDirectConversationUpdates = createServerFn({ method: "GET" })
       data.afterSequence,
       data.afterReplySequence,
     );
-    return attachActionCardViews(db, workspaceId, user.id, messages);
+    return attachViewerViews(db, workspaceId, user.id, messages);
   });
 
 export const loadOwnConversationMessages = createServerFn({ method: "GET" })
@@ -92,7 +92,7 @@ export const loadConversationAround = createServerFn({ method: "GET" })
     return {
       viewerId: user.id,
       ...page,
-      messages: await attachActionCardViews(db, workspaceId, user.id, page.messages),
+      messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
     };
   });
 
@@ -111,7 +111,7 @@ export const loadConversationThread = createServerFn({ method: "GET" })
       data.conversationId,
       data.threadRootId,
     );
-    return { replies: await attachActionCardViews(db, workspaceId, user.id, replies) };
+    return { replies: await attachViewerViews(db, workspaceId, user.id, replies) };
   });
 
 export const markDirectThreadRead = createServerFn({ method: "POST" })

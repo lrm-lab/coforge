@@ -7,6 +7,7 @@ import {
   assertRemovablePrefix,
   type BulkFileRemoval,
   type ManagedFileStorage,
+  type ObjectCopy,
   type FileStorage,
   type FileStorageConfig,
   type StoredFile,
@@ -80,7 +81,7 @@ export async function createOssFileStorage(config: OssConfig): Promise<ManagedFi
   );
 }
 
-export class OssFileStorage implements FileStorage, BulkFileRemoval {
+export class OssFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy {
   /** Server-side traffic (put/open/remove/head) may ride the internal endpoint; `presignPut`
    * and `presignGet` sign on the public-endpoint client because its URL is consumed outside this server. */
   constructor(
@@ -109,6 +110,11 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval {
       contentType: headers["content-type"] ?? null,
       sizeBytes: Number.isFinite(length) ? length : null,
     };
+  }
+
+  /** Server-side CopyObject within the bucket; like `put`, it refuses to overwrite. */
+  async copyObject(fromKey: string, toKey: string) {
+    await this.client.copy(toKey, fromKey, { headers: { "x-oss-forbid-overwrite": "true" } });
   }
 
   async remove(objectKey: string) {

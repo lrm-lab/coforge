@@ -31,6 +31,7 @@ function row(sequence: number, overrides: Partial<BrowserMessageRow> = {}): Brow
     mentions: [],
     reactionVersion: 0,
     reactions: [],
+    forward: null,
     ...overrides,
   };
 }

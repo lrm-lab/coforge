@@ -27,8 +27,14 @@ import { OwnMessageTicks } from "./message-status-markers";
 import { MessageSenderGutter } from "./message-sender-gutter";
 import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
 import { useMessageRowActions } from "./message-row-actions";
+import { ForwardedMessageCard } from "./message-forward-card";
 import type { MessageView } from "./message-view";
 import type { ReadState } from "./conversation-pane-layout";
+
+/** A grouped row has no sender header, so the hover action strip would sit on its first line: the
+ * strip's width (thread, reaction, forward, save, copy) is reserved there, only where the strip can
+ * appear (a touch screen opens the action sheet instead). */
+const HOVER_BAR_RESERVE_CLASS = "lg:[@media(hover:hover)_and_(pointer:fine)]:pr-24";
 
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
@@ -204,6 +210,8 @@ export const MessageRow = memo(function MessageRow({
       />
     );
   const displayBody = attachmentMessageDisplayBody(message);
+  // A forward's own text is its note; an empty one leaves only the card.
+  const showsBody = !message.forwarded || displayBody.trim() !== "";
   // An own message's ticks follow its last word; one with no text keeps them at its bottom right.
   const textTicks =
     readState && !message.actionCard && displayBody.trim() ? (
@@ -273,7 +281,7 @@ export const MessageRow = memo(function MessageRow({
               <span className="sr-only">{message.body}</span>
               <ActionCard card={message.actionCard} />
             </>
-          ) : (
+          ) : showsBody ? (
             // `relative` anchors the reply-to-selection affordance to the body it was highlighted
             // out of; the gesture handlers live here rather than on the row so dragging from a
             // message's text (its timestamp, say) cannot raise an offer for it. It is also the text
@@ -285,12 +293,9 @@ export const MessageRow = memo(function MessageRow({
               onKeyUp={quoteSelection.read}
               className={cn(
                 "relative min-w-0 text-md text-primary [overflow-wrap:anywhere]",
-                // A grouped row has no sender header, so the hover action strip would sit on its
-                // first text line; reserve the strip's width (thread + reaction + save + copy)
-                // there. Only where that strip can appear — the same gate as the strip below: a
-                // touch screen opens the action sheet instead, and the reserve was 80px of blank
-                // on every continuation line on a phone.
-                grouped && "lg:[@media(hover:hover)_and_(pointer:fine)]:pr-20",
+                // See `HOVER_BAR_RESERVE_CLASS`: a touch screen opens the action sheet instead,
+                // and the reserve was 80px of blank on every continuation line on a phone.
+                grouped && HOVER_BAR_RESERVE_CLASS,
               )}
             >
               <CollapsibleMessageBody
@@ -319,9 +324,19 @@ export const MessageRow = memo(function MessageRow({
                 <QuoteSelectionBar selection={quoteSelection} onQuote={onQuoteSelection} />
               )}
             </div>
+          ) : null}
+          {message.forwarded && (
+            // The attachments are the card's; the footer below draws none for a forward. A
+            // continuation with no note has no text line to reserve the hover bar's width.
+            <div className={cn(grouped && !showsBody && HOVER_BAR_RESERVE_CLASS)}>
+              <ForwardedMessageCard
+                forwarded={message.forwarded}
+                attachments={message.attachments}
+              />
+            </div>
           )}
           <MessageRowFooter
-            message={message}
+            message={message.forwarded ? { ...message, attachments: [] } : message}
             viewerId={viewerId}
             onToggleReaction={
               onToggleReaction && ((emoji, active) => onToggleReaction(message.id, emoji, active))

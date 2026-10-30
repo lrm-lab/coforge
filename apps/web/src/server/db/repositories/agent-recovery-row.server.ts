@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { AGENT_FORWARD_SELECT } from "./direct-conversation-agent-message.server";
 
 /** How many unread messages one Agent recovery batch carries at most. */
 export const AGENT_RECOVERY_MESSAGE_LIMIT = 100;
@@ -31,16 +32,17 @@ export type AgentRecoveryRow = {
 /**
  * What the raw recovery statement cannot join, read for its rows in two more queries: the
  * mention rows (so embedded tokens read as plain `@handle` text, which is all an Agent ever
- * reads) and the Memory Hints delivered to the Agent.
+ * reads), the Memory Hints delivered to the Agent, and the snapshot of a forwarded message with the
+ * ids of its own attachments.
  */
 export async function recoverySecondPass(
-  db: Pick<PrismaClient, "messageMention" | "memoryHintRecord">,
+  db: Pick<PrismaClient, "messageMention" | "memoryHintRecord" | "messageForward">,
   workspaceId: string,
   agentId: string,
   rows: readonly Pick<AgentRecoveryRow, "id">[],
 ) {
   const ids = rows.map((row) => row.id);
-  const [mentionRows, hints] = rows.length
+  const [mentionRows, hints, forwardRows] = rows.length
     ? await Promise.all([
         db.messageMention.findMany({
           where: { messageId: { in: ids } },
@@ -55,8 +57,18 @@ export async function recoverySecondPass(
           },
           select: { id: true, messageId: true },
         }),
+        db.messageForward.findMany({
+          where: { messageId: { in: ids } },
+          select: {
+            messageId: true,
+            ...AGENT_FORWARD_SELECT.select,
+            message: {
+              select: { attachments: { select: { id: true }, orderBy: { position: "asc" } } },
+            },
+          },
+        }),
       ])
-    : [[], []];
+    : [[], [], []];
   const mentionsByMessage = new Map<string, { kind: string; actorId: string; handle: string }[]>();
   for (const mention of mentionRows) {
     const list = mentionsByMessage.get(mention.messageId) ?? [];
@@ -66,5 +78,6 @@ export async function recoverySecondPass(
   return {
     mentionsByMessage,
     hintsByMessage: new Map(hints.map((hint) => [hint.messageId, hint.id])),
+    forwardsByMessage: new Map(forwardRows.map((forward) => [forward.messageId, forward])),
   };
 }

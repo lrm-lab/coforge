@@ -1,3 +1,4 @@
+import type { ForwardedMessage } from "./forwarded-message";
 import type { MessageSenderKind } from "./message-sender";
 
 /** The Message shape every Agent-facing read and send answers with: one conversation's message,
@@ -30,6 +31,9 @@ export type AgentMessageRecord = {
   nonMemberMention?: boolean;
   /** How many replies this message's thread holds; absent when it has none. */
   replyCount?: number;
+  /** Present when this message is a forward: the original it carries. `body` is then only the
+   * forwarder's note, possibly empty. */
+  forwarded?: ForwardedMessage;
 };
 export type MessageTaskMetadata = {
   number: number;

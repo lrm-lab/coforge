@@ -274,6 +274,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
       ],
       reactionVersion: 0,
       reactions: [],
+      forward: null,
       // Both the picked Agent and default Memory Agent are channel members.
       deliveries: [agent.id, await defaultMemoryAgentId(db, workspace.id)]
         .sort()

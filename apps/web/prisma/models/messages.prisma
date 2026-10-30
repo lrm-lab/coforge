@@ -24,6 +24,10 @@ model Message {
   task           Task?
   actionCard     ActionCard?
   appAgentEvent  AppAgentEvent?
+  /// Set when this message is a forward: the snapshot of the original it carries.
+  forward        MessageForward?        @relation("MessageForwardOf")
+  /// The forwards that snapshot this message.
+  forwardedAs    MessageForward[]       @relation("MessageForwardSource")
   /// Raised in each reaction write's transaction; pages show the newest summary.
   reactionVersion Int                  @default(0)
 

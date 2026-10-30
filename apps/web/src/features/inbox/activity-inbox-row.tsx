@@ -26,6 +26,9 @@ import type { ActivityItemActions } from "./use-activity-item-actions";
 /** A message's text rendered as inline Markdown, or its first attachment's name. */
 function Preview({ message }: { message: ActivityInboxItem["latest"] }) {
   if (message.body) return <MessagePreview body={message.body} mentions={message.mentions} />;
+  // A forward sent without a note previews as what it forwards.
+  if (message.forwarded)
+    return <>{m.message_forward_preview({ text: message.forwarded.sourceBody })}</>;
   return <>{message.attachments[0]?.fileName ?? ""}</>;
 }
 

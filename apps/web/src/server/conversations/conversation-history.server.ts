@@ -14,6 +14,8 @@ import {
 } from "./sender-display.server";
 import { attachmentFileNameSummary } from "#src/features/conversations/attachment-file-name";
 import type { ActionCardView } from "./action-cards.server";
+import type { ForwardedMessageView } from "#src/features/conversations/message-forward";
+import { BROWSER_FORWARD_SELECT, browserForwarded } from "./message-forward-view.server";
 import {
   isWeeklyReportPlatformTurn,
   weeklyReportAssistantDisplayBody,
@@ -54,6 +56,8 @@ export const browserMessageFields = {
   // overstate it, so the page still shows any newer `message.reaction.v1` it hears.
   reactionVersion: true,
   reactions: MESSAGE_REACTIONS_SELECT,
+  // The snapshot a forwarded message carries; null for every other message.
+  forward: BROWSER_FORWARD_SELECT,
 } satisfies Prisma.MessageSelect;
 
 export type BrowserMessageRow = Prisma.MessageGetPayload<{
@@ -120,6 +124,12 @@ export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: strin
     // Attached by the caller (`conversations.functions.ts`, `ActionCards.viewsFor`) in one
     // batched lookup per page; this function never queries `ActionCard` rows itself.
     actionCard: undefined as ActionCardView | undefined,
+    // The snapshot of a forwarded message, with `sourceAccessible` false: each caller settles it
+    // for its viewer in one batched lookup per page (`attachForwardedAccess`), never per row.
+    // Absent for every other message, and typed optional so an echo that carries none still fits.
+    ...((message.forward ? { forwarded: browserForwarded(message.forward) } : {}) as {
+      forwarded?: ForwardedMessageView;
+    }),
   };
 }
 

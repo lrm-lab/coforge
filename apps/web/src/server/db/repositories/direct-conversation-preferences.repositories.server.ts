@@ -8,6 +8,7 @@ import {
   markUnreadAnchor,
 } from "#src/server/conversations/human-unread.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { FORWARDED_PREVIEW_SOURCE_LENGTH } from "#src/server/conversations/message-preview-line.server";
 import {
   viewerDirectConversationSql,
   viewerDirectConversationWhere,
@@ -32,6 +33,8 @@ type LatestMessageRow = {
   conversationId: string;
   messageId: string;
   body: string;
+  /** The start of the `sourceBody` of a forward with a blank body, null for any other message. */
+  forwardedBody: string | null;
   createdAt: Date;
 };
 
@@ -145,6 +148,8 @@ export class PrismaDirectConversationPreferences {
         SELECT cm."conversationId" AS "conversationId",
                latest."id" AS "messageId",
                latest."body" AS "body",
+               CASE WHEN latest."body" ~ '^[[:space:]]*$'
+                    THEN left(forward."sourceBody", ${FORWARDED_PREVIEW_SOURCE_LENGTH}::int) END AS "forwardedBody",
                latest."createdAt" AS "createdAt"
         FROM "conversation_members" cm
         JOIN "conversations" c
@@ -156,6 +161,7 @@ export class PrismaDirectConversationPreferences {
             AND m."threadRootId" IS NULL
           ORDER BY m."sequence" DESC LIMIT 1
         ) latest
+        LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
         WHERE cm."userId" = ${userId}::uuid
           AND cm."workspaceId" = ${workspaceId}::uuid
           AND cm."leftAt" IS NULL
@@ -247,7 +253,11 @@ export class PrismaDirectConversationPreferences {
         row.conversationId,
         {
           createdAt: row.createdAt.toISOString(),
-          preview: messagePreviewLine(row.body, mentionsByMessage.get(row.messageId) ?? []),
+          preview: messagePreviewLine(
+            row.body,
+            mentionsByMessage.get(row.messageId) ?? [],
+            row.forwardedBody,
+          ),
         },
       ]),
     );

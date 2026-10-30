@@ -1,5 +1,9 @@
 import type { SentMessageHook } from "./sent-message-hook.server";
-import { isChannelMessageTarget, isPrintableSenderHandle } from "@lrm/coforge-sdk/internal";
+import {
+  isChannelMessageTarget,
+  isPrintableSenderHandle,
+  type ForwardedMessage,
+} from "@lrm/coforge-sdk/internal";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type {
@@ -55,8 +59,13 @@ export class SendDirectMessage {
     threadRootId?: string;
     /** Runs inside the send's transaction once the message and its uploads are written. */
     withinSend?: SentMessageHook;
+    /** A forward's body is the forwarder's note and may be empty; no other send accepts that. */
+    allowEmptyBody?: boolean;
+    /** The forwarded original as an Agent that is delivered the message reads it. */
+    forwarded?: ForwardedMessage;
   }) {
-    if (!input.idempotencyKey || !input.body) throw new Error("invalid direct message");
+    if (!input.idempotencyKey || (!input.body && !input.allowEmptyBody))
+      throw new Error("invalid direct message");
     const message = await this.idempotency.execute(
       {
         workspaceId: input.workspaceId,
@@ -85,10 +94,12 @@ export class SendDirectMessage {
       { userId: input.senderUserId, agentId: message.agentId, senderUserId: input.senderUserId },
       input.idempotencyKey,
     );
-    await this.publishUserMessageToAgent(input.idempotencyKey, input.conversationId, {
-      ...message,
-      agentId: message.agentId,
-    });
+    await this.publishUserMessageToAgent(
+      input.idempotencyKey,
+      input.conversationId,
+      { ...message, agentId: message.agentId },
+      input.forwarded,
+    );
     return message;
   }
 
@@ -274,6 +285,7 @@ export class SendDirectMessage {
     idempotencyKey: string,
     conversationId: string,
     message: Awaited<ReturnType<DirectConversationRepository["sendMessage"]>>,
+    forwarded?: ForwardedMessage,
   ) {
     if (!message) throw new Error("message publication is unavailable");
     if (!message.deliveryId) throw new Error("message delivery is unavailable");
@@ -308,6 +320,7 @@ export class SendDirectMessage {
           // carries no `mentionsAgent`, so the issuer tracks it only once a DM can mention.
           body: message.body,
           mentions: [],
+          forwarded,
           target: message.deliveryTarget ?? `@${message.latestSenderHandle}`,
           latestSenderKind: message.latestSenderKind,
           latestSenderHandle: message.latestSenderHandle,

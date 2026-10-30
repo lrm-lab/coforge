@@ -1,0 +1,47 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "message_forward_action": "转发",
+  "message_forward_badge": "转发",
+  "message_forward_badge_count": "的消息",
+  "message_forward_from_channel": "来自 #{name}",
+  "message_forward_from_channel_thread": "来自 #{name} · 话题",
+  "message_forward_from_dm": "来自私信",
+  "message_forward_from_dm_thread": "来自私信 · 话题",
+  "message_forward_dm": "私信",
+  "message_forward_open_source": "打开原消息",
+  "message_forward_preview": "已转发：{text}",
+  "message_forward_selected_from": "已选 1 条，来自 {source}",
+  "message_forward_search": "搜索目标",
+  "message_forward_selected_count": "已选 {count} 个",
+  "message_forward_no_matches": "没有匹配的转发目标",
+  "message_forward_search_failed": "无法搜索转发目标。",
+  "message_forward_not_joined": "未加入",
+  "message_forward_unavailable": "目标不可用",
+  "message_forward_note_label": "备注（可选）",
+  "message_forward_note_placeholder": "添加备注",
+  "message_forward_note_placeholder_target": "给 {target} 添加备注…",
+  "message_forward_note_placeholder_none": "先选择目标，再添加可选备注…",
+  "message_forward_add_note": "添加备注",
+  "message_forward_back": "返回选择目标",
+  "message_forward_send": "发送转发",
+  "message_forward_join_warning": "你还没有加入 {channel}。转发会先加入该频道，再发送。再次点击发送以确认。",
+  "message_forward_join_failed": "无法加入 {target}，请重试。",
+  "message_forward_sent_to": "已转发到 {target}。",
+  "message_forward_sent_to_many": "已转发到 {count} 个目标",
+  "message_forward_view_in_chat": "在聊天中查看",
+  "message_forward_partial": "已转发到 {total} 个目标中的 {delivered} 个。请重试剩余的目标。",
+  "message_forward_none": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "无法转发到 {count} 个目标。请检查所选目标后重试。",
+        "countPlural=other": "无法转发到 {count} 个目标。请检查所选目标后重试。"
+      }
+    }
+  ],
+  "message_forward_try_again": "重试",
+  "message_forward_uncertain": "无法确认转发是否已完成，可以放心重试。",
+  "message_forward_source_gone": "这条消息已不可用。请回到原会话查看后重试。",
+  "message_forward_not_forwardable": "这条消息不能转发。"
+}

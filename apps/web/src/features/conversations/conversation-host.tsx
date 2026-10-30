@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useDbClient } from "@tanstack/react-db";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { ForwardHost } from "./message-forward-host";
 import { savedMessagesQuery } from "./conversation-queries";
 import type { ChannelSuggestion } from "./reference-completion";
 import { listSavedMessages, saveMessage, unsaveMessage } from "./saved-messages.functions";
@@ -59,7 +60,9 @@ export function ConversationHostProvider({
   }, [dbClient, queryClient, workspaceId]);
   return (
     <SavedMessagesContext value={savedMessages}>
-      <ChannelsContext value={channels}>{children}</ChannelsContext>
+      <ChannelsContext value={channels}>
+        <ForwardHost channels={channels}>{children}</ForwardHost>
+      </ChannelsContext>
     </SavedMessagesContext>
   );
 }

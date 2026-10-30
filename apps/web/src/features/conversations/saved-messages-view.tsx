@@ -154,7 +154,9 @@ function SavedMessageCard({
           <p className="mt-1 line-clamp-2 h-10 text-sm break-words text-secondary">
             {message.body
               ? messagePlainText({ body: message.body, mentions: message.mentions })
-              : (attachmentName ?? "")}
+              : message.forwarded
+                ? m.message_forward_preview({ text: message.forwarded.sourceBody })
+                : (attachmentName ?? "")}
           </p>
         </AriaLink>
         <Dropdown.Popover placement="bottom start">

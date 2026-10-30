@@ -5,7 +5,7 @@ These rules apply to `src/server/conversations/`.
 ## Ownership
 
 - `active-member.server.ts` owns the shared Prisma/SQL DM predicate (`directKey IS NOT NULL`) and ordinary destination filter. `conversation-realtime-access.server.ts` authorizes generic channel/DM subscriptions; attachment comment author seats never grant one.
-
+- Message forwarding (`message-forwards.server.ts`, `forward-targets.server.ts`): the snapshot, copied files, per-destination sends and per-viewer access to the original are in [message-forwards.md](./message-forwards.md).
 - `channel-coordination.server.ts` owns current coordinator context and role changes, including the check that the acting person may update the channel: atomically store a system Message and old/new coordinator deliveries, even when muted or stopped. Repeated settings are a no-op. Channel reads show current roles, including threads and restart recovery; never rewrite stored messages or Agent memory.
 - `chat-sections.server.ts` owns personal Chat groups, their saved collapse state, and assigning a member's conversations, scoped to that user and Workspace.
   Deleting a group keeps its conversations; moving into one unpins that row. Group and row ordering takes the member pin lock before conversation locks.

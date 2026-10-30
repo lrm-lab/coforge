@@ -147,7 +147,11 @@ export async function channelListPreviews(
     if (!entry) continue;
     entry.lastMessage = {
       createdAt: row.createdAt.toISOString(),
-      preview: messagePreviewLine(row.body, mentionsByMessage.get(row.messageId) ?? []),
+      preview: messagePreviewLine(
+        row.body,
+        mentionsByMessage.get(row.messageId) ?? [],
+        row.forwardedBody,
+      ),
       sender: previewSenderOf(row, viewerUserId, names),
     };
   }

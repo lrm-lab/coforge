@@ -174,6 +174,7 @@ function row(overrides: Partial<BrowserMessageRow>): BrowserMessageRow {
     mentions: [],
     reactionVersion: 0,
     reactions: [],
+    forward: null,
     ...overrides,
   };
 }

@@ -59,8 +59,22 @@ export interface BulkFileRemoval {
   removePrefix(prefix: string): Promise<void>;
 }
 
+/**
+ * Duplicating an object inside the store, bytes never passing through this server. Kept apart
+ * from {@link FileStorage} for the same reason as {@link BulkFileRemoval}: only the storages this
+ * module creates implement it, and a forwarded message is its one caller.
+ */
+export interface ObjectCopy {
+  /**
+   * Copies one object to a new key. The copy is independent: removing either object never touches
+   * the other, so the keys must not share a directory (`<id>/original`). A missing source or an
+   * existing destination is an error.
+   */
+  copyObject(fromKey: string, toKey: string): Promise<void>;
+}
+
 /** A bucket the app writes to and removes from, one object or many at a time. */
-export type ManagedFileStorage = FileStorage & BulkFileRemoval;
+export type ManagedFileStorage = FileStorage & BulkFileRemoval & ObjectCopy;
 
 /** A prefix `removePrefix` accepts: at least two non-empty segments, no `.` or `..`, ending in `/`. */
 export function assertRemovablePrefix(prefix: string): void {
@@ -157,7 +171,7 @@ export async function createFileStorage(config: FileStorageConfig): Promise<Mana
  * Bytes under one private directory on the Web/backend host. Verification-only: no sharing
  * between backends, no orphan cleanup, no direct upload.
  */
-export class LocalFileStorage implements FileStorage, BulkFileRemoval {
+export class LocalFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy {
   constructor(private readonly root: string) {}
 
   path(objectKey: string) {
@@ -174,6 +188,15 @@ export class LocalFileStorage implements FileStorage, BulkFileRemoval {
     const file = Bun.file(this.path(objectKey));
     if (!(await file.exists())) return null;
     return { body: file, contentType: null, sizeBytes: file.size };
+  }
+
+  async copyObject(fromKey: string, toKey: string) {
+    const source = Bun.file(this.path(fromKey));
+    if (!(await source.exists())) throw new Error(`object ${fromKey} does not exist`);
+    const target = this.path(toKey);
+    if (await Bun.file(target).exists()) throw new Error(`object ${toKey} already exists`);
+    await mkdir(dirname(target), { recursive: true });
+    await Bun.write(target, source);
   }
 
   async remove(objectKey: string) {
