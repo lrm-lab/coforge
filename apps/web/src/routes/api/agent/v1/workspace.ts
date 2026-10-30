@@ -1,4 +1,3 @@
-import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { humanLabel } from "#src/lib/human-label";
 import { resolveAgentStatuses } from "#src/server/agents/agent-user-info.server";
@@ -21,113 +20,109 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
     middleware: [agentAuthMiddleware],
     handlers: {
       GET: async ({ context: { principal, db } }) => {
-        try {
-          // A private Agent invisible to the caller is absent from the roster.
-          const viewer = await agentVisibilityViewerForActor(db, principal.workspaceId, {
-            agentId: principal.agentId,
-          });
-          const [workspace, humans, agents, projects, self, serverRole] = await Promise.all([
-            db.workspace.findUnique({
-              where: { id: principal.workspaceId },
-              select: { id: true, name: true, slug: true },
-            }),
-            db.workspaceMembership.findMany({
-              where: { workspaceId: principal.workspaceId },
-              select: {
-                userId: true,
-                role: true,
-                user: { select: { username: true, displayName: true, description: true } },
-              },
-              orderBy: { user: { username: "asc" } },
-            }),
-            db.agent.findMany({
-              where: {
-                workspaceId: principal.workspaceId,
-                ...ACTIVE_AGENT_WHERE,
-                ...visibleAgentWhere(viewer),
-              },
-              select: {
-                id: true,
-                name: true,
-                displayName: true,
-                description: true,
-                role: true,
-                computerId: true,
-                stoppedAt: true,
-              },
-              orderBy: { name: "asc" },
-            }),
-            db.project.findMany({
-              where: { workspaceId: principal.workspaceId },
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                githubFullName: true,
-                githubHtmlUrl: true,
-              },
-              orderBy: { createdAt: "asc" },
-            }),
-            db.agent.findUnique({
-              where: {
-                id_workspaceId: { id: principal.agentId, workspaceId: principal.workspaceId },
-              },
-              select: {
-                id: true,
-                name: true,
-                runtimeConfig: true,
-                computerId: true,
-                computer: {
-                  select: {
-                    name: true,
-                    displayName: true,
-                    platform: true,
-                    osVersion: true,
-                    computerVersion: true,
-                  },
+        // A private Agent invisible to the caller is absent from the roster.
+        const viewer = await agentVisibilityViewerForActor(db, principal.workspaceId, {
+          agentId: principal.agentId,
+        });
+        const [workspace, humans, agents, projects, self, serverRole] = await Promise.all([
+          db.workspace.findUnique({
+            where: { id: principal.workspaceId },
+            select: { id: true, name: true, slug: true },
+          }),
+          db.workspaceMembership.findMany({
+            where: { workspaceId: principal.workspaceId },
+            select: {
+              userId: true,
+              role: true,
+              user: { select: { username: true, displayName: true, description: true } },
+            },
+            orderBy: { user: { username: "asc" } },
+          }),
+          db.agent.findMany({
+            where: {
+              workspaceId: principal.workspaceId,
+              ...ACTIVE_AGENT_WHERE,
+              ...visibleAgentWhere(viewer),
+            },
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              description: true,
+              role: true,
+              computerId: true,
+              stoppedAt: true,
+            },
+            orderBy: { name: "asc" },
+          }),
+          db.project.findMany({
+            where: { workspaceId: principal.workspaceId },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              githubFullName: true,
+              githubHtmlUrl: true,
+            },
+            orderBy: { createdAt: "asc" },
+          }),
+          db.agent.findUnique({
+            where: {
+              id_workspaceId: { id: principal.agentId, workspaceId: principal.workspaceId },
+            },
+            select: {
+              id: true,
+              name: true,
+              runtimeConfig: true,
+              computerId: true,
+              computer: {
+                select: {
+                  name: true,
+                  displayName: true,
+                  platform: true,
+                  osVersion: true,
+                  computerVersion: true,
                 },
               },
-            }),
-            resolveActorServerRole(db, principal.workspaceId, { agentId: principal.agentId }),
-          ]);
-          if (!workspace) return Response.json({ error: "workspace not found" }, { status: 404 });
-          // Same online/offline source the Agents list and `coforge user info` read; one read for
-          // the whole list rather than one per Agent, and never a failure of the whole response.
-          const [channels, computers] = await Promise.all([
-            listAgentWorkspaceChannels(db, principal.workspaceId, principal.agentId, serverRole),
-            listWorkspaceComputers(db, principal.workspaceId),
-          ]);
-          const resolvedAgentStatuses = await resolveAgentStatuses(principal.workspaceId, agents);
-          const agentStatuses = agents.map((agent, index) => ({
-            agent,
-            ...resolvedAgentStatuses[index],
-          }));
-          return Response.json({
-            workspace,
-            humans: humans.map((human) => ({
-              name: human.user.username,
-              displayName: humanLabel(human.user),
-              description: human.user.description,
-              role: human.role,
-            })),
-            agents: agentStatuses.map(({ agent, status, availability }) => ({
-              name: agent.name,
-              displayName: agent.displayName,
-              description: agent.description,
-              status,
-              activity: null,
-              activityDetail: availability ?? null,
-              role: agent.id === principal.agentId ? (serverRole ?? agent.role) : agent.role,
-            })),
-            projects,
-            ...(serverRole ? { serverRole } : {}),
-            channels,
-            computers,
-            ...buildSelfRuntimeContext(self, workspace),
-          });
-        } catch {
-          return textResponse("unauthorized", { status: 401 });
-        }
+            },
+          }),
+          resolveActorServerRole(db, principal.workspaceId, { agentId: principal.agentId }),
+        ]);
+        if (!workspace) return Response.json({ error: "workspace not found" }, { status: 404 });
+        // Same online/offline source the Agents list and `coforge user info` read; one read for
+        // the whole list rather than one per Agent, and never a failure of the whole response.
+        const [channels, computers] = await Promise.all([
+          listAgentWorkspaceChannels(db, principal.workspaceId, principal.agentId, serverRole),
+          listWorkspaceComputers(db, principal.workspaceId),
+        ]);
+        const resolvedAgentStatuses = await resolveAgentStatuses(principal.workspaceId, agents);
+        const agentStatuses = agents.map((agent, index) => ({
+          agent,
+          ...resolvedAgentStatuses[index],
+        }));
+        return Response.json({
+          workspace,
+          humans: humans.map((human) => ({
+            name: human.user.username,
+            displayName: humanLabel(human.user),
+            description: human.user.description,
+            role: human.role,
+          })),
+          agents: agentStatuses.map(({ agent, status, availability }) => ({
+            name: agent.name,
+            displayName: agent.displayName,
+            description: agent.description,
+            status,
+            activity: null,
+            activityDetail: availability ?? null,
+            role: agent.id === principal.agentId ? (serverRole ?? agent.role) : agent.role,
+          })),
+          projects,
+          ...(serverRole ? { serverRole } : {}),
+          channels,
+          computers,
+          ...buildSelfRuntimeContext(self, workspace),
+        });
       },
     },
   },

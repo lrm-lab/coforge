@@ -13,6 +13,7 @@ let runtimeConfig: AgentRuntimeConfig = {
 };
 let allowed = true;
 let launchAllowed = true;
+let runtimeAllowed = true;
 let lookups = 0;
 let issued = 0;
 let installedApps: unknown[] = [];
@@ -83,7 +84,7 @@ await mockModuleForFile("#src/server/agents/agent-control.server", () => ({
 await mockModuleForFile("#src/server/computers/computer-runtime-visibility.server", () => ({
   ComputerRuntimeVisibility: class {
     async canSelect() {
-      return true;
+      return runtimeAllowed;
     }
   },
 }));
@@ -173,6 +174,15 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
   allowed = false;
   expect(((await request("valid")) as Response).status).toBe(403);
   allowed = true;
+  runtimeAllowed = false;
+  const unavailable = (await request("valid")) as Response;
+  expect(unavailable.status).toBe(403);
+  expect(await unavailable.json()).toEqual({
+    error: "the configured runtime is not available on this Computer",
+    code: "RUNTIME_UNAVAILABLE",
+    retryable: false,
+  });
+  runtimeAllowed = true;
   launchAllowed = false;
   expect(((await request("valid")) as Response).status).toBe(403);
   launchAllowed = true;

@@ -313,7 +313,8 @@ export async function handleAgentMessagesPost(
     if (error instanceof AgentSendRejectedError)
       return Response.json({ error: error.message }, { status: error.status });
     // The same key's first request is still working: a duplicate, never a second message. Mapped
-    // here because the Agent auth middleware turns anything thrown past the handler into a 401.
+    // here because the send keeps its own retryable refusal shape rather than the boundary's
+    // generic one.
     if (error instanceof MessageRequestInProgressError) return inProgress(error);
     // An archived channel refuses posting (AppError("CONFLICT") from PublicChannels.send /
     // sendAgentMessage); reported the same way the rest of this route family reports a plain

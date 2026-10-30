@@ -22,6 +22,7 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { decryptAgentEnvironment } from "#src/server/agents/agent-environment.server";
+import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import {
   buildAgentRuntimeContext,
   type AgentRuntimeContextComputer,
@@ -134,7 +135,14 @@ export const Route = createFileRoute("/api/agent-api-keys")({
               parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
             ))
           )
-            throw new Error("Runtime is not available");
+            // The daemon relays this `code` to the Agent: a launch refused because the
+            // Computer's runtime is missing or too old is not a permissions failure.
+            return errorResponse(
+              "RUNTIME_UNAVAILABLE",
+              "the configured runtime is not available on this Computer",
+              403,
+              false,
+            );
           await new AgentControl(
             new PrismaAgentControlStore(db),
             createCentrifugoServerApi(),

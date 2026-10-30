@@ -187,7 +187,7 @@ export async function handleWorkspaceAssistantCommand(
   } catch (error) {
     if (error instanceof MessageRequestInProgressError)
       return Response.json(
-        { error: error.message, code: "MESSAGE_REQUEST_IN_PROGRESS" },
+        { error: error.message, code: "MESSAGE_REQUEST_IN_PROGRESS", retryable: true },
         { status: 409 },
       );
     if (error instanceof z.ZodError)
