@@ -24,6 +24,7 @@ import {
   forwardTargetKey,
   forwardTargetLabel,
   forwardedPreview,
+  isRetryableForwardFailure,
   isUnjoinedChannel,
   type ForwardSource,
 } from "./message-forward-model";
@@ -185,7 +186,9 @@ export function MessageForwardDialog({
       );
       setNotice({
         kind: "error",
-        retry: true,
+        // An archived, read-only or inaccessible destination refuses again; Try Again is only
+        // for one that may take it on another attempt.
+        retry: [...outcome.failed.values()].some(isRetryableForwardFailure),
         text:
           outcome.kind === "partial"
             ? m.message_forward_partial({ delivered: outcome.delivered, total: outcome.total })

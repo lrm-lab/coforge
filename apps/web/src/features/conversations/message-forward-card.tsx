@@ -7,6 +7,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { MessageAttachments } from "./attachment-card";
+import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import type { ForwardedMessageView } from "./message-forward";
 import { forwardSourceTarget } from "./message-forward-model";
 import type { MessageView } from "./message-view";
@@ -41,6 +42,9 @@ export function ForwardedMessageCard({
   const hydrated = useHydrated();
   const timeFormat = useTimeFormat();
   const target = forwarded.sourceAccessible ? forwardSourceTarget(workspaceSlug, forwarded) : null;
+  // The snapshot keeps the original's body as stored, an image-only send's filename placeholder
+  // included; the row drops that placeholder, and so does the card.
+  const body = attachmentMessageDisplayBody({ body: forwarded.sourceBody, attachments });
   return (
     <div
       data-forwarded-card
@@ -77,9 +81,7 @@ export function ForwardedMessageCard({
             : ""}
         </time>
       </p>
-      {forwarded.sourceBody && (
-        <p className="message-markdown whitespace-pre-wrap text-primary">{forwarded.sourceBody}</p>
-      )}
+      {body && <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>}
       <MessageAttachments attachments={attachments} />
       {target && (
         <Link

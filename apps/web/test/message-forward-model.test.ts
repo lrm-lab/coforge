@@ -6,6 +6,7 @@ import type {
   ForwardedMessageView,
 } from "#src/features/conversations/message-forward";
 import {
+  isRetryableForwardFailure,
   canForwardMessage,
   canSelectTarget,
   forwardOutcomeView,
@@ -99,4 +100,12 @@ test("a result closes the dialog only when every destination took it", () => {
   const none = view([bad("a")]);
   expect(none.kind).toBe("none");
   expect(none.kind === "none" && none.failed.get("a")).toBe("not_joined");
+});
+
+test("Try Again is offered only for a refusal another attempt may get past", () => {
+  expect(isRetryableForwardFailure("failed")).toBe(true);
+  expect(isRetryableForwardFailure("not_joined")).toBe(true);
+  expect(isRetryableForwardFailure("archived")).toBe(false);
+  expect(isRetryableForwardFailure("read_only")).toBe(false);
+  expect(isRetryableForwardFailure("no_access")).toBe(false);
 });

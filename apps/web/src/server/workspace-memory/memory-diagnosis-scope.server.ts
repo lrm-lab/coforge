@@ -1,6 +1,10 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
-import { agentMessageView } from "#src/server/conversations/agent-message-view.server";
+import {
+  agentDeliveryView,
+  agentMessageView,
+} from "#src/server/conversations/agent-message-view.server";
+import { AGENT_FORWARD_SELECT } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { isExplicitMemoryDiagnosis } from "./explicit-memory-answer";
 import type { DiagnosisScope } from "./explicit-diagnosis";
 
@@ -68,12 +72,15 @@ export async function resolveMemoryDiagnosisScope(
       createdAt: true,
       sender: { select: { agentId: true, agent: { select: { name: true } } } },
       mentions: MESSAGE_MENTIONS_SELECT,
+      forward: AGENT_FORWARD_SELECT,
+      attachments: { orderBy: { position: "asc" }, select: { id: true } },
     },
   });
   let remaining = MAX_CHARACTERS;
   const messages = [];
   for (const row of rows) {
-    const content = agentMessageView(row).body;
+    // One text per message: a forward's original goes after its note.
+    const content = agentDeliveryView(row).body;
     if (content.length > remaining) break;
     remaining -= content.length;
     messages.push({

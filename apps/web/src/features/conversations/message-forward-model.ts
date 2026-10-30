@@ -118,3 +118,9 @@ export function forwardOutcomeView(result: ForwardMessageResult): ForwardOutcome
     ? { kind: "none", total, failed }
     : { kind: "partial", delivered: total - failed.size, total, failed };
 }
+
+/** Whether another attempt may reach a destination that refused: a send that failed, or a channel
+ * the forwarder had not joined yet (the dialog joins it first). */
+export function isRetryableForwardFailure(code: ForwardFailureCode): boolean {
+  return code === "failed" || code === "not_joined";
+}
