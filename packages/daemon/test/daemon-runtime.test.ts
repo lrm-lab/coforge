@@ -17,7 +17,7 @@ import {
   setSystemTime,
   test,
 } from "bun:test";
-import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
@@ -70,13 +70,12 @@ import {
   DAEMON_RUNTIME_READY_METHOD,
   type AgentMessageRequest,
   type LocalAgentMessageRequest,
-  type TaskRequest,
-  type TaskResponse,
 } from "@lrm/coforge-sdk/internal";
 import type { LogRecord } from "@logtape/logtape";
 import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { createMessageHarness } from "./fixtures/message-harness";
+import { messageRecord } from "./fixtures/message-record";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());
@@ -747,25 +746,6 @@ test("cloud-authorized wake restores the acknowledged identity with a successor 
   }
 });
 
-function messageRecord(
-  sequence: number,
-  sender: string,
-  target: string,
-  id = `message-${sequence}`,
-) {
-  return {
-    id,
-    sequence,
-    senderKind: "human" as const,
-    senderHandle: sender.replace(/^@/, ""),
-    senderDescription: "",
-    target,
-    body: `body-${sequence}`,
-    createdAt: "2026-09-03T00:00:00Z",
-    attachments: [],
-  };
-}
-
 function agentLaunchConfig(
   agentApiKey: string,
   providerConfig?: AgentRuntimeConfig["providerConfig"],
@@ -885,225 +865,6 @@ async function queueHarness(
 }
 
 const messageHarness = createMessageHarness({ connection, config });
-
-describe("Agent Task freshness", () => {
-  test("reviewer-isolation holds are repeatable without reading, forwarding, or consuming", async () => {
-    const messageCalls: AgentMessageRequest[] = [];
-    const taskCalls: TaskRequest[] = [];
-    const harness = await messageHarness(
-      async (request) => {
-        messageCalls.push(request);
-        return {
-          protocolMajor: 1,
-          idempotencyKey: request.idempotencyKey,
-          accepted: true,
-          attentionCount: 0,
-          messages: [],
-        };
-      },
-      async (request) => {
-        taskCalls.push(request);
-        return { idempotencyKey: request.idempotencyKey, tasks: [] };
-      },
-    );
-    try {
-      await harness.deliver(4, "#tasks");
-      const command = {
-        operation: "claim" as const,
-        idempotencyKey: "claim-withheld",
-        target: "#tasks",
-        number: 7,
-        freshnessContextMode: "withheld" as const,
-      };
-
-      expect(await harness.runtime.agentTask(harness.context, command, harness.apiKey)).toEqual({
-        tasks: [],
-        state: "held",
-        freshnessContextMode: "withheld",
-        withheldMessageCount: 1,
-      });
-      expect(await harness.runtime.agentTask(harness.context, command, harness.apiKey)).toEqual({
-        tasks: [],
-        state: "held",
-        freshnessContextMode: "withheld",
-        withheldMessageCount: 1,
-      });
-      expect(messageCalls).toHaveLength(0);
-      expect(taskCalls).toHaveLength(0);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-
-  test("a claim on a target the Agent drained with a check reads no context first", async () => {
-    const messageCalls: AgentMessageRequest[] = [];
-    const harness = await messageHarness(
-      async (request) => {
-        messageCalls.push(request);
-        return {
-          idempotencyKey: request.idempotencyKey,
-          accepted: true,
-          attentionCount: 0,
-          hasMore: false,
-          messages: request.operation === "check" ? [messageRecord(4, "@ada", "#tasks")] : [],
-        };
-      },
-      async (request) => ({ idempotencyKey: request.idempotencyKey, tasks: [] }),
-    );
-    try {
-      await harness.deliver(4, "#tasks");
-      await harness.runtime.agentMessage(
-        harness.context,
-        { idempotencyKey: "check", context: harness.context, operation: "check" },
-        harness.apiKey,
-      );
-      await harness.runtime.agentTask(
-        harness.context,
-        { operation: "claim", idempotencyKey: "claim", target: "#tasks", number: 7 },
-        harness.apiKey,
-      );
-      expect(messageCalls.map(({ operation }) => operation)).toEqual(["check"]);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-
-  test("claim isolates exact-target freshness, bounds pending reads, and preserves Task results", async () => {
-    const messageCalls: AgentMessageRequest[] = [];
-    const upstream = {
-      protocolMajor: 1,
-      idempotencyKey: "claim-forward",
-      tasks: [],
-      claims: [],
-      assignmentReceipt: {
-        messageId: "receipt-message",
-        content: "claimed",
-        assignee: "@agent-a",
-        state: "started" as const,
-      },
-    };
-    const harness = await messageHarness(
-      async (request) => {
-        messageCalls.push(request);
-        return {
-          protocolMajor: 1,
-          idempotencyKey: request.idempotencyKey,
-          accepted: true,
-          attentionCount: 1,
-          messages: [messageRecord(9, "@alice", request.target)],
-        };
-      },
-      async () => upstream,
-    );
-    try {
-      await harness.deliver(3, "#unrelated");
-      const firstTouch = await harness.runtime.agentTask(
-        harness.context,
-        { operation: "claim", idempotencyKey: "first-touch", target: "#tasks", number: 7 },
-        harness.apiKey,
-      );
-      expect(firstTouch).toMatchObject({ state: "held", freshnessContextMode: "inline" });
-      expect(messageCalls[0]).toMatchObject({ target: "#tasks", limit: 3 });
-
-      const result = await harness.runtime.agentTask(
-        harness.context,
-        { operation: "claim", idempotencyKey: "claim-forward", target: "#tasks", number: 7 },
-        harness.apiKey,
-      );
-      expect(result).toBe(upstream);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-
-  test("an unavailable exact-target pending read holds instead of forwarding or consuming", async () => {
-    const messageCalls: AgentMessageRequest[] = [];
-    const taskCalls: TaskRequest[] = [];
-    const harness = await messageHarness(
-      async (request) => {
-        messageCalls.push(request);
-        return {
-          protocolMajor: 1,
-          idempotencyKey: request.idempotencyKey,
-          accepted: messageCalls.length > 1,
-          attentionCount: 1,
-          messages: [],
-        };
-      },
-      async (request) => {
-        taskCalls.push(request);
-        return { idempotencyKey: request.idempotencyKey, tasks: [] };
-      },
-    );
-    try {
-      await harness.deliver(5, "#tasks");
-      const command = {
-        operation: "update" as const,
-        idempotencyKey: "update",
-        target: "#tasks",
-        number: 7,
-      };
-
-      expect(await harness.runtime.agentTask(harness.context, command, harness.apiKey)).toEqual({
-        tasks: [],
-        state: "held",
-        freshnessContextMode: "inline",
-        heldMessages: [],
-        newMessageCount: 1,
-      });
-      expect(messageCalls[0]).toMatchObject({
-        target: "#tasks",
-        fromSequence: 5,
-        throughSequence: 5,
-        limit: 3,
-      });
-      expect(taskCalls).toHaveLength(0);
-
-      await harness.runtime.agentTask(harness.context, command, harness.apiKey);
-      expect(messageCalls).toHaveLength(2);
-      expect(taskCalls).toHaveLength(0);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-
-  test("amend bypasses local freshness preflight and forwards the complete result", async () => {
-    const messageCalls: AgentMessageRequest[] = [];
-    const upstream = {
-      protocolMajor: 1,
-      idempotencyKey: "amend",
-      tasks: [],
-      history: [],
-      resourceFollowup: {
-        id: "followup-a",
-        ownerAgentId: "agent-a",
-        owner: "@agent-a",
-        fireAt: "2026-09-10T12:00:00.000Z",
-        messageId: "message-a",
-        conversationId: "conversation-a",
-      },
-    };
-    const harness = await messageHarness(
-      async (request) => {
-        messageCalls.push(request);
-        throw new Error("amend must not read messages");
-      },
-      async () => upstream,
-    );
-    try {
-      await harness.deliver(2, "#tasks");
-      const result = await harness.runtime.agentTask(
-        harness.context,
-        { operation: "amend", idempotencyKey: "amend", target: "#tasks", number: 7, title: "new" },
-        harness.apiKey,
-      );
-      expect(result).toBe(upstream);
-      expect(messageCalls).toHaveLength(0);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-});
 
 const recovery = {
   resumeMessages: [],
