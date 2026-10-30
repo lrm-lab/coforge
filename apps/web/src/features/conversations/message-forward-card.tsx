@@ -7,6 +7,8 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { MessageAttachments } from "./attachment-card";
+import { ConversationIdProvider } from "./conversation-id";
+import { MessageBody } from "./message-body";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import type { ForwardedMessageView } from "./message-forward";
 import { forwardSourceTarget } from "./message-forward-model";
@@ -45,6 +47,10 @@ export function ForwardedMessageCard({
   // The snapshot keeps the original's body as stored, an image-only send's filename placeholder
   // included; the row drops that placeholder, and so does the card.
   const body = attachmentMessageDisplayBody({ body: forwarded.sourceBody, attachments });
+  const rawBody =
+    forwarded.sourceRawBody === undefined
+      ? undefined
+      : attachmentMessageDisplayBody({ body: forwarded.sourceRawBody, attachments });
   return (
     <div
       data-forwarded-card
@@ -92,7 +98,15 @@ export function ForwardedMessageCard({
             : ""}
         </time>
       </p>
-      {body && <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>}
+      {forwarded.sourceRawBody !== undefined && forwarded.sourceMentions
+        ? // The original's own words with their chips. A task it names is the source
+          // conversation's, so no conversation is in scope to read it from: it stays `task #N`.
+          rawBody && (
+            <ConversationIdProvider conversationId={undefined}>
+              <MessageBody body={rawBody} mentions={forwarded.sourceMentions} />
+            </ConversationIdProvider>
+          )
+        : body && <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>}
       <MessageAttachments attachments={attachments} />
     </div>
   );

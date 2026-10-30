@@ -19,6 +19,12 @@ model MessageForward {
   sourceSenderHandle     String
   sourceCreatedAt        DateTime
   sourceBody             String
+  /// The original's body as stored, with its `<@kind:...>` tokens, for the card to draw chips from.
+  /// `sourceBody` is computed from it and `sourceMentions` in the same step. Null on a forward made
+  /// before these columns, which the card draws from `sourceBody`.
+  sourceRawBody          String?
+  /// The original's mentions as the browser reads them (kind, actorId, handle, label), frozen.
+  sourceMentions         Json?
   createdAt              DateTime @default(now())
   message                Message  @relation("MessageForwardOf", fields: [messageId], references: [id], onDelete: Cascade)
   sourceMessage          Message? @relation("MessageForwardSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)

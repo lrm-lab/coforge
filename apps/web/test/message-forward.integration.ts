@@ -8,6 +8,8 @@ import { RedisClient } from "bun";
 
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import type { MentionRef } from "#src/features/conversations/mention-text";
+import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
 import {
   browserMessageFields,
   mapBrowserMessage,
@@ -228,6 +230,18 @@ test("forwards to a channel and a DM: a snapshot as plain text, the note's menti
     sourceBody: "ping @Bob about the plan",
   });
   expect(toChannel.forward!.sourceBody).not.toContain("<@");
+  // The card draws the original's chips from the stored body and the mentions as they were, and
+  // the plain text every other surface reads is computed from those same two.
+  expect(toChannel.forward).toMatchObject({
+    sourceRawBody: `ping <@human:${bob.id}> about the plan`,
+    sourceMentions: [{ kind: "user", actorId: bob.id, handle: `fwd-bob-${suffix}`, label: "Bob" }],
+  });
+  expect(toChannel.forward!.sourceBody).toBe(
+    peopleReadableBody(
+      toChannel.forward!.sourceRawBody!,
+      toChannel.forward!.sourceMentions as MentionRef[],
+    ),
+  );
   expect(toChannel.forward!.sourceCreatedAt).toEqual(message.createdAt);
 
   const toDm = await db.message.findFirstOrThrow({

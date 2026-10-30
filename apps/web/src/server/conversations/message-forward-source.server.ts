@@ -5,6 +5,7 @@ import {
   type AttachmentViewRow,
 } from "#src/server/attachments/attachment-view.server";
 import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attachment-comments.repositories.server";
+import type { MentionRef } from "#src/features/conversations/mention-text";
 import { ConversationHistory } from "./conversation-history.server";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { peopleReadableBody } from "./message-preview-line.server";
@@ -24,10 +25,28 @@ export type ForwardSource = {
   sourceSenderName: string;
   sourceSenderHandle: string;
   sourceCreatedAt: Date;
-  /** Mentions and references already read back as plain text, so storing it notifies no one. */
+  /** Mentions and references already read back as plain text, so storing it notifies no one. It is
+   * computed from `sourceRawBody` and `sourceMentions`, the one read of the original. */
   sourceBody: string;
+  /** The original's stored body, tokens included, and its mentions, for the card's chips. */
+  sourceRawBody: string;
+  sourceMentions: MentionRef[];
   attachments: AttachmentViewRow[];
 };
+
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+
+/**
+ * The body as the card needs it: a channel or thread token keeps its name and loses its ids. The
+ * card never links a token (a forward's reader may not see that channel), and a snapshot has no
+ * business carrying the ids of channels the reader cannot see.
+ */
+export function withoutChannelIds(body: string): string {
+  return body
+    .replace(new RegExp(`<@channel:${UUID}:`, "g"), `<@channel:${NIL_UUID}:`)
+    .replace(new RegExp(`<@thread:${UUID}:${UUID}:`, "g"), `<@thread:${NIL_UUID}:${NIL_UUID}:`);
+}
 
 const SOURCE_SELECT = {
   id: true,
@@ -105,6 +124,8 @@ export async function loadForwardSource(
   const sourceSenderHandle = browserSenderHandle(message.sender);
   if (message.forward || message.actionCard || sourceSenderHandle === undefined)
     throw new AppError("INVALID_INPUT", { errorId: FORWARD_NOT_FORWARDABLE });
+  const sourceMentions = message.mentions.map(browserMessageMention);
+  const sourceRawBody = withoutChannelIds(message.body);
   return {
     sourceMessageId,
     sourceConversationId,
@@ -113,7 +134,9 @@ export async function loadForwardSource(
     sourceSenderName: browserSenderName(message.sender),
     sourceSenderHandle,
     sourceCreatedAt: message.createdAt,
-    sourceBody: peopleReadableBody(message.body, message.mentions.map(browserMessageMention)),
+    sourceBody: peopleReadableBody(sourceRawBody, sourceMentions),
+    sourceRawBody,
+    sourceMentions,
     attachments: message.attachments,
   };
 }

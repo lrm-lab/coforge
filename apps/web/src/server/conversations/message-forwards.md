@@ -17,6 +17,11 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
 - `sourceBody` is stored as plain text (`peopleReadableBody`: a person reads as their name, an Agent as its
   `@handle`), so a forward notifies nobody the original named and a later edit or delete of the original changes
   nothing. Only the note's mentions resolve and notify, as in any message.
+  `sourceRawBody` (the original's stored body, tokens included) and `sourceMentions` (its mentions as the browser
+  reads them) are frozen beside it, for the card's chips only; `sourceBody` is computed from those two in the same
+  step. Nothing resolves the tokens in `sourceRawBody` into a mention or a wake, and a task it names is the
+  source conversation's, so the card draws it as `task #N` without reading any task. Both are null on a forward made
+  before they existed, which the card draws from `sourceBody`.
 - Each destination is its own send under the forwarder's normal permission to post there, with a key derived from the
   request id and the destination (`forwardIdempotencyKey`) in the existing message-request idempotency. A retry with
   the same request id answers a finished destination from its record without copying or sending, and sends only the

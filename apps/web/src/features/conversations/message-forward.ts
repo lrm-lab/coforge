@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { MentionRef } from "./mention-text";
+
 /** The longest note a forward carries: a message body's browser limit. */
 export const FORWARD_NOTE_MAX_LENGTH = 8_000;
 
@@ -17,6 +19,10 @@ export type ForwardedMessageView = {
   /** ISO timestamp the original was sent. */
   sourceCreatedAt: string;
   sourceBody: string;
+  /** The original as stored (its `<@kind:...>` tokens) with the mentions it was read with, when the
+   * forward kept them: the card draws chips from these, and from `sourceBody` when absent. */
+  sourceRawBody?: string;
+  sourceMentions?: MentionRef[];
   /** `name` is the channel's current name (its name when forwarded once it is gone), null for a DM. */
   sourceConversation: { id: string; name: string | null };
   sourceThreadRootId?: string;

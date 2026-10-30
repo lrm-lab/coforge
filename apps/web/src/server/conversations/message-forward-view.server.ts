@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { ForwardedMessageView } from "#src/features/conversations/message-forward";
+import type { MentionRef } from "#src/features/conversations/mention-text";
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import type { ForwardSource } from "./message-forward-source.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
@@ -14,6 +15,8 @@ export const BROWSER_FORWARD_SELECT = {
     sourceSenderHandle: true,
     sourceCreatedAt: true,
     sourceBody: true,
+    sourceRawBody: true,
+    sourceMentions: true,
   },
 } satisfies NonNullable<Prisma.MessageSelect["forward"]>;
 
@@ -29,6 +32,10 @@ export function browserForwarded(row: BrowserForwardRow): ForwardedMessageView {
     sourceSenderHandle: row.sourceSenderHandle,
     sourceCreatedAt: row.sourceCreatedAt.toISOString(),
     sourceBody: row.sourceBody,
+    // Both or neither: the card draws chips only from a body and the mentions it was read with.
+    ...(row.sourceRawBody !== null && Array.isArray(row.sourceMentions)
+      ? { sourceRawBody: row.sourceRawBody, sourceMentions: row.sourceMentions as MentionRef[] }
+      : {}),
     sourceConversation: {
       id: row.sourceConversationId,
       name: row.sourceConversationName,
@@ -101,6 +108,8 @@ export function recordForward(source: ForwardSource): SentMessageHook {
         sourceSenderHandle: source.sourceSenderHandle,
         sourceCreatedAt: source.sourceCreatedAt,
         sourceBody: source.sourceBody,
+        sourceRawBody: source.sourceRawBody,
+        sourceMentions: source.sourceMentions,
       },
     });
   };

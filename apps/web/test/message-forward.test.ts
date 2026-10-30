@@ -115,6 +115,8 @@ test("a daemon delivery carries the original in its body, and an empty note stil
 
 function forwardRow(sourceConversationId: string, sourceMessageId: string | null) {
   return {
+    sourceRawBody: null,
+    sourceMentions: null,
     sourceMessageId,
     sourceConversationId,
     sourceThreadRootId: null,
@@ -197,4 +199,45 @@ test("a viewer opens an original in a channel, or in a DM of theirs, and only wh
   // A page with no forward asks nothing.
   await attachForwardedAccess(db, WORKSPACE_ID, VIEWER, [plain]);
   expect(lookups).toHaveLength(1);
+});
+
+test("a forward that kept the original's body and mentions hands both to the card, and one that did not hands neither", () => {
+  const mentions = [{ kind: "user", actorId: VIEWER, handle: "bob", label: "Bob" }];
+  const kept = mapBrowserMessage(
+    browserRow({
+      ...forwardRow(SOURCE_CHANNEL, SOURCE_MESSAGE),
+      sourceRawBody: `ship it <@human:${VIEWER}> see <@task:68>`,
+      sourceMentions: mentions,
+    }),
+    WORKSPACE_ID,
+  );
+  expect(kept.forwarded).toMatchObject({
+    sourceBody: "ship it",
+    sourceRawBody: `ship it <@human:${VIEWER}> see <@task:68>`,
+    sourceMentions: mentions,
+  });
+  const before = mapBrowserMessage(
+    browserRow(forwardRow(SOURCE_CHANNEL, SOURCE_MESSAGE)),
+    WORKSPACE_ID,
+  );
+  expect(before.forwarded).not.toHaveProperty("sourceRawBody");
+  expect(before.forwarded).not.toHaveProperty("sourceMentions");
+  // A body without its mentions (or the reverse) is never half-drawn.
+  const half = mapBrowserMessage(
+    browserRow({ ...forwardRow(SOURCE_CHANNEL, SOURCE_MESSAGE), sourceRawBody: "x" }),
+    WORKSPACE_ID,
+  );
+  expect(half.forwarded).not.toHaveProperty("sourceRawBody");
+});
+
+test("a snapshot keeps a channel or thread token's name and drops its ids", async () => {
+  const { withoutChannelIds } =
+    await import("#src/server/conversations/message-forward-source.server");
+  const channel = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const root = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const nil = "00000000-0000-0000-0000-000000000000";
+  expect(
+    withoutChannelIds(`see <@channel:${channel}:product> and <@thread:${channel}:${root}:product>`),
+  ).toBe(`see <@channel:${nil}:product> and <@thread:${nil}:${nil}:product>`);
+  expect(withoutChannelIds("plain <@task:7> text")).toBe("plain <@task:7> text");
 });

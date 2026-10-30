@@ -11,7 +11,9 @@ export function ConversationIdProvider({
   conversationId,
   children,
 }: {
-  conversationId: string;
+  /** Undefined clears it for what renders below: a forwarded card's body names tasks of another
+   * conversation, which must not be read as this one's. */
+  conversationId: string | undefined;
   children: ReactNode;
 }) {
   return (
