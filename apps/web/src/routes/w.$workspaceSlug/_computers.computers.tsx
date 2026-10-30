@@ -8,8 +8,10 @@ const computersRoute = getRouteApi("/w/$workspaceSlug/_computers");
 export const Route = createFileRoute("/w/$workspaceSlug/_computers/computers")({
   // `?add=1` opens the add-a-Computer dialog (`_computers.tsx`): the link a person with no
   // Computer of their own is sent to.
-  validateSearch: (search: Record<string, unknown>): { add?: "1" } =>
-    search.add === "1" || search.add === 1 ? { add: "1" } : {},
+  validateSearch: (search: Record<string, unknown>): { add?: 1 } =>
+    // The router reads `1` as a number and writes a string back with quotes (`add="1"`), so the
+    // flag is the number.
+    search.add === "1" || search.add === 1 ? { add: 1 } : {},
   component: ComputersIndexPage,
 });
 

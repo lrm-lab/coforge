@@ -72,7 +72,7 @@ function ComputersPage() {
     from: "/w/$workspaceSlug/_computers/computers",
     shouldThrow: false,
   })?.add;
-  const [addComputerOpen, setAddComputerOpen] = useState(addRequested === "1");
+  const [addComputerOpen, setAddComputerOpen] = useState(addRequested === 1);
   // `/computers?add=1` opens the dialog once; closing it drops the parameter so the page shows
   // its usual selection.
   const dismissAdd = (open: boolean) => {
