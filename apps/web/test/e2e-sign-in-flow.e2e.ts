@@ -32,7 +32,7 @@ import {
  * account out.
  *
  * Opt-in like the other browser E2Es, but it brings its own servers (`e2e-sign-in-harness.ts`): a
- * stand-in for Authing's v3 sign-in API and a Web dev server with real sign-in pointed at it. It
+ * stand-in for Authing's v3 sign-in API and the Web's production build with real sign-in pointed at it. It
  * needs `agent-browser`, `openssl`, the local dev database and a local Redis, and deletes what it
  * created. Screenshots and the Web server's log are written under `.amp/e2e/sign-in-flow/`.
  *

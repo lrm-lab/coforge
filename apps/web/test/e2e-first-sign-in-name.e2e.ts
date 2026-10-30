@@ -20,7 +20,7 @@ import {
 
 /**
  * The first sign-in's full-name step, end to end, against real sign-in (a stand-in for Authing's
- * v3 sign-in API and a Web dev server signed in through it, `e2e-sign-in-harness.ts`).
+ * v3 sign-in API and the Web's production build signed in through it, `e2e-sign-in-harness.ts`).
  *
  * - A new person is asked for a display name at `/welcome`, starting from what the provider reported,
  *   before anything is made for them. Empty and too-long names are refused inline. Submitting

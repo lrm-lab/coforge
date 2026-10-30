@@ -25,7 +25,7 @@ import {
  * `e2e-first-sign-in-name.e2e.ts`): a stand-in for the part of Authing the Web server calls (the
  * v3 password and verification-code sign-in, the userinfo endpoint and token revocation) over HTTPS (a throwaway
  * self-signed certificate; the Web server trusts it through `NODE_EXTRA_CA_CERTS`, the browser
- * ignores certificate errors), a Web dev server with real sign-in (`COFORGE_DEV_SKIP_AUTH=0`)
+ * ignores certificate errors), the Web's production build with real sign-in (`COFORGE_DEV_SKIP_AUTH=0`)
  * pointed at it, and an `agent-browser` session that signs in through CoForge's own form. Not a
  * test file: it has no `.e2e.ts` suffix, so the e2e runner does not list it and `bun test` does
  * not run it.
@@ -147,6 +147,37 @@ async function clearSignInRateLimits(redisUrl: string) {
   }
 }
 
+const webRoot = join(import.meta.dir, "..");
+let built: Promise<void> | undefined;
+
+/**
+ * The Web the stacks serve: the production build, as it ships, made once per test process, so the
+ * e2e files of one `bun test` run share it. It replaces `apps/web/.output`. A `vite dev` server
+ * served it before (task #310): after many quick reloads of one page, its connection to the
+ * headless browser broke mid-load (the server took no more of that page's requests, the page never
+ * hydrated) while it still answered every request from outside the browser.
+ */
+function productionBuild(): Promise<void> {
+  built ??= (async () => {
+    const build = Bun.spawn([process.execPath, "run", "build"], {
+      cwd: webRoot,
+      // `bun test` runs with NODE_ENV=test, which would compile React's development JSX runtime
+      // into a server that then has none (as `managed-web.sh` does, build for production).
+      env: { ...process.env, NODE_ENV: "production" },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(build.stdout).text(),
+      new Response(build.stderr).text(),
+      build.exited,
+    ]);
+    if (code !== 0) throw new Error(`The Web build failed:\n${stdout}${stderr}`);
+  })();
+  return built;
+}
+
 /** The local PostgreSQL and Redis these e2es need, or a thrown error naming what is missing. */
 export function requireLocalServices(): { databaseUrl: string; redisUrl: string } {
   const databaseUrl = Bun.env.DATABASE_URL;
@@ -162,7 +193,7 @@ export function requireLocalServices(): { databaseUrl: string; redisUrl: string 
 }
 
 /**
- * Starts the stand-in Authing and a Web dev server signed in through it, and waits until the Web
+ * Starts the stand-in Authing and the Web (`productionBuild`) signed in through it, and waits until the Web
  * server answers. `stop` ends both, removes the certificate, and writes the Web server's log to
  * `<artifacts>/web.log`.
  */
@@ -198,36 +229,27 @@ export async function startSignInStack<Key extends string>(input: {
       tls: { cert: await Bun.file(certFile).text(), key: await Bun.file(keyFile).text() },
       ...(input.github ? { github: input.github } : {}),
     });
-    const server = Bun.spawn(
-      [
-        process.execPath,
-        "--bun",
-        "vite",
-        "dev",
-        "--port",
-        String(input.webPort),
-        "--host",
-        "127.0.0.1",
-        "--strictPort",
-      ],
-      {
-        cwd: join(import.meta.dir, ".."),
-        env: {
-          ...process.env,
-          AUTHING_ISSUER: fake.issuer,
-          AUTHING_APP_ID: appId,
-          AUTHING_APP_SECRET: appSecret,
-          COFORGE_DEV_SKIP_AUTH: "0",
-          COFORGE_SESSION_SECRET: randomBytes(32).toString("base64url"),
-          NODE_EXTRA_CA_CERTS: certFile,
-          COFORGE_LOG_SERVER_ERRORS: "1",
-          ...input.env,
-        },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
+    await productionBuild();
+    const server = Bun.spawn([process.execPath, ".output/server/index.mjs"], {
+      cwd: webRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        PORT: String(input.webPort),
+        AUTHING_ISSUER: fake.issuer,
+        AUTHING_APP_ID: appId,
+        AUTHING_APP_SECRET: appSecret,
+        COFORGE_DEV_SKIP_AUTH: "0",
+        COFORGE_SESSION_SECRET: randomBytes(32).toString("base64url"),
+        NODE_EXTRA_CA_CERTS: certFile,
+        COFORGE_LOG_SERVER_ERRORS: "1",
+        ...input.env,
       },
-    );
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     web = server;
     for (const stream of [server.stdout, server.stderr]) {
       webOutput.push(

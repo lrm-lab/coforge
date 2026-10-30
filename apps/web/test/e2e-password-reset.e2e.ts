@@ -96,11 +96,12 @@ test("setting a new password with a code sent by SMS or email", async () => {
       }
     }
     async function openResetPage() {
-      await browser(
-        "open",
-        `${origin}/login/reset-password?returnTo=${encodeURIComponent(returnTo)}`,
-      );
-      await waitFor(onResetPage);
+      const url = `${origin}/login/reset-password?returnTo=${encodeURIComponent(returnTo)}`;
+      // A fresh page asks for a destination only. Opening the page it is already on, the old one
+      // (its code fields showing) would otherwise pass for it until the new one replaces it.
+      const fresh = `${onResetPage} && !${resetCodeField}`;
+      await browser("open", url);
+      await waitFor(fresh);
     }
     /** Types the code and the new password, and presses the page's submit button. */
     async function submitReset(code: string, password: string) {
@@ -256,6 +257,11 @@ test("setting a new password with a code sent by SMS or email", async () => {
       await openResetPage();
       await requestCode(limitedEmail);
       await waitFor(`!!${resetCodeField}`);
+      // Counted only once the send has reached Authing, before the next one leaves the page.
+      while (
+        fake.refusedResetSends.filter((sent) => sent.destination === limitedEmail).length <= ask
+      )
+        await Bun.sleep(50);
     }
     expect(fake.refusedResetSends.filter((sent) => sent.destination === limitedEmail)).toHaveLength(
       CODE_SEND_DESTINATION_LIMIT,
