@@ -9,6 +9,7 @@ const event = {
   conversationId: "c",
   tasks: [
     {
+      id: "m",
       messageId: "m",
       conversationId: "c",
       number: 1,

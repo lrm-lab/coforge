@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
+import { storeAttachment } from "#src/server/attachments/attachment.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -129,10 +130,25 @@ test("unfollowing removes it unless mentioned, and leaving the private board rem
   expect(await listed("follower")).toEqual([]);
 
   expect(await listed("bystander")).toHaveLength(1);
+  // A seat is not authority: it lets the person upload only while the board lets them read.
+  const discussion = (await db.task.findFirstOrThrow({ where: { conversationId: boardId } }))
+    .discussionConversationId!;
+  const upload = () =>
+    storeAttachment(
+      db,
+      {
+        userId: people.bystander.id,
+        conversationId: discussion,
+        file: new File(["hi"], "hi.txt", { type: "text/plain" }),
+      },
+      async () => ({ put: async () => {}, remove: async () => {} }) as never,
+    );
+  expect((await upload()).fileName).toBe("hi.txt");
   await db.conversationMember.update({
     where: { id: people.bystander.memberId },
     data: { leftAt: new Date() },
   });
   expect(await listed("bystander")).toEqual([]);
+  await expect(upload()).rejects.toMatchObject({ code: "ACCESS_DENIED" });
   expect(await inbox.navAttention(workspaceId, people.bystander.id)).toEqual({ hasUnread: false });
 });

@@ -68,16 +68,31 @@ export async function storeAttachment(
   const conversation = await db.conversation.findFirst({
     where: {
       id: input.conversationId,
-      ...VISIBLE_CONVERSATION_WHERE,
-      AND: [TARGETABLE_CONVERSATION_WHERE],
       members: { some: { userId: input.userId, ...ACTIVE_MEMBER_WHERE } },
       OR: [
-        DIRECT_CONVERSATION_WHERE,
-        { workspace: { members: { some: { userId: input.userId } } } },
+        {
+          ...VISIBLE_CONVERSATION_WHERE,
+          AND: [TARGETABLE_CONVERSATION_WHERE],
+          OR: [
+            DIRECT_CONVERSATION_WHERE,
+            { workspace: { members: { some: { userId: input.userId } } } },
+          ],
+        },
+        // A task's own conversation: its board decides, below.
+        { kind: "task_thread" },
       ],
     },
-    select: { id: true, workspaceId: true },
+    select: { id: true, workspaceId: true, kind: true },
   });
+  // A seat in a task's own conversation is never authority: the person must read its board.
+  if (
+    conversation?.kind === "task_thread" &&
+    (await personConversationAccess(db, input.userId, {
+      id: conversation.id,
+      workspaceId: conversation.workspaceId,
+    })) !== "read"
+  )
+    throw new AppError("ACCESS_DENIED");
   if (!conversation) throw new AppError("ACCESS_DENIED");
   const id = crypto.randomUUID();
   const objectKey = `workspaces/${conversation.workspaceId}/attachments/${id}/original`;
