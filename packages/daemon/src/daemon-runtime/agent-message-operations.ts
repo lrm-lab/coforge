@@ -7,7 +7,6 @@ import {
   mentionsInContent,
   threadParentTarget,
   type AgentMessageContinuationOffer,
-  type AgentMessageRecord,
   type AgentMessageResponse,
   type LocalAgentMessageRequest,
 } from "@lrm/coforge-sdk/internal";
