@@ -458,8 +458,19 @@ async function readVersionWithBun(
     const { output, exitCode } = await versionProbeOutput(process);
     return exitCode === 0 ? lastWord(output) : undefined;
   } finally {
-    process.kill();
+    await killProbeChild(process);
   }
+}
+
+/**
+ * Ends a probe child and waits until it is really gone. On Windows a running executable keeps its
+ * image locked, and killing it takes effect asynchronously: a caller that removes the
+ * executable's directory right after the probe (a temp fixture, an uninstall) would get EBUSY
+ * without this wait.
+ */
+export async function killProbeChild(process: ReturnType<CodeAgentProbe["spawn"]>): Promise<void> {
+  process.kill?.();
+  await process.exited.catch(() => undefined);
 }
 
 function externalRuntimeDisplayName(provider: ExternalCodeAgentProvider): string {
