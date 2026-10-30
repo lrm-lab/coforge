@@ -475,7 +475,6 @@ export class AgentMessageOperations {
       this.#ports,
       agentId,
       request,
-      agentApiKey,
       (sendRequest, sendTarget) => this.#send(agentId, sendRequest, sendTarget, agentApiKey),
       (operation) => this.#prepareDraft(agentId, operation),
     );

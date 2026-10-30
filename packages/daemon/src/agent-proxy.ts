@@ -2,19 +2,15 @@ import { randomBytes } from "node:crypto";
 import { exactPath, pathParam } from "./agent-proxy-paths";
 import {
   encodeLocalReminderRequest,
-  isValidMentionSelectorArray,
-  isValidReactionEmoji,
   validateTaskRequest,
   validateWeeklyReportRequest,
-  type LocalAgentMessageRequest,
   type LocalReminderRequest,
   type TaskCommand,
   type WeeklyReportCommand,
   ATTACHMENT_MAX_BYTES,
-  isRecord,
   MESSAGE_ANCHOR_SOURCE,
-  UUID_LIKE_PATTERN,
   UUID_LIKE_SOURCE,
+  isRecord,
   utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -24,7 +20,6 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import {
-  invalidSearchPosition,
   parseActionPrepareRequest,
   parseChannelCommand,
   parseGithubCommitTrailersRequest,
@@ -37,11 +32,9 @@ import {
   parseInboxListQuery,
   parseInboxRequest,
   parseMentionPendingLimit,
-  parseSearchPosition,
 } from "./agent-proxy-request-parsers";
 import { forwardResponse, proxyFailureResponse } from "./agent-proxy-response";
 import * as domain from "./agent-proxy-domain-failures";
-import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
 import { validateWeeklyReportCollectCommand } from "#src/connection/weekly-report-collect";
 import { validateWeeklyReportKeyPointsCommand } from "#src/connection/weekly-report-key-points";
 import { validateWeeklyReportMemoryCommand } from "#src/connection/weekly-report-memory";
@@ -60,7 +53,6 @@ import type { AgentProxyRuntime } from "./agent-proxy-runtime";
 
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
 const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
-const UUID = UUID_LIKE_PATTERN;
 const LOCAL_ATTACHMENT_ROUTE_PREFIX = agentApiRoutes.local.attachments.path("");
 const LOCAL_ATTACHMENT_UPLOAD_PATH = agentApiRoutes.local.attachments.upload.path;
 // The cloud rejects attachments above `ATTACHMENT_MAX_BYTES`; the local upload hop allows that

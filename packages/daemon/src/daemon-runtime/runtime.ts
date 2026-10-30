@@ -187,7 +187,6 @@ import {
 } from "./mention-delivery-tracker";
 import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
-import { AgentMessageDraftStore } from "#src/persistence/agent-message-draft-store";
 import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { reminderDueItemId } from "#src/agent-app-inbox/registry";
 import { SystemCleaner, type SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";

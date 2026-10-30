@@ -44,7 +44,6 @@ export type {
   LocalMessageSearchFields,
   LocalAgentMessageRequest,
 } from "./local-agent-message-request";
-import type { LocalAgentMessageRequest } from "./local-agent-message-request";
 import type {
   AgentMessageRecord,
   LocalAttachment,

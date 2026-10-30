@@ -8,7 +8,6 @@ import { AgentPreflightError } from "./agent-preflight-error";
 import { AGENT_CONTINUATION_TTL_MS } from "#src/persistence/agent-continuation-store";
 import type { AgentContinuation } from "#src/persistence/agent-continuation-store";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
-import type { AgentMessageDraft } from "#src/persistence/agent-message-draft-store";
 import type { AgentMessageContinuationOffer } from "@lrm/coforge-sdk/internal";
 
 /**
@@ -21,7 +20,6 @@ export async function continueHeldSend(
   ports: AgentMessageOperationsPorts,
   agentId: string,
   request: LocalAgentMessageRequest,
-  agentApiKey: string,
   send: (request: LocalAgentMessageRequest, target: string) => Promise<AgentMessageResponse>,
   prepareDraft: <T>(operation: () => Promise<T>) => Promise<T>,
 ): Promise<AgentMessageResponse> {
