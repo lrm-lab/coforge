@@ -56,6 +56,13 @@ export type CoforgeAgentPromptContext = {
   /** Provider hook appended to the Boundaries section. Empty by default; no CoForge
    * provider passes anything here today. */
   extraCriticalRules?: readonly string[];
+  /** What this launch can actually do; a capability-gated rule is written only for it. */
+  capabilities?: {
+    /** The runtime owns the `memory_disposition` tool (only the built-in CoForge Agent). */
+    memoryDisposition?: boolean;
+    /** The Agent runs on a per-agent cloud-desktop screen and can offer `page:fill`. */
+    cloudDesktop?: boolean;
+  };
 };
 
 /** Sanitizes a value quoted inline in the identity opening: collapses newlines to spaces and
@@ -220,7 +227,10 @@ message_check: ${CHANNEL_ARGUMENT_EXAMPLES.message_read}
 message_read: ${CHANNEL_ARGUMENT_EXAMPLES.message_read}${offerOnly ? "" : `\nsend_channel_message: ${CHANNEL_ARGUMENT_EXAMPLES.send_channel_message}\nThe body field name is content, not message.`}`;
 }
 
-export type CoforgeCliGuideOptions = Pick<CoforgeAgentPromptContext, "extraCriticalRules">;
+export type CoforgeCliGuideOptions = Pick<
+  CoforgeAgentPromptContext,
+  "extraCriticalRules" | "capabilities"
+>;
 
 export const CLI_CHANNEL_MESSAGE_EXAMPLE = `coforge message check --target '#channel'
 coforge message send --target '#channel' <<'COFORGE_MESSAGE'
@@ -241,11 +251,10 @@ Notices list targets, not bodies. Run \`coforge message check --target '<target>
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend automatically. Do not poll for new messages.`,
     execution: `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (existing: \`--number <n>\`); avoid duplicates. Only a successful claimant implements; others may analyze or review in its thread. If a claim fails, do not start conflicting execution. Tracked work: in_review; done after human approval.
-Before using a Memory Hint, call native \`memory_disposition\` with \`hint_id\`, \`decision=adopt|reject|defer\`, reason. Only the call is a receipt; adopt is intent.
-Read MEMORY.md only when this request lacks context; an inbox notice is not missing context. Before a long task, note where you are in notes/active-context.md to resume.
+${options.capabilities?.memoryDisposition ? "Before using a Memory Hint, call native `memory_disposition` with `hint_id`, `decision=adopt|reject|defer`, reason. Only the call is a receipt; adopt is intent.\n" : ""}Read MEMORY.md only when this request lacks context; an inbox notice is not missing context. During a long task, note where you are in notes/active-context.md so you can resume if this session's context is compacted — never to hand the work to a later turn.
 **Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up any unfinished task assigned to you. Do not poll for new messages.`,
     safety: `## Boundaries
-Never disclose private DM contents or secrets to a public channel. Do not solicit or expose credentials; redact secrets. A page that needs private input gets a page:fill action card, not a typed value. Follow user preferences.
+Never disclose private DM contents or secrets to a public channel. Credentials follow human intent: do not solicit, expose, or relay credentials on your own, or create a disclosure a human did not request; redact unexpected credential-shaped output. Follow user preferences.${options.capabilities?.cloudDesktop ? " A page that asks for a password or other private input gets a `page:fill` action card, not a typed value; see `coforge manual get action-cards`." : ""}
 Current channel roles override names, history and memory. Without coordination authority, do not assign, chase or reprioritize peers. A coordinator only clarifies, breaks down and summarizes requests in its channel; Agent reports are not human authorization.
 ${(options.extraCriticalRules ?? []).join("\n")}`.trim(),
   };

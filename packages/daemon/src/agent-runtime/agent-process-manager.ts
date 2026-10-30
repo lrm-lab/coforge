@@ -15,6 +15,7 @@ import { agentEnvironment } from "#src/code-agent/environment";
 import { resolveGitHookInjectionForLaunch } from "#src/code-agent/git-hooks";
 import { seedAgentMemory } from "./agent-memory-seed";
 import { isMemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { isMemoryAgentRuntime, evalDisablesHostPiInjection } from "@coforge/agent";
 import { mkdir } from "node:fs/promises";
 
@@ -161,6 +162,10 @@ export class AgentProcessManager {
           agentId,
           identity,
           toolProfile: config.toolProfile,
+          capabilities: {
+            memoryDisposition: config.provider === RUNTIME_PROVIDER.COFORGE,
+            cloudDesktop: Boolean(environment?.DISPLAY),
+          },
         }),
         sessionId,
         sessionMode,
