@@ -201,7 +201,8 @@ export function TaskBoard<T extends BoardTask>({
             const created = await onCreateTask(titles, idempotencyKey);
             // One new Task opens its message in the chat; several stay on the board, where they
             // now show in To do.
-            if (created.length === 1) await conversation?.onOpenMessage(created[0]!.messageId);
+            const hostMessageId = created.length === 1 ? created[0]!.messageId : null;
+            if (hostMessageId) await conversation?.onOpenMessage(hostMessageId);
           }}
         />
       )}

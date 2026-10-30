@@ -23,15 +23,15 @@ function useHeldTasks(conversationId: string, listed: readonly TaskView[]) {
   const [shown, setShown] = useState(() => ({ conversationId, ids: new Set<string>() }));
   const known = shown.conversationId === conversationId ? shown.ids : undefined;
   const unseen = listed.filter(
-    (task) => !isFinishedStatus(task.status) && !known?.has(task.messageId),
+    (task) => !isFinishedStatus(task.status) && !known?.has(task.id),
   );
   let ids = known ?? new Set<string>();
   if (!known || unseen.length > 0) {
-    ids = new Set([...ids, ...unseen.map((task) => task.messageId)]);
+    ids = new Set([...ids, ...unseen.map((task) => task.id)]);
     setShown({ conversationId, ids });
   }
   return useMemo(
-    () => listed.filter((task) => !isFinishedStatus(task.status) || ids.has(task.messageId)),
+    () => listed.filter((task) => !isFinishedStatus(task.status) || ids.has(task.id)),
     [listed, ids],
   );
 }

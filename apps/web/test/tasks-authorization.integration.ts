@@ -138,7 +138,7 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         operation === "create"
           ? { operation, title: "Unauthorized create" }
           : operation === "convert"
-            ? { operation, messageId: seed.tasks[0]!.messageId }
+            ? { operation, messageId: seed.tasks[0]!.id }
             : operation === "claim"
               ? { operation, number: seed.tasks[0]!.number }
               : {

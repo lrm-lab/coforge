@@ -105,7 +105,7 @@ beforeAll(async () => {
       },
     )
   ).tasks[0];
-  reservedId = reserved.messageId;
+  reservedId = reserved.id;
   reservedUrl = `${proxy.origin}/en/w/${workspace.slug}/channel/${conversation.id}?view=tasks&task=${reserved.number}`;
 });
 afterAll(async () => {

@@ -51,7 +51,7 @@ function TaskPopupBoundary(props: OverviewTaskPopupProps) {
   if (conversationFailed)
     return (
       <TaskDetailDialog
-        key={task.messageId}
+        key={task.id}
         task={task}
         open
         onOpenChange={(open) => {
@@ -64,7 +64,7 @@ function TaskPopupBoundary(props: OverviewTaskPopupProps) {
     );
   return (
     <CatchBoundary
-      getResetKey={() => task.messageId}
+      getResetKey={() => task.id}
       errorComponent={NoFallback}
       onCatch={() => setConversationFailed(true)}
     >

@@ -447,7 +447,7 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
   ]);
   expect(
     await db.threadFollow.findMany({
-      where: { rootMessageId: agentTask.messageId },
+      where: { rootMessageId: agentTask.id },
       select: { memberId: true },
       orderBy: { memberId: "asc" },
     }),

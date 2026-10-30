@@ -127,12 +127,12 @@ function heldAfter(
   const byNumber = new Map(held.byNumber);
   let missing = held.missing;
   for (const { type, value } of changes) {
-    const known = byId.get(value.messageId);
+    const known = byId.get(value.id);
     if (known && byNumber.get(known.number) === known) byNumber.delete(known.number);
     // A delete here is also a row no read holds any more, so it says nothing about the Task.
-    if (type === "delete") byId.delete(value.messageId);
+    if (type === "delete") byId.delete(value.id);
     else {
-      byId.set(value.messageId, value);
+      byId.set(value.id, value);
       byNumber.set(value.number, value);
       if (missing.has(value.number))
         missing = new Set([...missing].filter((number) => number !== value.number));
@@ -181,7 +181,7 @@ export function createConversationTasks(
       },
       select: announced.over,
       queryClient,
-      getKey: (row: ConversationTask) => row.messageId,
+      getKey: (row: ConversationTask) => row.id,
       staleTime: READ_STALE_TIME_MS,
       // The one safety net besides the announcements: a focus reads each shown subset again.
       refetchOnWindowFocus: true,
@@ -212,14 +212,14 @@ export function createConversationTasks(
     const gone: number[] = [];
     for (const { tasks, deleted } of bursts) {
       for (const copy of tasks) {
-        const held = current(copy.messageId);
+        const held = current(copy.id);
         if (held && copy.revision <= held.revision) continue;
         if (
           isFinishedStatus(copy.status) ||
           (held ? isFinishedStatus(held.status) : copy.revision > 0)
         )
           finishedChanged = true;
-        next.set(copy.messageId, copy);
+        next.set(copy.id, copy);
         announced.changed(copy);
       }
       for (const messageId of deleted) {

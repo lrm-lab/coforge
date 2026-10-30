@@ -21,6 +21,7 @@ import type {
  * number from its store, so a change reaches only the readers of the Task it changed.
  */
 const task = (number: number, fields: Partial<ConversationTask> = {}): ConversationTask => ({
+  id: `message-${number}`,
   messageId: `message-${number}`,
   conversationId: "conversation-1",
   number,

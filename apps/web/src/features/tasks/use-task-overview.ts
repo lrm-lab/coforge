@@ -31,8 +31,8 @@ import { finishedTasksKey } from "./use-finished-tasks";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-const selectOrder = (overview: { tasks: readonly { messageId: string }[] }) =>
-  overview.tasks.map((task) => task.messageId);
+const selectOrder = (overview: { tasks: readonly { id: string }[] }) =>
+  overview.tasks.map((task) => task.id);
 
 // React access to the Tasks page's rows (`task-overview-collection.ts`).
 
@@ -81,8 +81,8 @@ export function useTaskOverview() {
       liveRows
         ? [...liveRows].sort(
             (left, right) =>
-              (position.get(left.messageId) ?? Infinity) -
-              (position.get(right.messageId) ?? Infinity),
+              (position.get(left.id) ?? Infinity) -
+              (position.get(right.id) ?? Infinity),
           )
         : // Until the live query is ready (the server render, the first tick after hydration) the
           // cache holds the same rows, already in order.

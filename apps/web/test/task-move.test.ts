@@ -3,6 +3,7 @@ import type { TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { getTaskMoveCommand, taskStatusOptions } from "#src/features/tasks/task-move";
 
 const task = (status: TaskStatus, owner: TaskView["owner"] = null): TaskView => ({
+  id: "message-1",
   messageId: "message-1",
   conversationId: "conversation-1",
   number: 7,

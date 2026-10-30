@@ -81,12 +81,13 @@ export async function postTaskMessage(
   // seat only keeps their read position; the board is what lets them read.
   const mentionedMembers = await tx.conversationMember.findMany({
     where: { id: { in: stored.mentions.map((mention) => mention.key) } },
-    select: { id: true, userId: true, agentId: true },
+    select: { id: true, userId: true, agentId: true, agent: { select: { deletedAt: true } } },
   });
   const seatOf = new Map<string, string>();
   for (const named of mentionedMembers) {
     seatOf.set(named.id, (await joinDiscussion(tx, workspaceId, conversationId, named)).id);
-    await followTask(tx, scope, taskId, named.id, "mentioned");
+    // A deleted Agent keeps its mention token, but follows nothing.
+    if (!named.agent?.deletedAt) await followTask(tx, scope, taskId, named.id, "mentioned");
   }
 
   const [followers, mentionedAgents] = await Promise.all([

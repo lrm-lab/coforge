@@ -517,7 +517,7 @@ test("TaskBoard pages Tasks updated at the same instant across a page boundary o
       rows.push(await f.task(f.channel, f.viewer.id, title, { status: "done", daysAgo: 1 }));
     const instant = new Date(Date.now() - 86_400_000);
     await f.db.task.updateMany({
-      where: { messageId: { in: rows.map(({ messageId }) => messageId) } },
+      where: { id: { in: rows.map(({ id }) => id) } },
       data: { updatedAt: instant },
     });
     const read = (cursor?: string | null) =>
@@ -529,13 +529,13 @@ test("TaskBoard pages Tasks updated at the same instant across a page boundary o
     let cursor: string | null | undefined;
     do {
       const page = await read(cursor);
-      seen.push(...page.tasks.map(({ messageId }) => messageId));
+      seen.push(...page.tasks.map(({ id }) => id));
       cursor = page.nextCursor;
     } while (cursor);
     // Same update time: the message id breaks the tie, highest first.
     expect(seen).toEqual(
       rows
-        .map(({ messageId }) => messageId)
+        .map(({ id }) => id)
         .sort()
         .reverse(),
     );

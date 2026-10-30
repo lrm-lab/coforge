@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 
 import { finishedCount, finishedRows } from "#src/features/tasks/finished-tasks";
 
-const row = (messageId: string, status: string) => ({ messageId, status });
+const row = (id: string, status: string) => ({ id, status });
 
 test("a finished group shows the Tasks moved into it on the page first, then its read pages, each once", () => {
   const onPage = [row("moved", "done"), row("open", "todo"), row("reopened", "todo")];
   const pages = [row("older", "done"), row("moved", "done"), row("reopened", "done")];
-  expect(finishedRows("done", onPage, pages).map(({ messageId }) => messageId)).toEqual([
+  expect(finishedRows("done", onPage, pages).map(({ id }) => id)).toEqual([
     "moved",
     "older",
   ]);

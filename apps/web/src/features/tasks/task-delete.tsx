@@ -54,7 +54,7 @@ export function TaskDeleteDialog({
               conversationId: task.conversationId,
             },
           });
-        writeTasks(task.conversationId, [{ tasks: [], deleted: [task.messageId] }]);
+        writeTasks(task.conversationId, [{ tasks: [], deleted: [task.id] }]);
         onOpenChange(false);
         onDeleted?.();
       }}

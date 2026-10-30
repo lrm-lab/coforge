@@ -209,7 +209,7 @@ export function useConversationTasks(conversationId: string) {
         // still changed Done or Closed.
         write(
           conversationId,
-          [{ tasks: result.tasks, deleted: deletedTask ? [deletedTask.messageId] : [] }],
+          [{ tasks: result.tasks, deleted: deletedTask ? [deletedTask.id] : [] }],
           input.operation === "delete" && !deletedTask,
         );
         return result.tasks;

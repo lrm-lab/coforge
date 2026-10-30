@@ -93,7 +93,7 @@ test("a conversation's Tasks are read by status, message window and number, neve
   await run({ operation: "claim", number: byTitle("Four").number });
   await run({ operation: "update", number: byTitle("Four").number, status: "done" });
   const sequences = await db.message.findMany({
-    where: { id: { in: created.map((task) => task.messageId) } },
+    where: { id: { in: created.map((task) => task.id) } },
     select: { id: true, sequence: true },
   });
   const sequenceOf = (title: string) =>

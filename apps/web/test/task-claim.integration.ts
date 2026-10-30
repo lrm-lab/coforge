@@ -117,7 +117,7 @@ test("A claim answers every selector, naming why a refused one failed and who ho
       observedAt: expect.stringMatching(ISO),
     });
     expect(result.claims).toEqual([
-      { number: open, messageId: created.tasks[0]!.messageId, success: true },
+      { number: open, messageId: created.tasks[0]!.messageId!, success: true },
       {
         number: held,
         success: false,
@@ -141,7 +141,7 @@ test("A claim answers every selector, naming why a refused one failed and who ho
     expect(result.tasks.map((task) => task.number)).toEqual([open]);
 
     // A refused Task named by its message still answers with its number.
-    const doneMessage = created.tasks[3]!.messageId;
+    const doneMessage = created.tasks[3]!.messageId!;
     const byMessage = await byAgent({ operation: "claim", messageId: doneMessage });
     expect(byMessage.claims).toEqual([
       { messageId: doneMessage, number: done, success: false, reason: "task is done" },

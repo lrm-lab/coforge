@@ -204,7 +204,7 @@ test.skipIf(!connectionString)(
       expect(updated).toEqual([{ conversationId: team.id, gone: true }]);
       // Open Tasks pages drop the channel's Tasks.
       expect(tasksDeleted).toEqual([
-        { conversationId: team.id, deleted: task.tasks.map(({ messageId }) => messageId) },
+        { conversationId: team.id, deleted: task.tasks.map(({ id }) => id) },
       ]);
       expect(await db.conversation.findUnique({ where: { id: other.id } })).not.toBeNull();
       expect(await errorOf(channels.deleteChannel(workspace.id, owner.id, team.id, storage))).toBe(

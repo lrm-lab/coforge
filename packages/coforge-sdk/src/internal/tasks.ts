@@ -56,9 +56,10 @@ export type TaskMember = {
 };
 
 export type TaskView = {
-  /** The task's id. For a task that started as a message it is that message's id; a task made under
-   * task conversations has no message, and this is its own id. */
-  messageId: string;
+  /** The task's own id; for a task that started as a message it equals that message's id. */
+  id: string;
+  /** The channel message the task sits on; null for a task made without one (task conversations). */
+  messageId: string | null;
   conversationId: string;
   number: number;
   title: string;

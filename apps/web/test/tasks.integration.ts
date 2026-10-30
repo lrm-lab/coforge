@@ -118,7 +118,7 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
     expect(delivered[0]).toMatchObject({ target: `@${alice.username}` });
     expect(
       await db.message.findUnique({
-        where: { id: directTask.tasks[0]!.messageId },
+        where: { id: directTask.tasks[0]!.id },
         select: {
           attachments: { select: { id: true } },
           deliveries: { select: { agentId: true } },
@@ -492,7 +492,7 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
         target: `#${channel.channelName}`,
         number: releasedReview.tasks[0]!.number,
         numbers: [releasedReview.tasks[0]!.number],
-        messageId: batchClosed.tasks[0]!.messageId,
+        messageId: batchClosed.tasks[0]!.id,
       },
     );
     expect(mixedSelectors.claims).toEqual([
@@ -517,7 +517,7 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
     expect(singleClaim.claims).toEqual([
       {
         number: releasedReview.tasks[0]!.number,
-        messageId: releasedReview.tasks[0]!.messageId,
+        messageId: releasedReview.tasks[0]!.messageId!,
         success: true,
       },
     ]);

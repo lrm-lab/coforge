@@ -93,7 +93,7 @@ export function TaskWorkflow<T extends TaskView>({
   const [active, setActive] = useState<T>();
   useDocumentDragCursor(active !== undefined);
   const [pending, setPending] = useState<{
-    messageId: string;
+    id: string;
     revision: number;
     status: TaskStatus;
   }>();
@@ -106,7 +106,7 @@ export function TaskWorkflow<T extends TaskView>({
   // Drag-over re-renders the board constantly; only regroup when the inputs change.
   const groups = useMemo(() => {
     const displayedTasks = tasks.map((task) =>
-      pending?.messageId === task.messageId && pending.revision === task.revision
+      pending?.id === task.id && pending.revision === task.revision
         ? { ...task, status: pending.status }
         : task,
     );
@@ -146,7 +146,7 @@ export function TaskWorkflow<T extends TaskView>({
       id={id}
       sensors={sensors}
       onDragStart={({ active: item }) =>
-        setActive(tasks.find((task) => task.messageId === item.id))
+        setActive(tasks.find((task) => task.id === item.id))
       }
       onDragCancel={() => setActive(undefined)}
       onDragEnd={(event) => void dropped(event)}
@@ -180,7 +180,7 @@ export function TaskWorkflow<T extends TaskView>({
             {(shown) => (
               <>
                 {group.tasks.slice(0, shown).map((task) => (
-                  <div key={task.messageId} aria-busy={pending?.messageId === task.messageId}>
+                  <div key={task.id} aria-busy={pending?.id === task.id}>
                     {renderTask(task, controls(task))}
                   </div>
                 ))}
@@ -225,7 +225,7 @@ export function TaskWorkflow<T extends TaskView>({
     if (!command) return;
     saving.current = true;
     setError(false);
-    setPending({ messageId: task.messageId, revision: task.revision, status });
+    setPending({ id: task.id, revision: task.revision, status });
     try {
       await onMove(task, command);
     } catch {
@@ -245,7 +245,7 @@ export function TaskWorkflow<T extends TaskView>({
 }
 
 function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
-  const drag = useDraggable({ id: task.messageId, disabled });
+  const drag = useDraggable({ id: task.id, disabled });
   return (
     <ButtonUtility
       ref={drag.setNodeRef}

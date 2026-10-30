@@ -121,7 +121,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     // Each thread is followed by its assignee and by the Task's author, as a first reply enrolls.
     expect(
       await db.threadFollow.count({
-        where: { rootMessageId: { in: created.tasks.map((task) => task.messageId) } },
+        where: { rootMessageId: { in: created.tasks.map((task) => task.id) } },
       }),
     ).toBe(4);
     expect(await repo.readPendingAgentDeliveries(workspace.id, assigned!.id)).toEqual(
@@ -164,7 +164,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
       workspace.id,
       human.id,
       channel.id,
-      created.tasks[0]!.messageId,
+      created.tasks[0]!.id,
     );
     expect(browser.replies.find((message) => message.id === receipt.messageId)).toMatchObject({
       senderKind: "system",
@@ -278,7 +278,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
       workspace.id,
       human.id,
       direct.id,
-      directCreated.tasks[0]!.messageId,
+      directCreated.tasks[0]!.id,
     );
     expect(
       directBrowser.replies.find(

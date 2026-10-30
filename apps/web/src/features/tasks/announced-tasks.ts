@@ -14,16 +14,16 @@ export function createAnnouncedTasks() {
   return {
     over: <Row extends TaskView>(rows: readonly Row[]): Row[] =>
       rows.flatMap((row) => {
-        if (deleted.has(row.messageId)) return [];
-        const newer = announced.get(row.messageId);
+        if (deleted.has(row.id)) return [];
+        const newer = announced.get(row.id);
         if (!newer) return [row];
         if (newer.revision >= row.revision) return [{ ...row, ...newer }];
-        announced.delete(row.messageId);
+        announced.delete(row.id);
         return [row];
       }),
     changed: (view: TaskView) => {
-      announced.set(view.messageId, view);
-      deleted.delete(view.messageId);
+      announced.set(view.id, view);
+      deleted.delete(view.id);
     },
     deleted: (messageId: string) => {
       announced.delete(messageId);

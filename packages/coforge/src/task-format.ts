@@ -37,7 +37,7 @@ function boardRow(task: TaskView): string {
   const creatorMark = departure(task.creator);
   const creator = ` (by @${task.creator.handle}${creatorMark ? ` [${creatorMark}]` : ""})`;
   const details = task.description ? `\n  details: ${fenceMessageBody(task.description)}` : "";
-  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} msg=${shortId(task.messageId)} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
+  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} msg=${task.messageId ? shortId(task.messageId) : "-"} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
 }
 
 /** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
@@ -55,7 +55,7 @@ function ownRow(task: TaskView): string {
   const mark = departure(task.creator);
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
   const title = task.title.replace(/\s+/g, " ").trim();
-  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} msg=${shortId(task.messageId)}${resourceReceipt(task)}${times(task)} ${title}`;
+  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} msg=${task.messageId ? shortId(task.messageId) : "-"}${resourceReceipt(task)}${times(task)} ${title}`;
 }
 
 /**
@@ -92,16 +92,26 @@ function assigneeField(task: TaskView): string {
   return `assignee=${task.owner ? `@${task.owner.handle}` : "unassigned"}`;
 }
 
-/** The command that replies in a Task's own thread: its conversation target plus its short id. */
-function threadReply(target: string, task: TaskView): string {
-  return `coforge message send --target "${target}:${shortId(task.messageId)}"`;
+/** The command that replies in a Task's own thread: its conversation target plus its short id. A
+ * Task without a channel message has no such thread. */
+function threadReplies(target: string, tasks: readonly TaskView[]): string[] {
+  return tasks.flatMap((task) => {
+    const reply = threadReply(target, task);
+    return reply ? [`#${task.number} → ${reply}`] : [];
+  });
+}
+
+function threadReply(target: string, task: TaskView): string | null {
+  return task.messageId
+    ? `coforge message send --target "${target}:${shortId(task.messageId)}"`
+    : null;
 }
 
 /** What `coforge task create` made: each new Task, the assignee's receipt, and each Task's thread. */
 export function formatTasksCreated(target: string, result: TaskResult): string {
   const rows = result.tasks.map(
     (task) =>
-      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} msg=${shortId(task.messageId)}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
+      `#${task.number} [${task.status}] ${assigneeField(task)} claimedAt=${task.claimedAt ?? "null"} msg=${task.messageId ? shortId(task.messageId) : "-"}${resourceReceipt(task)} "${fenceMessageBody(task.title)}"`,
   );
   const receipt = (result.assignmentReceipts ?? []).flatMap((receipt) => [
     "",
@@ -113,7 +123,7 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
       `Existing task found in ${target}; no duplicate was created:`,
       ...rows,
       "Claim or coordinate in this task's thread before starting work:",
-      ...result.tasks.map((task) => `#${task.number} → ${threadReply(target, task)}`),
+      ...threadReplies(target, result.tasks),
     ].join("\n");
   return [
     `Created ${result.tasks.length} task(s) in ${target}:`,
@@ -121,17 +131,17 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
     ...receipt,
     "",
     "To follow up in each task's thread:",
-    ...result.tasks.map((task) => `#${task.number} → ${threadReply(target, task)}`),
+    ...threadReplies(target, result.tasks),
   ].join("\n");
 }
 
 /** The Task `coforge task convert` made from a message, and its thread. */
 export function formatTaskConverted(target: string, task: TaskView): string {
   return [
-    `Converted msg=${shortId(task.messageId)} to task #${task.number} [${task.status}] ${assigneeField(task)} "${fenceMessageBody(task.title)}"`,
-    "",
-    "To follow up in the task's thread:",
-    threadReply(target, task),
+    `Converted msg=${task.messageId ? shortId(task.messageId) : "-"} to task #${task.number} [${task.status}] ${assigneeField(task)} "${fenceMessageBody(task.title)}"`,
+    ...(threadReply(target, task)
+      ? ["", "To follow up in the task's thread:", threadReply(target, task)!]
+      : []),
   ].join("\n");
 }
 

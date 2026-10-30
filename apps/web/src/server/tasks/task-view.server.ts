@@ -182,7 +182,8 @@ export function taskView(
 ): TaskView {
   const resourceReceipt = task.resourceReceipt;
   return {
-    messageId: task.id,
+    id: task.id,
+    messageId: task.messageId,
     conversationId: task.conversationId,
     number: task.number,
     // A title converted from a message keeps that message's stored tokens; they read back as text

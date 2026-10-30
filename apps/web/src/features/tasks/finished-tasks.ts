@@ -23,15 +23,15 @@ export type FinishedGroup = Awaited<ReturnType<typeof loadFinishedTaskSummary>>[
  * pages were read), then the read pages. A Task appears once, and the board's own copy wins, so a
  * Task moved out of the group leaves it before the pages are read again.
  */
-export function finishedRows<T extends { messageId: string; status: string }>(
+export function finishedRows<T extends { id: string; status: string }>(
   status: FinishedStatus,
   onPage: readonly T[],
   pages: readonly T[],
 ): T[] {
-  const held = new Set(onPage.map(({ messageId }) => messageId));
+  const held = new Set(onPage.map(({ id }) => id));
   return [
     ...onPage.filter((task) => task.status === status),
-    ...pages.filter((task) => !held.has(task.messageId)),
+    ...pages.filter((task) => !held.has(task.id)),
   ];
 }
 

@@ -241,7 +241,7 @@ export async function claimTasks(
       );
       const task = result.tasks[0]!;
       tasks.push(task);
-      claims.push({ number: task.number, messageId: task.messageId, success: true });
+      claims.push({ number: task.number, messageId: task.messageId ?? undefined, success: true });
     } catch (error) {
       if (error instanceof ClaimRefused)
         claims.push({

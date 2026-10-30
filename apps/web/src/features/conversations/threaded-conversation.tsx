@@ -109,7 +109,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     closeTask: closeTaskReference,
   } = taskPopup ?? conversationTaskPopup;
   const openTask = useNumberedTask(conversation.conversationId, openTaskNumber) ?? taskPopup?.task;
-  const openTaskMessageId = openTask?.messageId;
+  const openTaskMessageId = openTask?.messageId ?? undefined;
   const { root: openTaskRoot, reads: taskRootReads } = useTaskPopupRoot(
     conversation,
     openTaskMessageId,

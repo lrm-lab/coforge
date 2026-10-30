@@ -31,7 +31,7 @@ test.skipIf(!connectionString)(
       });
       expect(before.assignmentReceipts).toMatchObject([{ assignee: `@${agent.name}` }]);
       const beforeMessage = await db.message.findUniqueOrThrow({
-        where: { id: before.tasks[0]!.messageId },
+        where: { id: before.tasks[0]!.id },
         select: { deliveries: { select: { agentId: true } } },
       });
       expect(beforeMessage.deliveries.map((delivery) => delivery.agentId)).toContain(agent.id);
@@ -62,7 +62,7 @@ test.skipIf(!connectionString)(
         title: "No delivery after delete",
       });
       const afterMessage = await db.message.findUniqueOrThrow({
-        where: { id: after.tasks[0]!.messageId },
+        where: { id: after.tasks[0]!.id },
         select: { deliveries: { select: { agentId: true } } },
       });
       expect(afterMessage.deliveries.map((delivery) => delivery.agentId)).not.toContain(agent.id);
@@ -157,7 +157,7 @@ test.skipIf(!connectionString)(
       const taskLine = async () =>
         (
           await conversations.readMessages(workspace.id, reader.id, "#general", {
-            around: created.tasks[0]!.messageId,
+            around: created.tasks[0]!.id,
           })
         ).find((message) => message.task)!.task;
       // The handle carries no "@", like every other handle an Agent reads.

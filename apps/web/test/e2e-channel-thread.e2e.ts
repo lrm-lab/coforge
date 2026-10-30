@@ -269,7 +269,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
         result: ".e2e-task-review.json",
         cli: [
           ["message", "read", "--target", taskTarget],
-          ["task", "claim", "--target", "#general", "--message-id", task.messageId.slice(0, 8)],
+          ["task", "claim", "--target", "#general", "--message-id", task.id.slice(0, 8)],
           ["task", "create", "--target", "#general", "--title", "Independent follow-up"],
           [
             "task",
@@ -291,7 +291,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       user.id,
       general.id,
       `@${alpha.agent.name} please verify this Task`,
-      task.messageId,
+      task.id,
     );
     await waitForFiles(join(alphaRoot, ".e2e-task-review.json"));
     const reviewOutputs = await Bun.file(join(alphaRoot, ".e2e-task-review.json")).json();
@@ -348,7 +348,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       user.id,
       general.id,
       "Verified, approved. Please mark this done.",
-      task.messageId,
+      task.id,
     );
     await waitForFiles(join(alphaRoot, ".e2e-task-done.json"));
     const doneOutputs = await Bun.file(join(alphaRoot, ".e2e-task-done.json")).json();

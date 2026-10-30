@@ -111,7 +111,7 @@ test("a person's new task has no message in the channel and is followed by them"
   expect(task.sourceMessageId).toBeUndefined();
   expect(
     await db.taskFollow.count({
-      where: { taskId: task.messageId, memberId: people.actor.memberId },
+      where: { taskId: task.id, memberId: people.actor.memberId },
     }),
   ).toBe(1);
 });

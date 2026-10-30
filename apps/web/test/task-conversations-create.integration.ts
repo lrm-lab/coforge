@@ -114,6 +114,7 @@ test("with the experiment off a message is still claimed as a task, as before", 
   await experiment(false);
   const claimed = await run("worker", { operation: "claim", messageId: sourceId });
   expect(claimed.tasks[0]!.messageId).toBe(sourceId);
+  expect(claimed.tasks[0]!.id).toBe(sourceId);
   await db.task.deleteMany({ where: { workspaceId } });
 });
 
@@ -133,8 +134,10 @@ test("with it on, create makes a task with no message in the channel, followed b
   // No message in the channel: not for the task, not for the creation, not for the assignment.
   expect(await db.message.count({ where: { conversationId: channelId } })).toBe(before);
 
-  const task = await db.task.findUniqueOrThrow({ where: { id: view.messageId } });
+  const task = await db.task.findUniqueOrThrow({ where: { id: view.id } });
   expect(task.messageId).toBeNull();
+  expect(view.messageId).toBeNull();
+  expect(view.id).toBe(task.id);
   expect(task.sourceMessageId).toBe(sourceId);
   const follows = await db.taskFollow.findMany({ where: { taskId: task.id } });
   expect(follows.map((f) => [f.memberId, f.reason]).sort()).toEqual(

@@ -3,7 +3,7 @@ syntax = "proto3";
 package coforge.rpc.v1;
 
 message TaskView {
-  string message_id = 1;
+  optional string message_id = 1;
   string conversation_id = 2;
   uint32 number = 3;
   string title = 4;
@@ -19,6 +19,7 @@ message TaskView {
   bool description_is_null = 14;
   bool resource_receipt_recorded_at_is_null = 15;
   bool claimed_at_is_null = 16;
+  string id = 17;
 }
 
 message TaskResourceReceipt {

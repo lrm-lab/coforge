@@ -39,7 +39,8 @@ const member = z.object({
 // Loose: fields this schema does not name (a resource receipt, a channel reference) pass through
 // to the row instead of being dropped.
 const taskView = z.looseObject({
-  messageId: z.string().min(1),
+  id: z.string().min(1),
+  messageId: z.string().min(1).nullable(),
   conversationId: z.string().min(1),
   number: z.number().int(),
   title: z.string(),

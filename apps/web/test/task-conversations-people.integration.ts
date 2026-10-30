@@ -165,3 +165,11 @@ test("opening the conversation seats the person without a message or a follow", 
   expect(seat).not.toBeNull();
   expect(await db.taskFollow.count({ where: { memberId: people.friend.memberId } })).toBe(before);
 });
+
+test("a deleted Agent that is mentioned does not follow the task", async () => {
+  await db.taskFollow.deleteMany({ where: { taskId, memberId: agent.memberId } });
+  await db.agent.update({ where: { id: agent.id }, data: { deletedAt: new Date() } });
+  await conversations.reply(as("friend"), ref(), { body: `@${agent.name} still there?` });
+  expect(await followOf(agent.memberId)).toBeNull();
+  await db.agent.update({ where: { id: agent.id }, data: { deletedAt: null } });
+});

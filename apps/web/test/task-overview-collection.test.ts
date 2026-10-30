@@ -14,6 +14,7 @@ import {
  * saved; a refused change puts the row back.
  */
 const task = (number: number, fields: Partial<TaskView> = {}): TaskView => ({
+  id: `message-${number}`,
   messageId: `message-${number}`,
   conversationId: "conversation-1",
   number,

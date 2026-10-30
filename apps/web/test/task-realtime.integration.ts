@@ -130,7 +130,7 @@ test("a channel's Task writes announce each changed Task to the Workspace, once 
   ]);
 
   await run({ operation: "delete", number: second!.number });
-  expect(drain()).toEqual([{ tasks: [], deleted: [second!.messageId], userId: undefined }]);
+  expect(drain()).toEqual([{ tasks: [], deleted: [second!.id], userId: undefined }]);
 });
 
 test("a private channel's Task writes are announced only to its people, never the Workspace", async () => {

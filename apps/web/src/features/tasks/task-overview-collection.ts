@@ -67,7 +67,7 @@ export function createTaskOverview(
       queryKey: taskOverviewQueryKey(workspaceId),
       queryFn: () => api.load(),
       queryClient,
-      getKey: (row: OverviewTaskRow) => row.messageId,
+      getKey: (row: OverviewTaskRow) => row.id,
       select: (overview) => announced.over(overview.tasks),
     }),
   );
@@ -79,7 +79,7 @@ export function createTaskOverview(
       conversationId: row.conversationId,
     });
     if (command.operation === "delete") {
-      if (tasks.has(row.messageId)) tasks.utils.writeDelete([row.messageId]);
+      if (tasks.has(row.id)) tasks.utils.writeDelete([row.id]);
       return;
     }
     // The server's copy of each Task it changed replaces the shown one; the page's own fields
@@ -87,13 +87,13 @@ export function createTaskOverview(
     // page, which the rows do not hold, joins them once it is unfinished again, with the row's
     // page fields.
     for (const view of result.tasks) {
-      if (!tasks.has(view.messageId)) {
-        if (view.messageId === row.messageId && !isFinishedStatus(view.status))
+      if (!tasks.has(view.id)) {
+        if (view.id === row.id && !isFinishedStatus(view.status))
           tasks.utils.writeInsert({ ...row, ...view });
         continue;
       }
       try {
-        tasks.utils.writeUpdate({ ...view, messageId: view.messageId });
+        tasks.utils.writeUpdate(view);
       } catch (error) {
         // The Task left the page meanwhile: the next read shows the list as it is.
         if (!(error instanceof UpdateOperationItemNotFoundError)) throw error;
@@ -104,8 +104,8 @@ export function createTaskOverview(
   const move = createOptimisticAction<{ row: OverviewTaskRow; command: OverviewTaskCommand }>({
     onMutate: ({ row, command }) => {
       const status = statusAfter(command);
-      if (status && tasks.has(row.messageId))
-        tasks.update(row.messageId, (draft) => {
+      if (status && tasks.has(row.id))
+        tasks.update(row.id, (draft) => {
           draft.status = status;
         });
     },
@@ -142,20 +142,20 @@ export function createTaskOverview(
     let needsRead = false;
     for (const event of events) {
       for (const view of event.tasks) {
-        const known = newest.get(view.messageId);
-        if (!known || view.revision > known.revision) newest.set(view.messageId, view);
+        const known = newest.get(view.id);
+        if (!known || view.revision > known.revision) newest.set(view.id, view);
       }
       for (const messageId of event.deleted) deleted.add(messageId);
     }
     const updates: TaskView[] = [];
     for (const view of newest.values()) {
-      if (deleted.has(view.messageId)) continue;
-      const row = tasks.get(view.messageId);
+      if (deleted.has(view.id)) continue;
+      const row = tasks.get(view.id);
       // A finished Task the rows do not hold stays out: Done and Closed are read on their own.
       if (!row) needsRead ||= !isFinishedStatus(view.status);
       else if (view.revision > row.revision) updates.push(view);
     }
-    for (const view of newest.values()) if (!deleted.has(view.messageId)) announced.changed(view);
+    for (const view of newest.values()) if (!deleted.has(view.id)) announced.changed(view);
     for (const messageId of deleted) announced.deleted(messageId);
     const removed = [...deleted].filter((messageId) => tasks.has(messageId));
     if (updates.length > 0 || removed.length > 0)
