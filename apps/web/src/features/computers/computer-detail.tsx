@@ -173,10 +173,16 @@ export function ComputerDetail({
         showDesktop={isCloud && computer.ownedByCurrentUser}
         online={computer.online}
         restart={
-          onRestart
+          // Its owner, or a Workspace owner or admin (`mayRestartComputer`), may restart it.
+          onRestart && (computer.ownedByCurrentUser || computer.canManageAgents)
             ? {
                 pending: restartState === "pending",
-                disabled: upgrading || restartState === "pending" || restartState === "accepted",
+                // Nothing is running on an offline Computer to restart.
+                disabled:
+                  !computer.online ||
+                  upgrading ||
+                  restartState === "pending" ||
+                  restartState === "accepted",
                 onPress: runRestart,
               }
             : undefined

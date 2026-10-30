@@ -2,7 +2,6 @@ import { ProgressBar } from "react-aria-components";
 import { ArrowUp } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -83,23 +82,23 @@ export function ComputerTile({
           <Spinner className="size-full" />
         </ProgressBar>
       ) : (
+        // A mark, not a control: the row around it opens the Computer, whose Version row offers
+        // the upgrade to whoever may make it.
         updateAvailableVersion && (
-          <Tooltip title={m.computer_new_version_tooltip({ version: updateAvailableVersion })}>
-            <TooltipTrigger className={cn("absolute rounded-full", dims.badgeOffset)}>
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "flex items-center justify-center rounded-full border-2 border-primary bg-fg-success-primary",
-                  dims.badge,
-                )}
-              >
-                <ArrowUp className={cn(dims.badgeIcon, "text-white")} />
-              </span>
-              <span className="sr-only">
-                {m.computer_new_version({ version: updateAvailableVersion })}
-              </span>
-            </TooltipTrigger>
-          </Tooltip>
+          <span className={cn("absolute", dims.badgeOffset)}>
+            <span
+              aria-hidden="true"
+              className={cn(
+                "flex items-center justify-center rounded-full border-2 border-primary bg-fg-success-primary",
+                dims.badge,
+              )}
+            >
+              <ArrowUp className={cn(dims.badgeIcon, "text-white")} />
+            </span>
+            <span className="sr-only">
+              {m.computer_new_version({ version: updateAvailableVersion })}
+            </span>
+          </span>
         )
       )}
       {online !== undefined && (

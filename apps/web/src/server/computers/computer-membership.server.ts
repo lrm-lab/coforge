@@ -21,6 +21,39 @@ export async function isWorkspaceMemberComputer(
   return Boolean(connection);
 }
 
+/**
+ * Who may restart a Computer: its owner, and the Workspace's owners and admins, who must be able to
+ * free a Computer that hangs. A restart stops every Agent on it, so an ordinary member may not.
+ */
+export function mayRestartComputer(
+  viewer: { userId: string; role: string | undefined },
+  computer: { ownerId: string | null },
+): boolean {
+  return computer.ownerId === viewer.userId || viewer.role === "owner" || viewer.role === "admin";
+}
+
+/** `mayRestartComputer` for a Computer connected to the Workspace the User is a member of. */
+export async function canRestartWorkspaceComputer(
+  db: Pick<PrismaClient, "workspaceComputer">,
+  scope: { userId: string; workspaceId: string; computerId: string },
+): Promise<boolean> {
+  const connection = await db.workspaceComputer.findFirst({
+    where: { workspaceId: scope.workspaceId, computerId: scope.computerId },
+    select: {
+      computer: { select: { ownerId: true } },
+      workspace: {
+        select: { members: { where: { userId: scope.userId }, select: { role: true } } },
+      },
+    },
+  });
+  const member = connection?.workspace.members[0];
+  return Boolean(
+    connection &&
+    member &&
+    mayRestartComputer({ userId: scope.userId, role: member.role }, connection.computer),
+  );
+}
+
 /** Removes an owner's local Computer from one Workspace while preserving its identity elsewhere. */
 export async function removeComputerFromWorkspace(
   db: Pick<PrismaClient, "computer" | "$transaction">,

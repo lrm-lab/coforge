@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { decodeComputerRestartIntent } from "@lrm/coforge-sdk/internal";
 
+import { isAppErrorCode } from "#src/lib/app-error";
 import { RestartComputer } from "#src/server/computers/restart-computer.server";
 import { RedisComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 
@@ -237,4 +238,22 @@ test("a late ready cannot replace a newer process identity", async () => {
   ]);
 
   expect((await store.status(scope, "restart-1"))?.status).toBe("accepted");
+});
+
+test("a restart of a Computer no process has reported from is refused as offline", async () => {
+  const publications: Uint8Array[] = [];
+  const restart = new RestartComputer(
+    { canRestart: async () => true },
+    { publish: async (_channel, data) => void publications.push(data) },
+    new RedisComputerRestartStore(memoryRedis()),
+  );
+
+  const refused = await restart
+    .execute(
+      { userId: "user-1", workspaceId: "workspace-1" },
+      { computerId: "computer-1", requestId: "restart-1" },
+    )
+    .catch((error: unknown) => error);
+  expect(isAppErrorCode(refused, "COMPUTER_OFFLINE")).toBe(true);
+  expect(publications).toEqual([]);
 });

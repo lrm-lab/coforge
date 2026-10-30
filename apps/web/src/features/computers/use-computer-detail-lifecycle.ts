@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 
 import { useAppToast } from "#src/components/ui/toast";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
 import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
@@ -139,10 +140,15 @@ export function useComputerDetailLifecycle(input: {
               toast.error(m.computer_restart_error());
             }
           }),
-        () =>
+        // Refused rather than late: say why, not that the deadline passed.
+        (error: unknown) =>
           settle(() => {
             setRestartState("error");
-            toast.error(m.computer_restart_error());
+            toast.error(
+              isAppErrorCode(error, "COMPUTER_OFFLINE")
+                ? m.computer_restart_offline()
+                : m.computer_restart_failed(),
+            );
           }),
       );
   };

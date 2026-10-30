@@ -2,7 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
+import {
+  canRestartWorkspaceComputer,
+  isWorkspaceMemberComputer,
+} from "#src/server/computers/computer-membership.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import { RestartComputer } from "#src/server/computers/restart-computer.server";
 import { readRestartStatusInputSchema, restartComputerInputSchema } from "./computer.schemas";
@@ -15,7 +18,7 @@ export const restartComputer = createServerFn({ method: "POST" })
     const { user, db, workspaceId } = context;
     return new RestartComputer(
       {
-        canRestart: (scope) => isWorkspaceMemberComputer(db, scope),
+        canRestart: (scope) => canRestartWorkspaceComputer(db, scope),
       },
       createCentrifugoServerApi(),
       getComputerRestartStore(),

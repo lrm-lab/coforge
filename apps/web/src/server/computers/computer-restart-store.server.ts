@@ -1,3 +1,4 @@
+import { AppError } from "#src/lib/app-error";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type { ComputerRestartStatus } from "#src/features/computers/computer.schemas";
@@ -68,7 +69,8 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
     const existing = this.parseRestart(await this.redis.get(key));
     if (existing) return { status: this.publicStatus(existing), created: false };
     const current = this.parseIdentity(await this.redis.get(this.identityKey(scope)));
-    if (!current) throw new Error("Computer process identity is unavailable");
+    // No process has reported in: nothing is running there to restart.
+    if (!current) throw new AppError("COMPUTER_OFFLINE");
     const record: StoredRestart = {
       requestId,
       status: "accepted",
