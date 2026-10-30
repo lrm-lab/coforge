@@ -23,7 +23,8 @@ import {
   resolveChannelAuthority,
 } from "./channel-authority.server";
 import { softLeaveMember, upsertChannelMembers } from "./channel-changes.server";
-import { announceJoinedOrLeft } from "./conversation-realtime.server";
+import { announceJoinedOrLeft } from "./channel-membership-signals.server";
+
 import {
   announceNotifiedPeople,
   claimMentionActions,
@@ -98,6 +99,7 @@ export async function leaveChannel(
     change: "left",
     userIds: [userId],
     private: channel.visibility === CHANNEL_VISIBILITY.PRIVATE,
+    db,
   });
   return { left: true };
 }
@@ -137,6 +139,7 @@ export async function removeChannelMember(
       change: "left",
       userIds: "userId" in target ? [target.userId] : [],
       private: channel.visibility === CHANNEL_VISIBILITY.PRIVATE,
+      db,
     });
   if (wasMember && "agentId" in target)
     await inboxPurge.purge({

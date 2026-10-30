@@ -26,7 +26,7 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   private channel's `channel.created.v1`, `channel.updated.v1` and Task changes
   go to its active people's own channels (`channelAudience`,
   `conversationSignalScopes`), never the Workspace channel, and leaving it ends
-  the leaver's subscriptions to it (`announceConversationsRevoked`).
+  the leaver's subscriptions to it (`announceConversationsRevoked` (`channel-membership-signals.server.ts`)).
 - A person who cannot read a channel gets the `NOT_FOUND` a missing one gets, and
   reading comes before authority: `viewerChannel`, `memberChannel` and
   `findChannelById` read through the rule, so an owner or admin outside a private

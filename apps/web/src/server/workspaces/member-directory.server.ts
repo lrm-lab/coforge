@@ -7,10 +7,11 @@ import {
   type WorkspaceMemberRole,
 } from "./member-role.server";
 import {
-  announceConversationsRevoked,
   announceMemberChanged,
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
+import { announceConversationsRevoked } from "#src/server/conversations/channel-membership-signals.server";
+
 import {
   createCentrifugoServerApi,
   reconnectDaemon,
@@ -46,7 +47,12 @@ export type WorkspaceMemberDirectoryStore = {
   removeMember(
     workspaceId: string,
     userId: string,
-  ): Promise<{ leftChannelIds: string[]; computerIds: string[] }>;
+  ): Promise<{
+    leftChannelIds: string[];
+    /** The channels and their task conversations: what the person no longer reads. */
+    revokedConversationIds: string[];
+    computerIds: string[];
+  }>;
 };
 
 /** Who tells a departed member's Computers, after the commit, that their key is gone. */
@@ -112,13 +118,16 @@ export class WorkspaceMemberDirectory {
    * ends their subscriptions to those channels (they read none of them now) and tells their
    * Computers' daemons to reconnect. All best effort: the removal has committed. */
   private async removeFromWorkspace(workspaceId: string, userId: string) {
-    const { leftChannelIds, computerIds } = await this.store.removeMember(workspaceId, userId);
+    const { leftChannelIds, revokedConversationIds, computerIds } = await this.store.removeMember(
+      workspaceId,
+      userId,
+    );
     await Promise.all([
       announceMemberChanged(this.realtime, { workspaceId, conversationIds: leftChannelIds }),
       announceConversationsRevoked(this.realtime, {
         workspaceId,
         userIds: [userId],
-        conversationIds: leftChannelIds,
+        conversationIds: revokedConversationIds,
       }),
       this.reconnectDaemons(workspaceId, computerIds),
     ]);

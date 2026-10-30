@@ -1,3 +1,4 @@
+import { withTaskDiscussions } from "#src/server/conversations/task-discussion-revoke.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
@@ -111,7 +112,11 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
       const { computerIds } = await unlinkDepartingMemberComputers(tx, { workspaceId, userId });
       const leftChannelIds = activeChannels.map((row) => row.conversationId);
       await recordMemberRemoved(tx, workspaceId, { userId, leftChannelIds });
-      return { leftChannelIds, computerIds };
+      return {
+        leftChannelIds,
+        revokedConversationIds: await withTaskDiscussions(tx, leftChannelIds),
+        computerIds,
+      };
     });
   }
 }

@@ -22,9 +22,10 @@ import {
   announceChannelCreated,
   channelInfoOf,
   announceMemberChanged,
-  announceJoinedOrLeft,
   type ConversationRealtime,
 } from "./conversation-realtime.server";
+import { announceJoinedOrLeft } from "./channel-membership-signals.server";
+
 import { channelAudience } from "./conversation-signal-scope.server";
 import { hasChannelAdminAuthority } from "./channel-authority.server";
 import type { AgentDisplay } from "#src/server/agents/agent-display.server";
@@ -444,6 +445,7 @@ export class AgentChannelManagement {
         change: "left",
         userIds: removedUserIds,
         private: channel.visibility === CHANNEL_VISIBILITY.PRIVATE,
+        db: this.db,
       });
     if (removedAgentId)
       await this.inboxPurge.purge({

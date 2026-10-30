@@ -6,6 +6,7 @@ import {
   DIRECT_CONVERSATION_WHERE,
   VISIBLE_CONVERSATION_WHERE,
 } from "./active-member.server";
+import { taskDiscussionAccess, taskDiscussionBoardSelect } from "./task-discussion-access.server";
 import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
 
 /**
@@ -107,15 +108,20 @@ export async function personConversationAccess(
       OR: [
         { ...DIRECT_CONVERSATION_WHERE, members: { some: { userId, ...ACTIVE_MEMBER_WHERE } } },
         { channelName: { not: null }, workspace: { members: { some: { userId } } } },
+        // A task's own conversation: its board decides (`taskDiscussionAccess`).
+        { kind: "task_thread", workspace: { members: { some: { userId } } } },
       ],
     },
     select: {
       channelName: true,
       visibility: true,
+      kind: true,
       members: { where: { userId, ...ACTIVE_MEMBER_WHERE }, select: { id: true } },
+      ...taskDiscussionBoardSelect(userId),
     },
   });
   if (!conversation) return undefined;
+  if (conversation.kind === "task_thread") return taskDiscussionAccess(conversation);
   if (conversation.channelName === null) return "read";
   return canReadChannel(conversation, conversation.members.length > 0) ? "read" : "private";
 }
@@ -129,6 +135,24 @@ export function readableConversationWhere(workspaceId: string, reader: { userId:
         OR: [
           visibleChannelWhere(workspaceId, reader),
           { ...VISIBLE_CONVERSATION_WHERE, ...DIRECT_CONVERSATION_WHERE },
+          // A task's own conversation: readable as its board is, never by its own seats.
+          {
+            kind: "task_thread",
+            taskDiscussionOf: {
+              conversation: {
+                OR: [
+                  visibleChannelWhere(workspaceId, reader),
+                  {
+                    ...VISIBLE_CONVERSATION_WHERE,
+                    ...DIRECT_CONVERSATION_WHERE,
+                    members: {
+                      some: { workspaceId, userId: reader.userId, ...ACTIVE_MEMBER_WHERE },
+                    },
+                  },
+                ],
+              },
+            },
+          },
         ],
       },
     ],

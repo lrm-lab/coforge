@@ -256,7 +256,7 @@ function memoryStore(): WorkspaceMemberDirectoryStore & {
       channels.delete(key);
       const computerIds = computers.get(key) ?? [];
       computers.delete(key);
-      return { leftChannelIds, computerIds };
+      return { leftChannelIds, revokedConversationIds: leftChannelIds, computerIds };
     },
   };
 }

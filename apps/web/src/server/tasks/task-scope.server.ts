@@ -28,8 +28,12 @@ export async function resolveTaskScope(
       where: {
         id: command.conversationId,
         workspaceId: principal.workspaceId,
-        // A private channel the person is not in is a missing one.
-        ...readableConversationWhere(principal.workspaceId, { userId: principal.userId }),
+        // A private channel the person is not in is a missing one; a task's own conversation is
+        // not a board.
+        AND: [
+          readableConversationWhere(principal.workspaceId, { userId: principal.userId }),
+          TASK_SCOPE_WHERE,
+        ],
       },
       select: {
         id: true,

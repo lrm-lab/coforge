@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import {
   CentrifugoConversationRealtime,
-  announceJoinedOrLeft,
   announceViewerEvent,
 } from "#src/server/conversations/conversation-realtime.server";
+import { announceJoinedOrLeft } from "#src/server/conversations/channel-membership-signals.server";
+
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 
 /** Records what reaches each channel, whether one `publish` or one `broadcast` carried it, and

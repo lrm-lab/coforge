@@ -1,6 +1,7 @@
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { canReadChannel } from "./channel-read-access.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { taskDiscussionAccess, taskDiscussionBoardSelect } from "./task-discussion-access.server";
 import { AppError } from "#src/lib/app-error";
 import {
   attachmentView,
@@ -221,7 +222,9 @@ export class ConversationHistory {
           directKey: true,
           channelName: true,
           visibility: true,
+          kind: true,
           members: { where: { userId }, select: { id: true, leftAt: true } },
+          ...taskDiscussionBoardSelect(userId),
         },
       }),
     ]);
@@ -230,6 +233,12 @@ export class ConversationHistory {
     const viewer = conversation.members[0];
     const viewerMemberId = viewer?.id;
     const activeMemberId = viewer?.leftAt === null ? viewer.id : undefined;
+    if (conversation.kind === "task_thread") {
+      // A task's own conversation reads as its board does; the viewer's seat in it only keeps
+      // their read position, and only while they still read the board.
+      if (taskDiscussionAccess(conversation) !== "read") throw new AppError("NOT_FOUND");
+      return { viewerMemberId, activeMemberId, direct: true };
+    }
     if (conversation.channelName !== null) {
       // A private channel the viewer is not in is a missing one.
       if (!canReadChannel(conversation, activeMemberId !== undefined))
