@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
 import { z } from "zod";
 import { authenticateDaemon, parseBody } from "#src/server/auth/daemon-request.server";
 import {
@@ -63,6 +64,8 @@ function buildAgentLaunchIdentity(agent: {
   computerId: string;
   computer: LaunchIdentityComputer;
   apps: AgentLaunchApp[];
+  /** The Workspace's features as of this launch; a daemon older than the field ignores it. */
+  features: { taskConversations: boolean };
 }) {
   const runtimeContext = buildAgentRuntimeContext(agent);
   const identity = {
@@ -74,6 +77,7 @@ function buildAgentLaunchIdentity(agent: {
     ...(agent.description ? { description: agent.description } : {}),
     ...(Object.keys(runtimeContext).length > 0 ? { runtimeContext } : {}),
     ...(agent.apps.length > 0 ? { apps: agent.apps } : {}),
+    features: agent.features,
   };
   return Object.keys(identity).length > 0 ? identity : undefined;
 }
@@ -185,6 +189,11 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
           apps: await agentLaunchApps(db, agent.workspaceId, agent.id),
+          features: {
+            taskConversations: await taskConversationsEnabled(db, {
+              workspaceId: agent.workspaceId,
+            }),
+          },
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

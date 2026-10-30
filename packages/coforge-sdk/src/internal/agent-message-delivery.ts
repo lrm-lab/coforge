@@ -35,6 +35,9 @@ export type AgentMessageDelivery = {
   /** When the server created the message, in epoch milliseconds: not when the daemon received
    * it, which differs for a message replayed after a reconnect. Absent from an older server. */
   createdAtMs?: number;
+  /** The Workspace's features as of this delivery; absent from an older server. A session
+   * launched with another value restarts before it takes the input. */
+  features?: { taskConversations: boolean };
 };
 
 export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
@@ -72,6 +75,7 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       mentionDelivery: mentionDeliveryEnvelopeMessage(value.mentionDelivery),
       memoryHint: memoryHintMessage(value.memoryHint),
       createdAtMs: value.createdAtMs === undefined ? undefined : BigInt(value.createdAtMs),
+      taskConversations: value.features?.taskConversations,
     }),
   );
 }
@@ -118,6 +122,9 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
     ...(value.memoryHint ? { memoryHint: readMemoryHint(value.memoryHint) } : {}),
     ...(value.createdAtMs !== undefined
       ? { createdAtMs: safeUint64(value.createdAtMs, "Agent message creation time") }
+      : {}),
+    ...(value.taskConversations !== undefined
+      ? { features: { taskConversations: value.taskConversations } }
       : {}),
   };
 }

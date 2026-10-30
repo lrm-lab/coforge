@@ -314,6 +314,9 @@ message AgentMessageDelivery {
   // When the server created the message, in epoch milliseconds. Unset from a server that predates
   // it. Not when the daemon received it: a message replayed after a reconnect differs.
   optional uint64 created_at_ms = 20;
+  // Whether task conversations are on in the Workspace as of this delivery. Unset from a server
+  // that predates it: the daemon then keeps what its session was launched with.
+  optional bool task_conversations = 21;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.

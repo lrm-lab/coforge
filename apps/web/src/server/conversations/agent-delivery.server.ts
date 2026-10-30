@@ -11,6 +11,7 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import type { PendingAgentDelivery } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
+import { deliveryFeatures } from "./agent-delivery-features.server";
 import { withForwarded } from "./agent-message-view.server";
 import { agentReadableBody, type MessageMentionRef } from "./mentions.server";
 
@@ -50,7 +51,7 @@ export function encodeAgentDelivery(
 /** One committed delivery to push, and the Computer its Agent is on (none: not pushed). */
 export type AgentDeliveryPush = Omit<
   Parameters<typeof encodeAgentDelivery>[0],
-  "workspaceId" | "mentionDelivery"
+  "workspaceId" | "mentionDelivery" | "features"
 > & { computerId: string | null };
 
 /** One push to a running Agent: its publication, or the encoder's refusal of it. */
@@ -76,6 +77,7 @@ export class AgentDeliveryPublisher {
     pushes: readonly AgentDeliveryPush[],
   ): Promise<PromiseSettledResult<void>[]> {
     if (!pushes.length) return [];
+    const features = await deliveryFeatures(workspaceId);
     const envelopes = await this.mentions?.issue(
       workspaceId,
       pushes.map((push) => ({
@@ -93,6 +95,7 @@ export class AgentDeliveryPublisher {
           ...push,
           workspaceId,
           mentionDelivery: envelopes?.get(push.deliveryId),
+          ...(features ? { features } : {}),
         });
         return [{ publication: { channel: daemonControlChannel(workspaceId, computerId), data } }];
       } catch (reason) {
@@ -107,12 +110,13 @@ export class AgentDeliveryPublisher {
 }
 
 /** Pushes a delivery the Agent has not received again, as the repository reads it back. */
-export function publishPendingDelivery(
+export async function publishPendingDelivery(
   api: Pick<CentrifugoServerApi, "publish">,
   scope: { workspaceId: string; computerId: string; agentId: string },
   delivery: PendingAgentDelivery,
   tracked?: { mentionDelivery?: MentionDeliveryEnvelope },
 ): Promise<void> {
+  const features = await deliveryFeatures(scope.workspaceId);
   return api.publish(
     daemonControlChannel(scope.workspaceId, scope.computerId),
     encodeAgentDelivery({
@@ -124,6 +128,7 @@ export function publishPendingDelivery(
       mentions: [],
       // A tracked mention is re-sent as one, whatever its stored mention rows say.
       ...(tracked ? { mentionsAgent: true, mentionDelivery: tracked.mentionDelivery } : {}),
+      ...(features ? { features } : {}),
     }),
   );
 }

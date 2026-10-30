@@ -7,6 +7,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { deliveryFeatures } from "#src/server/conversations/agent-delivery-features.server";
 import { taskConversationsGate } from "#src/server/tasks/task-conversations-gate.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -84,4 +85,22 @@ test("the Workspace's switch decides, and only where the Workspace flag is on", 
   expect(await taskConversationsGate(db, { workspaceId: crypto.randomUUID(), agentId })()).toBe(
     false,
   );
+});
+
+test("a delivery carries the same answer, and none when the Workspace cannot be read", async () => {
+  const previous = Bun.env.DATABASE_URL;
+  Bun.env.DATABASE_URL = connectionString;
+  try {
+    await install(true);
+    const experiments = new PrismaExperimentsRepository(db);
+    await experiments.write(workspaceId, "taskConversations", true);
+    expect(await deliveryFeatures(workspaceId)).toEqual({ taskConversations: true });
+    await experiments.write(workspaceId, "taskConversations", false);
+    expect(await deliveryFeatures(workspaceId)).toEqual({ taskConversations: false });
+    Bun.env.DATABASE_URL = "";
+    expect(await deliveryFeatures(workspaceId)).toBeUndefined();
+  } finally {
+    if (previous === undefined) delete Bun.env.DATABASE_URL;
+    else Bun.env.DATABASE_URL = previous;
+  }
 });
