@@ -60,6 +60,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # `id-token: write` mints the GitHub OIDC token the step exchanges for the read-only
+      # coforge-release-reader role, which reads the two feeds' buckets over the accelerate
+      # endpoint - the reliable channel that anonymous CDN reads to China proved not to be.
+      id-token: write
     timeout-minutes: 10
     steps:
       # The workflow's own commit (`main`), with history: the verifier is this run's, and the
@@ -96,17 +100,42 @@ jobs:
           RELEASE_NOTES_ZH_CN: ${{ inputs.notes_zh_cn }}
         run: bun scripts/release/release-notes.ts --check --version "$INPUT_VERSION"
 
+      - name: Request an OIDC token for Alibaba Cloud
+        env:
+          AUDIENCE: sts.aliyuncs.com
+        run: |
+          token_file="$RUNNER_TEMP/aliyun-oidc-token"
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
+            | jq -r '.value' > "$token_file"
+          chmod 600 "$token_file"
+          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+          # The RAM role's trust policy matches these three claims exactly; print them so a
+          # trust-policy mismatch is diagnosable from the run log. The payload is public run
+          # metadata; the signature (the only secret part) is never printed.
+          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
+          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+
       - name: Require the version staging published from this commit
         env:
           INPUT_COMMIT: ${{ inputs.commit }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_STAGING_VERSION: ${{ inputs.staging_version }}
           WITHOUT_STAGING: ${{ inputs.without_staging }}
+          # The read-only release-reader role: `oss:GetObject` on both feed buckets, nothing else.
+          # `--feed-oss` reads each feed over the accelerate endpoint through it; the role's trust
+          # policy binds this repo's main ref so a token from anywhere else cannot assume it.
+          ALIBABA_CLOUD_ROLE_ARN: ${{ vars.COFORGE_FEED_READER_ROLE_ARN }}
+          ALIBABA_CLOUD_OIDC_PROVIDER_ARN: acs:ram::1085194890307801:oidc-provider/github-actions
+          ALIBABA_CLOUD_ROLE_SESSION_NAME: github-actions-${{ github.run_id }}
+          ALIBABA_CLOUD_ECS_METADATA_DISABLED: "true"
         run: |
           flags=()
           if [ "$WITHOUT_STAGING" = true ]; then flags=(--without-staging); fi
           if [ -n "$INPUT_STAGING_VERSION" ]; then flags+=("--staging-version=$INPUT_STAGING_VERSION"); fi
-          # Production's feed is public: its latest is read anonymously.
+          # The feed reads ride the release-reader role over the OSS accelerate endpoint; the
+          # anonymous CDN fallback stays for a run the variable is not set on.
+          if [ -n "$ALIBABA_CLOUD_ROLE_ARN" ]; then flags+=("--feed-oss"); fi
           bun scripts/release/production-candidate.ts "${flags[@]}" \
             --production-feed-url=https://releases.coforge.cn computer \
             "$INPUT_VERSION" "$INPUT_COMMIT" https://releases-staging.coforge.cn
