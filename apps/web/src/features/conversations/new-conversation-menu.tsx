@@ -33,7 +33,7 @@ export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () =
           aria-label={label}
           className="shrink-0"
         />
-        <Dropdown.Popover placement="bottom start" className="w-37">
+        <Dropdown.Popover placement="bottom start" className="w-auto min-w-37">
           <Dropdown.Menu
             aria-label={label}
             onAction={(key) =>
