@@ -7,10 +7,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { TASK_V2_USE_CREATE, TaskBoard } from "#src/server/tasks/task-board.server";
-import {
-  ASSIGNEE_CONVERSATIONS_OFF,
-  SourceMessageTaken,
-} from "#src/server/tasks/task-conversation-creation.server";
+import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
@@ -97,15 +94,6 @@ export async function handleAgentTaskPost(
         {
           error: `Task #${error.taskNumber} (${error.holder}) is already working on that message. Add to that task's conversation, or create yours beside it with --alongside.`,
           code: error.code,
-        },
-        { status: 409 },
-      );
-    if (error instanceof AppError && error.errorId === ASSIGNEE_CONVERSATIONS_OFF)
-      return Response.json(
-        {
-          error:
-            "That Agent's owner has not turned on Task conversations (Settings → Experiments), so it cannot be given a task made with them. Assign someone else, or leave it unassigned.",
-          code: ASSIGNEE_CONVERSATIONS_OFF,
         },
         { status: 409 },
       );

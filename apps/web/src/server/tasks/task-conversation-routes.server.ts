@@ -13,11 +13,11 @@ import type { TaskConversations } from "./task-conversations.server";
  */
 type Principal = { workspaceId: string; agentId: string };
 
-/** Whether the Agent's owner has task conversations on (the `taskConversations` experiment). */
+/** Whether the Workspace has task conversations on (the `taskConversations` experiment). */
 export type TaskConversationsGate = () => Promise<boolean>;
 
 const OFF_MESSAGE =
-  "Task conversations are not turned on for this Agent's owner. Turn on Task conversations in Settings → Experiments to use this command.";
+  "Task conversations are not turned on in this Workspace. A Workspace owner or admin can turn them on in Settings → Experiments.";
 type Service = Pick<
   TaskConversations,
   "view" | "read" | "reply" | "follow" | "unfollow" | "following"
@@ -42,7 +42,7 @@ const asRef = (body: { channel: string; task_number: number }) => ({
 
 class TaskConversationsOff extends Error {}
 
-/** The experiment decides for the Agent's owner; with it off the routes answer as if absent. */
+/** The Workspace's experiment decides; with it off the routes answer as if absent. */
 async function requireOn(gate: TaskConversationsGate) {
   if (!(await gate())) throw new TaskConversationsOff();
 }

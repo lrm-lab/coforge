@@ -5,9 +5,9 @@ import type { ExperimentsRepository } from "./experiments.server";
 export class PrismaExperimentsRepository implements ExperimentsRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async read(userId: string) {
-    const row = await this.db.userPreference.findUnique({
-      where: { userId },
+  async read(workspaceId: string) {
+    const row = await this.db.workspace.findUnique({
+      where: { id: workspaceId },
       select: { experiments: true },
     });
     const stored = row?.experiments;
@@ -16,14 +16,12 @@ export class PrismaExperimentsRepository implements ExperimentsRepository {
       : {};
   }
 
-  /** One statement, so two tabs setting different keys never overwrite each other. */
-  async write(userId: string, key: string, enabled: boolean) {
+  /** One statement, so two admins setting different keys never overwrite each other. */
+  async write(workspaceId: string, key: string, enabled: boolean) {
     await this.db.$executeRaw`
-      INSERT INTO user_preferences ("userId", experiments, "createdAt", "updatedAt")
-      VALUES (${userId}::uuid, jsonb_build_object(${key}::text, ${enabled}::boolean), NOW(), NOW())
-      ON CONFLICT ("userId") DO UPDATE
-        SET experiments = COALESCE(user_preferences.experiments, '{}'::jsonb)
-              || jsonb_build_object(${key}::text, ${enabled}::boolean),
-            "updatedAt" = NOW()`;
+      UPDATE workspaces
+      SET experiments = COALESCE(experiments, '{}'::jsonb)
+            || jsonb_build_object(${key}::text, ${enabled}::boolean)
+      WHERE id = ${workspaceId}::uuid`;
   }
 }

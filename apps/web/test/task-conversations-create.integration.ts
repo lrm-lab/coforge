@@ -18,7 +18,6 @@ let directory = "";
 let workspaceId = "";
 let channelId = "";
 let channelName = "";
-let ownerId = "";
 let sourceId = "";
 const agents = {} as Record<"maker" | "worker", { id: string; name: string; memberId: string }>;
 const board = new TaskBoard(db, { reader: "agent" });
@@ -34,7 +33,6 @@ beforeAll(async () => {
   const owner = await db.user.create({
     data: { username: `tcc-owner-${suffix}`, displayName: "Owner" },
   });
-  ownerId = owner.id;
   channelName = `tcc-${suffix}`;
   const workspace = await db.workspace.create({
     data: {
@@ -110,7 +108,7 @@ afterAll(async () => {
 });
 
 const experiment = (enabled: boolean) =>
-  new PrismaExperimentsRepository(db).write(ownerId, "taskConversations", enabled);
+  new PrismaExperimentsRepository(db).write(workspaceId, "taskConversations", enabled);
 
 test("with the experiment off a message is still claimed as a task, as before", async () => {
   await experiment(false);
@@ -210,28 +208,6 @@ test("a source message from another channel is not found", async () => {
   await expect(
     run("maker", { operation: "create", title: "Leak", messageId: foreign.id }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
-});
-
-test("a task cannot be given to an Agent whose owner has task conversations off", async () => {
-  const other = await db.user.create({
-    data: { username: `tcc-other-owner-${suffix}`, displayName: "Other" },
-  });
-  await db.workspaceMembership.create({ data: { workspaceId, userId: other.id, role: "member" } });
-  const stranger = await db.agent.create({
-    data: {
-      workspaceId,
-      name: `tcc-stranger-${suffix}`,
-      displayName: "stranger",
-      ownerId: other.id,
-      runtimeConfig: {},
-    },
-  });
-  await db.conversationMember.create({
-    data: { workspaceId, conversationId: channelId, agentId: stranger.id },
-  });
-  await expect(
-    run("maker", { operation: "create", title: "Not for them", assignee: `@${stranger.name}` }),
-  ).rejects.toMatchObject({ code: "CONFLICT", errorId: "assignee_task_conversations_off" });
 });
 
 test("a person keeps the message-based flow, and a source needs the experiment", async () => {

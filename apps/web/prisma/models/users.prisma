@@ -93,9 +93,6 @@ model UserPreference {
   conversationOpenMode        String?
   /// Clock display: 12h or 24h. NULL follows the display language. Display only.
   timeFormat                  String?
-  /// The experiments (`server/experiments/`) the user has switched on or off: a sparse key → boolean map.
-  /// NULL, or a key never set, reads as off; a key the registry no longer lists is ignored.
-  experiments                 Json?
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 

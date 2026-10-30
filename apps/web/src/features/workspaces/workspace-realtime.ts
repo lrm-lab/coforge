@@ -23,3 +23,32 @@ export function decodeWorkspaceDeletedEvent(value: unknown): WorkspaceDeletedEve
   const parsed = workspaceDeletedEvent.safeParse(data);
   return parsed.success ? parsed.data : undefined;
 }
+
+/**
+ * What the Workspace offers changed (an owner or admin switched an experiment), published on the
+ * same channel. A page that shows or hides something by it reads its features again; the event
+ * carries only the id, so it says nothing about which switch moved.
+ */
+export type WorkspaceFeaturesChangedEvent = {
+  type: "workspace.features.changed.v1";
+  workspaceId: string;
+};
+
+const workspaceFeaturesChangedEvent = z.object({
+  type: z.literal("workspace.features.changed.v1"),
+  workspaceId: z.string().min(1),
+});
+
+export function decodeWorkspaceFeaturesChangedEvent(
+  value: unknown,
+): WorkspaceFeaturesChangedEvent | undefined {
+  const data = publicationDataOrUndefined(value);
+  if (
+    !data ||
+    typeof data !== "object" ||
+    Reflect.get(data, "type") !== "workspace.features.changed.v1"
+  )
+    return undefined;
+  const parsed = workspaceFeaturesChangedEvent.safeParse(data);
+  return parsed.success ? parsed.data : undefined;
+}

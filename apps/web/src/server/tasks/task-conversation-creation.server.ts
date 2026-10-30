@@ -10,7 +10,6 @@ import { findSourceMessage } from "./task-claims.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import { announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
-import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { postTaskNotice } from "./task-conversations.server";
 import {
@@ -23,8 +22,6 @@ import {
 /** The message already has someone else's live task: who holds it, so the creator can add to that
  * task or say `alongside`. */
 export const SOURCE_MESSAGE_TAKEN = "source_message_taken";
-/** The assignee is an Agent whose owner has not turned task conversations on. */
-export const ASSIGNEE_CONVERSATIONS_OFF = "assignee_task_conversations_off";
 export class SourceMessageTaken extends AppError {
   constructor(
     readonly taskNumber: number,
@@ -80,16 +77,6 @@ export async function createConversationTasks(
     if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
-    // An Agent follows its owner's switch: one whose owner has task conversations off could not open
-    // the task's conversation it would be told about.
-    if (
-      assignee?.agentId &&
-      !(await taskConversationsEnabled(ports.db, {
-        workspaceId: scope.workspaceId,
-        agentId: assignee.agentId,
-      }))
-    )
-      throw new AppError("CONFLICT", { errorId: ASSIGNEE_CONVERSATIONS_OFF });
     const started = assignee?.id === member.id;
     const [allocated] = await tx.$queryRaw<Array<{ first: number }>>`
       UPDATE "conversations"

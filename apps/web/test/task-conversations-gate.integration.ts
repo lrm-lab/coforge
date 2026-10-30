@@ -68,20 +68,20 @@ async function install(on: boolean) {
   );
 }
 
-test("an Agent follows its owner's switch, and only where the Workspace flag is on", async () => {
+test("the Workspace's switch decides, and only where the Workspace flag is on", async () => {
   const gate = taskConversationsGate(db, { workspaceId, agentId });
   const experiments = new PrismaExperimentsRepository(db);
 
   await install(false);
-  await experiments.write(ownerId, "taskConversations", true);
-  expect(await gate()).toBe(false); // the owner is in, the Workspace flag is off
+  await experiments.write(workspaceId, "taskConversations", true);
+  expect(await gate()).toBe(false); // switched on, but the Workspace flag is off
 
   await install(true);
   expect(await gate()).toBe(true);
-  await experiments.write(ownerId, "taskConversations", false);
-  expect(await gate()).toBe(false); // the flag is on, the owner has not switched it on
+  await experiments.write(workspaceId, "taskConversations", false);
+  expect(await gate()).toBe(false); // the flag is on, nobody has switched it on
 
-  expect(await taskConversationsGate(db, { workspaceId, agentId: crypto.randomUUID() })()).toBe(
+  expect(await taskConversationsGate(db, { workspaceId: crypto.randomUUID(), agentId })()).toBe(
     false,
   );
 });

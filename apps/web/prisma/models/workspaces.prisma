@@ -5,6 +5,10 @@ model Workspace {
   name                   String
   iconObjectKey          String?
   iconContentType        String?
+  /// The experiments (`server/experiments/`) an owner or admin switched on or off for the Workspace:
+  /// a sparse key → boolean map. NULL, or a key never set, reads as off; a key the registry no
+  /// longer lists is ignored.
+  experiments            Json?
   members                WorkspaceMembership[]
   joinLinks              WorkspaceJoinLink[]
   computers              WorkspaceComputer[]

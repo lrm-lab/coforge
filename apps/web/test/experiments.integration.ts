@@ -10,29 +10,27 @@ function database() {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
-test("an experiment choice is stored per key, beside the user's other preferences", async () => {
+test("an experiment choice is stored per key on the Workspace, beside its other settings", async () => {
   const db = database();
-  const user = await db.user.create({
-    data: { displayName: `exp-${crypto.randomUUID()}`, username: `exp-${crypto.randomUUID()}` },
+  const workspace = await db.workspace.create({
+    data: { slug: `exp-${crypto.randomUUID().slice(0, 8)}`, name: "Experiments" },
   });
   try {
     const repository = new PrismaExperimentsRepository(db);
-    expect(await repository.read(user.id)).toEqual({});
+    expect(await repository.read(workspace.id)).toEqual({});
 
-    await repository.write(user.id, "taskConversations", true);
-    await db.userPreference.update({
-      where: { userId: user.id },
-      data: { timeZone: "Asia/Tokyo" },
-    });
-    await repository.write(user.id, "other", false);
-    await repository.write(user.id, "taskConversations", false);
+    await repository.write(workspace.id, "taskConversations", true);
+    await db.workspace.update({ where: { id: workspace.id }, data: { name: "Renamed" } });
+    await repository.write(workspace.id, "other", false);
+    await repository.write(workspace.id, "taskConversations", false);
 
-    expect(await repository.read(user.id)).toEqual({ taskConversations: false, other: false });
-    expect(
-      (await db.userPreference.findUniqueOrThrow({ where: { userId: user.id } })).timeZone,
-    ).toBe("Asia/Tokyo");
+    expect(await repository.read(workspace.id)).toEqual({ taskConversations: false, other: false });
+    expect((await db.workspace.findUniqueOrThrow({ where: { id: workspace.id } })).name).toBe(
+      "Renamed",
+    );
+    expect(await repository.read(crypto.randomUUID())).toEqual({});
   } finally {
-    await db.user.delete({ where: { id: user.id } });
+    await db.workspace.delete({ where: { id: workspace.id } });
     await db.$disconnect();
   }
 });

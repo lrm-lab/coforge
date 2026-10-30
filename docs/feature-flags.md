@@ -99,11 +99,13 @@ those keys.
 
 ## Experiments
 
-An experiment is a flag a person switches on for themselves in Settings. The flag still decides
-which Workspaces offer it; the user's own switch (`user_preferences.experiments`, a sparse
-key → boolean map, off by default) decides whether it applies to them and to the Agents they own.
+An experiment is a flag a Workspace owner or admin switches on for the whole Workspace in Settings
+(Workspace settings → Manage): it applies to every member and every Agent at once. The flag still
+decides which Workspaces offer it; the Workspace's own switch (`workspaces.experiments`, a sparse
+key → boolean map, off by default) decides whether it applies. Members see no switch; the server
+refuses a change from anyone but an owner or admin.
 `apps/web/src/server/experiments/` holds the registry (`EXPERIMENTS`: key, flag, and whether a change
-needs a reload) and `Experiments.enabled(key, userId, workspace)`, the one question server code
+needs a reload) and `Experiments.enabled(key, workspace)`, the one question server code
 asks. When an experiment graduates, delete its registry entry and its flag together; a stored
 choice for an unlisted key is ignored, so nothing else needs migrating.
 
