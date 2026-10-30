@@ -109,7 +109,10 @@ export async function handleTaskReadGet(
     );
     const { unread, ...range } = page;
     return Response.json(
-      await service.read(principal, asRef(ref), { ...range, ...(unread === "true" && { unread: true }) }),
+      await service.read(principal, asRef(ref), {
+        ...range,
+        ...(unread === "true" && { unread: true }),
+      }),
     );
   } catch (error) {
     return failure(error);
