@@ -18,6 +18,7 @@ import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { AgentInputDrain } from "./agent-input-drain";
+import { AgentLaunchCustody } from "./agent-launch-custody";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
 import {
   observeRuntimeEvent,
@@ -267,7 +268,7 @@ export class DaemonRuntime {
     hasConsumed: (message) => this.#messageAttention.hasConsumed(message),
     logConsumed: (message) => this.#messageAttention.logDecision(message, "consumed"),
     acknowledge: (message) => this.#messageAttention.acknowledge(message),
-    acknowledgeCustody: (message) => this.#acknowledgeCustody(message),
+    acknowledgeCustody: (message) => this.#launchCustody.acknowledge(message),
     restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
     startPending: (agentId) => this.#agentControl.startPending(agentId),
     hasQueued: (agentId) => this.#deliveryQueue.hasQueued(agentId),
@@ -276,7 +277,8 @@ export class DaemonRuntime {
       this.#wakeLaunchFailures.isBlocked(agentId)
         ? this.#wakeLaunchFailures.blockedUntil(agentId)
         : undefined,
-    enqueueInputDelivery: (agentId, message) => this.#enqueueDelivery(agentId, message),
+    enqueueInputDelivery: (agentId, message) =>
+      this.#launchCustody.enqueueDelivery(agentId, message),
     wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
     offline: {
       has: (agentId) => this.#offlineResidency.has(agentId),
@@ -422,11 +424,12 @@ export class DaemonRuntime {
         ? this.#mentionDeliveries.deliver(message)
         : this.#messageAttention.receive(message),
     runStartup: async (agentId, session, launch, text) => {
-      this.#noteTurnStarted(agentId);
+      this.#launchCustody.noteTurnStarted(agentId);
       await launch.startup?.run(session.sendMessage(text));
     },
-    runPrompt: (agentId, text, introduction) => this.#runPromptTurn(agentId, text, introduction),
-    recoverAttention: (agentId, context) => this.#recoverAttention(agentId, context),
+    runPrompt: (agentId, text, introduction) =>
+      this.#launchCustody.runPromptTurn(agentId, text, introduction),
+    recoverAttention: (agentId, context) => this.#launchCustody.recover(agentId, context),
     abandonLaunch: (agentId, error) => this.#abandonLaunch(agentId, error),
     publishStartupError: (agentId, launch, message) =>
       this.#activityPublisher.publish(
@@ -438,6 +441,8 @@ export class DaemonRuntime {
     dropMention: (message) =>
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
   });
+  /** Delivery admission, launch-boundary recovery, and turn-open bookkeeping. */
+  readonly #launchCustody: AgentLaunchCustody;
   /** Agents whose current process was already handed its introduction turn: one per process,
    * however many Starts carry `introductionPrompt`. Set only when a live session takes the turn;
    * a Start also queues none while one waits unsent, so one a crashed process left queued goes to
@@ -662,7 +667,7 @@ export class DaemonRuntime {
         queued: (agentId) => this.#deliveryQueue.pending(agentId),
         enqueue: (agentId, message) => this.#deliveryQueue.enqueue(agentId, message),
         busy: (agentId) => {
-          if (!this.#deliveryQueue.isBusy(agentId)) this.#noteTurnStarted(agentId);
+          if (!this.#deliveryQueue.isBusy(agentId)) this.#launchCustody.noteTurnStarted(agentId);
           this.#deliveryQueue.busy(agentId);
         },
         noticeSettled: (agentId) => {
@@ -856,6 +861,16 @@ export class DaemonRuntime {
       failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
     };
+    this.#launchCustody = new AgentLaunchCustody({
+      messageAttention: this.#messageAttention,
+      deliveryQueue: this.#deliveryQueue,
+      inputDrain: this.#inputDrain,
+      agentProcessManager: this.#agentProcessManager,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      introducedAgents: this.#introducedAgents,
+      releaseHeldAppItems: (agentId) => this.#releaseHeldAppItems(agentId),
+      releaseFallbackNotices: (agentId) => this.#releaseFallbackNotices(agentId),
+    });
   }
 
   get agentProcessManager(): AgentProcessManager {
@@ -1497,120 +1512,10 @@ export class DaemonRuntime {
     return launch;
   }
 
-  async #recoverAttention(agentId: string, context: AgentRecoveryContext): Promise<void> {
-    const messages = [
-      ...(context.wakeMessage ? [context.wakeMessage] : []),
-      ...(context.resumeMessages ?? []),
-    ];
-    const hasRecoveryContent = recoveryHasContent(context);
-    try {
-      if (hasRecoveryContent)
-        await this.#messageAttention.recover(
-          agentId,
-          messages,
-          context.unreadSummary ?? {},
-          context.unreadConversationIds ?? {},
-        );
-    } catch (error) {
-      logger.warn("Agent recovery notice was not accepted; canonical unread state remains", {
-        event: "agent.recovery_notice.rejected",
-        agent_id: agentId,
-        error_code: diagnosticErrorName(error),
-      });
-      throw error;
-    }
-    // Reconcile whatever AgentDeliveryQueue held across an unexpected exit now that
-    // this launch's recovery pass has run. `recover()` above already told the Agent about the
-    // same canonical unread state (the server's own unread ledger, not this in-memory queue, is
-    // what a crashed-and-relaunched Agent's `resumeMessages`/`unreadSummary` are built from) —
-    // drop the surviving held deliveries (acknowledged when they were held) instead of a second,
-    // redundant notice for them.
-    // When there was no recovery content, nothing else has told the Agent, so flush them now,
-    // treating the freshly launched session as idle.
-    if (hasRecoveryContent) this.#dropSurvivingDeliveryQueue(agentId);
-    else this.#flushSurvivingDeliveryQueue(agentId);
-    // App items (reminders, etc.) are a separate subsystem from canonical Message unread state
-    // (`agent-app-inbox/`); `recover()` above never mentions them, so a held one is always
-    // released here regardless of `hasRecoveryContent`, never dropped. A surviving fallback
-    // notice (Kiro's `notice-undelivered`) is treated the same way for the same reason: this
-    // in-memory queue does not know whether the text it held came from a Message delivery
-    // `recover()` already covers or an App Inbox notice it never mentions, so always releasing
-    // it is the only choice that never silently drops one.
-    this.#releaseHeldAppItems(agentId);
-    this.#releaseFallbackNotices(agentId);
-  }
-
   /** The fields every daemon -> server report opens with: this protocol, a fresh request id, and
    * this runtime's own Workspace and Computer. */
   #envelope() {
     return workspaceEnvelope(this.#connection.workspaceId, this.#connection.computerId);
-  }
-
-  /**
-   * The daemon has taken this delivery into its own keeping (for a later launch, a batch, or to
-   * drop it), so it acknowledges it now, as the server needs no further copy. A failed ACK only
-   * means the server replays it on the next `ready`; nothing is lost, since a daemon restart
-   * recovers unread messages from the cloud read boundary, not from ACK state.
-   */
-  #acknowledgeCustody(message: AgentMessageDelivery): void {
-    this.#messageAttention.acknowledgeCustody(message);
-  }
-
-  /** Queues a delivery as the Agent's next input; settles once the input drain handled it. */
-  #enqueueDelivery(agentId: string, message: AgentMessageDelivery): Promise<void> {
-    return this.#inputDrain.enqueue(agentId, (completion) => ({
-      kind: "delivery",
-      message,
-      completion,
-    }));
-  }
-
-  /** Drops whatever `AgentDeliveryQueue` held for `agentId` across an unexpected exit — used when
-   * this launch's `recover()` pass already covered the same unread state, so notifying about them
-   * again would be redundant. Each was acknowledged when the daemon took it. */
-  #dropSurvivingDeliveryQueue(agentId: string): void {
-    this.#deliveryQueue.discardPending(agentId);
-  }
-
-  /** Flushes whatever `AgentDeliveryQueue` held for `agentId` across an unexpected
-   * exit, treating the (fresh or just-recovered) session as idle — used when nothing else has
-   * told the Agent about it. */
-  #flushSurvivingDeliveryQueue(agentId: string): void {
-    const held = this.#deliveryQueue.idle(agentId);
-    if (!held.length) return;
-    void this.#messageAttention.flush(agentId, held).catch((error: unknown) => {
-      // Already acknowledged when held: they come back as unread on the next Start or daemon
-      // restart, not from a `ready` replay.
-      logger.warn("Held Agent deliveries were not accepted at launch", {
-        event: "agent.delivery_queue.flush_rejected",
-        agent_id: agentId,
-        held_count: held.length,
-        already_acknowledged: true,
-        error_code: diagnosticErrorName(error),
-      });
-    });
-  }
-
-  /** Opens a turn with `text`: the resume prompt a user's Start sent, or the introduction the
-   * server asks for. */
-  async #runPromptTurn(agentId: string, text: string, introduction?: true): Promise<void> {
-    const session = this.#agentProcessManager.session(agentId);
-    if (!session?.notify) {
-      logger.debug("Agent prompt turn skipped: the session accepts no input", {
-        event: "agent.prompt_turn.skipped",
-        agent_id: agentId,
-      });
-      return;
-    }
-    if (introduction) this.#introducedAgents.add(agentId);
-    this.#noteTurnStarted(agentId);
-    await session.notify(text);
-  }
-  #noteTurnStarted(agentId: string): void {
-    const launch = this.#currentActivityLaunches.get(agentId);
-    if (!launch?.progress) return;
-    launch.progress.noteTurnStarted();
-    launch.stalled?.start(agentId, stalledTurnObservation(launch));
   }
 
   /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
@@ -2468,7 +2373,7 @@ export class DaemonRuntime {
       this.#exitedDelivery.keepForNextLaunch(message.agentId, message);
       return;
     }
-    const delivery = this.#enqueueDelivery(message.agentId, message);
+    const delivery = this.#launchCustody.enqueueDelivery(message.agentId, message);
     // Runner hold: the delivery is queued, never rejected and never indexed. Attention indexing is
     // what wakes a turn, and the server's canonical read boundary only advances when the Agent
     // itself drains `check` - so a held delivery stays undelivered server-side and is re-fetched
@@ -2511,7 +2416,7 @@ export class DaemonRuntime {
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
       return Promise.resolve();
     }
-    const delivery = this.#enqueueDelivery(agentId, message);
+    const delivery = this.#launchCustody.enqueueDelivery(agentId, message);
     if (this.#runnerHold !== undefined) {
       void delivery.catch(() => {});
       return Promise.resolve();
@@ -2583,7 +2488,7 @@ export class DaemonRuntime {
             MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
           )
         )
-          this.#acknowledgeCustody(item.message);
+          this.#launchCustody.acknowledge(item.message);
         item.completion.resolve();
         dropped++;
         return false;
@@ -2855,7 +2760,7 @@ export class DaemonRuntime {
 
   /** Presents what was kept across an exit or a runtime's end, as at idle. */
   #releaseSurvivingHolds(agentId: string): void {
-    this.#flushSurvivingDeliveryQueue(agentId);
+    this.#launchCustody.flushSurvivingDeliveryQueue(agentId);
     this.#releaseHeldAppItems(agentId);
     this.#releaseFallbackNotices(agentId);
   }
