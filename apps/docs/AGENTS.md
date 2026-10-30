@@ -13,6 +13,8 @@ Run from `apps/docs` (the root `mise run test`, `check` and `build` already run 
 - `bun test`: builds, then checks `llms.txt`, a `.md` twin per page, the schema copy, and that both
   locales have the same page set.
 - `bun run check`: format and lint.
+- `mise exec uv@0.11.7 -- uv run scripts/subset-fonts.py`: by hand, never in the build. Builds the
+  site and rewrites the Inter subsets and `fonts.css` in `.vitepress/theme/fonts/`; commit them.
 
 ## Rules
 
@@ -25,6 +27,11 @@ Run from `apps/docs` (the root `mise run test`, `check` and `build` already run 
 - `vitepress-plugin-llms` publishes a directory's `index.md` as `<dir>.md` (`/apps/` is `/apps.md`).
 - The Agent manifest JSON Schema is copied from `docs/agent-manifest/` into `/schemas/` by the build
   (`.vitepress/config.ts` `buildEnd`). Never commit a second copy.
+- Fonts: the theme is `vitepress/theme-without-fonts` plus the generated `.vitepress/theme/fonts/`
+  (never edit those files) and VitePress's Punctuation SC faces (`theme/punctuation.css`). Rerun the
+  subset script when a `subset Inter fonts` test fails (a page uses a character, or the CSS a weight
+  or OpenType feature, the subsets dropped) and when VitePress or the pinned Inter release changes.
+  The script builds the site first, so if `fonts/` is missing, restore it from git before rerunning.
 - `public/` holds the logo and favicons. The web app's logo files are separate; do not edit them.
 
 ## Deployment

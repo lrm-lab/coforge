@@ -23,6 +23,15 @@ export default defineConfig({
   vite: {
     plugins: [llmstxt({ domain: process.env.DOCS_ORIGIN, excludeIndexPage: false })],
   },
+  // Every page preloads the roman core (theme/fonts); VitePress's own preload only matches its
+  // bundled Inter files.
+  transformHead({ assets }) {
+    const core = assets.find((asset) => /\/inter-roman-core\.[\w-]+\.woff2$/.test(asset));
+    if (!core) throw new Error("The roman Inter core is missing from the build");
+    return [
+      ["link", { rel: "preload", href: core, as: "font", type: "font/woff2", crossorigin: "" }],
+    ];
+  },
   buildEnd(siteConfig) {
     const target = join(siteConfig.outDir, schemaPublishedPath);
     mkdirSync(dirname(target), { recursive: true });

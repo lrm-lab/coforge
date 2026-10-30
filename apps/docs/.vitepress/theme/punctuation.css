@@ -1,0 +1,34 @@
+/* VitePress's Punctuation SC faces, which theme-without-fonts leaves out with its Inter files: on
+   zh pages its font stack draws these punctuation marks with the system's Chinese font. */
+
+@font-face {
+  font-family: "Punctuation SC";
+  font-weight: 400;
+  src: local("PingFang SC Regular"), local("Noto Sans CJK SC"), local("Microsoft YaHei");
+  unicode-range:
+    U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
+}
+
+@font-face {
+  font-family: "Punctuation SC";
+  font-weight: 500;
+  src: local("PingFang SC Medium"), local("Noto Sans CJK SC"), local("Microsoft YaHei");
+  unicode-range:
+    U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
+}
+
+@font-face {
+  font-family: "Punctuation SC";
+  font-weight: 600;
+  src: local("PingFang SC Semibold"), local("Noto Sans CJK SC Bold"), local("Microsoft YaHei Bold");
+  unicode-range:
+    U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
+}
+
+@font-face {
+  font-family: "Punctuation SC";
+  font-weight: 700;
+  src: local("PingFang SC Semibold"), local("Noto Sans CJK SC Bold"), local("Microsoft YaHei Bold");
+  unicode-range:
+    U+201C, U+201D, U+2018, U+2019, U+2E3A, U+2014, U+2013, U+2026, U+00B7, U+007E, U+002F;
+}
