@@ -78,8 +78,14 @@ export function UsageWindow({
   // ("7,517.29 / 10,000 credits used") would squeeze the label onto two lines in the popover, so
   // they move under the bar and the header shows the used share, like a session window (task #109).
   const hydrated = useHydrated();
+  // A rolling window starts at its first use, so an untouched one (0% used) has no reset yet:
+  // Claude Code sends none until the session begins (task #329). Only a used share without a
+  // reset means the reset could not be read.
   const resetUnknown =
-    resetExpected && window.usedPercent !== undefined && window.resetsAt === undefined;
+    resetExpected &&
+    window.usedPercent !== undefined &&
+    window.usedPercent > 0 &&
+    window.resetsAt === undefined;
   const used =
     window.usedPercent === undefined ? undefined : Math.min(100, Math.max(0, window.usedPercent));
   // A quota at its limit reads "Used up", as on Raft, not "0% left" beside a Limit reached badge.
